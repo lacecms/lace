@@ -1254,7 +1254,9 @@ framework and never reads `process.env` or `import.meta.env` itself.
   rejects a key that differs from its definition type, and returns a frozen
   map. `resolveBlock(map, block, context)` returns the entry or fails on an
   unknown block type, which preserves the build-failure behavior for blocks a
-  site cannot render.
+  site cannot render. `prepareBlocks(map, entry, mediaUrl)` resolves and parses
+  an entry's blocks in order and returns each mapped component with its
+  `BlockProps`, so adapters only render the result.
 - `BlockProps<Definition>` is the prop contract every adapter passes to a block
   component: `block`, parsed `data`, `context`, and `mediaUrl`.
 - `describeRichText(value, context?)` validates with `validateRichTextDocument`

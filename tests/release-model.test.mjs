@@ -29,12 +29,13 @@ async function coherentModel() {
   return model;
 }
 
-test("release closes over thirteen artifacts in dependency order", async () => {
+test("release closes over fourteen artifacts in dependency order", async () => {
   const model = await coherentModel();
   const order = validateReleaseModel(model);
-  expect(order).toHaveLength(13);
+  expect(order).toHaveLength(14);
   expect(order.indexOf("@lacecms/content")).toBeLessThan(order.indexOf("@lacecms/config"));
   expect(order.indexOf("@lacecms/config")).toBeLessThan(order.indexOf("@lacecms/cli"));
+  expect(order.indexOf("@lacecms/content")).toBeLessThan(order.indexOf("@lacecms/render"));
 });
 
 test.each(["version", "private", "missing", "cycle", "template", "image", "internal"])(

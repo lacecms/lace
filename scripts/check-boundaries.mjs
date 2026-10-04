@@ -20,6 +20,7 @@ const allowedDependencies = new Map([
   ["@lacecms/auth", new Set(["@lacecms/application", "@lacecms/domain"])],
   ["@lacecms/server", new Set(["@lacecms/application", "@lacecms/contracts", "@lacecms/auth"])],
   ["@lacecms/sdk", new Set(["@lacecms/contracts"])],
+  ["@lacecms/render", new Set(["@lacecms/content"])],
   [
     "@lacecms/test-utils",
     new Set(["@lacecms/application", "@lacecms/config", "@lacecms/content", "@lacecms/domain"]),
@@ -63,6 +64,13 @@ const allowedDependencies = new Map([
   ],
   ["@lacecms/app-admin", new Set(["@lacecms/contracts", "@lacecms/content"])],
   ["@lacecms/app-site", new Set(["@lacecms/sdk", "@lacecms/content"])],
+]);
+
+// Framework-neutral packages: every non-relative import must be listed here, which
+// rejects UI frameworks, Node built-ins, and other third-party modules.
+const externalImportAllowlist = new Map([
+  ["@lacecms/render", new Set(["@lacecms/content"])],
+  ["@lacecms/sdk", new Set(["@lacecms/contracts", "valibot"])],
 ]);
 
 function collectFiles(directory) {
@@ -338,6 +346,12 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
           isNodeBuiltin(specifier)
         ) {
           throw new Error(`Node builtin import in portable package ${member.name}: ${specifier}`);
+        }
+        const externalAllowlist = externalImportAllowlist.get(member.name);
+        if (externalAllowlist !== undefined && !externalAllowlist.has(specifier)) {
+          throw new Error(
+            `framework-neutral package ${member.name} may not import ${specifier} (in ${filePath})`,
+          );
         }
         if (!memberNames.has(specifier)) continue;
         if (!allowedDependencies.get(member.name)?.has(specifier)) {

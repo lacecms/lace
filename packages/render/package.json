@@ -1,0 +1,43 @@
+{
+  "name": "@lacecms/render",
+  "version": "0.1.0-alpha.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lacecms/lace.git",
+    "directory": "packages/render"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-test.json --noEmit",
+    "lint": "oxlint src type-tests",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@lacecms/content": "workspace:*"
+  },
+  "devDependencies": {
+    "@lacecms/contracts": "workspace:*",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  }
+}

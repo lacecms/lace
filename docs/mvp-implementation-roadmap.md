@@ -1877,6 +1877,13 @@ Planning/documentation only; no production code.
 
 ### Session 30B — Framework-neutral loading and rendering core
 
+**Completed:** 2026-10-04. `@lacecms/sdk` exports `createPublishedSiteLoader`
+and `LacePublishedSiteError`; the new `@lacecms/render` package exports
+`parseBlock`, `defineBlockMap`, `resolveBlock`, `prepareBlocks`, `BlockProps`,
+`describeRichText`, and `LaceRenderError`, and joins the alpha release
+allowlist. The boundary check keeps both packages framework-neutral. The sites
+still use their local copies until 30C migrates them.
+
 1. **Published-site loader in `@lacecms/sdk`.** Generalize `site-data.ts` into
    `createPublishedSiteLoader` (architecture §13.2) without framework imports:
    - input: explicit environment record or explicit `baseUrl`/`token`/public
@@ -1903,13 +1910,16 @@ Planning/documentation only; no production code.
      definitions, fails on block type or schema-version mismatch, and fails with
      model, entry, block key, and field path (`LaceRenderError`);
    - rich-text helpers reuse `validateRichTextDocument` and `isSafeUrl`
-     exclusively; delete the site-local allowlist copies. `describeRichText`
+     exclusively; the site-local allowlist copies are deleted when 30C migrates
+     both sites onto the adapter. `describeRichText`
      provides a neutral node/mark-to-element description (tag, safe attributes,
      children) so every adapter renders identical semantics and never emits raw
      HTML;
    - `defineBlockMap` keyed by block type plus `resolveBlock`, which fails on
      unknown types with model, entry, and block identifiers (current
-     build-failure behavior preserved), and the shared `BlockProps` type;
+     build-failure behavior preserved), the shared `BlockProps` type, and
+     `prepareBlocks`, which resolves and parses an entry's blocks in order for
+     adapters;
    - no dependency on any UI framework, Node-only API, or the SDK transport.
 3. Tests: loader modes, ETag reuse, concurrent revalidation, expected-version
    mismatch, auth/transport failures, duplicate path/slug rejection; `parseBlock`
