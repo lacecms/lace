@@ -12,3 +12,4 @@ dev-data/
 .lace-acceptance/
 **/test-results/
 .release-artifacts/
+packages/platform-cloudflare/admin/

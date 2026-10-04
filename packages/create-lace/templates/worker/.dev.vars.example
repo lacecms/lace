@@ -1,0 +1,8 @@
+# Local Worker variables for `pnpm cf:dev`. Run `pnpm cf:env:prepare` to create the
+# protected, ignored worker/.dev.vars with a fresh auth secret; never commit it.
+# These values override worker/wrangler.jsonc vars only for local development.
+LACE_ENVIRONMENT=development
+LACE_PUBLIC_BASE_URL=http://127.0.0.1:8787/
+LACE_AUTH_SECRET=
+# Optional HTTPS deploy hook used by local build dispatch tests:
+# LACE_DEPLOY_HOOK_URL=

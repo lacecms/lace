@@ -170,13 +170,30 @@ These stop commands preserve `.lace/data/` and MinIO/static-output volumes. Remo
 
 `lace.config.ts` defines the singleton Home page (`/`) and Posts collection (`/blog/:slug`), fields and permitted blocks. Review with `pnpm content:sync --check`, apply with `pnpm content:sync`, and restart the API after config edits. README and `lace.config.ts` are user-owned and upgrades preserve edits. Operations is managed with hash/conflict review. Upgrades keep the no-site mode; to add a site, follow [Connect an existing Astro site](docs/lace-astro-site.md) and configure the build site, or generate a fresh project with `--existing-site <path>` and compare its managed files.
 <!-- lace-site: end -->
-<!-- lace-site: starter existing -->
+<!-- lace-cloudflare: on -->
 
-## Optional Cloudflare
+## Cloudflare Worker
 
-`--cloudflare` adds Pages config and a manual workflow for the static site. After building, `pnpm exec wrangler pages dev {{SITE_PATH}}/dist` previews Pages locally. It does not deliver or deploy the CMS Worker. Complete generated D1/R2/Worker onboarding remains Step 31 work; configure any independent Worker explicitly and keep remote mutations intentional. See [Cloudflare scope](docs/lace-operations.md#optional-cloudflare-pages). External site selection requires compatible Step 29A or later artifacts; publication visibility is verified separately in Step 29B.
-<!-- lace-site: end -->
+This project includes its own CMS Worker in `worker/`, built from installed Lace packages (Step 31A or a later compatible release). Run it locally without a Cloudflare account:
+
+```bash
+pnpm env:prepare
+pnpm cf:env:prepare
+pnpm cf:db:migrate
+pnpm cf:content:sync
+pnpm cf:auth:bootstrap
+pnpm cf:dev
+```
+
+Then open `http://127.0.0.1:8787/admin/` and create the first administrator with the bootstrap token. The `cf:*` commands use the explicit `cloudflare-local` target and the persistent local state in `.lace/data/cloudflare`; run migration, sync and bootstrap while `cf:dev` is stopped. `pnpm cf:build` checks the Worker bundle without credentials. The Worker and the static site are separate deployments: the Pages workflow never deploys the CMS. Provisioning D1/R2, secrets, remote migration and deployment are explicit account commands described in [Cloudflare Worker](docs/lace-operations.md#cloudflare-worker).
 <!-- lace-site: existing -->
 
 GitHub reads workflows only from the repository root's `.github/workflows/`: move the generated workflow there and set its `working-directory` to this CMS directory, relative to the repository root. It installs and builds the site at `{{SITE_PATH}}` and deploys `{{SITE_PATH}}/dist`.
 <!-- lace-site: end -->
+<!-- lace-cloudflare: end -->
+<!-- lace-cloudflare: off -->
+
+## Optional Cloudflare
+
+Generating with `--cloudflare` adds a separate CMS Worker (D1, R2 and packaged admin) and, with a site, a manual Pages workflow for the static site. See [Optional Cloudflare](docs/lace-operations.md#optional-cloudflare).
+<!-- lace-cloudflare: end -->

@@ -50,14 +50,16 @@ async function main(): Promise<number> {
     target = options.target;
     if (options.command === "env prepare") {
       const { prepareEnvironment } = await import("./environment.js");
-      await prepareEnvironment();
+      const worker = options.target === "cloudflare-local";
+      await prepareEnvironment(undefined, undefined, worker ? "cloudflare-local" : "project");
       console.info(
         presentResult(
           {
             ok: true,
             code: "ENV_PREPARED",
-            message:
-              "Created protected .env. Review local settings; leave LACE_BUILD_TOKEN empty until Admin Settings issues it.",
+            message: worker
+              ? "Created protected worker/.dev.vars with a local auth secret. Review its local origin; never commit it."
+              : "Created protected .env. Review local settings; leave LACE_BUILD_TOKEN empty until Admin Settings issues it.",
           },
           options.json,
         ),

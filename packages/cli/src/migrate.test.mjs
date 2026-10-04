@@ -1,8 +1,8 @@
 import { expect, test, vi } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runMigration } from "../dist/migrate.js";
+import { findWrangler, runMigration } from "../dist/migrate.js";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -71,6 +71,8 @@ test("D1 migration verifies selected database before invoking Wrangler", async (
       wranglerConfig,
       '{ "d1_databases": [{ "binding": "DB", "database_id": "correct" }] }',
     );
+    await mkdir(join(directory, "node_modules/.bin"), { recursive: true });
+    await writeFile(join(directory, "node_modules/.bin/wrangler"), "");
     const run = vi.fn(() => ({ status: 0 }));
     const d1 = { prepare: () => ({ all: async () => ({ results: [{ name: "0000_init.sql" }] }) }) };
     await expect(
@@ -87,6 +89,44 @@ test("D1 migration verifies selected database before invoking Wrangler", async (
       }),
     ).toEqual(["0000_init.sql"]);
     expect(run.mock.calls[0][1]).toContain("--remote");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("D1 migration runs the project Wrangler above a subdirectory configuration", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lace-cli-wrangler-"));
+  try {
+    const wranglerConfig = join(directory, "worker", "wrangler.jsonc");
+    await mkdir(join(directory, "worker"));
+    await writeFile(
+      wranglerConfig,
+      '{ "d1_databases": [{ "binding": "DB", "database_id": "local" }] }',
+    );
+    const run = vi.fn(() => ({ status: 0 }));
+    const input = {
+      target: "cloudflare-local",
+      databaseId: "local",
+      persistTo: join(directory, "state"),
+      wranglerConfig,
+      run,
+    };
+    await expect(runMigration(input)).rejects.toMatchObject({
+      code: "CONFIG",
+      message: expect.stringContaining("Wrangler is not installed"),
+    });
+    expect(run).not.toHaveBeenCalled();
+    await mkdir(join(directory, "node_modules/.bin"), { recursive: true });
+    await writeFile(join(directory, "node_modules/.bin/wrangler"), "");
+    expect(await findWrangler(join(directory, "worker"))).toBe(
+      join(directory, "node_modules/.bin/wrangler"),
+    );
+    await runMigration(input);
+    expect(run.mock.calls[0][0]).toBe(join(directory, "node_modules/.bin/wrangler"));
+    expect(run.mock.calls[0][1]).toEqual(
+      expect.arrayContaining(["--local", "--config", wranglerConfig]),
+    );
+    expect(run.mock.calls[0][2].cwd).toBe(join(directory, "worker"));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
 import { generateProject, runCli, TEMPLATE_FILES, TEMPLATE_VERSION } from "../dist/index.js";
 
+const TEMPLATE_PACKAGE = JSON.parse(
+  await readFile(new URL("../templates/package.json", import.meta.url), "utf8"),
+);
+
 const roots = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -91,9 +95,67 @@ test("generates deterministic owned source and hashed managed files", async () =
 test("optional Cloudflare files are managed only when selected", async () => {
   const parent = await root();
   const project = await generateProject({ target: join(parent, "cloud-site"), cloudflare: true });
-  expect(project.manifest.files["wrangler.jsonc"]?.owner).toBe("managed");
-  expect(project.manifest.files[".github/workflows/cloudflare.yml"]?.owner).toBe("managed");
-  expect(await listFiles(project.path)).toContain(".github/workflows/cloudflare.yml");
+  const files = project.manifest.files;
+  expect(files["wrangler.jsonc"]).toBeUndefined();
+  expect(files[".github/workflows/cloudflare.yml"]?.owner).toBe("managed");
+  expect(files["worker/index.ts"]?.owner).toBe("managed");
+  expect(files["worker/.dev.vars.example"]?.owner).toBe("managed");
+  expect(files["worker/wrangler.jsonc"]).toEqual({ owner: "user" });
+  const listed = await listFiles(project.path);
+  expect(listed).toContain(".github/workflows/cloudflare.yml");
+  expect(listed).not.toContain("wrangler.jsonc");
+  const read = (path) => readFile(join(project.path, path), "utf8");
+  const config = await read("worker/wrangler.jsonc");
+  expect(config).toContain('"name": "cloud-site-cms"');
+  expect(config).toContain('"compatibility_flags": ["nodejs_compat"]');
+  expect(config).toContain('"migrations_dir": "../node_modules/@lacecms/db/drizzle"');
+  expect(config).toContain('"directory": "../node_modules/@lacecms/platform-cloudflare/admin"');
+  expect(config).toContain('"crons": ["* * * * *"]');
+  expect(config).toContain('"LACE_BUILD_SITE_ID": "main-site"');
+  expect(config).not.toMatch(/pages_build_output_dir|LACE_AUTH_SECRET"|lace-site|lace-cloudflare/u);
+  expect(await read("worker/index.ts")).toContain('import config from "../lace.config.ts";');
+  const manifest = JSON.parse(await read("package.json"));
+  expect(manifest.dependencies).toMatchObject({
+    "@lacecms/db": TEMPLATE_PACKAGE.dependencies["@lacecms/db"],
+    "@lacecms/platform-cloudflare": TEMPLATE_PACKAGE.dependencies["@lacecms/platform-cloudflare"],
+  });
+  expect(manifest.scripts["cf:env:prepare"]).toContain("env prepare --target cloudflare-local");
+  expect(manifest.scripts["cf:dev"]).toContain("--persist-to .lace/data/cloudflare");
+  for (const name of ["cf:db:migrate", "cf:content:sync", "cf:auth:bootstrap"])
+    expect(manifest.scripts[name]).toContain("--target cloudflare-local");
+  expect(Object.values(manifest.scripts).join("\n")).not.toMatch(
+    /--remote|cloudflare-remote|wrangler deploy(?! --dry-run)|secret put/u,
+  );
+  const environment = await read(".env.example");
+  expect(environment).toContain("LACE_WRANGLER_CONFIG=worker/wrangler.jsonc\n");
+  expect(environment).toContain("LACE_CLOUDFLARE_PERSIST_TO=./.lace/data/cloudflare\n");
+  expect(environment).toContain("LACE_D1_DATABASE_ID=00000000-0000-0000-0000-000000000000\n");
+  expect(environment).not.toContain("lace-cloudflare");
+  const guide = await read("docs/lace-operations.md");
+  expect(guide).toContain("## Cloudflare Worker");
+  expect(guide).toContain("explicit mutation of your Cloudflare account");
+  expect(guide).toContain("--target cloudflare-remote");
+  expect(guide).toContain("never deploys, migrates or configures the CMS Worker");
+  expect(guide).not.toContain("## Optional Cloudflare\n");
+  expect(await read("README.md")).toContain("docs/lace-operations.md#cloudflare-worker");
+  expect(await read(".gitignore")).toContain(".dev.vars\n");
+});
+
+test("projects without Cloudflare keep empty operator settings and no Worker scripts", async () => {
+  const parent = await root();
+  const project = await generateProject({ target: join(parent, "plain-site") });
+  const read = (path) => readFile(join(project.path, path), "utf8");
+  const manifest = JSON.parse(await read("package.json"));
+  expect(Object.keys(manifest.scripts).some((name) => name.startsWith("cf:"))).toBe(false);
+  expect(manifest.dependencies).not.toHaveProperty("@lacecms/platform-cloudflare");
+  expect(manifest.dependencies).not.toHaveProperty("@lacecms/db");
+  const environment = await read(".env.example");
+  expect(environment).toContain("LACE_WRANGLER_CONFIG=\n");
+  expect(environment).not.toContain("worker/wrangler.jsonc");
+  const guide = await read("docs/lace-operations.md");
+  expect(guide).toContain("## Optional Cloudflare");
+  expect(guide).not.toContain("## Cloudflare Worker");
+  expect(await listFiles(project.path)).not.toContain("worker/index.ts");
 });
 
 test.each([false, true])("fresh cms README is user-owned (cloudflare=%s)", async (cloudflare) => {
@@ -180,7 +242,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.1");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.1");
-  expect(TEMPLATE_VERSION).toBe("0.11.0");
+  expect(TEMPLATE_VERSION).toBe("0.12.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");

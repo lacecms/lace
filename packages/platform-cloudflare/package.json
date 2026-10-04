@@ -8,7 +8,8 @@
     "directory": "packages/platform-cloudflare"
   },
   "files": [
-    "dist"
+    "dist",
+    "admin"
   ],
   "type": "module",
   "types": "./dist/index.d.ts",
@@ -23,7 +24,7 @@
     "tag": "next"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-admin-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
     "test": "vitest run src/*.test.mjs"

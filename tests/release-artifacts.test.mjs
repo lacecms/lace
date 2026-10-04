@@ -157,6 +157,36 @@ test("credentials, data and traversal cannot enter snapshots", () => {
   expect(safeSourcePath("packages/create-lace/templates/.env.example")).toBe(true);
 });
 
+test("Cloudflare platform archive requires packaged admin assets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lace-release-admin-"));
+  try {
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "@lacecms/platform-cloudflare",
+        version: "0.1.0-alpha.1",
+        exports: { ".": { import: "./dist/index.js" } },
+      }),
+    );
+    await mkdir(join(root, "dist"));
+    await writeFile(join(root, "dist/index.js"), "export {};");
+    const release = { version: "0.1.0-alpha.1", packages: ["platform-cloudflare"] };
+    await expect(inspectPackage(root, release)).rejects.toThrow(
+      "Missing packaged admin assets: @lacecms/platform-cloudflare: admin/index.html",
+    );
+    await mkdir(join(root, "admin/assets"), { recursive: true });
+    await writeFile(join(root, "admin/index.html"), "<!doctype html>");
+    await writeFile(join(root, "admin/assets/index.js"), "export {};");
+    await expect(inspectPackage(root, release)).resolves.toMatchObject({
+      name: "@lacecms/platform-cloudflare",
+    });
+    await writeFile(join(root, "admin/assets/index.js.map"), "{}");
+    await expect(inspectPackage(root, release)).rejects.toThrow("Forbidden admin source map");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("archive verification rejects missing exports and forbidden files", async () => {
   const root = await mkdtemp(join(tmpdir(), "lace-release-archive-"));
   try {

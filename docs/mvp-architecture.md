@@ -180,6 +180,16 @@ Separate static deployment
 
 The admin application and authenticated API should use the same origin. This avoids unnecessary cross-origin cookie and CORS complexity.
 
+A generated Cloudflare consumer (`--cloudflare`) owns its Worker in `worker/`: a
+managed entry that statically imports the project's `lace.config.ts` and calls
+`createCloudflareWorker`, and a user-owned `worker/wrangler.jsonc` with the D1,
+R2, packaged admin `ASSETS`, optional KV, cron, and plain-variable settings.
+`@lacecms/platform-cloudflare` ships the compiled admin of the same release in
+its `admin/` directory, so the consumer bundles and deploys the Worker without
+the engine checkout. Secrets are uploaded with Wrangler and kept locally in the
+ignored `worker/.dev.vars`. The static Astro deployment is configured separately
+(its own workflow and hosting project); deploying it never deploys the CMS.
+
 ### VPS deployment
 
 ```text
@@ -336,7 +346,11 @@ my-site/
 ├── .env.example
 ├── .lace/
 │   └── manifest.json           # generator version, site mode, managed-file hashes
-└── .github/workflows/          # optional Cloudflare/CI deployment files
+├── worker/                     # optional (--cloudflare) CMS Worker
+│   ├── index.ts                # managed entry importing lace.config.ts
+│   ├── wrangler.jsonc          # user-owned Worker bindings and resource IDs
+│   └── .dev.vars.example       # managed local Worker variables template
+└── .github/workflows/          # optional Cloudflare Pages/CI deployment files
 ```
 
 ### Site modes
@@ -354,7 +368,8 @@ recorded in `.lace/manifest.json` as `site: { mode, path }`:
    `lace add block --all --site <path>` and follows the connection guide;
 3. **none** (`--no-site`, path `null`) — generates the CMS only, for headless use
    or a later connection; Compose has no builder, so build dispatch reports that
-   no build trigger or build site is configured. `--cloudflare` is rejected.
+   no build trigger or build site is configured. With `--cloudflare` it
+   generates the CMS Worker without the static-site workflow.
 
 An explicit flag always wins. Without one, an interactive terminal asks for the
 mode, defaulting to **existing** at `..` when the target's parent directory is an
@@ -1832,6 +1847,12 @@ pnpm dev:cloudflare
 - uses locally simulated D1, R2, and KV bindings;
 - persists local Cloudflare state in the configured development directory;
 - starts admin and Astro development processes against the Worker.
+
+Generated Cloudflare consumers use their own local commands instead: `cf:dev`
+runs `wrangler dev` for `worker/wrangler.jsonc` with state persisted in
+`.lace/data/cloudflare`, and `cf:db:migrate`, `cf:content:sync` and
+`cf:auth:bootstrap` use the explicit `cloudflare-local` CLI target. Remote
+provisioning, migration and deployment remain explicit operator commands.
 
 `dev:node` is the fast vendor-independent workflow. `dev:cloudflare` is the integration workflow that validates Cloudflare bindings and runtime compatibility.
 

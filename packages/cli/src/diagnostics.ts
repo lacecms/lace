@@ -72,18 +72,25 @@ export function failureDiagnostic(
   target: Target = "node",
   kind?: DiagnosticKind,
 ): Diagnostic {
+  const worker = operation === "env prepare" && target === "cloudflare-local";
+  const envFile = worker ? "worker/.dev.vars" : ".env";
   const catalog: Record<string, readonly [string, string]> = {
     "env-exists": [
-      "The .env destination already exists; preparation refuses to overwrite it.",
-      "Keep the existing .env and review its settings privately. Preparation does not rotate credentials; do not delete an active installation's configuration to rerun it.",
+      `The ${envFile} destination already exists; preparation refuses to overwrite it.`,
+      `Keep the existing ${envFile} and review its settings privately. Preparation does not rotate credentials; do not delete an active installation's configuration to rerun it.`,
     ],
-    "env-template": [
-      "The local .env.example is missing or is not a valid regular template.",
-      "Restore a regular non-symlink .env.example with one single-line NAME=value assignment for LACE_AUTH_SECRET, LACE_MINIO_ROOT_ACCESS_KEY, LACE_MINIO_ROOT_SECRET, LACE_BUILDER_SECRET and LACE_BUILD_TOKEN, then retry lace env prepare.",
-    ],
+    "env-template": worker
+      ? [
+          "The local worker/.dev.vars.example is missing or is not a valid regular template.",
+          "Restore a regular non-symlink worker/.dev.vars.example with one single-line LACE_AUTH_SECRET= assignment (copy it from a freshly generated --cloudflare project), then retry lace env prepare --target cloudflare-local.",
+        ]
+      : [
+          "The local .env.example is missing or is not a valid regular template.",
+          "Restore a regular non-symlink .env.example with one single-line NAME=value assignment for LACE_AUTH_SECRET, LACE_MINIO_ROOT_ACCESS_KEY, LACE_MINIO_ROOT_SECRET, LACE_BUILDER_SECRET and LACE_BUILD_TOKEN, then retry lace env prepare.",
+        ],
     "env-filesystem": [
       "Local environment preparation could not read, stage or publish its protected file.",
-      "Check project directory permissions and support for local hard links, then retry lace env prepare. Preserve any existing .env; remove private .lace-env-* remnants only after confirming no preparation is running.",
+      `Check project directory permissions and support for local hard links, then retry lace env prepare. Preserve any existing ${envFile}; remove private .lace-env-* remnants only after confirming no preparation is running.`,
     ],
     permission: [
       "Filesystem access was denied or the database is read-only.",

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { directory, pair, snapshot } from "./upgrade-fixtures.mjs";
@@ -298,6 +298,8 @@ test("Wrangler subprocess output is never forwarded", async () => {
   const root = await directory();
   const config = join(root, "wrangler.jsonc");
   await writeFile(config, '{ "d1_databases": [{ "binding": "DB", "database_id": "selected" }] }');
+  await mkdir(join(root, "node_modules/.bin"), { recursive: true });
+  await writeFile(join(root, "node_modules/.bin/wrangler"), "");
   try {
     await runMigration({
       target: "cloudflare-local",

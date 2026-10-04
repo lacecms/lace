@@ -7,8 +7,8 @@ RUN apt-get update \
 WORKDIR /opt/lace/workspace
 COPY . .
 RUN pnpm install --frozen-lockfile \
+    && pnpm --filter @lacecms/app-admin... build \
     && pnpm --filter @lacecms/app-api... build \
-    && pnpm --filter @lacecms/app-admin build \
     && pnpm --filter @lacecms/app-api deploy --legacy --prod /runtime/apps/api \
     && node scripts/make-api-runtime.mjs /runtime \
     && mkdir -p /runtime/apps/admin \

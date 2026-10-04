@@ -41,7 +41,7 @@ export class CliError extends Error {
 }
 
 export const usage =
-  "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--json]\n       lace env prepare [--json]";
+  "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--json]\n       lace env prepare [--target cloudflare-local] [--json]";
 
 export function parseArguments(argv: readonly string[]): CliOptions {
   const words: string[] = [];
@@ -72,7 +72,7 @@ export function parseArguments(argv: readonly string[]): CliOptions {
   const command = words.join(" ");
   if (
     !["db migrate", "content sync", "auth bootstrap", "env prepare"].includes(command) ||
-    (command === "env prepare" && targetSeen) ||
+    (command === "env prepare" && targetSeen && target !== "cloudflare-local") ||
     (check && command !== "content sync")
   )
     throw new CliError("USAGE", usage, EXIT.USAGE);
