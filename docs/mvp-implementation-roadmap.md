@@ -2060,6 +2060,23 @@ template is `0.10.0`; generated guides use the command.
 
 ### Session 30E — Project creation with an optional starter
 
+**Completed:** 2026-10-04. `create-lace` accepts `--starter`,
+`--existing-site <path>`, and `--no-site` (mutually exclusive; `--no-site` with
+`--cloudflare` is a usage error). Without a flag a terminal prompt defaults to
+an existing site at `..` when the parent directory is an Astro project, otherwise
+to the starter; without a terminal the starter is generated and the other flags
+are named. Existing-site paths are validated (relative grammar, outside the
+target, no symbolic links, Astro root) and never written. One template set is
+rendered per mode through `lace-site` marker blocks and structured transforms of
+the root `package.json` and `pnpm-workspace.yaml`; starter infrastructure bytes
+are unchanged. The manifest records `site: { mode, path }` (template `0.11.0`);
+`lace upgrade` rejects a template for another mode with the matching flags and
+reads legacy manifests as starter; `lace doctor` adds a manifest-driven `site`
+check. Snapshots cover default, Cloudflare, existing, existing-Cloudflare, and
+no-site projects, and the `existing-site` acceptance phase generates `cms/`
+inside the existing-site fixture, adds blocks with `lace add block --all --site
+..`, and builds the parent site in CI.
+
 1. **Site modes at creation.** `create-lace` supports three explicit modes
    (flag names fixed in the proposal):
    - *starter* — generates `site/` from the 30C starter (current behavior);

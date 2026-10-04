@@ -62,6 +62,9 @@ jobs:
       - name: Build the packed generated starter
         run: pnpm acceptance:starter
 
+      - name: Build an existing Astro site with a generated CMS
+        run: pnpm acceptance:existing-site
+
       - name: Verify generated OpenAPI
         run: pnpm openapi:check
 

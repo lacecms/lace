@@ -1,4 +1,5 @@
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
+import { existingSiteJourney } from "./existing-site-acceptance.mjs";
 import { publicationVisibilityJourney } from "./publication-visibility-acceptance.mjs";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -141,19 +142,35 @@ async function captureSnapshot(project) {
   return { tree, manifest: manifestText, digests };
 }
 
+/** A minimal standalone Astro parent for existing-site snapshot variants. */
+async function writeAstroParent(root) {
+  await writeFile(join(root, "astro.config.mjs"), "export default {};\n");
+  await writeFile(
+    join(root, "package.json"),
+    `${JSON.stringify({ name: "existing-site", private: true, dependencies: { astro: "7.3.1" } })}\n`,
+  );
+}
+
+const snapshotVariants = [
+  ["default", []],
+  ["cloudflare", ["--cloudflare"]],
+  ["existing", ["--existing-site", ".."]],
+  ["existing-cloudflare", ["--existing-site", "..", "--cloudflare"]],
+  ["none", ["--no-site"]],
+];
+
 async function verifySnapshots(parent, update = false) {
-  for (const [variant, flag] of [
-    ["default", false],
-    ["cloudflare", true],
-  ]) {
+  for (const [variant, flags] of snapshotVariants) {
+    const existing = flags.includes("--existing-site");
     const roots = [join(parent, `${variant}-a`), join(parent, `${variant}-b`)];
     for (const root of roots) {
       await mkdir(root, { recursive: true });
+      if (existing) await writeAstroParent(root);
       await run(`snapshot-${variant}`, "node", [
         "packages/create-lace/dist/bin.js",
         "create",
         join(root, "acceptance-site"),
-        ...(flag ? ["--cloudflare"] : []),
+        ...(flags.length === 0 ? ["--starter"] : flags),
       ]);
     }
     const first = await captureSnapshot(join(roots[0], "acceptance-site"));
@@ -161,11 +178,17 @@ async function verifySnapshots(parent, update = false) {
     if (JSON.stringify(first) !== JSON.stringify(second)) {
       throw new Error(`snapshot: ${variant} generation is not byte-stable`);
     }
-    if (flag && !first.tree.includes("wrangler.jsonc")) {
-      throw new Error("snapshot: Cloudflare variant is incomplete");
+    const cloudflare = flags.includes("--cloudflare");
+    if (cloudflare !== first.tree.includes("wrangler.jsonc")) {
+      throw new Error(`snapshot: ${variant} Cloudflare files do not match the selected options`);
     }
-    if (!flag && first.tree.includes("wrangler.jsonc")) {
-      throw new Error("snapshot: default variant includes Cloudflare files");
+    const site = JSON.parse(first.manifest).site;
+    const expectedMode = existing ? "existing" : flags.includes("--no-site") ? "none" : "starter";
+    if (
+      site?.mode !== expectedMode ||
+      first.tree.some((path) => path.startsWith("site/")) !== (expectedMode === "starter")
+    ) {
+      throw new Error(`snapshot: ${variant} site mode or site/ files do not match`);
     }
     const path = join(workspace, "tests", "fixtures", "generated-project", `${variant}.json`);
     const actual = `${JSON.stringify(first, null, 2)}\n`;
@@ -178,7 +201,9 @@ async function verifySnapshots(parent, update = false) {
       );
     }
   }
-  console.info("Generated default and Cloudflare snapshots match two byte-stable regenerations");
+  console.info(
+    `Generated ${snapshotVariants.map(([variant]) => variant).join(", ")} snapshots match two byte-stable regenerations`,
+  );
 }
 
 async function freePort() {
@@ -671,7 +696,12 @@ async function installPackedConsumer(project, tarballs) {
     await copyFile(filename, join(artifactDirectory, basename(filename)));
     references.set(name, `file:.lace/acceptance-packages/${basename(filename)}`);
   }
-  for (const directory of [project, join(project, "site")]) {
+  // Existing-site and no-site projects have no site/ workspace package.
+  const hasSite = await stat(join(project, "site/package.json")).then(
+    () => true,
+    () => false,
+  );
+  for (const directory of hasSite ? [project, join(project, "site")] : [project]) {
     const path = join(directory, "package.json");
     const packageJson = await packageMetadata(directory);
     for (const section of ["dependencies", "devDependencies"]) {
@@ -691,7 +721,7 @@ async function installPackedConsumer(project, tarballs) {
   // pnpm's frozen check compare root- and site-relative paths, so those packages
   // are overridden only where another Lace package depends on them.
   const siteDirect = new Set(
-    Object.keys((await packageMetadata(join(project, "site"))).dependencies ?? {}),
+    hasSite ? Object.keys((await packageMetadata(join(project, "site"))).dependencies ?? {}) : [],
   );
   const scoped = [];
   for (const parent of references.keys()) {
@@ -1352,6 +1382,7 @@ async function main() {
       "node",
       "all",
       "build-site",
+      "existing-site",
       "publication-visibility",
       "snapshots",
       "starter",
@@ -1436,6 +1467,15 @@ async function main() {
   await verifySnapshots(parent);
   await run("mkdir-tarballs", "mkdir", ["-p", tarballDirectory]);
   const tarballs = await packConsumerGraph(tarballDirectory);
+  if (phase === "existing-site") {
+    await existingSiteJourney(parent, {
+      installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
+      run,
+      secretValues,
+      workspace,
+    });
+    return;
+  }
   const project = join(parent, "consumer", "acceptance-site");
   await run("mkdir-consumer", "mkdir", ["-p", dirname(project)]);
   await run("generate", "node", ["packages/create-lace/dist/bin.js", "create", project]);

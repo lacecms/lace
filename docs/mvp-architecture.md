@@ -341,25 +341,35 @@ my-site/
 
 ### Site modes
 
-Project creation selects one of three site modes, recorded with the site path in
-`.lace/manifest.json`:
+Project creation selects one of three site modes with mutually exclusive flags,
+recorded in `.lace/manifest.json` as `site: { mode, path }`:
 
-1. **starter** — generates `site/` from the `create-lace` starter; the default
-   without a flag, except that an interactive prompt proposes **existing** when
-   it detects an Astro project near the target;
-2. **existing** — generates no `site/` and connects the CMS to an existing Astro
-   site at a relative path outside the generated target, typically the parent of
-   a `cms/` directory. The generator never modifies that site; the operator runs
+1. **starter** (`--starter`, path `site`) — generates `site/` from the
+   `create-lace` starter;
+2. **existing** (`--existing-site <path>`) — generates no `site/` and connects
+   the CMS to an existing Astro site at a relative path outside the generated
+   target, typically `..` for a `cms/` directory. The path must reach an Astro
+   project root (`astro.config.*` and an `astro` dependency) without symbolic
+   links. The generator never modifies that site; the operator runs
    `lace add block --all --site <path>` and follows the connection guide;
-3. **none** — generates the CMS only, for headless use or a later connection;
-   build dispatch reports that no build site is configured.
+3. **none** (`--no-site`, path `null`) — generates the CMS only, for headless use
+   or a later connection; Compose has no builder, so build dispatch reports that
+   no build trigger or build site is configured. `--cloudflare` is rejected.
+
+An explicit flag always wins. Without one, an interactive terminal asks for the
+mode, defaulting to **existing** at `..` when the target's parent directory is an
+Astro project and to **starter** otherwise; without a terminal the starter is
+generated and the output names the other flags. Manifests without a `site`
+record (template `0.10.0` and earlier) are read as starter mode with path `site`.
 
 `init .` keeps the empty-target rule in every mode. Managed files that reference
 the site (workspace globs, root scripts, Compose build-site mount, Cloudflare
 workflow, README, and operations guide) are rendered from the recorded mode and
-path, reusing the build-site selection configuration. `lace upgrade` and
-`lace doctor` respect the recorded mode. Flag names and prompt behavior are
-fixed by the Step 30E change.
+path, reusing the build-site selection configuration. `lace upgrade` requires a
+target template generated for the same mode and path (and names the flags that
+generate one); it never creates `site/` for other modes. `lace doctor` checks the
+recorded site. Switching the mode of an existing project means generating a
+fresh project and moving configuration manually.
 
 ### Starter and reference site
 

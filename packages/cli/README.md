@@ -44,6 +44,8 @@ pnpm exec lace doctor --target cloudflare-remote --stage ready --json
 
 Both target and stage are required. Node defaults to native mode; `--mode` is invalid for Cloudflare. Doctor rejects extra/duplicate arguments and `--check`. It reads a regular root `.env` without executing or interpolating its contents, then overlays process environment (including explicitly empty values). No `.env` is required if settings are exported. Symlinks, nonregular files and files larger than 64 KiB fail safely. Compatibility comes from this project's `engines.node` and `engines.pnpm`, rather than engine-workspace defaults. Doctor does not evaluate `lace.config.ts`.
 
+The `site` check reads `.lace/manifest.json` and is skipped without one. Site mode `none` passes without probing `site/`. For `starter` and `existing`, a missing site directory or one without `astro.config.*` and an `astro` dependency fails as configuration (exit `4`); missing `@lacecms/astro`/`@lacecms/render` (nearest `node_modules`, walking up from the site), `lace.site.json` or its block map is expected during `setup` and fails during `ready`, with `pnpm exec lace add block --all --site <path>` as the next action.
+
 Native mode checks Node runtime variable names, plus `LACE_API_BASE_URL` for anonymous readiness. Compose mode checks generated host inputs: `LACE_DATABASE_PATH`, `LACE_PUBLIC_BASE_URL`, `LACE_API_BASE_URL`, `LACE_AUTH_SECRET`, root MinIO access/secret keys, `LACE_BUILDER_SECRET` and API/builder image declarations. Bucket, region, timeout and API/HTTP ports follow generated Compose defaults. It checks the generated `.lace/data/lace.sqlite` host bind mount; custom mounts need a separately reviewed deployment configuration. It does not require host settings for container-internal MinIO endpoints or paths. Only Compose mode probes Docker Compose and daemon availability; it never starts containers, renders secret-bearing Compose configuration or pulls images.
 
 Cloudflare checks the installed project-local Wrangler package/executable metadata without launching Wrangler, and requires `LACE_WRANGLER_CONFIG` to contain a matching `DB` binding. Local needs `LACE_D1_DATABASE_ID`, `LACE_CLOUDFLARE_PERSIST_TO` and a loopback `LACE_API_BASE_URL`; remote needs the explicit account, D1 ID and API token. Local diagnosis never starts Miniflare or inspects/creates offline D1 files. Local migration readiness is derived from the selected Worker's existing `/health/ready` contract; configure that URL to identify the intended Worker. When it is offline, migration inspection is skipped. Remote diagnosis sends only a migration-ledger SELECT to the fixed D1 provider endpoint. The generated Pages-only Wrangler file does not provide CMS bindings; complete generated Worker onboarding remains Step 31 work.
@@ -58,12 +60,12 @@ JSON prints one object with `ok`, `code` (`DOCTOR_OK`/`DOCTOR_FAILED`), `message
 
 ## Upgrade review and apply (Steps 24A–24B)
 
-`lace upgrade` defaults to a read-only plan. Prepare a pristine project with the target generator release in a separate, non-overlapping parent directory, using the same project basename and optional `--cloudflare` setting as the installed project. Its `.lace/manifest.json` and managed bytes are the target template; the installed manifest hashes represent the old template. For example, with `/work/my-site` as the installed project and a reviewed target generator release:
+`lace upgrade` defaults to a read-only plan. Prepare a pristine project with the target generator release in a separate, non-overlapping parent directory, using the same project basename, site mode (`--starter`, `--existing-site <path>` with the same path, or `--no-site`) and optional `--cloudflare` setting as the installed project. Planning refuses a template whose `.lace/manifest.json` site record differs and names the matching flags; a manifest without a site record is read as starter mode with path `site`, and an applied upgrade records the target's site. An existing-site target must be generated next to an Astro project at that path, for example inside a copy of the site. Its `.lace/manifest.json` and managed bytes are the target template; the installed manifest hashes represent the old template. For example, with `/work/my-site` as the installed project and a reviewed target generator release:
 
 ```sh
 mkdir -p /work/upgrade-target
 cd /work/upgrade-target
-pnpm dlx create-lace@<target-release> create my-site
+pnpm dlx create-lace@<target-release> create my-site --starter
 cd /work/my-site
 pnpm exec lace upgrade --template /work/upgrade-target/my-site
 pnpm exec lace upgrade --template /work/upgrade-target/my-site --json

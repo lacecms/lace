@@ -13,8 +13,20 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TEMPLATE_FILES, TEMPLATE_VERSION } from "./inventory.js";
+import { renderForSite } from "./render.js";
+import {
+  createPrompter,
+  isAstroProject,
+  promptSite,
+  siteRecord,
+  validateExistingSite,
+} from "./site.js";
+import type { SiteRecord, SiteSelection } from "./site.js";
 
 export { TEMPLATE_FILES, TEMPLATE_VERSION } from "./inventory.js";
+export { renderForSite, renderSiteMarkers, TemplateError } from "./render.js";
+export { normalizeSitePath, SITE_MODES } from "./site.js";
+export type { SiteMode, SiteRecord, SiteSelection } from "./site.js";
 
 const ALLOWED_EXISTING = new Set([".git", "README.md", "LICENSE"]);
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
@@ -22,6 +34,8 @@ const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 export interface GenerateOptions {
   readonly target: string;
   readonly cloudflare?: boolean;
+  /** Site mode; defaults to the starter. */
+  readonly site?: SiteSelection;
   /** Used by tests to inject a failure after moving an existing target aside. */
   readonly afterBackup?: () => Promise<void>;
   /** Used by tests to inject a failure while the original target is still in place. */
@@ -38,6 +52,7 @@ export interface GeneratedProject {
 export interface ProjectManifest {
   readonly schemaVersion: 1;
   readonly templateVersion: string;
+  readonly site: SiteRecord;
   readonly files: Readonly<
     Record<
       string,
@@ -100,9 +115,33 @@ function packageName(target: string): string {
   return /^[a-z]/u.test(normalized) ? normalized : `lace-${normalized}`;
 }
 
-function renderTemplate(bytes: Buffer, name: string, interpolate: boolean): Buffer {
-  if (!interpolate) return bytes;
-  return Buffer.from(bytes.toString("utf8").replaceAll("{{PROJECT_NAME}}", name), "utf8");
+function renderTemplate(
+  bytes: Buffer,
+  file: (typeof TEMPLATE_FILES)[number],
+  name: string,
+  site: SiteSelection,
+): Buffer {
+  if (file.interpolateName !== true && file.render === undefined) return bytes;
+  let text = bytes.toString("utf8");
+  if (file.interpolateName === true) text = text.replaceAll("{{PROJECT_NAME}}", name);
+  if (file.render !== undefined) text = renderForSite(text, file.path, file.render, site);
+  return Buffer.from(text, "utf8");
+}
+
+/** Rejects invalid site selections before anything is written. */
+async function resolveSite(
+  target: string,
+  site: SiteSelection,
+  cloudflare: boolean,
+): Promise<SiteSelection> {
+  if (site.mode === "none" && cloudflare)
+    throw new GeneratorError("--cloudflare deploys a site and cannot be combined with --no-site.");
+  if (site.mode !== "existing") return site;
+  try {
+    return { mode: "existing", path: await validateExistingSite(target, site.path) };
+  } catch (error) {
+    throw new GeneratorError(errorMessage(error), { cause: error });
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -112,6 +151,11 @@ function errorMessage(error: unknown): string {
 /** Generate in a sibling directory, then publish the completed tree. */
 export async function generateProject(options: GenerateOptions): Promise<GeneratedProject> {
   const { path: target, entries, exists } = await validateTarget(options.target);
+  const site = await resolveSite(
+    target,
+    options.site ?? { mode: "starter" },
+    options.cloudflare === true,
+  );
   const readmePreserved = entries.includes("README.md");
   const stage = await mkdtemp(join(dirname(target), `.${basename(target)}.lace-stage-`));
   let backup: string | undefined;
@@ -124,14 +168,16 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
     const files: Record<string, { owner: "user" } | { owner: "managed"; sha256: string }> = {};
     for (const file of TEMPLATE_FILES) {
       if (file.cloudflare && !options.cloudflare) continue;
+      if (file.modes !== undefined && !file.modes.includes(site.mode)) continue;
       if (file.path === "README.md" && readmePreserved) {
         files[file.path] = { owner: "user" };
         continue;
       }
       const bytes = renderTemplate(
         await readFile(join(TEMPLATE_ROOT, file.path)),
+        file,
         packageName(target),
-        file.interpolateName === true,
+        site,
       );
       const output = join(stage, file.path);
       await mkdir(dirname(output), { recursive: true });
@@ -145,6 +191,7 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
     const manifest: ProjectManifest = {
       schemaVersion: 1,
       templateVersion: TEMPLATE_VERSION,
+      site: siteRecord(site),
       files: Object.fromEntries(
         Object.entries(files).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
       ),
@@ -216,7 +263,106 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
 }
 
 function usage(): string {
-  return "Usage: create-lace [create] <dir> [--cloudflare] | create-lace init . [--cloudflare]";
+  return [
+    "Usage: create-lace [create] <dir> [site mode] [--cloudflare] | create-lace init . [site mode] [--cloudflare]",
+    "Site mode (at most one): --starter | --existing-site <path> | --no-site (not with --cloudflare).",
+    "Without a mode flag, a terminal asks for the mode; otherwise the starter is generated.",
+  ].join("\n");
+}
+
+const FLAGS = new Set(["--cloudflare", "--starter", "--existing-site", "--no-site"]);
+
+interface ParsedArguments {
+  readonly command: "create" | "init";
+  readonly directory: string;
+  readonly cloudflare: boolean;
+  readonly site: SiteSelection | undefined;
+}
+
+function parseArguments(args: readonly string[]): ParsedArguments | undefined {
+  const normalized =
+    args[0] !== undefined && args[0] !== "create" && args[0] !== "init" && !args[0].startsWith("-")
+      ? ["create", ...args]
+      : args;
+  const command = normalized[0];
+  const positional: string[] = [];
+  const flags: string[] = [];
+  let sitePath: string | undefined;
+  for (let index = 1; index < normalized.length; index++) {
+    const arg = normalized[index]!;
+    if (!arg.startsWith("--")) positional.push(arg);
+    else if (arg === "--existing-site") {
+      const value = normalized[++index];
+      if (value === undefined || value.startsWith("-")) return undefined;
+      flags.push(arg);
+      sitePath = value;
+    } else flags.push(arg);
+  }
+  const modes = flags.filter((flag) => flag !== "--cloudflare");
+  const cloudflare = flags.includes("--cloudflare");
+  if (
+    (command !== "create" && command !== "init") ||
+    positional.length !== 1 ||
+    flags.some((flag) => !FLAGS.has(flag)) ||
+    flags.length !== new Set(flags).size ||
+    modes.length > 1 ||
+    (modes[0] === "--no-site" && cloudflare) ||
+    (command === "init" && positional[0] !== ".")
+  )
+    return undefined;
+  const site: SiteSelection | undefined =
+    modes[0] === "--starter"
+      ? { mode: "starter" }
+      : modes[0] === "--no-site"
+        ? { mode: "none" }
+        : sitePath !== undefined
+          ? { mode: "existing", path: sitePath }
+          : undefined;
+  return { command, directory: positional[0]!, cloudflare, site };
+}
+
+/** Terminal access for the interactive site-mode prompt. */
+export interface CliTerminal {
+  readonly input?: NodeJS.ReadableStream;
+  /** Defaults to whether both standard input and output are terminals. */
+  readonly interactive?: boolean;
+}
+
+async function detectAstroParent(target: string): Promise<boolean> {
+  try {
+    return await isAstroProject(dirname(target));
+  } catch {
+    return false;
+  }
+}
+
+function nextSteps(project: GeneratedProject): string[] {
+  const { site } = project.manifest;
+  const guide = project.readmePreserved ? "docs/lace-operations.md" : "README.md";
+  const lines =
+    site.mode === "existing"
+      ? [
+          `Site mode: existing site at ${site.path} (the generator did not modify it).`,
+          `Next: follow ${guide} for setup; after pnpm install, install @lacecms/astro and @lacecms/render in the site, run pnpm exec lace add block --all --site ${site.path} and follow docs/lace-astro-site.md.`,
+        ]
+      : site.mode === "none"
+        ? [
+            "Site mode: none (CMS only). No site is built; build requests fail until a site is configured.",
+            `Next: follow ${guide} for setup; to connect an Astro site later, follow docs/lace-astro-site.md.`,
+          ]
+        : [
+            "Site mode: starter (site/).",
+            ...(project.readmePreserved
+              ? []
+              : [
+                  "Next: follow README.md for setup, first admin and publication; see docs/lace-operations.md for detailed operation.",
+                ]),
+          ];
+  if (project.readmePreserved)
+    lines.push(
+      "Preserved existing README.md. Follow docs/lace-operations.md for Lace setup; manually copy relevant instructions into your README if desired.",
+    );
+  return lines;
 }
 
 /** CLI entry point. Returns a process exit code without terminating the caller. */
@@ -225,33 +371,38 @@ export async function runCli(
   cwd = process.cwd(),
   stdout: Pick<NodeJS.WriteStream, "write"> = process.stdout,
   stderr: Pick<NodeJS.WriteStream, "write"> = process.stderr,
+  terminal: CliTerminal = {},
 ): Promise<number> {
-  const normalized =
-    args[0] !== undefined && args[0] !== "create" && args[0] !== "init" && !args[0].startsWith("-")
-      ? ["create", ...args]
-      : args;
-  const command = normalized[0];
-  const positional = normalized.slice(1).filter((arg) => !arg.startsWith("--"));
-  const flags = normalized.slice(1).filter((arg) => arg.startsWith("--"));
-  if (
-    (command !== "create" && command !== "init") ||
-    positional.length !== 1 ||
-    flags.some((flag) => flag !== "--cloudflare") ||
-    flags.length !== new Set(flags).size ||
-    (command === "init" && positional[0] !== ".")
-  ) {
+  const parsed = parseArguments(args);
+  if (parsed === undefined) {
     stderr.write(`${usage()}\n`);
     return 2;
   }
+  const target = parsed.command === "init" ? cwd : resolve(cwd, parsed.directory);
+  let site = parsed.site;
+  if (site === undefined) {
+    if (terminal.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY)) {
+      const prompter = createPrompter(terminal.input ?? process.stdin, stdout);
+      try {
+        site = await promptSite(prompter, stdout, await detectAstroParent(target));
+      } finally {
+        prompter.close();
+      }
+      if (site === undefined || (site.mode === "none" && parsed.cloudflare)) {
+        stderr.write(`${usage()}\n`);
+        return 2;
+      }
+    } else {
+      site = { mode: "starter" };
+      stdout.write(
+        "No terminal: generating the starter site. Use --existing-site <path> to connect an existing Astro site or --no-site for the CMS only.\n",
+      );
+    }
+  }
   try {
-    const target = command === "init" ? cwd : resolve(cwd, positional[0]!);
-    const result = await generateProject({ target, cloudflare: flags.includes("--cloudflare") });
+    const result = await generateProject({ target, cloudflare: parsed.cloudflare, site });
     stdout.write(`Created Lace project at ${result.path}\n`);
-    stdout.write(
-      result.readmePreserved
-        ? "Preserved existing README.md. Follow docs/lace-operations.md for Lace setup; manually copy relevant instructions into your README if desired.\n"
-        : "Next: follow README.md for setup, first admin and publication; see docs/lace-operations.md for detailed operation.\n",
-    );
+    stdout.write(`${nextSteps(result).join("\n")}\n`);
     if (result.warning !== undefined) stderr.write(`${result.warning}\n`);
     return 0;
   } catch (error) {

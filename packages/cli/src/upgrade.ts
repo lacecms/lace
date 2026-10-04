@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { decideManagedFile } from "./managed-decision.js";
 import type { ManagedAction } from "./managed-decision.js";
 import {
+  assertSameSite,
   isUserSource,
   readTargetTemplate,
   readUpgradeFile,
@@ -76,6 +77,7 @@ export async function planUpgrade(options: {
   const template = resolve(options.template);
   const baseline = await readUpgradeManifest(project);
   const target = await readUpgradeManifest(template);
+  assertSameSite(baseline, target);
   const targetBytes = await readTargetTemplate(template, target);
   const decisions: UpgradeDecision[] = [];
   const paths = [...new Set([...Object.keys(baseline.files), ...Object.keys(target.files)])].sort();

@@ -15,7 +15,7 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 
 `home` и `contacts` — singleton-модели страниц. `works` — коллекция. Список `/works` создаёт код Astro: наличие коллекции само по себе не создаёт страницу списка.
 
-Твой отдельный репозиторий содержит `site/**`, `lace.config.ts`, зависимости и инфраструктуру. Исходники движка и админки в него переносить не нужно. Для существующего непустого проекта автоматического подключения CMS нет: создай новый Lace-проект и перенеси в его `site/` свой сайт. Однако работающий CMS можно читать из другого Astro-проекта через `@lacecms/sdk`.
+Твой отдельный репозиторий содержит `site/**`, `lace.config.ts`, зависимости и инфраструктуру. Исходники движка и админки в него переносить не нужно. Установить CMS прямо в непустой проект нельзя, но с шаблона `0.11.0` (30E) существующий Astro-сайт подключается без копирования стартера: в корне сайта создай CMS в подкаталоге командой `create-lace cms --existing-site ..` (каталог `site/` не создаётся, сайт генератор не меняет), затем из `cms/` выполни `pnpm exec lace add block --all --site ..` и следуй `docs/lace-astro-site.md`. Флаг `--no-site` создаёт только CMS без сайта, `--starter` — пример сайта в `site/`. Без флага генератор в терминале спрашивает режим, а без терминала создаёт стартер. Этот гайд использует стартер.
 
 ## 1. Создай проект из текущего репозитория
 
@@ -29,7 +29,7 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 cd /Users/jentix/Dev/lace
 pnpm install --frozen-lockfile
 pnpm build
-node packages/create-lace/dist/bin.js create /Users/jentix/Dev/my-portfolio --cloudflare
+node packages/create-lace/dist/bin.js create /Users/jentix/Dev/my-portfolio --starter --cloudflare
 ```
 
 Флаг `--cloudflare` добавляет Pages-конфиг и ручной workflow; VPS Compose тоже остаётся. Он **не создаёт CMS Worker**.
@@ -38,7 +38,7 @@ node packages/create-lace/dist/bin.js create /Users/jentix/Dev/my-portfolio --cl
 
 ```sh
 cd /Users/jentix/Dev/my-portfolio
-node /Users/jentix/Dev/lace/packages/create-lace/dist/bin.js init . --cloudflare
+node /Users/jentix/Dev/lace/packages/create-lace/dist/bin.js init . --starter --cloudflare
 ```
 
 ### Установи локальные пакеты

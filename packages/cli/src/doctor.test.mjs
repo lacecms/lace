@@ -1,5 +1,5 @@
 import { expect, test, afterEach } from "vitest";
-import { mkdtemp, writeFile, readdir, mkdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, writeFile, readdir, readFile, mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -425,5 +425,103 @@ test("packaged command emits one safe JSON or readable human report without conf
       });
     } else expect(result.stdout).toContain("[fail] settings:");
     expect(result.stdout).not.toContain(sentinel);
+  }
+});
+
+async function siteProject(site, parentAstro = false) {
+  const parent = await directory();
+  if (parentAstro) {
+    await writeFile(join(parent, "astro.config.mjs"), "export default {};\n");
+    await writeFile(join(parent, "package.json"), '{"dependencies":{"astro":"7.3.1"}}\n');
+  }
+  const root = join(parent, "cms");
+  await mkdir(join(root, ".lace"), { recursive: true });
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify({ engines: { node: ">=24.12.0 <25", pnpm: ">=12 <13" } }),
+  );
+  const manifest = { schemaVersion: 1, templateVersion: "0.11.0", files: {} };
+  if (site !== undefined) manifest.site = site;
+  await writeFile(join(root, ".lace/manifest.json"), JSON.stringify(manifest));
+  return { parent, root };
+}
+
+test("site check is not applicable without a manifest and fails on an invalid one", async () => {
+  const root = await project();
+  const result = await execute(root);
+  expect(getCheck(result, "site")).toMatchObject({
+    status: "skipped",
+    code: "SITE_NOT_APPLICABLE",
+  });
+  expect(result.exitCode).toBe(0);
+  await mkdir(join(root, ".lace"));
+  await writeFile(join(root, ".lace/manifest.json"), '{"schemaVersion":1,"site":"none"}');
+  const invalid = await execute(root);
+  expect(getCheck(invalid, "site")).toMatchObject({ status: "fail", code: "MANIFEST_INVALID" });
+  expect(invalid.exitCode).toBe(4);
+});
+
+test("site check passes for a headless project without probing site/", async () => {
+  const { root } = await siteProject({ mode: "none", path: null });
+  const paths = [];
+  const result = await execute(root, settings, baseOptions, {
+    file: async (path, signal) => {
+      paths.push(path);
+      return doctorIO.file(path, signal);
+    },
+  });
+  expect(getCheck(result, "site")).toMatchObject({ status: "pass", code: "SITE_NONE" });
+  expect(paths.some((path) => path.includes(`${join(root, "site")}`))).toBe(false);
+});
+
+test("an existing site without packages or blocks is expected at setup and fails at ready", async () => {
+  const { root } = await siteProject({ mode: "existing", path: ".." }, true);
+  const setup = await execute(root);
+  const check = getCheck(setup, "site");
+  expect(check).toMatchObject({ status: "expected", code: "SITE_PACKAGES_MISSING" });
+  expect(check.nextAction).toContain("pnpm install in ..");
+  expect(check.nextAction).toContain("pnpm exec lace add block --all --site ..");
+  expect(setup.exitCode).toBe(0);
+  const ready = await execute(root, settings, { ...baseOptions, stage: "ready" });
+  expect(getCheck(ready, "site").status).toBe("fail");
+  expect(ready.exitCode).not.toBe(0);
+  for (const name of ["astro", "render"]) {
+    await mkdir(join(root, "..", "node_modules/@lacecms", name), { recursive: true });
+    await writeFile(join(root, "..", "node_modules/@lacecms", name, "package.json"), "{}");
+  }
+  const blocks = getCheck(await execute(root), "site");
+  expect(blocks).toMatchObject({ status: "expected", code: "SITE_BLOCKS_MISSING" });
+  expect(blocks.nextAction).toBe(
+    "Run pnpm exec lace add block --all --site ..; see docs/lace-astro-site.md.",
+  );
+});
+
+test("a missing or non-Astro recorded site fails as configuration", async () => {
+  const missing = await siteProject({ mode: "existing", path: "../web" });
+  const result = await execute(missing.root);
+  expect(getCheck(result, "site")).toMatchObject({ status: "fail", code: "SITE_MISSING" });
+  expect(result.exitCode).toBe(4);
+  const starter = await siteProject({ mode: "starter", path: "site" });
+  await mkdir(join(starter.root, "site"));
+  await writeFile(join(starter.root, "site/package.json"), '{"dependencies":{}}');
+  expect(getCheck(await execute(starter.root), "site")).toMatchObject({
+    status: "fail",
+    code: "SITE_NOT_ASTRO",
+  });
+});
+
+test("a connected starter site is ready, including legacy manifests", async () => {
+  for (const site of [{ mode: "starter", path: "site" }, undefined]) {
+    const { root } = await siteProject(site);
+    const starter = resolve(import.meta.dirname, "../../create-lace/templates/site");
+    await mkdir(join(root, "site/src/lace"), { recursive: true });
+    for (const file of ["astro.config.mjs", "package.json", "lace.site.json", "src/lace/blocks.ts"])
+      await writeFile(join(root, "site", file), await readFile(join(starter, file)));
+    for (const name of ["astro", "render"]) {
+      await mkdir(join(root, "site/node_modules/@lacecms", name), { recursive: true });
+      await writeFile(join(root, "site/node_modules/@lacecms", name, "package.json"), "{}");
+    }
+    const result = await execute(root, settings, { ...baseOptions, stage: "ready" });
+    expect(getCheck(result, "site")).toMatchObject({ status: "pass", code: "SITE_READY" });
   }
 });

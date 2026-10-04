@@ -21,6 +21,7 @@ import {
   toolVersion,
   wranglerPrerequisite,
 } from "./doctor-probes.js";
+import { siteCheck } from "./doctor-site.js";
 
 /** Probe races are bounded even when an injected dependency ignores its signal. */
 async function deadline<T>(
@@ -167,7 +168,7 @@ export async function runDoctor(options: DoctorOptions, runtime: DoctorRuntime =
       }
     }
     const settingsOk = observations.get("settings")?.kind === "pass";
-    const tasks: Promise<void>[] = [];
+    const tasks: Promise<void>[] = [probe("site", (signal) => siteCheck(io, cwd, signal))];
     if (options.mode === "compose")
       tasks.push(
         (async () => {

@@ -48,6 +48,7 @@ export const checkOrder = [
   "node",
   "pnpm",
   "settings",
+  "site",
   "docker-compose",
   "docker-daemon",
   "wrangler",
