@@ -2213,6 +2213,21 @@ covered by Step 30. Depends on Steps 26–31.
 4. Map every feedback item to a test/document or explicit decision/deferral.
    Keep §11 deferred and do not count unresolved defects as acceptance success.
 
+Delivered as: `pnpm acceptance:generated` (phase `all`) is the feedback
+regression suite. The Node consumer executes the generated README's setup
+commands (drift fails), keeps the prepared credentials, migrates without
+`mkdir`, creates the first administrator in the browser, completes and replays
+the tour, uploads media and publishes before the Compose release, Pages preview
+and dev/manual/automatic visibility journey (observe-only is refused). The
+existing-Astro consumer writes its loader and routes from the generated guide,
+verifies the Compose build-site mount, safe rich text (an unsafe link fails the
+build), styling hooks, public media bytes and operator block edits across a
+rerun and a simulated update. The Cloudflare consumer journey follows, then the
+packed CLI upgrades the published template `0.4.0` default and Cloudflare
+projects (`tests/fixtures/template-0.4.0/`): a modified managed file is refused,
+user README/config/site bytes are preserved. `docs/onboarding-feedback-acceptance.md`
+maps §1–§12 to evidence, guarded by a test (§11 deferred, no open defects).
+
 ### Session 32B — Coherent artifact refresh and verification
 
 1. Select an unused next alpha package/image version and a new template version

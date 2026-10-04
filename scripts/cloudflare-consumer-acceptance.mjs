@@ -2,11 +2,11 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer as createHttpsServer } from "node:https";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { parseEnv } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
+import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 
 /** A structurally valid 3×2 RGB PNG, so upload exercises the Worker image inspector. */
@@ -166,21 +166,6 @@ async function expireSetupTokens(persistTo) {
     }
   }
   if (expired === 0) throw new Error("cloudflare-expire: no setup token found in local D1 state");
-}
-
-/** Loads the workspace's Playwright as an acceptance harness; consumers never depend on it. */
-function loadBrowser(workspace) {
-  const require = createRequire(join(workspace, "apps/admin/package.json"));
-  const { chromium } = require("@playwright/test");
-  return chromium.launch({ headless: true });
-}
-
-async function visible(locator, stage) {
-  try {
-    await locator.waitFor({ state: "visible", timeout: 30_000 });
-  } catch {
-    throw new Error(`${stage}: expected admin element did not appear`);
-  }
 }
 
 /**

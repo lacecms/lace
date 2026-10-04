@@ -1,0 +1,195 @@
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { assertSecretFree } from "./consumer-security.mjs";
+
+/** Upgrade metadata the CLI writes by design: conflict review and recovery records. */
+export function upgradeMetadata(path) {
+  return path.startsWith(".lace/conflicts/") || path.startsWith(".lace/upgrade/");
+}
+
+/** Variants of the published alpha template and the operator change that conflicts. */
+const variants = [
+  { name: "default", flags: [], conflict: "docker-compose.yml" },
+  // The retired root wrangler.jsonc is removed by the upgrade; an edit makes it a removal conflict.
+  { name: "cloudflare", flags: ["--cloudflare"], conflict: "wrangler.jsonc" },
+];
+
+const userReadme = "# Operator site\n\nOur own deployment notes; Lace upgrades never touch them.\n";
+
+async function files(root, prefix = "") {
+  const result = {};
+  for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) Object.assign(result, await files(root, path));
+    else
+      result[path] = createHash("sha256")
+        .update(await readFile(join(root, path)))
+        .digest("hex");
+  }
+  return result;
+}
+
+function withoutMetadata(snapshot) {
+  return Object.fromEntries(Object.entries(snapshot).filter(([path]) => !upgradeMetadata(path)));
+}
+
+/**
+ * Upgrades the exact projects the published create-lace@0.1.0-alpha.1 generated
+ * (template 0.4.0) with the packed CLI: a modified managed file blocks apply,
+ * and after it is restored, apply makes managed files current while the user's
+ * README, configuration and site source stay byte-for-byte unchanged.
+ */
+export async function templateUpgradeJourney(temporary, operations) {
+  const { cli, generator, run, secretValues, workspace } = operations;
+  // Upgrade refuses symbolic links in its paths, such as macOS's /var -> /private/var.
+  const parent = await realpath(temporary);
+  const upgrade = (stage, project, template, apply) => {
+    console.info(`Acceptance: ${stage}`);
+    const result = spawnSync(
+      process.execPath,
+      [
+        cli,
+        "upgrade",
+        "--project",
+        project,
+        "--template",
+        template,
+        ...(apply ? ["--apply"] : []),
+        "--json",
+      ],
+      { encoding: "utf8" },
+    );
+    assertSecretFree(`${result.stdout}${result.stderr}`, secretValues, `${stage} output`);
+    try {
+      return { status: result.status, report: JSON.parse(result.stdout) };
+    } catch {
+      throw new Error(`${stage}: invalid JSON output\n${result.stdout}${result.stderr}`);
+    }
+  };
+
+  for (const variant of variants) {
+    const fixture = JSON.parse(
+      await readFile(join(workspace, `tests/fixtures/template-0.4.0/${variant.name}.json`), "utf8"),
+    );
+    const project = join(parent, `upgrade-${variant.name}`, "acceptance-site");
+    for (const [path, content] of Object.entries(fixture.files)) {
+      await mkdir(dirname(join(project, path)), { recursive: true });
+      await writeFile(join(project, path), content);
+    }
+    // The operator's own changes since generation.
+    await writeFile(join(project, "README.md"), userReadme);
+    await writeFile(
+      join(project, "lace.config.ts"),
+      `${fixture.files["lace.config.ts"]}// Operator note: keep this configuration.\n`,
+    );
+    await writeFile(
+      join(project, "site/src/pages/index.astro"),
+      `${fixture.files["site/src/pages/index.astro"]}<!-- operator page edit -->\n`,
+    );
+    const template = join(parent, `upgrade-${variant.name}-template`, "acceptance-site");
+    await mkdir(dirname(template), { recursive: true });
+    await run(`upgrade-${variant.name}-template`, "node", [
+      generator,
+      "create",
+      template,
+      "--starter",
+      ...variant.flags,
+    ]);
+    const user = Object.fromEntries(
+      Object.entries(await files(project)).filter(
+        ([path]) => path === "README.md" || path === "lace.config.ts" || path.startsWith("site/"),
+      ),
+    );
+
+    // Modified managed infrastructure is detected and blocks apply.
+    await writeFile(
+      join(project, variant.conflict),
+      `${fixture.files[variant.conflict]}\n// operator change\n`,
+    );
+    const conflicted = upgrade(`upgrade-${variant.name}-conflict-plan`, project, template, false);
+    const conflict = conflicted.report.data?.decisions?.find(
+      (decision) => decision.path === variant.conflict,
+    );
+    if (
+      conflicted.status === 0 ||
+      conflicted.report.data?.conflicts !== 1 ||
+      conflict?.action !== "conflict"
+    )
+      throw new Error(
+        `upgrade-${variant.name}-conflict-plan: modified ${variant.conflict} was not a conflict (${conflicted.report.code}: ${conflicted.report.message})`,
+      );
+    const before = await files(project);
+    const refused = upgrade(`upgrade-${variant.name}-conflict-apply`, project, template, true);
+    if (refused.status === 0 || refused.report.code !== "UPGRADE_CONFLICTS")
+      throw new Error(`upgrade-${variant.name}-conflict-apply: apply did not refuse the conflict`);
+    if (
+      JSON.stringify(withoutMetadata(await files(project))) !==
+      JSON.stringify(withoutMetadata(before))
+    )
+      throw new Error(
+        `upgrade-${variant.name}-conflict-apply: a refused apply changed project files`,
+      );
+
+    // The operator restores the managed file and applies.
+    await writeFile(join(project, variant.conflict), fixture.files[variant.conflict]);
+    const plan = upgrade(`upgrade-${variant.name}-plan`, project, template, false);
+    if (
+      plan.status !== 0 ||
+      plan.report.data.conflicts !== 0 ||
+      plan.report.data.fromVersion !== "0.4.0"
+    )
+      throw new Error(`upgrade-${variant.name}-plan: unexpected plan ${plan.report.code}`);
+    const applied = upgrade(`upgrade-${variant.name}-apply`, project, template, true);
+    if (applied.status !== 0 || applied.report.code !== "UPGRADE_APPLIED")
+      throw new Error(
+        `upgrade-${variant.name}-apply: ${applied.report.code} ${applied.report.message}`,
+      );
+    const after = await files(project);
+    const targetManifest = JSON.parse(
+      await readFile(join(template, ".lace/manifest.json"), "utf8"),
+    );
+    const manifest = JSON.parse(await readFile(join(project, ".lace/manifest.json"), "utf8"));
+    if (manifest.templateVersion !== targetManifest.templateVersion)
+      throw new Error(`upgrade-${variant.name}-apply: manifest version was not advanced`);
+    const changed = plan.report.data.decisions.filter((decision) =>
+      ["add", "replace", "remove"].includes(decision.action),
+    );
+    if (!changed.some((decision) => decision.action === "add"))
+      throw new Error(`upgrade-${variant.name}-apply: no new managed file was added`);
+    for (const decision of changed) {
+      if (decision.action === "remove") {
+        if (decision.path in after)
+          throw new Error(`upgrade-${variant.name}-apply: retired ${decision.path} remains`);
+      } else if (after[decision.path] !== decision.targetHash) {
+        throw new Error(
+          `upgrade-${variant.name}-apply: ${decision.path} is not the current template`,
+        );
+      }
+    }
+    if (variant.name === "cloudflare") {
+      if (
+        "wrangler.jsonc" in after ||
+        !("worker/index.ts" in after) ||
+        "worker/wrangler.jsonc" in after
+      )
+        throw new Error(
+          "upgrade-cloudflare-apply: Worker files do not follow the upgrade contract",
+        );
+    }
+    const userAfter = Object.fromEntries(
+      Object.entries(after).filter(
+        ([path]) => path === "README.md" || path === "lace.config.ts" || path.startsWith("site/"),
+      ),
+    );
+    if (JSON.stringify(userAfter) !== JSON.stringify(user))
+      throw new Error(`upgrade-${variant.name}-apply: user README, configuration or site changed`);
+    const repeat = upgrade(`upgrade-${variant.name}-repeat`, project, template, false);
+    if (repeat.status !== 0 || repeat.report.data.changes !== 0)
+      throw new Error(`upgrade-${variant.name}-repeat: upgraded project is not current`);
+  }
+  console.info(
+    "Template 0.4.0 default and Cloudflare projects: managed conflict refused, upgrade applied, user README, configuration and site source preserved",
+  );
+}
