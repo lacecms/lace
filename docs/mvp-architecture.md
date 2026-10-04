@@ -419,7 +419,10 @@ root.
 
 Block-source updates are a separate command: `lace add block` updates installed
 registry items, while `lace upgrade` updates the template's managed files. Both
-share one hash, conflict, and journal implementation in `@lacecms/cli`.
+share one three-way hash decision, diff, and guarded atomic-write implementation
+in `@lacecms/cli`. `lace add block` needs no rollback journal: every write is
+compare-and-swap, `lace.site.json` is written last as the commit record, and a
+re-run adopts files that already match the registry.
 
 `.lace/manifest.json` should record the generator/template version and hashes of managed files. A modified managed file produces a diff or conflict instead of being overwritten.
 
@@ -1315,9 +1318,12 @@ Registry item manifests (`item.json`, `schemaVersion` 1) carry `name`,
 `framework`, `blockType`, `blockVersion`, `revision`, `requires`, `files`
 (`source`, `target` relative to the components directory, `role`), and
 `dependencies`. `lace.site.json` (`schemaVersion` 1) stores `framework`,
-`componentsDir`, `blockMap`, `blockMapSha256`, optional `definitions`, and
-`items` keyed by item name with `revision` and `files` mapping site-relative
-paths to SHA-256 hashes; the item `revision` is the recorded registry version.
+`componentsDir`, `blockMap`, `blockMapSha256` (`null` until Lace first writes the
+map), optional `definitions` (a module path relative to the site root, only
+imported, never written), `items` keyed by item name with `revision` and
+`files` mapping site-relative paths to SHA-256 hashes (the item `revision` is
+the recorded registry version), and optional `customBlocks` keyed by block type
+with the `files` scaffolded for configured custom blocks.
 
 The block map file imports definitions and components and exports
 `blocks = defineBlockMap({...})`, with imports and entries sorted by block type
@@ -1325,8 +1331,9 @@ after a one-line generated-file comment. Built-in definitions come from
 `@lacecms/content`; custom definitions come from the recorded `definitions`
 module, which `lace.config.ts` also uses. Definitions are imported, never copied.
 
-`lace add block <type...>` (with `--all`, `--dry-run`, `--json`, and
-`--site <dir>`) resolves item dependencies, writes component files, updates the
+`lace add block <type...>` (with `--all`, `--dry-run`, `--json`,
+`--site <dir>` defaulting to `site`, `--framework <key>`, and `--write-new`)
+resolves item dependencies, writes component files, updates the
 map file, checks installed package versions against item ranges, checks
 built-in definition versions against `lace.config.ts`, and scaffolds a typed
 component for a configured custom block that has no registry item. Ownership

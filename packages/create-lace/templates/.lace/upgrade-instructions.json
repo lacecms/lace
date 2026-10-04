@@ -1,8 +1,11 @@
 {
   "schemaVersion": 1,
-  "templateVersion": "0.9.0",
+  "templateVersion": "0.10.0",
   "database": [],
   "configuration": [
+    "Template 0.10.0: the managed docs/lace-astro-site.md and docs/lace-operations.md now use the lace add block command from @lacecms/cli to install, update and scaffold block components. Upgrade updates only those managed guides; it never changes, adds or deletes files under site/.",
+    "Optional: after updating @lacecms/cli, run pnpm exec lace add block --all (add --site <path> for a site outside site/) to check your block components against the bundled registry; unchanged files are reported current or updated, and edited components or an edited block map are reported as conflicts and never overwritten. Your README is user-owned; incorporate the new block guidance there manually if desired.",
+    "Template 0.9.0 (included when upgrading from 0.8.0 or earlier):",
     "Template 0.9.0: new projects load and render published content through the @lacecms/sdk, @lacecms/render and @lacecms/astro packages with user-owned block components. Upgrade updates only managed files (the operations guide and the new docs/lace-astro-site.md); it never changes, adds or deletes files under site/.",
     "Your site keeps building with its current files. To migrate it manually: generate a fresh 0.9.0 project in a temporary directory with the same create-lace version and compare its site/ with yours.",
     "1. Add @lacecms/astro, @lacecms/render and @lacecms/content next to @lacecms/sdk in site/package.json at the release version, then run pnpm install.",

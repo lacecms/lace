@@ -2003,6 +2003,20 @@ because the shared allowlist now rejects it. Parity, existing-site guide
 
 ### Session 30D — Block registry and `lace add block`
 
+**Completed:** 2026-10-04. `@lacecms/cli` bundles `registry/` into
+`dist/registry/` at build time and provides `lace add block <type...>|--all`
+with `--site` (default `site`), `--framework`, `--dry-run`, `--write-new`, and
+`--json`. It reproduces the committed starter lock, map, and components byte for
+byte, adopts identical untracked files, updates unmodified files to newer
+revisions, preserves edits, reports conflicts with diffs (exit 2), prints the
+exact block map lines for an edited map, blocks items whose block definition
+version differs from `lace.config.ts`, prints the `pnpm --dir <site> add`
+command for missing packages, and scaffolds configured custom blocks from the
+recorded `definitions` module (`customBlocks` in `lace.site.json`). The upgrade
+three-way decision is shared; block installation uses compare-and-swap writes
+with `lace.site.json` as the commit record instead of a rollback journal. The
+template is `0.10.0`; generated guides use the command.
+
 1. **Registry format and delivery.** A versioned, framework-keyed registry
    bundled with `@lacecms/cli` (no network fetch). Each item declares block type,
    framework, block definition version, required adapter/core package ranges,

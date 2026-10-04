@@ -1,4 +1,6 @@
 import { resolve } from "node:path";
+import { decideManagedFile } from "./managed-decision.js";
+import type { ManagedAction } from "./managed-decision.js";
 import {
   isUserSource,
   readTargetTemplate,
@@ -8,7 +10,7 @@ import {
   UpgradeError,
 } from "./upgrade-input.js";
 
-export type UpgradeAction = "preserve" | "current" | "add" | "replace" | "remove" | "conflict";
+export type UpgradeAction = ManagedAction;
 export interface UpgradeDecision {
   readonly path: string;
   readonly action: UpgradeAction;
@@ -108,27 +110,15 @@ export async function planUpgrade(options: {
     }
     const current = await readUpgradeFile(project, path);
     const currentHash = current === undefined ? null : upgradeHash(current);
-    let action: UpgradeAction;
-    let reason: string;
-    if (oldEntry?.owner === "managed" && nextEntry?.owner === "user") {
-      action = "conflict";
-      reason = "ownership-changed";
-    } else if (oldEntry === undefined) {
-      action = current === undefined ? "add" : "conflict";
-      reason = current === undefined ? "new-managed-file" : "untracked-path-exists";
-    } else if (currentHash === targetHash) {
-      action = "current";
-      reason = "matches-target";
-    } else if (baselineHash === targetHash) {
-      action = "preserve";
-      reason = "template-unchanged-local-edit";
-    } else if (currentHash === baselineHash) {
-      action = nextEntry === undefined ? "remove" : "replace";
-      reason = "matches-baseline";
-    } else {
-      action = "conflict";
-      reason = current === undefined ? "managed-file-missing" : "managed-file-modified";
-    }
+    const { action, reason } =
+      oldEntry?.owner === "managed" && nextEntry?.owner === "user"
+        ? { action: "conflict" as const, reason: "ownership-changed" }
+        : decideManagedFile({
+            tracked: oldEntry !== undefined,
+            baselineHash,
+            currentHash,
+            targetHash,
+          });
     const needsDiff =
       ["add", "replace", "remove", "conflict"].includes(action) && reason !== "ownership-changed";
     decisions.push({

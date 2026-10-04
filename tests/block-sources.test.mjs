@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { builtInBlocks } from "@lacecms/content";
@@ -102,4 +102,20 @@ test("every Lace-maintained site installs all built-in blocks with the same bloc
     }),
   );
   expect(new Set(maps).size).toBe(1);
+});
+
+test("the CLI bundles a byte-identical copy of the registry", async () => {
+  const bundled = join(workspace, "packages/cli/dist/registry");
+  const files = async (root) =>
+    (await readdir(root, { recursive: true, withFileTypes: true }))
+      .filter((entry) => entry.isFile())
+      .map((entry) => join(entry.parentPath, entry.name).slice(root.length + 1))
+      .sort();
+  const paths = await files(registryRoot);
+  expect(await files(bundled)).toEqual(paths);
+  for (const path of paths)
+    expect(
+      (await readFile(join(bundled, path))).equals(await readFile(join(registryRoot, path))),
+      path,
+    ).toBe(true);
 });

@@ -4,11 +4,12 @@ import { runUpgradeCommand, upgradeUsage } from "./upgrade-command.js";
 import { describeFailure, failureDiagnostic, identifyOperation } from "./diagnostics.js";
 import type { Target } from "./index.js";
 import { doctorUsage, parseDoctorArguments } from "./doctor-report.js";
+import { addBlockUsage, runAddBlockCommand } from "./blocks-command.js";
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) {
-    console.info(`${usage}\n${doctorUsage}\n${upgradeUsage}`);
+    console.info(`${usage}\n${doctorUsage}\n${upgradeUsage}\n${addBlockUsage}`);
     return EXIT.OK;
   }
   const json = argv.includes("--json");
@@ -33,6 +34,15 @@ async function main(): Promise<number> {
         return EXIT.OK;
       }
       const result = await runUpgradeCommand(argv.slice(1));
+      console.info(result.output);
+      return result.exitCode;
+    }
+    if (argv[0] === "add" && argv[1] === "block") {
+      if (argv.length === 3 && (argv[2] === "--help" || argv[2] === "-h")) {
+        console.info(addBlockUsage);
+        return EXIT.OK;
+      }
+      const result = await runAddBlockCommand(argv.slice(2));
       console.info(result.output);
       return result.exitCode;
     }

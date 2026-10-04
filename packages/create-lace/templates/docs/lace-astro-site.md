@@ -77,20 +77,34 @@ declare module "*.astro" {
 
 ## 5. Add the block components
 
-Copy these from a freshly generated starter (`pnpm dlx create-lace@0.1.0-alpha.1 lace-starter`)
-into the same paths of your site:
+From the `cms/` directory, install the block components, the block map and the
+block lock into your site:
 
-- `site/src/components/lace/` — `HeroBlock`, `RichTextBlock`, `ImageBlock`,
-  `QuoteBlock` and `CtaBlock` components;
-- `site/src/lace/blocks.ts` — the block map;
-- `site/lace.site.json` — the record of installed block versions and hashes.
+```sh
+pnpm exec lace add block --all --site ..
+```
+
+`--all` installs a component for every block type `cms/lace.config.ts`
+registers; name types instead (`lace add block hero cta --site ..`) to install
+only those. The command writes `src/components/lace/*Block.astro`,
+`src/lace/blocks.ts` and `lace.site.json` in the site, and prints the exact
+`pnpm --dir .. add ...` command when a required Lace package is missing or
+outdated; it never edits your `package.json` or other source. Use `--dry-run`
+to review the plan without writing.
 
 The components are your source: change their markup and styles freely. Each
 receives `block`, validated `data`, `context` and `mediaUrl`; rich-text fields
 render through `@lacecms/astro/RichText.astro`. A block type that is missing
-from the map fails the build with its model, entry and block key. A future
-`lace add block` command will install and update these files for you; until
-then this copy is the supported path.
+from the map fails the build with its model, entry and block key. Running the
+command again after a CLI upgrade updates only files you have not changed; an
+edited component or block map is reported as a conflict with a diff and left
+untouched (`--write-new` writes the proposed file next to it as `.new`).
+
+For a custom block, export its `defineBlock` value from a module that
+`lace.config.ts` imports, record that module path relative to the site root as
+`"definitions"` in `lace.site.json`, then run
+`pnpm exec lace add block <type> --site ..` to scaffold a typed component with
+the styling hooks and register it in the block map.
 
 ## 6. Render a page and a collection
 

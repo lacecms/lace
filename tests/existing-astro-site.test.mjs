@@ -13,6 +13,14 @@ const exec = promisify(execFile);
 const workspace = fileURLToPath(new URL("..", import.meta.url));
 const fixtureSite = join(workspace, "tests/fixtures/existing-astro-site");
 const astro = join(workspace, "apps/site/node_modules/astro/bin/astro.mjs");
+const lace = join(workspace, "packages/cli/dist/bin.js");
+const blockFiles = [
+  "lace.site.json",
+  "src/lace/blocks.ts",
+  ...["Cta", "Hero", "Image", "Quote", "RichText"].map(
+    (name) => `src/components/lace/${name}Block.astro`,
+  ),
+];
 const roots = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -33,6 +41,19 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   await cp(fixtureSite, site, { recursive: true });
   // The guide installs the packages; reuse the workspace installation here.
   await symlink(join(workspace, "apps/site/node_modules"), join(site, "node_modules"));
+  // The guide installs the blocks with `lace add block`; it must reproduce the fixture files.
+  await Promise.all(blockFiles.map((path) => rm(join(site, path))));
+  const added = await exec(
+    process.execPath,
+    [lace, "add", "block", "cta", "hero", "image", "quote", "richText", "--site", "site", "--json"],
+    { cwd: root },
+  );
+  expect(JSON.parse(added.stdout)).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED" });
+  for (const path of blockFiles)
+    expect(
+      (await readFile(join(site, path))).equals(await readFile(join(fixtureSite, path))),
+      path,
+    ).toBe(true);
 
   const exported = JSON.parse(
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
