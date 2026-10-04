@@ -147,7 +147,7 @@ foundation
   -> feedback-driven local setup + diagnostics + quickstart
   -> browser setup + admin introduction
   -> explicit build site + verified publication modes
-  -> renderer distribution decision
+  -> shared rendering core + block installation
   -> complete Cloudflare consumer onboarding
   -> feedback regression + next alpha verification
   -> cross-runtime/security/release gate
@@ -187,12 +187,12 @@ foundation
 | 27 | Environment checks and generated-project quickstart | M | 27A, 27B |
 | 28 | First-admin setup and guided admin introduction | M | 28A, 28B |
 | 29 | Explicit build site and publication-mode guidance | M | 29A, 29B |
-| 30 | Renderer distribution decision | S | 30A |
+| 30 | Shared rendering core and block installation | L | 30A, 30B, 30C, 30D |
 | 31 | Complete generated Cloudflare consumer onboarding | M | 31A, 31B |
 | 32 | Feedback regression acceptance and next alpha preparation | M | 32A, 32B |
 | 33 | MVP release gate | L | 33A, 33B, 33C |
 
-The roadmap is therefore **82 recommended session units**. Small neighboring
+The roadmap is therefore **85 recommended session units**. Small neighboring
 units can be combined after the foundation stabilizes, but units that introduce
 a database migration, a runtime adapter, or a security boundary should remain
 separate.
@@ -213,9 +213,10 @@ not pre-create changes or mark proposed behavior implemented. Keep the existing
 architecture invariants: operator-issued one-time setup token, one installation
 per site, Astro public output, fixed-command builds, and protected user source.
 
-The component-installation idea (§7) receives a bounded decision in Step 30;
-implementation requires a separate scope decision. In-place CMS installation
-into a nonempty project (§11) stays post-MVP. Selecting an external site's build
+The component-installation idea (§7) was scoped on 2026-10-04: Step 30 delivers
+a framework-neutral rendering core, a thin Astro adapter, and the
+`lace add block` installer for user-owned block sources. In-place CMS
+installation into a nonempty project (§11) stays post-MVP. Selecting an external site's build
 source in Step 29 is operator configuration alongside a separately generated
 CMS directory, not a relaxation of the generator's empty-target contract.
 
@@ -1776,40 +1777,210 @@ claims. See [29B verification](archive/step-29/step-29b-verification.md).
 
 **Session boundary:** M; use 29A and 29B.
 
-## Step 30 — Renderer distribution decision
+## Step 30 — Shared rendering core and block installation
 
-**Outcome:** the optional component-installation idea has a reviewable decision
-and a documented integration path, without promising an unapproved installer.
+**Outcome:** public sites consume Lace content through packaged,
+framework-neutral loading and rendering primitives plus a thin Astro adapter,
+while visual block components remain user-owned source that `lace add block`
+installs, versions, and updates without overwriting user edits.
 
-**Basis:** onboarding feedback §7; §11 remains deferred. Depends on Step 29.
-This is a bounded investigation/documentation unit. It does not require a new
-component command or support for additional public-site frameworks to ship MVP.
+**Basis:** onboarding feedback §7 and the owner's 2026-10-04 scope decision; §11
+remains deferred. Depends on Step 29. The first alpha is published, so this step
+may break alpha compatibility deliberately to avoid later rework; existing
+generated projects receive explicit migration instructions, never silent
+rewrites of user-owned files.
 
-### Session 30A — Compare source installation and packaged renderers
+**Decisions already taken (do not reopen in proposals):**
 
-1. Inventory the current built-in Astro renderers, rich-text helpers, SDK loader,
-   dependencies, block registration, styling hooks, and routing assumptions.
-   Document a complete manual connection to an existing Astro site.
-2. Compare copying a starter set, selective source installation, and packaged
-   renderers against editable source, dependency closure, configurable paths,
-   compatibility, repeated addition, and updates without overwriting edits.
-3. Describe how framework selection and renderer implementations could be
-   separated for future Astro/React/Vue/Svelte variants without committing to
-   implementing all variants now. Keep Astro as the supported MVP site runtime.
-4. Record the recommendation, tradeoffs, and unresolved choices. If an installer
-   is selected for implementation, obtain a separate scope decision and add a
-   just-in-time roadmap/OpenSpec unit; update architecture first if it changes
-   the supported onboarding or ownership invariants. Do not expand `init .` to
-   nonempty projects as part of this investigation.
+- *Package split.* Everything framework-independent lives in framework-neutral
+  packages (`@lacecms/content`, `@lacecms/sdk`, and a framework-neutral render
+  core). A framework adapter package contains only code that depends on that
+  framework. Astro is the only adapter implemented now and the default framework.
+- *Visual components are never npm-distributed.* Block markup is user-owned
+  source: the generated starter ships it, and `lace add block` copies it from a
+  versioned registry into existing sites. No adapter exports default visual
+  blocks.
+- *Block registration uses a generated map file* that the CLI maintains with hash
+  conflict detection; the CLI never edits arbitrary user source.
+- *Public DTO shape is unchanged in this step.* The loader hides that public
+  entries reuse the content-entry schema (always-present `published`, mirrored
+  `draft`); a dedicated public schema is an open question for Step 33.
+- `create-lace init .` still requires an empty target. Adding blocks to an
+  existing site is site-side tooling, not in-place CMS installation (§11).
+
+**Current-state inventory (input to 30A, verified 2026-10-04).** The generated
+`site/` and `apps/site` each carry their own copies of:
+
+- `lib/site-data.ts` — SDK client creation from env, ETag-conditional build-export
+  reads, per-build memoization versus dev revalidation with a shared in-flight
+  request, `LACE_EXPECTED_PUBLISHED_VERSION` consistency check, actionable
+  401/403/transport errors, public media URLs, local export type copies, and a
+  starter-specific derivation hard-coding `home` at `/` and `posts` at
+  `/blog/<slug>`;
+- `lib/rich-text.ts` — a re-implementation of the rich-text allowlist that
+  already drifts from `@lacecms/content` (`validateRichTextDocument`,
+  `isSafeUrl`): it accepts `https:example.com`, `mailto:` without `@`, and
+  invalid nesting such as a paragraph inside a paragraph;
+- `lib/rendering.ts` — hand-written field readers duplicating `builtInBlocks`
+  definitions, although `validateBlockData`/`BlockDataValues` already exist;
+- `BlockRenderer.astro` — a closed `if` chain over five block types;
+- `RichText*.astro` — semantic rich-text output without styling;
+- five visual blocks carrying the Step 21.5 `data-lace-*` styling hooks.
+
+### Session 30A — Decision record, architecture, and package boundaries
+
+Planning/documentation only; no production code.
+
+1. Record an ADR under `docs/adr/` with the decision above, the compared options
+   (copy-only starter, npm-packaged renderers, source installer, chosen hybrid),
+   their tradeoffs, and the drift evidence from the inventory.
+2. Update `docs/mvp-architecture.md` before any implementation unit:
+   - package list and dependency graph for the render core and framework
+     adapters (for example `render -> content, contracts`, `astro -> render, sdk`,
+     `apps/site -> astro, render, sdk, content`); final package names are fixed
+     here and reused by 30B–30D;
+   - ownership rules for block sources installed by the CLI, the generated block
+     map file, and the site-local Lace configuration/lock file (Lace-managed with
+     hash conflict detection, inside an otherwise user-owned site tree);
+   - the rule that visual block markup is never published as a runtime package;
+   - §13 SDK and typical Astro page examples rewritten for the new APIs;
+   - the framework-selection model (registry and adapters keyed by framework,
+     `astro` default, other frameworks reserved).
+3. Specify the public APIs that 30B–30D implement, at the level of names,
+   inputs, outputs, error behavior, and server-only constraints, so proposals do
+   not redesign them. Keep the exact field-level DTO and spec wording to the
+   just-in-time OpenSpec changes.
+4. Reconcile onboarding feedback §7 and the Step 31–33 cross-references (already
+   updated on 2026-10-04) with any name or boundary fixed in this session.
+
+### Session 30B — Framework-neutral loading and rendering core
+
+1. **Published-site loader in `@lacecms/sdk`.** Generalize `site-data.ts` into
+   an SDK-owned loader without framework imports:
+   - input: explicit environment record or explicit `baseUrl`/`token`/public
+     media origin, optional `fetch`, and `revalidate`;
+   - static mode reads one build export per process and resets after failure;
+     revalidate mode issues ETag-conditional reads with one shared in-flight
+     request, preserving the 29B dev behavior;
+   - enforces `LACE_EXPECTED_PUBLISHED_VERSION` when present;
+   - returns a typed published-site view: `byPath(path)`, `entries(modelKey)`,
+     `bySlug(modelKey, slug)`, `mediaUrl(mediaId)`, and the export version, built
+     from contract DTOs instead of local type copies. Entries expose required
+     `published` content only; no draft-shaped field is surfaced;
+   - rejects duplicate paths and duplicate slugs within a model; it trusts the
+     CMS-resolved `path` and does not re-derive route patterns or hard-code
+     model keys;
+   - errors keep stable classes/codes and actionable but project-neutral text;
+     callers may supply hints (the generated project names its commands).
+2. **Framework-neutral render core package.**
+   - `parseBlock(definition, block, context)` over `validateBlockData` returns
+     typed `BlockDataValues`, works for built-in and user `defineBlock`
+     definitions, and fails with model, entry, block key, and field path;
+   - rich-text helpers reuse `validateRichTextDocument` and `isSafeUrl`
+     exclusively; delete the site-local allowlist copies. Provide a neutral
+     node/mark-to-element description (tag, safe attributes, children) so every
+     adapter renders identical semantics and never emits raw HTML;
+   - a block-map type keyed by block type plus a resolver that fails on unknown
+     types with model, entry, and block identifiers (current build-failure
+     behavior preserved);
+   - no dependency on any UI framework, Node-only API, or the SDK transport.
+3. Tests: loader modes, ETag reuse, concurrent revalidation, expected-version
+   mismatch, auth/transport failures, duplicate path/slug rejection; `parseBlock`
+   for every built-in block, custom block, defaults, and invalid data; rich-text
+   parity tests proving the render core accepts and rejects exactly what
+   `@lacecms/content` does (including the drift cases above); dependency-direction
+   check that the core imports no framework.
+
+### Session 30C — Astro adapter and starter migration
+
+1. **Astro adapter package** containing only Astro-bound code:
+   - `<LaceBlocks entry blocks mediaUrl>` dispatching through the block map and
+     passing typed block props (`block`, parsed `data`, `context`, `mediaUrl`);
+   - `<RichText document components?>` rendering the neutral element description,
+     with optional overrides for individual node/mark components that receive
+     validated props only;
+   - Astro environment glue: a server-only loader factory that reads
+     `import.meta.env`/`process.env`, enables revalidation in `astro dev`, and
+     never exposes `LACE_BUILD_TOKEN` to client bundles;
+   - shipped as Astro component source with a peer dependency on the supported
+     Astro range; no visual block components.
+2. **Generated starter and reference site.** Rewrite `create-lace` template
+   `site/` and `apps/site` on the adapter: delete `lib/rich-text.ts` and
+   `lib/rendering.ts`, replace `site-data.ts` with a small starter file that
+   uses the loader view (`byPath("/")`, `entries("posts")`), replace
+   `BlockRenderer.astro` with `<LaceBlocks>` plus the generated map file, and
+   rewrite the five visual blocks to use `parseBlock`/`<RichText>` while keeping
+   every existing `data-lace-*` hook and the generated markup. Source the five
+   blocks from the 30D registry layout (or a single shared source the registry
+   reuses) so the starter and `lace add block` cannot diverge; record them in the
+   site-local lock file as installed registry items.
+3. Bump the template version, update `TEMPLATE_FILES` ownership, generated
+   README/operations, and upgrade instructions. Existing alpha projects receive
+   explicit manual migration steps for their user-owned `site/**`; `lace upgrade`
+   never rewrites them.
+4. Write and verify the manual connection guide for an existing Astro site
+   (CMS in a subdirectory per Step 29): install packages, configure env, create
+   the loader file, render one page and one collection route, add blocks, and
+   style through hooks. Verification uses a separate independent Astro fixture.
+5. Tests: fixture build output for all five blocks unchanged apart from intended
+   differences, safe rich text, unknown-block failure, dev revalidation,
+   client-bundle secret scan, generated-project acceptance, and the
+   existing-site guide fixture.
+
+### Session 30D — Block registry and `lace add block`
+
+1. **Registry format and delivery.** A versioned, framework-keyed registry
+   bundled with `@lacecms/cli` (no network fetch). Each item declares block type,
+   framework, block definition version, required adapter/core package ranges,
+   files with their target role, and registry-item dependencies. Only `astro`
+   items exist now; the schema and lookup accept other framework keys and return
+   an explicit "framework not supported yet" error.
+2. **Site-local configuration and lock.** On first use the CLI creates a
+   site-local Lace file recording framework, component directory, map-file path,
+   and installed items with registry version and content hash. Framework is taken
+   from the file, else `--framework`, else detected from the site's
+   `package.json`, defaulting to `astro`. The site root is selected with
+   `--site <dir>` (default: the generated `site/`), validated by locating the
+   framework config; paths outside the site root are rejected.
+3. **Command behavior** (`lace add block <type...>`, `--all`, `--dry-run`,
+   `--json`, consistent with existing CLI error codes and output):
+   - resolves the dependency closure, writes component files, and updates the
+     generated block map file;
+   - checks installed adapter/core versions against item ranges and prints the
+     exact `pnpm add` command instead of editing `package.json`;
+   - checks each built-in block's registry version against the project's
+     `lace.config.ts` definition version and reports mismatches;
+   - `--all` installs renderers for every block type the config uses and
+     reports block types without renderers;
+   - for a config-defined custom block absent from the registry, scaffolds a
+     typed component from its `defineBlock` fields using `parseBlock` and the
+     hook conventions.
+4. **Repeated add and updates.** Unchanged installed files (hash match) are
+   reported as current or updated to the newer registry version; modified files
+   are never overwritten — the command reports a conflict, can show a diff, and
+   can write a `.new` sibling on explicit request. The map file follows the same
+   rule; on conflict the CLI prints the exact entries to add. Reuse the hash,
+   conflict, and journal mechanisms from `lace upgrade` rather than a second
+   implementation. Template upgrades and block updates stay separate commands.
+5. Tests: fresh add into generated and independent Astro sites, dependency
+   closure, `--all` and missing renderer reporting, custom block scaffold,
+   idempotent re-add, update of unmodified files, conflict on modified component
+   and map file, version-range and block-version mismatch, unsupported framework,
+   path escape rejection, and a built site rendering the added blocks.
 
 ### Acceptance
 
-- The decision identifies a usable renderer/helper/loader set and how user edits
-  survive future upgrades; the documented Astro connection is verified.
-- Optional tooling and deferred in-place CMS integration are clearly separated
-  from the release requirements.
+- Framework-neutral loading, block parsing, and rich-text safety come from
+  packages; rich-text and URL rules have one implementation shared with the CMS.
+- The Astro adapter contains only Astro-bound code and no visual block markup.
+- The generated starter, `apps/site`, and an independent existing Astro site use
+  the same APIs; the documented manual connection is verified.
+- `lace add block` installs, registers, and updates block sources without
+  silently overwriting user edits, and its registry/config model admits future
+  React/Vue/Svelte variants without restructuring.
+- In-place CMS installation into nonempty projects remains deferred.
 
-**Session boundary:** S; use 30A as one planning/documentation change.
+**Session boundary:** L; use 30A (documentation only), 30B, 30C, and 30D.
 
 ## Step 31 — Complete generated Cloudflare consumer onboarding
 
@@ -1819,7 +1990,8 @@ starter configuration.
 
 **Basis:** the explicit Step 25 deferral and the current `--cloudflare` template,
 which configures Pages but does not deliver full CMS Worker onboarding. Depends
-on Steps 26–29 and the accepted Step 22 runtime; renderer tooling is not required.
+on Steps 26–30 and the accepted Step 22 runtime; its generated starter uses the
+Step 30 rendering core.
 
 ### Session 31A — Packaged Worker deployment and configuration
 
@@ -1864,7 +2036,7 @@ on Steps 26–29 and the accepted Step 22 runtime; renderer tooling is not requi
 consumers and delivered in a coherent, upgrade-safe next alpha artifact set.
 
 **Basis:** completed Step 25 acceptance and feedback §1–§10 and §12, with §7
-covered by the Step 30 decision only. Depends on Steps 26–31.
+covered by Step 30. Depends on Steps 26–31.
 
 ### Session 32A — Independent consumer regressions
 
@@ -1873,8 +2045,9 @@ covered by the Step 30 decision only. Depends on Steps 26–31.
    migration without manual mkdir, doctor, browser bootstrap, tour, publication,
    media, and dev/manual/automatic site visibility.
 2. Add a separate existing-Astro consumer with CMS in a subdirectory and explicit
-   build-site selection. Follow the documented renderer integration; verify all
-   five blocks, safe rich text, styling hooks, public media, and user-owned edits.
+   build-site selection. Follow the documented Step 30 connection guide and
+   install blocks with `lace add block`; verify all five blocks, safe rich text,
+   styling hooks, public media, and that user edits survive a block update.
 3. Include the generated Cloudflare CMS journey from Step 31. Exercise expected
    setup-stage diagnostics, failure/retry, restart persistence, and upgrade from
    alpha template `0.4.0`, including changed managed files and preserved README.
@@ -1918,6 +2091,11 @@ requirements, and operational recovery promises.
    publish/build failure, and session expiry.
 4. Build the Astro fixture from both runtime exports and compare canonical output
    data, routes, and media references.
+5. Decide before the stable contract freeze whether public entries keep reusing
+   the content-entry schema (optional `published`, mirrored `draft`) or move to
+   a dedicated published-only public schema; Step 30 deliberately hides this
+   behind the SDK loader. Any change updates contracts, SDK, render core, and
+   the public API specs together.
 
 ### Session 33B — Security and resilience pass
 
@@ -1964,6 +2142,8 @@ From a clean machine/project template:
 8. Observe a coalesced build, simulate failure, recover it, and serve the last
    successful static release throughout.
 9. Run an upgrade dry-run and prove user-owned site source is untouched.
+   Update an installed block with `lace add block` and prove an edited block is
+   reported as a conflict instead of overwritten.
 
 **Session boundary:** L; use 33A, 33B, and 33C. Do not combine the security pass
 with the release-documentation session.
@@ -2008,8 +2188,9 @@ best checkpoints for demonstrating useful progress are:
     the first-login experience.
 18. **After step 29:** the intended Astro site is built and publication guidance
     matches verified dev/manual/automatic behavior.
-19. **After step 30:** renderer distribution has a documented decision; optional
-    installer implementation remains separately scoped.
+19. **After step 30:** sites load and render content through the shared core
+    and Astro adapter, and `lace add block` installs and updates user-owned
+    block sources without overwriting edits.
 20. **After step 31:** complete generated Cloudflare CMS onboarding passes local
     consumer acceptance and has a real-deployment handoff.
 21. **After step 32:** the feedback improvements pass together against the next
