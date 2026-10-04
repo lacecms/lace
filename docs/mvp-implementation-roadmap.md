@@ -187,12 +187,12 @@ foundation
 | 27 | Environment checks and generated-project quickstart | M | 27A, 27B |
 | 28 | First-admin setup and guided admin introduction | M | 28A, 28B |
 | 29 | Explicit build site and publication-mode guidance | M | 29A, 29B |
-| 30 | Shared rendering core and block installation | L | 30A, 30B, 30C, 30D |
+| 30 | Shared rendering core and block installation | L | 30A, 30B, 30C, 30D, 30E |
 | 31 | Complete generated Cloudflare consumer onboarding | M | 31A, 31B |
 | 32 | Feedback regression acceptance and next alpha preparation | M | 32A, 32B |
 | 33 | MVP release gate | L | 33A, 33B, 33C |
 
-The roadmap is therefore **85 recommended session units**. Small neighboring
+The roadmap is therefore **86 recommended session units**. Small neighboring
 units can be combined after the foundation stabilizes, but units that introduce
 a database migration, a runtime adapter, or a security boundary should remain
 separate.
@@ -215,7 +215,8 @@ per site, Astro public output, fixed-command builds, and protected user source.
 
 The component-installation idea (§7) was scoped on 2026-10-04: Step 30 delivers
 a framework-neutral rendering core, a thin Astro adapter, and the
-`lace add block` installer for user-owned block sources. In-place CMS
+`lace add block` installer for user-owned block sources, and makes the
+generated starter optional at project creation. In-place CMS
 installation into a nonempty project (§11) stays post-MVP. Selecting an external site's build
 source in Step 29 is operator configuration alongside a separately generated
 CMS directory, not a relaxation of the generator's empty-target contract.
@@ -1782,7 +1783,8 @@ claims. See [29B verification](archive/step-29/step-29b-verification.md).
 **Outcome:** public sites consume Lace content through packaged,
 framework-neutral loading and rendering primitives plus a thin Astro adapter,
 while visual block components remain user-owned source that `lace add block`
-installs, versions, and updates without overwriting user edits.
+installs, versions, and updates without overwriting user edits. New projects
+choose between the starter, an existing Astro site, or no site.
 
 **Basis:** onboarding feedback §7 and the owner's 2026-10-04 scope decision; §11
 remains deferred. Depends on Step 29. The first alpha is published, so this step
@@ -1807,6 +1809,11 @@ rewrites of user-owned files.
   `draft`); a dedicated public schema is an open question for Step 33.
 - `create-lace init .` still requires an empty target. Adding blocks to an
   existing site is site-side tooling, not in-place CMS installation (§11).
+- *Starter and reference site have separate roles.* The `create-lace` starter is
+  a minimal product template; `apps/site` is the engine's development and
+  integration playground and never ships to users. Both consume the same
+  packages and take block sources from the 30D registry, so only their pages and
+  layouts differ. The starter is optional at project creation (30E).
 
 **Current-state inventory (input to 30A, verified 2026-10-04).** The generated
 `site/` and `apps/site` each carry their own copies of:
@@ -1845,7 +1852,9 @@ Planning/documentation only; no production code.
    - the rule that visual block markup is never published as a runtime package;
    - §13 SDK and typical Astro page examples rewritten for the new APIs;
    - the framework-selection model (registry and adapters keyed by framework,
-     `astro` default, other frameworks reserved).
+     `astro` default, other frameworks reserved);
+   - the starter/reference-site role split and the optional-starter project
+     layouts (starter, existing site at a path, no site) from 30E.
 3. Specify the public APIs that 30B–30D implement, at the level of names,
    inputs, outputs, error behavior, and server-only constraints, so proposals do
    not redesign them. Keep the exact field-level DTO and spec wording to the
@@ -1914,18 +1923,34 @@ Planning/documentation only; no production code.
    blocks from the 30D registry layout (or a single shared source the registry
    reuses) so the starter and `lace add block` cannot diverge; record them in the
    site-local lock file as installed registry items.
-3. Bump the template version, update `TEMPLATE_FILES` ownership, generated
+3. **Role split between starter and `apps/site`.**
+   - The starter in `create-lace` is the single source of what users receive:
+     minimal pages (`home`, `posts`), layout, global styles, and registry blocks.
+     It contains no tests, fixtures, or engine-development routes.
+   - `apps/site` is the development playground and integration fixture: it may
+     keep extra routes/models (`about`, `notes`), custom blocks, edge-case
+     content, the published-export fixture, and build tests. Nothing from it is
+     copied into generated projects.
+   - Neither site keeps local copies of loader, parsing, or rich-text logic;
+     both import packages and take block sources from the shared registry
+     source. A test fails if starter, `apps/site`, and registry block sources
+     diverge.
+   - CI generates a project from the packed starter and builds it, in addition
+     to building `apps/site`, so the shipped template is verified as a product
+     rather than through the playground.
+4. Bump the template version, update `TEMPLATE_FILES` ownership, generated
    README/operations, and upgrade instructions. Existing alpha projects receive
    explicit manual migration steps for their user-owned `site/**`; `lace upgrade`
    never rewrites them.
-4. Write and verify the manual connection guide for an existing Astro site
+5. Write and verify the manual connection guide for an existing Astro site
    (CMS in a subdirectory per Step 29): install packages, configure env, create
    the loader file, render one page and one collection route, add blocks, and
    style through hooks. Verification uses a separate independent Astro fixture.
-5. Tests: fixture build output for all five blocks unchanged apart from intended
+6. Tests: fixture build output for all five blocks unchanged apart from intended
    differences, safe rich text, unknown-block failure, dev revalidation,
-   client-bundle secret scan, generated-project acceptance, and the
-   existing-site guide fixture.
+   client-bundle secret scan, generated-project acceptance, block-source parity
+   between starter, `apps/site`, and registry, and the existing-site guide
+   fixture.
 
 ### Session 30D — Block registry and `lace add block`
 
@@ -1968,6 +1993,45 @@ Planning/documentation only; no production code.
    and map file, version-range and block-version mismatch, unsupported framework,
    path escape rejection, and a built site rendering the added blocks.
 
+### Session 30E — Project creation with an optional starter
+
+1. **Site modes at creation.** `create-lace` supports three explicit modes
+   (flag names fixed in the proposal):
+   - *starter* — generates `site/` from the 30C starter (current behavior);
+   - *existing site* — generates no `site/` and connects the CMS to an existing
+     Astro site at a given relative path, typically the parent of a `cms/`
+     subdirectory;
+   - *no site* — generates the CMS only, for headless use or a site connected
+     later; build dispatch reports that no build site is configured.
+2. **Mode selection.** An explicit flag always wins. In an interactive terminal
+   without a flag, the generator asks for the mode; if an Astro project
+   (`astro.config.*` with an `astro` dependency) is detected near the target,
+   the default answer is *existing site* with that path, otherwise *starter*.
+   Without a TTY and without a flag, *starter* is used and the output names the
+   flags for the other modes. `init .` keeps the empty-target rule in every mode;
+   the existing site is never inside the generated target and is never modified
+   by the generator.
+3. **Parameterized managed files.** `pnpm-workspace.yaml`, root `package.json`
+   site scripts (today hard-coded to `--dir site`), Compose
+   `LACE_BUILD_SITE_DIR`/site mount, the Cloudflare workflow, README, and
+   operations docs are rendered from the selected mode and path, reusing the
+   Step 29 build-site configuration instead of a second mechanism. Paths are
+   validated as relative, non-escaping where required, and free of secrets.
+4. **Manifest, upgrade, and doctor.** `.lace/manifest.json` records the site mode
+   and path. `lace upgrade` renders managed files for that mode, never creates or
+   touches `site/` for non-starter projects, and keeps hash conflict detection.
+   `lace doctor` checks the configured site (exists, Astro detected, adapter and
+   core packages present, block map present) and does not expect `site/` when
+   the mode says otherwise.
+5. **Next steps.** For *existing site*, the generator output and README point to
+   `lace add block --all --site <path>` and the 30C connection guide; for
+   *no site*, to the same guide for later connection.
+6. Tests: each mode non-interactively, interactive prompt defaults with and
+   without a detected Astro project, invalid/escaping paths, managed-file
+   snapshots per mode, upgrade from a 0.x starter project and from each mode,
+   doctor per mode, and an end-to-end existing-site consumer (generate CMS into
+   `cms/`, add blocks, publish, build the parent site).
+
 ### Acceptance
 
 - Framework-neutral loading, block parsing, and rich-text safety come from
@@ -1978,9 +2042,13 @@ Planning/documentation only; no production code.
 - `lace add block` installs, registers, and updates block sources without
   silently overwriting user edits, and its registry/config model admits future
   React/Vue/Svelte variants without restructuring.
+- The starter ships only what users own; `apps/site` remains an engine
+  playground, and shared block sources cannot drift between them.
+- A project can be created with the starter, against an existing Astro site, or
+  without a site; upgrade and doctor respect the recorded mode.
 - In-place CMS installation into nonempty projects remains deferred.
 
-**Session boundary:** L; use 30A (documentation only), 30B, 30C, and 30D.
+**Session boundary:** L; use 30A (documentation only), 30B, 30C, 30D, and 30E.
 
 ## Step 31 — Complete generated Cloudflare consumer onboarding
 
@@ -2045,8 +2113,8 @@ covered by Step 30. Depends on Steps 26–31.
    migration without manual mkdir, doctor, browser bootstrap, tour, publication,
    media, and dev/manual/automatic site visibility.
 2. Add a separate existing-Astro consumer with CMS in a subdirectory and explicit
-   build-site selection. Follow the documented Step 30 connection guide and
-   install blocks with `lace add block`; verify all five blocks, safe rich text,
+   build-site selection, created in the Step 30E existing-site mode. Follow the
+   documented Step 30 connection guide and install blocks with `lace add block`; verify all five blocks, safe rich text,
    styling hooks, public media, and that user edits survive a block update.
 3. Include the generated Cloudflare CMS journey from Step 31. Exercise expected
    setup-stage diagnostics, failure/retry, restart persistence, and upgrade from
@@ -2189,8 +2257,9 @@ best checkpoints for demonstrating useful progress are:
 18. **After step 29:** the intended Astro site is built and publication guidance
     matches verified dev/manual/automatic behavior.
 19. **After step 30:** sites load and render content through the shared core
-    and Astro adapter, and `lace add block` installs and updates user-owned
-    block sources without overwriting edits.
+    and Astro adapter, `lace add block` installs and updates user-owned block
+    sources without overwriting edits, and projects can start without the
+    starter.
 20. **After step 31:** complete generated Cloudflare CMS onboarding passes local
     consumer acceptance and has a real-deployment handoff.
 21. **After step 32:** the feedback improvements pass together against the next
