@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "cta",
+  "framework": "astro",
+  "blockType": "cta",
+  "blockVersion": 1,
+  "revision": 1,
+  "requires": {
+    "@lacecms/astro": "0.1.0-alpha.1",
+    "@lacecms/render": "0.1.0-alpha.1"
+  },
+  "files": [
+    {
+      "source": "CtaBlock.astro",
+      "target": "CtaBlock.astro",
+      "role": "component"
+    }
+  ],
+  "dependencies": []
+}

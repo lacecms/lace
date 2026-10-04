@@ -1,8 +1,0 @@
----
-import { assertSafeRichTextDocument } from "../lib/rich-text.js";
-import RichTextNodes from "./RichTextNodes.astro";
-
-const document = assertSafeRichTextDocument(Astro.props.document);
----
-
-<RichTextNodes nodes={document.content} />

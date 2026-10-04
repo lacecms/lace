@@ -322,6 +322,7 @@ my-site/
 ├── site/                       # user-owned Astro source (starter mode only)
 │   ├── lace.site.json          # Lace-managed site configuration and block lock
 │   └── src/
+│       ├── env.d.ts            # user-owned; lets `tsc` read `.astro` imports
 │       ├── lace/blocks.ts      # generated block map file (hash-guarded)
 │       ├── lib/lace.ts         # user-owned loader file
 │       ├── components/lace/    # installed registry blocks, user-owned
@@ -1274,8 +1275,10 @@ framework and never reads `process.env` or `import.meta.env` itself.
 ### 13.4 Astro adapter
 
 `@lacecms/astro` depends on `@lacecms/render` and `@lacecms/sdk`, declares a peer
-dependency on the supported Astro range, and ships Astro component source. It
-contains no visual blocks, no client scripts, and requires no Astro integration.
+dependency on the supported Astro range, and ships Astro component source
+(copied next to its compiled module in `dist/`). It contains no visual blocks,
+no client scripts, and requires no Astro integration. Override components for
+`RichText.astro` are typed by the adapter's `RichTextOverrideProps`.
 
 - `createAstroSiteLoader(options?)` (root entry, server-only) accepts `env`
   (default `process.env`), `dev` (enables revalidation), `fetch`, and `hints`,
@@ -1308,8 +1311,17 @@ The site-local `lace.site.json` records a format version, `framework`,
 block definitions, and `items` with registry version and per-file SHA-256
 hashes, plus the block map file hash.
 
+Registry item manifests (`item.json`, `schemaVersion` 1) carry `name`,
+`framework`, `blockType`, `blockVersion`, `revision`, `requires`, `files`
+(`source`, `target` relative to the components directory, `role`), and
+`dependencies`. `lace.site.json` (`schemaVersion` 1) stores `framework`,
+`componentsDir`, `blockMap`, `blockMapSha256`, optional `definitions`, and
+`items` keyed by item name with `revision` and `files` mapping site-relative
+paths to SHA-256 hashes; the item `revision` is the recorded registry version.
+
 The block map file imports definitions and components and exports
-`blocks = defineBlockMap({...})`. Built-in definitions come from
+`blocks = defineBlockMap({...})`, with imports and entries sorted by block type
+after a one-line generated-file comment. Built-in definitions come from
 `@lacecms/content`; custom definitions come from the recorded `definitions`
 module, which `lace.config.ts` also uses. Definitions are imported, never copied.
 

@@ -1,0 +1,22 @@
+---
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
+import Site from "../../layouts/Site.astro";
+import { blocks } from "../../lace/blocks";
+import { getSite } from "../../lib/lace";
+
+export async function getStaticPaths() {
+  const site = await getSite();
+  return site.entries("posts").map((post) => ({ params: { slug: post.slug } }));
+}
+
+const site = await getSite();
+const post = site.bySlug("posts", Astro.params.slug ?? "");
+if (post === undefined) return new Response(null, { status: 404 });
+---
+
+<Site title={post.title}>
+  <article data-lace-model={post.modelKey} data-lace-entry={post.id}>
+    <h1>{post.title}</h1>
+    <LaceBlocks blocks={blocks} entry={post} mediaUrl={site.mediaUrl} />
+  </article>
+</Site>

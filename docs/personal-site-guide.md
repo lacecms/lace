@@ -285,9 +285,9 @@ const url = String(work.fields.projectUrl ?? "");
 
 ### Если нужны контентные блоки
 
-Начиная с шаблона `0.3.0` (25A), generated starter содержит пользовательские рендереры всех пяти встроенных блоков в `site/src/components/`, safe rich-text helpers, styling hooks и live-loader `site/src/lib/site-data.ts`. Главная и блог читают один published export на сборку. Для своих contacts/works адаптируй слой загрузки и добавь Astro routes; копировать рендереры из engine больше не нужно.
+Начиная с шаблона `0.9.0` (30C), generated starter загружает и рендерит контент через пакеты `@lacecms/sdk`, `@lacecms/render` и `@lacecms/astro`. Loader находится в `site/src/lib/lace.ts` (`getSite()` даёт `byPath`, `entries`, `bySlug` и `mediaUrl`), пять компонентов блоков — в `site/src/components/lace/`, карта блоков — в `site/src/lace/blocks.ts`, версии и хэши установленных блоков — в `site/lace.site.json`. Вместо своего `cms.ts` можно читать страницы так: `const site = await getSite(); const home = site.byPath("/");`, а работы — через `site.entries("works")` и `site.bySlug("works", slug)`.
 
-Компонент `BlockRenderer` получает объект с `id`, `modelKey`, `path`, `title`, `blocks` и `mediaUrl`. На странице преобразуй DTO в эту форму. Tiptap document нужно выводить через проверенный rich-text renderer, а не через `set:html` с необработанным JSON. Custom block требует твоего Astro-renderer; админка даст generic-форму по metadata, но не напишет шаблон отображения.
+Блоки страницы выводи через `<LaceBlocks entry={entry} blocks={blocks} mediaUrl={site.mediaUrl} />` из `@lacecms/astro/LaceBlocks.astro`. Данные блоков проверяются правилами CMS до передачи в компонент, а rich text выводит `@lacecms/astro/RichText.astro` только через общий allowlist, без `set:html`. Custom block требует твоего Astro-компонента и записи в `site/src/lace/blocks.ts`; админка даст generic-форму по metadata, но не напишет шаблон отображения.
 
 ## 4. VPS: собери runtime images
 

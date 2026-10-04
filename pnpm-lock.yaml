@@ -628,6 +628,15 @@ importers:
 
   apps/site:
     dependencies:
+      '@lacecms/astro':
+        specifier: workspace:*
+        version: link:../../packages/astro
+      '@lacecms/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@lacecms/render':
+        specifier: workspace:*
+        version: link:../../packages/render
       '@lacecms/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -669,6 +678,28 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@types/node@22.20.2)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+
+  packages/astro:
+    dependencies:
+      '@lacecms/render':
+        specifier: workspace:*
+        version: link:../render
+      '@lacecms/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      astro:
+        specifier: 'catalog:'
+        version: 7.3.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@24.10.1)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0)
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.81.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@types/node@24.10.1)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/auth:
     dependencies:

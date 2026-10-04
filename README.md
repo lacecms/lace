@@ -99,8 +99,9 @@ pnpm dev:node
 ```
 
 The site at `http://127.0.0.1:3000/` now reads the published export through
-the SDK. After each publication, repeat the two restart commands and reload the
-browser to refresh Astro's cached export and routes. Saving a draft alone does
+the SDK. Astro dev revalidates the export on every request, so after a
+publication reload the browser; repeat the two restart commands only after a
+new or renamed slug, because Astro caches its routes. Saving a draft alone does
 not change the public site, even after a restart. Automated build dispatch is
 not part of this local workflow yet. Keep `.env` private and revoke a lost
 token in **Settings**.
@@ -177,7 +178,8 @@ diagnostics and leave SQLite content unchanged; fix the configuration and run
 the command again. A stale-plan message means another sync changed SQLite
 between planning and apply; rerun to review the current plan. Sync never runs
 as part of startup or migrations. Route validation also does not create Astro pages: add or update
-the matching route and renderer in `apps/site/src/pages/`. See
+the matching route in `apps/site/src/pages/` and, for a new block type, its
+component in `apps/site/src/components/lace/` and entry in `apps/site/src/lace/blocks.ts`. See
 [the Node configuration guide](./docs/node-api.md#editing-content-models) for
 key, version, field, block, and route examples, plus a repeatable
 sync–Admin–publication–public-site check.

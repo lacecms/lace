@@ -19,6 +19,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lacecms/astro": "workspace:*",
+    "@lacecms/content": "workspace:*",
+    "@lacecms/render": "workspace:*",
     "@lacecms/sdk": "workspace:*",
     "astro": "catalog:"
   },

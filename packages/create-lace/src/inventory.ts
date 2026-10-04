@@ -9,7 +9,7 @@ export interface TemplateFile {
   readonly metadata?: true;
 }
 
-export const TEMPLATE_VERSION = "0.8.0";
+export const TEMPLATE_VERSION = "0.9.0";
 
 /** Every bundled template must appear here with an explicit ownership decision. */
 export const TEMPLATE_FILES: readonly TemplateFile[] = [
@@ -21,27 +21,25 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "docker-compose.yml", owner: "managed" },
   { path: "deploy/minio.Dockerfile", owner: "managed" },
   { path: "deploy/nginx.conf", owner: "managed" },
+  { path: "docs/lace-astro-site.md", owner: "managed" },
   { path: "docs/lace-operations.md", owner: "managed" },
   { path: "lace.config.ts", owner: "user" },
   { path: "package.json", owner: "managed", interpolateName: true },
   { path: "pnpm-workspace.yaml", owner: "managed" },
   { path: "site/astro.config.mjs", owner: "user" },
+  { path: "site/lace.site.json", owner: "user" },
   { path: "site/package.json", owner: "user", interpolateName: true },
+  { path: "site/src/components/lace/CtaBlock.astro", owner: "user" },
+  { path: "site/src/components/lace/HeroBlock.astro", owner: "user" },
+  { path: "site/src/components/lace/ImageBlock.astro", owner: "user" },
+  { path: "site/src/components/lace/QuoteBlock.astro", owner: "user" },
+  { path: "site/src/components/lace/RichTextBlock.astro", owner: "user" },
+  { path: "site/src/env.d.ts", owner: "user" },
+  { path: "site/src/lace/blocks.ts", owner: "user" },
+  { path: "site/src/layouts/BaseLayout.astro", owner: "user" },
+  { path: "site/src/lib/lace.ts", owner: "user" },
   { path: "site/src/pages/index.astro", owner: "user" },
   { path: "site/src/pages/blog/[slug].astro", owner: "user" },
-  { path: "site/src/components/RichTextBlock.astro", owner: "user" },
-  { path: "site/src/components/BlockRenderer.astro", owner: "user" },
-  { path: "site/src/components/CtaBlock.astro", owner: "user" },
-  { path: "site/src/components/ImageBlock.astro", owner: "user" },
-  { path: "site/src/components/RichTextNodes.astro", owner: "user" },
-  { path: "site/src/components/RichText.astro", owner: "user" },
-  { path: "site/src/components/HeroBlock.astro", owner: "user" },
-  { path: "site/src/components/QuoteBlock.astro", owner: "user" },
-  { path: "site/src/components/RichTextMarks.astro", owner: "user" },
-  { path: "site/src/lib/rendering.ts", owner: "user" },
-  { path: "site/src/lib/rich-text.ts", owner: "user" },
-  { path: "site/src/layouts/BaseLayout.astro", owner: "user" },
-  { path: "site/src/lib/site-data.ts", owner: "user" },
   { path: "site/src/styles/global.css", owner: "user" },
   { path: "site/tsconfig.json", owner: "user" },
   { path: "wrangler.jsonc", owner: "managed", cloudflare: true, interpolateName: true },

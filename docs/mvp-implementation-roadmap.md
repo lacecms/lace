@@ -1932,6 +1932,20 @@ still use their local copies until 30C migrates them.
 
 ### Session 30C — Astro adapter and starter migration
 
+**Completed:** 2026-10-04. `@lacecms/astro` provides `createAstroSiteLoader`,
+`LaceBlocks.astro`, and `RichText.astro` (with per-node/mark overrides) and
+joins the alpha allowlist. `registry/` holds the five built-in `astro` items;
+`lace.site.json` (`schemaVersion` 1: framework, components directory, block map
+path and hash, items with revision and per-file hashes) and the generated block
+map format are fixed for 30D. The starter (template `0.9.0`) and `apps/site`
+use the adapter with byte-identical markup and a user-owned `src/env.d.ts` that
+lets `tsc` read `.astro` imports; the site-local loader, rendering, and
+rich-text copies are deleted. The reference fixture's invalid rich text
+(text directly inside a blockquote, a document-level hard break) was corrected,
+because the shared allowlist now rejects it. Parity, existing-site guide
+(`docs/lace-astro-site.md` in generated projects), and packed-starter CI checks
+(`pnpm acceptance:starter`) are in place.
+
 1. **Astro adapter package `@lacecms/astro`** (architecture §13.4) containing
    only Astro-bound code:
    - `<LaceBlocks entry blocks mediaUrl>` dispatching through the block map and

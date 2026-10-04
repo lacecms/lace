@@ -1,0 +1,36 @@
+---
+import RichText from "@lacecms/astro/RichText.astro";
+import ExternalLink from "../components/ExternalLink.astro";
+import "../styles/site.css";
+
+interface Props {
+  readonly title: string;
+}
+
+const { title } = Astro.props;
+const colophon = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Content from " },
+        { type: "text", text: "Lace", marks: [{ type: "link", attrs: { href: "https://lace.example" } }] },
+      ],
+    },
+  ],
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{title} · Existing site</title>
+  </head>
+  <body>
+    <header class="site-header"><a href="/">Existing site</a></header>
+    <slot />
+    <footer class="site-footer"><RichText components={{ link: ExternalLink }} document={colophon} /></footer>
+  </body>
+</html>

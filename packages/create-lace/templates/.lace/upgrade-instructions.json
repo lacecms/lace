@@ -1,8 +1,17 @@
 {
   "schemaVersion": 1,
-  "templateVersion": "0.8.0",
+  "templateVersion": "0.9.0",
   "database": [],
   "configuration": [
+    "Template 0.9.0: new projects load and render published content through the @lacecms/sdk, @lacecms/render and @lacecms/astro packages with user-owned block components. Upgrade updates only managed files (the operations guide and the new docs/lace-astro-site.md); it never changes, adds or deletes files under site/.",
+    "Your site keeps building with its current files. To migrate it manually: generate a fresh 0.9.0 project in a temporary directory with the same create-lace version and compare its site/ with yours.",
+    "1. Add @lacecms/astro, @lacecms/render and @lacecms/content next to @lacecms/sdk in site/package.json at the release version, then run pnpm install.",
+    "2. Copy site/src/lib/lace.ts, site/src/env.d.ts, site/src/lace/blocks.ts, site/lace.site.json and site/src/components/lace/ from the fresh project.",
+    "3. Re-apply your own markup changes from site/src/components/*Block.astro to the matching files in site/src/components/lace/; the new components receive validated data instead of reading block fields themselves. Keep the data-lace-* hooks your styles use.",
+    "4. Change each page to call getSite() from src/lib/lace.ts, read entries with byPath('/'), entries('posts') and bySlug('posts', slug), render them with LaceBlocks from @lacecms/astro/LaceBlocks.astro and the blocks map, and type layouts with PublishedEntry from @lacecms/sdk.",
+    "5. Delete site/src/lib/site-data.ts, site/src/lib/rendering.ts, site/src/lib/rich-text.ts, site/src/components/BlockRenderer.astro, the RichText*.astro components and the old block components, then run pnpm typecheck and pnpm build.",
+    "Rich text and URLs are now validated with the CMS rules: content the old site copy accepted but the CMS rejects (such as https:example.com or a paragraph inside a paragraph) fails the build with its model, entry, block and field. To connect an existing Astro site instead of the starter, follow docs/lace-astro-site.md.",
+    "Template 0.8.0 (included when upgrading from 0.7.0 or earlier):",
     "Template 0.8.0: review the managed deploy/nginx.conf change, which sends Cache-Control: no-cache for served site responses so browsers revalidate after a release switch, then recreate the web service. The proxy and operations-guide changes need no new API, admin, CLI or builder artifacts; Admin publication-visibility guidance appears with compatible freshly built Step 29B or later admin artifacts.",
     "Site source stays user-owned and is not changed by upgrade. To see publications on reload in Astro dev, optionally adopt the generated pattern: revalidate the build export with its ETag in development while keeping one memoized export per static build, and read the current post by slug instead of getStaticPaths props. New or renamed slugs still need an Astro dev restart. See docs/lace-operations.md for each publication visibility mode.",
     "Template 0.7.0 (included when upgrading from 0.6.0 or earlier):",

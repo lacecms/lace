@@ -6,6 +6,7 @@
   "scripts": {
     "acceptance:release": "node scripts/generated-project-acceptance.mjs release",
     "acceptance:generated": "node scripts/generated-project-acceptance.mjs all",
+    "acceptance:starter": "node scripts/generated-project-acceptance.mjs starter",
     "acceptance:start": "node scripts/dev-stack.mjs acceptance:start",
     "acceptance:stop": "node scripts/dev-stack.mjs acceptance:stop",
     "acceptance:bootstrap": "node scripts/dev-stack.mjs acceptance:bootstrap",

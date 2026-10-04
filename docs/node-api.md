@@ -98,9 +98,11 @@ and
 [`apps/site/src/pages/notes/[slug].astro`](../apps/site/src/pages/notes/[slug].astro).
 The `about` route uses `getStaticPaths()` so it emits no static page before
 publication. Further pages and collections need matching Astro route files;
-collections use `getStaticPaths()`. The existing routes use
-[`BlockRenderer.astro`](../apps/site/src/components/BlockRenderer.astro) to
-render ordered blocks. Lace validates route definitions; it does not create
+collections use `getStaticPaths()`. The existing routes read entries from the
+published-site loader in [`src/lib/lace.ts`](../apps/site/src/lib/lace.ts)
+(`byPath`, `entries`, `bySlug`) and render ordered blocks with
+`<LaceBlocks>` from `@lacecms/astro` and the block map
+[`src/lace/blocks.ts`](../apps/site/src/lace/blocks.ts). Lace validates route definitions; it does not create
 Astro files or choose a layout. The reference site reads the committed fixture
 until live mode is configured; live mode reads locally published content.
 
@@ -110,9 +112,10 @@ path or route, then list its allowed blocks. `notes` demonstrates an optional
 text field with `fields: { summary: field.text() }`. Add further fields using
 typed `field` descriptors and render any field intended for public display in
 the Astro route. To add a block type, register its definition in the root
-`blocks` list, allow its key in the model, and add a rendering case to
-`BlockRenderer.astro`. A published block without a site renderer fails the
-build with its model, entry, and block keys.
+`blocks` list, allow its key in the model, add its component to
+`apps/site/src/components/lace/`, and map its definition to that component in
+`apps/site/src/lace/blocks.ts`. A published block without a mapped component fails
+the build with its model, entry, and block keys.
 
 Keep a model key stable once it has stored content. Increase `version` when a
 field, allowed block, path, route, or other structural definition changes. A

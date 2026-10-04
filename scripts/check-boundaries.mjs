@@ -6,7 +6,7 @@ import { createScanner, SyntaxKind } from "typescript/unstable/ast";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultRoot = resolve(scriptDirectory, "..");
-const sourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts"]);
+const sourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".astro"]);
 const nodeBuiltinModules = new Set(
   builtinModules.map((moduleName) => moduleName.replace(/^node:/, "")),
 );
@@ -21,6 +21,7 @@ const allowedDependencies = new Map([
   ["@lacecms/server", new Set(["@lacecms/application", "@lacecms/contracts", "@lacecms/auth"])],
   ["@lacecms/sdk", new Set(["@lacecms/contracts"])],
   ["@lacecms/render", new Set(["@lacecms/content"])],
+  ["@lacecms/astro", new Set(["@lacecms/render", "@lacecms/sdk"])],
   [
     "@lacecms/test-utils",
     new Set(["@lacecms/application", "@lacecms/config", "@lacecms/content", "@lacecms/domain"]),
@@ -63,7 +64,10 @@ const allowedDependencies = new Map([
     new Set(["@lacecms/platform-cloudflare", "@lacecms/platform-node", "@lacecms/server"]),
   ],
   ["@lacecms/app-admin", new Set(["@lacecms/contracts", "@lacecms/content"])],
-  ["@lacecms/app-site", new Set(["@lacecms/sdk", "@lacecms/content"])],
+  [
+    "@lacecms/app-site",
+    new Set(["@lacecms/astro", "@lacecms/render", "@lacecms/sdk", "@lacecms/content"]),
+  ],
 ]);
 
 // Framework-neutral packages: every non-relative import must be listed here, which
@@ -73,6 +77,10 @@ const externalImportAllowlist = new Map([
   ["@lacecms/sdk", new Set(["@lacecms/contracts", "valibot"])],
 ]);
 
+// Framework adapters may additionally import their framework and its subpaths.
+const adapterFrameworks = new Map([["@lacecms/astro", "astro"]]);
+const reExportPattern =
+  /\bexport\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s*from\s*["']@lacecms\//u;
 function collectFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -98,9 +106,21 @@ function readMembers(rootDirectory) {
   return members;
 }
 
+/** Astro components carry their imports in the leading `---` frontmatter fence. */
+function sourceText(filePath) {
+  const text = readFileSync(filePath, "utf8");
+  if (extname(filePath) !== ".astro") return text;
+  return /^\s*---\r?\n([\s\S]*?)\r?\n---/u.exec(text)?.[1] ?? "";
+}
+
+function packageOf(specifier) {
+  const parts = specifier.split("/");
+  return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+}
+
 function importsIn(filePath) {
   const imports = [];
-  const scanner = createScanner(true, undefined, readFileSync(filePath, "utf8"));
+  const scanner = createScanner(true, undefined, sourceText(filePath));
   let token = scanner.scan();
 
   while (token !== SyntaxKind.EndOfFile) {
@@ -353,11 +373,25 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
             `framework-neutral package ${member.name} may not import ${specifier} (in ${filePath})`,
           );
         }
-        if (!memberNames.has(specifier)) continue;
-        if (!allowedDependencies.get(member.name)?.has(specifier)) {
-          throw new Error(`forbidden dependency: ${member.name} -> ${specifier}`);
+        const target = packageOf(specifier);
+        const framework = adapterFrameworks.get(member.name);
+        if (framework !== undefined) {
+          if (isNodeBuiltin(specifier) || (target !== framework && !memberNames.has(target))) {
+            throw new Error(
+              `framework adapter ${member.name} may not import ${specifier} (in ${filePath})`,
+            );
+          }
         }
-        graph.get(member.name).add(specifier);
+        if (!memberNames.has(target)) continue;
+        if (!allowedDependencies.get(member.name)?.has(target)) {
+          throw new Error(`forbidden dependency: ${member.name} -> ${target}`);
+        }
+        graph.get(member.name).add(target);
+      }
+      if (adapterFrameworks.has(member.name) && reExportPattern.test(sourceText(filePath))) {
+        throw new Error(
+          `framework adapter ${member.name} may not re-export a Lace package (in ${filePath})`,
+        );
       }
     }
   }

@@ -1,0 +1,27 @@
+---
+import type { RichTextDescriptionNode } from "@lacecms/render";
+import type { RichTextComponents } from "./index.js";
+
+interface Props {
+  readonly components: RichTextComponents;
+  readonly nodes: readonly RichTextDescriptionNode[];
+}
+
+const { components, nodes } = Astro.props;
+---
+
+{
+  nodes.map((node) => {
+    if (node.kind === "text") return node.text;
+    const Override = components[node.source];
+    if (Override !== undefined)
+      return <Override element={node}><Astro.self components={components} nodes={node.children} /></Override>;
+    if (node.tag === "br") return <br />;
+    const Tag = node.tag;
+    return node.tag === "a" ? (
+      <a href={node.attributes.href}><Astro.self components={components} nodes={node.children} /></a>
+    ) : (
+      <Tag><Astro.self components={components} nodes={node.children} /></Tag>
+    );
+  })
+}

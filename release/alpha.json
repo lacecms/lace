@@ -12,6 +12,7 @@
   "platforms": ["linux/amd64", "linux/arm64"],
   "packages": [
     "application",
+    "astro",
     "auth",
     "cli",
     "config",

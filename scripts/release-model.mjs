@@ -45,7 +45,7 @@ export function validateReleaseModel(model, { templates = true } = {}) {
   )
     throw new Error("Invalid alpha release coordinates/version/platforms");
   const publicNames = new Set(release.packages.map(packageName));
-  if (publicNames.size !== 14 || publicNames.has("@lacecms/test-utils"))
+  if (publicNames.size !== 15 || publicNames.has("@lacecms/test-utils"))
     throw new Error("Invalid public package allowlist");
   if (!model.rootManifest.private) throw new Error("Workspace root must remain private");
   for (const [name, { manifest }] of Object.entries(manifests)) {

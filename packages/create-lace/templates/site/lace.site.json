@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "framework": "astro",
+  "componentsDir": "src/components/lace",
+  "blockMap": "src/lace/blocks.ts",
+  "blockMapSha256": "fe99316d998d116c2bce9a233090465ae80f8bfb17db7066170bb761682d8598",
+  "items": {
+    "cta": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/CtaBlock.astro": "a3d6e8e7a4730985c73f99a5a89231a98c40f3645f9ce4a88aaa5520b45e01f6"
+      }
+    },
+    "hero": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/HeroBlock.astro": "a732de4a7a1f26adcd41a4dda8e056b1d1eac0a8ccec6f2493c13013d9dab84d"
+      }
+    },
+    "image": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/ImageBlock.astro": "45e4188435b9cf0ea3d38af7864f2265773c81614640559a8e229f0f455acce7"
+      }
+    },
+    "quote": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/QuoteBlock.astro": "489802b97ae9def11e127df372397d937e8f330b33609fd8ba1a0908a44ef9c4"
+      }
+    },
+    "richText": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/RichTextBlock.astro": "0041a09497c61ef9acc41f9c79b93ad37dd6c30f19788685e6932b13c8fc964d"
+      }
+    }
+  }
+}

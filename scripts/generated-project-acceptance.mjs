@@ -687,8 +687,26 @@ async function installPackedConsumer(project, tarballs) {
   }
   const workspaceFile = join(project, "pnpm-workspace.yaml");
   const workspaceYaml = await readFile(workspaceFile, "utf8");
-  const overrides = [...references]
-    .filter(([name]) => name !== "@lacecms/sdk")
+  // A global file: override of a package the site importer also declares makes
+  // pnpm's frozen check compare root- and site-relative paths, so those packages
+  // are overridden only where another Lace package depends on them.
+  const siteDirect = new Set(
+    Object.keys((await packageMetadata(join(project, "site"))).dependencies ?? {}),
+  );
+  const scoped = [];
+  for (const parent of references.keys()) {
+    const manifest = await packageMetadata(
+      join(workspace, "packages", parent.slice("@lacecms/".length)),
+    );
+    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+      if (siteDirect.has(dependency) && references.has(dependency))
+        scoped.push([`${parent}>${dependency}`, references.get(dependency)]);
+    }
+  }
+  const overrides = [
+    ...[...references].filter(([name]) => !siteDirect.has(name)),
+    ...scoped.sort(([left], [right]) => left.localeCompare(right)),
+  ]
     .map(([name, file]) => `  '${name}': '${file}'`)
     .join("\n");
   await writeFile(workspaceFile, `${workspaceYaml}\noverrides:\n${overrides}\n`);
@@ -711,6 +729,61 @@ async function installPackedConsumer(project, tarballs) {
       throw new Error(`install: ${name} resolves outside generated project: ${resolved}`);
     }
   }
+}
+
+/** Builds the packed starter against a local export server, without Docker. */
+async function starterJourney(project) {
+  const exported = JSON.parse(
+    await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
+  );
+  exported.entries = exported.entries.slice(0, 2);
+  const token = `lace_build_${randomBytes(16).toString("hex")}`;
+  secretValues.add(token);
+  let requests = 0;
+  const server = createHttpServer((request, response) => {
+    requests++;
+    if (
+      request.url !== "/api/v1/public/build-export" ||
+      request.headers.authorization !== `Bearer ${token}`
+    ) {
+      response.writeHead(403, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }));
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
+    response.end(JSON.stringify(exported));
+  });
+  await new Promise((done, fail) => {
+    server.once("error", fail);
+    server.listen(0, "127.0.0.1", done);
+  });
+  try {
+    await run("starter-build", "pnpm", ["build"], {
+      cwd: project,
+      env: {
+        ASTRO_TELEMETRY_DISABLED: "1",
+        LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
+        LACE_BUILD_TOKEN: token,
+        LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
+      },
+    });
+  } finally {
+    await new Promise((done) => server.close(done));
+  }
+  if (requests !== 1) throw new Error(`starter-build: expected one export read, saw ${requests}`);
+  await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
+  const html = [
+    await readFile(join(project, "site/dist/index.html"), "utf8"),
+    await readFile(join(project, "site/dist/blog/first-post/index.html"), "utf8"),
+  ].join("\n");
+  for (const type of ["hero", "richText", "image", "quote", "cta"]) {
+    if (!html.includes(`data-lace-block="${type}"`))
+      throw new Error(`starter-build: missing ${type}`);
+  }
+  if (!html.includes("https://public.example/lace/api/v1/public/media/post-media"))
+    throw new Error("starter-build: public media origin missing");
+  await scanTree(join(project, "site/dist"), secretValues, "starter static output");
+  console.info("Packed starter installed, typechecked and built all five blocks");
 }
 
 async function environmentPreparation(project) {
@@ -1281,6 +1354,7 @@ async function main() {
       "build-site",
       "publication-visibility",
       "snapshots",
+      "starter",
       "self-test",
     ].includes(phase)
   ) {
@@ -1369,6 +1443,10 @@ async function main() {
   console.info(`Packed consumer installed: ${tarballs.size} Lace tarballs; ${basename(project)}`);
   if (phase === "packages") {
     await environmentPreparation(project);
+    return;
+  }
+  if (phase === "starter") {
+    await starterJourney(project);
     return;
   }
   const context = await prepareCompose(project, parent);

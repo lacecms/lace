@@ -1,0 +1,17 @@
+---
+import RichText from "@lacecms/astro/RichText.astro";
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.hero>;
+
+const { block, context, data, mediaUrl } = Astro.props;
+---
+
+<section class="hero" data-lace-block={block.type} data-lace-block-key={block.key}>
+  {data.eyebrow !== undefined && <p data-lace-part="eyebrow">{data.eyebrow}</p>}
+  <h1 data-lace-part="heading">{data.heading}</h1>
+  {data.body !== undefined && <div data-lace-part="body"><RichText context={{ block: context, fieldPath: ["body"] }} document={data.body} /></div>}
+  {data.image !== undefined && <img alt="" data-lace-part="media" src={mediaUrl(data.image)} />}
+  {data.primaryActionLabel !== undefined && data.primaryActionUrl !== undefined && <a data-lace-part="action" href={data.primaryActionUrl}>{data.primaryActionLabel}</a>}
+</section>

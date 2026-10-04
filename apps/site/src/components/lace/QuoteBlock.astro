@@ -1,0 +1,13 @@
+---
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.quote>;
+
+const { block, data } = Astro.props;
+---
+
+<blockquote data-lace-block={block.type} data-lace-block-key={block.key}>
+  <p data-lace-part="text">{data.quote}</p>
+  {data.attribution !== undefined && <footer data-lace-part="attribution">{data.attribution}</footer>}
+</blockquote>

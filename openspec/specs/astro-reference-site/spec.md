@@ -26,12 +26,15 @@ routes while retaining the fixed home path and per-slug blog route.
 
 ### Requirement: Reference site derives all starter routes from one published export
 The reference site SHALL build the starter home route and every published post
-route from one validated Lace build export. In live mode it SHALL perform one
-authenticated build-export read for the complete build and SHALL derive route
-parameters and entry data locally; it SHALL NOT issue page, collection, path,
-or per-entry requests. In fixture mode it SHALL read the committed export
-fixture and SHALL make no CMS request. Only entries in the build export SHALL
-be eligible for rendered output.
+route from one validated Lace build export read through the packaged
+published-site loader. In live mode it SHALL perform one authenticated
+build-export read for the complete build and SHALL derive route parameters and
+entry data from the loader's published view by CMS-resolved path, model, and
+slug; it SHALL NOT issue page, collection, path, or per-entry requests and SHALL
+NOT keep a local copy of loader, export-type, or route-derivation logic. In
+fixture mode it SHALL read the committed export fixture through the same loader
+and SHALL make no CMS request. Only entries in the build export SHALL be
+eligible for rendered output.
 
 #### Scenario: Live build receives a published export
 - **WHEN** a live build is configured with a valid API base URL and build token
@@ -50,11 +53,14 @@ be eligible for rendered output.
 
 ### Requirement: Reference site renders the starter blocks deterministically
 The reference site SHALL render the `hero`, `richText`, `image`, `quote`, and
-`cta` built-in block types for the starter models, preserving their exported
-order. It SHALL create media links only through the public-media URL helper so
-the emitted URL retains the configured API base path. An unsupported block
-type SHALL fail the build before static output is accepted and the failure
-SHALL identify the model key, entry identifier, and block key.
+`cta` built-in block types for the starter models through the Astro adapter's
+block-list component, its block map file, and the registry block components,
+preserving their exported order and the markup emitted before the adapter
+migration. It SHALL create media links only through the public-media URL helper
+so the emitted URL retains the configured API base path. An unsupported block
+type, a block schema-version mismatch, or block data that fails publish
+validation SHALL fail the build before static output is accepted, and the
+failure SHALL identify the model key, entry identifier, and block key.
 
 #### Scenario: A starter entry contains each supported block type
 - **WHEN** an exported entry supplies valid built-in blocks in a defined order
@@ -64,6 +70,11 @@ SHALL identify the model key, entry identifier, and block key.
 #### Scenario: An exported block has no renderer
 - **WHEN** an exported entry contains a block type outside the five built-ins
 - **THEN** the build fails with its model key, entry identifier, and block key
+
+#### Scenario: Migration preserves markup
+- **WHEN** the committed fixture is built after the adapter migration
+- **THEN** the entry scopes, block roots, part hooks, text, and media URLs equal
+  the output of the pre-migration renderers
 
 ### Requirement: Published routes expose a stable entry styling scope
 Every static route emitted for a published `home`, `about`, `posts`, or `notes` entry SHALL have exactly one container around that entry's ordered blocks with `data-lace-model` equal to the stable model key and `data-lace-entry` equal to the stable entry identifier. These values SHALL come from the published build export and SHALL be HTML-attribute escaped. The styling scope SHALL NOT expose draft-only content or an automatically generated HTML `id`.
@@ -114,11 +125,13 @@ The reference site SHALL document its public `data-lace-*` selector contract and
 - **THEN** the static output can style the selected scope without changing block data, REST responses, or renderer source
 
 ### Requirement: Reference site renders rich text through an allowlist
-The reference site SHALL render rich text structurally from the shared safe
-Tiptap subset: `doc`, `paragraph`, `text`, `heading`, `bulletList`,
-`orderedList`, `listItem`, `blockquote`, and `hardBreak` nodes; and `bold`,
-`italic`, `strike`, `code`, and `link` marks. It SHALL not inject raw rich-text
-JSON or HTML. Unsupported nodes, marks, attributes, or unsafe link values
+The reference site SHALL render rich text through the Astro adapter's rich-text
+component, which uses the shared safe Tiptap subset of `@lacecms/content`:
+`doc`, `paragraph`, `text`, `heading`, `bulletList`, `orderedList`,
+`listItem`, `blockquote`, and `hardBreak` nodes; and `bold`, `italic`,
+`strike`, `code`, and `link` marks. It SHALL keep no site-local allowlist or URL
+check. It SHALL not inject raw rich-text JSON or HTML. Unsupported nodes, marks,
+attributes, invalid nesting, or unsafe link values SHALL fail the build and
 SHALL not be emitted as executable or raw HTML content.
 
 #### Scenario: Safe formatted rich text is exported
@@ -129,12 +142,13 @@ SHALL not be emitted as executable or raw HTML content.
 
 #### Scenario: Unsafe rich text reaches the renderer
 - **WHEN** rich-text input contains an unsupported node, mark, attribute, or
-  unsafe link value
-- **THEN** the generated output contains no executable markup or unsafe URL
-  derived from that input
+  unsafe link value, including values the former site-local copy accepted such
+  as `https:example.com`
+- **THEN** the build fails and the generated output contains no executable
+  markup or unsafe URL derived from that input
 
 ### Requirement: Live local site failures provide actionable diagnostics
-Live development SHALL report a clear corrective action when the build token is missing or rejected, the configured API cannot be reached, or the published export lacks the starter home page. Diagnostics and site output SHALL not reveal the plaintext build token. Fixture mode SHALL continue to build without an API request.
+Live development SHALL report a clear corrective action when the build token is missing or rejected, the configured API cannot be reached, or the published export lacks the starter home page. Loader failures SHALL carry the published-site loader's stable codes with hints naming the reference workspace's commands. Diagnostics and site output SHALL not reveal the plaintext build token. Fixture mode SHALL continue to build without an API request.
 
 #### Scenario: Live mode has no token
 - **WHEN** the site starts in live mode without a build token
@@ -153,7 +167,7 @@ Live development SHALL report a clear corrective action when the build token is 
 - **THEN** the site retries the export instead of retaining the failed result
 
 #### Scenario: No home page is published
-- **WHEN** an otherwise valid published export contains no published `home` entry at `/`
+- **WHEN** an otherwise valid published export contains no published entry at `/`
 - **THEN** the local error directs the contributor to synchronize and publish the home page
 
 ### Requirement: Reference site serves additional code-owned published routes
@@ -174,3 +188,10 @@ The reference site SHALL provide an `about` page at `/about` and one `/notes/:sl
 #### Scenario: Additional route has an unsupported block
 - **WHEN** a published `about` or `notes` entry contains a block without a site renderer
 - **THEN** the build fails with its model key, entry identifier, and block key
+
+### Requirement: Reference site is the engine playground, not the shipped template
+`apps/site` SHALL be the engine's development playground and integration fixture: it MAY carry additional models and routes, custom blocks, edge-case content, the published-export fixture, fixture mode, and build tests, and nothing from it SHALL be copied into generated projects. It SHALL consume the same packages as the generated starter and SHALL hold its registry blocks, block map file, and `lace.site.json` exactly as the block-source registry defines them.
+
+#### Scenario: Generated project contents
+- **WHEN** a project is generated
+- **THEN** its site contains no reference-site route, fixture, or test file, and its block sources are byte-identical to those of `apps/site`

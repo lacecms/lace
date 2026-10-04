@@ -13,7 +13,7 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 | API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.1` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
 | Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.1` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
 
-The thirteen scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, and `render`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
+The fourteen scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, and `astro`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
 
 Both runtime images support `linux/amd64` and `linux/arm64` only when both platform builds and smoke checks pass. Local image IDs are not registry manifest digests. Initial preparation saves one archive per runtime/platform and records its ID and checksum. The public version tag is assembled from those tested platform images during publication.
 

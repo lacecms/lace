@@ -1,11 +1,17 @@
 ---
-import BlockRenderer from "../components/BlockRenderer.astro";
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { getSiteData } from "../lib/site-data.js";
+import { blocks } from "../lace/blocks";
+import { getSite } from "../lib/lace";
 
-const { home, mediaUrl } = await getSiteData();
+const site = await getSite();
+const home = site.byPath("/");
+if (home === undefined)
+  throw new Error(
+    "The build export contains no published entry at /. Run `pnpm content:sync`, then publish the home page in Admin.",
+  );
 ---
 
 <BaseLayout entry={home} title={home.title}>
-  <BlockRenderer entry={home} mediaUrl={mediaUrl} />
+  <LaceBlocks blocks={blocks} entry={home} mediaUrl={site.mediaUrl} />
 </BaseLayout>

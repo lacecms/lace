@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "name": "cta",
+      "framework": "astro",
+      "manifest": "astro/cta/item.json"
+    },
+    {
+      "name": "hero",
+      "framework": "astro",
+      "manifest": "astro/hero/item.json"
+    },
+    {
+      "name": "image",
+      "framework": "astro",
+      "manifest": "astro/image/item.json"
+    },
+    {
+      "name": "quote",
+      "framework": "astro",
+      "manifest": "astro/quote/item.json"
+    },
+    {
+      "name": "richText",
+      "framework": "astro",
+      "manifest": "astro/richText/item.json"
+    }
+  ]
+}

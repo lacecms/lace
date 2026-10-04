@@ -3,7 +3,7 @@
 The public Astro site owns its presentation. Edit
 [`apps/site/src/styles/site.css`](../apps/site/src/styles/site.css) to change
 styles without changing Lace content, the admin application, or a block
-renderer. `BaseLayout.astro` imports this global stylesheet for every static
+component. `BaseLayout.astro` imports this global stylesheet for every static
 route. A site rebuild publishes CSS changes; saving a CMS draft alone does not
 change the public site.
 

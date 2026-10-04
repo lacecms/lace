@@ -1,0 +1,20 @@
+---
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
+import Site from "../layouts/Site.astro";
+import { blocks } from "../lace/blocks";
+import { getSite } from "../lib/lace";
+
+const site = await getSite();
+const home = site.byPath("/");
+if (home === undefined) throw new Error("Publish the home page in Lace Admin.");
+const posts = site.entries("posts");
+---
+
+<Site title={home.title}>
+  <main data-lace-model={home.modelKey} data-lace-entry={home.id}>
+    <LaceBlocks blocks={blocks} entry={home} mediaUrl={site.mediaUrl} />
+  </main>
+  <nav class="articles">
+    {posts.map((post) => <a href={`/articles/${post.slug}/`}>{post.title}</a>)}
+  </nav>
+</Site>
