@@ -32,5 +32,8 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install the Chromium browser for the Cloudflare consumer journey
+        run: pnpm --filter @lacecms/app-admin exec playwright install --with-deps chromium
+
       - name: Accept generated project
         run: pnpm acceptance:generated

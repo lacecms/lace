@@ -5,22 +5,23 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { CliError, EXIT } from "./index.js";
 
-const controlled = [
-  "LACE_AUTH_SECRET",
-  "LACE_MINIO_ROOT_ACCESS_KEY",
-  "LACE_MINIO_ROOT_SECRET",
-  "LACE_BUILDER_SECRET",
-  "LACE_BUILD_TOKEN",
-] as const;
+/** The project `.env` or, for `cloudflare-local`, the local Worker variables. */
+export type EnvironmentTarget = "project" | "cloudflare-local";
 
-function templateError(): CliError {
-  return new CliError("CONFIG", "Cannot use local .env.example.", EXIT.CONFIG, "env-template");
+interface Preparation {
+  readonly template: string;
+  readonly destination: string;
+  readonly credentials: () => Readonly<Record<string, string>>;
 }
 
-function existingError(): CliError {
+function templateError(path: string): CliError {
+  return new CliError("CONFIG", `Cannot use local ${path}.`, EXIT.CONFIG, "env-template");
+}
+
+function existingError(path: string): CliError {
   return new CliError(
     "OPERATION_FAILED",
-    "Refusing to replace .env.",
+    `Refusing to replace ${path}.`,
     EXIT.OPERATION,
     "env-exists",
   );
@@ -34,16 +35,33 @@ function accessKey(): string {
   }
 }
 
-/** Keep unrelated bytes intact; never execute or interpolate dotenv contents. */
-export function renderEnvironment(template: string): string {
-  const counts = new Map(controlled.map((name) => [name as string, 0]));
-  const credentials: Readonly<Record<string, string>> = {
+function projectCredentials(): Readonly<Record<string, string>> {
+  return {
     LACE_AUTH_SECRET: randomBytes(32).toString("hex"),
     LACE_MINIO_ROOT_ACCESS_KEY: accessKey(),
     LACE_MINIO_ROOT_SECRET: randomBytes(32).toString("hex"),
     LACE_BUILDER_SECRET: randomBytes(32).toString("hex"),
     LACE_BUILD_TOKEN: "",
   };
+}
+
+export const PREPARATIONS: Readonly<Record<EnvironmentTarget, Preparation>> = {
+  project: { template: ".env.example", destination: ".env", credentials: projectCredentials },
+  "cloudflare-local": {
+    template: "worker/.dev.vars.example",
+    destination: "worker/.dev.vars",
+    credentials: () => ({ LACE_AUTH_SECRET: randomBytes(32).toString("hex") }),
+  },
+};
+
+/** Keep unrelated bytes intact; never execute or interpolate dotenv contents. */
+export function renderEnvironment(
+  template: string,
+  credentials: Readonly<Record<string, string>> = projectCredentials(),
+  templatePath = ".env.example",
+): string {
+  const controlled = Object.keys(credentials);
+  const counts = new Map(controlled.map((name) => [name, 0]));
   let multilineQuote: string | undefined;
   const rendered = template.replace(/[^\r\n]+/gu, (line) => {
     if (multilineQuote !== undefined) {
@@ -62,14 +80,15 @@ export function renderEnvironment(template: string): string {
       if (multiline) multilineQuote = quote;
       return line;
     }
-    if (multiline) throw templateError();
+    if (multiline) throw templateError(templatePath);
     counts.set(name, (counts.get(name) ?? 0) + 1);
     return `${prefix}${credentials[name]}`;
   });
   if (multilineQuote !== undefined || [...counts.values()].some((count) => count !== 1))
-    throw templateError();
+    throw templateError(templatePath);
   const parsed = parseEnv(rendered);
-  if (controlled.some((name) => parsed[name] !== credentials[name])) throw templateError();
+  if (controlled.some((name) => parsed[name] !== credentials[name]))
+    throw templateError(templatePath);
   return rendered;
 }
 
@@ -78,34 +97,36 @@ const filesystem = { link, lstat, mkdtemp, open, rm };
 export async function prepareEnvironment(
   cwd = process.cwd(),
   io: typeof filesystem = filesystem,
+  target: EnvironmentTarget = "project",
 ): Promise<void> {
+  const preparation = PREPARATIONS[target];
   let staging: string | undefined;
   try {
-    const destination = join(cwd, ".env");
+    const destination = join(cwd, preparation.destination);
     try {
       await io.lstat(destination);
-      throw existingError();
+      throw existingError(preparation.destination);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     let template: string;
     try {
       const source = await io.open(
-        join(cwd, ".env.example"),
+        join(cwd, preparation.template),
         constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
       );
       try {
-        if (!(await source.stat()).isFile()) throw templateError();
+        if (!(await source.stat()).isFile()) throw templateError(preparation.template);
         template = await source.readFile("utf8");
       } finally {
         await source.close();
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ELOOP") throw templateError();
+      if (code === "ENOENT" || code === "ELOOP") throw templateError(preparation.template);
       throw error;
     }
-    const content = renderEnvironment(template);
+    const content = renderEnvironment(template, preparation.credentials(), preparation.template);
     staging = await io.mkdtemp(join(cwd, ".lace-env-"));
     const stagedPath = join(staging, "prepared");
     const file = await io.open(stagedPath, "wx", 0o600);
@@ -118,7 +139,8 @@ export async function prepareEnvironment(
     try {
       await io.link(stagedPath, destination);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw existingError();
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+        throw existingError(preparation.destination);
       throw error;
     }
   } catch (error) {

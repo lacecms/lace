@@ -1,0 +1,49 @@
+// Lace CMS Worker configuration. This file is yours: Lace upgrades never change it.
+// It serves the API, authentication and admin (/admin/) from one origin. The static
+// Astro site is a separate deployment; see docs/lace-operations.md#cloudflare-worker.
+// Never put secrets here: upload LACE_AUTH_SECRET (and the optional LACE_DEPLOY_HOOK_URL)
+// with `pnpm exec wrangler secret put <NAME> --config worker/wrangler.jsonc`; local
+// values live in the ignored worker/.dev.vars (pnpm cf:env:prepare).
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "{{PROJECT_NAME}}-cms",
+  "main": "index.ts",
+  "compatibility_date": "2026-09-01",
+  // Better Auth requires AsyncLocalStorage from the Node.js compatibility layer.
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "{{PROJECT_NAME}}-cms",
+      // Placeholder: run `pnpm exec wrangler d1 create {{PROJECT_NAME}}-cms` and paste the
+      // returned ID here and into LACE_D1_DATABASE_ID in .env. Local state is keyed by it.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../node_modules/@lacecms/db/drizzle",
+    },
+  ],
+  // Create with `pnpm exec wrangler r2 bucket create {{PROJECT_NAME}}-media`.
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "{{PROJECT_NAME}}-media" }],
+  // Optional derived cache. Without a CACHE binding the Worker uses a no-op cache.
+  // To enable it, create a namespace with `pnpm exec wrangler kv namespace create CACHE`
+  // and add: "kv_namespaces": [{ "binding": "CACHE", "id": "<namespace-id>" }],
+  // The compiled admin of the installed Lace release.
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "../node_modules/@lacecms/platform-cloudflare/admin",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": true,
+  },
+  // Scheduled outbox recovery; post-commit dispatch only reduces latency.
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    // The Worker's public origin with a trailing slash: admin login, API and media URLs.
+    // Replace before deploying; worker/.dev.vars overrides it for local development.
+    "LACE_PUBLIC_BASE_URL": "https://cms.example.com/",
+    // lace-site: starter existing
+    // Safe build-site identity shown in Admin (not proof of a successful deploy).
+    "LACE_BUILD_SITE_ID": "main-site",
+    "LACE_BUILD_SITE_LABEL": "Main site",
+    // lace-site: end
+  },
+}

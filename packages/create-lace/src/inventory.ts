@@ -16,7 +16,7 @@ export interface TemplateFile {
   readonly metadata?: true;
 }
 
-export const TEMPLATE_VERSION = "0.11.0";
+export const TEMPLATE_VERSION = "0.13.0";
 
 const STARTER = ["starter"] as const;
 const SITE = ["starter", "existing"] as const;
@@ -58,12 +58,14 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "site/src/pages/blog/[slug].astro", owner: "user", modes: STARTER },
   { path: "site/src/styles/global.css", owner: "user", modes: STARTER },
   { path: "site/tsconfig.json", owner: "user", modes: STARTER },
+  { path: "worker/.dev.vars.example", owner: "managed", cloudflare: true },
+  { path: "worker/index.ts", owner: "managed", cloudflare: true },
+  // Holds operator resource IDs and origins, so upgrades never change it.
   {
-    path: "wrangler.jsonc",
-    owner: "managed",
+    path: "worker/wrangler.jsonc",
+    owner: "user",
     cloudflare: true,
     interpolateName: true,
-    modes: SITE,
     render: "markers",
   },
 ];

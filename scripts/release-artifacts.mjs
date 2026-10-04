@@ -234,6 +234,13 @@ export async function inspectPackage(directory, release) {
     for (const entry of journal.entries)
       await readFile(join(directory, "drizzle", `${entry.tag}.sql`));
   }
+  if (manifest.name === "@lacecms/platform-cloudflare") {
+    // The packaged admin is the Workers static-assets directory of consumer Workers.
+    if (!(await lstat(join(directory, "admin/index.html")).catch(() => undefined))?.isFile())
+      throw new Error(`Missing packaged admin assets: ${manifest.name}: admin/index.html`);
+    if ((await walk(join(directory, "admin"))).some((file) => file.endsWith(".map")))
+      throw new Error(`Forbidden admin source map: ${manifest.name}`);
+  }
   if (manifest.name === "create-lace") {
     const { TEMPLATE_FILES, TEMPLATE_VERSION } = await import(
       pathToFileURL(join(directory, "dist/inventory.js")).href

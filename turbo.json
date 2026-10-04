@@ -10,6 +10,10 @@
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/registry/**"],
       "outputs": ["dist/**"]
     },
+    "@lacecms/platform-cloudflare#build": {
+      "dependsOn": ["^build", "@lacecms/app-admin#build"],
+      "outputs": ["dist/**", "admin/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
       "outputs": []

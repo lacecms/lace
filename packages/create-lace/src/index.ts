@@ -24,7 +24,12 @@ import {
 import type { SiteRecord, SiteSelection } from "./site.js";
 
 export { TEMPLATE_FILES, TEMPLATE_VERSION } from "./inventory.js";
-export { renderForSite, renderSiteMarkers, TemplateError } from "./render.js";
+export {
+  renderCloudflareMarkers,
+  renderForSite,
+  renderSiteMarkers,
+  TemplateError,
+} from "./render.js";
 export { normalizeSitePath, SITE_MODES } from "./site.js";
 export type { SiteMode, SiteRecord, SiteSelection } from "./site.js";
 
@@ -46,6 +51,7 @@ export interface GeneratedProject {
   readonly path: string;
   readonly manifest: ProjectManifest;
   readonly readmePreserved: boolean;
+  readonly cloudflare: boolean;
   readonly warning?: string;
 }
 
@@ -120,22 +126,18 @@ function renderTemplate(
   file: (typeof TEMPLATE_FILES)[number],
   name: string,
   site: SiteSelection,
+  cloudflare: boolean,
 ): Buffer {
   if (file.interpolateName !== true && file.render === undefined) return bytes;
   let text = bytes.toString("utf8");
   if (file.interpolateName === true) text = text.replaceAll("{{PROJECT_NAME}}", name);
-  if (file.render !== undefined) text = renderForSite(text, file.path, file.render, site);
+  if (file.render !== undefined)
+    text = renderForSite(text, file.path, file.render, site, cloudflare);
   return Buffer.from(text, "utf8");
 }
 
 /** Rejects invalid site selections before anything is written. */
-async function resolveSite(
-  target: string,
-  site: SiteSelection,
-  cloudflare: boolean,
-): Promise<SiteSelection> {
-  if (site.mode === "none" && cloudflare)
-    throw new GeneratorError("--cloudflare deploys a site and cannot be combined with --no-site.");
+async function resolveSite(target: string, site: SiteSelection): Promise<SiteSelection> {
   if (site.mode !== "existing") return site;
   try {
     return { mode: "existing", path: await validateExistingSite(target, site.path) };
@@ -151,11 +153,7 @@ function errorMessage(error: unknown): string {
 /** Generate in a sibling directory, then publish the completed tree. */
 export async function generateProject(options: GenerateOptions): Promise<GeneratedProject> {
   const { path: target, entries, exists } = await validateTarget(options.target);
-  const site = await resolveSite(
-    target,
-    options.site ?? { mode: "starter" },
-    options.cloudflare === true,
-  );
+  const site = await resolveSite(target, options.site ?? { mode: "starter" });
   const readmePreserved = entries.includes("README.md");
   const stage = await mkdtemp(join(dirname(target), `.${basename(target)}.lace-stage-`));
   let backup: string | undefined;
@@ -178,6 +176,7 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
         file,
         packageName(target),
         site,
+        options.cloudflare === true,
       );
       const output = join(stage, file.path);
       await mkdir(dirname(output), { recursive: true });
@@ -223,12 +222,13 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
           path: target,
           manifest,
           readmePreserved,
+          cloudflare: options.cloudflare === true,
           warning: `Project was created, but the original backup remains at ${backup}. Inspect it before removal. Cleanup error: ${errorMessage(cleanupError)}`,
         };
       }
       backup = undefined;
     }
-    return { path: target, manifest, readmePreserved };
+    return { path: target, manifest, readmePreserved, cloudflare: options.cloudflare === true };
   } catch (error) {
     const recover: string[] = [];
     if (!published && backup !== undefined) {
@@ -265,7 +265,8 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
 function usage(): string {
   return [
     "Usage: create-lace [create] <dir> [site mode] [--cloudflare] | create-lace init . [site mode] [--cloudflare]",
-    "Site mode (at most one): --starter | --existing-site <path> | --no-site (not with --cloudflare).",
+    "Site mode (at most one): --starter | --existing-site <path> | --no-site.",
+    "--cloudflare adds the CMS Worker in worker/ and, with a site, the static-site Pages workflow.",
     "Without a mode flag, a terminal asks for the mode; otherwise the starter is generated.",
   ].join("\n");
 }
@@ -306,7 +307,6 @@ function parseArguments(args: readonly string[]): ParsedArguments | undefined {
     flags.some((flag) => !FLAGS.has(flag)) ||
     flags.length !== new Set(flags).size ||
     modes.length > 1 ||
-    (modes[0] === "--no-site" && cloudflare) ||
     (command === "init" && positional[0] !== ".")
   )
     return undefined;
@@ -358,6 +358,10 @@ function nextSteps(project: GeneratedProject): string[] {
                   "Next: follow README.md for setup, first admin and publication; see docs/lace-operations.md for detailed operation.",
                 ]),
           ];
+  if (project.cloudflare)
+    lines.push(
+      "Cloudflare: the CMS Worker is in worker/; follow the Cloudflare Worker section of docs/lace-operations.md (local: pnpm cf:env:prepare, cf:db:migrate, cf:content:sync, cf:auth:bootstrap, cf:dev).",
+    );
   if (project.readmePreserved)
     lines.push(
       "Preserved existing README.md. Follow docs/lace-operations.md for Lace setup; manually copy relevant instructions into your README if desired.",
@@ -388,7 +392,7 @@ export async function runCli(
       } finally {
         prompter.close();
       }
-      if (site === undefined || (site.mode === "none" && parsed.cloudflare)) {
+      if (site === undefined) {
         stderr.write(`${usage()}\n`);
         return 2;
       }

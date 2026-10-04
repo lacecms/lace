@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { D1Database } from "@lacecms/platform-cloudflare";
 import { migrateNodeDatabase } from "@lacecms/platform-node";
@@ -34,6 +34,27 @@ export async function verifyD1Config(configPath: string, databaseId: string): Pr
       "LACE_D1_DATABASE_ID does not match LACE_WRANGLER_CONFIG DB binding.",
       EXIT.CONFIG,
     );
+}
+
+/** The nearest installed Wrangler at or above the configuration's directory. */
+export async function findWrangler(configDirectory: string): Promise<string> {
+  let directory = resolve(configDirectory);
+  for (;;) {
+    const candidate = resolve(directory, "node_modules", ".bin", "wrangler");
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      const parent = dirname(directory);
+      if (parent === directory)
+        throw new CliError(
+          "CONFIG",
+          "Wrangler is not installed for LACE_WRANGLER_CONFIG; install the project dependencies.",
+          EXIT.CONFIG,
+        );
+      directory = parent;
+    }
+  }
 }
 
 export interface MigrateInput {
@@ -72,7 +93,8 @@ export async function runMigration(input: MigrateInput): Promise<readonly string
   if (input.target === "cloudflare-local")
     args.push("--persist-to", resolve(input.persistTo as string));
   const runner = input.run ?? spawnSync;
-  const result = runner(resolve(dirname(configPath), "node_modules", ".bin", "wrangler"), args, {
+  const wrangler = await findWrangler(dirname(configPath));
+  const result = runner(wrangler, args, {
     cwd: dirname(configPath),
     encoding: "utf8",
     env: { ...process.env, CI: "true", WRANGLER_SEND_METRICS: "false" },

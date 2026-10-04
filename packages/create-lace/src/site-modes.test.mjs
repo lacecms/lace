@@ -21,6 +21,7 @@ import { afterEach, expect, test } from "vitest";
 import {
   generateProject,
   normalizeSitePath,
+  renderCloudflareMarkers,
   renderForSite,
   renderSiteMarkers,
   runCli,
@@ -95,10 +96,8 @@ test.each([
   [["create", "cms", "--existing-site", "..", "--starter"]],
   [["create", "cms", "--existing-site"]],
   [["create", "cms", "--existing-site", "--no-site"]],
-  [["create", "cms", "--no-site", "--cloudflare"]],
   [["cms", "--starter", "--starter"]],
   [["cms", "--site", "starter"]],
-  [["init", ".", "--no-site", "--cloudflare"]],
 ])("site-mode usage errors exit 2 before writing: %j", async (args) => {
   const parent = await root();
   const result = await cli(args, parent);
@@ -113,6 +112,7 @@ test.each([
   [["cms", "--existing-site", ".."], "existing", ".."],
   [["create", "cms", "--cloudflare", "--existing-site", "../"], "existing", ".."],
   [["create", "cms", "--no-site"], "none", null],
+  [["create", "cms", "--no-site", "--cloudflare"], "none", null],
 ])("explicit site-mode flags select the mode: %j", async (args, mode, path) => {
   const parent = await astroSite();
   const before = await treeHashes(parent);
@@ -203,14 +203,18 @@ test("interactive answers are re-prompted and fail after three invalid answers",
   );
 });
 
-test("interactive none is rejected with --cloudflare", async () => {
+test("interactive none with --cloudflare generates a headless Worker project", async () => {
   const parent = await root();
   const result = await cli(["cms", "--cloudflare"], parent, {
     interactive: true,
     input: input("3"),
   });
-  expect(result.code).toBe(2);
-  expect(await readdir(parent)).toEqual([]);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain("Cloudflare Worker section of docs/lace-operations.md");
+  const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
+  expect(manifest.site).toEqual({ mode: "none", path: null });
+  expect(manifest.files).toHaveProperty("worker/index.ts");
+  expect(manifest.files).not.toHaveProperty(".github/workflows/cloudflare.yml");
 });
 
 test("existing-site path grammar", () => {
@@ -309,12 +313,56 @@ test("markers render per mode and malformed markers fail", () => {
     );
 });
 
+test("Cloudflare markers select on/off blocks and nest with site markers", () => {
+  const text = [
+    "a",
+    "// lace-cloudflare: on",
+    "worker",
+    "// lace-site: starter existing",
+    "site {{SITE_PATH}}",
+    "// lace-site: end",
+    "// lace-cloudflare: end",
+    "// lace-cloudflare: off",
+    "plain",
+    "// lace-cloudflare: end",
+    "",
+  ].join("\n");
+  const starter = { mode: "starter" };
+  expect(renderForSite(text, "x.jsonc", "markers", starter, true)).toBe("a\nworker\nsite site\n");
+  expect(renderForSite(text, "x.jsonc", "markers", { mode: "none" }, true)).toBe("a\nworker\n");
+  expect(renderForSite(text, "x.jsonc", "markers", starter, false)).toBe("a\nplain\n");
+  expect(
+    renderCloudflareMarkers(
+      "<!-- lace-cloudflare: on -->\nW\n<!-- lace-cloudflare: end -->\n",
+      "r.md",
+      false,
+    ),
+  ).toBe("");
+  for (const [bad, message] of [
+    ["# lace-cloudflare: on\nx\n", "unterminated"],
+    ["# lace-cloudflare: end\n", "without a block"],
+    ["# lace-cloudflare: maybe\nx\n# lace-cloudflare: end\n", "unknown lace-cloudflare value"],
+    ["# lace-cloudflare: on off\nx\n# lace-cloudflare: end\n", "unknown lace-cloudflare value"],
+    ["<!-- lace-cloudflare: on\n", "malformed"],
+  ])
+    expect(() =>
+      renderCloudflareMarkers(bad, bad.startsWith("<") ? "r.md" : "x.yml", true),
+    ).toThrow(message);
+});
+
 test("starter package.json and workspace bytes equal the committed templates", async () => {
   const pkg = (await readFile(join(templates, "package.json"), "utf8")).replaceAll(
     "{{PROJECT_NAME}}",
     "cms",
   );
-  expect(renderForSite(pkg, "package.json", "root-package", { mode: "starter" })).toBe(pkg);
+  expect(renderForSite(pkg, "package.json", "root-package", { mode: "starter" }, true)).toBe(pkg);
+  const plain = JSON.parse(renderForSite(pkg, "package.json", "root-package", { mode: "starter" }));
+  const template = JSON.parse(pkg);
+  for (const name of Object.keys(template.scripts).filter((key) => key.startsWith("cf:")))
+    delete template.scripts[name];
+  delete template.dependencies["@lacecms/db"];
+  delete template.dependencies["@lacecms/platform-cloudflare"];
+  expect(plain).toEqual(template);
   const workspace = await readFile(join(templates, "pnpm-workspace.yaml"), "utf8");
   expect(renderForSite(workspace, "pnpm-workspace.yaml", "workspace", { mode: "starter" })).toBe(
     workspace,
@@ -331,11 +379,14 @@ test("no template file leaks a marker in any mode", async () => {
     ["starter", { mode: "starter" }, true],
     ["existing", { mode: "existing", path: ".." }, true],
     ["none", { mode: "none" }, false],
+    ["none-cloudflare", { mode: "none" }, true],
+    ["starter-plain", { mode: "starter" }, false],
   ]) {
     const project = await generateProject({ target: join(parent, name), site, cloudflare });
     for (const file of await listFiles(project.path)) {
       const text = await readFile(join(project.path, file), "utf8");
       expect(text, `${name}:${file}`).not.toContain("lace-site:");
+      expect(text, `${name}:${file}`).not.toContain("lace-cloudflare:");
       expect(text, `${name}:${file}`).not.toMatch(/\{\{(SITE_PATH|PROJECT_NAME)\}\}/u);
       expect(text, `${name}:${file}`).not.toMatch(/\n\n\n/u);
     }
@@ -370,7 +421,8 @@ test("existing-site managed files select the site at its path", async () => {
   expect(compose).toContain("source: ${LACE_BUILD_SOURCE_ROOT:-..}");
   expect(compose).toContain("LACE_BUILD_SITE_DIR: ${LACE_BUILD_SITE_DIR:-.}");
   expect(compose).toContain("LACE_BUILD_OUTPUT_DIR: ${LACE_BUILD_OUTPUT_DIR:-dist}");
-  expect(await read("wrangler.jsonc")).toContain('"pages_build_output_dir": "../dist"');
+  expect(await read("worker/wrangler.jsonc")).toContain('"LACE_BUILD_SITE_LABEL": "Main site"');
+  expect(await read("worker/wrangler.jsonc")).not.toContain("pages_build_output_dir");
   const workflow = await read(".github/workflows/cloudflare.yml");
   expect(workflow).toContain("pnpm --dir .. install --frozen-lockfile");
   expect(workflow).toContain("wrangler pages deploy ../dist");
@@ -413,9 +465,23 @@ test("no-site managed files configure no builder or build site", async () => {
   expect(readme).toContain("docs/lace-astro-site.md");
   expect(readme).not.toContain("pnpm dev\n");
   expect(await read("docs/lace-operations.md")).toContain("builds no site");
-  await expect(
-    generateProject({ target: join(parent, "cloud"), site: { mode: "none" }, cloudflare: true }),
-  ).rejects.toThrow("--no-site");
+  const cloud = await generateProject({
+    target: join(parent, "cloud"),
+    site: { mode: "none" },
+    cloudflare: true,
+  });
+  const config = await readFile(join(cloud.path, "worker/wrangler.jsonc"), "utf8");
+  expect(config).not.toContain("LACE_BUILD_SITE");
+  expect(
+    JSON.parse(config.replace(/^\s*\/\/.*$/gmu, "").replace(/,(\s*[}\]])/gu, "$1")),
+  ).toMatchObject({
+    vars: { LACE_PUBLIC_BASE_URL: "https://cms.example.com/" },
+  });
+  expect(cloud.manifest.files).not.toHaveProperty(".github/workflows/cloudflare.yml");
+  const cloudGuide = await readFile(join(cloud.path, "docs/lace-operations.md"), "utf8");
+  expect(cloudGuide).toContain("## Cloudflare Worker");
+  expect(cloudGuide).toContain("no static-site workflow");
+  expect(cloudGuide).not.toContain("Deploy the static site separately");
 });
 
 test.each([

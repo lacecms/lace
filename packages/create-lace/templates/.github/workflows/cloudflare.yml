@@ -1,4 +1,8 @@
 name: Deploy site to Cloudflare Pages
+# Builds and deploys only the static Astro site. It never deploys, migrates or
+# configures the CMS Worker in worker/; see docs/lace-operations.md#cloudflare-worker.
+# Direct upload has no deploy hook: run this workflow after publishing, or connect
+# a Pages project to Git for hook-driven rebuilds.
 on:
   workflow_dispatch:
 jobs:
@@ -25,6 +29,8 @@ jobs:
       # lace-site: existing
       - run: pnpm --dir {{SITE_PATH}} install --frozen-lockfile
       # lace-site: end
+      # LACE_API_BASE_URL reads the build export from the deployed CMS Worker origin;
+      # LACE_PUBLIC_BASE_URL is the Worker's public origin used in rendered media URLs.
       - run: pnpm build
         env:
           LACE_API_BASE_URL: ${{ vars.LACE_API_BASE_URL }}

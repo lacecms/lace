@@ -308,3 +308,61 @@ test("termination before publication leaves only protected ignored staging", asy
   await prepareEnvironment(root);
   checkSettings(await fs.readFile(join(root, ".env"), "utf8"));
 });
+
+const workerTemplate = await fs.readFile(
+  resolve(import.meta.dirname, "../../create-lace/templates/worker/.dev.vars.example"),
+  "utf8",
+);
+
+test("cloudflare-local preparation creates protected local Worker variables only", async () => {
+  expect(parseArguments(["env", "prepare", "--target", "cloudflare-local"]).target).toBe(
+    "cloudflare-local",
+  );
+  for (const json of [false, true]) {
+    const root = await directory();
+    await fs.mkdir(join(root, "worker"));
+    await fs.writeFile(join(root, "worker/.dev.vars.example"), workerTemplate);
+    const result = invoke(root, ["--target", "cloudflare-local", ...(json ? ["--json"] : [])]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("worker/.dev.vars");
+    const content = await fs.readFile(join(root, "worker/.dev.vars"), "utf8");
+    const values = parseEnv(content);
+    expect(values.LACE_AUTH_SECRET).toMatch(/^[a-f0-9]{64}$/u);
+    expect(values.LACE_ENVIRONMENT).toBe("development");
+    expect(values.LACE_PUBLIC_BASE_URL).toBe("http://127.0.0.1:8787/");
+    expect(content.replace(/^LACE_AUTH_SECRET=.*$/mu, "LACE_AUTH_SECRET=")).toBe(workerTemplate);
+    expect(result.stdout).not.toContain(values.LACE_AUTH_SECRET);
+    expect(result.stdout).not.toContain(sentinel);
+    expect((await fs.stat(join(root, "worker/.dev.vars"))).mode & 0o777).toBe(0o600);
+    expect((await fs.readdir(root)).sort()).toEqual(["worker"]);
+    const repeated = invoke(root, ["--target", "cloudflare-local", "--json"]);
+    expect(repeated.status).toBe(6);
+    expect(JSON.parse(repeated.stdout)).toMatchObject({
+      code: "OPERATION_FAILED",
+      operation: "env prepare",
+    });
+    expect(repeated.stdout).toContain("worker/.dev.vars");
+    expect(await fs.readFile(join(root, "worker/.dev.vars"), "utf8")).toBe(content);
+  }
+});
+
+test("cloudflare-local preparation rejects a missing or ambiguous Worker template", async () => {
+  for (const invalid of [
+    undefined,
+    "LACE_ENVIRONMENT=development\n",
+    `${workerTemplate}LACE_AUTH_SECRET=x\n`,
+  ]) {
+    const root = await directory();
+    await fs.mkdir(join(root, "worker"));
+    if (invalid !== undefined) await fs.writeFile(join(root, "worker/.dev.vars.example"), invalid);
+    const result = invoke(root, ["--target", "cloudflare-local", "--json"]);
+    expect(result.status).toBe(4);
+    const failure = JSON.parse(result.stdout);
+    expect(failure).toMatchObject({ code: "CONFIG", operation: "env prepare" });
+    expect(failure.nextAction).toContain("worker/.dev.vars.example");
+    await expect(fs.lstat(join(root, "worker/.dev.vars"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  }
+});

@@ -1,4 +1,5 @@
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
+import { cloudflareConsumerJourney } from "./cloudflare-consumer-acceptance.mjs";
 import { existingSiteJourney } from "./existing-site-acceptance.mjs";
 import { publicationVisibilityJourney } from "./publication-visibility-acceptance.mjs";
 import { spawn } from "node:child_process";
@@ -157,6 +158,7 @@ const snapshotVariants = [
   ["existing", ["--existing-site", ".."]],
   ["existing-cloudflare", ["--existing-site", "..", "--cloudflare"]],
   ["none", ["--no-site"]],
+  ["none-cloudflare", ["--no-site", "--cloudflare"]],
 ];
 
 async function verifySnapshots(parent, update = false) {
@@ -179,7 +181,10 @@ async function verifySnapshots(parent, update = false) {
       throw new Error(`snapshot: ${variant} generation is not byte-stable`);
     }
     const cloudflare = flags.includes("--cloudflare");
-    if (cloudflare !== first.tree.includes("wrangler.jsonc")) {
+    if (
+      cloudflare !== first.tree.includes("worker/wrangler.jsonc") ||
+      first.tree.includes("wrangler.jsonc")
+    ) {
       throw new Error(`snapshot: ${variant} Cloudflare files do not match the selected options`);
     }
     const site = JSON.parse(first.manifest).site;
@@ -582,15 +587,11 @@ async function cloudflareSmoke(context, tarballs) {
       LACE_BUILD_TOKEN: context.values.LACE_BUILD_TOKEN,
     },
   });
-  const config = await readFile(join(cloudProject, "wrangler.jsonc"), "utf8");
   const workflow = await readFile(
     join(cloudProject, ".github", "workflows", "cloudflare.yml"),
     "utf8",
   );
-  if (
-    !config.includes('"pages_build_output_dir": "site/dist"') ||
-    !workflow.includes("site/dist")
-  ) {
+  if (!workflow.includes("wrangler pages deploy site/dist")) {
     throw new Error("cloudflare-bundle: generated Pages paths differ");
   }
   const port = await freePort();
@@ -645,13 +646,20 @@ async function cloudflareSmoke(context, tarballs) {
       child.kill("SIGTERM");
     }
   }
-  await run(
-    "cloudflare-worker-smoke",
-    "pnpm",
-    ["--dir", "apps/api", "exec", "vitest", "run", "src/worker-smoke.test.mjs"],
-    { timeoutMs: 5 * 60_000 },
-  );
-  console.info("Generated Cloudflare Pages bundle and local Worker smoke passed");
+  console.info("Generated Cloudflare Pages bundle preview passed");
+  await cloudflareConsumerJourney(context.parent, cloudflareOperations(tarballs));
+}
+
+function cloudflareOperations(tarballs) {
+  return {
+    capturedDiagnostics,
+    freePort,
+    installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
+    run,
+    sanitize,
+    secretValues,
+    workspace,
+  };
 }
 
 async function packConsumerGraph(tarballDirectory) {
@@ -1382,6 +1390,7 @@ async function main() {
       "node",
       "all",
       "build-site",
+      "cloudflare",
       "existing-site",
       "publication-visibility",
       "snapshots",
@@ -1467,6 +1476,10 @@ async function main() {
   await verifySnapshots(parent);
   await run("mkdir-tarballs", "mkdir", ["-p", tarballDirectory]);
   const tarballs = await packConsumerGraph(tarballDirectory);
+  if (phase === "cloudflare") {
+    await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
+    return;
+  }
   if (phase === "existing-site") {
     await existingSiteJourney(parent, {
       installPackedConsumer: (project) => installPackedConsumer(project, tarballs),

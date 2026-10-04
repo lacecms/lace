@@ -13,12 +13,20 @@
     "env:prepare": "node node_modules/@lacecms/cli/dist/bin.js env prepare",
     "db:migrate": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js db migrate",
     "content:sync": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js content sync",
-    "auth:bootstrap": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js auth bootstrap"
+    "auth:bootstrap": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js auth bootstrap",
+    "cf:env:prepare": "node node_modules/@lacecms/cli/dist/bin.js env prepare --target cloudflare-local",
+    "cf:db:migrate": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js db migrate --target cloudflare-local",
+    "cf:content:sync": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js content sync --target cloudflare-local",
+    "cf:auth:bootstrap": "node --env-file=.env node_modules/@lacecms/cli/dist/bin.js auth bootstrap --target cloudflare-local",
+    "cf:dev": "wrangler dev --config worker/wrangler.jsonc --local --persist-to .lace/data/cloudflare --ip 127.0.0.1 --port 8787 --test-scheduled --show-interactive-dev-session=false",
+    "cf:build": "cd worker && wrangler deploy --dry-run --outdir ../.lace/data/cloudflare-bundle"
   },
   "dependencies": {
     "@lacecms/cli": "0.1.0-alpha.1",
     "@lacecms/config": "0.1.0-alpha.1",
-    "@lacecms/content": "0.1.0-alpha.1"
+    "@lacecms/content": "0.1.0-alpha.1",
+    "@lacecms/db": "0.1.0-alpha.1",
+    "@lacecms/platform-cloudflare": "0.1.0-alpha.1"
   },
   "devDependencies": {
     "wrangler": "4.129.0"
