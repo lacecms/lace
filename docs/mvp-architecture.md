@@ -2131,9 +2131,12 @@ The implementation plan uses these resolved defaults:
   name `create-lace` (unscoped availability must be rechecked before publication);
 - GHCR organization `lacecms`, with `ghcr.io/lacecms/api` and
   `ghcr.io/lacecms/builder`;
-- experimental package/image version `0.1.0-alpha.1`, npm channel `next`, and
-  independent ownership template version `0.4.0`; see
-  [`alpha-release.md`](./alpha-release.md) for preparation and owner publication.
+- experimental package/image versions on npm channel `next` with an
+  independent ownership template version: `0.1.0-alpha.1` (template `0.4.0`)
+  is published and immutable, and `0.1.0-alpha.2` (template `0.14.0`) is the
+  current candidate; `release/alpha.json` records the candidate and published
+  versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
+  owner publication.
 
 The following choices are release and operations work, not blockers for the
 first local vertical slices:

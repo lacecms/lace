@@ -1,6 +1,6 @@
 # Preparing and publishing a Lace alpha
 
-This procedure prepares experimental `0.1.0-alpha.1` artifacts. npm uses the `next` channel, the generator ownership template is `0.4.0`, and API/builder images use the same prerelease version. Nothing in the repository's `release:*` commands publishes, pushes, creates a remote release or changes package visibility. The owner performs publication separately after the exact-artifact consumer/security acceptance in Step 25C. Step 26 remains the stable-MVP gate and real Cloudflare deployment gate.
+This procedure prepares the current experimental candidate recorded in `release/alpha.json`: package/generator/image version `0.1.0-alpha.2`, ownership template `0.14.0` and npm channel `next`. The first alpha, `0.1.0-alpha.1` (template `0.4.0`), is published and immutable; the definition lists it in `publishedVersions`, and `release:check` refuses to prepare a version recorded there. Nothing in the repository's `release:*` or acceptance commands publishes, pushes, creates a remote release or changes package visibility. The owner publishes separately after exact-artifact acceptance passes. Step 33 remains the stable-MVP gate, including the real VPS and Cloudflare deployments.
 
 ## Coordinates and ownership
 
@@ -8,12 +8,18 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 
 | Artifact | Coordinate | Contents |
 | --- | --- | --- |
-| Generator | `create-lace@0.1.0-alpha.1` | Executable, declarations, templates, ownership inventory, MIT license |
-| Runtime graph | `@lacecms/*@0.1.0-alpha.1` | Compiled ESM/declarations and complete registry dependency metadata |
-| API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.1` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.1` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
+| Generator | `create-lace@0.1.0-alpha.2` | Executable, declarations, templates, ownership inventory, MIT license |
+| Runtime graph | `@lacecms/*@0.1.0-alpha.2` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
+| API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.2` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
+| Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.2` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
 
-The fourteen scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, and `astro`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
+Registry metadata checked on 2026-10-04 listed `0.1.0-alpha.1` (plus `0.0.0-stage` for `application`, `cli` and `sdk`) for the first-alpha packages and `create-lace`, returned 404 for `@lacecms/astro` and `@lacecms/render`, and reported no `0.1.0-alpha.2` manifest for either GHCR image. That is availability evidence on that date, not a reservation; recheck before publishing.
+
+### Selecting the next version
+
+Choose a prerelease that is not in `publishedVersions` and is unused in the registries, change `release/alpha.json`, every public manifest, generated dependencies and image defaults, the Dockerfile `LACE_VERSION` defaults, versioned guide commands and the block registry's package requirements together, and advance the ownership template version with upgrade instructions. `release:check` names any stale coordinate; it never rewrites files. After the owner publishes a version, append it to `publishedVersions`.
+
+The fourteen scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, and `astro`; `render` and `astro` are published for the first time with `0.1.0-alpha.2`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
 
 Both runtime images support `linux/amd64` and `linux/arm64` only when both platform builds and smoke checks pass. Local image IDs are not registry manifest digests. Initial preparation saves one archive per runtime/platform and records its ID and checksum. The public version tag is assembled from those tested platform images during publication.
 
@@ -32,13 +38,13 @@ The checked-in `release/alpha.json` is the version/coordinate definition. The va
 pnpm install --frozen-lockfile
 pnpm release:check
 pnpm release:plan
-pnpm release:prepare --output .release-artifacts/alpha-1
-pnpm release:verify --output .release-artifacts/alpha-1
+pnpm release:prepare --output .release-artifacts/alpha-2
+pnpm release:verify --output .release-artifacts/alpha-2
 ```
 
 `release:plan` is the mutation-free dry-run plan; it does not build or need Docker. `release:prepare` builds the public graph in an isolated source snapshot, packs inspected archives in a disposable workspace, tests an isolated package consumer with test-only overrides, builds/loads both image platforms locally, exercises migrations/configuration/admin/native runtime and builder health, and saves the tested image archives. It does not build the reference Astro site against a live CMS during package compilation.
 
-The output contains `inventory.json`, `status.json`, `packages/*.tgz`, `images/*.tar`, a source snapshot and temporary inspection/build trees. `inventory.json` records definition, source commit/fingerprint, versions, archive SHA-256, image platforms/IDs and checks. Only a successful full set from clean source has both `complete: true` and `publicationEligible: true`. This source-integrity flag does not mean that Step 25C has passed or that anything is published. Verification recomputes every artifact checksum without rebuilding.
+The output contains `inventory.json`, `status.json`, `packages/*.tgz`, `images/*.tar`, a source snapshot and temporary inspection/build trees. `inventory.json` records definition, source commit/fingerprint, versions, archive SHA-256, image platforms/IDs and checks. Only a successful full set from clean source has both `complete: true` and `publicationEligible: true`. This source-integrity flag does not mean that exact-artifact acceptance has passed or that anything is published. Verification recomputes every artifact checksum without rebuilding.
 
 For development previews:
 
@@ -50,10 +56,10 @@ pnpm release:prepare --preview --output .release-artifacts/full-preview
 
 `--preview` is always publication-ineligible, even if the working tree happens to be clean. Package-only and platform-subset runs are explicitly incomplete. Output destinations are exclusive: never merge runs or overwrite a prepared directory. On failure, `status.json` reports failure and no complete inventory is advertised. Correct the cause and retry in a new destination. Each snapshot is isolated, and local image tags include its fingerprint to avoid overlapping preparations replacing one another's tags. Do not publish a working-tree preview; repeat full preparation from the final reviewed commit.
 
-Run 25C against the exact clean prepared inventory before publication:
+Run exact-artifact acceptance against the clean prepared inventory before publication:
 
 ```sh
-pnpm acceptance:release --artifacts .release-artifacts/alpha-1
+pnpm acceptance:release --artifacts .release-artifacts/alpha-2
 pnpm --filter @lacecms/platform-node test
 pnpm --filter @lacecms/platform-cloudflare test
 pnpm --dir apps/api test
@@ -66,11 +72,13 @@ pnpm spec:validate
 
 `acceptance:release` requires a complete publication-eligible inventory and verifies all archive checksums. It runs the extracted generator and installs exactly those tarballs in a temporary project, then loads the saved images and checks immutable IDs, platform and provenance labels. The full journey uses the host's corresponding Linux platform (arm64 or amd64). Both-platform preparation smoke results remain in the inventory; one consumer run does not claim two-platform end-to-end coverage.
 
+Since Session 32B the same command is the complete onboarding feedback regression suite for the candidate. After the journeys below it checks that the packed generator reproduces the reviewed byte-stable snapshots and runs, with only the inventory's generator, archives and image IDs: the static-site preview of a generated `--cloudflare` project, the dev/manual/automatic publication visibility journey, the existing-Astro consumer (connection guide, `lace add block`, safe rich text, styling hooks, public media, block edits across rerun/update), the packed Cloudflare consumer journey (generated Worker bundle with the packaged admin, local D1/R2, browser setup, hook failure/recovery, restart persistence) and the upgrade of the template `0.4.0` fixtures to the candidate template. The receipt lists these journeys.
+
 Only the temporary installation substitutes relative tarball references/overrides. The delivered templates and archives stay unchanged, and source-workspace resolution is rejected. The runner checks setup/login, all five blocks, media upload/reuse, external media URLs, roles, anonymous/build-token denial, later-draft isolation, a served Compose release, terminal failed build, explicit retry, and database/object/static persistence after service recreation. Failed-build testing temporarily supplies a random invalid build token and accelerates only the disposable outbox's retry availability; production retry count and policy stay unchanged. No renderer or deployment patch is needed.
 
 Shipping scans cover generated files, extracted packages, selected image configurations/exported filesystems, host/static-volume releases and captured tool/service diagnostics using the run's exact credential bytes and complete private-key blocks in text files. Intentional bootstrap output, local operator `.env`, installed dependencies and persistent auth database are excluded from shipping scans. Errors redact credential values. The final receipt reports source fingerprint, versions, package checksums and selected image IDs; retain it alongside the inventory. Temporary containers, volumes and consumer files are removed on success/failure; `LACE_ACCEPTANCE_KEEP_TEMP=1` is a diagnostic option that retains sensitive local operator state and must not be used for shared release evidence.
 
-See [step-25c-verification.md](./archive/step-25/step-25c-verification.md) for the tested set and results. Node/D1/Worker checks remain local regression coverage. The first alpha remains experimental: complete browser-role/session coverage, a vulnerability/license audit, fault-injection/backup drills, full Cloudflare consumer onboarding and a real Cloudflare deployment remain Step 26 or subsequent work. No acceptance command publishes artifacts.
+See [step-32b-verification.md](./archive/step-32/step-32b-verification.md) for the tested `0.1.0-alpha.2` set and results, and [step-25c-verification.md](./archive/step-25/step-25c-verification.md) for the first alpha. Node/D1/Worker checks remain local regression coverage. The alpha remains experimental: complete browser-role/session coverage, a vulnerability/license audit, fault-injection/backup drills and real VPS and Cloudflare deployments remain Step 33 work. No acceptance command publishes artifacts.
 
 ## Owner-operated npm publication
 
@@ -84,10 +92,10 @@ npm view create-lace maintainers --json
 
 An E404 means currently unpublished, not reserved. If it exists and you lack publishing permission, stop and revise the generator name and onboarding commands through OpenSpec. Do not silently fall back to another name. For existing release versions, check published integrity/maintainers before doing anything further.
 
-From the repository root, first review every exact tarball through the npm dry-run. Set the local inventory directory to the clean, 25C-verified output:
+From the repository root, first review every exact tarball through the npm dry-run. Set the local inventory directory to the clean, acceptance-verified output:
 
 ```sh
-export LACE_RELEASE_DIR="$PWD/.release-artifacts/alpha-1"
+export LACE_RELEASE_DIR="$PWD/.release-artifacts/alpha-2"
 pnpm release:verify --output "$LACE_RELEASE_DIR"
 node --input-type=module <<'JS'
 import { readFileSync } from 'node:fs';
@@ -103,25 +111,13 @@ for (const item of inventory.packages) {
 JS
 ```
 
-After reviewing that output and completing 25C, execute the same owner-operated block with `--dry-run` removed. Publish the exact saved tarballs in inventory order; do not repack or run `npm publish` in source directories. Keep `--access public --tag next`; do not move `latest` during this experimental release. Verify each name/version with `npm view <name>@0.1.0-alpha.1 version dist.integrity` and verify `create-lace@next` points to the intended version.
+After reviewing that output and completing exact-artifact acceptance, execute the same owner-operated block with `--dry-run` removed. Publish the exact saved tarballs in inventory order; do not repack or run `npm publish` in source directories. Keep `--access public --tag next`; do not move `latest` during this experimental release. npm already set `latest` to `0.1.0-alpha.1` when the first-alpha packages were first published, and it will likewise point `@lacecms/astro` and `@lacecms/render` at `0.1.0-alpha.2` on their first publication; leave those tags as they are. Verify each name/version with `npm view <name>@0.1.0-alpha.2 version dist.integrity` and verify `create-lace@next` points to the intended version.
 
 Published npm versions are immutable. If a run stops midway, compare existing versions' registry integrity with the saved artifacts, record already-published items and resume only the missing ones. A different archive requires a new prerelease version and a new prepared/verified set. Do not overwrite versions or announce a partially published set.
 
-## Repository transfer and prepared artifacts
+## Source repository
 
-The current source repository is `https://github.com/lacecms/lace`. Package repository metadata, the release definition and both OCI source labels use this address. npm names, GHCR image coordinates, versions and the `next` channel are unchanged by the transfer.
-
-Previously prepared archives and images retain the old repository address. Keep their inventories, checksums and acceptance evidence unchanged; editing an inventory or retagging an image does not update the embedded package metadata or OCI source label. The recorded Step 25C results describe that historical artifact set.
-
-Before publishing artifacts with the new address, commit and review the metadata changes, prepare a new complete set in a fresh directory, verify it and rerun exact-artifact acceptance:
-
-```sh
-pnpm release:prepare --output .release-artifacts/alpha-1-lacecms
-pnpm release:verify --output .release-artifacts/alpha-1-lacecms
-pnpm acceptance:release --artifacts .release-artifacts/alpha-1-lacecms
-```
-
-Publish only that new verified set and retain its inventory and acceptance receipt. If this version has already been published with different artifacts, choose a new prerelease version through the release workflow instead of replacing it.
+The source repository is `https://github.com/lacecms/lace`. Package repository metadata, the release definition and both OCI source labels use this address. Artifact sets prepared before the repository moved retain the old address in their embedded metadata; keep their inventories and evidence unchanged and never edit an inventory or retag an image to change provenance. A version that is already published is never replaced: changed artifacts require a new prerelease version, a new prepared set and a new acceptance run.
 
 ## Owner-operated GHCR publication
 
@@ -130,18 +126,18 @@ Use your GitHub account with publishing rights in organization `lacecms`. For ma
 Load the exact saved archives, retag their recorded image IDs to the platform coordinates, and push those tags. Example for the API amd64 artifact (replace the ID with the inventory's actual `imageId`):
 
 ```sh
-docker load --input "$LACE_RELEASE_DIR/images/api-0.1.0-alpha.1-amd64.tar"
-docker tag sha256:<inventory-image-id> ghcr.io/lacecms/api:0.1.0-alpha.1-amd64
-docker push ghcr.io/lacecms/api:0.1.0-alpha.1-amd64
+docker load --input "$LACE_RELEASE_DIR/images/api-0.1.0-alpha.2-amd64.tar"
+docker tag sha256:<inventory-image-id> ghcr.io/lacecms/api:0.1.0-alpha.2-amd64
+docker push ghcr.io/lacecms/api:0.1.0-alpha.2-amd64
 ```
 
 Repeat using the matching saved archive and ID for API arm64 and builder amd64/arm64. Do not rebuild with `--push`: publication must use the tested archives. Once both platform tags exist for each runtime:
 
 ```sh
-docker manifest create ghcr.io/lacecms/api:0.1.0-alpha.1 ghcr.io/lacecms/api:0.1.0-alpha.1-amd64 ghcr.io/lacecms/api:0.1.0-alpha.1-arm64
-docker manifest push ghcr.io/lacecms/api:0.1.0-alpha.1
-docker manifest create ghcr.io/lacecms/builder:0.1.0-alpha.1 ghcr.io/lacecms/builder:0.1.0-alpha.1-amd64 ghcr.io/lacecms/builder:0.1.0-alpha.1-arm64
-docker manifest push ghcr.io/lacecms/builder:0.1.0-alpha.1
+docker manifest create ghcr.io/lacecms/api:0.1.0-alpha.2 ghcr.io/lacecms/api:0.1.0-alpha.2-amd64 ghcr.io/lacecms/api:0.1.0-alpha.2-arm64
+docker manifest push ghcr.io/lacecms/api:0.1.0-alpha.2
+docker manifest create ghcr.io/lacecms/builder:0.1.0-alpha.2 ghcr.io/lacecms/builder:0.1.0-alpha.2-amd64 ghcr.io/lacecms/builder:0.1.0-alpha.2-arm64
+docker manifest push ghcr.io/lacecms/builder:0.1.0-alpha.2
 ```
 
 New GHCR packages default to private. For both organization packages, open their Package settings and explicitly set visibility to Public, then verify anonymous pulling and both platform entries with `docker buildx imagetools inspect <versioned-coordinate>`. Record actual remote manifest/platform digests in a separate publication receipt after push; local IDs do not substitute for them. Leave `latest` unchanged.

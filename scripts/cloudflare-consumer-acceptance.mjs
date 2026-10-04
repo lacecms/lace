@@ -2,11 +2,11 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer as createHttpsServer } from "node:https";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { parseEnv } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
+import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 
 /** A structurally valid 3×2 RGB PNG, so upload exercises the Worker image inspector. */
@@ -168,21 +168,6 @@ async function expireSetupTokens(persistTo) {
   if (expired === 0) throw new Error("cloudflare-expire: no setup token found in local D1 state");
 }
 
-/** Loads the workspace's Playwright as an acceptance harness; consumers never depend on it. */
-function loadBrowser(workspace) {
-  const require = createRequire(join(workspace, "apps/admin/package.json"));
-  const { chromium } = require("@playwright/test");
-  return chromium.launch({ headless: true });
-}
-
-async function visible(locator, stage) {
-  try {
-    await locator.waitFor({ state: "visible", timeout: 30_000 });
-  } catch {
-    throw new Error(`${stage}: expected admin element did not appear`);
-  }
-}
-
 /**
  * Generates a `--cloudflare` project from packed packages and runs the operator
  * journey against its own Worker through the generated scripts: account-free
@@ -195,6 +180,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
   const {
     capturedDiagnostics,
     freePort,
+    generator,
     installPackedConsumer,
     run,
     sanitize,
@@ -205,7 +191,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
   await mkdir(dirname(project), { recursive: true });
   const diagnostics = [];
   await run("cloudflare-generate", "node", [
-    join(workspace, "packages/create-lace/dist/bin.js"),
+    generator,
     "create",
     project,
     "--starter",
@@ -577,6 +563,12 @@ export async function cloudflareConsumerJourney(parent, operations) {
     });
     if (JSON.stringify(afterDraft.draft) !== JSON.stringify(draft.draft))
       throw new Error("cloudflare-restart: saved draft did not persist");
+  } catch (error) {
+    // Network failures carry no stage context; keep the local Worker's own output.
+    const output = sanitize(worker?.output ?? "").slice(-4000);
+    throw new Error(
+      `${error instanceof Error ? error.message : error}\nLocal Worker output:\n${output}`,
+    );
   } finally {
     await browser?.close();
     await stop();

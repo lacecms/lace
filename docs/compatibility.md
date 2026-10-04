@@ -89,6 +89,34 @@ release supports parsing TypeScript 7 without lowering the project's TypeScript
 baseline. That migration must retain the same boundary checks and negative
 fixture coverage.
 
+## Alpha release line
+
+Lace artifacts are experimental prereleases on the npm `next` channel. One
+release definition (`release/alpha.json`) pins the package, generator and
+API/builder image version together with the generator's ownership template
+version; mixing artifacts from different versions is unsupported.
+
+| Release | Template | Status | Notes |
+| --- | --- | --- | --- |
+| `0.1.0-alpha.1` | `0.4.0` | Published 2026-09-30, immutable | Predates environment preparation, doctor, browser setup, the tour, existing-site mode, `lace add block`, `@lacecms/astro`/`@lacecms/render` and the generated Cloudflare Worker |
+| `0.1.0-alpha.2` | `0.14.0` | Candidate prepared and accepted locally (Step 32B); not published | Carries the onboarding feedback improvements of Steps 26–31 |
+
+Both runtime images target `linux/amd64` and `linux/arm64`; each platform is
+built and smoke-tested separately during preparation, while the full consumer
+journey runs on the host's platform. Consumer packages require Node
+`>=24.12.0 <25` and pnpm 12. Existing projects move between template versions
+with `lace upgrade` (user-owned README, `lace.config.ts`, `.env`, site source
+and `worker/wrangler.jsonc` are never modified; managed-file edits are reported
+as conflicts) and then follow the template's upgrade instructions to update
+their image references and site dependencies. On Docker Desktop and OrbStack
+(macOS/Windows), the Compose data directory crosses a VM file share without
+shared SQLite locks or WAL memory: host `lace` database commands must run only
+while the `api` and `dispatcher` services are stopped, as the generated guides
+state. Linux hosts share the kernel with their containers and are not affected.
+Exact candidate evidence is in
+`docs/archive/step-32/step-32b-verification.md`; preparation and publication
+are described in `docs/alpha-release.md`.
+
 ## Baseline refresh policy
 
 Refreshes must resolve current stable releases from the listed sources, run the

@@ -20,7 +20,7 @@ Site mode: **none**. This project contains the CMS only and builds no site: Comp
 
 Use Node `>=24.12.0 <25`, pnpm `>=12 <13` (this project pins 12.3.4), Docker with Compose and a running daemon. API/builder images must match the Lace package release. MinIO's first image build needs network access and disk space.
 
-This source quickstart requires packages/images built from Step 27B or a later compatible release, including environment preparation and doctor. Published `0.1.0-alpha.1` artifacts retain their older behavior; this source template does not update them. Package/image coordinates still identify that alpha pending a separate coherent artifact refresh. Use a release that includes these steps when available; coordinates are downloadable only after owner publication. Repository verification uses local artifacts.
+This quickstart requires Lace `0.1.0-alpha.2` or a later compatible release of the packages and images named in `package.json` and `.env.example`, including environment preparation and doctor. Published `0.1.0-alpha.1` artifacts retain their older behavior and are not retroactively updated. The coordinates are downloadable only after owner publication; repository verification uses the exact locally prepared artifacts.
 
 Generate with the selected compatible generator (`pnpm create lace@<release> my-site`), or use `pnpm dlx create-lace@<release> init .` in an otherwise empty repository. Replace `<release>` with that exact version. Only `.git`, `README.md` and `LICENSE` may already exist; arbitrary existing applications are not valid init targets. For a CMS directory named `cms/`, generate there and run these commands from `cms/`.
 
@@ -49,9 +49,11 @@ Doctor is read-only. During `setup`, a missing database, unavailable API or empt
 
 Migrate explicitly before startup; the API does not migrate automatically. Matching current packages create missing database parent directories, so no manual `mkdir` is needed. Sync registers Home/Posts and creates the Home draft. Bootstrap prints one expiring setup token: capture it privately. `dev:api` starts MinIO, its initialization/migration service and API/admin; check `/health/ready` at the configured API origin before submitting setup.
 
+Host database commands and the running stack: `pnpm db:migrate`, `pnpm content:sync` (including `--check`) and `pnpm auth:bootstrap` open the same SQLite file as the Compose `api` and `dispatcher` services. Run them only while those services are stopped: `docker compose stop api dispatcher`, run the command, then start again with `pnpm dev:api` (or `docker compose up -d` for the full stack). On Docker Desktop and OrbStack the data directory crosses a virtual-machine file share that does not share SQLite locks or write-ahead-log memory with containers, so a host command run while the services are up can leave them with diverging views; publications then stop triggering site builds until the services restart. Doctor never writes and refuses to probe a running write-ahead-log database.
+
 ## Create the first administrator
 
-With API/admin artifacts built after Step 28A or a later compatible release, open `/admin/` at the configured `LACE_PUBLIC_BASE_URL` origin. While installation setup is incomplete, enter your email, a password of 12–1024 characters, and the operator-issued bootstrap token, create the administrator, then sign in normally. After an interruption, retry with the same token and email; completed setup stays closed. The originally published `0.1.0-alpha.1` artifacts predate browser setup.
+With `0.1.0-alpha.2` or later compatible API/admin artifacts, open `/admin/` at the configured `LACE_PUBLIC_BASE_URL` origin. While installation setup is incomplete, enter your email, a password of 12–1024 characters, and the operator-issued bootstrap token, create the administrator, then sign in normally. After an interruption, retry with the same token and email; completed setup stays closed. The originally published `0.1.0-alpha.1` artifacts predate browser setup.
 
 The API alternative uses `POST /api/v1/setup/admin` with exactly `token`, `email` and `password` (12–1024 characters). The following is a placeholder-only request: replace `<PUBLIC_API_BASE_URL>` with your configured `LACE_PUBLIC_BASE_URL`, including any path prefix and its trailing slash; use the token just issued by bootstrap and a password of at least 12 characters.
 
@@ -174,7 +176,7 @@ These stop commands preserve `.lace/data/` and MinIO/static-output volumes. Remo
 
 ## Cloudflare Worker
 
-This project includes its own CMS Worker in `worker/`, built from installed Lace packages (Step 31A or a later compatible release). Run it locally without a Cloudflare account:
+This project includes its own CMS Worker in `worker/`, built from installed Lace packages (`0.1.0-alpha.2` or a later compatible release). Run it locally without a Cloudflare account:
 
 ```bash
 pnpm env:prepare

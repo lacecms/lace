@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-04",
+  "command": "pnpm acceptance:release --artifacts .release-artifacts/alpha-2b",
+  "release": {
+    "schemaVersion": 1,
+    "version": "0.1.0-alpha.2",
+    "generatorVersion": "0.1.0-alpha.2",
+    "templateVersion": "0.14.0",
+    "publishedVersions": [
+      "0.1.0-alpha.1"
+    ],
+    "channel": "next",
+    "sourceRepository": "https://github.com/lacecms/lace",
+    "images": {
+      "api": "ghcr.io/lacecms/api",
+      "builder": "ghcr.io/lacecms/builder"
+    },
+    "platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "packages": [
+      "application",
+      "astro",
+      "auth",
+      "cli",
+      "config",
+      "content",
+      "contracts",
+      "db",
+      "domain",
+      "platform-cloudflare",
+      "platform-node",
+      "render",
+      "sdk",
+      "server",
+      "create-lace"
+    ]
+  },
+  "source": {
+    "revision": "75026e5fe3a444f8663f2ea885392cfccc9e642a",
+    "preview": false,
+    "fingerprint": "7f2a4dce728b23c5c852d97f321c0d8ac6f1039958eab2acf79b56562b7d7449"
+  },
+  "complete": true,
+  "publicationEligible": true,
+  "packages": [
+    {
+      "name": "@lacecms/content",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-content-0.1.0-alpha.2.tgz",
+      "sha256": "6987b5fbcfd6944b2e09184ea069328d531054dba65c5145fd822a84fdaafea8"
+    },
+    {
+      "name": "@lacecms/config",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-config-0.1.0-alpha.2.tgz",
+      "sha256": "18efbb3a2107e2242b612e1641ee2f56ea02d7d71d40467342db959bff35a25f"
+    },
+    {
+      "name": "@lacecms/domain",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-domain-0.1.0-alpha.2.tgz",
+      "sha256": "b2dcd2ef048b30071521adf6bfd6291668006fb540bbc5ab9b8c2d7dd00a9182"
+    },
+    {
+      "name": "@lacecms/application",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-application-0.1.0-alpha.2.tgz",
+      "sha256": "ab6b11aed43e0ea9aec56b632f7f2e880b29403d093c8849b4b1d68f35dee75b"
+    },
+    {
+      "name": "@lacecms/render",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-render-0.1.0-alpha.2.tgz",
+      "sha256": "ae0fbd4847dd26484c0a99a798026d023ef560e67b115a8457f96b3eda97f05a"
+    },
+    {
+      "name": "@lacecms/contracts",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-contracts-0.1.0-alpha.2.tgz",
+      "sha256": "981932290494d9fec4ee91fad968a2e062ae82ba685c7904218a4bb2ff207720"
+    },
+    {
+      "name": "@lacecms/sdk",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-sdk-0.1.0-alpha.2.tgz",
+      "sha256": "c776c2b0a6bb637ce83a18ac06b2e3a56799635c3cfe7f44137601fc31fb076d"
+    },
+    {
+      "name": "@lacecms/astro",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-astro-0.1.0-alpha.2.tgz",
+      "sha256": "91c4d8b04bdc483de71becdd5e8fa17572c3428eb7dd66afa7eedf5bc3925856"
+    },
+    {
+      "name": "@lacecms/auth",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-auth-0.1.0-alpha.2.tgz",
+      "sha256": "69b737b4b7ae13014fd111f3936bb1baa35e298fd21166d8cf16fa04e3bf99e3"
+    },
+    {
+      "name": "@lacecms/db",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-db-0.1.0-alpha.2.tgz",
+      "sha256": "1cefa41cee18222a98a4c1fefa1ddc85ab5df2a7a0ebd84c7dcb154ed1e98920"
+    },
+    {
+      "name": "@lacecms/server",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-server-0.1.0-alpha.2.tgz",
+      "sha256": "a0560d371d69dc3955e67e41b518b078d1ec22072eab9237eb37ea28547e36c4"
+    },
+    {
+      "name": "@lacecms/platform-cloudflare",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-platform-cloudflare-0.1.0-alpha.2.tgz",
+      "sha256": "7fa6829306e700e032bf6495411e6b6ab0dcde3ab40ff43b29094626fc945c31"
+    },
+    {
+      "name": "@lacecms/platform-node",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-platform-node-0.1.0-alpha.2.tgz",
+      "sha256": "8010b8b9446f7f6e3e7c80e4355c0385d3feb97c30d9cc9560f66686d55cc1c1"
+    },
+    {
+      "name": "@lacecms/cli",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/lacecms-cli-0.1.0-alpha.2.tgz",
+      "sha256": "54df34a57ccb1a678a3ae800a58922e312d98aeef93f76a614ec2a4ee0e36a1b"
+    },
+    {
+      "name": "create-lace",
+      "version": "0.1.0-alpha.2",
+      "file": "packages/create-lace-0.1.0-alpha.2.tgz",
+      "sha256": "ef322346cb217b560d253c4078cbf49550da7842e13b159b86fa35e7f168cc15"
+    }
+  ],
+  "images": [
+    {
+      "kind": "api",
+      "coordinate": "ghcr.io/lacecms/api:0.1.0-alpha.2-amd64",
+      "manifestCoordinate": "ghcr.io/lacecms/api:0.1.0-alpha.2",
+      "localTag": "ghcr.io/lacecms/api:0.1.0-alpha.2-amd64-7f2a4dce728b",
+      "platform": "linux/amd64",
+      "imageId": "sha256:d3663200f5e7623b383b5c89c380aa0dd0426454e4566c94fb7a91b4fd37550c",
+      "file": "images/api-0.1.0-alpha.2-amd64.tar",
+      "sha256": "6f2b5f6b527e7207eb1785c7a1559dc4c312daad26241ccb2ca9108262a0166b",
+      "smokePassed": true
+    },
+    {
+      "kind": "builder",
+      "coordinate": "ghcr.io/lacecms/builder:0.1.0-alpha.2-amd64",
+      "manifestCoordinate": "ghcr.io/lacecms/builder:0.1.0-alpha.2",
+      "localTag": "ghcr.io/lacecms/builder:0.1.0-alpha.2-amd64-7f2a4dce728b",
+      "platform": "linux/amd64",
+      "imageId": "sha256:1b9fe14dc99705c465705c7718cebea417ca9eed3e2b312df0610e65a0e8eb85",
+      "file": "images/builder-0.1.0-alpha.2-amd64.tar",
+      "sha256": "a7a233d83fe39ec8a56d60d5af8c36f0b3675f7910bcefe8c2f50f17b9caab8e",
+      "smokePassed": true
+    },
+    {
+      "kind": "api",
+      "coordinate": "ghcr.io/lacecms/api:0.1.0-alpha.2-arm64",
+      "manifestCoordinate": "ghcr.io/lacecms/api:0.1.0-alpha.2",
+      "localTag": "ghcr.io/lacecms/api:0.1.0-alpha.2-arm64-7f2a4dce728b",
+      "platform": "linux/arm64",
+      "imageId": "sha256:4802544d8fae6341dabd5c64ed145aff6a63c83b3535589ef95e2827432c60e8",
+      "file": "images/api-0.1.0-alpha.2-arm64.tar",
+      "sha256": "907170a96a540acb7d3deca8201a589bf5e30112fcb92d18b3444b89a62aded0",
+      "smokePassed": true
+    },
+    {
+      "kind": "builder",
+      "coordinate": "ghcr.io/lacecms/builder:0.1.0-alpha.2-arm64",
+      "manifestCoordinate": "ghcr.io/lacecms/builder:0.1.0-alpha.2",
+      "localTag": "ghcr.io/lacecms/builder:0.1.0-alpha.2-arm64-7f2a4dce728b",
+      "platform": "linux/arm64",
+      "imageId": "sha256:f4f6bfecbaae628aeb131816efdbb5fa960cb57ec767c36ca68e42e395a24cc5",
+      "file": "images/builder-0.1.0-alpha.2-arm64.tar",
+      "sha256": "67fb05f0ff5e62cfadf7bc5de221cc63009142ec586fe181ce3f553700d9a486",
+      "smokePassed": true
+    }
+  ],
+  "consumer": {
+    "result": "passed",
+    "version": "0.1.0-alpha.2",
+    "templateVersion": "0.14.0",
+    "platform": "linux/arm64",
+    "journeys": [
+      "snapshots",
+      "node-readme-browser",
+      "compose-release",
+      "cloudflare-pages-preview",
+      "publication-visibility",
+      "existing-astro",
+      "cloudflare-consumer",
+      "template-0.4.0-upgrade"
+    ],
+    "builds": {
+      "first": "76cd306f-ec77-4c07-8ab5-1a82ce2abefd",
+      "failed": "01M43ZYD8XNWSEZXFKXQJ8P54S",
+      "retried": "01M43ZZVYH2R8N6WN8CG3KAXZ2",
+      "firstVersion": 3,
+      "recoveredVersion": 4
+    }
+  },
+  "registryAvailability": {
+    "checkedAt": "2026-10-04",
+    "npm": "first-alpha packages and create-lace list only 0.1.0-alpha.1 (application, cli and sdk also 0.0.0-stage); @lacecms/astro and @lacecms/render return 404",
+    "ghcr": "ghcr.io/lacecms/api:0.1.0-alpha.2 and ghcr.io/lacecms/builder:0.1.0-alpha.2 report manifest unknown",
+    "note": "availability evidence only, not a reservation"
+  },
+  "published": false
+}

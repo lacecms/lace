@@ -2,7 +2,10 @@ import { buildSiteJourney } from "./build-site-acceptance.mjs";
 import { cloudflareConsumerJourney } from "./cloudflare-consumer-acceptance.mjs";
 import { existingSiteJourney } from "./existing-site-acceptance.mjs";
 import { publicationVisibilityJourney } from "./publication-visibility-acceptance.mjs";
-import { spawn } from "node:child_process";
+import { readmeSetupCommands, reviewEnvironment, updateEnvironment } from "./consumer-guides.mjs";
+import { nodeBrowserJourney } from "./node-browser-acceptance.mjs";
+import { templateUpgradeJourney } from "./template-upgrade-acceptance.mjs";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   copyFile,
@@ -37,6 +40,12 @@ const temporaryPaths = [];
 let composeProject;
 let composeCwd;
 const capturedDiagnostics = [];
+// The generator and package manifests under test: the workspace build by default,
+// the extracted inventory archives during exact-artifact (`release`) acceptance.
+let generatorBin = join(workspace, "packages/create-lace/dist/bin.js");
+let packageRoots = new Map();
+const packageRoot = (name) =>
+  packageRoots.get(name) ?? join(workspace, "packages", name.slice("@lacecms/".length));
 if (process.env.LACE_ACCEPTANCE_SECRET_SENTINEL) {
   secretValues.add(process.env.LACE_ACCEPTANCE_SECRET_SENTINEL);
 }
@@ -169,7 +178,7 @@ async function verifySnapshots(parent, update = false) {
       await mkdir(root, { recursive: true });
       if (existing) await writeAstroParent(root);
       await run(`snapshot-${variant}`, "node", [
-        "packages/create-lace/dist/bin.js",
+        generatorBin,
         "create",
         join(root, "acceptance-site"),
         ...(flags.length === 0 ? ["--starter"] : flags),
@@ -249,39 +258,15 @@ async function prepareCompose(project, parent, releaseArtifacts) {
       { timeoutMs: 20 * 60_000 },
     );
   }
-  const values = {
-    LACE_API_IMAGE: apiImage,
-    LACE_BUILDER_IMAGE: builderImage,
-    LACE_PUBLIC_BASE_URL: `http://127.0.0.1:${apiPort}/`,
-    LACE_API_BASE_URL: `http://127.0.0.1:${apiPort}/`,
-    LACE_DATABASE_PATH: "./.lace/data/lace.sqlite",
-    LACE_API_PORT: String(apiPort),
-    LACE_HTTP_PORT: String(httpPort),
-    LACE_AUTH_SECRET: randomBytes(32).toString("hex"),
-    LACE_MINIO_ROOT_ACCESS_KEY: `lace${randomBytes(8).toString("hex")}`,
-    LACE_MINIO_ROOT_SECRET: randomBytes(24).toString("hex"),
-    LACE_BUILDER_SECRET: randomBytes(32).toString("hex"),
-    LACE_BUILD_TOKEN: randomBytes(32).toString("hex"),
+  return {
+    apiPort,
+    httpPort,
+    images: { api: apiImage, builder: builderImage },
+    parent,
+    project,
+    releaseArtifacts,
+    values: {},
   };
-  for (const key of [
-    "LACE_AUTH_SECRET",
-    "LACE_MINIO_ROOT_ACCESS_KEY",
-    "LACE_MINIO_ROOT_SECRET",
-    "LACE_BUILDER_SECRET",
-    "LACE_BUILD_TOKEN",
-  ]) {
-    secretValues.add(values[key]);
-  }
-  await writeFile(
-    join(project, ".env"),
-    `${Object.entries(values)
-      .map(([name, value]) => `${name}=${value}`)
-      .join("\n")}\n`,
-  );
-  await compose("image-minio", ["build", "minio"], {
-    timeoutMs: 30 * 60_000,
-  });
-  return { apiPort, httpPort, parent, project, values, releaseArtifacts };
 }
 
 async function compose(stage, args, options = {}) {
@@ -309,33 +294,144 @@ async function request(base, path, options = {}) {
   return { body, response };
 }
 
+/** The reviewed README setup sequence; the README must document exactly these commands. */
+export const readmeNodeSetup = Object.freeze([
+  "pnpm install",
+  "pnpm env:prepare",
+  "pnpm exec lace doctor --target node --mode compose --stage setup",
+  "pnpm db:migrate",
+  "pnpm content:sync",
+  "pnpm auth:bootstrap",
+  "pnpm dev:api",
+]);
+
+async function readmeContract(project) {
+  console.info("Acceptance: readme-setup-contract");
+  const commands = readmeSetupCommands(await readFile(join(project, "README.md"), "utf8"));
+  const scripts = (await packageMetadata(project)).scripts;
+  for (let index = 0; index < Math.max(commands.length, readmeNodeSetup.length); index++) {
+    if (commands[index] !== readmeNodeSetup[index])
+      throw new Error(
+        `readme-setup-contract: step ${index + 1} documents "${commands[index] ?? "(none)"}", acceptance runs "${readmeNodeSetup[index] ?? "(none)"}"`,
+      );
+    const [tool, script] = commands[index].split(" ");
+    if (tool === "pnpm" && !["install", "exec"].includes(script) && !(script in scripts))
+      throw new Error(`readme-setup-contract: "${commands[index]}" names no package script`);
+  }
+}
+
+/** Runs one documented command whose exit status is part of the check. */
+function runStatus(stage, command, args, options = {}) {
+  console.info(`Acceptance: ${stage}`);
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? workspace,
+    encoding: "utf8",
+    env: { ...process.env, ...options.env },
+    timeout: timeoutMs,
+  });
+  capturedDiagnostics.push(result.stdout ?? "", result.stderr ?? "");
+  return result;
+}
+
+async function waitApiReady(base) {
+  console.info("Acceptance: api-ready");
+  let last = "no response";
+  for (const deadline = Date.now() + 5 * 60_000; Date.now() < deadline;) {
+    try {
+      const response = await fetch(new URL("health/ready", base), {
+        signal: AbortSignal.timeout(2_000),
+      });
+      const body = await response.json().catch(() => undefined);
+      if (response.ok && body?.status === "ready") return;
+      last = `status ${response.status}`;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`api-ready: API did not become ready (${sanitize(last)})`);
+}
+
+/**
+ * Follows the generated README: packed install (substituting `pnpm install`),
+ * environment preparation and review, setup doctor, migration without a
+ * pre-created directory, sync, bootstrap and `pnpm dev:api`; then browser setup,
+ * tour and media, and publication through the API.
+ */
 async function nodeJourney(context) {
   const { project, apiPort } = context;
-  const databasePath = join(project, ".lace", "data", "lace.sqlite");
-  const env = { LACE_DATABASE_PATH: databasePath };
-  const dataDirectory = join(project, ".lace", "data");
-  try {
-    await stat(dataDirectory);
-    throw new Error("cli-db-migrate: database parent was created before fresh migration");
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
-  for (const command of [
-    ["db", "migrate"],
-    ["content", "sync"],
+  const base = `http://127.0.0.1:${apiPort}/`;
+  await readmeContract(project);
+
+  const prepared = JSON.parse(
+    (await run("env-prepare", "pnpm", ["env:prepare", "--json"], { cwd: project }))
+      .trim()
+      .split("\n")
+      .at(-1),
+  );
+  if (prepared.ok !== true || prepared.code !== "ENV_PREPARED")
+    throw new Error("env-prepare: unexpected preparation result");
+  const envPath = join(project, ".env");
+  // The README's review step: images, ports and both origins; credentials stay generated.
+  const reviewed = reviewEnvironment(await readFile(envPath, "utf8"), {
+    LACE_API_IMAGE: context.images.api,
+    LACE_BUILDER_IMAGE: context.images.builder,
+    LACE_API_PORT: String(apiPort),
+    LACE_HTTP_PORT: String(context.httpPort),
+    LACE_PUBLIC_BASE_URL: base,
+    LACE_API_BASE_URL: base,
+  });
+  await writeFile(envPath, reviewed);
+  context.values = parseEnv(reviewed);
+  for (const key of [
+    "LACE_AUTH_SECRET",
+    "LACE_MINIO_ROOT_ACCESS_KEY",
+    "LACE_MINIO_ROOT_SECRET",
+    "LACE_BUILDER_SECRET",
   ]) {
-    const output = await run(`cli-${command.join("-")}`, "pnpm", [command.join(":"), "--json"], {
+    if (!context.values[key]) throw new Error(`env-prepare: ${key} was not generated`);
+    secretValues.add(context.values[key]);
+  }
+  await compose("image-minio", ["build", "minio"], { timeoutMs: 30 * 60_000 });
+
+  const doctor = runStatus(
+    "doctor-setup",
+    "pnpm",
+    [...readmeNodeSetup[2].split(" ").slice(1), "--json"],
+    {
       cwd: project,
-      env,
+    },
+  );
+  let report;
+  try {
+    report = JSON.parse(doctor.stdout);
+  } catch {
+    throw new Error(
+      `doctor-setup: invalid JSON\n${sanitize(doctor.stdout + doctor.stderr).slice(-2000)}`,
+    );
+  }
+  const checks = Object.fromEntries(report.data.checks.map((check) => [check.id, check.status]));
+  if (
+    doctor.status !== 0 ||
+    checks.migrations !== "expected" ||
+    checks["api-readiness"] !== "expected"
+  )
+    throw new Error(`doctor-setup: unexpected setup report ${sanitize(JSON.stringify(checks))}`);
+
+  const dataDirectory = join(project, ".lace", "data");
+  if (await stat(dataDirectory).catch(() => undefined))
+    throw new Error("cli-db-migrate: database parent was created before fresh migration");
+  for (const script of ["db:migrate", "content:sync"]) {
+    const output = await run(`cli-${script.replace(":", "-")}`, "pnpm", [script, "--json"], {
+      cwd: project,
     });
-    if (!JSON.parse(output).ok) throw new Error(`cli-${command.join("-")}: unsuccessful result`);
-    if (command[0] === "db" && !(await stat(dataDirectory)).isDirectory())
+    if (!JSON.parse(output).ok) throw new Error(`cli-${script}: unsuccessful result`);
+    if (script === "db:migrate" && !(await stat(dataDirectory)).isDirectory())
       throw new Error("cli-db-migrate: migration did not create the database parent");
   }
   const bootstrap = JSON.parse(
     await run("cli-bootstrap", "pnpm", ["auth:bootstrap", "--json"], {
       cwd: project,
-      env,
       intentionalReveal: true,
     }),
   );
@@ -343,17 +439,62 @@ async function nodeJourney(context) {
   if (!bootstrap.ok || typeof token !== "string") throw new Error("cli-bootstrap: missing token");
   secretValues.add(token);
   await compose("compose-config", ["config", "--quiet"]);
-  await compose("compose-api", ["up", "--detach", "--wait", "api"], { timeoutMs: 10 * 60_000 });
-  const base = `http://127.0.0.1:${apiPort}/`;
-  const ready = await request(base, "/health/ready");
-  if (ready.body?.status !== "ready") throw new Error("api: readiness payload mismatch");
+  await run("dev-api", "pnpm", ["dev:api"], {
+    cwd: project,
+    env: { COMPOSE_PROJECT_NAME: composeProject },
+    timeoutMs: 10 * 60_000,
+  });
+  await waitApiReady(base);
+
   const email = "acceptance@lace.test";
   const password = randomBytes(24).toString("hex");
   secretValues.add(password);
-  await request(base, "/api/v1/setup/admin", {
-    method: "POST",
-    json: { email, password, token },
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5mcAAAAASUVORK5CYII=",
+    "base64",
+  );
+  await nodeBrowserJourney({
+    base,
+    diagnostics: capturedDiagnostics,
+    email,
+    password,
+    png,
+    secretValues,
+    token,
+    workspace,
   });
+  // A refused operator command names the operation, the cause and the next action.
+  // As the generated guide instructs, host database commands run while the Compose
+  // API is stopped: host access to its live SQLite file through a VM file share
+  // leaves container processes with diverging views.
+  await compose("stop-api-for-host-command", ["stop", "api"]);
+  const refusedBootstrap = runStatus(
+    "cli-bootstrap-refused",
+    "pnpm",
+    ["auth:bootstrap", "--json"],
+    {
+      cwd: project,
+    },
+  );
+  const refusal = JSON.parse(refusedBootstrap.stdout.trim().split("\n").at(-1) ?? "{}");
+  if (
+    refusedBootstrap.status !== 6 ||
+    refusal.ok !== false ||
+    refusal.code !== "OPERATION_FAILED" ||
+    refusal.operation !== "auth bootstrap" ||
+    !/already completed/u.test(refusal.reason ?? "") ||
+    (refusal.nextAction ?? "").length < 20 ||
+    "token" in (refusal.data ?? {})
+  )
+    throw new Error(
+      `cli-bootstrap-refused: unexpected completed-setup refusal ${sanitize(refusedBootstrap.stdout).slice(-1000)}`,
+    );
+  await run("dev-api-restart", "pnpm", ["dev:api"], {
+    cwd: project,
+    env: { COMPOSE_PROJECT_NAME: composeProject },
+    timeoutMs: 10 * 60_000,
+  });
+  await waitApiReady(base);
   const login = await request(base, "/api/auth/sign-in/email", {
     method: "POST",
     headers: { origin: base.slice(0, -1) },
@@ -374,19 +515,10 @@ async function nodeJourney(context) {
   });
   const homeId = homeEntries.body?.items?.[0]?.id;
   if (typeof homeId !== "string") throw new Error("home: synchronized draft missing");
-  const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5mcAAAAASUVORK5CYII=",
-    "base64",
-  );
-  const form = new FormData();
-  form.append("file", new Blob([png], { type: "image/png" }), "onboarding.png");
-  const uploaded = await request(base, "/api/v1/admin/media", {
-    method: "POST",
-    headers: { cookie },
-    body: form,
-  });
-  const mediaId = uploaded.body?.id;
-  if (typeof mediaId !== "string") throw new Error("media: uploaded ID missing");
+  // The image uploaded through Media in the browser.
+  const library = await request(base, "/api/v1/admin/media", { headers: { cookie } });
+  const mediaId = library.body?.items?.find((item) => item.filename === "onboarding.png")?.id;
+  if (typeof mediaId !== "string") throw new Error("media: browser upload missing from library");
   const richText = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Published rich text" }] }],
@@ -452,7 +584,9 @@ async function nodeJourney(context) {
   const buildToken = createdToken.body?.token;
   if (typeof buildToken !== "string") throw new Error("build: token missing");
   secretValues.add(buildToken);
+  // README: put the one-time build token value into LACE_BUILD_TOKEN in .env.
   context.values.LACE_BUILD_TOKEN = buildToken;
+  await writeEnvironment(context);
   await run("astro-build", "pnpm", ["build"], {
     cwd: project,
     env: {
@@ -477,7 +611,7 @@ async function nodeJourney(context) {
   }
   if (html.includes(buildToken)) throw new Error("astro-build: exposed build token");
   console.info(
-    "Generated Node journey: migrate, sync, bootstrap, login, edit, publish, Astro build passed",
+    "Generated Node journey from the README: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish and Astro build passed",
   );
   return { base, cookie, png, entryId, mediaId, blocks, buildToken, token, password, email };
 }
@@ -495,12 +629,7 @@ async function verifyRenderedMedia(html, base, bytes) {
 }
 
 async function productionSmoke(context, session) {
-  await writeFile(
-    join(context.project, ".env"),
-    `${Object.entries(context.values)
-      .map(([name, value]) => `${name}=${value}`)
-      .join("\n")}\n`,
-  );
+  await writeEnvironment(context);
   await compose("compose-production", ["up", "--detach", "--wait"], {
     timeoutMs: 10 * 60_000,
   });
@@ -552,8 +681,9 @@ async function productionSmoke(context, session) {
             failedState = state;
           }
         }
-      } catch {
-        /* A transient history read does not stop the release wait. */
+      } catch (error) {
+        // A transient history read does not stop the release wait; keep it for diagnosis.
+        lastBuildState = `history unavailable: ${error instanceof Error ? error.message : error}`;
       }
       if (failedState)
         throw new Error(`compose-production: builder failed (${sanitize(failedState)})`);
@@ -568,15 +698,11 @@ async function productionSmoke(context, session) {
   console.info("Generated Compose production services and web proxy passed");
 }
 
-async function cloudflareSmoke(context, tarballs) {
-  const cloudProject = join(context.parent, "cloudflare-consumer", "acceptance-site");
+/** Previews a generated `--cloudflare` project's static output built against the Node API. */
+async function cloudflarePagesSmoke(context, tarballs) {
+  const cloudProject = join(context.parent, "cloudflare-pages", "acceptance-site");
   await mkdir(dirname(cloudProject), { recursive: true });
-  await run("cloudflare-generate", "node", [
-    "packages/create-lace/dist/bin.js",
-    "create",
-    cloudProject,
-    "--cloudflare",
-  ]);
+  await run("cloudflare-generate", "node", [generatorBin, "create", cloudProject, "--cloudflare"]);
   await installPackedConsumer(cloudProject, tarballs);
   await run("cloudflare-bundle", "pnpm", ["build"], {
     cwd: cloudProject,
@@ -647,13 +773,13 @@ async function cloudflareSmoke(context, tarballs) {
     }
   }
   console.info("Generated Cloudflare Pages bundle preview passed");
-  await cloudflareConsumerJourney(context.parent, cloudflareOperations(tarballs));
 }
 
 function cloudflareOperations(tarballs) {
   return {
     capturedDiagnostics,
     freePort,
+    generator: generatorBin,
     installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
     run,
     sanitize,
@@ -733,9 +859,7 @@ async function installPackedConsumer(project, tarballs) {
   );
   const scoped = [];
   for (const parent of references.keys()) {
-    const manifest = await packageMetadata(
-      join(workspace, "packages", parent.slice("@lacecms/".length)),
-    );
+    const manifest = await packageMetadata(packageRoot(parent));
     for (const dependency of Object.keys(manifest.dependencies ?? {})) {
       if (siteDirect.has(dependency) && references.has(dependency))
         scoped.push([`${parent}>${dependency}`, references.get(dependency)]);
@@ -1065,6 +1189,30 @@ async function expectDenied(base, path, options = {}, statuses = [401, 403]) {
     throw new Error(`Authorization boundary failed: ${path}: ${response.status}`);
 }
 
+/**
+ * Signs in like a well-behaved client: Better Auth allows three sign-ins per
+ * ten seconds, and one acceptance client signs in several roles in a row, so a
+ * 429 is honored by waiting for its advertised retry delay (at most once, 60s).
+ */
+async function signInHonoringRetry(base, email, password) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(new URL("/api/auth/sign-in/email", base), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: base.slice(0, -1) },
+      body: JSON.stringify({ email, password }),
+    });
+    await response.arrayBuffer();
+    if (response.ok) return response;
+    const retryAfter = Number(
+      response.headers.get("x-retry-after") ?? response.headers.get("retry-after"),
+    );
+    if (response.status !== 429 || attempt > 0 || !(retryAfter > 0 && retryAfter <= 60))
+      throw new Error(`HTTP /api/auth/sign-in/email: status ${response.status}`);
+    console.info(`Acceptance: sign-in rate limited; retrying after ${retryAfter}s`);
+    await new Promise((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));
+  }
+}
+
 async function securityJourney(context, session) {
   const { base, cookie, entryId, buildToken, token, email, password } = session;
   const exportPath = "/api/v1/public/build-export";
@@ -1104,12 +1252,8 @@ async function securityJourney(context, session) {
       headers: { cookie },
       json: { email: roleEmail, password: rolePassword, role },
     });
-    const login = await request(base, "/api/auth/sign-in/email", {
-      method: "POST",
-      headers: { origin: base.slice(0, -1) },
-      json: { email: roleEmail, password: rolePassword },
-    });
-    const roleCookie = login.response.headers.getSetCookie()[0]?.split(";")[0];
+    const login = await signInHonoringRetry(base, roleEmail, rolePassword);
+    const roleCookie = login.headers.getSetCookie()[0]?.split(";")[0];
     if (!roleCookie) throw new Error(`${role} login: session missing`);
     secretValues.add(roleCookie);
     await expectDenied(
@@ -1174,13 +1318,15 @@ async function securityJourney(context, session) {
   );
 }
 
+/** Applies changed `context.values` to `.env` in place, keeping comments and other settings. */
 async function writeEnvironment(context) {
-  await writeFile(
-    join(context.project, ".env"),
-    `${Object.entries(context.values)
-      .map(([name, value]) => `${name}=${value}`)
-      .join("\n")}\n`,
+  const path = join(context.project, ".env");
+  const text = await readFile(path, "utf8");
+  const current = parseEnv(text);
+  const changed = Object.fromEntries(
+    Object.entries(context.values).filter(([name, value]) => current[name] !== value),
   );
+  await writeFile(path, updateEnvironment(text, changed));
 }
 
 async function waitBuild(session, predicate, accelerate = false) {
@@ -1381,6 +1527,69 @@ async function inspectShipping(context) {
   );
 }
 
+/**
+ * The recovery journey publishes the later draft. The feedback journeys start
+ * from the Node journey's published post, as in the workspace suite, so publish
+ * its title again and wait until Compose serves that version.
+ */
+async function restorePublishedBaseline(session) {
+  const headers = { cookie: session.cookie };
+  const path = `/api/v1/admin/entries/${session.entryId}`;
+  const { body: entry } = await request(session.base, path, { headers });
+  const saved = await request(session.base, `${path}/draft`, {
+    method: "PUT",
+    headers,
+    json: {
+      blocks: entry.draft.blocks,
+      expectedRevision: entry.draft.revision,
+      fields: entry.draft.fields,
+      slug: entry.draft.slug,
+      title: "Published acceptance title",
+    },
+  });
+  const published = await request(session.base, `${path}/publish`, {
+    method: "POST",
+    headers,
+    json: { expectedRevision: saved.body.draft.revision },
+  });
+  const targetVersion = published.body.build.targetVersion;
+  await waitBuild(
+    session,
+    (build) => build.targetVersion === targetVersion && build.status === "succeeded",
+  );
+  console.info(`Published baseline restored and built (version ${targetVersion})`);
+}
+
+/**
+ * The onboarding feedback consumer journeys after the Node consumer, in order.
+ * Both the workspace suite (`all`) and exact-artifact acceptance (`release`) run them.
+ */
+async function feedbackJourneys(parent, context, session, tarballs, upgradeOperations) {
+  await cloudflarePagesSmoke(context, tarballs);
+  await publicationVisibilityJourney(context, session, { request, run, secretValues });
+  await existingSiteJourney(parent, {
+    generator: generatorBin,
+    installPackedConsumer: (target) => installPackedConsumer(target, tarballs),
+    run,
+    secretValues,
+    workspace,
+  });
+  await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
+  await templateUpgradeJourney(parent, upgradeOperations);
+  for (const output of capturedDiagnostics)
+    assertSecretFree(output, secretValues, "captured diagnostics");
+  return [
+    "snapshots",
+    "node-readme-browser",
+    "compose-release",
+    "cloudflare-pages-preview",
+    "publication-visibility",
+    "existing-astro",
+    "cloudflare-consumer",
+    "template-0.4.0-upgrade",
+  ];
+}
+
 async function main() {
   const phase = process.argv[2] ?? "all";
   if (
@@ -1396,10 +1605,14 @@ async function main() {
       "snapshots",
       "starter",
       "self-test",
+      "upgrade",
     ].includes(phase)
   ) {
     throw new Error(`Unknown acceptance phase: ${phase}`);
   }
+  // The regression suite counts only real outcomes; observed mismatches must fail it.
+  if (phase === "all" && process.env.LACE_VISIBILITY_OBSERVE === "1")
+    throw new Error("The full acceptance cannot run with LACE_VISIBILITY_OBSERVE=1");
   const parent = await mkdtemp(join(tmpdir(), "lace-generated-acceptance-"));
   temporaryPaths.push(parent);
   if (phase === "self-test") {
@@ -1436,6 +1649,15 @@ async function main() {
       )[0];
       checkImageIdentity(metadata, record, artifacts.inventory);
     }
+    // Every journey below generates with the packed generator and resolves
+    // override metadata from the extracted archives, never the engine checkout.
+    generatorBin = artifacts.generator;
+    packageRoots = new Map(
+      await Promise.all(
+        artifacts.extracted.map(async (root) => [(await packageMetadata(root)).name, root]),
+      ),
+    );
+    await verifySnapshots(parent);
     const project = join(parent, "consumer", "acceptance-site");
     await mkdir(dirname(project), { recursive: true });
     await run("packed-generate", "node", [artifacts.generator, "create", project]);
@@ -1447,12 +1669,21 @@ async function main() {
     await installPackedConsumer(project, artifacts.tarballs);
     const context = await prepareCompose(project, parent, artifacts);
     context.shipping = shipping;
+    context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
     const session = await nodeJourney(context);
     await securityJourney(context, session);
     await productionSmoke(context, session);
     await recoveryJourney(context, session);
     await persistenceJourney(context, session);
     await inspectShipping(context);
+    await restorePublishedBaseline(session);
+    const journeys = await feedbackJourneys(parent, context, session, artifacts.tarballs, {
+      cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+      generator: generatorBin,
+      run,
+      secretValues,
+      workspace,
+    });
     console.info(
       JSON.stringify(
         {
@@ -1462,6 +1693,7 @@ async function main() {
           platform,
           source: artifacts.inventory.source,
           builds: context.buildEvidence,
+          journeys,
           packages: artifacts.inventory.packages,
           images: Object.values(artifacts.images),
         },
@@ -1482,6 +1714,7 @@ async function main() {
   }
   if (phase === "existing-site") {
     await existingSiteJourney(parent, {
+      generator: generatorBin,
       installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
       run,
       secretValues,
@@ -1498,11 +1731,23 @@ async function main() {
     await environmentPreparation(project);
     return;
   }
+  const upgradeOperations = {
+    cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+    generator: join(workspace, "packages/create-lace/dist/bin.js"),
+    run,
+    secretValues,
+    workspace,
+  };
+  if (phase === "upgrade") {
+    await templateUpgradeJourney(parent, upgradeOperations);
+    return;
+  }
   if (phase === "starter") {
     await starterJourney(project);
     return;
   }
   const context = await prepareCompose(project, parent);
+  context.sdkTarball = basename(tarballs.get("@lacecms/sdk"));
   const session = await nodeJourney(context);
   if (phase === "node") return;
   await productionSmoke(context, session);
@@ -1522,7 +1767,10 @@ async function main() {
     await publicationVisibilityJourney(context, session, { request, run, secretValues });
     return;
   }
-  await cloudflareSmoke(context, tarballs);
+  await feedbackJourneys(parent, context, session, tarballs, upgradeOperations);
+  console.info(
+    "Onboarding feedback regression suite passed: README-driven Node consumer, Compose release, Pages preview, publication visibility, existing-Astro consumer, Cloudflare consumer and template 0.4.0 upgrade",
+  );
 }
 
 try {
@@ -1531,14 +1779,16 @@ try {
   console.error(sanitize(error instanceof Error ? error.message : error));
   if (composeProject && composeCwd) {
     try {
-      const logs = await compose("builder-logs", [
-        "logs",
-        "--no-color",
-        "--tail",
-        "100",
-        "builder",
-      ]);
-      console.error(`Builder diagnostics:\n${sanitize(logs).slice(-6000)}`);
+      for (const service of ["builder", "dispatcher", "api"]) {
+        const logs = await compose(`${service}-logs`, [
+          "logs",
+          "--no-color",
+          "--tail",
+          "100",
+          service,
+        ]);
+        console.error(`${service} diagnostics:\n${sanitize(logs).slice(-6000)}`);
+      }
     } catch {
       /* Keep the original acceptance failure. */
     }
