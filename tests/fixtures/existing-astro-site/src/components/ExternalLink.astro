@@ -1,0 +1,9 @@
+---
+import type { RichTextOverrideProps } from "@lacecms/astro";
+
+type Props = RichTextOverrideProps;
+
+const { element } = Astro.props;
+---
+
+<a class="external" href={element.attributes.href} rel="noopener"><slot /></a>

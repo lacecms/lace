@@ -22,6 +22,34 @@ test("rejects a forbidden architecture import", () => {
   expect(result.stderr).toContain("forbidden dependency");
 });
 
+test.each([
+  ["render-framework", "@lacecms/render may not import astro/runtime/server/index.js"],
+  ["render-node", "@lacecms/render may not import node:fs"],
+  ["render-sdk", "@lacecms/render may not import @lacecms/sdk"],
+  ["sdk-framework", "@lacecms/sdk may not import react"],
+  ["sdk-node", "@lacecms/sdk may not import process"],
+])("rejects the %s framework-neutral import", (name, message) => {
+  const result = spawnSync(
+    process.execPath,
+    [checker, join(fixtureDirectory, "framework-neutral", name)],
+    { encoding: "utf8" },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
+test.each([
+  ["astro-content", "forbidden dependency: @lacecms/astro -> @lacecms/content"],
+  ["astro-reexport", "framework adapter @lacecms/astro may not re-export a Lace package"],
+  ["astro-node", "framework adapter @lacecms/astro may not import node:fs/promises"],
+])("rejects the %s adapter boundary violation", (name, message) => {
+  const result = spawnSync(process.execPath, [checker, join(fixtureDirectory, "adapter", name)], {
+    encoding: "utf8",
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
 const adminFixtureDirectory = join(testDirectory, "fixtures", "admin-structure");
 
 function checkAdminFixture(name) {

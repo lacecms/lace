@@ -1,0 +1,16 @@
+---
+import { prepareBlocks } from "@lacecms/render";
+import type { BlockMap, MediaUrlBuilder, RenderableEntry } from "@lacecms/render";
+
+interface Props {
+  readonly blocks: BlockMap;
+  readonly entry: RenderableEntry;
+  readonly mediaUrl: MediaUrlBuilder;
+}
+
+const { blocks, entry, mediaUrl } = Astro.props;
+// Resolve and parse every block before rendering so a failure emits no partial page.
+const prepared = prepareBlocks(blocks, entry, mediaUrl);
+---
+
+{prepared.map(({ component: Component, props }) => <Component {...props} />)}

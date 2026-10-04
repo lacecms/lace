@@ -1,4 +1,5 @@
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
+import { existingSiteJourney } from "./existing-site-acceptance.mjs";
 import { publicationVisibilityJourney } from "./publication-visibility-acceptance.mjs";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -141,19 +142,35 @@ async function captureSnapshot(project) {
   return { tree, manifest: manifestText, digests };
 }
 
+/** A minimal standalone Astro parent for existing-site snapshot variants. */
+async function writeAstroParent(root) {
+  await writeFile(join(root, "astro.config.mjs"), "export default {};\n");
+  await writeFile(
+    join(root, "package.json"),
+    `${JSON.stringify({ name: "existing-site", private: true, dependencies: { astro: "7.3.1" } })}\n`,
+  );
+}
+
+const snapshotVariants = [
+  ["default", []],
+  ["cloudflare", ["--cloudflare"]],
+  ["existing", ["--existing-site", ".."]],
+  ["existing-cloudflare", ["--existing-site", "..", "--cloudflare"]],
+  ["none", ["--no-site"]],
+];
+
 async function verifySnapshots(parent, update = false) {
-  for (const [variant, flag] of [
-    ["default", false],
-    ["cloudflare", true],
-  ]) {
+  for (const [variant, flags] of snapshotVariants) {
+    const existing = flags.includes("--existing-site");
     const roots = [join(parent, `${variant}-a`), join(parent, `${variant}-b`)];
     for (const root of roots) {
       await mkdir(root, { recursive: true });
+      if (existing) await writeAstroParent(root);
       await run(`snapshot-${variant}`, "node", [
         "packages/create-lace/dist/bin.js",
         "create",
         join(root, "acceptance-site"),
-        ...(flag ? ["--cloudflare"] : []),
+        ...(flags.length === 0 ? ["--starter"] : flags),
       ]);
     }
     const first = await captureSnapshot(join(roots[0], "acceptance-site"));
@@ -161,11 +178,17 @@ async function verifySnapshots(parent, update = false) {
     if (JSON.stringify(first) !== JSON.stringify(second)) {
       throw new Error(`snapshot: ${variant} generation is not byte-stable`);
     }
-    if (flag && !first.tree.includes("wrangler.jsonc")) {
-      throw new Error("snapshot: Cloudflare variant is incomplete");
+    const cloudflare = flags.includes("--cloudflare");
+    if (cloudflare !== first.tree.includes("wrangler.jsonc")) {
+      throw new Error(`snapshot: ${variant} Cloudflare files do not match the selected options`);
     }
-    if (!flag && first.tree.includes("wrangler.jsonc")) {
-      throw new Error("snapshot: default variant includes Cloudflare files");
+    const site = JSON.parse(first.manifest).site;
+    const expectedMode = existing ? "existing" : flags.includes("--no-site") ? "none" : "starter";
+    if (
+      site?.mode !== expectedMode ||
+      first.tree.some((path) => path.startsWith("site/")) !== (expectedMode === "starter")
+    ) {
+      throw new Error(`snapshot: ${variant} site mode or site/ files do not match`);
     }
     const path = join(workspace, "tests", "fixtures", "generated-project", `${variant}.json`);
     const actual = `${JSON.stringify(first, null, 2)}\n`;
@@ -178,7 +201,9 @@ async function verifySnapshots(parent, update = false) {
       );
     }
   }
-  console.info("Generated default and Cloudflare snapshots match two byte-stable regenerations");
+  console.info(
+    `Generated ${snapshotVariants.map(([variant]) => variant).join(", ")} snapshots match two byte-stable regenerations`,
+  );
 }
 
 async function freePort() {
@@ -671,7 +696,12 @@ async function installPackedConsumer(project, tarballs) {
     await copyFile(filename, join(artifactDirectory, basename(filename)));
     references.set(name, `file:.lace/acceptance-packages/${basename(filename)}`);
   }
-  for (const directory of [project, join(project, "site")]) {
+  // Existing-site and no-site projects have no site/ workspace package.
+  const hasSite = await stat(join(project, "site/package.json")).then(
+    () => true,
+    () => false,
+  );
+  for (const directory of hasSite ? [project, join(project, "site")] : [project]) {
     const path = join(directory, "package.json");
     const packageJson = await packageMetadata(directory);
     for (const section of ["dependencies", "devDependencies"]) {
@@ -687,8 +717,26 @@ async function installPackedConsumer(project, tarballs) {
   }
   const workspaceFile = join(project, "pnpm-workspace.yaml");
   const workspaceYaml = await readFile(workspaceFile, "utf8");
-  const overrides = [...references]
-    .filter(([name]) => name !== "@lacecms/sdk")
+  // A global file: override of a package the site importer also declares makes
+  // pnpm's frozen check compare root- and site-relative paths, so those packages
+  // are overridden only where another Lace package depends on them.
+  const siteDirect = new Set(
+    hasSite ? Object.keys((await packageMetadata(join(project, "site"))).dependencies ?? {}) : [],
+  );
+  const scoped = [];
+  for (const parent of references.keys()) {
+    const manifest = await packageMetadata(
+      join(workspace, "packages", parent.slice("@lacecms/".length)),
+    );
+    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+      if (siteDirect.has(dependency) && references.has(dependency))
+        scoped.push([`${parent}>${dependency}`, references.get(dependency)]);
+    }
+  }
+  const overrides = [
+    ...[...references].filter(([name]) => !siteDirect.has(name)),
+    ...scoped.sort(([left], [right]) => left.localeCompare(right)),
+  ]
     .map(([name, file]) => `  '${name}': '${file}'`)
     .join("\n");
   await writeFile(workspaceFile, `${workspaceYaml}\noverrides:\n${overrides}\n`);
@@ -711,6 +759,61 @@ async function installPackedConsumer(project, tarballs) {
       throw new Error(`install: ${name} resolves outside generated project: ${resolved}`);
     }
   }
+}
+
+/** Builds the packed starter against a local export server, without Docker. */
+async function starterJourney(project) {
+  const exported = JSON.parse(
+    await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
+  );
+  exported.entries = exported.entries.slice(0, 2);
+  const token = `lace_build_${randomBytes(16).toString("hex")}`;
+  secretValues.add(token);
+  let requests = 0;
+  const server = createHttpServer((request, response) => {
+    requests++;
+    if (
+      request.url !== "/api/v1/public/build-export" ||
+      request.headers.authorization !== `Bearer ${token}`
+    ) {
+      response.writeHead(403, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }));
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
+    response.end(JSON.stringify(exported));
+  });
+  await new Promise((done, fail) => {
+    server.once("error", fail);
+    server.listen(0, "127.0.0.1", done);
+  });
+  try {
+    await run("starter-build", "pnpm", ["build"], {
+      cwd: project,
+      env: {
+        ASTRO_TELEMETRY_DISABLED: "1",
+        LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
+        LACE_BUILD_TOKEN: token,
+        LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
+      },
+    });
+  } finally {
+    await new Promise((done) => server.close(done));
+  }
+  if (requests !== 1) throw new Error(`starter-build: expected one export read, saw ${requests}`);
+  await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
+  const html = [
+    await readFile(join(project, "site/dist/index.html"), "utf8"),
+    await readFile(join(project, "site/dist/blog/first-post/index.html"), "utf8"),
+  ].join("\n");
+  for (const type of ["hero", "richText", "image", "quote", "cta"]) {
+    if (!html.includes(`data-lace-block="${type}"`))
+      throw new Error(`starter-build: missing ${type}`);
+  }
+  if (!html.includes("https://public.example/lace/api/v1/public/media/post-media"))
+    throw new Error("starter-build: public media origin missing");
+  await scanTree(join(project, "site/dist"), secretValues, "starter static output");
+  console.info("Packed starter installed, typechecked and built all five blocks");
 }
 
 async function environmentPreparation(project) {
@@ -1279,8 +1382,10 @@ async function main() {
       "node",
       "all",
       "build-site",
+      "existing-site",
       "publication-visibility",
       "snapshots",
+      "starter",
       "self-test",
     ].includes(phase)
   ) {
@@ -1362,6 +1467,15 @@ async function main() {
   await verifySnapshots(parent);
   await run("mkdir-tarballs", "mkdir", ["-p", tarballDirectory]);
   const tarballs = await packConsumerGraph(tarballDirectory);
+  if (phase === "existing-site") {
+    await existingSiteJourney(parent, {
+      installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
+      run,
+      secretValues,
+      workspace,
+    });
+    return;
+  }
   const project = join(parent, "consumer", "acceptance-site");
   await run("mkdir-consumer", "mkdir", ["-p", dirname(project)]);
   await run("generate", "node", ["packages/create-lace/dist/bin.js", "create", project]);
@@ -1369,6 +1483,10 @@ async function main() {
   console.info(`Packed consumer installed: ${tarballs.size} Lace tarballs; ${basename(project)}`);
   if (phase === "packages") {
     await environmentPreparation(project);
+    return;
+  }
+  if (phase === "starter") {
+    await starterJourney(project);
     return;
   }
   const context = await prepareCompose(project, parent);

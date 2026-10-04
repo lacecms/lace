@@ -1,0 +1,13 @@
+---
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.image>;
+
+const { block, data, mediaUrl } = Astro.props;
+---
+
+<figure data-lace-block={block.type} data-lace-block-key={block.key}>
+  <img alt={data.alt} data-lace-part="media" src={mediaUrl(data.media)} />
+  {data.caption !== undefined && <figcaption data-lace-part="caption">{data.caption}</figcaption>}
+</figure>

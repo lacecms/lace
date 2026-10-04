@@ -17,8 +17,9 @@ The application must remain portable by placing infrastructure-specific behavior
 
 The MVP should allow a user to:
 
-- initialize a new Lace-powered website with one CLI command;
+- initialize a new Lace-powered website with one CLI command, with a starter site, against an existing Astro site, or without a site;
 - customize the Astro site without modifying the CMS engine or admin application;
+- install editable block renderers into a site without copying engine files by hand;
 - define pages, collections, fields, and allowed block types in a typed configuration file;
 - manage structured content and ordered content blocks in a browser-based admin application;
 - upload and reuse media;
@@ -216,7 +217,7 @@ apps/
 ├── admin/                     # React/Vite admin SPA
 ├── api/                       # deployable/reference Hono composition root
 ├── builder/                   # fixed-command VPS Astro build service
-└── site/                      # default Astro starter and integration fixture
+└── site/                      # engine Astro playground and build fixture (never shipped)
 
 packages/
 ├── domain/                    # pure domain types, rules, and errors
@@ -227,11 +228,15 @@ packages/
 ├── db/                        # Drizzle SQLite schema and repositories
 ├── auth/                      # Better Auth configuration and authorization
 ├── config/                    # lace.config.ts definition and loader
-├── sdk/                       # build-time and external REST client
+├── sdk/                       # build-time and external REST client, published-site loader
+├── render/                    # framework-neutral block parsing, block map, rich-text description
+├── astro/                     # Astro adapter: LaceBlocks, RichText, loader environment glue
 ├── platform-cloudflare/       # D1, R2, KV, Worker and deploy-hook adapters
 ├── platform-node/             # SQLite, MinIO/S3, Node server adapters
 ├── cli/                       # create, sync, migrate, upgrade commands
 └── test-utils/                # factories, fixtures, and contract test suites
+
+registry/                      # versioned, framework-keyed block sources for `lace add block`
 
 docs/
 ├── mvp-architecture.md
@@ -253,12 +258,19 @@ db           -> application, domain
 auth         -> application, domain
 server       -> application, contracts, auth
 sdk          -> contracts
+render       -> content
+astro        -> render, sdk
 platform-*   -> application, server, db, auth, config
 cli          -> application, config, platform-*
 apps/api     -> platform-*, server
 apps/admin   -> contracts, content
-apps/site    -> sdk, content
+apps/site    -> astro, render, sdk, content
 ```
+
+Generated starter sites and connected existing sites use the same direct
+dependencies as `apps/site`. `registry/` is engine data, not a workspace
+package: its files are copied into sites and bundled with `@lacecms/cli`, never
+imported by any package.
 
 Rules:
 
@@ -271,7 +283,19 @@ Rules:
 - platform packages may depend on application ports and concrete vendor SDKs.
 - `admin` depends on contracts and content metadata and owns a credentialed
   browser transport client; it never depends on database schemas.
-- `site` depends on the public SDK and user-owned rendering code.
+- `render` is framework-neutral: it imports no UI framework, Node-only API, the
+  SDK, or REST contracts. It accepts a structural block input that the contract
+  block DTO satisfies and reuses `@lacecms/content` validation exclusively.
+- A framework adapter (`@lacecms/astro` now; `@lacecms/react`, `@lacecms/vue`,
+  and `@lacecms/svelte` are reserved names) contains only code that depends on
+  its framework. It never re-exports `render`, `sdk`, or `content` APIs, so each
+  symbol has one canonical import path.
+- No package exports visual block components. Block markup is user-owned source
+  installed from `registry/` (see sections 7 and 13).
+- `sdk` owns transport and the published-site loader and imports neither
+  `content` nor `render`.
+- `site` depends on the public SDK, the render core and its framework adapter,
+  `@lacecms/content` for block definitions, and user-owned block markup.
 
 Workspace dependency checks in CI must reject cycles and imports that violate these rules.
 
@@ -289,22 +313,79 @@ An empty existing repository may use:
 pnpm dlx create-lace@latest init .
 ```
 
-The first version should require an empty target directory, except for explicitly allowed files such as `.git`, `README.md`, or `LICENSE`. Integrating Lace into an arbitrary existing Astro project is a later feature.
+The first version should require an empty target directory, except for explicitly allowed files such as `.git`, `README.md`, or `LICENSE`. Installing the CMS in place into a nonempty existing project is a later feature; an existing Astro site is instead connected to a separately generated CMS directory (see site modes below).
 
-Generated layout:
+Generated layout (starter site mode):
 
 ```text
 my-site/
-├── site/                       # user-owned Astro source
+├── site/                       # user-owned Astro source (starter mode only)
+│   ├── lace.site.json          # Lace-managed site configuration and block lock
+│   └── src/
+│       ├── env.d.ts            # user-owned; lets `tsc` read `.astro` imports
+│       ├── lace/blocks.ts      # generated block map file (hash-guarded)
+│       ├── lib/lace.ts         # user-owned loader file
+│       ├── components/lace/    # installed registry blocks, user-owned
+│       ├── layouts/            # user-owned
+│       ├── pages/              # user-owned: home and posts routes
+│       └── styles/             # user-owned
 ├── lace.config.ts              # public, typed Lace configuration
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── docker-compose.yml          # managed infrastructure file
 ├── .env.example
 ├── .lace/
-│   └── manifest.json           # generator version and managed-file hashes
+│   └── manifest.json           # generator version, site mode, managed-file hashes
 └── .github/workflows/          # optional Cloudflare/CI deployment files
 ```
+
+### Site modes
+
+Project creation selects one of three site modes with mutually exclusive flags,
+recorded in `.lace/manifest.json` as `site: { mode, path }`:
+
+1. **starter** (`--starter`, path `site`) — generates `site/` from the
+   `create-lace` starter;
+2. **existing** (`--existing-site <path>`) — generates no `site/` and connects
+   the CMS to an existing Astro site at a relative path outside the generated
+   target, typically `..` for a `cms/` directory. The path must reach an Astro
+   project root (`astro.config.*` and an `astro` dependency) without symbolic
+   links. The generator never modifies that site; the operator runs
+   `lace add block --all --site <path>` and follows the connection guide;
+3. **none** (`--no-site`, path `null`) — generates the CMS only, for headless use
+   or a later connection; Compose has no builder, so build dispatch reports that
+   no build trigger or build site is configured. `--cloudflare` is rejected.
+
+An explicit flag always wins. Without one, an interactive terminal asks for the
+mode, defaulting to **existing** at `..` when the target's parent directory is an
+Astro project and to **starter** otherwise; without a terminal the starter is
+generated and the output names the other flags. Manifests without a `site`
+record (template `0.10.0` and earlier) are read as starter mode with path `site`.
+
+`init .` keeps the empty-target rule in every mode. Managed files that reference
+the site (workspace globs, root scripts, Compose build-site mount, Cloudflare
+workflow, README, and operations guide) are rendered from the recorded mode and
+path, reusing the build-site selection configuration. `lace upgrade` requires a
+target template generated for the same mode and path (and names the flags that
+generate one); it never creates `site/` for other modes. `lace doctor` checks the
+recorded site. Switching the mode of an existing project means generating a
+fresh project and moving configuration manually.
+
+### Starter and reference site
+
+The `create-lace` starter is the single source of what users receive: minimal
+`home` and `posts` pages, a layout, global styles, the five built-in registry
+blocks, `lace.site.json`, the block map file, and the loader file. It contains
+no tests, fixtures, or engine-development routes.
+
+`apps/site` is the engine development playground and integration fixture. It may
+carry extra models and routes, custom blocks, edge-case content, and the
+published-export fixture. Nothing from it is copied into generated projects.
+
+Both consume the same packages and hold committed copies of the built-in blocks
+exactly as `lace add block` installs them. A test fails when the starter,
+`apps/site`, and `registry/` block sources diverge, and CI builds a project
+generated from the packed starter in addition to `apps/site`.
 
 The generated project must not expose the editable source of the admin SPA. The admin UI and CMS engine are delivered as versioned packages, bundles, or container images.
 
@@ -318,6 +399,26 @@ deployment files        managed with hash/conflict detection
 CMS engine/admin        versioned dependency or container image
 ```
 
+Inside any connected site tree (the starter `site/` or an existing site), the
+user-owned rule has three Lace-managed exceptions maintained only by
+`lace add block`, never by `lace upgrade` or the generator after creation:
+
+```text
+<site>/lace.site.json        Lace-managed site configuration and block lock;
+                             configuration keys are user-editable, `items` and
+                             hashes are CLI-maintained
+<site>/<blockMap>            generated block map file; rewritten only while its
+                             recorded hash matches, otherwise the CLI prints the
+                             entries to add
+<site>/<componentsDir>/**    installed registry block sources; user-owned after
+                             installation, updated only while the recorded hash
+                             matches, otherwise reported as a conflict
+```
+
+The CLI never edits other site source, never edits the site `package.json`
+(it prints the exact `pnpm add` command), and rejects paths outside the site
+root.
+
 ### Upgrade model
 
 `lace upgrade` treats upgrades in three categories:
@@ -325,6 +426,13 @@ CMS engine/admin        versioned dependency or container image
 1. Engine dependencies and container image tags can be updated automatically.
 2. Generated infrastructure files can be updated only when their recorded hash proves that the user has not changed them.
 3. User-owned files are never silently rewritten. Required changes are supplied as migration instructions or explicit codemods.
+
+Block-source updates are a separate command: `lace add block` updates installed
+registry items, while `lace upgrade` updates the template's managed files. Both
+share one three-way hash decision, diff, and guarded atomic-write implementation
+in `@lacecms/cli`. `lace add block` needs no rollback journal: every write is
+compare-and-swap, `lace.site.json` is written last as the commit record, and a
+re-run adopts files that already match the registry.
 
 `.lace/manifest.json` should record the generator/template version and hashes of managed files. A modified managed file produces a diff or conflict instead of being overwritten.
 
@@ -930,9 +1038,18 @@ Tiptap JSON is stored only inside rich-text field or rich-text block data. The e
 The allowed Tiptap node and mark set is explicit and shared by validation and
 rendering. Links permit only `https:`, `http:`, `mailto:`, `tel:`, root-relative,
 and fragment URLs. Raw HTML nodes, scriptable URL schemes, inline event handlers,
-and arbitrary style attributes are rejected. The reference Astro renderer
-escapes text and renders only this allowlist; custom sites receive structured
-JSON and remain responsible for using an equally safe renderer.
+and arbitrary style attributes are rejected. The allowlist and URL rules have one
+implementation in `@lacecms/content`; the render core's `describeRichText`
+reuses it exclusively, and framework adapters escape text and render only the
+resulting element description. Sites must not keep their own allowlist copies.
+Consumers that read structured JSON without the render core remain responsible
+for an equally safe renderer.
+
+Sites render blocks through a block map that pairs each block definition with a
+user-owned component (section 13). Block definitions used by a site are the same
+`defineBlock` definitions the configuration uses; a site that cannot render a
+block type, or whose definition version differs from the published block, fails
+its build with the model, entry, and block identifiers.
 
 Each block definition may carry an optional one-sentence description next to its label. Both are display metadata: they reach the admin through the block projection, change the configuration projection hash, and never change the structural hash. The built-in blocks ship with labels and descriptions. Block icons are not configuration. The admin maps the built-in types to icons and gives any other block type a default icon.
 
@@ -1065,14 +1182,31 @@ Example error:
 }
 ```
 
-## 13. Astro SDK
+## 13. Site rendering and block installation
 
-`@lacecms/sdk` is a small fetch-based client usable during Astro builds and by external consumers.
+Sites consume Lace through three layers ([ADR 0006](./adr/0006-shared-rendering-core-and-installed-block-source.md)):
+
+1. framework-neutral loading in `@lacecms/sdk` and parsing/rich-text description
+   in `@lacecms/render`;
+2. a thin framework adapter (`@lacecms/astro`) that renders those results;
+3. user-owned visual block source installed from the block registry.
+
+This section fixes the public names, inputs, outputs, error behavior, and
+server-only constraints that Step 30 implements. Exact DTO fields and spec
+wording belong to the implementing OpenSpec changes. The public build-export DTO
+is unchanged: public entries still reuse the content-entry schema with an
+always-present `published` and a mirrored `draft` snapshot, and the loader hides
+that shape (a dedicated public schema is a Step 33 question).
+
+### 13.1 SDK client
+
+`@lacecms/sdk` is a small fetch-based client usable during site builds and by
+external consumers.
 
 ```ts
 const lace = createLaceClient({
-  baseUrl: import.meta.env.LACE_API_URL,
-  token: import.meta.env.LACE_BUILD_TOKEN,
+  baseUrl: env.LACE_API_BASE_URL,
+  token: env.LACE_BUILD_TOKEN,
 });
 
 const home = await lace.getPage("home");
@@ -1080,38 +1214,232 @@ const posts = await lace.getCollection("posts");
 const exportData = await lace.getBuildExport();
 ```
 
-The build token is read-only and may access published content only. It must not grant admin-session capabilities.
+The build token is read-only and may access published content only. It must not
+grant admin-session capabilities, and it is used only in server-side build or
+dev-server code, never in client bundles.
 
-Typical Astro page:
+### 13.2 Published-site loader
 
-```astro
----
-import { lace } from "../lib/lace";
-import PageRenderer from "../components/PageRenderer.astro";
+`createPublishedSiteLoader(options)` in `@lacecms/sdk` returns a
+`PublishedSiteLoader`, a function resolving to a `PublishedSite`. It imports no
+framework and never reads `process.env` or `import.meta.env` itself.
 
-const page = await lace.getPage("home");
----
+- **Input:** an `environment` record (`LACE_API_BASE_URL`, `LACE_BUILD_TOKEN`,
+  `LACE_PUBLIC_BASE_URL`, `LACE_EXPECTED_PUBLISHED_VERSION`) and/or explicit
+  `baseUrl`, `token`, `publicBaseUrl`, and `expectedPublishedVersion` values that
+  take precedence; optional `fetch`; `revalidate` (default `false`); optional
+  `hints` keyed by error code that are appended to error messages.
+- **Static mode** reads one build export per loader, shared by concurrent
+  callers, and forgets a failed read so the next call retries.
+- **Revalidate mode** (dev servers) issues an ETag-conditional read on each call;
+  concurrent calls share one in-flight request and `304` reuses the last view.
+- **Consistency:** when an expected published version is configured, a
+  different export version fails the build.
+- **Output:** `PublishedSite` with `version`, `byPath(path)`,
+  `entries(modelKey)` (sorted by path; empty for an unknown model),
+  `bySlug(modelKey, slug)`, and `mediaUrl(mediaId)`. Lookups return
+  `undefined` when absent so routes choose between 404 and failure.
+  `PublishedEntry` exposes `id`, `modelKey`, `path`, optional `slug`, `title`,
+  `fields`, and ordered `blocks` (`PublishedBlock`: `type`, `key`, `position`,
+  `schemaVersion`, `data`), typed from contract DTOs. No draft-shaped property
+  exists on the view.
+- The loader trusts the CMS-resolved `path`, never re-derives route patterns or
+  names model keys, and rejects duplicate paths and duplicate slugs within a
+  model.
+- **Errors:** `LacePublishedSiteError` (a `LaceSdkError`) with stable codes
+  `missing_configuration`, `rejected_token` (HTTP 401/403), `api_unavailable`
+  (transport failure), `version_mismatch`, and `invalid_export`. Other SDK
+  errors propagate unchanged. Messages are project-neutral and never include the
+  token; generated projects pass hints that name their own commands.
 
-<PageRenderer blocks={page.blocks} />
+### 13.3 Render core
+
+`@lacecms/render` depends only on `@lacecms/content`.
+
+- `BlockContext` identifies a block in errors: `modelKey`, `entryId`, `blockKey`.
+- `parseBlock(definition, block, context)` validates `block.data` with
+  `validateBlockData` in publish mode, applies definition defaults, and returns
+  typed `BlockDataValues`. It works for built-in and user `defineBlock`
+  definitions, fails when the block type differs from the definition, and fails
+  when `block.schemaVersion` differs from `definition.version`; the render core
+  never migrates block data.
+- `defineBlockMap(entries)` accepts a record keyed by block type whose values
+  are `{ definition, component }`, generic over the adapter's component type,
+  rejects a key that differs from its definition type, and returns a frozen
+  map. `resolveBlock(map, block, context)` returns the entry or fails on an
+  unknown block type, which preserves the build-failure behavior for blocks a
+  site cannot render. `prepareBlocks(map, entry, mediaUrl)` resolves and parses
+  an entry's blocks in order and returns each mapped component with its
+  `BlockProps`, so adapters only render the result.
+- `BlockProps<Definition>` is the prop contract every adapter passes to a block
+  component: `block`, parsed `data`, `context`, and `mediaUrl`.
+- `describeRichText(value, context?)` validates with `validateRichTextDocument`
+  and returns a neutral tree of text nodes (`{ kind: "text", text }`) and
+  element nodes (`{ kind: "element", tag, attributes, source, children }`).
+  Tags come from a fixed allowlist, attributes are limited to safe attributes
+  (a link `href` has passed `isSafeUrl`), and `source` names the originating
+  node or mark. No raw HTML string is produced.
+- **Errors:** `LaceRenderError` with codes `invalid_block_data`,
+  `block_version_mismatch`, `unknown_block_type`, and `invalid_rich_text`,
+  carrying the context, the field path, and the underlying
+  `ContentValidationError` as `cause`. Messages name model, entry, block key,
+  and field path.
+
+### 13.4 Astro adapter
+
+`@lacecms/astro` depends on `@lacecms/render` and `@lacecms/sdk`, declares a peer
+dependency on the supported Astro range, and ships Astro component source
+(copied next to its compiled module in `dist/`). It contains no visual blocks,
+no client scripts, and requires no Astro integration. Override components for
+`RichText.astro` are typed by the adapter's `RichTextOverrideProps`.
+
+- `createAstroSiteLoader(options?)` (root entry, server-only) accepts `env`
+  (default `process.env`), `dev` (enables revalidation), `fetch`, and `hints`,
+  and returns a `PublishedSiteLoader`. Sites pass
+  `{ env: { ...import.meta.env, ...process.env }, dev: import.meta.env.DEV }`
+  from their loader file because `import.meta.env` is not reliably transformed
+  inside externalized dependencies. The module fails fast when evaluated in a
+  browser; `LACE_BUILD_TOKEN` must never reach a client bundle.
+- `@lacecms/astro/LaceBlocks.astro` takes `entry`, `blocks` (the block map), and
+  `mediaUrl`, resolves and parses each block in order, and renders the mapped
+  component with `BlockProps`.
+- `@lacecms/astro/RichText.astro` takes `document`, optional `components` keyed
+  by node or mark name, and optional `context`. It renders the
+  `describeRichText` tree with Astro's escaping and never uses `set:html`;
+  overrides receive only the validated element and its rendered children.
+
+### 13.5 Block registry and `lace add block`
+
+Canonical block sources live in the repository `registry/` directory and are
+bundled with, and versioned by, the `@lacecms/cli` release; the CLI never
+fetches registry content over the network. `registry/registry.json` lists the
+items, and each item lives in `registry/<framework>/<item>/` with a manifest
+declaring block type, framework, block definition version, item revision,
+required render-core and adapter ranges, files with their target role, and item
+dependencies.
+
+The site-local `lace.site.json` records a format version, `framework`,
+`componentsDir` (default `src/components/lace`), `blockMap` (default
+`src/lace/blocks.ts`), an optional `definitions` module that exports custom
+block definitions, and `items` with registry version and per-file SHA-256
+hashes, plus the block map file hash.
+
+Registry item manifests (`item.json`, `schemaVersion` 1) carry `name`,
+`framework`, `blockType`, `blockVersion`, `revision`, `requires`, `files`
+(`source`, `target` relative to the components directory, `role`), and
+`dependencies`. `lace.site.json` (`schemaVersion` 1) stores `framework`,
+`componentsDir`, `blockMap`, `blockMapSha256` (`null` until Lace first writes the
+map), optional `definitions` (a module path relative to the site root, only
+imported, never written), `items` keyed by item name with `revision` and
+`files` mapping site-relative paths to SHA-256 hashes (the item `revision` is
+the recorded registry version), and optional `customBlocks` keyed by block type
+with the `files` scaffolded for configured custom blocks.
+
+The block map file imports definitions and components and exports
+`blocks = defineBlockMap({...})`, with imports and entries sorted by block type
+after a one-line generated-file comment. Built-in definitions come from
+`@lacecms/content`; custom definitions come from the recorded `definitions`
+module, which `lace.config.ts` also uses. Definitions are imported, never copied.
+
+`lace add block <type...>` (with `--all`, `--dry-run`, `--json`,
+`--site <dir>` defaulting to `site`, `--framework <key>`, and `--write-new`)
+resolves item dependencies, writes component files, updates the
+map file, checks installed package versions against item ranges, checks
+built-in definition versions against `lace.config.ts`, and scaffolds a typed
+component for a configured custom block that has no registry item. Ownership
+and conflict rules are in section 7.
+
+### 13.6 Framework selection
+
+Registry items, `lace.site.json`, and adapters are keyed by framework. `astro`
+is implemented and is the default; `react`, `vue`, and `svelte` are reserved
+keys that fail with an explicit "framework not supported yet" error, and their
+adapters would be named `@lacecms/react`, `@lacecms/vue`, and `@lacecms/svelte`.
+The framework is taken from `lace.site.json`, else `--framework`, else detected
+from the site `package.json`, else `astro`. All adapters share the render core.
+
+### 13.7 Typical Astro site files
+
+Loader file (`src/lib/lace.ts`, user-owned):
+
+```ts
+import { createAstroSiteLoader } from "@lacecms/astro";
+
+export const getSite = createAstroSiteLoader({
+  env: { ...import.meta.env, ...process.env },
+  dev: import.meta.env.DEV,
+});
 ```
 
-Typical collection route:
+Block map file (`src/lace/blocks.ts`, generated by `lace add block`):
+
+```ts
+import { builtInBlocks } from "@lacecms/content";
+import { defineBlockMap } from "@lacecms/render";
+import HeroBlock from "../components/lace/HeroBlock.astro";
+import RichTextBlock from "../components/lace/RichTextBlock.astro";
+
+export const blocks = defineBlockMap({
+  hero: { definition: builtInBlocks.hero, component: HeroBlock },
+  richText: { definition: builtInBlocks.richText, component: RichTextBlock },
+});
+```
+
+Typical page:
 
 ```astro
 ---
-import { lace } from "../../lib/lace";
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
+import { blocks } from "../lace/blocks";
+import { getSite } from "../lib/lace";
+
+const site = await getSite();
+const home = site.byPath("/");
+if (home === undefined) throw new Error("Publish the home page in Admin.");
+---
+
+<LaceBlocks entry={home} blocks={blocks} mediaUrl={site.mediaUrl} />
+```
+
+Typical collection route (the entry is read by slug on each render so dev
+revalidation shows publications on reload):
+
+```astro
+---
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
+import { blocks } from "../../lace/blocks";
+import { getSite } from "../../lib/lace";
 
 export async function getStaticPaths() {
-  const posts = await lace.getCollection("posts");
-
-  return posts.map((post) => ({
-    params: { slug: post.slug },
-    props: { post },
-  }));
+  const site = await getSite();
+  return site.entries("posts").map((post) => ({ params: { slug: post.slug } }));
 }
 
-const { post } = Astro.props;
+const site = await getSite();
+const post = site.bySlug("posts", Astro.params.slug);
+if (post === undefined) return new Response(null, { status: 404 });
 ---
+
+<LaceBlocks entry={post} blocks={blocks} mediaUrl={site.mediaUrl} />
+```
+
+Installed block component (user-owned, keeps the `data-lace-*` styling hooks):
+
+```astro
+---
+import RichText from "@lacecms/astro/RichText.astro";
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.hero>;
+const { block, data, mediaUrl } = Astro.props;
+---
+
+<section class="hero" data-lace-block={block.type} data-lace-block-key={block.key}>
+  <h1 data-lace-part="heading">{data.heading}</h1>
+  {data.body && <div data-lace-part="body"><RichText document={data.body} /></div>}
+  {data.image && <img alt="" data-lace-part="media" src={mediaUrl(data.image)} />}
+</section>
 ```
 
 The CMS describes route patterns for validation and preview URLs, but it does not generate or own the user's Astro route files.
@@ -1541,7 +1869,9 @@ Major dependency groups:
 ### Site
 
 - Astro;
-- `@lacecms/sdk`.
+- `@lacecms/astro`, `@lacecms/render`, `@lacecms/sdk`, and `@lacecms/content`;
+- no UI component library: visual block markup is user-owned source installed
+  from the Lace block registry.
 
 The static Astro site does not require the Cloudflare Astro SSR adapter.
 
@@ -1651,7 +1981,14 @@ Playwright should cover the critical editor path:
 
 ### Build fixture
 
-`apps/site` acts as an integration fixture. CI should build it from a seeded API export to ensure that public contracts remain compatible with Astro generation.
+`apps/site` acts as the engine playground and integration fixture. CI builds it
+from a seeded API export to ensure that public contracts remain compatible with
+Astro generation. CI also generates a project from the packed `create-lace`
+starter and builds it, so the shipped template is verified as a product, and a
+parity test keeps starter, `apps/site`, and `registry/` block sources identical.
+
+Render-core tests prove that rich-text acceptance and rejection match
+`@lacecms/content` exactly and that the render core imports no framework.
 
 ## 21. Observability and operations
 
@@ -1739,6 +2076,13 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Publishing writes an outbox event and triggers a static rebuild.
 - The supported onboarding path is a generator for a new/empty project.
 - The user's Astro site is not overwritten during Lace upgrades.
+- Site loading, block parsing, and rich-text safety are packaged
+  (`@lacecms/sdk`, `@lacecms/render`) and rendered through a thin framework
+  adapter (`@lacecms/astro`); visual block markup is never a runtime package and
+  is installed as user-owned source by `lace add block` from a versioned,
+  framework-keyed registry.
+- The generated starter site is optional; projects may connect an existing
+  Astro site or run without a site.
 - Implementation changes follow the repository-local OpenSpec workflow.
 - Oxlint and Oxfmt are the linting and formatting toolchain.
 

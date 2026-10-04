@@ -1,17 +1,19 @@
 ---
-import BlockRenderer from "../../components/BlockRenderer.astro";
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getSiteData } from "../../lib/site-data.js";
+import { blocks } from "../../lace/blocks";
+import { getSite } from "../../lib/lace";
 
 export async function getStaticPaths() {
-  const { about } = await getSiteData();
-  return about === undefined ? [] : [{ params: { slug: undefined }, props: { about } }];
+  const site = await getSite();
+  return site.byPath("/about") === undefined ? [] : [{ params: { slug: undefined } }];
 }
 
-const { about } = Astro.props;
-const { mediaUrl } = await getSiteData();
+const site = await getSite();
+const about = site.byPath("/about");
+if (about === undefined) return new Response(null, { status: 404 });
 ---
 
 <BaseLayout entry={about} title={about.title}>
-  <BlockRenderer entry={about} mediaUrl={mediaUrl} />
+  <LaceBlocks blocks={blocks} entry={about} mediaUrl={site.mediaUrl} />
 </BaseLayout>

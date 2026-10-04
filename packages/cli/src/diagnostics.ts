@@ -1,7 +1,8 @@
 import { CliError, EXIT, type Command, type Target } from "./index.js";
 import { UpgradeError } from "./upgrade-input.js";
+import { BlockError } from "./blocks-registry.js";
 
-export type Operation = Command | "upgrade" | "doctor" | "cli";
+export type Operation = Command | "upgrade" | "doctor" | "add block" | "cli";
 export type DiagnosticKind =
   | "permission"
   | "path"
@@ -25,6 +26,7 @@ export interface Diagnostic {
 export function identifyOperation(argv: readonly string[]): Operation {
   if (argv[0] === "doctor") return "doctor";
   if (argv[0] === "upgrade") return "upgrade";
+  if (argv[0] === "add" && argv[1] === "block") return "add block";
   const words = argv.filter(
     (word, index) => !word.startsWith("--") && argv[index - 1] !== "--target",
   );
@@ -163,6 +165,30 @@ export function failureDiagnostic(
       "An interrupted upgrade has pending recovery.",
       "Inspect .lace/upgrade/ and resume matching --apply or --rollback in the recorded direction before deploying.",
     ],
+    BLOCK_USAGE: [
+      "Block selection or command arguments are invalid.",
+      "Run lace add block --help, name registry or configured block types (or --all) and retry.",
+    ],
+    BLOCK_INPUT: [
+      "The selected site, its lace.site.json or a block path cannot be used safely.",
+      "Select the Astro project root with --site <dir>, keep lace.site.json paths relative inside the site without symbolic links, and retry; nothing was overwritten.",
+    ],
+    BLOCK_FRAMEWORK: [
+      "The site framework has no Lace block support yet.",
+      "Use an Astro site, or set framework to astro in lace.site.json or with --framework astro if the detection was wrong.",
+    ],
+    BLOCK_CONFIG: [
+      "The project configuration or custom block definitions could not be used.",
+      "Run the command from the CMS project root that contains lace.config.ts, and record the module exporting custom defineBlock values as definitions in lace.site.json.",
+    ],
+    BLOCK_REGISTRY: [
+      "The block registry bundled with this CLI is missing or invalid.",
+      "Reinstall @lacecms/cli at the release version and retry; do not edit its bundled registry.",
+    ],
+    BLOCKS_CONFLICTS: [
+      "Some block files, the block map or block versions conflict with the requested installation.",
+      "Review the reported diffs (or .new files from --write-new), merge the registry changes into your edited files or add the printed block map lines yourself; edited files are never overwritten.",
+    ],
     UPGRADE_APPLY: [
       "Upgrade or rollback could not complete safely.",
       "Preserve .lace/upgrade/; resolve filesystem access or the reported artifact conflict, then repeat matching --apply or --rollback in the recorded direction.",
@@ -176,7 +202,8 @@ export function failureDiagnostic(
 }
 
 export function describeFailure(error: unknown, operation: Operation, target: Target = "node") {
-  const known = error instanceof CliError || error instanceof UpgradeError;
+  const known =
+    error instanceof CliError || error instanceof UpgradeError || error instanceof BlockError;
   const code = known ? error.code : "OPERATION_FAILED";
   return {
     ok: false,
@@ -191,9 +218,15 @@ export function describeFailure(error: unknown, operation: Operation, target: Ta
     exitCode:
       error instanceof CliError
         ? error.exitCode
-        : error instanceof UpgradeError && error.code === "UPGRADE_INPUT"
-          ? EXIT.CONFIG
-          : EXIT.OPERATION,
+        : error instanceof BlockError
+          ? error.code === "BLOCK_USAGE"
+            ? EXIT.USAGE
+            : error.code === "BLOCK_REGISTRY"
+              ? EXIT.OPERATION
+              : EXIT.CONFIG
+          : error instanceof UpgradeError && error.code === "UPGRADE_INPUT"
+            ? EXIT.CONFIG
+            : EXIT.OPERATION,
   };
 }
 

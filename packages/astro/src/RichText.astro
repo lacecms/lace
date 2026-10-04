@@ -1,0 +1,17 @@
+---
+import { describeRichText } from "@lacecms/render";
+import type { RichTextContext } from "@lacecms/render";
+import type { RichTextComponents } from "./index.js";
+import RichTextNodes from "./RichTextNodes.astro";
+
+interface Props {
+  readonly components?: RichTextComponents;
+  readonly context?: RichTextContext;
+  readonly document: unknown;
+}
+
+const { components = {}, context, document } = Astro.props;
+const nodes = describeRichText(document, context);
+---
+
+<RichTextNodes components={components} nodes={nodes} />

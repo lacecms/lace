@@ -1,12 +1,32 @@
 # Operating this Lace project
 
+<!-- lace-site: starter -->
+
 Run the generated project with packaged API/admin runtimes and an editable Astro site. You own `lace.config.ts` and `site/`; the engine checkout is unnecessary.
+
+Site mode: **starter**. The Astro site is the generated `site/` directory, recorded in `.lace/manifest.json` as mode `starter` with path `site`.
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+Run the generated project with packaged API/admin runtimes and your existing Astro site. You own `lace.config.ts` and the site; the engine checkout is unnecessary.
+
+Site mode: **existing site** at `{{SITE_PATH}}`, recorded in `.lace/manifest.json` as mode `existing` with that path relative to this directory. This project contains no `site/` directory, and the generator did not modify the site. Connect it with [Connect and build the existing site](#connect-and-build-the-existing-site).
+
+<!-- lace-site: end -->
+<!-- lace-site: none -->
+
+Run the generated project with packaged API/admin runtimes. You own `lace.config.ts`; the engine checkout is unnecessary.
+
+Site mode: **none**, recorded in `.lace/manifest.json` as mode `none`. This project contains the CMS only and builds no site: Compose defines no builder, the dispatcher has no builder trigger and no build-site identity is configured, so build requests fail as unavailable until a site is configured and Admin shows an unconfigured site. To connect a site later, see [Selecting the build site](#selecting-the-build-site).
+
+<!-- lace-site: end -->
 
 Start with the generated root `README.md` for the concise quickstart. README is user-owned, without a manifest hash; upgrades preserve its edits. If `init .` encounters an allowed existing README, it preserves every byte and prints this guide's path. Follow this guide directly or manually copy relevant Lace instructions into your existing README. In a `cms/` installation these paths and commands are relative to `cms/`, not its parent application. This guide is managed with hash/conflict review.
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This source template uses ownership template `0.8.0`; published Lace `0.1.0-alpha.1` packages/images retain their original template and behavior. The root quickstart and concise setup example require a generator built from Step 27B; its commands also need current matching packages/images. Package and image coordinates remain `0.1.0-alpha.1` until the separate coherent alpha artifact refresh. The npm alpha channel is `next`; use the exact version below for reproducible generation of that published alpha's template, not a claim that it includes the current source quickstart. These coordinates become downloadable only after owner publication. Before publication, repository verification uses local artifacts; ordinary consumers must wait for a compatible publication rather than patch dependency references.
+Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This source template uses ownership template `0.11.0`; published Lace `0.1.0-alpha.1` packages/images retain their original template and behavior. The root quickstart and concise setup example require a generator built from Step 27B; its commands also need current matching packages/images. Package and image coordinates remain `0.1.0-alpha.1` until the separate coherent alpha artifact refresh. The npm alpha channel is `next`; use the exact version below for reproducible generation of that published alpha's template, not a claim that it includes the current source quickstart. These coordinates become downloadable only after owner publication. Before publication, repository verification uses local artifacts; ordinary consumers must wait for a compatible publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
@@ -32,7 +52,7 @@ pnpm exec lace doctor --target node --mode compose --stage setup
 pnpm exec lace doctor --target node --mode compose --stage ready --json
 ```
 
-Doctor reads a regular `.env`, then lets exported process variables override it; it does not require Node's `--env-file` option. It checks your `package.json` Node/pnpm engine ranges, generated Compose host settings, Docker Compose/daemon, migrations, anonymous API readiness through `LACE_API_BASE_URL` and build-token presence. Select `--mode native` only for an independently configured host Node runtime using its runtime variable names. Target and stage are required; native is the Node default and mode is invalid for Cloudflare. No tools are installed and no configuration or services are changed.
+Doctor reads a regular `.env`, then lets exported process variables override it; it does not require Node's `--env-file` option. It checks your `package.json` Node/pnpm engine ranges, the site recorded in `.lace/manifest.json` (its Astro project, Lace site packages, `lace.site.json` and block map; nothing for site mode none), generated Compose host settings, Docker Compose/daemon, migrations, anonymous API readiness through `LACE_API_BASE_URL` and build-token presence. Select `--mode native` only for an independently configured host Node runtime using its runtime variable names. Target and stage are required; native is the Node default and mode is invalid for Cloudflare. No tools are installed and no configuration or services are changed.
 
 `setup` marks absent databases/ledgers, pending migrations, an unavailable API and the not-yet-issued build token as `expected`; `ready` treats them as failures. Settings/permission/lock/tool/authorization errors and a reachable API returning not-ready fail in both stages. Other check statuses are `pass`, `fail` and `skipped`; skipped checks explain their dependency or inapplicability. A present token remains unverified and is never sent. Readiness does not verify content sync, object storage, publication or a successful site build.
 
@@ -112,6 +132,8 @@ SH
 
 Successful setup consumes the setup token. It is not a password or build token. Open `http://127.0.0.1:3000/admin/` (or your configured API origin) and sign in with that email/password. In Settings create a read-only build token and copy its one-time value to `LACE_BUILD_TOKEN` in `.env`. It authorizes only published exports, not editing or draft access. Replace expired/revoked build tokens through Settings; never put credentials in `VITE_*`, `LACE_PUBLIC_*`, HTML or source control.
 
+<!-- lace-site: starter -->
+
 ## Publish and build the editable site
 
 In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media and select them in image/hero blocks. Both Home and Posts support `hero`, `richText`, `image`, `quote` and `cta`. For a blog page create a Posts entry, set a valid slug/title, save and publish. Editors can save drafts; publication requires an admin.
@@ -125,15 +147,60 @@ pnpm typecheck
 
 `dev` serves editable Astro at its printed URL, normally `http://localhost:4321/`. Each static build reads one authenticated published export and derives `/` and `/blog/:slug` routes from it. Publish Home before building. Later draft edits do not change built content. Missing/rejected credentials, unavailable API, unpublished Home and unsupported blocks fail with corrective diagnostics. See [publication visibility](#when-published-content-becomes-visible) for when each mode shows a publication.
 
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+## Connect and build the existing site
+
+In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media and select them in image/hero blocks. Both Home and Posts support `hero`, `richText`, `image`, `quote` and `cta`. For a blog page create a Posts entry, set a valid slug/title, save and publish. Editors can save drafts; publication requires an admin.
+
+The site at `{{SITE_PATH}}` reads published content through the Lace site packages. Connect it once, in this order:
+
+1. Install `@lacecms/sdk`, `@lacecms/astro`, `@lacecms/render` and `@lacecms/content` in the site at the release version of this project's Lace packages, then run `pnpm install` there so its `pnpm-lock.yaml` is committed and reproducible.
+2. From this CMS directory, run `pnpm exec lace add block --all --site {{SITE_PATH}}`. It installs the five built-in block components, the block map and `lace.site.json` into the site, never edits its `package.json`, and reports edited files as conflicts instead of overwriting them.
+3. Create the server-only loader file and your routes as described in [Connect an existing Astro site](lace-astro-site.md).
+4. Build with this project's root scripts (`pnpm dev` and `pnpm build` run Astro in `{{SITE_PATH}}`) or with the Compose builder, whose defaults select that site (see [Selecting the build site](#selecting-the-build-site)).
+
+```bash
+pnpm exec lace add block --all --site {{SITE_PATH}}
+pnpm dev
+# After publishing: reload dev; restart it only for new/renamed slugs or token/env changes.
+pnpm build
+```
+
+Each static build reads one authenticated published export with `LACE_API_BASE_URL` and `LACE_BUILD_TOKEN`. Publish Home before building. Missing/rejected credentials, unavailable API, unpublished content and unsupported blocks fail with corrective diagnostics. `lace doctor` reports a `site` check that is expected during `setup` until the packages and blocks are installed. See [publication visibility](#when-published-content-becomes-visible) for when each mode shows a publication.
+
+<!-- lace-site: end -->
+<!-- lace-site: none -->
+
+## Publish content without a site
+
+In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media. Editors can save drafts; publication requires an admin. Published content is readable with a build token through the authenticated build export; no site is built from it until a site is configured.
+
+<!-- lace-site: end -->
+
 ## Full Compose build and persistence
 
+<!-- lace-site: starter existing -->
+
 Once the real build token is configured, run `pnpm prod:start`. It starts API/admin, MinIO, explicit migration, dispatcher, fixed-command builder and web proxy. The builder reads generated source read-only and publishes successful static releases atomically. Visit `http://127.0.0.1:8080/` after a successful build. Publication queues a build; Settings also offers an explicit build request. If earlier publications were already built, request a fresh build in Settings. Failed builds retain the last successful release; inspect build history and request retry after correcting the cause. Rendered images use the host API URL, not `http://api:3000/`.
+
+<!-- lace-site: end -->
+<!-- lace-site: none -->
+
+`pnpm prod:start` starts API/admin, MinIO, explicit migration, dispatcher and web proxy; there is no builder. The web proxy serves `/admin/` and `/api/` on `LACE_HTTP_PORT`, and `/` reports that no site build exists yet. Build requests fail as unavailable until a site is configured.
+
+<!-- lace-site: end -->
 
 `pnpm dev:stop` and `pnpm prod:stop` retain SQLite in `.lace/data/` and MinIO/static-output volumes. Restart with the corresponding start command. Use `docker compose down --volumes` and remove `.lace/data/` only for disposable test deployments after backing up valuable content.
 
 ## When published content becomes visible
 
+<!-- lace-site: starter existing -->
+
 Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors were verified against a generated consumer with Template `0.8.0` and compatible Step 29B artifacts.
+
+<!-- lace-site: starter -->
 
 | Mode                               | After publication                                                                                                                                                                               | Next action                                                                                                        |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -141,17 +208,67 @@ Saving a draft never changes any site output and never requests a build. Publish
 | Manual static build (`pnpm build`) | Existing `site/dist/` output is unchanged.                                                                                                                                                      | Run a fresh `pnpm build`, then deploy `site/dist/` with your own host. Lace cannot see or confirm that deployment. |
 | Compose (`pnpm prod:start`)        | Publication queues a build. The web proxy keeps serving the previous release until the builder switches a complete new one; a failed build keeps the previous release.                          | Watch Builds; reload after the build covering your publication succeeds.                                           |
 
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+| Mode                               | After publication                                                                                                                                                                               | Next action                                                                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Generated `pnpm dev`               | Changes to `/` and existing `/blog/:slug` pages appear on reload; dev revalidates the export with its ETag on each render. A new or renamed slug returns 404 because Astro caches static paths. | Reload. Restart `pnpm dev` only for new/renamed slugs or token/environment changes.                                         |
+| Manual static build (`pnpm build`) | Existing `{{SITE_PATH}}/dist/` output is unchanged.                                                                                                                                             | Run a fresh `pnpm build`, then deploy `{{SITE_PATH}}/dist/` with your own host. Lace cannot see or confirm that deployment. |
+| Compose (`pnpm prod:start`)        | Publication queues a build. The web proxy keeps serving the previous release until the builder switches a complete new one; a failed build keeps the previous release.                          | Watch Builds; reload after the build covering your publication succeeds.                                                    |
+
+<!-- lace-site: end -->
+
 On the VPS builder a build stays **Pending** while it waits and while the synchronous builder runs, then becomes **Succeeded** or **Failed**; **Running** appears only for providers that report an accepted deployment. The new release can be served a moment before Builds records success. Builds coalesce: one build may cover several publications, so look for a build whose target version is at least the version your publication queued. The web proxy sends `Cache-Control: no-cache` for site responses, so browsers revalidate with the file validators after a release switch instead of reusing heuristically cached HTML. Admin's entry editor follows the covering build and names the current build site, but a succeeded build does not prove a manual or provider deployment.
 
-An existing site with its own SDK integration behaves according to its own code in Astro dev: data read in page code on every render appears on reload, while data passed through `getStaticPaths` props and any new routes stay as loaded until you restart dev. The generated `site/src/lib/site-data.ts` and `site/src/pages/blog/[slug].astro` show the reload-friendly pattern while keeping one export per static build.
+<!-- lace-site: starter -->
+
+An existing site with its own SDK integration behaves according to its own code in Astro dev: data read in page code on every render appears on reload, while data passed through `getStaticPaths` props and any new routes stay as loaded until you restart dev. The generated `site/src/lib/lace.ts` and `site/src/pages/blog/[slug].astro` show the reload-friendly pattern while keeping one export per static build.
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+Your site behaves according to its own code in Astro dev: data read in page code on every render appears on reload, while data passed through `getStaticPaths` props and any new routes stay as loaded until you restart dev. The loader from [Connect an existing Astro site](lace-astro-site.md) revalidates the export in dev while keeping one export per static build.
+
+<!-- lace-site: end -->
+
+<!-- lace-site: end -->
+<!-- lace-site: none -->
+
+Saving a draft never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read. This project builds no site, so publication changes no site output and queues no successful build; connect a site to make publications visible.
+
+<!-- lace-site: end -->
 
 ## Configuration, routes, renderers and styling
 
 `lace.config.ts` defines models. `pnpm content:sync --check` reports pending/incompatible changes without writing (pending changes exit with code 2). Normal sync applies valid plans atomically and refuses incompatible changes without partial application. Changes to kind, fields, routes or allowed blocks on populated models can be blocked even with a version increment. This alpha has no general content migration tool; plan a deliberate migration instead of deleting production data. Restart API services after config changes to reload the mounted configuration.
 
-Adding a model does not create an Astro route. Add the route in `site/src/pages/` and derive entries in `site/src/lib/site-data.ts` using the same export. Custom blocks need a component and registration in `BlockRenderer.astro` and `lib/rendering.ts`; unknown blocks fail with model, entry and block identifiers. Keep safe URL and structural rich-text validation. These source files belong to you and upgrades never silently overwrite them.
+<!-- lace-site: starter -->
+
+Adding a model does not create an Astro route. Add the route in `site/src/pages/` and read its entries from `getSite()` in `site/src/lib/lace.ts`: `byPath(path)` for a page, `entries(model)` in `getStaticPaths` and `bySlug(model, slug)` on each render for a collection. A custom block needs a component in `site/src/components/lace/` and an entry in the `site/src/lace/blocks.ts` map whose definition is imported from the same module `lace.config.ts` uses: export the `defineBlock` value from a module, record its path relative to `site/` as `"definitions"` in `site/lace.site.json`, and run `pnpm exec lace add block <type>` to scaffold the component and register it. `pnpm exec lace add block --all` installs or updates the built-in block components for every configured block type; it updates only files you have not changed, reports edited components or an edited block map as conflicts with a diff, and never edits `package.json` (it prints the `pnpm add` command instead). Unknown blocks fail with model, entry and block identifiers. Block data is validated with the CMS rules before your component receives it, and `@lacecms/astro/RichText.astro` renders rich text only through the shared allowlist. These source files belong to you and upgrades never silently overwrite them.
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+Adding a model does not create an Astro route. Add the route in your site and read its entries through the loader file from [Connect an existing Astro site](lace-astro-site.md): `byPath(path)` for a page, `entries(model)` in `getStaticPaths` and `bySlug(model, slug)` on each render for a collection. Run `pnpm exec lace add block --all --site {{SITE_PATH}}` from this directory after adding a block type; it updates only block files you have not changed, reports edited components or an edited block map as conflicts with a diff, and never edits `package.json`. For a custom block, record the module exporting its `defineBlock` value as `"definitions"` in the site's `lace.site.json` and run `pnpm exec lace add block <type> --site {{SITE_PATH}}` to scaffold and register its component. Block data is validated with the CMS rules before your component receives it, and `@lacecms/astro/RichText.astro` renders rich text only through the shared allowlist. Your site's files belong to you; upgrades never create or change them.
+
+<!-- lace-site: end -->
+<!-- lace-site: none -->
+
+Adding a model does not create a site route. Connect a site first; see [Selecting the build site](#selecting-the-build-site).
+
+<!-- lace-site: end -->
+<!-- lace-site: starter -->
 
 Style in `site/src/styles/global.css`. Stable hooks are `data-lace-model`, `data-lace-entry`, `data-lace-block`, `data-lace-block-key` and `data-lace-part`; tags and incidental classes are not the selector contract:
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+Style your site with its own stylesheets. Stable hooks are `data-lace-model`, `data-lace-entry`, `data-lace-block`, `data-lace-block-key` and `data-lace-part`; tags and incidental classes are not the selector contract:
+
+<!-- lace-site: end -->
+<!-- lace-site: starter existing -->
 
 ```css
 [data-lace-block="hero"] {
@@ -167,11 +284,33 @@ Style in `site/src/styles/global.css`. Stable hooks are `data-lace-model`, `data
 
 Block keys are unique within an entry, so scope instance selectors by entry. Built-in parts: hero `eyebrow`, `heading`, `body`, `media`, `action`; richText `content`; image `media`, `caption`; quote `text`, `attribution`; cta `heading`, `body`, `action`. Optional parts are absent when their content is absent.
 
+<!-- lace-site: end -->
+
+<!-- lace-site: starter existing -->
+
 ## Optional Cloudflare Pages
 
-`--cloudflare` adds Pages config and a manual workflow. After a build against your configured API, run `pnpm exec wrangler pages dev site/dist` for local Pages preview. Workflow installation needs compatible published packages; provide API/public URLs and build credentials in CI, never generated files. The CMS Worker is a separate versioned deployment. Complete Cloudflare consumer onboarding, real deployment, artifact preparation and the stable-MVP gate remain separate work.
+`--cloudflare` adds Pages config and a manual workflow. After a build against your configured API, run `pnpm exec wrangler pages dev {{SITE_PATH}}/dist` for local Pages preview. Workflow installation needs compatible published packages; provide API/public URLs and build credentials in CI, never generated files. The CMS Worker is a separate versioned deployment. Complete Cloudflare consumer onboarding, real deployment, artifact preparation and the stable-MVP gate remain separate work.
+
+<!-- lace-site: end -->
 
 ## Selecting the build site
+
+<!-- lace-site: starter -->
+
+This project's generated defaults select the starter `site/` (source root `.`, site directory `site`, output `dist`).
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+This project's generated defaults select the existing site at `{{SITE_PATH}}` as a standalone Astro root: `LACE_BUILD_SOURCE_ROOT={{SITE_PATH}}`, `LACE_BUILD_SITE_DIR=.` and `LACE_BUILD_OUTPUT_DIR=dist`. For a site that is a package inside a pnpm workspace, select the workspace root and the package directory instead.
+
+<!-- lace-site: end -->
+<!-- lace-site: none -->
+
+This project was generated without a site, so its Compose file has no builder and no build-site identity. Upgrades keep the recorded mode and never add a site. To connect a site later, connect it as described in [Connect an existing Astro site](lace-astro-site.md), generate a fresh project with `create-lace <dir> --existing-site <path>` in a temporary directory, and move its builder service, dispatcher and API build settings and `.env` build-site settings into this project after comparing them. The selection rules below then apply.
+
+<!-- lace-site: end -->
 
 Build-site selection (introduced in template `0.7.0`) requires compatible freshly built Step 29A or later API, admin, CLI and builder artifacts (or a later compatible published release). Published alpha images are not retroactively updated; this configuration does not publish or download replacement artifacts. Upgrade managed infrastructure with conflict review, retain user-owned README/site/config and manually incorporate guidance in an existing README.
 
@@ -195,7 +334,7 @@ LACE_BUILD_SITE_LABEL="Public site"
 
 The selected root must contain its regular `package.json` and `pnpm-lock.yaml`; a selected workspace package needs the root `pnpm-workspace.yaml` and must belong to that installation. Mount an independent site's own lockfile root rather than choose a package with a separate nested lockfile. Astro must be a direct dependency/dev dependency of the selected package. Paths cannot be absolute inside `/source`, escape with `..`, contain symlinks or select source/configuration directories as output. `.` is permitted only for the site directory. Existing output, dependencies, Git, environment credentials and nested CMS `.lace/data` are filtered from scratch copies.
 
-An existing site requires user-owned routes, renderers and a server-only `@lacecms/sdk` published-export loader. The generated `site/src/lib/site-data.ts` and renderers are integration references: preserve one validated export per static build, expected published-version validation, draft isolation, all five built-in block renderers, safe rich text/URLs and public media origins. This selection does not install components or modify your existing source, and `create-lace init .` still requires an empty target. Install compatible dependencies and commit a reproducible pnpm lockfile in the selected root before building.
+An existing site requires the Lace site packages, a server-only loader file, user-owned routes, the block map and block components. Follow [Connect an existing Astro site](lace-astro-site.md): it keeps one validated export per static build, expected published-version validation, draft isolation, all five built-in blocks, safe rich text/URLs and public media origins. Build-site selection does not install components or modify your existing source (run `pnpm exec lace add block --all --site <path>` from the CMS directory for the block components), and `create-lace init .` still requires an empty target. Install compatible dependencies and commit a reproducible pnpm lockfile in the selected root before building.
 
 The image runs frozen installation followed by direct `pnpm --dir <selected-site> exec astro build --outDir <selected-output>`. Custom package build/prebuild scripts are not selected. Only static Astro output is served; SSR/server output, incomplete output, linked files, frozen-install failure and version mismatch fail the build. The trusted site configuration and normal dependency hooks still execute during installation/Astro compilation. There is no custom command or extra environment forwarding interface.
 

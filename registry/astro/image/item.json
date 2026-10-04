@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "image",
+  "framework": "astro",
+  "blockType": "image",
+  "blockVersion": 1,
+  "revision": 1,
+  "requires": {
+    "@lacecms/astro": "0.1.0-alpha.1",
+    "@lacecms/render": "0.1.0-alpha.1"
+  },
+  "files": [
+    {
+      "source": "ImageBlock.astro",
+      "target": "ImageBlock.astro",
+      "role": "component"
+    }
+  ],
+  "dependencies": []
+}

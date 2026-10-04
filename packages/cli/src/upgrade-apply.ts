@@ -1,6 +1,7 @@
 import { rmdir, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
+  assertSameSite,
   readTargetTemplate,
   readUpgradeFile,
   readUpgradeManifest,
@@ -196,6 +197,7 @@ export async function applyUpgrade(options: ApplyOptions): Promise<UpgradeOutcom
   const instructions = await readUpgradeInstructions(template, target.templateVersion);
   await readTargetTemplate(template, target);
   const installed = await readUpgradeManifest(project);
+  assertSameSite(installed, target);
   inspectInventory([...Object.keys(installed.files), ...Object.keys(target.files)]);
   const release = await acquireUpgradeLock(project);
   try {

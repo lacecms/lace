@@ -1,9 +1,9 @@
 ---
-import type { SiteEntry } from "../lib/site-data.js";
+import type { PublishedEntry } from "@lacecms/sdk";
 import "../styles/site.css";
 
 interface Props {
-  readonly entry: Pick<SiteEntry, "id" | "modelKey">;
+  readonly entry: Pick<PublishedEntry, "id" | "modelKey">;
   readonly title: string;
 }
 

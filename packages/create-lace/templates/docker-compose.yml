@@ -43,9 +43,10 @@ services:
 
   api:
     image: ${LACE_API_IMAGE:?set LACE_API_IMAGE}
-    environment: &api-environment
+    environment: &api-environment # lace-site: starter existing
       LACE_BUILD_SITE_ID: ${LACE_BUILD_SITE_ID:-main-site}
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
+      # lace-site: end
       LACE_AUTH_SECRET: ${LACE_AUTH_SECRET:?set LACE_AUTH_SECRET}
       LACE_DATABASE_PATH: /data/lace.sqlite
       LACE_HOST: 0.0.0.0
@@ -85,14 +86,18 @@ services:
     command: ["node", "apps/api/dist/dispatcher.js"]
     environment:
       <<: *api-environment
+      # lace-site: starter existing
       LACE_BUILDER_URL: http://builder:8788/
       LACE_BUILDER_SECRET: ${LACE_BUILDER_SECRET:?set LACE_BUILDER_SECRET}
+      # lace-site: end
     volumes:
       - ./.lace/data:/data
       - ./lace.config.ts:/opt/lace/workspace/lace.config.ts:ro
     depends_on:
       api: { condition: service_healthy }
+      # lace-site: starter existing
       builder: { condition: service_healthy }
+      # lace-site: end
     networks: [backend]
     healthcheck:
       test: ["CMD", "node", "-e", "process.kill(1,0)"]
@@ -109,11 +114,17 @@ services:
     volumes:
       - static-output:/output
     restart: "no"
+  # lace-site: starter existing
 
   builder:
     image: ${LACE_BUILDER_IMAGE:?set LACE_BUILDER_IMAGE}
     environment:
+      # lace-site: starter
       LACE_BUILD_SITE_DIR: ${LACE_BUILD_SITE_DIR:-site}
+      # lace-site: end
+      # lace-site: existing
+      LACE_BUILD_SITE_DIR: ${LACE_BUILD_SITE_DIR:-.}
+      # lace-site: end
       LACE_BUILD_OUTPUT_DIR: ${LACE_BUILD_OUTPUT_DIR:-dist}
       LACE_BUILD_SITE_ID: ${LACE_BUILD_SITE_ID:-main-site}
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
@@ -123,7 +134,12 @@ services:
       LACE_PUBLIC_BASE_URL: ${LACE_PUBLIC_BASE_URL:?set LACE_PUBLIC_BASE_URL}
     volumes:
       - type: bind
+        # lace-site: starter
         source: ${LACE_BUILD_SOURCE_ROOT:-.}
+        # lace-site: end
+        # lace-site: existing
+        source: ${LACE_BUILD_SOURCE_ROOT:-{{SITE_PATH}}}
+        # lace-site: end
         target: /source
         read_only: true
         bind:
@@ -145,6 +161,7 @@ services:
       timeout: 3s
       retries: 12
     restart: unless-stopped
+  # lace-site: end
 
   web:
     image: nginx:1.27.5-alpine
@@ -169,7 +186,9 @@ networks:
     driver: bridge
   backend:
     internal: true
+  # lace-site: starter existing
   build-egress: {}
+  # lace-site: end
 
 volumes:
   minio-data: {}

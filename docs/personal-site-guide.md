@@ -15,7 +15,7 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 
 `home` и `contacts` — singleton-модели страниц. `works` — коллекция. Список `/works` создаёт код Astro: наличие коллекции само по себе не создаёт страницу списка.
 
-Твой отдельный репозиторий содержит `site/**`, `lace.config.ts`, зависимости и инфраструктуру. Исходники движка и админки в него переносить не нужно. Для существующего непустого проекта автоматического подключения CMS нет: создай новый Lace-проект и перенеси в его `site/` свой сайт. Однако работающий CMS можно читать из другого Astro-проекта через `@lacecms/sdk`.
+Твой отдельный репозиторий содержит `site/**`, `lace.config.ts`, зависимости и инфраструктуру. Исходники движка и админки в него переносить не нужно. Установить CMS прямо в непустой проект нельзя, но с шаблона `0.11.0` (30E) существующий Astro-сайт подключается без копирования стартера: в корне сайта создай CMS в подкаталоге командой `create-lace cms --existing-site ..` (каталог `site/` не создаётся, сайт генератор не меняет), затем из `cms/` выполни `pnpm exec lace add block --all --site ..` и следуй `docs/lace-astro-site.md`. Флаг `--no-site` создаёт только CMS без сайта, `--starter` — пример сайта в `site/`. Без флага генератор в терминале спрашивает режим, а без терминала создаёт стартер. Этот гайд использует стартер.
 
 ## 1. Создай проект из текущего репозитория
 
@@ -29,7 +29,7 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 cd /Users/jentix/Dev/lace
 pnpm install --frozen-lockfile
 pnpm build
-node packages/create-lace/dist/bin.js create /Users/jentix/Dev/my-portfolio --cloudflare
+node packages/create-lace/dist/bin.js create /Users/jentix/Dev/my-portfolio --starter --cloudflare
 ```
 
 Флаг `--cloudflare` добавляет Pages-конфиг и ручной workflow; VPS Compose тоже остаётся. Он **не создаёт CMS Worker**.
@@ -38,7 +38,7 @@ node packages/create-lace/dist/bin.js create /Users/jentix/Dev/my-portfolio --cl
 
 ```sh
 cd /Users/jentix/Dev/my-portfolio
-node /Users/jentix/Dev/lace/packages/create-lace/dist/bin.js init . --cloudflare
+node /Users/jentix/Dev/lace/packages/create-lace/dist/bin.js init . --starter --cloudflare
 ```
 
 ### Установи локальные пакеты
@@ -285,9 +285,9 @@ const url = String(work.fields.projectUrl ?? "");
 
 ### Если нужны контентные блоки
 
-Начиная с шаблона `0.3.0` (25A), generated starter содержит пользовательские рендереры всех пяти встроенных блоков в `site/src/components/`, safe rich-text helpers, styling hooks и live-loader `site/src/lib/site-data.ts`. Главная и блог читают один published export на сборку. Для своих contacts/works адаптируй слой загрузки и добавь Astro routes; копировать рендереры из engine больше не нужно.
+Начиная с шаблона `0.9.0` (30C), generated starter загружает и рендерит контент через пакеты `@lacecms/sdk`, `@lacecms/render` и `@lacecms/astro`. Loader находится в `site/src/lib/lace.ts` (`getSite()` даёт `byPath`, `entries`, `bySlug` и `mediaUrl`), пять компонентов блоков — в `site/src/components/lace/`, карта блоков — в `site/src/lace/blocks.ts`, версии и хэши установленных блоков — в `site/lace.site.json`. Вместо своего `cms.ts` можно читать страницы так: `const site = await getSite(); const home = site.byPath("/");`, а работы — через `site.entries("works")` и `site.bySlug("works", slug)`.
 
-Компонент `BlockRenderer` получает объект с `id`, `modelKey`, `path`, `title`, `blocks` и `mediaUrl`. На странице преобразуй DTO в эту форму. Tiptap document нужно выводить через проверенный rich-text renderer, а не через `set:html` с необработанным JSON. Custom block требует твоего Astro-renderer; админка даст generic-форму по metadata, но не напишет шаблон отображения.
+Блоки страницы выводи через `<LaceBlocks entry={entry} blocks={blocks} mediaUrl={site.mediaUrl} />` из `@lacecms/astro/LaceBlocks.astro`. Данные блоков проверяются правилами CMS до передачи в компонент, а rich text выводит `@lacecms/astro/RichText.astro` только через общий allowlist, без `set:html`. Custom block требует Astro-компонента и записи в `site/src/lace/blocks.ts`: экспортируй его `defineBlock` из модуля, который импортирует `lace.config.ts`, запиши путь к модулю (относительно `site/`) как `"definitions"` в `site/lace.site.json` и выполни `pnpm exec lace add block <type>` — команда создаст типизированный компонент-заготовку и добавит его в карту блоков. `pnpm exec lace add block --all` (с шаблона `0.10.0`, 30D) ставит и обновляет встроенные блоки; изменённые тобой файлы и карту она не перезаписывает, а показывает конфликт с diff. Админка даст generic-форму по metadata, но шаблон отображения остаётся твоим.
 
 ## 4. VPS: собери runtime images
 

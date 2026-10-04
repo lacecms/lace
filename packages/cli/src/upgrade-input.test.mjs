@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, writeFile, symlink, rm, realpath } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { mergedManifest } from "../dist/upgrade-journal.js";
 import {
+  assertSameSite,
+  manifestSite,
   readUpgradeFile,
   readUpgradeManifest,
   readTargetTemplate,
@@ -23,6 +26,65 @@ const manifest = (files = {}) => ({ schemaVersion: 1, templateVersion: "0.2.1", 
 const managed = { owner: "managed", sha256: upgradeHash(Buffer.from("content")) };
 
 describe("upgrade inputs", () => {
+  it.each([
+    { mode: "starter", path: "site" },
+    { mode: "existing", path: ".." },
+    { mode: "existing", path: "../../web_site-1" },
+    { mode: "none", path: null },
+  ])("accepts the site record %j and keeps manifest key order", (site) => {
+    const value = { schemaVersion: 1, templateVersion: "0.11.0", site, files: {} };
+    const validated = validateUpgradeManifest(value);
+    expect(validated.site).toEqual(site);
+    expect(Object.keys(validated)).toEqual(["schemaVersion", "templateVersion", "site", "files"]);
+    expect(manifestSite(validated)).toEqual(site);
+  });
+  it("reads a manifest without a site record as starter mode and keeps it absent", () => {
+    const validated = validateUpgradeManifest(manifest());
+    expect(validated).not.toHaveProperty("site");
+    expect(manifestSite(validated)).toEqual({ mode: "starter", path: "site" });
+  });
+  it.each([
+    null,
+    "starter",
+    { mode: "starter", path: "web" },
+    { mode: "starter" },
+    { mode: "existing", path: "/srv/site" },
+    { mode: "existing", path: "." },
+    { mode: "existing", path: "../-x" },
+    { mode: "existing", path: "a//b" },
+    { mode: "existing", path: "..\\web" },
+    { mode: "existing", path: null },
+    { mode: "none", path: "site" },
+    { mode: "none", path: null, extra: true },
+    { mode: "headless", path: null },
+  ])("rejects the invalid site record %j", (site) => {
+    expect(() => validateUpgradeManifest({ ...manifest(), site })).toThrow(
+      "Invalid manifest site record.",
+    );
+  });
+  it("requires the template to match the project's site mode and path", () => {
+    const legacy = validateUpgradeManifest(manifest());
+    const starter = validateUpgradeManifest({
+      ...manifest(),
+      site: { mode: "starter", path: "site" },
+    });
+    const existing = (path) =>
+      validateUpgradeManifest({ ...manifest(), site: { mode: "existing", path } });
+    expect(() => assertSameSite(legacy, starter)).not.toThrow();
+    expect(() => assertSameSite(existing(".."), existing(".."))).not.toThrow();
+    expect(() => assertSameSite(existing(".."), existing("../web"))).toThrow(
+      "create-lace <dir> --existing-site ..",
+    );
+    expect(() => assertSameSite(legacy, existing(".."))).toThrow("create-lace <dir> --starter");
+  });
+  it("merged manifests take the target's site record", () => {
+    const legacy = validateUpgradeManifest(manifest({ "README.md": { owner: "user" } }));
+    const target = validateUpgradeManifest({
+      ...manifest({ "README.md": { owner: "user" } }),
+      site: { mode: "starter", path: "site" },
+    });
+    expect(mergedManifest(legacy, target).site).toEqual({ mode: "starter", path: "site" });
+  });
   it("accepts existing generator metadata and sorts paths", () => {
     expect(
       Object.keys(

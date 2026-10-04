@@ -12,6 +12,7 @@
   "platforms": ["linux/amd64", "linux/arm64"],
   "packages": [
     "application",
+    "astro",
     "auth",
     "cli",
     "config",
@@ -21,6 +22,7 @@
     "domain",
     "platform-cloudflare",
     "platform-node",
+    "render",
     "sdk",
     "server",
     "create-lace"

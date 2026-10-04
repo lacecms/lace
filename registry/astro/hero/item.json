@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "hero",
+  "framework": "astro",
+  "blockType": "hero",
+  "blockVersion": 1,
+  "revision": 1,
+  "requires": {
+    "@lacecms/astro": "0.1.0-alpha.1",
+    "@lacecms/render": "0.1.0-alpha.1"
+  },
+  "files": [
+    {
+      "source": "HeroBlock.astro",
+      "target": "HeroBlock.astro",
+      "role": "component"
+    }
+  ],
+  "dependencies": []
+}

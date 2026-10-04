@@ -1836,6 +1836,19 @@ rewrites of user-owned files.
 
 ### Session 30A — Decision record, architecture, and package boundaries
 
+**Completed:** 2026-10-04 (documentation only). [ADR 0006](adr/0006-shared-rendering-core-and-installed-block-source.md)
+records the hybrid decision. Architecture §§6, 7, and 13 fix the package names
+`@lacecms/render` (`render -> content`; no `contracts` edge — it takes a
+structural block input) and `@lacecms/astro` (`astro -> render, sdk`, no
+re-exports), the repository `registry/` directory, the site-local
+`lace.site.json`, the block map file `src/lace/blocks.ts`, installed components
+under `src/components/lace/`, the loader file `src/lib/lace.ts`, and the public
+APIs `createPublishedSiteLoader`, `parseBlock`, `defineBlockMap`,
+`resolveBlock`, `BlockProps`, `describeRichText`, `LacePublishedSiteError`,
+`LaceRenderError`, `createAstroSiteLoader`, `LaceBlocks`, and `RichText`.
+Later sessions reuse these names; exact DTO fields and spec wording stay with
+their changes.
+
 Planning/documentation only; no production code.
 
 1. Record an ADR under `docs/adr/` with the decision above, the compared options
@@ -1843,7 +1856,7 @@ Planning/documentation only; no production code.
    their tradeoffs, and the drift evidence from the inventory.
 2. Update `docs/mvp-architecture.md` before any implementation unit:
    - package list and dependency graph for the render core and framework
-     adapters (for example `render -> content, contracts`, `astro -> render, sdk`,
+     adapters (fixed as `render -> content`, `astro -> render, sdk`,
      `apps/site -> astro, render, sdk, content`); final package names are fixed
      here and reused by 30B–30D;
    - ownership rules for block sources installed by the CLI, the generated block
@@ -1864,11 +1877,18 @@ Planning/documentation only; no production code.
 
 ### Session 30B — Framework-neutral loading and rendering core
 
+**Completed:** 2026-10-04. `@lacecms/sdk` exports `createPublishedSiteLoader`
+and `LacePublishedSiteError`; the new `@lacecms/render` package exports
+`parseBlock`, `defineBlockMap`, `resolveBlock`, `prepareBlocks`, `BlockProps`,
+`describeRichText`, and `LaceRenderError`, and joins the alpha release
+allowlist. The boundary check keeps both packages framework-neutral. The sites
+still use their local copies until 30C migrates them.
+
 1. **Published-site loader in `@lacecms/sdk`.** Generalize `site-data.ts` into
-   an SDK-owned loader without framework imports:
+   `createPublishedSiteLoader` (architecture §13.2) without framework imports:
    - input: explicit environment record or explicit `baseUrl`/`token`/public
      media origin, optional `fetch`, and `revalidate`;
-   - static mode reads one build export per process and resets after failure;
+   - static mode reads one build export per loader and resets after failure;
      revalidate mode issues ETag-conditional reads with one shared in-flight
      request, preserving the 29B dev behavior;
    - enforces `LACE_EXPECTED_PUBLISHED_VERSION` when present;
@@ -1879,50 +1899,79 @@ Planning/documentation only; no production code.
    - rejects duplicate paths and duplicate slugs within a model; it trusts the
      CMS-resolved `path` and does not re-derive route patterns or hard-code
      model keys;
-   - errors keep stable classes/codes and actionable but project-neutral text;
-     callers may supply hints (the generated project names its commands).
-2. **Framework-neutral render core package.**
+   - errors use `LacePublishedSiteError` codes (`missing_configuration`,
+     `rejected_token`, `api_unavailable`, `version_mismatch`, `invalid_export`)
+     with actionable but project-neutral text; callers may supply hints (the
+     generated project names its commands).
+2. **Framework-neutral render core package `@lacecms/render`** (architecture
+   §13.3; depends only on `@lacecms/content`):
    - `parseBlock(definition, block, context)` over `validateBlockData` returns
      typed `BlockDataValues`, works for built-in and user `defineBlock`
-     definitions, and fails with model, entry, block key, and field path;
+     definitions, fails on block type or schema-version mismatch, and fails with
+     model, entry, block key, and field path (`LaceRenderError`);
    - rich-text helpers reuse `validateRichTextDocument` and `isSafeUrl`
-     exclusively; delete the site-local allowlist copies. Provide a neutral
-     node/mark-to-element description (tag, safe attributes, children) so every
-     adapter renders identical semantics and never emits raw HTML;
-   - a block-map type keyed by block type plus a resolver that fails on unknown
-     types with model, entry, and block identifiers (current build-failure
-     behavior preserved);
+     exclusively; the site-local allowlist copies are deleted when 30C migrates
+     both sites onto the adapter. `describeRichText`
+     provides a neutral node/mark-to-element description (tag, safe attributes,
+     children) so every adapter renders identical semantics and never emits raw
+     HTML;
+   - `defineBlockMap` keyed by block type plus `resolveBlock`, which fails on
+     unknown types with model, entry, and block identifiers (current
+     build-failure behavior preserved), the shared `BlockProps` type, and
+     `prepareBlocks`, which resolves and parses an entry's blocks in order for
+     adapters;
    - no dependency on any UI framework, Node-only API, or the SDK transport.
 3. Tests: loader modes, ETag reuse, concurrent revalidation, expected-version
    mismatch, auth/transport failures, duplicate path/slug rejection; `parseBlock`
    for every built-in block, custom block, defaults, and invalid data; rich-text
    parity tests proving the render core accepts and rejects exactly what
    `@lacecms/content` does (including the drift cases above); dependency-direction
-   check that the core imports no framework.
+   check that the core imports no framework; boundary-script edges for
+   `@lacecms/render`; and a type test that the contract block DTO satisfies the
+   render core's block input.
 
 ### Session 30C — Astro adapter and starter migration
 
-1. **Astro adapter package** containing only Astro-bound code:
+**Completed:** 2026-10-04. `@lacecms/astro` provides `createAstroSiteLoader`,
+`LaceBlocks.astro`, and `RichText.astro` (with per-node/mark overrides) and
+joins the alpha allowlist. `registry/` holds the five built-in `astro` items;
+`lace.site.json` (`schemaVersion` 1: framework, components directory, block map
+path and hash, items with revision and per-file hashes) and the generated block
+map format are fixed for 30D. The starter (template `0.9.0`) and `apps/site`
+use the adapter with byte-identical markup and a user-owned `src/env.d.ts` that
+lets `tsc` read `.astro` imports; the site-local loader, rendering, and
+rich-text copies are deleted. The reference fixture's invalid rich text
+(text directly inside a blockquote, a document-level hard break) was corrected,
+because the shared allowlist now rejects it. Parity, existing-site guide
+(`docs/lace-astro-site.md` in generated projects), and packed-starter CI checks
+(`pnpm acceptance:starter`) are in place.
+
+1. **Astro adapter package `@lacecms/astro`** (architecture §13.4) containing
+   only Astro-bound code:
    - `<LaceBlocks entry blocks mediaUrl>` dispatching through the block map and
      passing typed block props (`block`, parsed `data`, `context`, `mediaUrl`);
    - `<RichText document components?>` rendering the neutral element description,
      with optional overrides for individual node/mark components that receive
      validated props only;
-   - Astro environment glue: a server-only loader factory that reads
-     `import.meta.env`/`process.env`, enables revalidation in `astro dev`, and
-     never exposes `LACE_BUILD_TOKEN` to client bundles;
+   - Astro environment glue: the server-only `createAstroSiteLoader`, which
+     receives `import.meta.env`/`process.env` from the site's `src/lib/lace.ts`,
+     enables revalidation in `astro dev`, and never exposes `LACE_BUILD_TOKEN`
+     to client bundles;
    - shipped as Astro component source with a peer dependency on the supported
      Astro range; no visual block components.
 2. **Generated starter and reference site.** Rewrite `create-lace` template
    `site/` and `apps/site` on the adapter: delete `lib/rich-text.ts` and
-   `lib/rendering.ts`, replace `site-data.ts` with a small starter file that
-   uses the loader view (`byPath("/")`, `entries("posts")`), replace
-   `BlockRenderer.astro` with `<LaceBlocks>` plus the generated map file, and
-   rewrite the five visual blocks to use `parseBlock`/`<RichText>` while keeping
-   every existing `data-lace-*` hook and the generated markup. Source the five
-   blocks from the 30D registry layout (or a single shared source the registry
-   reuses) so the starter and `lace add block` cannot diverge; record them in the
-   site-local lock file as installed registry items.
+   `lib/rendering.ts`, replace `site-data.ts` with `src/lib/lace.ts` and pages
+   that use the loader view (`byPath("/")`, `entries("posts")`,
+   `bySlug("posts", slug)`), replace `BlockRenderer.astro` with `<LaceBlocks>`
+   plus the map file `src/lace/blocks.ts`, and rewrite the five visual blocks
+   under `src/components/lace/` to consume parsed `BlockProps` data and
+   `<RichText>` while keeping every existing `data-lace-*` hook and the generated
+   markup. Create the canonical `registry/registry.json` and
+   `registry/astro/<item>/` sources for the five blocks (architecture §13.5;
+   30D adds the CLI that reads them), commit identical copies in the starter and
+   `apps/site`, and record them in each site's `lace.site.json` as installed
+   registry items.
 3. **Role split between starter and `apps/site`.**
    - The starter in `create-lace` is the single source of what users receive:
      minimal pages (`home`, `posts`), layout, global styles, and registry blocks.
@@ -1954,15 +2003,30 @@ Planning/documentation only; no production code.
 
 ### Session 30D — Block registry and `lace add block`
 
+**Completed:** 2026-10-04. `@lacecms/cli` bundles `registry/` into
+`dist/registry/` at build time and provides `lace add block <type...>|--all`
+with `--site` (default `site`), `--framework`, `--dry-run`, `--write-new`, and
+`--json`. It reproduces the committed starter lock, map, and components byte for
+byte, adopts identical untracked files, updates unmodified files to newer
+revisions, preserves edits, reports conflicts with diffs (exit 2), prints the
+exact block map lines for an edited map, blocks items whose block definition
+version differs from `lace.config.ts`, prints the `pnpm --dir <site> add`
+command for missing packages, and scaffolds configured custom blocks from the
+recorded `definitions` module (`customBlocks` in `lace.site.json`). The upgrade
+three-way decision is shared; block installation uses compare-and-swap writes
+with `lace.site.json` as the commit record instead of a rollback journal. The
+template is `0.10.0`; generated guides use the command.
+
 1. **Registry format and delivery.** A versioned, framework-keyed registry
    bundled with `@lacecms/cli` (no network fetch). Each item declares block type,
    framework, block definition version, required adapter/core package ranges,
    files with their target role, and registry-item dependencies. Only `astro`
    items exist now; the schema and lookup accept other framework keys and return
    an explicit "framework not supported yet" error.
-2. **Site-local configuration and lock.** On first use the CLI creates a
-   site-local Lace file recording framework, component directory, map-file path,
-   and installed items with registry version and content hash. Framework is taken
+2. **Site-local configuration and lock.** On first use the CLI creates
+   `lace.site.json` at the site root recording framework, component directory,
+   map-file path, optional custom `definitions` module, and installed items with
+   registry version and content hashes (architecture §§7 and 13.5). Framework is taken
    from the file, else `--framework`, else detected from the site's
    `package.json`, defaulting to `astro`. The site root is selected with
    `--site <dir>` (default: the generated `site/`), validated by locating the
@@ -1978,8 +2042,9 @@ Planning/documentation only; no production code.
    - `--all` installs renderers for every block type the config uses and
      reports block types without renderers;
    - for a config-defined custom block absent from the registry, scaffolds a
-     typed component from its `defineBlock` fields using `parseBlock` and the
-     hook conventions.
+     component typed with `BlockProps` from its `defineBlock` fields and the
+     hook conventions, importing the definition from the recorded
+     `definitions` module (never copying it).
 4. **Repeated add and updates.** Unchanged installed files (hash match) are
    reported as current or updated to the newer registry version; modified files
    are never overwritten — the command reports a conflict, can show a diff, and
@@ -1994,6 +2059,23 @@ Planning/documentation only; no production code.
    path escape rejection, and a built site rendering the added blocks.
 
 ### Session 30E — Project creation with an optional starter
+
+**Completed:** 2026-10-04. `create-lace` accepts `--starter`,
+`--existing-site <path>`, and `--no-site` (mutually exclusive; `--no-site` with
+`--cloudflare` is a usage error). Without a flag a terminal prompt defaults to
+an existing site at `..` when the parent directory is an Astro project, otherwise
+to the starter; without a terminal the starter is generated and the other flags
+are named. Existing-site paths are validated (relative grammar, outside the
+target, no symbolic links, Astro root) and never written. One template set is
+rendered per mode through `lace-site` marker blocks and structured transforms of
+the root `package.json` and `pnpm-workspace.yaml`; starter infrastructure bytes
+are unchanged. The manifest records `site: { mode, path }` (template `0.11.0`);
+`lace upgrade` rejects a template for another mode with the matching flags and
+reads legacy manifests as starter; `lace doctor` adds a manifest-driven `site`
+check. Snapshots cover default, Cloudflare, existing, existing-Cloudflare, and
+no-site projects, and the `existing-site` acceptance phase generates `cms/`
+inside the existing-site fixture, adds blocks with `lace add block --all --site
+..`, and builds the parent site in CI.
 
 1. **Site modes at creation.** `create-lace` supports three explicit modes
    (flag names fixed in the proposal):
@@ -2018,10 +2100,11 @@ Planning/documentation only; no production code.
    Step 29 build-site configuration instead of a second mechanism. Paths are
    validated as relative, non-escaping where required, and free of secrets.
 4. **Manifest, upgrade, and doctor.** `.lace/manifest.json` records the site mode
-   and path. `lace upgrade` renders managed files for that mode, never creates or
+   (`starter`, `existing`, or `none`, architecture §7) and path. `lace upgrade` renders managed files for that mode, never creates or
    touches `site/` for non-starter projects, and keeps hash conflict detection.
-   `lace doctor` checks the configured site (exists, Astro detected, adapter and
-   core packages present, block map present) and does not expect `site/` when
+   `lace doctor` checks the configured site (exists, Astro detected,
+   `@lacecms/astro` and `@lacecms/render` present, `lace.site.json` and block
+   map present) and does not expect `site/` when
    the mode says otherwise.
 5. **Next steps.** For *existing site*, the generator output and README point to
    `lace add block --all --site <path>` and the 30C connection guide; for
@@ -2162,7 +2245,8 @@ requirements, and operational recovery promises.
 5. Decide before the stable contract freeze whether public entries keep reusing
    the content-entry schema (optional `published`, mirrored `draft`) or move to
    a dedicated published-only public schema; Step 30 deliberately hides this
-   behind the SDK loader. Any change updates contracts, SDK, render core, and
+   behind the SDK published-site loader (`createPublishedSiteLoader`). Any change
+   updates contracts, SDK, render core (`@lacecms/render`), and
    the public API specs together.
 
 ### Session 33B — Security and resilience pass

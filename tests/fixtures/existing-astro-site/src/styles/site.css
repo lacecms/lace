@@ -1,0 +1,7 @@
+/* Style Lace content only through the public data-lace-* hooks. */
+[data-lace-block="hero"] [data-lace-part="heading"] {
+  font-size: 3rem;
+}
+[data-lace-model="posts"] [data-lace-block="quote"] {
+  border-inline-start: 4px solid currentColor;
+}

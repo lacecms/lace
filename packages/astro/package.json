@@ -1,0 +1,53 @@
+{
+  "name": "@lacecms/astro",
+  "version": "0.1.0-alpha.1",
+  "keywords": [
+    "astro-component",
+    "lace"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lacecms/lace.git",
+    "directory": "packages/astro"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./LaceBlocks.astro": "./dist/LaceBlocks.astro",
+    "./RichText.astro": "./dist/RichText.astro"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node copy-components.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "oxlint src",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@lacecms/render": "workspace:*",
+    "@lacecms/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "astro": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "astro": "^7.3.1"
+  },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  }
+}

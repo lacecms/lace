@@ -193,14 +193,23 @@
                     {
                       "content": [
                         {
-                          "text": "Quoted rich text",
-                          "type": "text"
+                          "content": [
+                            {
+                              "text": "Quoted rich text",
+                              "type": "text"
+                            },
+                            {
+                              "type": "hardBreak"
+                            },
+                            {
+                              "text": "across two lines",
+                              "type": "text"
+                            }
+                          ],
+                          "type": "paragraph"
                         }
                       ],
                       "type": "blockquote"
-                    },
-                    {
-                      "type": "hardBreak"
                     }
                   ],
                   "type": "doc"
