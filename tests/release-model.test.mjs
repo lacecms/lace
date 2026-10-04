@@ -26,6 +26,14 @@ async function coherentModel() {
         `LACE_${kind.toUpperCase()}_IMAGE=${coordinate}:${model.definition.version}\n`,
     )
     .join("");
+  for (const requires of Object.values(model.registry))
+    for (const name of Object.keys(requires)) requires[name] = model.definition.version;
+  for (const file of Object.keys(model.dockerfiles))
+    model.dockerfiles[file] = `FROM node\nARG LACE_VERSION=${model.definition.version}\n`;
+  for (const file of Object.keys(model.guides))
+    model.guides[file] =
+      `pnpm create lace@${model.definition.version} my-site\n` +
+      `Published \`0.1.0-alpha.1\` artifacts predate browser setup.\n`;
   return model;
 }
 
@@ -40,21 +48,54 @@ test("release closes over fifteen artifacts in dependency order", async () => {
   expect(order.indexOf("@lacecms/sdk")).toBeLessThan(order.indexOf("@lacecms/astro"));
 });
 
-test.each(["version", "private", "missing", "cycle", "template", "image", "internal"])(
-  "rejects %s release graph drift",
-  async (failure) => {
-    const model = await coherentModel();
-    const manifest = model.manifests["@lacecms/content"].manifest;
-    if (failure === "version") manifest.version = "0.0.0";
-    if (failure === "private") manifest.private = true;
-    if (failure === "missing") delete model.manifests["@lacecms/content"];
-    if (failure === "cycle") manifest.dependencies["@lacecms/config"] = "workspace:*";
-    if (failure === "template") model.templateVersion = "0.0.0";
-    if (failure === "image") model.environment = "";
-    if (failure === "internal") manifest.dependencies["@lacecms/test-utils"] = "workspace:*";
-    expect(() => validateReleaseModel(model)).toThrow();
-  },
-);
+test("the coherent model accepts historical prose about published versions", async () => {
+  const model = await coherentModel();
+  expect(model.definition.publishedVersions).toContain("0.1.0-alpha.1");
+  expect(model.definition.publishedVersions).not.toContain(model.definition.version);
+  expect(() => validateReleaseModel(model)).not.toThrow();
+});
+
+test.each([
+  "version",
+  "private",
+  "missing",
+  "cycle",
+  "template",
+  "image",
+  "internal",
+  "published",
+  "published-record",
+  "dockerfile",
+  "guide-create",
+  "guide-package",
+  "guide-image",
+  "registry",
+])("rejects %s release graph drift", async (failure) => {
+  const model = await coherentModel();
+  const manifest = model.manifests["@lacecms/content"].manifest;
+  if (failure === "version") manifest.version = "0.0.0";
+  if (failure === "private") manifest.private = true;
+  if (failure === "missing") delete model.manifests["@lacecms/content"];
+  if (failure === "cycle") manifest.dependencies["@lacecms/config"] = "workspace:*";
+  if (failure === "template") model.templateVersion = "0.0.0";
+  if (failure === "image") model.environment = "";
+  if (failure === "internal") manifest.dependencies["@lacecms/test-utils"] = "workspace:*";
+  if (failure === "published")
+    model.definition.publishedVersions = [
+      ...model.definition.publishedVersions,
+      model.definition.version,
+    ];
+  if (failure === "published-record") delete model.definition.publishedVersions;
+  if (failure === "dockerfile")
+    model.dockerfiles["apps/builder/Dockerfile"] = "ARG LACE_VERSION=0.1.0-alpha.1\n";
+  if (failure === "registry")
+    model.registry["registry/astro/quote/item.json"]["@lacecms/astro"] = "0.1.0-alpha.1";
+  const guide = "packages/create-lace/templates/docs/lace-operations.md";
+  if (failure === "guide-create") model.guides[guide] += "pnpm create lace@0.1.0-alpha.1 x\n";
+  if (failure === "guide-package") model.guides[guide] += "pnpm add @lacecms/astro@0.1.0-alpha.1\n";
+  if (failure === "guide-image") model.guides[guide] += "ghcr.io/lacecms/api:0.1.0-alpha.1\n";
+  expect(() => validateReleaseModel(model)).toThrow();
+});
 
 test("packed metadata rejects workspace/catalog/local/private dependencies", async () => {
   const { definition } = await coherentModel();

@@ -84,6 +84,10 @@ test("injected preparation failure leaves no inventory or success", async () => 
       `export const TEMPLATE_VERSION = "${model.templateVersion}";\n`,
     );
     await fixtureFile("packages/create-lace/templates/.env.example", model.environment);
+    for (const [path, contents] of Object.entries({ ...model.guides, ...model.dockerfiles }))
+      await fixtureFile(path, contents);
+    for (const [path, requires] of Object.entries(model.registry))
+      await fixtureFile(path, JSON.stringify({ requires }));
     const git = (...args) => execFileSync("git", args, { cwd: root, stdio: "pipe" });
     git("init");
     git("config", "user.name", "Release test");

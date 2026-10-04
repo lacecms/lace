@@ -26,12 +26,12 @@ Start with the generated root `README.md` for the concise quickstart. README is 
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This source template uses ownership template `0.13.0`; published Lace `0.1.0-alpha.1` packages/images retain their original template and behavior. The root quickstart and concise setup example require a generator built from Step 27B; its commands also need current matching packages/images. Package and image coordinates remain `0.1.0-alpha.1` until the separate coherent alpha artifact refresh. The npm alpha channel is `next`; use the exact version below for reproducible generation of that published alpha's template, not a claim that it includes the current source quickstart. These coordinates become downloadable only after owner publication. Before publication, repository verification uses local artifacts; ordinary consumers must wait for a compatible publication rather than patch dependency references.
+Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.14.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The root quickstart, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-alpha.1 my-site
+pnpm create lace@0.1.0-alpha.2 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -41,11 +41,11 @@ pnpm env:prepare
 
 Preparation refuses to replace any existing `.env`, including concurrent creation. If you already have one, retain it and review its settings privately; this command does not rotate credentials. A missing, symlinked or malformed `.env.example` must be restored as a regular file with one single-line `NAME=value` assignment for each generated credential and `LACE_BUILD_TOKEN`. Filesystem failures require checking directory permissions and hard-link support. If preparation was forcibly stopped, `.env` is either absent or fully written; private ignored `.lace-env-*` staging directories can be removed after confirming no preparation is running. Retry only when `.env` is absent.
 
-This preparation flow requires packages packed from the revision that implements Step 26C (or a later compatible published release). Previously published `0.1.0-alpha.1` artifacts are not retroactively updated. The next coherent alpha artifact/version refresh is a separate release step.
+This preparation flow requires `0.1.0-alpha.2` or later compatible packages. Previously published `0.1.0-alpha.1` artifacts are not retroactively updated.
 
 ## Read-only environment checks
 
-With a CLI packed from Step 27A or a later compatible release, run from this project root:
+With a `0.1.0-alpha.2` or later compatible CLI, run from this project root:
 
 ```bash
 pnpm exec lace doctor --target node --mode compose --stage setup
@@ -87,9 +87,9 @@ pnpm auth:bootstrap
 pnpm dev:api
 ```
 
-Migrations are explicit and repeatable; the API does not apply them on startup. With packages built after the fresh SQLite migration fix (26A), `pnpm db:migrate` creates missing parent directories for `LACE_DATABASE_PATH`, including `.lace/data`, and preserves existing database contents. No manual directory creation is needed with those rebuilt packages. The originally published `0.1.0-alpha.1` packages predate this fix; until a release includes it, those packages still require `mkdir -p .lace/data` before their first migration. Sync creates the singleton Home draft and registers Posts. Bootstrap prints a one-time setup token and expiry. Capture it privately. Bootstrap refuses after first-admin setup completes; for an expired unused token, run bootstrap again before completing setup.
+Migrations are explicit and repeatable; the API does not apply them on startup. With `0.1.0-alpha.2` or later packages, `pnpm db:migrate` creates missing parent directories for `LACE_DATABASE_PATH`, including `.lace/data`, and preserves existing database contents. No manual directory creation is needed with those packages. The originally published `0.1.0-alpha.1` packages predate this fix and still require `mkdir -p .lace/data` before their first migration. Sync creates the singleton Home draft and registers Posts. Bootstrap prints a one-time setup token and expiry. Capture it privately. Bootstrap refuses after first-admin setup completes; for an expired unused token, run bootstrap again before completing setup.
 
-With API/admin artifacts built after Step 28A or a later compatible release, open `/admin/` at the configured `LACE_PUBLIC_BASE_URL` origin. The browser shows setup while installation setup is incomplete. Enter your email, a password of 12–1024 characters, and the operator-issued bootstrap token, then create the administrator and sign in normally. The token expires after one hour. After an interruption, retry with the same token and email; the browser checks whether setup completed before offering another submission. Completed setup remains closed and later visitors see sign-in.
+With `0.1.0-alpha.2` or later compatible API/admin artifacts, open `/admin/` at the configured `LACE_PUBLIC_BASE_URL` origin. The browser shows setup while installation setup is incomplete. Enter your email, a password of 12–1024 characters, and the operator-issued bootstrap token, then create the administrator and sign in normally. The token expires after one hour. After an interruption, retry with the same token and email; the browser checks whether setup completed before offering another submission. Completed setup remains closed and later visitors see sign-in.
 
 The originally published `0.1.0-alpha.1` artifacts predate browser setup. As an alternative, including for those artifacts, create the first admin through `POST /api/v1/setup/admin` using exactly `token`, `email`, and `password` (12–1024 characters). For a concise placeholder-only request, replace `<PUBLIC_API_BASE_URL>` with the configured `LACE_PUBLIC_BASE_URL`, keeping any path prefix and trailing slash. Use the one-time token just issued by `pnpm auth:bootstrap` and a password of at least 12 characters:
 
@@ -198,7 +198,7 @@ Once the real build token is configured, run `pnpm prod:start`. It starts API/ad
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors were verified against a generated consumer with Template `0.8.0` and compatible Step 29B artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.14.0` with the exact `0.1.0-alpha.2` candidate artifacts.
 
 <!-- lace-site: starter -->
 
@@ -290,7 +290,7 @@ Block keys are unique within an entry, so scope instance selectors by entry. Bui
 
 ## Cloudflare Worker
 
-This project was generated with `--cloudflare`. The CMS runs as your own Cloudflare Worker built from installed Lace packages; the engine checkout is unnecessary. It requires Lace packages built from Step 31A or a later compatible release: published `0.1.0-alpha.1` packages do not contain the packaged admin and are not retroactively updated.
+This project was generated with `--cloudflare`. The CMS runs as your own Cloudflare Worker built from installed Lace packages; the engine checkout is unnecessary. It requires Lace `0.1.0-alpha.2` or later compatible packages: published `0.1.0-alpha.1` packages do not contain the packaged admin and are not retroactively updated.
 
 | File                       | Owner   | Purpose                                                                                                                                                                                  |
 | -------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -407,7 +407,7 @@ This project was generated without a site, so its Compose file has no builder an
 
 <!-- lace-site: end -->
 
-Build-site selection (introduced in template `0.7.0`) requires compatible freshly built Step 29A or later API, admin, CLI and builder artifacts (or a later compatible published release). Published alpha images are not retroactively updated; this configuration does not publish or download replacement artifacts. Upgrade managed infrastructure with conflict review, retain user-owned README/site/config and manually incorporate guidance in an existing README.
+Build-site selection (introduced in template `0.7.0`) requires `0.1.0-alpha.2` or later compatible API, admin, CLI and builder artifacts. Published `0.1.0-alpha.1` images are not retroactively updated; this configuration does not publish or download replacement artifacts. Upgrade managed infrastructure with conflict review, retain user-owned README/site/config and manually incorporate guidance in an existing README.
 
 The builder mounts `LACE_BUILD_SOURCE_ROOT` from the host read-only at `/source`. Compose resolves a relative host path against its project directory and refuses to create a missing source directory. Container paths are separate: `LACE_BUILD_SITE_DIR` selects an Astro project relative to `/source`, and `LACE_BUILD_OUTPUT_DIR` selects a static result relative to that project. Install uses `/source/pnpm-lock.yaml` and its root package/workspace declarations, with frozen pnpm and the image-pinned toolchain. It never guesses which example to build. Served releases remain in the shared `/output` volume; your host `dist` is not overwritten.
 

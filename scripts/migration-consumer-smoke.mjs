@@ -58,10 +58,15 @@ for (const [name, executable, args] of [
   if (name === "cli") {
     assert.equal(failed.status, 6);
     assert.equal(failed.stdout.trim().split("\n").length, 1);
+    // Actionable diagnostics name the operation, reason and next step, never the path.
     assert.deepEqual(JSON.parse(failed.stdout), {
       ok: false,
       code: "OPERATION_FAILED",
-      message: "Operation failed. Check the selected target, migration state, and configuration.",
+      message: "Operation failed.",
+      operation: "db migrate",
+      reason: "The selected filesystem path cannot be used as a database or directory.",
+      nextAction:
+        "Check LACE_DATABASE_PATH or the selected project path; ensure parent components are directories and the destination has the expected file type, then retry.",
     });
     assert.equal(failed.stderr, "");
     const human = invoke(`${blocked}/data/lace.sqlite`, ["db", "migrate"]);

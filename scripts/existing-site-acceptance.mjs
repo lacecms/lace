@@ -106,7 +106,7 @@ export function assertSafeRichText(html) {
  * parent site through the CMS root build script against a controlled export.
  */
 export async function existingSiteJourney(parent, operations) {
-  const { installPackedConsumer, run, secretValues, workspace } = operations;
+  const { generator, installPackedConsumer, run, secretValues, workspace } = operations;
   const fixture = join(workspace, "tests/fixtures/existing-astro-site");
   const root = join(parent, "existing-site");
   await cp(fixture, root, { recursive: true });
@@ -122,7 +122,7 @@ export async function existingSiteJourney(parent, operations) {
 
   const cms = join(root, "cms");
   const generated = await run("existing-generate", "node", [
-    join(workspace, "packages/create-lace/dist/bin.js"),
+    generator,
     "create",
     cms,
     "--existing-site",

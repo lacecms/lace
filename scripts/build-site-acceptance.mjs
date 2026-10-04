@@ -32,7 +32,7 @@ export async function buildSiteJourney(context, session, operations) {
     const packageJson = JSON.parse(await readFile(join(site, "package.json"), "utf8"));
     packageJson.name = `external-${kind}`;
     packageJson.dependencies["@lacecms/sdk"] =
-      `file:${kind === "workspace" ? "../" : ""}.lace/acceptance-packages/lacecms-sdk-0.1.0-alpha.1.tgz`;
+      `file:${kind === "workspace" ? "../" : ""}.lace/acceptance-packages/${context.sdkTarball}`;
     await writeFile(join(site, "package.json"), JSON.stringify(packageJson, null, 2));
     if (kind === "workspace")
       await writeFile(

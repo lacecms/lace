@@ -22,11 +22,11 @@
     "cf:build": "cd worker && wrangler deploy --dry-run --outdir ../.lace/data/cloudflare-bundle"
   },
   "dependencies": {
-    "@lacecms/cli": "0.1.0-alpha.1",
-    "@lacecms/config": "0.1.0-alpha.1",
-    "@lacecms/content": "0.1.0-alpha.1",
-    "@lacecms/db": "0.1.0-alpha.1",
-    "@lacecms/platform-cloudflare": "0.1.0-alpha.1"
+    "@lacecms/cli": "0.1.0-alpha.2",
+    "@lacecms/config": "0.1.0-alpha.2",
+    "@lacecms/content": "0.1.0-alpha.2",
+    "@lacecms/db": "0.1.0-alpha.2",
+    "@lacecms/platform-cloudflare": "0.1.0-alpha.2"
   },
   "devDependencies": {
     "wrangler": "4.129.0"

@@ -140,7 +140,7 @@ export async function publicationVisibilityJourney(context, session, operations)
         private: true,
         type: "module",
         dependencies: {
-          "@lacecms/sdk": "file:.lace/acceptance-packages/lacecms-sdk-0.1.0-alpha.1.tgz",
+          "@lacecms/sdk": `file:.lace/acceptance-packages/${context.sdkTarball}`,
           astro: "7.3.1",
         },
       },

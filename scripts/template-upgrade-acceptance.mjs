@@ -37,7 +37,7 @@ function withoutMetadata(snapshot) {
 
 /**
  * Upgrades the exact projects the published create-lace@0.1.0-alpha.1 generated
- * (template 0.4.0) with the packed CLI: a modified managed file blocks apply,
+ * (template 0.4.0) with the packed CLI to the template of the generator under test: a modified managed file blocks apply,
  * and after it is restored, apply makes managed files current while the user's
  * README, configuration and site source stay byte-for-byte unchanged.
  */

@@ -180,6 +180,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
   const {
     capturedDiagnostics,
     freePort,
+    generator,
     installPackedConsumer,
     run,
     sanitize,
@@ -190,7 +191,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
   await mkdir(dirname(project), { recursive: true });
   const diagnostics = [];
   await run("cloudflare-generate", "node", [
-    join(workspace, "packages/create-lace/dist/bin.js"),
+    generator,
     "create",
     project,
     "--starter",

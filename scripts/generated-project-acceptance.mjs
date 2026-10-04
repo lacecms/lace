@@ -40,6 +40,12 @@ const temporaryPaths = [];
 let composeProject;
 let composeCwd;
 const capturedDiagnostics = [];
+// The generator and package manifests under test: the workspace build by default,
+// the extracted inventory archives during exact-artifact (`release`) acceptance.
+let generatorBin = join(workspace, "packages/create-lace/dist/bin.js");
+let packageRoots = new Map();
+const packageRoot = (name) =>
+  packageRoots.get(name) ?? join(workspace, "packages", name.slice("@lacecms/".length));
 if (process.env.LACE_ACCEPTANCE_SECRET_SENTINEL) {
   secretValues.add(process.env.LACE_ACCEPTANCE_SECRET_SENTINEL);
 }
@@ -172,7 +178,7 @@ async function verifySnapshots(parent, update = false) {
       await mkdir(root, { recursive: true });
       if (existing) await writeAstroParent(root);
       await run(`snapshot-${variant}`, "node", [
-        "packages/create-lace/dist/bin.js",
+        generatorBin,
         "create",
         join(root, "acceptance-site"),
         ...(flags.length === 0 ? ["--starter"] : flags),
@@ -685,12 +691,7 @@ async function productionSmoke(context, session) {
 async function cloudflarePagesSmoke(context, tarballs) {
   const cloudProject = join(context.parent, "cloudflare-pages", "acceptance-site");
   await mkdir(dirname(cloudProject), { recursive: true });
-  await run("cloudflare-generate", "node", [
-    "packages/create-lace/dist/bin.js",
-    "create",
-    cloudProject,
-    "--cloudflare",
-  ]);
+  await run("cloudflare-generate", "node", [generatorBin, "create", cloudProject, "--cloudflare"]);
   await installPackedConsumer(cloudProject, tarballs);
   await run("cloudflare-bundle", "pnpm", ["build"], {
     cwd: cloudProject,
@@ -767,6 +768,7 @@ function cloudflareOperations(tarballs) {
   return {
     capturedDiagnostics,
     freePort,
+    generator: generatorBin,
     installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
     run,
     sanitize,
@@ -846,9 +848,7 @@ async function installPackedConsumer(project, tarballs) {
   );
   const scoped = [];
   for (const parent of references.keys()) {
-    const manifest = await packageMetadata(
-      join(workspace, "packages", parent.slice("@lacecms/".length)),
-    );
+    const manifest = await packageMetadata(packageRoot(parent));
     for (const dependency of Object.keys(manifest.dependencies ?? {})) {
       if (siteDirect.has(dependency) && references.has(dependency))
         scoped.push([`${parent}>${dependency}`, references.get(dependency)]);
@@ -1496,6 +1496,36 @@ async function inspectShipping(context) {
   );
 }
 
+/**
+ * The onboarding feedback consumer journeys after the Node consumer, in order.
+ * Both the workspace suite (`all`) and exact-artifact acceptance (`release`) run them.
+ */
+async function feedbackJourneys(parent, context, session, tarballs, upgradeOperations) {
+  await cloudflarePagesSmoke(context, tarballs);
+  await publicationVisibilityJourney(context, session, { request, run, secretValues });
+  await existingSiteJourney(parent, {
+    generator: generatorBin,
+    installPackedConsumer: (target) => installPackedConsumer(target, tarballs),
+    run,
+    secretValues,
+    workspace,
+  });
+  await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
+  await templateUpgradeJourney(parent, upgradeOperations);
+  for (const output of capturedDiagnostics)
+    assertSecretFree(output, secretValues, "captured diagnostics");
+  return [
+    "snapshots",
+    "node-readme-browser",
+    "compose-release",
+    "cloudflare-pages-preview",
+    "publication-visibility",
+    "existing-astro",
+    "cloudflare-consumer",
+    "template-0.4.0-upgrade",
+  ];
+}
+
 async function main() {
   const phase = process.argv[2] ?? "all";
   if (
@@ -1555,6 +1585,15 @@ async function main() {
       )[0];
       checkImageIdentity(metadata, record, artifacts.inventory);
     }
+    // Every journey below generates with the packed generator and resolves
+    // override metadata from the extracted archives, never the engine checkout.
+    generatorBin = artifacts.generator;
+    packageRoots = new Map(
+      await Promise.all(
+        artifacts.extracted.map(async (root) => [(await packageMetadata(root)).name, root]),
+      ),
+    );
+    await verifySnapshots(parent);
     const project = join(parent, "consumer", "acceptance-site");
     await mkdir(dirname(project), { recursive: true });
     await run("packed-generate", "node", [artifacts.generator, "create", project]);
@@ -1566,12 +1605,20 @@ async function main() {
     await installPackedConsumer(project, artifacts.tarballs);
     const context = await prepareCompose(project, parent, artifacts);
     context.shipping = shipping;
+    context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
     const session = await nodeJourney(context);
     await securityJourney(context, session);
     await productionSmoke(context, session);
     await recoveryJourney(context, session);
     await persistenceJourney(context, session);
     await inspectShipping(context);
+    const journeys = await feedbackJourneys(parent, context, session, artifacts.tarballs, {
+      cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+      generator: generatorBin,
+      run,
+      secretValues,
+      workspace,
+    });
     console.info(
       JSON.stringify(
         {
@@ -1581,6 +1628,7 @@ async function main() {
           platform,
           source: artifacts.inventory.source,
           builds: context.buildEvidence,
+          journeys,
           packages: artifacts.inventory.packages,
           images: Object.values(artifacts.images),
         },
@@ -1601,6 +1649,7 @@ async function main() {
   }
   if (phase === "existing-site") {
     await existingSiteJourney(parent, {
+      generator: generatorBin,
       installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
       run,
       secretValues,
@@ -1633,6 +1682,7 @@ async function main() {
     return;
   }
   const context = await prepareCompose(project, parent);
+  context.sdkTarball = basename(tarballs.get("@lacecms/sdk"));
   const session = await nodeJourney(context);
   if (phase === "node") return;
   await productionSmoke(context, session);
@@ -1652,19 +1702,7 @@ async function main() {
     await publicationVisibilityJourney(context, session, { request, run, secretValues });
     return;
   }
-  // The onboarding feedback regression suite: every consumer journey, in order.
-  await cloudflarePagesSmoke(context, tarballs);
-  await publicationVisibilityJourney(context, session, { request, run, secretValues });
-  await existingSiteJourney(parent, {
-    installPackedConsumer: (target) => installPackedConsumer(target, tarballs),
-    run,
-    secretValues,
-    workspace,
-  });
-  await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
-  await templateUpgradeJourney(parent, upgradeOperations);
-  for (const output of capturedDiagnostics)
-    assertSecretFree(output, secretValues, "captured diagnostics");
+  await feedbackJourneys(parent, context, session, tarballs, upgradeOperations);
   console.info(
     "Onboarding feedback regression suite passed: README-driven Node consumer, Compose release, Pages preview, publication visibility, existing-Astro consumer, Cloudflare consumer and template 0.4.0 upgrade",
   );
