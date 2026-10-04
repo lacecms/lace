@@ -26,7 +26,7 @@ Start with the generated root `README.md` for the concise quickstart. README is 
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This source template uses ownership template `0.12.0`; published Lace `0.1.0-alpha.1` packages/images retain their original template and behavior. The root quickstart and concise setup example require a generator built from Step 27B; its commands also need current matching packages/images. Package and image coordinates remain `0.1.0-alpha.1` until the separate coherent alpha artifact refresh. The npm alpha channel is `next`; use the exact version below for reproducible generation of that published alpha's template, not a claim that it includes the current source quickstart. These coordinates become downloadable only after owner publication. Before publication, repository verification uses local artifacts; ordinary consumers must wait for a compatible publication rather than patch dependency references.
+Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This source template uses ownership template `0.13.0`; published Lace `0.1.0-alpha.1` packages/images retain their original template and behavior. The root quickstart and concise setup example require a generator built from Step 27B; its commands also need current matching packages/images. Package and image coordinates remain `0.1.0-alpha.1` until the separate coherent alpha artifact refresh. The npm alpha channel is `next`; use the exact version below for reproducible generation of that published alpha's template, not a claim that it includes the current source quickstart. These coordinates become downloadable only after owner publication. Before publication, repository verification uses local artifacts; ordinary consumers must wait for a compatible publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
@@ -58,7 +58,7 @@ Doctor reads a regular `.env`, then lets exported process variables override it;
 
 SQLite is inspected without writable runtime opening. WAL-mode databases report `DATABASE_UNAVAILABLE` rather than change SHM reader marks or create sidecars; consult the separate API readiness result. For an independent ledger inspection, stop all API/dispatcher/CLI database users, back up with trusted SQLite tooling, explicitly checkpoint successfully and switch to rollback journal mode (`PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;`), then repeat doctor. These are operator actions; doctor performs none of them. Ordinary Lace startup restores WAL. Never discard WAL/SHM files or use immutable mode on a live database.
 
-Cloudflare needs an installed project-local Wrangler and an explicitly selected `LACE_WRANGLER_CONFIG` with a CMS `DB` binding matching `LACE_D1_DATABASE_ID`. The generated Pages-only file lacks that binding and complete CMS Worker onboarding remains future work. `--target cloudflare-local` additionally needs `LACE_CLOUDFLARE_PERSIST_TO` and a loopback API URL; migration readiness comes from the existing running Worker's readiness and is skipped while offline, without creating local state. `--target cloudflare-remote` needs `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` and performs only the selected D1 ledger read. Never substitute a remote target for an unavailable local Worker.
+Cloudflare needs an installed project-local Wrangler and an explicitly selected `LACE_WRANGLER_CONFIG` with a CMS `DB` binding matching `LACE_D1_DATABASE_ID`; a Pages-only Wrangler file lacks that binding. Projects generated with `--cloudflare` select their CMS Worker configuration `worker/wrangler.jsonc`. `--target cloudflare-local` additionally needs `LACE_CLOUDFLARE_PERSIST_TO` and a loopback API URL, normally the local Worker origin; migration readiness comes from the running Worker's readiness and is skipped while offline, without creating local state. `--target cloudflare-remote` needs `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` and performs only the selected D1 ledger read. Never substitute a remote target for an unavailable local Worker.
 
 `--json` prints one deterministic report with ordered checks and safe recovery guidance. Exit codes: `0` passing/expected setup, `3` invalid arguments, `4` failed compatibility/settings, `5` failed migration state, `6` failed infrastructure/probe. Mixed failures prioritize `4`, then `5`, then `6`. Each probe is limited to five seconds, total diagnosis to thirty seconds and captured data to 64 KiB. Secrets, paths and raw provider/tool errors are excluded, redirects are rejected, and diagnosis never migrates, syncs, bootstraps, starts services or creates credentials.
 
@@ -322,11 +322,36 @@ Run migration, sync and bootstrap while `cf:dev` is stopped; they and `cf:dev` s
 
 `pnpm cf:build` bundles the Worker with Wrangler's dry run into `.lace/data/cloudflare-bundle` without credentials, which checks your configuration and `lace.config.ts` before deploying.
 
+### Local journey and diagnosis
+
+`.env` serves both runtimes. Its `LACE_API_BASE_URL` and `LACE_PUBLIC_BASE_URL` default to the Node API at `http://127.0.0.1:3000/`; while you work with the local Worker, set both to `http://127.0.0.1:8787/` (the origin in `worker/.dev.vars`), and change them back for the Node runtime.
+
+1. With `cf:dev` running, open `http://127.0.0.1:8787/admin/`. The setup screen asks for an email, a password of at least 12 characters and the token printed by `pnpm cf:auth:bootstrap`. After setup, sign in.
+2. Upload media, edit and publish entries in Admin. Each publication requests a site build. The build is dispatched after a short debounce, by the post-publication pass or the scheduled trigger.
+3. In Admin Settings, issue a read-only build token and keep it private.
+
 <!-- lace-site: starter existing -->
 
-To build the site against the local Worker, set `LACE_API_BASE_URL` and `LACE_PUBLIC_BASE_URL` in `.env` to `http://127.0.0.1:8787/`, issue a read-only build token in Admin Settings, set `LACE_BUILD_TOKEN`, then run `pnpm dev` or `pnpm build`.
+4. Build the site against the local Worker: put the token into `LACE_BUILD_TOKEN` in `.env` (or pass it to the command), then run `pnpm dev` or `pnpm build`. Rendered media URLs use the Worker origin; unpublished drafts never reach the build export.
 
 <!-- lace-site: end -->
+
+Diagnose without changing anything:
+
+```bash
+pnpm exec lace doctor --target cloudflare-local --stage setup
+pnpm exec lace doctor --target cloudflare-local --stage ready
+```
+
+Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and skips migration evidence, and `ready` fails. With the Worker running and a build token present, `ready` passes with migration readiness derived from the Worker's `/health/ready`. Doctor never starts the Worker or creates `.lace/data/cloudflare`. For your account, `pnpm exec lace doctor --target cloudflare-remote --stage ready` reads only the remote D1 migration ledger with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+
+### Recovery
+
+- **Expired or lost setup token.** Tokens expire after one hour. The setup screen then reports that setup is still incomplete and creates no account. Stop `cf:dev`, run `pnpm cf:auth:bootstrap` again for a fresh token, start `cf:dev` and retry. After setup completes, bootstrap reports that setup is closed.
+- **Deploy hook unavailable or rejected.** Publication stays committed. The build stays `pending` with a sanitized reason (`trigger_unavailable` for timeouts, throttling, server errors or network failures; `provider_failed` for rejected or revoked hooks), and the scheduled trigger retries with backoff, up to eight attempts. The build then becomes `failed`. Fix the hook, then use Retry in Admin. Locally no cron runs by itself: `cf:dev` exposes `http://127.0.0.1:8787/__scheduled` to run the scheduled handler once.
+- **Accepted is not deployed.** When the provider accepts the hook and returns a deployment ID, Admin records the build as `running` with that ID. Lace does not poll the provider. Confirm the deployment's result in your provider before you treat the site as updated.
+- **Restarts.** Content, accounts, setup state and media survive `cf:dev` restarts in `.lace/data/cloudflare`. Reset only by deleting that directory with the Worker stopped.
+- **Worker unavailable.** The Worker answers with a generic unavailable error and logs only the names of missing or invalid variables. Check `worker/.dev.vars` locally or the Worker's secrets and `vars` remotely.
 
 ### Deploy the Worker to your account
 
@@ -347,7 +372,7 @@ Redeploy after editing `lace.config.ts`, and sync with the remote target before 
 
 The Astro site is a separate static deployment; deploying it never deploys, migrates or configures the CMS Worker, and deploying the Worker never publishes the site. The generated manual workflow `.github/workflows/cloudflare.yml` installs and builds `{{SITE_PATH}}` and deploys `{{SITE_PATH}}/dist` with `wrangler pages deploy` to the Pages project named by the `CLOUDFLARE_PAGES_PROJECT` variable. Set repository variables `LACE_API_BASE_URL` (the Worker origin, used to read the authenticated build export) and `LACE_PUBLIC_BASE_URL` (the Worker's public origin, used in rendered media URLs), and secrets `LACE_BUILD_TOKEN` (a read-only token from Admin Settings), `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. After building, `pnpm exec wrangler pages dev {{SITE_PATH}}/dist` previews the output locally.
 
-To rebuild after publication, create a deploy hook for the site's Pages project and store its URL as the Worker secret `LACE_DEPLOY_HOOK_URL`. Admin then records whether the provider accepted the hook; acceptance is not proof of a successful static deploy.
+To rebuild after publication, the site needs a deploy hook. Cloudflare Pages offers deploy hooks only for projects connected to a Git repository, which build the site themselves: set the project's root directory to this project, build command `pnpm build`, output directory `{{SITE_PATH}}/dist`, and build variables `LACE_API_BASE_URL`, `LACE_PUBLIC_BASE_URL` (both the Worker origin) and an encrypted `LACE_BUILD_TOKEN`. The manual workflow above uploads directly and has no hook, so with it you rebuild by running the workflow yourself. Another provider works if its build hook accepts a bodiless `POST` without credentials. Store the hook URL only as the Worker secret `LACE_DEPLOY_HOOK_URL`. Admin then records whether the provider accepted the hook (`running` with the provider's deployment ID); acceptance is not proof of a successful static deploy.
 
 <!-- lace-site: end -->
 <!-- lace-site: none -->

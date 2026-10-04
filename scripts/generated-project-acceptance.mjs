@@ -652,6 +652,7 @@ async function cloudflareSmoke(context, tarballs) {
 
 function cloudflareOperations(tarballs) {
   return {
+    capturedDiagnostics,
     freePort,
     installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
     run,

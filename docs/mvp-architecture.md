@@ -189,6 +189,13 @@ its `admin/` directory, so the consumer bundles and deploys the Worker without
 the engine checkout. Secrets are uploaded with Wrangler and kept locally in the
 ignored `worker/.dev.vars`. The static Astro deployment is configured separately
 (its own workflow and hosting project); deploying it never deploys the CMS.
+The reference hook-driven static host is a Cloudflare Pages project connected to
+Git: its deploy hook, stored as the Worker secret `LACE_DEPLOY_HOOK_URL`, is the
+site build trigger, and Pages builds the site with the Worker origin and a
+read-only build token. The generated manual workflow (direct upload) is the
+alternative without hook-driven rebuilds. A hook accepted by the provider is
+recorded as a running build, not as a confirmed deployment. The real-account
+procedure for the release gate is `docs/cloudflare-deployment-handoff.md`.
 
 ### VPS deployment
 
@@ -2135,8 +2142,9 @@ first local vertical slices:
   immediately before first publication;
 - selecting the signing/provenance process for published artifacts;
 - defining hosted release channels and update metadata for `create-lace`;
-- selecting the reference Cloudflare static-hosting project and CI provider used
-  by deployment documentation.
+- confirming, during the real-account release gate, the Cloudflare Pages Git
+  integration selected as the reference static host for hook-driven rebuilds
+  (see `docs/cloudflare-deployment-handoff.md`).
 
 If package-name ownership differs, only published names and generator templates
 change; internal package boundaries and domain contracts remain the same.

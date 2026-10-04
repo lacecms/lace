@@ -2172,6 +2172,14 @@ Step 30 rendering core.
    deployment secrets, and static-hosting/provider integration. Local tests do
    not count as real Cloudflare deployment acceptance.
 
+Delivered as: `pnpm acceptance:cloudflare` drives the packed consumer through
+local doctor, expired-token recovery, browser setup/editing/publication, a
+controlled HTTPS deploy hook (unavailable, then accepted as `running`), the
+Astro build from the Worker export, draft isolation, restart persistence and
+secret exclusion; the generated guide (template `0.13.0`) documents that
+journey and its recovery; `docs/cloudflare-deployment-handoff.md` is the
+real-account procedure for Session 33C.
+
 ### Acceptance
 
 - A generated Cloudflare consumer operates its CMS and builds its Astro site
@@ -2263,7 +2271,8 @@ requirements, and operational recovery promises.
 ### Session 33C — Operations and release documentation
 
 The generated Cloudflare onboarding from Step 31 and the exact candidate
-artifacts from Step 32 are prerequisites. Verify real VPS and Cloudflare
+artifacts from Step 32 are prerequisites. Follow `docs/cloudflare-deployment-handoff.md` for
+the Cloudflare deployment and its evidence. Verify real VPS and Cloudflare
 installations, including the separate public-site deployment and publish/build
 path, and record the tested versions and provider outcomes. Local simulation
 alone does not satisfy deployment acceptance; missing account access is an

@@ -137,7 +137,16 @@ test("optional Cloudflare files are managed only when selected", async () => {
   expect(guide).toContain("--target cloudflare-remote");
   expect(guide).toContain("never deploys, migrates or configures the CMS Worker");
   expect(guide).not.toContain("## Optional Cloudflare\n");
-  expect(await read("README.md")).toContain("docs/lace-operations.md#cloudflare-worker");
+  expect(guide).toContain("### Local journey and diagnosis");
+  expect(guide).toContain("pnpm exec lace doctor --target cloudflare-local --stage ready");
+  expect(guide).toContain("http://127.0.0.1:8787/__scheduled");
+  expect(guide).toContain("run `pnpm cf:auth:bootstrap` again");
+  expect(guide).toContain("deploy hooks only for projects connected to a Git repository");
+  expect(guide).toContain("acceptance is not proof of a successful static deploy");
+  expect(guide).not.toContain("future work");
+  const readme = await read("README.md");
+  expect(readme).toContain("docs/lace-operations.md#cloudflare-worker");
+  expect(readme).toContain("pnpm exec lace doctor --target cloudflare-local --stage ready");
   expect(await read(".gitignore")).toContain(".dev.vars\n");
 });
 
@@ -242,7 +251,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.1");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.1");
-  expect(TEMPLATE_VERSION).toBe("0.12.0");
+  expect(TEMPLATE_VERSION).toBe("0.13.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");

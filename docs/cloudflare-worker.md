@@ -93,6 +93,11 @@ Failures follow the normal eight-attempt retry policy. Lace does not poll the
 provider, so an accepted build stays `running`. Use the recorded provider ID
 to find the deployment in the Cloudflare dashboard.
 
+Cloudflare Pages offers deploy hooks only for projects connected to Git. A
+project deployed by direct upload (`wrangler pages deploy`) has no hook. The
+real-account deployment procedure, including the Pages Git integration, is in
+[cloudflare-deployment-handoff.md](cloudflare-deployment-handoff.md).
+
 ## Local development
 
 ```bash
