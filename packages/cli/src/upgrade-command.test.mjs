@@ -287,7 +287,10 @@ describe("upgrade CLI", () => {
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
       expect(outcome.data.instructions.templateVersion).toBe("0.14.0");
-      expect(outcome.guidance).toContain("Template 0.14.0: release coordinates only");
+      expect(outcome.guidance).toContain(
+        "Template 0.14.0: release coordinates and one operating rule",
+      );
+      expect(outcome.guidance).toContain("docker compose stop api dispatcher");
       expect(outcome.guidance).toContain("pnpm --dir site add @lacecms/astro@0.1.0-alpha.2");
       for (const path of managed)
         expect(await readFile(join(project, path), "utf8")).toBe(

@@ -11,11 +11,13 @@
 
 - [x] 3.1 Parameterize the generator and package-manifest source in `scripts/generated-project-acceptance.mjs`, pass the generator to existing-site, Cloudflare consumer and upgrade journeys, derive the SDK tarball name from the tarball map, and extend the `release` phase to run snapshots, Pages preview, publication visibility, existing-Astro, Cloudflare consumer and template upgrade before printing its receipt (design decision 5). Verify focused acceptance helper tests and Oxlint pass.
 
+- [x] 3.2 Document stopping `api`/`dispatcher` around host database commands in the managed operations guide, README template and `0.14.0` upgrade instructions; make the acceptance stop `api` around the refused-bootstrap check and restart it; regenerate snapshots (design decision 6b). Verify generator and CLI tests, snapshot check and Oxlint.
+
 ## 4. Quality gates and clean candidate
 
 - [x] 4.1 Run focused tests (release tooling, create-lace, CLI, consumer guides, onboarding map), root `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and strict OpenSpec validation; run a package-only `--preview` preparation as a smoke.
-- [ ] 4.2 Commit the implementation; from that clean commit run `pnpm release:prepare --output .release-artifacts/alpha-2` for both platforms and `pnpm release:verify`; confirm `complete` and `publicationEligible` and inspected archive/image contents.
-- [ ] 4.3 Run `pnpm acceptance:release --artifacts .release-artifacts/alpha-2` and require the full suite receipt.
+- [ ] 4.2 Commit the implementation; from that clean commit run `pnpm release:prepare --output .release-artifacts/alpha-2b` (the first `alpha-2` set, prepared before decision 6b, is superseded) for both platforms and `pnpm release:verify`; confirm `complete` and `publicationEligible` and inspected archive/image contents.
+- [ ] 4.3 Run `pnpm acceptance:release --artifacts .release-artifacts/alpha-2b` and require the full suite receipt.
 
 ## 5. Evidence and documentation
 

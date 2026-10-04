@@ -464,6 +464,10 @@ async function nodeJourney(context) {
     workspace,
   });
   // A refused operator command names the operation, the cause and the next action.
+  // As the generated guide instructs, host database commands run while the Compose
+  // API is stopped: host access to its live SQLite file through a VM file share
+  // leaves container processes with diverging views.
+  await compose("stop-api-for-host-command", ["stop", "api"]);
   const refusedBootstrap = runStatus(
     "cli-bootstrap-refused",
     "pnpm",
@@ -485,6 +489,12 @@ async function nodeJourney(context) {
     throw new Error(
       `cli-bootstrap-refused: unexpected completed-setup refusal ${sanitize(refusedBootstrap.stdout).slice(-1000)}`,
     );
+  await run("dev-api-restart", "pnpm", ["dev:api"], {
+    cwd: project,
+    env: { COMPOSE_PROJECT_NAME: composeProject },
+    timeoutMs: 10 * 60_000,
+  });
+  await waitApiReady(base);
   const login = await request(base, "/api/auth/sign-in/email", {
     method: "POST",
     headers: { origin: base.slice(0, -1) },
@@ -671,8 +681,9 @@ async function productionSmoke(context, session) {
             failedState = state;
           }
         }
-      } catch {
-        /* A transient history read does not stop the release wait. */
+      } catch (error) {
+        // A transient history read does not stop the release wait; keep it for diagnosis.
+        lastBuildState = `history unavailable: ${error instanceof Error ? error.message : error}`;
       }
       if (failedState)
         throw new Error(`compose-production: builder failed (${sanitize(failedState)})`);
@@ -1178,6 +1189,30 @@ async function expectDenied(base, path, options = {}, statuses = [401, 403]) {
     throw new Error(`Authorization boundary failed: ${path}: ${response.status}`);
 }
 
+/**
+ * Signs in like a well-behaved client: Better Auth allows three sign-ins per
+ * ten seconds, and one acceptance client signs in several roles in a row, so a
+ * 429 is honored by waiting for its advertised retry delay (at most once, 60s).
+ */
+async function signInHonoringRetry(base, email, password) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(new URL("/api/auth/sign-in/email", base), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: base.slice(0, -1) },
+      body: JSON.stringify({ email, password }),
+    });
+    await response.arrayBuffer();
+    if (response.ok) return response;
+    const retryAfter = Number(
+      response.headers.get("x-retry-after") ?? response.headers.get("retry-after"),
+    );
+    if (response.status !== 429 || attempt > 0 || !(retryAfter > 0 && retryAfter <= 60))
+      throw new Error(`HTTP /api/auth/sign-in/email: status ${response.status}`);
+    console.info(`Acceptance: sign-in rate limited; retrying after ${retryAfter}s`);
+    await new Promise((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));
+  }
+}
+
 async function securityJourney(context, session) {
   const { base, cookie, entryId, buildToken, token, email, password } = session;
   const exportPath = "/api/v1/public/build-export";
@@ -1217,12 +1252,8 @@ async function securityJourney(context, session) {
       headers: { cookie },
       json: { email: roleEmail, password: rolePassword, role },
     });
-    const login = await request(base, "/api/auth/sign-in/email", {
-      method: "POST",
-      headers: { origin: base.slice(0, -1) },
-      json: { email: roleEmail, password: rolePassword },
-    });
-    const roleCookie = login.response.headers.getSetCookie()[0]?.split(";")[0];
+    const login = await signInHonoringRetry(base, roleEmail, rolePassword);
+    const roleCookie = login.headers.getSetCookie()[0]?.split(";")[0];
     if (!roleCookie) throw new Error(`${role} login: session missing`);
     secretValues.add(roleCookie);
     await expectDenied(
@@ -1714,14 +1745,16 @@ try {
   console.error(sanitize(error instanceof Error ? error.message : error));
   if (composeProject && composeCwd) {
     try {
-      const logs = await compose("builder-logs", [
-        "logs",
-        "--no-color",
-        "--tail",
-        "100",
-        "builder",
-      ]);
-      console.error(`Builder diagnostics:\n${sanitize(logs).slice(-6000)}`);
+      for (const service of ["builder", "dispatcher", "api"]) {
+        const logs = await compose(`${service}-logs`, [
+          "logs",
+          "--no-color",
+          "--tail",
+          "100",
+          service,
+        ]);
+        console.error(`${service} diagnostics:\n${sanitize(logs).slice(-6000)}`);
+      }
     } catch {
       /* Keep the original acceptance failure. */
     }
