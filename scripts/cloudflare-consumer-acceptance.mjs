@@ -563,6 +563,12 @@ export async function cloudflareConsumerJourney(parent, operations) {
     });
     if (JSON.stringify(afterDraft.draft) !== JSON.stringify(draft.draft))
       throw new Error("cloudflare-restart: saved draft did not persist");
+  } catch (error) {
+    // Network failures carry no stage context; keep the local Worker's own output.
+    const output = sanitize(worker?.output ?? "").slice(-4000);
+    throw new Error(
+      `${error instanceof Error ? error.message : error}\nLocal Worker output:\n${output}`,
+    );
   } finally {
     await browser?.close();
     await stop();

@@ -145,8 +145,8 @@ the ignored `.lace-acceptance/.env` as `LACE_BUILD_TOKEN`, and set
 and `/notes/<published-slug>` at the acceptance origin. Save a changed title
 and slug without publishing, restart the site again, and confirm the old public
 route and content remain. Content, Media, Users, and Settings have actionable
-empty and error states. **Builds** explicitly describes its current state;
-history and retry controls arrive in Step 21. Finish with
+empty and error states. **Builds** shows build history for the configured site
+and lets administrators retry a failed build. Finish with
 `pnpm acceptance:stop`, which removes only the named acceptance project and its
 volumes. Do not use `pnpm dev:reset` for acceptance cleanup.
 
@@ -240,6 +240,15 @@ CLI processes have explicit integration deadlines; ordinary unit tests keep
 Vitest's default timeout. The human and JSON sync/bootstrap cases run separately
 with fresh databases so neither mode consumes the other's deadline.
 
+Generated-consumer acceptance runs outside this checkout. `pnpm
+acceptance:generated` is the onboarding feedback regression suite against a
+workspace-packed package graph and locally built images. For a release candidate,
+`pnpm release:prepare --output <new-dir>` prepares the exact package and image
+set from a clean commit and `pnpm acceptance:release --artifacts <new-dir>` runs
+the same journeys against only those artifacts. The current candidate is
+`0.1.0-alpha.2` (template `0.14.0`); see
+[docs/alpha-release.md](./docs/alpha-release.md). No command publishes.
+
 ## Troubleshooting
 
 - `Missing .env`: run `pnpm dev:env`; it refuses to overwrite existing local
@@ -276,8 +285,9 @@ Steps follow configured Pages/Collections and your current role. Editors learn
 drafts and media uploads, viewers get inspection guidance, and admins also learn
 publication, build recovery, Users, Settings, and once-shown read-only build
 tokens. Publishing a snapshot and updating the served site are separate; inspect
-build status according to your site's rendering/build setup. Step 29 will add
-verified guidance for individual publication modes.
+build status according to your site's rendering/build setup; the generated
+project's `docs/lace-operations.md` describes the verified dev, manual static and
+automatic Compose publication modes.
 
 Completion and dismissal are local to this browser, installation origin/admin
 base path, user ID, and tour version. They survive reload/sign-in when browser

@@ -1528,6 +1528,39 @@ async function inspectShipping(context) {
 }
 
 /**
+ * The recovery journey publishes the later draft. The feedback journeys start
+ * from the Node journey's published post, as in the workspace suite, so publish
+ * its title again and wait until Compose serves that version.
+ */
+async function restorePublishedBaseline(session) {
+  const headers = { cookie: session.cookie };
+  const path = `/api/v1/admin/entries/${session.entryId}`;
+  const { body: entry } = await request(session.base, path, { headers });
+  const saved = await request(session.base, `${path}/draft`, {
+    method: "PUT",
+    headers,
+    json: {
+      blocks: entry.draft.blocks,
+      expectedRevision: entry.draft.revision,
+      fields: entry.draft.fields,
+      slug: entry.draft.slug,
+      title: "Published acceptance title",
+    },
+  });
+  const published = await request(session.base, `${path}/publish`, {
+    method: "POST",
+    headers,
+    json: { expectedRevision: saved.body.draft.revision },
+  });
+  const targetVersion = published.body.build.targetVersion;
+  await waitBuild(
+    session,
+    (build) => build.targetVersion === targetVersion && build.status === "succeeded",
+  );
+  console.info(`Published baseline restored and built (version ${targetVersion})`);
+}
+
+/**
  * The onboarding feedback consumer journeys after the Node consumer, in order.
  * Both the workspace suite (`all`) and exact-artifact acceptance (`release`) run them.
  */
@@ -1643,6 +1676,7 @@ async function main() {
     await recoveryJourney(context, session);
     await persistenceJourney(context, session);
     await inspectShipping(context);
+    await restorePublishedBaseline(session);
     const journeys = await feedbackJourneys(parent, context, session, artifacts.tarballs, {
       cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
       generator: generatorBin,

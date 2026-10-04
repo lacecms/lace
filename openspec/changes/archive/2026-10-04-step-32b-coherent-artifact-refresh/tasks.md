@@ -16,11 +16,11 @@
 ## 4. Quality gates and clean candidate
 
 - [x] 4.1 Run focused tests (release tooling, create-lace, CLI, consumer guides, onboarding map), root `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and strict OpenSpec validation; run a package-only `--preview` preparation as a smoke.
-- [ ] 4.2 Commit the implementation; from that clean commit run `pnpm release:prepare --output .release-artifacts/alpha-2b` (the first `alpha-2` set, prepared before decision 6b, is superseded) for both platforms and `pnpm release:verify`; confirm `complete` and `publicationEligible` and inspected archive/image contents.
-- [ ] 4.3 Run `pnpm acceptance:release --artifacts .release-artifacts/alpha-2b` and require the full suite receipt.
+- [x] 4.2 Commit the implementation; from that clean commit run `pnpm release:prepare --output .release-artifacts/alpha-2b` (the first `alpha-2` set, prepared before decision 6b, is superseded) for both platforms and `pnpm release:verify`; confirm `complete` and `publicationEligible` and inspected archive/image contents.
+- [x] 4.3 Run `pnpm acceptance:release --artifacts .release-artifacts/alpha-2b` and require the full suite receipt.
 
 ## 5. Evidence and documentation
 
-- [ ] 5.1 Record `docs/archive/step-32/step-32b-verification.md` and `step-32b-artifacts.json` (source revision, fingerprint, versions, package checksums, image IDs per platform, receipt, registry-availability evidence and remaining checks).
-- [ ] 5.2 Reconcile `docs/alpha-release.md`, `docs/compatibility.md`, architecture §25, the roadmap (32B and step summary), root README, `docs/onboarding-feedback.md` statuses and `docs/onboarding-feedback-acceptance.md` with delivered behavior; keep publication, real deployment and Step 33 explicit. Verify the onboarding map test and `pnpm format:check`.
-- [ ] 5.3 Validate `pnpm exec openspec validate step-32b-coherent-artifact-refresh --type change --strict`, then sync specs, archive and commit the evidence.
+- [x] 5.1 Record `docs/archive/step-32/step-32b-verification.md` and `step-32b-artifacts.json` (source revision, fingerprint, versions, package checksums, image IDs per platform, receipt, registry-availability evidence and remaining checks).
+- [x] 5.2 Reconcile `docs/alpha-release.md`, `docs/compatibility.md`, architecture §25, the roadmap (32B and step summary), root README, `docs/onboarding-feedback.md` statuses and `docs/onboarding-feedback-acceptance.md` with delivered behavior; keep publication, real deployment and Step 33 explicit. Verify the onboarding map test and `pnpm format:check`.
+- [x] 5.3 Validate `pnpm exec openspec validate step-32b-coherent-artifact-refresh --type change --strict`, then sync specs, archive and commit the evidence.

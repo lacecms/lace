@@ -2241,6 +2241,27 @@ maps §1–§12 to evidence, guarded by a test (§11 deferred, no open defects).
    statuses with actual completed behavior. Record evidence and remaining real
    deployment/security checks; registry publication is a separate explicit act.
 
+Delivered as: candidate `0.1.0-alpha.2` (package, generator and API/builder
+images), ownership template `0.14.0`, channel `next`, from clean revision
+`75026e5`. `release/alpha.json` records `publishedVersions`, so preparation
+refuses to reuse the published `0.1.0-alpha.1`; `release:check` also requires
+the Dockerfile version defaults, versioned guide commands and the block
+registry's package requirements to name the candidate (the registry still
+required `0.1.0-alpha.1`, which `lace add block` would have reported as missing).
+Template `0.14.0` upgrade instructions list the manual `.env` image and site
+dependency steps. `pnpm acceptance:release --artifacts` now runs the complete
+onboarding feedback suite with only the inventory's generator, archives and
+image IDs after the 25C security/recovery/persistence journeys. The first
+exact run exposed a defect: a host `lace` database command run while the
+Compose API holds the SQLite file (on Docker Desktop/OrbStack, through a VM file
+share without shared locks or WAL memory) left the dispatcher blind to later
+publications, so no site build ran. The generated guides now require stopping
+`api` and `dispatcher` around host database commands, and the acceptance
+follows that rule; a product-level guard is later work. The complete
+clean inventory (15 packages, API/builder on `linux/amd64` and `linux/arm64`)
+passed preparation smokes, and the suite passed on `linux/arm64`; see
+`docs/archive/step-32/step-32b-verification.md`. Nothing was published.
+
 ### Acceptance
 
 - Fresh generated and independently integrated Astro consumers complete their
@@ -2277,6 +2298,11 @@ requirements, and operational recovery promises.
 1. Review auth/session configuration, CSRF/origin behavior, permission checks,
    rate limits, upload parsing, URL/rich-text sanitization, token hashing, secret
    redaction, and arbitrary-command/path resistance.
+   Include the Step 32B findings: the Node request rate limiter keys clients on
+   the first, client-controlled `X-Forwarded-For` value; Better Auth's sign-in
+   limiter falls back to one shared bucket without a trusted client-IP header;
+   and host database commands are only documented, not guarded, against a
+   running Compose API on VM-backed Docker hosts.
 2. Fault-inject DB, object storage, deploy hook, builder, and process termination.
    Confirm retry, lease expiry, previous-release preservation, and admin status.
 3. Test D1 query/parameter budgets at maximum block count and build-export size.
@@ -2371,7 +2397,8 @@ best checkpoints for demonstrating useful progress are:
 20. **After step 31:** complete generated Cloudflare CMS onboarding passes local
     consumer acceptance and has a real-deployment handoff.
 21. **After step 32:** the feedback improvements pass together against the next
-    compatible alpha artifact set, ready for explicit publication.
+    compatible alpha artifact set, ready for explicit publication. Completed
+    2026-10-04 with candidate `0.1.0-alpha.2` (template `0.14.0`).
 22. **After step 33:** the MVP is release-ready.
 
 Steps 0–3 should be implemented in order. After step 5, SDK fixture work and

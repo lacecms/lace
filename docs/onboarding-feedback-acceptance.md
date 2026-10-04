@@ -13,8 +13,10 @@ a referenced stage or file does not exist, §11 is not deferred, or a row is
 (resolved by a recorded design decision and proven), `deferred` (outside the
 MVP), `open` (an unresolved defect; the suite is then not accepted).
 
-Statuses inside the feedback log itself are reconciled with delivered artifacts
-in Session 32B.
+Session 32B reconciled the statuses inside the feedback log with delivered
+artifacts and ran the same journeys against the exact candidate artifacts
+(`pnpm acceptance:release --artifacts`, `0.1.0-alpha.2`, template `0.14.0`):
+see [step-32b-verification.md](archive/step-32/step-32b-verification.md).
 
 | §   | Feedback                                  | Status   | Evidence                                                                                                                                                                                                                                                                                                                                    |
 | --- | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

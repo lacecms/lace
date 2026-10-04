@@ -7,15 +7,23 @@ Defines the coherent experimental Lace package and container artifacts that oper
 ## Requirements
 
 ### Requirement: Alpha coordinates form one compatible release set
-The release SHALL identify an exact prerelease version, generator version, template version, npm channel, public package names, API/builder image coordinates and source revision. The first prepared set SHALL use package/generator/image version `0.1.0-alpha.1`, template `0.4.0`, npm channel `next`, npm scope `@lacecms`, generator `create-lace`, and images `ghcr.io/lacecms/api` and `ghcr.io/lacecms/builder`. Preparation SHALL reject inconsistent versions, missing runtime dependencies and runtime dependencies on private workspace packages. Applications, test-utils and the workspace root SHALL remain private.
+The release SHALL identify an exact prerelease version, generator version, template version, npm channel, public package names, API/builder image coordinates, source revision and the prerelease versions already published. The first prepared set used package/generator/image version `0.1.0-alpha.1` and template `0.4.0`; the current candidate SHALL use package/generator/image version `0.1.0-alpha.2` and template `0.14.0`, with npm channel `next`, npm scope `@lacecms`, generator `create-lace`, and images `ghcr.io/lacecms/api` and `ghcr.io/lacecms/builder`. Preparation SHALL reject a candidate version that is recorded as published, inconsistent versions, missing runtime dependencies and runtime dependencies on private workspace packages. Generated package dependencies, image defaults, runtime image version defaults and the versioned installation commands in delivered consumer guides SHALL match the candidate. Applications, test-utils and the workspace root SHALL remain private. Selecting an unpublished version SHALL rely on registry metadata checked on a recorded date as availability evidence only, never as a reservation.
 
 #### Scenario: Matching release metadata
-- **WHEN** all selected package, template and image settings agree with the release definition
+- **WHEN** all selected package, template, guide and image settings agree with the release definition
 - **THEN** preparation identifies the complete compatible set with its source revision and alpha channel
 
 #### Scenario: Incomplete or mismatched graph
 - **WHEN** a consumer runtime dependency has another Lace version or depends on a private workspace member
 - **THEN** preparation fails with the affected dependency before reporting a complete artifact set
+
+#### Scenario: Published version reused
+- **WHEN** the release definition's candidate version equals a version recorded as already published
+- **THEN** validation fails before any build or pack and the published artifacts are left unchanged
+
+#### Scenario: Stale delivered coordinates
+- **WHEN** a generated dependency, image default, runtime image version default or versioned guide command still names a different prerelease
+- **THEN** validation fails and identifies the stale coordinate instead of rewriting files
 
 ### Requirement: Packed artifacts are complete external packages
 Packed public packages SHALL contain resolvable compiled ESM exports and declarations, declared executable entry points where applicable, checked-in database migrations where required, the generator's complete classified templates, and, in the Cloudflare platform package, the compiled admin application of the same source revision in its packaged admin directory. All packed Lace dependency references SHALL resolve to the exact release version; packed third-party dependencies SHALL resolve to concrete registry-compatible versions. Packed dependency metadata SHALL NOT contain `workspace:`, `catalog:`, source-checkout paths or test-only tarball overrides. Archives SHALL exclude credentials, local runtime data, test fixtures, editable admin source and node_modules.
