@@ -660,3 +660,33 @@ test("rejects unsafe generated versions and weak mutation preconditions", () => 
     "strong",
   );
 });
+
+test("admin build diagnostics validate closed reasons and coherent safe paths", async () => {
+  const { siteBuildRecordSchema } = await import("../dist/index.js");
+  const base = {
+    id: "build",
+    reason: "manual",
+    status: "failed",
+    targetVersion: 1,
+    requestedBy: "admin",
+    requestedAt: "2026-10-05T00:00:00.000Z",
+  };
+  expect(v.safeParse(siteBuildRecordSchema, { ...base, error: "install_failed" }).success).toBe(
+    true,
+  );
+  expect(
+    v.safeParse(siteBuildRecordSchema, {
+      ...base,
+      error: "source_symlink",
+      errorPath: "src/linked.astro",
+    }).success,
+  ).toBe(true);
+  for (const item of [
+    { error: "unknown" },
+    { errorPath: "src/a" },
+    { error: "install_failed", errorPath: "src/a" },
+    { error: "source_missing", errorPath: "/host/root" },
+    { error: "source_missing", errorPath: ".env" },
+  ])
+    expect(v.safeParse(siteBuildRecordSchema, { ...base, ...item }).success).toBe(false);
+});

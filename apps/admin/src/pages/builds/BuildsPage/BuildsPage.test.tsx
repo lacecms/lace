@@ -15,7 +15,7 @@ const failed = {
   startedAt: "2026-09-27T00:00:05.000Z",
   completedAt: "2026-09-27T00:00:06.000Z",
   providerBuildId: "provider-1",
-  error: "provider_failed",
+  error: "provider_failed" as const,
 };
 
 test("admin inspects and retries a failed build", async () => {
@@ -39,7 +39,7 @@ test("admin inspects and retries a failed build", async () => {
   await user.click(within(table).getByRole("button", { name: "View build for version 4" }));
   const detail = await screen.findByRole("region", { name: "Build details" });
   expect(detail).toHaveTextContent("provider-1");
-  expect(detail).toHaveTextContent("provider failed");
+  expect(detail).toHaveTextContent("The build provider failed.");
   expect(detail).toHaveTextContent("admin-1");
   await user.click(within(detail).getByRole("button", { name: "Retry build" }));
   await waitFor(() => expect(retryBuild).toHaveBeenCalledWith("build-1"));
@@ -120,3 +120,71 @@ test("every role sees verified publication visibility guidance without deploymen
     document.body.replaceChildren();
   }
 });
+
+test.each(["admin", "editor", "viewer"] as const)(
+  "%s sees pending source correction and correlation without retry",
+  async (role) => {
+    const user = userEvent.setup();
+    const pending = {
+      ...failed,
+      status: "pending" as const,
+      error: "source_symlink" as const,
+      errorPath: "src/linked.astro",
+    };
+    renderRoute(
+      "/builds",
+      createStaticSessionSource({ id: `${role}-1`, role }),
+      stubClient({ listBuilds: async () => ({ items: [pending] }), getBuild: async () => pending }),
+    );
+    await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
+    const detail = await screen.findByRole("region", { name: "Build details" });
+    expect(detail).toHaveTextContent("build-1");
+    expect(detail).toHaveTextContent("src/linked.astro");
+    expect(detail).toHaveTextContent("Replace the included link");
+    expect(detail).toHaveTextContent("An automatic retry is scheduled.");
+    expect(within(detail).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Retry build" })).not.toBeInTheDocument();
+  },
+);
+
+test("every closed reason has an explanation and correction", async () => {
+  const { buildFailureGuidance } = await import("./build-failure.js");
+  const { buildFailureReasonSchema } = await import("@lacecms/contracts");
+  expect(Object.keys(buildFailureGuidance)).toEqual(
+    expect.arrayContaining([...buildFailureReasonSchema.options]),
+  );
+  for (const value of Object.values(buildFailureGuidance)) {
+    expect(value.explanation.length).toBeGreaterThan(10);
+    expect(value.correction.length).toBeGreaterThan(20);
+  }
+});
+
+test.each([
+  ["source_invalid", "Check the source, project and output selection"],
+  ["source_symlink", "Replace the included link"],
+  ["source_unreadable", "Restore read access"],
+  ["source_missing", "Restore the required entry"],
+  ["source_special_file", "replace it with a regular file"],
+  ["install_failed", "root frozen lockfile"],
+  ["build_failed", "Run the selected Astro build locally"],
+  ["version_changed", "latest published version"],
+  ["trigger_unavailable", "deployment credentials"],
+  ["build_timeout", "build duration"],
+  ["invalid_build_event", "matched engine versions"],
+  ["provider_failed", "using the build ID"],
+] as const)(
+  "%s shows an actionable correction without inventing a path",
+  async (error, correction) => {
+    const user = userEvent.setup();
+    const build = { ...failed, error };
+    renderRoute(
+      "/builds",
+      createStaticSessionSource({ id: "admin-1", role: "admin" }),
+      stubClient({ listBuilds: async () => ({ items: [build] }), getBuild: async () => build }),
+    );
+    await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
+    const detail = await screen.findByRole("region", { name: "Build details" });
+    expect(detail).toHaveTextContent(correction);
+    expect(detail).not.toHaveTextContent("Source entry:");
+  },
+);

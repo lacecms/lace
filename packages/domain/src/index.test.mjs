@@ -219,3 +219,48 @@ test.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, 1000, 500])(
     }
   },
 );
+
+test("build diagnostics preserve known reasons and reject unsafe paths", async () => {
+  const { siteBuildFailureReasons, normalizeBuildFailure, safeBuildSourcePath } =
+    await import("../dist/index.js");
+  for (const reason of siteBuildFailureReasons)
+    expect(normalizeBuildFailure(reason).reason).toBe(reason);
+  expect(normalizeBuildFailure("secret /host/root", "src/file")).toEqual({
+    reason: "provider_failed",
+  });
+  expect(normalizeBuildFailure("source_symlink", "src/file.astro")).toEqual({
+    reason: "source_symlink",
+    path: "src/file.astro",
+  });
+  expect(normalizeBuildFailure("install_failed", "src/file")).toEqual({ reason: "install_failed" });
+  for (const path of [
+    "",
+    ".",
+    "..",
+    "/source/file",
+    "C:/file",
+    "src/../file",
+    "src//file",
+    "src/./file",
+    "--file",
+    "src/--file",
+    "src\\file",
+    "src/é",
+    "src/line\n",
+    "a".repeat(513),
+    ".env",
+    "cms/.env.production",
+    ".git/config",
+    ".aws/key",
+    "cms/.lace/data/db",
+    ".npmrc",
+    ".ssh/key",
+    ".agents/a",
+    ".codex/a",
+    ".claude/a",
+    ".pnpmfile.cjs",
+  ])
+    expect(safeBuildSourcePath(path), path).toBeUndefined();
+  for (const path of ["pnpm-lock.yaml", "web/src/page.astro", "src/a b.txt", "a".repeat(512)])
+    expect(safeBuildSourcePath(path)).toBe(path);
+});

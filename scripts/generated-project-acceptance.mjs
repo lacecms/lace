@@ -1,3 +1,4 @@
+import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs";
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
 import { cloudflareConsumerJourney } from "./cloudflare-consumer-acceptance.mjs";
 import { existingSiteJourney } from "./existing-site-acceptance.mjs";
@@ -1599,6 +1600,7 @@ async function main() {
       "node",
       "all",
       "build-site",
+      "builder-diagnostics",
       "cloudflare",
       "existing-site",
       "publication-visibility",
@@ -1710,6 +1712,27 @@ async function main() {
   const tarballs = await packConsumerGraph(tarballDirectory);
   if (phase === "cloudflare") {
     await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
+    return;
+  }
+  if (phase === "builder-diagnostics") {
+    await builderDiagnosticsJourney(parent, {
+      existingJourney: () =>
+        existingSiteJourney(parent, {
+          generator: generatorBin,
+          installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
+          run,
+          secretValues,
+          workspace,
+        }),
+      prepareCompose,
+      compose,
+      run,
+      request,
+      writeEnvironment,
+      waitApiReady,
+      secretValues,
+      workspace,
+    });
     return;
   }
   if (phase === "existing-site") {

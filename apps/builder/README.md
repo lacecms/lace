@@ -30,3 +30,39 @@ relative symlink switched only after a complete version-matched build. The two
 most recent successful releases are kept. If a build fails, `current` remains
 unchanged. Roll back by atomically replacing `current` with a relative symlink
 to the retained previous release.
+
+## Source failures (33C)
+
+The disposable copy excludes only the installation-root `AGENTS.md` and
+`CLAUDE.md` service documents in addition to the existing exclusions. These
+entries are skipped whether regular files or links; their targets are never
+read. The same filenames inside site source are not excluded. All other
+included links fail, even if their targets are inside the installation.
+
+Authenticated failures may include `path`, an installation-relative ASCII
+entry of at most 512 characters. Absolute locations, link targets, credential
+paths, unsafe filenames and raw tool output are omitted. Responses are bounded
+to 1024 bytes. Builds preserves the specific reason as `error`, the optional
+entry as `errorPath`, and shows the build ID and a correction. Pending failures
+are automatically retried; after eight failed attempts administrators can retry.
+
+| Reason | Correction |
+| --- | --- |
+| `source_symlink` | Replace the included link with a regular source entry. |
+| `source_unreadable` | Restore read/traverse access for the image's `node` user. |
+| `source_missing` | Restore the required file or directory, such as the root lockfile. |
+| `source_special_file` | Replace the FIFO/socket/device with regular source. |
+| `source_invalid` | Check selected paths, manifests, Astro dependency and layout. |
+| `install_failed` | Check the frozen root lockfile and dependency availability. |
+| `build_failed` | Run the selected Astro build locally and correct its source/output. |
+| `version_changed` | Build the latest version after publication settles. |
+
+The application also recognizes `trigger_unavailable`, `build_timeout`, and
+`invalid_build_event`; `provider_failed` is the unknown-error fallback. Neither
+failure nor a queued retry changes the last successful release.
+
+Upgrade API, dispatcher, admin and builder together. Existing reason-only build
+errors remain readable; path-bearing errors use JSON in the existing SQL text
+column without a schema migration. Before downgrading, stop dispatch, back up
+state and replace validated structured errors with their reason strings,
+discarding path metadata. Do not delete history or change statuses/attempts.

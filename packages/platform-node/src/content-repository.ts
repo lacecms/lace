@@ -99,6 +99,7 @@ import {
   publicEntry,
   sameStoredModelStates,
   sanitizeBuildReason,
+  encodeBuildError,
   sanitizeDispatchError,
   siteBuildPayload,
   siteBuildRecord,
@@ -1413,10 +1414,12 @@ export class NodeContentRepository
     readonly leaseId: import("@lacecms/application").DispatcherLeaseId;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
     readonly reason: string;
+    readonly path?: string;
     readonly retryAt?: import("@lacecms/domain").UnixMilliseconds;
     readonly terminal: boolean;
   }): Promise<void> {
     const reason = sanitizeBuildReason(input.reason);
+    const error = encodeBuildError(input.reason, input.path);
     try {
       this.connection.transaction(() => {
         const id = this.requireLeasedSiteBuild(input.leaseId, input.now);
@@ -1425,12 +1428,12 @@ export class NodeContentRepository
             .prepare(
               "update site_builds set status = 'failed', started_at = coalesce(started_at, ?), completed_at = ?, error = ? where id = ? and status = 'pending'",
             )
-            .run(input.now, input.now, reason, id);
+            .run(input.now, input.now, error, id);
           if (updated.changes !== 1) failure("Build cannot be failed.");
         } else {
           const updated = this.connection
             .prepare("update site_builds set error = ? where id = ? and status = 'pending'")
-            .run(reason, id);
+            .run(error, id);
           if (updated.changes !== 1) failure("Build cannot be retried.");
         }
         this.connection

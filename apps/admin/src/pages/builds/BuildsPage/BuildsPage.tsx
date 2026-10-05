@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../shared/ui/Table/index.js";
+import { buildFailureGuidance } from "./build-failure.js";
 import type { SiteBuildRecordDto } from "@lacecms/contracts";
 
 function BuildTime({ value }: { readonly value: string | undefined }) {
@@ -219,6 +220,8 @@ export function BuildsPage() {
               {detail.data === undefined ? undefined : (
                 <>
                   <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm [&_dt]:text-muted-foreground">
+                    <dt>Build ID</dt>
+                    <dd className="m-0 break-all">{detail.data.id}</dd>
                     <dt>Status</dt>
                     <dd className="m-0">
                       <BuildStatus status={detail.data.status} />
@@ -245,12 +248,21 @@ export function BuildsPage() {
                     <dd className="m-0 break-all">{detail.data.providerBuildId ?? "—"}</dd>
                   </dl>
                   {detail.data.error === undefined ? undefined : (
-                    <p
-                      className="m-0 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                    <div
+                      className="grid gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
                       role="alert"
                     >
-                      {detail.data.error.replaceAll("_", " ")}
-                    </p>
+                      <p className="m-0">{buildFailureGuidance[detail.data.error].explanation}</p>
+                      {detail.data.errorPath === undefined ? undefined : (
+                        <p className="m-0 break-all">
+                          Source entry: <code>{detail.data.errorPath}</code>
+                        </p>
+                      )}
+                      <p className="m-0">{buildFailureGuidance[detail.data.error].correction}</p>
+                      {detail.data.status === "pending" ? (
+                        <p className="m-0">An automatic retry is scheduled.</p>
+                      ) : undefined}
+                    </div>
                   )}
                   {isAdmin && detail.data.status === "failed" ? (
                     <Button

@@ -149,7 +149,7 @@ async function workerFixture(options = {}) {
     buildTrigger: () => ({
       trigger: async (input) => {
         triggers.push(input);
-        return { status: "succeeded" };
+        return options.buildResult ?? { status: "succeeded" };
       },
     }),
     clock: { now: () => unixMilliseconds(Date.now() + offset) },
@@ -591,4 +591,24 @@ test("Worker/D1 compares strong and weak export validators through publication",
     changed.body.entries.find(({ entry }) => entry.id === created.body.id).entry.published.title,
   ).toBe("Second");
   await fixture.settle();
+});
+
+test("Worker history and detail preserve source diagnostics", async () => {
+  const fixture = await workerFixture({
+    buildResult: { status: "failed", reason: "source_symlink", path: "src/linked.astro" },
+  });
+  await fixture.signIn();
+  const receipt = await fixture.call("/api/v1/admin/builds", { method: "POST", json: {} });
+  fixture.pending.splice(0);
+  fixture.advance(6000);
+  await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
+  const builds = await fixture.call("/api/v1/admin/site-builds");
+  expect(builds.body.items[0]).toMatchObject({
+    id: receipt.body.eventId,
+    status: "pending",
+    error: "source_symlink",
+    errorPath: "src/linked.astro",
+  });
+  const detail = await fixture.call(`/api/v1/admin/site-builds/${receipt.body.eventId}`);
+  expect(detail.body).toMatchObject({ error: "source_symlink", errorPath: "src/linked.astro" });
 });

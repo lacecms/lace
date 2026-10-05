@@ -586,3 +586,12 @@ export function requireMutableDraft(snapshot: ContentSnapshot): DraftSnapshot {
   assertDraft(snapshot);
   return snapshot;
 }
+
+export {
+  siteBuildFailureReasons,
+  sourceFailureReasons,
+  BUILD_SOURCE_PATH_PATTERN,
+  safeBuildSourcePath,
+  normalizeBuildFailure,
+} from "./build-diagnostics.js";
+export type { SiteBuildFailureReason } from "./build-diagnostics.js";

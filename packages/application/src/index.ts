@@ -340,7 +340,7 @@ export interface SiteBuildRequest {
 export type BuildTriggerResult =
   | Readonly<{ readonly status: "accepted"; readonly providerBuildId: string }>
   | Readonly<{ readonly status: "succeeded" }>
-  | Readonly<{ readonly status: "failed"; readonly reason: string }>;
+  | Readonly<{ readonly status: "failed"; readonly reason: string; readonly path?: string }>;
 
 export interface SiteBuildTrigger {
   trigger(input: SiteBuildRequest): Promise<BuildTriggerResult>;
@@ -374,6 +374,7 @@ export interface SiteBuildRecord {
   readonly completedAt?: UnixMilliseconds;
   readonly providerBuildId?: string;
   readonly error?: string;
+  readonly errorPath?: string;
 }
 
 export interface SiteBuildReadPort {
@@ -408,6 +409,7 @@ export interface SiteBuildDispatchPort {
     readonly leaseId: DispatcherLeaseId;
     readonly now: UnixMilliseconds;
     readonly reason: string;
+    readonly path?: string;
     readonly retryAt?: UnixMilliseconds;
     readonly terminal: boolean;
   }): Promise<void>;

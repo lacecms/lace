@@ -1,11 +1,34 @@
 import type { BuildTriggerResult, SiteBuildRequest, SiteBuildTrigger } from "@lacecms/application";
 
-const FAILURE_REASONS = new Set([
-  "source_invalid",
-  "install_failed",
-  "build_failed",
-  "version_changed",
-]);
+import { siteBuildFailureReasons, normalizeBuildFailure } from "@lacecms/domain";
+const FAILURE_REASONS = new Set<string>(siteBuildFailureReasons.slice(0, 8));
+async function boundedText(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) throw new Error("invalid_response");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 1024) {
+        await reader.cancel();
+        throw new Error("invalid_response");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
 
 export interface NodeBuilderTriggerSettings {
   readonly baseUrl: URL;
@@ -36,8 +59,7 @@ export class NodeBuilderSiteBuildTrigger implements SiteBuildTrigger {
           signal: AbortSignal.timeout(25 * 60_000),
         },
       );
-      const text = await response.text();
-      if (text.length > 512) return { status: "failed", reason: "trigger_unavailable" };
+      const text = await boundedText(response);
       const value = JSON.parse(text) as unknown;
       if (value === null || typeof value !== "object" || Array.isArray(value))
         return { status: "failed", reason: "trigger_unavailable" };
@@ -51,13 +73,14 @@ export class NodeBuilderSiteBuildTrigger implements SiteBuildTrigger {
         return { status: "succeeded" };
       if (
         response.status === 503 &&
-        Object.keys(record).length === 3 &&
+        Object.keys(record).every((key) => ["status", "reason", "log", "path"].includes(key)) &&
+        (!Object.hasOwn(record, "path") || typeof record.path === "string") &&
         record.status === "failed" &&
         typeof record.reason === "string" &&
         FAILURE_REASONS.has(record.reason) &&
         record.log === `Static build failed: ${record.reason}.`
       )
-        return { status: "failed", reason: record.reason };
+        return { status: "failed", ...normalizeBuildFailure(record.reason, record.path) };
       return { status: "failed", reason: "trigger_unavailable" };
     } catch {
       return { status: "failed", reason: "trigger_unavailable" };

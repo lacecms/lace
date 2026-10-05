@@ -28,6 +28,7 @@ import { MAX_TOP_LEVEL_BLOCKS } from "@lacecms/content";
 import type { JsonObject } from "@lacecms/content";
 import {
   DomainError,
+  normalizeBuildFailure,
   actorId,
   blockKey,
   contentEntryId,
@@ -308,7 +309,7 @@ export function siteBuildRecord(row: SiteBuildRow): SiteBuildRecord {
     ...(row.started_at === null ? {} : { startedAt: unixMilliseconds(row.started_at) }),
     ...(row.completed_at === null ? {} : { completedAt: unixMilliseconds(row.completed_at) }),
     ...(row.provider_build_id === null ? {} : { providerBuildId: row.provider_build_id }),
-    ...(row.error === null ? {} : { error: sanitizeBuildReason(row.error) }),
+    ...(row.error === null ? {} : buildErrorRecord(row.error)),
   };
 }
 
@@ -400,14 +401,34 @@ export function sanitizeDispatchError(value: string): string {
 }
 
 export function sanitizeBuildReason(value: string): string {
-  return [
-    "trigger_unavailable",
-    "provider_failed",
-    "build_timeout",
-    "invalid_build_event",
-  ].includes(value)
-    ? value
-    : "provider_failed";
+  return normalizeBuildFailure(value).reason;
+}
+export function encodeBuildError(reason: string, path?: string): string {
+  const failure = normalizeBuildFailure(reason, path);
+  return failure.path === undefined ? failure.reason : JSON.stringify(failure);
+}
+export function buildErrorRecord(value: string): { error: string; errorPath?: string } {
+  let failure = normalizeBuildFailure(value);
+  if (value.startsWith("{") && value.length <= 1024) {
+    try {
+      const record: unknown = JSON.parse(value);
+      if (record !== null && typeof record === "object" && !Array.isArray(record)) {
+        const item = record as Record<string, unknown>;
+        if (
+          Object.keys(item).every((key) => key === "reason" || key === "path") &&
+          typeof item.reason === "string" &&
+          (item.path === undefined || typeof item.path === "string")
+        )
+          failure = normalizeBuildFailure(item.reason, item.path);
+      }
+    } catch {
+      /* malformed stored data never reaches transport */
+    }
+  }
+  return {
+    error: failure.reason,
+    ...(failure.path === undefined ? {} : { errorPath: failure.path }),
+  };
 }
 
 export function parseObject(value: string, label: string): JsonObject {

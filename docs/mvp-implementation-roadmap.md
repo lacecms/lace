@@ -2367,6 +2367,14 @@ verification with default compression remains in 33H/34C.
    retryable afterwards; verify with a packed Compose production consumer in
    existing-site layout.
 
+Session 33C completed on 2026-10-05 via
+`step-33c-builder-source-diagnostics`: exact root service-document exclusions,
+closed reason/safe-path diagnostics through builder, dispatch, SQLite/D1, REST
+and Builds, plus correction/retry guidance. Packed existing-site Compose
+acceptance verified all source fault cases, unchanged releases and successful
+browser retries; see [acceptance evidence](step-33c-builder-source-diagnostics-acceptance.md).
+Sessions 33D–33H remain.
+
 ### Session 33D — Truthful site-build outcome model
 
 Decided on 2026-10-05: `site_builds.status` stays one enum with seven values.

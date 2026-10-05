@@ -439,4 +439,35 @@ The image runs frozen installation followed by direct `pnpm --dir <selected-site
 
 Review `docker compose config` privately, then recreate affected services using compatible images with `docker compose up -d --force-recreate api dispatcher builder`. Use the existing administrator Request build/Retry build actions in Builds. If a mount is missing or inaccessible, correct the host bind and permissions; if installation/build fails, correct the selected dependencies/lockfile/source and retry. The trigger still accepts only build ID and published version; no HTTP request can change source, command, arguments or environment. A failed build preserves the current complete release until a successful retry switches it atomically. Keep internal `http://api:3000/` export transport separate from `LACE_PUBLIC_BASE_URL` for browser-facing media. Stop without deleting volumes to preserve data and releases.
 
+### Builder source diagnostics
+
+With compatible 33C API, dispatcher, admin and builder artifacts, the disposable
+copy also excludes the exact installation-root `AGENTS.md` and `CLAUDE.md`
+entries, including links, without reading their targets. Other included links
+are rejected, even when they point inside the installation. The same filenames
+inside site source are not excluded.
+
+Builds details shows a specific failure, its correction, the build ID and an
+optional source entry relative to the selected installation root. Paths are
+bounded ASCII text; absolute host/container locations, link targets, credentials
+and raw process output are never shown. Unsafe entry names are omitted. For
+`source_symlink`, replace the included link with regular source; for
+`source_unreadable`, restore read/traverse access for the builder's `node` user;
+for `source_missing`, restore the required entry; for `source_special_file`,
+remove or replace the special entry. `source_invalid` requires checking selected
+paths, manifests and the Astro dependency. `install_failed`, `build_failed` and
+`version_changed` respectively require correcting dependencies/lockfile, the
+local Astro build, or building the latest published version. Connectivity and
+timeout failures have separate guidance; `provider_failed` is only the unknown
+failure fallback.
+
+Pending errors retain their explanation during automatic retries. After eight
+failed attempts, correct the source and use the administrator Retry build
+action. The previous complete release remains served throughout failure.
+Upgrade API, dispatcher, admin and builder together. Legacy reason-only errors
+remain readable; new path-bearing diagnostics use the existing SQL error text
+column. Before downgrading, stop dispatch, back up the database and convert
+validated structured error records to their reason strings, discarding path
+metadata without deleting history or changing statuses/attempts.
+
 This section defines deployment selection; a configured identity does not prove a successful deployment. See [publication visibility](#when-published-content-becomes-visible) for dev, manual and automatic behavior after publication.

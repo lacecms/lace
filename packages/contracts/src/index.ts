@@ -1,6 +1,15 @@
 import { canonicalizeJson, defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
-import { BlockOrderError, DomainError, unixMilliseconds } from "@lacecms/domain";
+import {
+  BlockOrderError,
+  DomainError,
+  unixMilliseconds,
+  siteBuildFailureReasons,
+  sourceFailureReasons,
+  safeBuildSourcePath,
+  normalizeBuildFailure,
+  BUILD_SOURCE_PATH_PATTERN,
+} from "@lacecms/domain";
 import type {
   ContentBlock,
   ContentEntry,
@@ -577,18 +586,38 @@ export const siteBuildSchema = v.strictObject({
 });
 
 /** Persisted build history exposed to authenticated admin sessions. */
-export const siteBuildRecordSchema = v.strictObject({
-  id: identifierSchema,
-  reason: identifierSchema,
-  status: v.picklist(["failed", "pending", "running", "succeeded"]),
-  targetVersion: nonNegativeIntegerSchema,
-  requestedBy: identifierSchema,
-  requestedAt: isoTimestampSchema,
-  startedAt: v.optional(isoTimestampSchema),
-  completedAt: v.optional(isoTimestampSchema),
-  providerBuildId: v.optional(identifierSchema),
-  error: v.optional(identifierSchema),
-});
+export const buildFailureReasonSchema = v.picklist(siteBuildFailureReasons);
+export const buildSourcePathSchema = v.pipe(
+  v.string(),
+  v.minLength(1),
+  v.maxLength(512),
+  v.regex(BUILD_SOURCE_PATH_PATTERN),
+  v.check((value) => safeBuildSourcePath(value) !== undefined),
+  v.description(
+    "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
+  ),
+);
+export const siteBuildRecordSchema = v.pipe(
+  v.strictObject({
+    id: identifierSchema,
+    reason: identifierSchema,
+    status: v.picklist(["failed", "pending", "running", "succeeded"]),
+    targetVersion: nonNegativeIntegerSchema,
+    requestedBy: identifierSchema,
+    requestedAt: isoTimestampSchema,
+    startedAt: v.optional(isoTimestampSchema),
+    completedAt: v.optional(isoTimestampSchema),
+    providerBuildId: v.optional(identifierSchema),
+    error: v.optional(buildFailureReasonSchema),
+    errorPath: v.optional(buildSourcePathSchema),
+  }),
+  v.check(
+    (value) =>
+      value.errorPath === undefined ||
+      (value.error !== undefined && sourceFailureReasons.includes(value.error)),
+    "Source path requires a source failure reason.",
+  ),
+);
 export const siteBuildListSchema = v.strictObject({
   items: v.pipe(v.array(siteBuildRecordSchema), v.maxLength(100)),
 });
@@ -862,6 +891,7 @@ export function toSiteBuildRecordDto(build: {
   readonly completedAt?: number;
   readonly providerBuildId?: string;
   readonly error?: string;
+  readonly errorPath?: string;
 }): SiteBuildRecordDto {
   return {
     id: build.id,
@@ -873,7 +903,11 @@ export function toSiteBuildRecordDto(build: {
     ...(build.startedAt === undefined ? {} : { startedAt: toIsoTimestamp(build.startedAt) }),
     ...(build.completedAt === undefined ? {} : { completedAt: toIsoTimestamp(build.completedAt) }),
     ...(build.providerBuildId === undefined ? {} : { providerBuildId: build.providerBuildId }),
-    ...(build.error === undefined ? {} : { error: build.error }),
+    ...(build.error === undefined ? {} : { error: normalizeBuildFailure(build.error).reason }),
+    ...(build.error === undefined ||
+    normalizeBuildFailure(build.error, build.errorPath).path === undefined
+      ? {}
+      : { errorPath: normalizeBuildFailure(build.error, build.errorPath).path! }),
   };
 }
 

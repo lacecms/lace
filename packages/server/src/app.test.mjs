@@ -147,38 +147,47 @@ test("admin build routes queue strict requests without running a trigger", async
   expect(calls).toHaveLength(2);
 });
 
-test("authenticated build reads expose persisted history and missing detail", async () => {
-  const build = {
-    id: "build-1",
-    reason: "publication",
-    status: "failed",
-    targetVersion: 3,
-    requestedBy: "admin",
-    requestedAt: unixMilliseconds(1_000),
-    startedAt: unixMilliseconds(2_000),
-    completedAt: unixMilliseconds(3_000),
-    error: "provider_failed",
-  };
-  const builds = new SiteBuildUseCases({
-    clock: { now: () => unixMilliseconds(1) },
-    builds: {
-      listSiteBuilds: async () => [build],
-      getSiteBuild: async (id) => (id === build.id ? build : null),
-      requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 3 }),
-    },
-  });
-  const { app } = await fixture({ actor: editor, builds });
-  const get = (path) => app.fetch(new Request(`https://lace.test${path}`));
-  expect(await (await get("/api/v1/admin/site-builds")).json()).toMatchObject({
-    items: [{ id: "build-1", targetVersion: 3, error: "provider_failed" }],
-  });
-  expect((await get("/api/v1/admin/site-builds/build-1")).status).toBe(200);
-  expect((await get("/api/v1/admin/site-builds/missing")).status).toBe(404);
-  const anonymous = (await fixture({ actor: null, builds })).app;
-  expect(
-    (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/site-builds"))).status,
-  ).toBe(403);
-});
+test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
+  "authenticated build reads expose source diagnostics for $role",
+  async (actor) => {
+    const build = {
+      id: "build-1",
+      reason: "publication",
+      status: "failed",
+      targetVersion: 3,
+      requestedBy: "admin",
+      requestedAt: unixMilliseconds(1_000),
+      startedAt: unixMilliseconds(2_000),
+      completedAt: unixMilliseconds(3_000),
+      error: "source_symlink",
+      errorPath: "src/linked.astro",
+    };
+    const builds = new SiteBuildUseCases({
+      clock: { now: () => unixMilliseconds(1) },
+      builds: {
+        listSiteBuilds: async () => [build],
+        getSiteBuild: async (id) => (id === build.id ? build : null),
+        requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 3 }),
+      },
+    });
+    const { app } = await fixture({ actor, builds });
+    const get = (path) => app.fetch(new Request(`https://lace.test${path}`));
+    expect(await (await get("/api/v1/admin/site-builds")).json()).toMatchObject({
+      items: [
+        { id: "build-1", targetVersion: 3, error: "source_symlink", errorPath: "src/linked.astro" },
+      ],
+    });
+    expect(await (await get("/api/v1/admin/site-builds/build-1")).json()).toMatchObject({
+      error: "source_symlink",
+      errorPath: "src/linked.astro",
+    });
+    expect((await get("/api/v1/admin/site-builds/missing")).status).toBe(404);
+    const anonymous = (await fixture({ actor: null, builds })).app;
+    expect(
+      (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/site-builds"))).status,
+    ).toBe(403);
+  },
+);
 
 test("mounts authentication before API and admin fallbacks", async () => {
   const { app } = await fixture({

@@ -103,6 +103,7 @@ import {
   revisionConflict,
   sameStoredModelStates,
   sanitizeBuildReason,
+  encodeBuildError,
   sanitizeDispatchError,
   siteBuildPayload,
   siteBuildRecord,
@@ -1235,10 +1236,12 @@ export class D1ContentRepository
     readonly leaseId: DispatcherLeaseId;
     readonly now: UnixMilliseconds;
     readonly reason: string;
+    readonly path?: string;
     readonly retryAt?: UnixMilliseconds;
     readonly terminal: boolean;
   }): Promise<void> {
     const reason = sanitizeBuildReason(input.reason);
+    const error = encodeBuildError(input.reason, input.path);
     await this.transitionSiteBuild(
       input,
       input.terminal ? "Build cannot be failed." : "Build cannot be retried.",
@@ -1248,14 +1251,14 @@ export class D1ContentRepository
             `update site_builds set status = 'failed', started_at = coalesce(started_at, ?), completed_at = ?, error = ? where id = ? and ${GUARD_SQL}`,
             input.now,
             input.now,
-            reason,
+            error,
             id,
             token,
           );
         } else {
           batch.add(
             `update site_builds set error = ? where id = ? and ${GUARD_SQL}`,
-            reason,
+            error,
             id,
             token,
           );

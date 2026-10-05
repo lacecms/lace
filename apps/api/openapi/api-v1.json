@@ -2685,8 +2685,26 @@
                         "properties": {
                           "completedAt": {},
                           "error": {
-                            "maxLength": 255,
+                            "enum": [
+                              "source_invalid",
+                              "source_symlink",
+                              "source_unreadable",
+                              "source_missing",
+                              "source_special_file",
+                              "install_failed",
+                              "build_failed",
+                              "version_changed",
+                              "trigger_unavailable",
+                              "build_timeout",
+                              "invalid_build_event",
+                              "provider_failed"
+                            ]
+                          },
+                          "errorPath": {
+                            "description": "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
+                            "maxLength": 512,
                             "minLength": 1,
+                            "pattern": "^(?!.*(?:^|\\/)(?:\\.{1,2})(?:\\/|$))[A-Za-z0-9_.][A-Za-z0-9_. -]*(?:\\/[A-Za-z0-9_.][A-Za-z0-9_. -]*)*$",
                             "type": "string"
                           },
                           "id": {
@@ -2767,8 +2785,26 @@
                   "properties": {
                     "completedAt": {},
                     "error": {
-                      "maxLength": 255,
+                      "enum": [
+                        "source_invalid",
+                        "source_symlink",
+                        "source_unreadable",
+                        "source_missing",
+                        "source_special_file",
+                        "install_failed",
+                        "build_failed",
+                        "version_changed",
+                        "trigger_unavailable",
+                        "build_timeout",
+                        "invalid_build_event",
+                        "provider_failed"
+                      ]
+                    },
+                    "errorPath": {
+                      "description": "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
+                      "maxLength": 512,
                       "minLength": 1,
+                      "pattern": "^(?!.*(?:^|\\/)(?:\\.{1,2})(?:\\/|$))[A-Za-z0-9_.][A-Za-z0-9_. -]*(?:\\/[A-Za-z0-9_.][A-Za-z0-9_. -]*)*$",
                       "type": "string"
                     },
                     "id": {
