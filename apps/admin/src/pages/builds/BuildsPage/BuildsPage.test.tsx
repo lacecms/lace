@@ -246,3 +246,58 @@ test.each(statuses)("administrator retry availability for a %s build", async (st
   if (["failed", "cancelled", "unknown", "accepted"].includes(status)) expect(retry).not.toBeNull();
   else expect(retry).toBeNull();
 });
+
+test("a tracked build shows its provider stage, last check and refreshes until it finishes", async () => {
+  const user = userEvent.setup();
+  const running = {
+    ...failed,
+    status: "running" as const,
+    completedAt: undefined,
+    error: undefined,
+    providerStage: "deploy" as const,
+    providerCheckedAt: "2026-09-27T00:00:30.000Z",
+  };
+  const done = { ...running, status: "succeeded" as const, completedAt: failed.completedAt };
+  let reads = 0;
+  renderRoute(
+    "/builds",
+    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    stubClient({
+      listBuilds: async () => ({ items: [running] }),
+      getBuild: async () => (++reads > 1 ? done : running),
+    }),
+  );
+  await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
+  const detail = await screen.findByRole("region", { name: "Build details" });
+  expect(detail).toHaveTextContent("Provider stage");
+  expect(detail).toHaveTextContent("Deploy");
+  expect(detail).toHaveTextContent("Last checked");
+  expect(within(detail).getByText("Running")).toBeInTheDocument();
+  await waitFor(() => expect(within(detail).getByText("Succeeded")).toBeInTheDocument(), {
+    timeout: 7_000,
+  });
+}, 10_000);
+
+test("an unknown build after the tracking deadline explains the next step without a failure alert", async () => {
+  const user = userEvent.setup();
+  const timedOut = {
+    ...failed,
+    status: "unknown" as const,
+    error: "tracking_timeout" as const,
+    providerStage: "build" as const,
+  };
+  renderRoute(
+    "/builds",
+    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    stubClient({
+      listBuilds: async () => ({ items: [timedOut] }),
+      getBuild: async () => timedOut,
+    }),
+  );
+  await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
+  const detail = await screen.findByRole("region", { name: "Build details" });
+  expect(detail).toHaveTextContent("Tracking stopped at its deadline");
+  expect(detail).toHaveTextContent("LACE_PAGES_TRACKING_TIMEOUT_MINUTES");
+  expect(within(detail).queryByRole("alert")).not.toBeInTheDocument();
+  expect(within(detail).getByRole("button", { name: "Retry build" })).toBeInTheDocument();
+});

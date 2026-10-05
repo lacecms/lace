@@ -57,6 +57,7 @@ import type {
   SiteBuildReadPort,
   SiteBuildRecord,
   SiteBuildWorkLease,
+  TrackedSiteBuildCheck,
   StoredContentModelState,
 } from "@lacecms/application";
 import {
@@ -108,7 +109,13 @@ import {
   RETRYABLE_SITE_BUILD_REFUSAL,
   RETRYABLE_SITE_BUILD_STATUS_SQL,
   assertProviderBuildId,
+  assertTrackingClaim,
+  DUE_TRACKED_SITE_BUILDS_SQL,
+  LEASE_TRACKED_SITE_BUILD_SQL,
+  trackedCompletionStage,
   trackedOutcomeError,
+  trackedSiteBuildCheck,
+  trackedSiteBuildCheckUpdate,
   sanitizeDispatchError,
   siteBuildPayload,
   siteBuildRecord,
@@ -120,6 +127,7 @@ import {
   storedSnapshots,
 } from "@lacecms/db";
 import type {
+  DueTrackedSiteBuildRow,
   BlockRow,
   ContentModelResolver,
   EntryRow,
@@ -147,6 +155,7 @@ import type {
   MediaMetadata,
   PublishedSnapshot,
   SiteBuildId,
+  SiteBuildProviderStage,
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
@@ -1325,8 +1334,10 @@ export class D1ContentRepository
     readonly now: UnixMilliseconds;
     readonly outcome: TrackedSiteBuildOutcome;
     readonly reason?: string;
+    readonly stage?: SiteBuildProviderStage;
   }): Promise<void> {
     const error = trackedOutcomeError(input.outcome, input.reason);
+    const [stage, checkedAt] = trackedCompletionStage(input.stage, input.now);
     const assertTransition = async (): Promise<boolean> => {
       const row = await this.first<{
         readonly error: string | null;
@@ -1346,15 +1357,56 @@ export class D1ContentRepository
     };
     if (!(await assertTransition())) return;
     const changed = await this.run(
-      "update site_builds set status = ?, completed_at = ?, error = ?, provider_check_after = null where id = ? and status = 'running' and provider_build_id = ? and exists (select 1 from outbox_events where id = site_builds.id and processed_at is not null)",
+      "update site_builds set status = ?, completed_at = ?, error = ?, provider_check_after = null, provider_stage = coalesce(?, provider_stage), provider_checked_at = coalesce(?, provider_checked_at) where id = ? and status = 'running' and provider_build_id = ? and exists (select 1 from outbox_events where id = site_builds.id and processed_at is not null)",
       input.outcome,
       input.now,
       error,
+      stage,
+      checkedAt,
       input.buildId,
       input.providerBuildId,
     );
     if (changed !== 1 && (await assertTransition()))
       failure("Build already has a different terminal outcome.");
+  }
+
+  /** One select and one guarded lease batch: two D1 queries per call. */
+  public async claimTrackedSiteBuildChecks(input: {
+    readonly limit: number;
+    readonly leaseMs: number;
+    readonly now: UnixMilliseconds;
+  }): Promise<readonly TrackedSiteBuildCheck[]> {
+    assertTrackingClaim(input);
+    const rows = await this.all<DueTrackedSiteBuildRow>(
+      DUE_TRACKED_SITE_BUILDS_SQL,
+      input.now,
+      input.limit,
+    );
+    if (rows.length === 0) return Object.freeze([]);
+    const batch = this.batch();
+    for (const row of rows)
+      batch.add(
+        LEASE_TRACKED_SITE_BUILD_SQL,
+        input.now + input.leaseMs,
+        row.id,
+        row.provider_build_id,
+        row.provider_check_after,
+      );
+    const results = await this.execute(batch, false);
+    return Object.freeze(
+      rows.filter((_row, index) => results[index]!.meta.changes === 1).map(trackedSiteBuildCheck),
+    );
+  }
+
+  public async recordTrackedSiteBuildCheck(input: {
+    readonly buildId: SiteBuildId;
+    readonly providerBuildId: string;
+    readonly now: UnixMilliseconds;
+    readonly checkAfter: UnixMilliseconds;
+    readonly stage?: SiteBuildProviderStage;
+  }): Promise<boolean> {
+    const update = trackedSiteBuildCheckUpdate(input);
+    return (await this.run(update.sql, ...update.params)) === 1;
   }
 
   // -------------------------------------------------------------- helpers

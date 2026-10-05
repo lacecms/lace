@@ -28,7 +28,15 @@ unconfigured Node deployment records.
 | `LACE_DEPLOY_HOOK_URL` | secret | no | HTTPS deploy-hook URL that rebuilds the static site. |
 | `LACE_DEPLOY_HOOK_TIMEOUT_MS` | variable | no | Deploy-hook call timeout from 1 to 60000 ms; defaults to 10000. |
 | `LACE_ENVIRONMENT` | variable | no | `production` (default, `Secure` cookies) or `development`. |
+| `LACE_PAGES_ACCOUNT_ID` | variable | no¹ | Cloudflare account ID (32 hex characters) of the Pages project. |
+| `LACE_PAGES_PROJECT_NAME` | variable | no¹ | Pages project whose deploy hook is `LACE_DEPLOY_HOOK_URL`. |
+| `LACE_PAGES_API_TOKEN` | secret | no¹ | Separate API token with only *Account · Cloudflare Pages · Read*; never the D1 operator token. |
+| `LACE_PAGES_TRACKING_TIMEOUT_MINUTES` | variable | no | Overall tracking deadline per build, 5–1440 minutes; defaults to 60. |
+| `LACE_PAGES_API_BASE_URL` | variable | no | Development only: HTTPS or loopback HTTP stub of the Cloudflare API, ending in `/`. Invalid in production. |
 | `LACE_R2_TIMEOUT_MS` | variable | no | Per-operation R2 timeout from 1 to 60000 ms; defaults to 10000. |
+
+¹ Pages tracking is enabled only when all three are set; setting some of them is
+a validation error.
 
 Set secrets with `wrangler secret put`, never through `vars`. When bindings or
 variables are invalid, every request receives a sanitized `503` envelope. The
@@ -62,8 +70,9 @@ AVIF. The inspector rejects malformed or trailing data and reports displayed
 ## Outbox recovery
 
 A cron trigger (`* * * * *`) runs a scheduled invocation every minute. Each
-invocation claims at most one site-build event and five media-deletion events
-through the shared 60-second leases and retry policy. That bound keeps one
+invocation claims at most one site-build event, checks at most five tracked
+Pages deployments, and claims at most five media-deletion events through the
+shared 60-second leases and retry policy. That bound keeps one
 invocation within D1's 50-query free-plan budget. Work left unfinished when a
 Worker terminates is reclaimed after its lease expires.
 
@@ -84,19 +93,60 @@ or build records. The call does not follow redirects, is aborted after
 
 | Hook response | Recorded outcome |
 | --- | --- |
-| 2xx with a Cloudflare envelope `result.id` | Build `accepted`, with that provider deployment ID |
-| 2xx without a usable ID | Build `accepted`, without a provider ID |
+| 2xx with a Cloudflare envelope `result.id`, Pages tracking configured | Build stays `running` and is tracked (below) |
+| 2xx with a Cloudflare envelope `result.id`, no tracking | Build `accepted`, with that provider deployment ID |
+| 2xx without a usable ID | Build `accepted`, without a provider ID (never tracked) |
 | 2xx with `success: false`, redirect, or other 4xx | Retryable failure, `provider_failed` |
 | `408`, `425`, `429`, 5xx, network error, or timeout | Retryable failure, `trigger_unavailable` |
 
 Failures follow the normal eight-attempt retry policy. While the hook call is
-in progress the build is `running`. Lace does not yet track the provider's
-deployment, so `accepted` is a final status that means only that the provider
-took the request; it never proves the site was published (only `succeeded`
-does). Use the recorded provider ID to find the deployment in the Cloudflare
-dashboard, and retry an `accepted` build from Admin if the deployment failed.
-Databases migrated from earlier alphas record former `running` hook builds,
-and hook `succeeded` builds without a provider ID, as `accepted`.
+in progress the build is `running`. Without Pages tracking, `accepted` is a
+final status that means only that the provider took the request; it never
+proves the site was published (only `succeeded` does). Use the recorded
+provider ID to find the deployment in the Cloudflare dashboard, and retry an
+`accepted` build from Admin if the deployment failed. Databases migrated from
+earlier alphas record former `running` hook builds, and hook `succeeded`
+builds without a provider ID, as `accepted`.
+
+## Pages deployment tracking
+
+With `LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME` and the secret
+`LACE_PAGES_API_TOKEN`, every identified hook acceptance stays `running` and
+each scheduled run reads exactly that deployment
+(`GET /accounts/{account}/pages/projects/{project}/deployments/{id}`). Create
+a dedicated token with only *Account · Cloudflare Pages · Read*; the Worker
+never uses the D1 operator token. The token, the hook URL and Pages response
+bodies (which contain environment variables) are never stored, logged or
+returned; Builds shows only the closed stage, the last check time and a reason.
+
+| Pages deployment | Build |
+| --- | --- |
+| `deploy` stage `success` | `succeeded` |
+| `build` stage `failure` | `failed`, `provider_build_failed` |
+| `deploy` stage `failure` | `failed`, `provider_deploy_failed` |
+| another stage `failure` | `failed`, `provider_failed` |
+| `canceled` | `cancelled`, `provider_cancelled` |
+| `skipped` or `is_skipped` | `cancelled`, `provider_skipped` |
+| `idle`, `active`, or `success` before `deploy` | stays `running`; stage recorded, checked again after 30 s |
+| `401` or `403` | `unknown`, `tracking_forbidden` |
+| `404` more than 5 minutes after acceptance | `unknown`, `tracking_not_found` |
+| other 4xx or redirect | `unknown`, `tracking_rejected` |
+| `408`, `425`, `429`, 5xx, network error, timeout, unexpected body | retried with backoff (30 s growing to 10 min) |
+| no outcome by the deadline (`LACE_PAGES_TRACKING_TIMEOUT_MINUTES`, default 60) | `unknown`, `tracking_timeout` |
+| tracking settings removed while tracked | `unknown`, `tracking_unconfigured` |
+
+The deadline counts from the hook acceptance, so no build stays `running`
+longer than the configured timeout plus one cron interval, even when the Pages
+API, the token or the Worker misbehaves. Tracking state lives in `site_builds`
+(a 60-second check lease, the stage, last check and next check) and never uses
+the outbox retry budget, so Worker restarts lose nothing. Checks are matched to
+the exact build and deployment ID: parallel builds, repeats and late results
+never change another build, and a terminal status is never reopened.
+`unknown`, `cancelled` and `failed` builds can be retried from Admin.
+
+A generic deploy hook without Pages tracking stays honestly `accepted`; an
+authenticated CI callback is deliberately not offered (a callback after
+`pnpm build` cannot prove publication).
 
 Cloudflare Pages offers deploy hooks only for projects connected to Git. A
 project deployed by direct upload (`wrangler pages deploy`) has no hook. The

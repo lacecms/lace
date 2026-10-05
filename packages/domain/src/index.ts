@@ -602,5 +602,14 @@ export {
   isSiteBuildStatus,
   isTerminalSiteBuildStatus,
   isRetryableSiteBuildStatus,
+  trackedOutcomeReasons,
+  normalizeTrackedOutcomeReason,
+  siteBuildProviderStages,
+  isSiteBuildProviderStage,
+  siteBuildTrackingPolicy,
 } from "./build-status.js";
-export type { SiteBuildStatus, TrackedSiteBuildOutcome } from "./build-status.js";
+export type {
+  SiteBuildProviderStage,
+  SiteBuildStatus,
+  TrackedSiteBuildOutcome,
+} from "./build-status.js";

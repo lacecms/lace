@@ -32,9 +32,10 @@ export const siteBuildStatusGuidance: Readonly<Record<SiteBuildStatus, SiteBuild
     badge: "warning",
     label: "Running",
     short: "building, or tracking a provider deployment",
-    meaning: "Lace is running this build or tracking the provider deployment it started.",
+    meaning:
+      "Lace is running this build, or tracking the provider deployment it started until a final result or the tracking deadline.",
     proof: "Not yet confirmed: the public site may still serve the previous release.",
-    next: "Wait for a final status.",
+    next: "Wait for a final status. Build details show the provider stage and last check.",
   },
   accepted: {
     badge: "outline",

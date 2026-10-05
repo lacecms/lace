@@ -13,6 +13,16 @@ export const siteBuildFailureReasons = [
   "build_timeout",
   "invalid_build_event",
   "provider_failed",
+  // Tracked provider deployment outcomes (Cloudflare Pages).
+  "provider_build_failed",
+  "provider_deploy_failed",
+  "provider_cancelled",
+  "provider_skipped",
+  "tracking_forbidden",
+  "tracking_not_found",
+  "tracking_rejected",
+  "tracking_timeout",
+  "tracking_unconfigured",
 ] as const;
 export type SiteBuildFailureReason = (typeof siteBuildFailureReasons)[number];
 export const sourceFailureReasons = siteBuildFailureReasons.slice(0, 5);

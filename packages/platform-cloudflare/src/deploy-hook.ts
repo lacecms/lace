@@ -1,4 +1,5 @@
 import type { BuildTriggerResult, SiteBuildTrigger } from "@lacecms/application";
+import { boundedText } from "./bounded-body.js";
 
 export const DEFAULT_DEPLOY_HOOK_TIMEOUT_MS = 10_000;
 /** Deploy-hook responses are small envelopes; anything larger carries no usable ID. */
@@ -10,6 +11,8 @@ const RETRYABLE_STATUSES = new Set([408, 425, 429]);
 export interface DeployHookSiteBuildTriggerSettings {
   readonly fetch?: (input: URL, init: RequestInit) => Promise<Response>;
   readonly timeoutMs?: number;
+  /** True when this runtime tracks identified deployments (Pages tracking configured). */
+  readonly tracked?: boolean;
   readonly url: URL;
 }
 
@@ -18,35 +21,6 @@ const unavailable: BuildTriggerResult = Object.freeze({
   status: "failed",
 });
 const rejected: BuildTriggerResult = Object.freeze({ reason: "provider_failed", status: "failed" });
-
-/** Reads at most the byte limit; a larger body yields `undefined` and is cancelled. */
-async function boundedText(response: Response): Promise<string | undefined> {
-  if (response.body === null) return "";
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > DEPLOY_HOOK_MAX_RESPONSE_BYTES) {
-        await reader.cancel();
-        return undefined;
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
-}
 
 function parseEnvelope(text: string | undefined): Record<string, unknown> | undefined {
   if (text === undefined || text.length === 0) return undefined;
@@ -96,7 +70,7 @@ export class DeployHookSiteBuildTrigger implements SiteBuildTrigger {
     }
     let text: string | undefined;
     try {
-      text = await boundedText(response);
+      text = await boundedText(response, DEPLOY_HOOK_MAX_RESPONSE_BYTES);
     } catch {
       text = undefined;
     }
@@ -104,10 +78,13 @@ export class DeployHookSiteBuildTrigger implements SiteBuildTrigger {
     if (response.status < 200 || response.status > 299) return rejected;
     const envelope = parseEnvelope(text);
     if (envelope?.success === false) return rejected;
-    // Acceptance never proves publication; without tracking it is terminal `accepted`.
+    // Acceptance never proves publication: an identified deployment is tracked
+    // when configured, otherwise the build is terminal `accepted`.
     const id = providerId(envelope);
-    return id === undefined
-      ? Object.freeze({ status: "accepted" })
-      : Object.freeze({ providerBuildId: id, status: "accepted" });
+    if (id === undefined) return Object.freeze({ status: "accepted" });
+    return Object.freeze({
+      providerBuildId: id,
+      status: this.settings.tracked === true ? "tracking" : "accepted",
+    });
   }
 }

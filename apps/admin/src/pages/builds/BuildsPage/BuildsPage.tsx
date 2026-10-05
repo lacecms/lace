@@ -1,6 +1,11 @@
 import { CurrentBuildSite } from "../../../widgets/current-build-site/index.js";
-import { BuildStatusBadge, isRetryableBuildStatus } from "../../../entities/site-build/index.js";
+import {
+  BuildStatusBadge,
+  isRetryableBuildStatus,
+  isTerminalBuildStatus,
+} from "../../../entities/site-build/index.js";
 import { publicationVisibilityModes } from "../../../features/publish-entry/index.js";
+import type { SiteBuildRecordDto } from "@lacecms/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Hammer, RotateCw } from "lucide-react";
 import { useState } from "react";
@@ -26,6 +31,14 @@ import {
   TableRow,
 } from "../../../shared/ui/Table/index.js";
 import { buildFailureGuidance } from "./build-failure.js";
+
+const providerStageLabels: Record<NonNullable<SiteBuildRecordDto["providerStage"]>, string> = {
+  queued: "Queued",
+  initialize: "Initializing",
+  clone_repo: "Cloning repository",
+  build: "Build",
+  deploy: "Deploy",
+};
 
 function BuildTime({ value }: { readonly value: string | undefined }) {
   return value === undefined ? (
@@ -78,6 +91,11 @@ export function BuildsPage() {
     queryKey: adminQueryKeys.buildDetail(selectedId ?? ""),
     queryFn: () => client.getBuild(selectedId!),
     enabled: selectedId !== null,
+    // A tracked provider deployment changes stage and status without user action.
+    refetchInterval: (query) =>
+      query.state.data === undefined || isTerminalBuildStatus(query.state.data.status)
+        ? false
+        : 5_000,
   });
   useSessionRecovery(history.error ?? detail.error ?? actionError);
   const isAdmin = session.role === "admin";
@@ -234,11 +252,33 @@ export function BuildsPage() {
                     </dd>
                     <dt>Provider ID</dt>
                     <dd className="m-0 break-all">{detail.data.providerBuildId ?? "—"}</dd>
+                    {detail.data.providerStage === undefined ? undefined : (
+                      <>
+                        <dt>Provider stage</dt>
+                        <dd className="m-0">{providerStageLabels[detail.data.providerStage]}</dd>
+                      </>
+                    )}
+                    {detail.data.providerCheckedAt === undefined ? undefined : (
+                      <>
+                        <dt>Last checked</dt>
+                        <dd className="m-0">
+                          <BuildTime value={detail.data.providerCheckedAt} />
+                        </dd>
+                      </>
+                    )}
                   </dl>
                   {detail.data.error === undefined ? undefined : (
                     <div
-                      className="grid gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
-                      role="alert"
+                      className={
+                        detail.data.status === "cancelled" || detail.data.status === "unknown"
+                          ? "grid gap-2 rounded-md border bg-muted p-3 text-sm"
+                          : "grid gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                      }
+                      role={
+                        detail.data.status === "cancelled" || detail.data.status === "unknown"
+                          ? "status"
+                          : "alert"
+                      }
                     >
                       <p className="m-0">{buildFailureGuidance[detail.data.error].explanation}</p>
                       {detail.data.errorPath === undefined ? undefined : (

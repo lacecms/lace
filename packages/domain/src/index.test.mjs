@@ -297,3 +297,36 @@ test("site-build statuses form one closed lifecycle with explicit terminal and r
   expect(isSiteBuildStatus("accepted")).toBe(true);
   expect(isSiteBuildStatus("deployed")).toBe(false);
 });
+
+test("tracked outcomes keep only their own closed reasons and stages are closed", async () => {
+  const {
+    isSiteBuildProviderStage,
+    normalizeTrackedOutcomeReason,
+    siteBuildFailureReasons,
+    siteBuildProviderStages,
+    sourceFailureReasons,
+    trackedOutcomeReasons,
+  } = await import("../dist/index.js");
+  for (const reasons of Object.values(trackedOutcomeReasons))
+    for (const reason of reasons) expect(siteBuildFailureReasons).toContain(reason);
+  expect(sourceFailureReasons).not.toContain("provider_build_failed");
+  expect(normalizeTrackedOutcomeReason("failed", "provider_deploy_failed")).toBe(
+    "provider_deploy_failed",
+  );
+  expect(normalizeTrackedOutcomeReason("failed", "secret text")).toBe("provider_failed");
+  expect(normalizeTrackedOutcomeReason("failed", undefined)).toBe("provider_failed");
+  expect(normalizeTrackedOutcomeReason("cancelled", "provider_skipped")).toBe("provider_skipped");
+  expect(normalizeTrackedOutcomeReason("cancelled", "tracking_timeout")).toBeUndefined();
+  expect(normalizeTrackedOutcomeReason("unknown", "tracking_timeout")).toBe("tracking_timeout");
+  expect(normalizeTrackedOutcomeReason("unknown", "provider_build_failed")).toBeUndefined();
+  expect(normalizeTrackedOutcomeReason("succeeded", "provider_failed")).toBeUndefined();
+  expect(siteBuildProviderStages).toEqual([
+    "queued",
+    "initialize",
+    "clone_repo",
+    "build",
+    "deploy",
+  ]);
+  expect(isSiteBuildProviderStage("deploy")).toBe(true);
+  expect(isSiteBuildProviderStage("upload")).toBe(false);
+});

@@ -58,4 +58,48 @@ export const buildFailureGuidance: Record<
     correction:
       "Ask the operator to inspect private builder or provider logs using the build ID, then retry after correction.",
   },
+  provider_build_failed: {
+    explanation: "The Cloudflare Pages build of the static site failed.",
+    correction:
+      "Open the deployment's build log in Cloudflare Pages, correct the site or its build settings, then retry the build.",
+  },
+  provider_deploy_failed: {
+    explanation: "Cloudflare Pages built the site but failed to deploy it.",
+    correction:
+      "Check the deployment in Cloudflare Pages; the previous deployment stays live. Retry the build when Pages is healthy.",
+  },
+  provider_cancelled: {
+    explanation: "The deployment was cancelled in Cloudflare Pages.",
+    correction: "Retry the build if the published content should still be deployed.",
+  },
+  provider_skipped: {
+    explanation: "Cloudflare Pages skipped the deployment.",
+    correction:
+      "Check the project's build watch paths and branch controls in Cloudflare Pages, then retry the build.",
+  },
+  tracking_forbidden: {
+    explanation: "Lace may not read this Cloudflare Pages deployment.",
+    correction:
+      "Give LACE_PAGES_API_TOKEN the Account · Cloudflare Pages · Read permission for this account, check the deployment in Pages, then retry if needed.",
+  },
+  tracking_not_found: {
+    explanation: "Cloudflare Pages does not know this deployment.",
+    correction:
+      "Check LACE_PAGES_ACCOUNT_ID and LACE_PAGES_PROJECT_NAME match the project of the deploy hook, then retry the build.",
+  },
+  tracking_rejected: {
+    explanation: "Cloudflare Pages rejected the deployment status request.",
+    correction:
+      "Check the Pages tracking settings of the CMS Worker, then check the deployment in Pages and retry if needed.",
+  },
+  tracking_timeout: {
+    explanation: "Tracking stopped at its deadline before the deployment finished.",
+    correction:
+      "Check the deployment in Cloudflare Pages and retry if it did not publish; for long build queues raise LACE_PAGES_TRACKING_TIMEOUT_MINUTES.",
+  },
+  tracking_unconfigured: {
+    explanation: "Pages tracking settings were removed while this deployment was tracked.",
+    correction:
+      "Check the deployment in Cloudflare Pages, then retry the build if needed; restore the tracking settings to track new builds.",
+  },
 };

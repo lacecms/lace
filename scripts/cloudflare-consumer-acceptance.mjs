@@ -459,13 +459,13 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const accepted = await waitBuild(
       base,
       cookie,
-      (build) => build.status !== "pending",
+      (build) => build.status !== "pending" && build.status !== "running",
       60_000,
       () => scheduled(base),
     );
-    if (accepted.status !== "running" || accepted.providerBuildId !== providerDeploymentId)
+    if (accepted.status !== "accepted" || accepted.providerBuildId !== providerDeploymentId)
       throw new Error(
-        `cloudflare-hook-recovered: accepted hook must be running, not ${accepted.status}`,
+        `cloudflare-hook-recovered: untracked accepted hook must be accepted, not ${accepted.status}`,
       );
     if (
       hook.calls.length !== 2 ||

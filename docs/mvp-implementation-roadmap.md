@@ -2455,6 +2455,18 @@ guide share one status map with keyboard/touch popovers. Sessions 33E–33H rema
    recovery, and a hook without an ID. Decide in the proposal whether an
    authenticated CI callback for generic hooks is in scope or deferred.
 
+Session 33E completed on 2026-10-06 via `step-33e-pages-deployment-tracking`:
+optional Pages tracking (`LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME`, the
+Pages-Read-only secret `LACE_PAGES_API_TOKEN`) makes identified hook acceptances
+`tracking`; the scheduled Worker checks at most five due builds per run through
+a 60-second check lease in `site_builds`, maps the exact deployment's latest
+stage to `succeeded` (deploy success only), `failed`, `cancelled` or `unknown`
+with closed reasons, backs off transient errors from 30 s to 10 min, and ends
+every tracked build by an overall deadline (`LACE_PAGES_TRACKING_TIMEOUT_MINUTES`,
+default 60, 5–1440) or as `tracking_unconfigured` when tracking is removed.
+Builds shows the stage, last check and next action; no migration was needed.
+An authenticated CI callback for generic hooks is deferred. Sessions 33F–33H remain.
+
 ### Session 33F — Explicit Cloudflare CLI credentials
 
 1. Make the credential choice explicit in generated Cloudflare projects: either

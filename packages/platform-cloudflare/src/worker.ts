@@ -4,6 +4,7 @@ import {
   MediaUseCases,
   SITE_BUILD_DEBOUNCE_MS,
   SiteBuildDispatcher,
+  SiteBuildTracker,
   SiteBuildUseCases,
 } from "@lacecms/application";
 import type {
@@ -30,6 +31,7 @@ import { createCloudflareAdminAssets } from "./admin-assets.js";
 import { CloudflareKvCache, NoopCloudflareCache } from "./cache.js";
 import { D1ContentRepository } from "./d1-content-repository.js";
 import { DeployHookSiteBuildTrigger } from "./deploy-hook.js";
+import { PagesDeploymentStatusReader } from "./pages-deployments.js";
 import { D1FixedWindowRateLimiter, D1SecurityService } from "./d1-security.js";
 import type { D1Database } from "./d1.js";
 import { WorkerImageInspector } from "./image-inspector.js";
@@ -49,6 +51,8 @@ export interface WorkerExecutionContext {
 /** Bounded per-invocation claims keep a scheduled run inside the D1 query budget. */
 export const SCHEDULED_SITE_BUILD_CLAIMS = 1;
 export const SCHEDULED_MEDIA_DELETION_CLAIMS = 5;
+/** Tracked provider deployments checked per scheduled run (one Pages request each). */
+export const SCHEDULED_TRACKING_CHECKS = 5;
 const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
 
 /** Admin mutations that enqueue outbox work and deserve a best-effort post-commit pass. */
@@ -86,6 +90,7 @@ export interface CreateCloudflareWorkerInput {
 export interface CloudflareRuntime {
   readonly app: ReturnType<typeof createLaceApp>;
   readonly buildDispatcher: SiteBuildDispatcher;
+  readonly buildTracker: SiteBuildTracker;
   readonly cache: Cache;
   readonly deletionDispatcher: MediaDeletionDispatcher;
   readonly repository: D1ContentRepository;
@@ -184,6 +189,7 @@ function defaultBuildTrigger(settings: CloudflareSettings): SiteBuildTrigger {
     ? new UnavailableSiteBuildTrigger()
     : new DeployHookSiteBuildTrigger({
         timeoutMs: settings.deployHookTimeoutMs,
+        tracked: settings.pagesTracking !== undefined,
         url: settings.deployHookUrl,
       });
 }
@@ -230,6 +236,23 @@ export function createCloudflareRuntime(
     clock,
     logger: { error: (entry) => logger.error({ component: "site-build", ...entry }) },
     trigger: input.buildTrigger?.(settings) ?? defaultBuildTrigger(settings),
+    work: repository,
+  });
+  const tracking = settings.pagesTracking;
+  const buildTracker = new SiteBuildTracker({
+    clock,
+    logger: { error: (entry) => logger.error({ component: "site-build-tracking", ...entry }) },
+    ...(tracking === undefined
+      ? {}
+      : {
+          reader: new PagesDeploymentStatusReader({
+            accountId: tracking.accountId,
+            apiBaseUrl: tracking.apiBaseUrl,
+            apiToken: tracking.apiToken,
+            projectName: tracking.projectName,
+          }),
+          timeoutMs: tracking.timeoutMs,
+        }),
     work: repository,
   });
   const content = new ContentUseCases({
@@ -281,6 +304,7 @@ export function createCloudflareRuntime(
   return Object.freeze({
     app,
     buildDispatcher,
+    buildTracker,
     cache,
     deletionDispatcher,
     repository,
@@ -327,7 +351,7 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
 
   /** One dispatcher's failure is logged and never prevents the next from running. */
   async function dispatch(
-    name: "media-deletion" | "site-build",
+    name: "media-deletion" | "site-build" | "site-build-tracking",
     run: () => Promise<void>,
   ): Promise<void> {
     try {
@@ -365,6 +389,9 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       if (runtime === undefined) return;
       await dispatch("site-build", () =>
         runtime.buildDispatcher.runOnce(SCHEDULED_SITE_BUILD_CLAIMS),
+      );
+      await dispatch("site-build-tracking", () =>
+        runtime.buildTracker.runOnce(SCHEDULED_TRACKING_CHECKS),
       );
       await dispatch("media-deletion", () =>
         runtime.deletionDispatcher.runOnce(SCHEDULED_MEDIA_DELETION_CLAIMS),

@@ -100,3 +100,18 @@ test("results never contain the hook URL and settings are validated", async () =
     () => new DeployHookSiteBuildTrigger({ url: new URL("http://hooks.example.test/") }),
   ).toThrow(TypeError);
 });
+
+test("with tracking configured an identified acceptance is tracked, an anonymous one is not", async () => {
+  const tracked = (respond) =>
+    new DeployHookSiteBuildTrigger({ fetch: async () => respond(), tracked: true, url });
+  expect(
+    await tracked(() => Response.json({ result: { id: "dep-7" }, success: true })).trigger(input),
+  ).toEqual({ providerBuildId: "dep-7", status: "tracking" });
+  expect(await tracked(() => Response.json({ result: {}, success: true })).trigger(input)).toEqual({
+    status: "accepted",
+  });
+  expect(await tracked(() => Response.json({ success: false })).trigger(input)).toEqual({
+    reason: "provider_failed",
+    status: "failed",
+  });
+});

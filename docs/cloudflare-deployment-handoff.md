@@ -43,6 +43,10 @@ Create an account API token for the operator CLI and Wrangler with at least:
 | Account · Account Settings · Read | Wrangler account resolution |
 | Zone · Workers Routes · Edit (and DNS · Edit) | only for a custom domain instead of `workers.dev` |
 
+For Pages deployment tracking create a second, separate token with only
+*Account · Cloudflare Pages · Read*. It is stored only as the Worker secret
+`LACE_PAGES_API_TOKEN` and is never the operator token above.
+
 `wrangler login` (OAuth) is acceptable for the release owner's shell. The token
 is still needed for the `cloudflare-remote` CLI target, which reads
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` from the project's private
@@ -110,17 +114,24 @@ project root unless noted.
    Then create a deploy hook for the production branch and store its URL with
    `pnpm exec wrangler secret put LACE_DEPLOY_HOOK_URL --config worker/wrangler.jsonc`.
    Any other provider is acceptable only if its build hook accepts a bodiless
-   `POST` without credentials.
+   `POST` without credentials. Enable tracking: set `LACE_PAGES_ACCOUNT_ID` and
+   `LACE_PAGES_PROJECT_NAME` in `worker/wrangler.jsonc` `vars`, store the
+   Pages-Read token with
+   `pnpm exec wrangler secret put LACE_PAGES_API_TOKEN --config worker/wrangler.jsonc`,
+   and redeploy the Worker.
 10. **Publish and rebuild.** Publish a change in Admin. Within a few minutes the
     scheduled trigger (cron every minute) or the post-commit pass calls the hook.
-    Admin's build history must show the build `accepted` with the Pages
-    deployment ID. Lace does not poll the provider, so `accepted` means only
-    that the provider accepted the request, not that the site was published.
+    Admin's build history must show the build `running` with the Pages
+    deployment ID and its current stage, then `succeeded` after the Pages
+    deploy stage succeeds (or `failed`/`cancelled`/`unknown` with a reason).
+    Without tracking the build stays `accepted`, which means only that the
+    provider accepted the request.
 11. **Confirm the deployment separately.** In the Pages dashboard or with
     `wrangler pages deployment list --project-name <project>`, confirm that the
-    deployment with the recorded ID succeeded. Then fetch the published page
-    from the Pages URL and confirm the new content and Worker-origin media URLs.
-    Only this step verifies the static deployment.
+    deployment with the recorded ID succeeded and matches the tracked outcome.
+    Then fetch the published page from the Pages URL and confirm the new
+    content and Worker-origin media URLs. Only this step verifies the served
+    static site.
 12. **Recovery checks.** Revoke or rename the hook temporarily, or set an
     invalid hook secret and redeploy. Confirm that publication stays committed
     and the build records a sanitized `provider_failed` or `trigger_unavailable`
@@ -138,8 +149,9 @@ Record privately and summarize, without secrets, in the release record:
 - artifact versions, template version, Wrangler version, date, account type;
 - output of `health/ready` and of remote doctor `ready`;
 - the browser setup, sign-in, media upload and publication outcome;
-- the build history entry with status `accepted` and the provider deployment ID,
-  next to the provider's own `success` result for that ID;
+- the build history entry with status `succeeded`, stage `deploy` and the
+  provider deployment ID, next to the provider's own `success` result for that
+  ID (or `accepted` when tracking is deliberately not configured);
 - the served Pages page containing the published change, its media loading
   from the Worker origin, and a later unpublished draft absent from it;
 - the recovery-check outcomes in step 12;
@@ -151,7 +163,7 @@ hook but the deployment cannot be confirmed, the gate fails with that reason.
 
 ## Cleanup
 
-Delete the Pages project and its hook, the Worker
+Delete the Pages project and its hook, the Pages-Read tracking token, the Worker
 (`wrangler delete --config worker/wrangler.jsonc`), the D1 database, the R2
 bucket (after emptying it) and the KV namespace, and revoke the API token and
 build token. Deleting resources is irreversible. Confirm the account before

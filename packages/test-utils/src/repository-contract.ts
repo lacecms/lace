@@ -718,6 +718,225 @@ contract(
 );
 
 contract(
+  "tracking checks are leased, provider guarded and record stages without touching other builds",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({
+      nextId: sequence("track"),
+      resolveModel: noModels,
+    });
+    let clock = 0;
+    const track = async (providerBuildId: string) => {
+      clock += 10_000;
+      await repository.requestBuild({ requestedAt: unixMilliseconds(clock), requestedBy: admin });
+      clock += 5_000;
+      const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
+      await repository.recordSiteBuildTracking({
+        leaseId: lease!.id,
+        now: unixMilliseconds(clock),
+        providerBuildId,
+      });
+      return { buildId: lease!.buildId, startedAt: clock };
+    };
+    const row = async (id: string) =>
+      sql.get(
+        "select status, provider_stage, provider_checked_at, provider_check_after, error from site_builds where id = ?",
+        id,
+      );
+    const a = await track("dep-a");
+    const b = await track("dep-b");
+    // A running build still owned by dispatch is never offered for checks.
+    clock += 10_000;
+    await repository.requestBuild({ requestedAt: unixMilliseconds(clock), requestedBy: admin });
+    clock += 5_000;
+    const [owned] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
+    await sql.run(
+      "update site_builds set provider_build_id = 'dep-owned', provider_check_after = 0 where id = ?",
+      owned!.buildId,
+    );
+
+    const now = unixMilliseconds(clock);
+    await expect(
+      repository.claimTrackedSiteBuildChecks({ leaseMs: 60_000, limit: 0, now }),
+    ).rejects.toThrow("Tracking claim limit is invalid.");
+    const first = await repository.claimTrackedSiteBuildChecks({ leaseMs: 60_000, limit: 25, now });
+    expect(first).toEqual([
+      { buildId: a.buildId, providerBuildId: "dep-a", trackingStartedAt: a.startedAt },
+      { buildId: b.buildId, providerBuildId: "dep-b", trackingStartedAt: b.startedAt },
+    ]);
+    // The check lease makes each build exclusive until it expires.
+    expect(
+      await repository.claimTrackedSiteBuildChecks({ leaseMs: 60_000, limit: 25, now }),
+    ).toEqual([]);
+    expect(await row(a.buildId)).toMatchObject({ provider_check_after: clock + 60_000 });
+
+    expect(
+      await repository.recordTrackedSiteBuildCheck({
+        buildId: a.buildId,
+        checkAfter: unixMilliseconds(clock + 30_000),
+        now,
+        providerBuildId: "dep-a",
+        stage: "build",
+      }),
+    ).toBe(true);
+    expect(
+      await repository.recordTrackedSiteBuildCheck({
+        buildId: a.buildId,
+        checkAfter: unixMilliseconds(clock + 1),
+        now,
+        providerBuildId: "dep-b",
+        stage: "deploy",
+      }),
+    ).toBe(false);
+    expect(await row(a.buildId)).toEqual({
+      status: "running",
+      provider_stage: "build",
+      provider_checked_at: clock,
+      provider_check_after: clock + 30_000,
+      error: null,
+    });
+    // A transient check moves only the next due time.
+    expect(
+      await repository.recordTrackedSiteBuildCheck({
+        buildId: a.buildId,
+        checkAfter: unixMilliseconds(clock + 45_000),
+        now: unixMilliseconds(clock + 1),
+        providerBuildId: "dep-a",
+      }),
+    ).toBe(true);
+    expect(await row(a.buildId)).toMatchObject({
+      provider_stage: "build",
+      provider_checked_at: clock,
+      provider_check_after: clock + 45_000,
+    });
+
+    await repository.completeTrackedSiteBuild({
+      buildId: b.buildId,
+      now: unixMilliseconds(clock + 2),
+      outcome: "succeeded",
+      providerBuildId: "dep-b",
+      stage: "deploy",
+    });
+    expect(await row(b.buildId)).toEqual({
+      status: "succeeded",
+      provider_stage: "deploy",
+      provider_checked_at: clock + 2,
+      provider_check_after: null,
+      error: null,
+    });
+    expect(await repository.getSiteBuild(b.buildId)).toMatchObject({
+      providerCheckedAt: clock + 2,
+      providerStage: "deploy",
+      status: "succeeded",
+    });
+    expect(await row(a.buildId)).toMatchObject({ status: "running", provider_stage: "build" });
+    // Terminal rows never accept check records and are never due again.
+    expect(
+      await repository.recordTrackedSiteBuildCheck({
+        buildId: b.buildId,
+        checkAfter: unixMilliseconds(clock + 3),
+        now: unixMilliseconds(clock + 3),
+        providerBuildId: "dep-b",
+        stage: "build",
+      }),
+    ).toBe(false);
+
+    // After the lease and next check, A is due again with its last successful check.
+    const later = unixMilliseconds(clock + 120_000);
+    expect(
+      await repository.claimTrackedSiteBuildChecks({ leaseMs: 60_000, limit: 25, now: later }),
+    ).toEqual([
+      {
+        buildId: a.buildId,
+        lastCheckedAt: clock,
+        providerBuildId: "dep-a",
+        trackingStartedAt: a.startedAt,
+      },
+    ]);
+    await repository.completeTrackedSiteBuild({
+      buildId: a.buildId,
+      now: later,
+      outcome: "unknown",
+      providerBuildId: "dep-a",
+      reason: "tracking_timeout",
+    });
+    await repository.completeTrackedSiteBuild({
+      buildId: a.buildId,
+      now: unixMilliseconds(later + 1),
+      outcome: "unknown",
+      providerBuildId: "dep-a",
+      reason: "tracking_timeout",
+      stage: "deploy",
+    });
+    await expect(
+      repository.completeTrackedSiteBuild({
+        buildId: a.buildId,
+        now: unixMilliseconds(later + 2),
+        outcome: "succeeded",
+        providerBuildId: "dep-a",
+        stage: "deploy",
+      }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    expect(await row(a.buildId)).toEqual({
+      status: "unknown",
+      provider_stage: "build",
+      provider_checked_at: clock,
+      provider_check_after: null,
+      error: "tracking_timeout",
+    });
+    expect(await repository.getSiteBuild(a.buildId)).toMatchObject({ error: "tracking_timeout" });
+    expect(
+      await repository.claimTrackedSiteBuildChecks({
+        leaseMs: 60_000,
+        limit: 25,
+        now: unixMilliseconds(later + 600_000),
+      }),
+    ).toEqual([]);
+    expect(await row(owned!.buildId)).toMatchObject({ status: "running" });
+  },
+);
+
+contract(
+  "tracked completions store only their outcome's closed reasons",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({
+      nextId: sequence("reason"),
+      resolveModel: noModels,
+    });
+    let clock = 0;
+    const cases = [
+      ["failed", "provider_deploy_failed", "provider_deploy_failed"],
+      ["failed", "tracking_timeout", "provider_failed"],
+      ["cancelled", "provider_skipped", "provider_skipped"],
+      ["cancelled", "provider_build_failed", null],
+      ["unknown", "tracking_forbidden", "tracking_forbidden"],
+      ["unknown", "provider_cancelled", null],
+      ["succeeded", "provider_failed", null],
+    ] as const;
+    for (const [outcome, reason, stored] of cases) {
+      clock += 10_000;
+      await repository.requestBuild({ requestedAt: unixMilliseconds(clock), requestedBy: admin });
+      clock += 5_000;
+      const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
+      await repository.recordSiteBuildTracking({
+        leaseId: lease!.id,
+        now: unixMilliseconds(clock),
+        providerBuildId: `dep-${clock}`,
+      });
+      await repository.completeTrackedSiteBuild({
+        buildId: lease!.buildId,
+        now: unixMilliseconds(clock),
+        outcome,
+        providerBuildId: `dep-${clock}`,
+        reason,
+      });
+      expect(
+        await sql.get("select status, error from site_builds where id = ?", lease!.buildId),
+      ).toEqual({ status: outcome, error: stored });
+    }
+  },
+);
+
+contract(
   "a stray event for a terminal build is finished without dispatch",
   async (runtime, expect) => {
     const { repository, sql } = await runtime.open({ resolveModel: noModels });

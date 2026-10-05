@@ -9,6 +9,7 @@ import {
   SITE_BUILD_DEBOUNCE_MS,
   siteBuildRetryPolicy,
   SiteBuildDispatcher,
+  SiteBuildTracker,
   SiteBuildUseCases,
   checkConfigurationSynchronization,
   contentSyncActor,
@@ -561,4 +562,283 @@ test("site-build dispatcher maps every trigger result to one truthful lifecycle 
     ["succeeded", { leaseId: "lease-succeeded", now: 7 }],
     ["tracking", { leaseId: "lease-tracking", now: 7, providerBuildId: "dep-2" }],
   ]);
+});
+
+function trackingFixture({ checks, observations, reader = "fake", timeoutMs, nowAt = 0 }) {
+  const writes = [];
+  const logs = [];
+  let now = nowAt;
+  const work = {
+    claimTrackedSiteBuildChecks: async (input) => {
+      writes.push(["claim", input]);
+      return checks;
+    },
+    recordTrackedSiteBuildCheck: async (input) => {
+      writes.push(["check", input]);
+      return true;
+    },
+    completeTrackedSiteBuild: async (input) => {
+      writes.push(["complete", input]);
+      if (input.buildId === "conflict")
+        throw new DomainError("CONTENT_INVALID_STATE", "Build already has a different outcome.");
+    },
+  };
+  const tracker = new SiteBuildTracker({
+    clock: { now: () => unixMilliseconds(now) },
+    logger: { error: (entry) => logs.push(entry) },
+    ...(reader === null
+      ? {}
+      : {
+          reader: {
+            read: async (id) => {
+              const value = observations[id];
+              if (value instanceof Error) throw value;
+              return value;
+            },
+          },
+        }),
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    work,
+  });
+  return {
+    logs,
+    setNow: (value) => {
+      now = value;
+    },
+    tracker,
+    writes,
+  };
+}
+
+const check = (id, extra = {}) => ({
+  buildId: id,
+  providerBuildId: `dep-${id}`,
+  trackingStartedAt: 0,
+  ...extra,
+});
+
+test("site-build tracker maps observations to proven outcomes and later checks", async () => {
+  const fixture = trackingFixture({
+    checks: [
+      check("ok"),
+      check("broken"),
+      check("skipped"),
+      check("denied"),
+      check("rejected"),
+      check("building", { lastCheckedAt: 50_000 }),
+      check("thrown"),
+      check("conflict"),
+      check("young-missing"),
+    ],
+    nowAt: 100_000,
+    observations: {
+      "dep-ok": { kind: "outcome", outcome: "succeeded", stage: "deploy" },
+      "dep-broken": {
+        kind: "outcome",
+        outcome: "failed",
+        reason: "provider_build_failed",
+        stage: "build",
+      },
+      "dep-skipped": {
+        kind: "outcome",
+        outcome: "cancelled",
+        reason: "provider_skipped",
+        stage: "queued",
+      },
+      "dep-denied": { kind: "forbidden" },
+      "dep-rejected": { kind: "rejected" },
+      "dep-building": { kind: "progress", stage: "build" },
+      "dep-thrown": new Error("secret token"),
+      "dep-conflict": { kind: "outcome", outcome: "succeeded", stage: "deploy" },
+      "dep-young-missing": { kind: "not_found" },
+    },
+  });
+  await fixture.tracker.runOnce(9);
+  const [claim, ...rest] = fixture.writes;
+  expect(claim).toEqual(["claim", { leaseMs: 60_000, limit: 9, now: 100_000 }]);
+  const base = { now: 100_000 };
+  expect(rest).toEqual([
+    [
+      "complete",
+      { ...base, buildId: "ok", outcome: "succeeded", providerBuildId: "dep-ok", stage: "deploy" },
+    ],
+    [
+      "complete",
+      {
+        ...base,
+        buildId: "broken",
+        outcome: "failed",
+        providerBuildId: "dep-broken",
+        reason: "provider_build_failed",
+        stage: "build",
+      },
+    ],
+    [
+      "complete",
+      {
+        ...base,
+        buildId: "skipped",
+        outcome: "cancelled",
+        providerBuildId: "dep-skipped",
+        reason: "provider_skipped",
+        stage: "queued",
+      },
+    ],
+    [
+      "complete",
+      {
+        ...base,
+        buildId: "denied",
+        outcome: "unknown",
+        providerBuildId: "dep-denied",
+        reason: "tracking_forbidden",
+      },
+    ],
+    [
+      "complete",
+      {
+        ...base,
+        buildId: "rejected",
+        outcome: "unknown",
+        providerBuildId: "dep-rejected",
+        reason: "tracking_rejected",
+      },
+    ],
+    [
+      "check",
+      {
+        ...base,
+        buildId: "building",
+        checkAfter: 130_000,
+        providerBuildId: "dep-building",
+        stage: "build",
+      },
+    ],
+    // Transient: the gap since tracking start (100 s) becomes the next delay.
+    ["check", { ...base, buildId: "thrown", checkAfter: 200_000, providerBuildId: "dep-thrown" }],
+    [
+      "complete",
+      {
+        ...base,
+        buildId: "conflict",
+        outcome: "succeeded",
+        providerBuildId: "dep-conflict",
+        stage: "deploy",
+      },
+    ],
+    // Not found inside the 5-minute grace is retried like a transient error.
+    [
+      "check",
+      {
+        ...base,
+        buildId: "young-missing",
+        checkAfter: 200_000,
+        providerBuildId: "dep-young-missing",
+      },
+    ],
+  ]);
+  expect(fixture.logs).toContainEqual({ buildId: "conflict", reason: "tracking_conflict" });
+  expect(fixture.logs).toContainEqual({ buildId: "broken", reason: "provider_build_failed" });
+  expect(JSON.stringify(fixture.logs)).not.toContain("secret");
+});
+
+test("site-build tracker enforces grace, backoff bounds and the overall deadline", async () => {
+  const minute = 60_000;
+  const fixture = trackingFixture({
+    checks: [
+      check("old-missing"),
+      check("outage", { lastCheckedAt: 50 * minute }),
+      check("long-outage", { trackingStartedAt: 0, lastCheckedAt: 1 * minute }),
+      check("near-deadline", { trackingStartedAt: -55 * minute + 20_000 }),
+    ],
+    nowAt: 54 * minute,
+    observations: {
+      "dep-old-missing": { kind: "not_found" },
+      "dep-outage": { kind: "transient" },
+      "dep-long-outage": { kind: "transient" },
+      "dep-near-deadline": { kind: "transient" },
+    },
+  });
+  await fixture.tracker.runOnce();
+  expect(fixture.writes.slice(1)).toEqual([
+    [
+      "complete",
+      {
+        buildId: "old-missing",
+        now: 54 * minute,
+        outcome: "unknown",
+        providerBuildId: "dep-old-missing",
+        reason: "tracking_not_found",
+      },
+    ],
+    // Gap of 4 minutes since the last successful read; capped by the deadline at 60 minutes.
+    [
+      "check",
+      {
+        buildId: "outage",
+        checkAfter: 58 * minute,
+        now: 54 * minute,
+        providerBuildId: "dep-outage",
+      },
+    ],
+    // Gap of 53 minutes is bounded to the 10-minute backoff, then to the deadline.
+    [
+      "check",
+      {
+        buildId: "long-outage",
+        checkAfter: 60 * minute,
+        now: 54 * minute,
+        providerBuildId: "dep-long-outage",
+      },
+    ],
+    [
+      "complete",
+      {
+        buildId: "near-deadline",
+        now: 54 * minute,
+        outcome: "unknown",
+        providerBuildId: "dep-near-deadline",
+        reason: "tracking_timeout",
+      },
+    ],
+  ]);
+
+  const late = trackingFixture({
+    checks: [check("slow")],
+    nowAt: 30 * minute,
+    observations: { "dep-slow": { kind: "progress", stage: "deploy" } },
+    timeoutMs: 30 * minute,
+  });
+  await late.tracker.runOnce();
+  expect(late.writes[1]).toEqual([
+    "complete",
+    {
+      buildId: "slow",
+      now: 30 * minute,
+      outcome: "unknown",
+      providerBuildId: "dep-slow",
+      reason: "tracking_timeout",
+      stage: "deploy",
+    },
+  ]);
+
+  const unconfigured = trackingFixture({
+    checks: [check("orphan")],
+    reader: null,
+    observations: {},
+  });
+  await unconfigured.tracker.runOnce();
+  expect(unconfigured.writes[1]).toEqual([
+    "complete",
+    {
+      buildId: "orphan",
+      now: 0,
+      outcome: "unknown",
+      providerBuildId: "dep-orphan",
+      reason: "tracking_unconfigured",
+    },
+  ]);
+  expect(() => trackingFixture({ checks: [], observations: {}, timeoutMs: 0 })).toThrow(
+    "Tracking timeout is invalid.",
+  );
 });

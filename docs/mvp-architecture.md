@@ -194,7 +194,11 @@ Git: its deploy hook, stored as the Worker secret `LACE_DEPLOY_HOOK_URL`, is the
 site build trigger, and Pages builds the site with the Worker origin and a
 read-only build token. The generated manual workflow (direct upload) is the
 alternative without hook-driven rebuilds. A hook accepted by the provider is
-recorded as an `accepted` build, not as a confirmed deployment (see §9.8). The real-account
+recorded as an `accepted` build, not as a confirmed deployment (see §9.8). With
+optional Pages tracking settings (`LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME`
+and the separate Pages-Read-only Worker secret `LACE_PAGES_API_TOKEN`) the
+scheduled Worker instead tracks the exact deployment until a proven outcome or
+the tracking deadline. The real-account
 procedure for the release gate is `docs/cloudflare-deployment-handoff.md`.
 
 ### VPS deployment
@@ -920,6 +924,23 @@ creates a new request. The site's current version is the highest
 `target_version` among `succeeded` builds. The nullable `provider_*` fields hold
 the tracked deployment's stage, last check, and next due check; they are
 internal tracking state, never provider responses or credentials.
+
+Provider tracking (Cloudflare Pages, optional): the tracking start is the
+completion time of the build's outbox event, so processed events of `running`
+builds must be kept. Each scheduled run claims at most 5 due tracked rows
+through a 60-second check lease on `provider_check_after` (guarded by build ID,
+provider ID, `running`, and the selected value), reads exactly the stored
+deployment, and records the closed stage (`queued`, `initialize`, `clone_repo`,
+`build`, `deploy`) and last successful check. Only a successful `deploy` stage is
+`succeeded`; build/deploy failure is `failed` (`provider_build_failed`,
+`provider_deploy_failed`); cancel or skip is `cancelled` (`provider_cancelled`,
+`provider_skipped`); missing permission, a deployment still missing after a
+5-minute grace, other rejections, removed tracking settings, or the overall
+deadline (default 60 minutes, configurable 5–1440) are `unknown`
+(`tracking_forbidden`, `tracking_not_found`, `tracking_rejected`,
+`tracking_unconfigured`, `tracking_timeout`). Transient provider errors back off
+from 30 seconds to 10 minutes, never past the deadline, and never consume the
+outbox retry budget. Progress is polled every 30 seconds.
 
 The optional snapshot ID identifies the publication that initiated a request;
 `target_version` is authoritative when requests are coalesced.
@@ -1656,6 +1677,7 @@ Implementations:
 | Cache | Workers KV | in-memory or no-op initially |
 | API runtime | Cloudflare Worker | Hono Node server |
 | Build trigger | Cloudflare deploy hook | authenticated fixed-command builder |
+| Deployment tracking | optional Pages API reader (Pages Read token, Worker secret) | not needed (builder result is proof) |
 | Recovery dispatch | scheduled Worker | container timer/worker |
 
 R2 and MinIO use different concrete adapters even though both expose S3-compatible concepts. Cloudflare code should prefer the native R2 binding, while Node uses the S3 client against MinIO.

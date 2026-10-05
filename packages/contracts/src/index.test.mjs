@@ -732,3 +732,56 @@ test("admin build DTOs accept exactly the seven lifecycle statuses", async () =>
     completedAt: expect.any(String),
   });
 });
+
+test("admin build DTOs carry tracking stage, last check and tracking reasons", async () => {
+  const { siteBuildRecordSchema, toSiteBuildRecordDto } = await import("../dist/index.js");
+  const base = {
+    id: "build",
+    reason: "publication",
+    status: "running",
+    targetVersion: 4,
+    requestedBy: "admin",
+    requestedAt: "2026-10-05T00:00:00.000Z",
+  };
+  const tracked = toSiteBuildRecordDto({
+    ...base,
+    requestedAt: 1,
+    providerBuildId: "dep-1",
+    providerStage: "build",
+    providerCheckedAt: 5,
+  });
+  expect(tracked).toMatchObject({
+    providerStage: "build",
+    providerCheckedAt: "1970-01-01T00:00:00.005Z",
+  });
+  expect(v.safeParse(siteBuildRecordSchema, tracked).success).toBe(true);
+  for (const stage of ["queued", "initialize", "clone_repo", "build", "deploy"])
+    expect(v.safeParse(siteBuildRecordSchema, { ...base, providerStage: stage }).success).toBe(
+      true,
+    );
+  for (const stage of ["upload", "Deploy", ""])
+    expect(v.safeParse(siteBuildRecordSchema, { ...base, providerStage: stage }).success).toBe(
+      false,
+    );
+  expect(
+    v.safeParse(siteBuildRecordSchema, { ...base, providerCheckedAt: "yesterday" }).success,
+  ).toBe(false);
+  for (const error of [
+    "provider_build_failed",
+    "provider_deploy_failed",
+    "provider_cancelled",
+    "provider_skipped",
+    "tracking_forbidden",
+    "tracking_not_found",
+    "tracking_rejected",
+    "tracking_timeout",
+    "tracking_unconfigured",
+  ]) {
+    expect(v.safeParse(siteBuildRecordSchema, { ...base, status: "unknown", error }).success).toBe(
+      true,
+    );
+    expect(
+      v.safeParse(siteBuildRecordSchema, { ...base, error, errorPath: "src/page.astro" }).success,
+    ).toBe(false);
+  }
+});

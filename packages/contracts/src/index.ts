@@ -5,6 +5,7 @@ import {
   DomainError,
   unixMilliseconds,
   siteBuildFailureReasons,
+  siteBuildProviderStages,
   siteBuildStatuses,
   sourceFailureReasons,
   safeBuildSourcePath,
@@ -18,6 +19,7 @@ import type {
   ContentModelRoute,
   ContentSnapshot,
   DomainErrorCode,
+  SiteBuildProviderStage,
   SiteBuildState,
   SiteBuildStatus,
   UnixMilliseconds,
@@ -602,6 +604,8 @@ export const buildSourcePathSchema = v.pipe(
     "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
   ),
 );
+/** Latest observed stage of a tracked provider deployment. */
+export const siteBuildProviderStageSchema = v.picklist(siteBuildProviderStages);
 export const siteBuildRecordSchema = v.pipe(
   v.strictObject({
     id: identifierSchema,
@@ -613,6 +617,8 @@ export const siteBuildRecordSchema = v.pipe(
     startedAt: v.optional(isoTimestampSchema),
     completedAt: v.optional(isoTimestampSchema),
     providerBuildId: v.optional(identifierSchema),
+    providerStage: v.optional(siteBuildProviderStageSchema),
+    providerCheckedAt: v.optional(isoTimestampSchema),
     error: v.optional(buildFailureReasonSchema),
     errorPath: v.optional(buildSourcePathSchema),
   }),
@@ -895,6 +901,8 @@ export function toSiteBuildRecordDto(build: {
   readonly startedAt?: number;
   readonly completedAt?: number;
   readonly providerBuildId?: string;
+  readonly providerStage?: SiteBuildProviderStage;
+  readonly providerCheckedAt?: number;
   readonly error?: string;
   readonly errorPath?: string;
 }): SiteBuildRecordDto {
@@ -908,6 +916,10 @@ export function toSiteBuildRecordDto(build: {
     ...(build.startedAt === undefined ? {} : { startedAt: toIsoTimestamp(build.startedAt) }),
     ...(build.completedAt === undefined ? {} : { completedAt: toIsoTimestamp(build.completedAt) }),
     ...(build.providerBuildId === undefined ? {} : { providerBuildId: build.providerBuildId }),
+    ...(build.providerStage === undefined ? {} : { providerStage: build.providerStage }),
+    ...(build.providerCheckedAt === undefined
+      ? {}
+      : { providerCheckedAt: toIsoTimestamp(build.providerCheckedAt) }),
     ...(build.error === undefined ? {} : { error: normalizeBuildFailure(build.error).reason }),
     ...(build.error === undefined ||
     normalizeBuildFailure(build.error, build.errorPath).path === undefined

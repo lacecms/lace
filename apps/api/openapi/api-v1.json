@@ -2697,7 +2697,16 @@
                               "trigger_unavailable",
                               "build_timeout",
                               "invalid_build_event",
-                              "provider_failed"
+                              "provider_failed",
+                              "provider_build_failed",
+                              "provider_deploy_failed",
+                              "provider_cancelled",
+                              "provider_skipped",
+                              "tracking_forbidden",
+                              "tracking_not_found",
+                              "tracking_rejected",
+                              "tracking_timeout",
+                              "tracking_unconfigured"
                             ]
                           },
                           "errorPath": {
@@ -2716,6 +2725,10 @@
                             "maxLength": 255,
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "providerCheckedAt": {},
+                          "providerStage": {
+                            "enum": ["queued", "initialize", "clone_repo", "build", "deploy"]
                           },
                           "reason": {
                             "maxLength": 255,
@@ -2805,7 +2818,16 @@
                         "trigger_unavailable",
                         "build_timeout",
                         "invalid_build_event",
-                        "provider_failed"
+                        "provider_failed",
+                        "provider_build_failed",
+                        "provider_deploy_failed",
+                        "provider_cancelled",
+                        "provider_skipped",
+                        "tracking_forbidden",
+                        "tracking_not_found",
+                        "tracking_rejected",
+                        "tracking_timeout",
+                        "tracking_unconfigured"
                       ]
                     },
                     "errorPath": {
@@ -2824,6 +2846,10 @@
                       "maxLength": 255,
                       "minLength": 1,
                       "type": "string"
+                    },
+                    "providerCheckedAt": {},
+                    "providerStage": {
+                      "enum": ["queued", "initialize", "clone_repo", "build", "deploy"]
                     },
                     "reason": {
                       "maxLength": 255,

@@ -13,7 +13,9 @@ import type {
   MediaId,
   MediaMetadata,
   PublishedSnapshot,
+  SiteBuildFailureReason,
   SiteBuildId,
+  SiteBuildProviderStage,
   SiteBuildStatus,
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
@@ -25,6 +27,7 @@ export const packageName = "@lacecms/application";
 export * from "./configuration-sync.js";
 export * from "./site-build-use-cases.js";
 export * from "./dispatchers.js";
+export * from "./site-build-tracker.js";
 
 export type OpaqueCursor = Brand<string, "OpaqueCursor">;
 export type OpaqueTokenSecret = Brand<string, "OpaqueTokenSecret">;
@@ -380,6 +383,8 @@ export interface SiteBuildRecord {
   readonly startedAt?: UnixMilliseconds;
   readonly completedAt?: UnixMilliseconds;
   readonly providerBuildId?: string;
+  readonly providerStage?: SiteBuildProviderStage;
+  readonly providerCheckedAt?: UnixMilliseconds;
   readonly error?: string;
   readonly errorPath?: string;
 }
@@ -429,7 +434,8 @@ export interface SiteBuildDispatchPort {
   }): Promise<void>;
   /**
    * Ends a tracked deployment for the exact build and provider ID; idempotent
-   * for the same outcome and never reopens a terminal build.
+   * for the same outcome and never reopens a terminal build. A supplied stage
+   * is recorded with the completion time as the last check.
    */
   completeTrackedSiteBuild(input: {
     readonly buildId: SiteBuildId;
@@ -437,7 +443,57 @@ export interface SiteBuildDispatchPort {
     readonly now: UnixMilliseconds;
     readonly outcome: TrackedSiteBuildOutcome;
     readonly reason?: string;
+    readonly stage?: SiteBuildProviderStage;
   }): Promise<void>;
+  /**
+   * Leases due tracked builds (`running`, provider ID, completed event) by
+   * moving their next check to `now + leaseMs`; each is returned to one caller.
+   */
+  claimTrackedSiteBuildChecks(input: {
+    readonly limit: number;
+    readonly leaseMs: number;
+    readonly now: UnixMilliseconds;
+  }): Promise<readonly TrackedSiteBuildCheck[]>;
+  /**
+   * Schedules the next check of a still-running tracked build. With a stage the
+   * observation is recorded as the last successful check at `now`.
+   */
+  recordTrackedSiteBuildCheck(input: {
+    readonly buildId: SiteBuildId;
+    readonly providerBuildId: string;
+    readonly now: UnixMilliseconds;
+    readonly checkAfter: UnixMilliseconds;
+    readonly stage?: SiteBuildProviderStage;
+  }): Promise<boolean>;
+}
+
+/** One leased check of a tracked provider deployment. */
+export interface TrackedSiteBuildCheck {
+  readonly buildId: SiteBuildId;
+  readonly providerBuildId: string;
+  /** Completion time of the build's outbox event: when tracking began. */
+  readonly trackingStartedAt: UnixMilliseconds;
+  /** Last successful provider read, when one happened. */
+  readonly lastCheckedAt?: UnixMilliseconds;
+}
+
+/** Closed facts read from a provider about one exact deployment. */
+export type ProviderDeploymentObservation =
+  | Readonly<{ kind: "progress"; stage: SiteBuildProviderStage }>
+  | Readonly<{
+      kind: "outcome";
+      outcome: "succeeded" | "failed" | "cancelled";
+      reason?: SiteBuildFailureReason;
+      stage: SiteBuildProviderStage;
+    }>
+  | Readonly<{ kind: "forbidden" }>
+  | Readonly<{ kind: "not_found" }>
+  | Readonly<{ kind: "rejected" }>
+  | Readonly<{ kind: "transient" }>;
+
+/** Reads a provider deployment; never returns provider text or credentials. */
+export interface ProviderDeploymentReader {
+  read(providerBuildId: string): Promise<ProviderDeploymentObservation>;
 }
 
 export interface Clock {

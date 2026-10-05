@@ -104,7 +104,13 @@ import {
   CLAIMABLE_SITE_BUILD_STATUS_SQL,
   RETRYABLE_SITE_BUILD_REFUSAL,
   assertProviderBuildId,
+  assertTrackingClaim,
+  DUE_TRACKED_SITE_BUILDS_SQL,
+  LEASE_TRACKED_SITE_BUILD_SQL,
+  trackedCompletionStage,
   trackedOutcomeError,
+  trackedSiteBuildCheck,
+  trackedSiteBuildCheckUpdate,
   RETRYABLE_SITE_BUILD_STATUS_SQL,
   siteBuildPayload,
   siteBuildRecord,
@@ -114,6 +120,7 @@ import {
   storedSnapshots,
 } from "@lacecms/db";
 import type {
+  DueTrackedSiteBuildRow,
   BlockRow,
   ContentModelResolver,
   EntryRow,
@@ -1500,8 +1507,10 @@ export class NodeContentRepository
     readonly now: import("@lacecms/domain").UnixMilliseconds;
     readonly outcome: import("@lacecms/domain").TrackedSiteBuildOutcome;
     readonly reason?: string;
+    readonly stage?: import("@lacecms/domain").SiteBuildProviderStage;
   }): Promise<void> {
     const error = trackedOutcomeError(input.outcome, input.reason);
+    const [stage, checkedAt] = trackedCompletionStage(input.stage, input.now);
     try {
       this.connection.transaction(() => {
         const row = this.connection
@@ -1523,10 +1532,64 @@ export class NodeContentRepository
         if (row.processed_at === null) failure("Build is still owned by dispatch.");
         this.connection
           .prepare(
-            "update site_builds set status = ?, completed_at = ?, error = ?, provider_check_after = null where id = ? and status = 'running' and provider_build_id = ?",
+            "update site_builds set status = ?, completed_at = ?, error = ?, provider_check_after = null, provider_stage = coalesce(?, provider_stage), provider_checked_at = coalesce(?, provider_checked_at) where id = ? and status = 'running' and provider_build_id = ?",
           )
-          .run(input.outcome, input.now, error, input.buildId, input.providerBuildId);
+          .run(
+            input.outcome,
+            input.now,
+            error,
+            stage,
+            checkedAt,
+            input.buildId,
+            input.providerBuildId,
+          );
       })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+  }
+
+  public async claimTrackedSiteBuildChecks(input: {
+    readonly limit: number;
+    readonly leaseMs: number;
+    readonly now: import("@lacecms/domain").UnixMilliseconds;
+  }): Promise<readonly import("@lacecms/application").TrackedSiteBuildCheck[]> {
+    assertTrackingClaim(input);
+    try {
+      return this.connection.transaction(() => {
+        const rows = this.connection
+          .prepare(DUE_TRACKED_SITE_BUILDS_SQL)
+          .all(input.now, input.limit) as DueTrackedSiteBuildRow[];
+        const lease = this.connection.prepare(LEASE_TRACKED_SITE_BUILD_SQL);
+        return Object.freeze(
+          rows
+            .filter(
+              (row) =>
+                lease.run(
+                  input.now + input.leaseMs,
+                  row.id,
+                  row.provider_build_id,
+                  row.provider_check_after,
+                ).changes === 1,
+            )
+            .map(trackedSiteBuildCheck),
+        );
+      })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+  }
+
+  public async recordTrackedSiteBuildCheck(input: {
+    readonly buildId: import("@lacecms/domain").SiteBuildId;
+    readonly providerBuildId: string;
+    readonly now: import("@lacecms/domain").UnixMilliseconds;
+    readonly checkAfter: import("@lacecms/domain").UnixMilliseconds;
+    readonly stage?: import("@lacecms/domain").SiteBuildProviderStage;
+  }): Promise<boolean> {
+    const update = trackedSiteBuildCheckUpdate(input);
+    try {
+      return this.connection.prepare(update.sql).run(...update.params).changes === 1;
     } catch (error) {
       this.throwWriteError(error, false);
     }
