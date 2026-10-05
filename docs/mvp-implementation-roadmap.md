@@ -2488,6 +2488,12 @@ An authenticated CI callback for generic hooks is deferred. Sessions 33F–33H r
    same token. Provide upgrade guidance for alpha.2 projects that already store
    the token in `.env`.
 
+33F delivered 2026-10-06: explicit private credentials, read-only credential
+preflight, template `0.15.0`, packed credential/Worker checks and ownership-safe
+0.14.0 upgrades. Evidence and the prerequisite contract for 33G are in
+`docs/archive/step-33/step-33f-verification.md`. Real-account OAuth/deploy remains
+unverified; no artifacts were published.
+
 ### Session 33G — Scenario guides and minimum-version policy
 
 1. Replace the mixed generated CMS README with a short entry README

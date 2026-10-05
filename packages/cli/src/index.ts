@@ -26,6 +26,7 @@ export interface CliOptions {
   readonly command: Command;
   readonly json: boolean;
   readonly target: Target;
+  readonly operatorEnv?: string;
 }
 
 export class CliError extends Error {
@@ -41,12 +42,13 @@ export class CliError extends Error {
 }
 
 export const usage =
-  "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--json]\n       lace env prepare [--target cloudflare-local] [--json]";
+  "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]\n       lace env prepare [--target cloudflare-local] [--json]";
 
 export function parseArguments(argv: readonly string[]): CliOptions {
   const words: string[] = [];
   let target: Target = "node";
   let targetSeen = false;
+  let operatorEnv: string | undefined;
   let check = false;
   let json = false;
   for (let index = 0; index < argv.length; index += 1) {
@@ -57,6 +59,11 @@ export function parseArguments(argv: readonly string[]): CliOptions {
         throw new CliError("USAGE", usage, EXIT.USAGE);
       target = next as Target;
       targetSeen = true;
+    } else if (item === "--operator-env") {
+      const next = argv[++index];
+      if (operatorEnv !== undefined || !next || next.startsWith("--"))
+        throw new CliError("USAGE", usage, EXIT.USAGE);
+      operatorEnv = next;
     } else if (item === "--check") {
       if (check) throw new CliError("USAGE", usage, EXIT.USAGE);
       check = true;
@@ -73,10 +80,18 @@ export function parseArguments(argv: readonly string[]): CliOptions {
   if (
     !["db migrate", "content sync", "auth bootstrap", "env prepare"].includes(command) ||
     (command === "env prepare" && targetSeen && target !== "cloudflare-local") ||
-    (check && command !== "content sync")
+    (check && command !== "content sync") ||
+    (operatorEnv !== undefined &&
+      (!targetSeen || target !== "cloudflare-remote" || command === "env prepare"))
   )
     throw new CliError("USAGE", usage, EXIT.USAGE);
-  return { check, command: command as Command, json, target };
+  return {
+    check,
+    command: command as Command,
+    json,
+    target,
+    ...(operatorEnv === undefined ? {} : { operatorEnv }),
+  };
 }
 
 export interface CliEnvironment {

@@ -6,16 +6,30 @@ import type { Target } from "./index.js";
 import { doctorUsage, parseDoctorArguments } from "./doctor-report.js";
 import { addBlockUsage, runAddBlockCommand } from "./blocks-command.js";
 
+import { parsePreflightArguments, preflightUsage } from "./preflight-options.js";
+
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) {
-    console.info(`${usage}\n${doctorUsage}\n${upgradeUsage}\n${addBlockUsage}`);
+    console.info(`${usage}\n${doctorUsage}\n${upgradeUsage}\n${addBlockUsage}\n${preflightUsage}`);
     return EXIT.OK;
   }
   const json = argv.includes("--json");
   const operation = identifyOperation(argv);
   let target: Target = "node";
   try {
+    if (argv[0] === "cloudflare" && argv[1] === "preflight") {
+      if (argv.length === 3 && ["--help", "-h"].includes(argv[2]!)) {
+        console.info(preflightUsage);
+        return EXIT.OK;
+      }
+      const options = parsePreflightArguments(argv.slice(2));
+      target = "cloudflare-remote";
+      const { runPreflight } = await import("./preflight.js");
+      const result = await runPreflight(options);
+      console.info(result.output);
+      return result.exitCode;
+    }
     if (argv[0] === "doctor") {
       if (argv.length === 2 && (argv[1] === "--help" || argv[1] === "-h")) {
         console.info(doctorUsage);
@@ -66,7 +80,15 @@ async function main(): Promise<number> {
       );
       return EXIT.OK;
     }
-    const environment = loadEnvironment(options.target, process.env);
+    const values =
+      options.operatorEnv === undefined
+        ? process.env
+        : (
+            await (
+              await import("./operator-environment.js")
+            ).resolveOperatorEnvironment(options.operatorEnv)
+          ).values;
+    const environment = loadEnvironment(options.target, values);
     // Runtime adapters are unnecessary for upgrade, help and invalid settings.
     const { runCommand } = await import("./commands.js");
     const result = await runCommand(options, environment);

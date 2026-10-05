@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "version": "0.1.0-alpha.2",
   "generatorVersion": "0.1.0-alpha.2",
-  "templateVersion": "0.14.0",
+  "templateVersion": "0.15.0",
   "publishedVersions": ["0.1.0-alpha.1"],
   "channel": "next",
   "sourceRepository": "https://github.com/lacecms/lace",

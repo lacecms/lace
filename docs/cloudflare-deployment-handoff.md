@@ -80,24 +80,38 @@ project root unless noted.
 1. **Generate and install.** `create-lace <dir> --cloudflare` (starter mode),
    `pnpm install`, `pnpm env:prepare`, `pnpm cf:env:prepare`, then
    `pnpm cf:build` to confirm the account-free bundle. Commit the project to the
-   Git repository, which must not contain `.env` or `worker/.dev.vars`.
+   Git repository, which must not contain `.env`, `.env.local`,
+   `.lace/cloudflare-operator.env` or `worker/.dev.vars`. All commands run from
+   the generated CMS root. Follow `docs/lace-operations.md` to choose either
+   a private D1 operator token with separate Wrangler OAuth, or a single token
+   with the necessary D1/Workers/Pages permissions. Copy the credential-free
+   `docs/cloudflare-operator.env.example` to the private path with mode `0600`,
+   then edit it privately. For existing alpha.2 projects, install the current
+   CLI and upgrade the template; move the token out of both root dotenv files,
+   remove both assignments and `unset CLOUDFLARE_API_TOKEN` before OAuth.
 2. **Provision.** `pnpm exec wrangler d1 create <name>-cms`,
    `pnpm exec wrangler r2 bucket create <name>-media`, optionally
    `pnpm exec wrangler kv namespace create CACHE`.
 3. **Configure.** Put the D1 ID into `worker/wrangler.jsonc` and `.env`
    (`LACE_D1_DATABASE_ID`), add the optional KV binding, set
    `vars.LACE_PUBLIC_BASE_URL` to the Worker's HTTPS origin, and set
-   `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` in `.env`. Run
-   `pnpm exec lace doctor --target cloudflare-remote --stage setup` and expect
-   pending migrations to be reported as expected.
+   the account, token, database and config path in `.lace/cloudflare-operator.env`.
+   Align any root dotenv account setting. For the split workflow run
+   `pnpm exec wrangler login`, then
+   `pnpm exec lace cloudflare preflight --target cloudflare-remote --wrangler-auth oauth --operator-env .lace/cloudflare-operator.env --json`,
+   and `pnpm exec wrangler whoami --account <account-id> --config worker/wrangler.jsonc`.
+   Preflight only probes D1 with SELECT 1; OAuth membership and deploy/secret
+   permissions require separate review. For the single-token workflow use
+   `node --env-file=.lace/cloudflare-operator.env` for both the CLI preflight
+   (`--wrangler-auth token`) and `node_modules/wrangler/bin/wrangler.js`.
 4. **Secrets.** `openssl rand -hex 32 | pnpm exec wrangler secret put LACE_AUTH_SECRET --config worker/wrangler.jsonc`.
    The deploy hook is added in step 9.
-5. **Migrate.** `node --env-file=.env node_modules/@lacecms/cli/dist/bin.js db migrate --target cloudflare-remote`.
+5. **Migrate.** `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`.
    A placeholder ID must be refused. Test this once before setting the ID.
-6. **Sync.** The same command with `content sync --target cloudflare-remote`.
+6. **Sync.** `pnpm exec lace content sync --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`.
 7. **Deploy the Worker.** `pnpm exec wrangler deploy --config worker/wrangler.jsonc`.
    Confirm `GET <origin>health/ready` returns `{"status":"ready"}`.
-8. **Bootstrap and set up.** `… auth bootstrap --target cloudflare-remote` prints
+8. **Bootstrap and set up.** `pnpm exec lace auth bootstrap --target cloudflare-remote --operator-env .lace/cloudflare-operator.env` prints
    one expiring token. Open `<origin>admin/`, create the administrator in the
    browser setup screen, sign in, upload an image, edit and publish the home
    page and one post, and issue a read-only build token in Admin Settings.
@@ -138,7 +152,7 @@ project root unless noted.
     reason. Restore it and use Admin retry for a terminal failure. Confirm that
     an expired or used setup token is refused and that setup stays closed after
     a Worker redeploy.
-13. **Diagnose.** `pnpm exec lace doctor --target cloudflare-remote --stage ready`
+13. **Diagnose.** `node --env-file=.env --env-file=.lace/cloudflare-operator.env node_modules/@lacecms/cli/dist/bin.js doctor --target cloudflare-remote --stage ready`
     with the build token present: migrations pass and the report contains no
     secret.
 

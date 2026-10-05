@@ -26,7 +26,7 @@ Start with the generated root `README.md` for the concise quickstart. README is 
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.14.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The root quickstart, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.15.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The root quickstart, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
@@ -345,7 +345,7 @@ pnpm exec lace doctor --target cloudflare-local --stage setup
 pnpm exec lace doctor --target cloudflare-local --stage ready
 ```
 
-Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and skips migration evidence, and `ready` fails. With the Worker running and a build token present, `ready` passes with migration readiness derived from the Worker's `/health/ready`. Doctor never starts the Worker or creates `.lace/data/cloudflare`. For your account, `pnpm exec lace doctor --target cloudflare-remote --stage ready` reads only the remote D1 migration ledger with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and skips migration evidence, and `ready` fails. With the Worker running and a build token present, `ready` passes with migration readiness derived from the Worker's `/health/ready`. Doctor never starts the Worker or creates `.lace/data/cloudflare`. For your account use the explicit private-file remote diagnosis described below; doctor reads the remote D1 ledger and does not verify deployment permissions.
 
 ### Recovery
 
@@ -356,18 +356,72 @@ Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and ski
 - **Restarts.** Content, accounts, setup state and media survive `cf:dev` restarts in `.lace/data/cloudflare`. Reset only by deleting that directory with the Worker stopped.
 - **Worker unavailable.** The Worker answers with a generic unavailable error and logs only the names of missing or invalid variables. Check `worker/.dev.vars` locally or the Worker's secrets and `vars` remotely.
 
+### Choose Cloudflare management credentials
+
+Work from this generated CMS root; Wrangler commands use `--config worker/wrangler.jsonc` in the default environment. Local `cf:*` scripts stay local. Remote commands need an explicit account and database; local content is not copied to your account.
+
+Choose one of these management workflows:
+
+| Choice            | Lace remote migrate/sync/bootstrap                                                   | Wrangler deploy/secrets                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Split credentials | D1-scoped API token in `.lace/cloudflare-operator.env`, loaded with `--operator-env` | OAuth from a one-time `pnpm exec wrangler login`; no API token in shell, `.env` or `.env.local` |
+| Single token      | One sufficiently scoped token in the same private file                               | Explicitly load that file only for the intended Wrangler invocation                             |
+
+An operator token needs **Account · D1 · Edit** for remote D1 operations. The single-token choice additionally needs **Account · Workers Scripts · Edit** (current equivalent Workers Editor for an existing Worker; creating one may need Workers product Admin), **Account · Account Settings · Read** for account resolution, **Account · Workers R2 Storage · Edit** for bucket creation, **Account · Cloudflare Pages · Edit** for Pages operations, and **Account · Workers KV Storage · Edit** only for optional KV. Custom domain/route provisioning may also need **Zone · Workers Routes · Edit** and **DNS · Edit**. Scope the token to the intended account/resources. Check current provider permissions for each operation; a successful read-only probe does not prove write permissions. A D1-only token is insufficient for Worker deploy or secrets.
+
+| Credential             | Purpose and location                                                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LACE_AUTH_SECRET`     | CMS sessions/authentication; local Worker `worker/.dev.vars`, production Worker secret uploaded separately. Not a Cloudflare management token. |
+| `CLOUDFLARE_API_TOKEN` | Account management; private operator file or intended process only. Never upload it as a CMS Worker secret.                                    |
+| Wrangler OAuth         | Management login stored by Wrangler; never copied into the operator file or Worker.                                                            |
+| Setup token / password | One-time first-admin setup / subsequent admin login; neither is a build credential.                                                            |
+| `LACE_BUILD_TOKEN`     | Read-only published exports; private site build environment, never public browser configuration.                                               |
+| `LACE_PAGES_API_TOKEN` | Separate Pages-Read-only Worker secret for deployment tracking; never reuse the operator token.                                                |
+
+Create the private file once without overwriting an existing copy. The generated `.lace/` exists already:
+
+```bash
+node --input-type=module -e 'import { copyFile, chmod, constants } from "node:fs/promises"; process.umask(0o077); await copyFile("docs/cloudflare-operator.env.example", ".lace/cloudflare-operator.env", constants.COPYFILE_EXCL); await chmod(".lace/cloudflare-operator.env", 0o600);'
+```
+
+Edit it privately: set `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `LACE_D1_DATABASE_ID` and `LACE_WRANGLER_CONFIG=worker/wrangler.jsonc`. The account ID is 32 hexadecimal characters. The D1 ID must match the `DB` binding. This file is ignored, user-owned and loaded only when selected; the CLI never sources shell code. Process values override it, including empty values. Selected-file failures never fall back. Do not add other assignments to the operator file.
+
+For split credentials, remove API-token assignments from **both** `.env` and `.env.local` and clear `CLOUDFLARE_API_TOKEN` in the current shell before login or deploy. `unset CLOUDFLARE_API_TOKEN` alone is insufficient when Wrangler can reload a file. A plain `CLOUDFLARE_ACCOUNT_ID` may remain in `.env` to select the same account for Wrangler; align it with the private file and Worker configuration. Then:
+
+```bash
+unset CLOUDFLARE_API_TOKEN
+pnpm exec wrangler login
+pnpm exec lace cloudflare preflight --target cloudflare-remote --wrangler-auth oauth --operator-env .lace/cloudflare-operator.env
+pnpm exec wrangler whoami --account <account-id> --config worker/wrangler.jsonc
+```
+
+Preflight reads only the explicit D1 endpoint (`SELECT 1`) and default-root credential inputs. It prints source categories and the validated account ID, never token values or private paths. `oauth-candidate` means no overriding token was found; OAuth login/account membership and Workers/Pages write permissions remain unverified. Inspect `whoami` and the operation permission checklist before deployment/secrets. Missing permissions, authorization rejection, conflicting account settings or stale dotenv tokens need correction before proceeding. Preflight itself never logs in, launches Wrangler, changes files or refreshes OAuth credentials. Named environments/profiles and alternative API-key authentication are outside its default-root scope and fail with advice.
+
+For the single-token choice, explicitly load the same private file into these individual processes (the token stays out of shell arguments):
+
+```bash
+node --env-file=.lace/cloudflare-operator.env node_modules/@lacecms/cli/dist/bin.js cloudflare preflight --target cloudflare-remote --wrangler-auth token
+node --env-file=.lace/cloudflare-operator.env node_modules/wrangler/bin/wrangler.js whoami --account <account-id> --config worker/wrangler.jsonc
+node --env-file=.lace/cloudflare-operator.env node_modules/wrangler/bin/wrangler.js deploy --config worker/wrangler.jsonc
+```
+
+Use that explicit Wrangler invocation also for provisioning and `secret put` in the single-token choice. Login is unnecessary for a valid API token. Preflight reports when the intended Wrangler token differs from the Lace token; it cannot certify equal permissions.
+
+**Alpha.2 upgrade:** install a compatible new CLI before using `--operator-env` or preflight. Template `0.15.0` supplies the example and managed guidance; published alpha.2 packages are immutable and do not gain these commands retroactively. `lace upgrade` preserves `.env`, `.env.local`, README, the private operator file, Worker configuration and site source. Manually move the legacy API token into the protected file, remove its assignments from both implicit dotenv files, clear the inherited token, then repeat preflight and `whoami`. Do not print/copy credentials through chat, logs or inline shell commands. Upgrade never relocates credentials automatically.
+
 ### Deploy the Worker to your account
 
-Every command in this section is an explicit mutation of your Cloudflare account; generation, installation and the `cf:*` scripts never perform them. You need an account with Workers, D1 and R2, and either `pnpm exec wrangler login` or an API token with Workers Scripts, D1 and R2 edit permissions (plus Pages edit for the site). Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` only in your private `.env` or CI secrets. Replace `<name>` with the names in `worker/wrangler.jsonc`.
+Every provisioning/deployment command here is an explicit mutation of your Cloudflare account; generation, installation and the local `cf:*` scripts never perform them. Preflight and `whoami` are diagnostic steps. You need Workers, D1 and R2. First choose the credential workflow above; the commands below show split credentials, while the single-token choice uses its explicit Node env-file Wrangler invocation.
 
-1. Provision: `pnpm exec wrangler d1 create <name>-cms` and `pnpm exec wrangler r2 bucket create <name>-media`. Optionally create a KV namespace for `CACHE`.
-2. Configure: put the returned D1 ID into `worker/wrangler.jsonc` and `LACE_D1_DATABASE_ID` in `.env`, add the optional KV binding, and set `LACE_PUBLIC_BASE_URL` in the configuration's `vars` to the Worker's HTTPS origin (its `workers.dev` address or a custom domain route), with a trailing slash.
-3. Secrets: `pnpm exec wrangler secret put LACE_AUTH_SECRET --config worker/wrangler.jsonc` with at least 32 random bytes (for example from `openssl rand -hex 32`), and optionally `LACE_DEPLOY_HOOK_URL` with the static site's HTTPS deploy hook and `LACE_PAGES_API_TOKEN` for Pages deployment tracking.
-4. Migrate and sync with the remote target, after setting `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env`: `node --env-file=.env node_modules/@lacecms/cli/dist/bin.js db migrate --target cloudflare-remote`, then the same with `content sync --target cloudflare-remote`. A placeholder D1 ID never reaches a real database.
-5. Deploy: `pnpm exec wrangler deploy --config worker/wrangler.jsonc`.
-6. Bootstrap: `node --env-file=.env node_modules/@lacecms/cli/dist/bin.js auth bootstrap --target cloudflare-remote`, then create the first administrator at `<LACE_PUBLIC_BASE_URL>admin/`.
+1. Provision: `pnpm exec wrangler d1 create <name>-cms --config worker/wrangler.jsonc` and `pnpm exec wrangler r2 bucket create <name>-media --config worker/wrangler.jsonc`. Optionally create a KV namespace for `CACHE`.
+2. Configure: put the returned D1 ID into `worker/wrangler.jsonc`, local `LACE_D1_DATABASE_ID` in `.env` and remote `LACE_D1_DATABASE_ID` in the private operator file; align the account ID and public HTTPS origin. Configure `vars` with a trailing-slash `LACE_PUBLIC_BASE_URL`. Changing the D1 ID selects different local simulated data.
+3. Preflight: `pnpm exec lace cloudflare preflight --target cloudflare-remote --wrangler-auth oauth --operator-env .lace/cloudflare-operator.env`, then `pnpm exec wrangler whoami --account <account-id> --config worker/wrangler.jsonc` and review operation permissions.
+4. Secrets: `pnpm exec wrangler secret put LACE_AUTH_SECRET --config worker/wrangler.jsonc` with at least 32 random bytes, optionally `LACE_DEPLOY_HOOK_URL` and the separate `LACE_PAGES_API_TOKEN`. Secret changes can create/deploy a Worker version; they are explicit account mutations.
+5. Migrate and sync: `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`, then `pnpm exec lace content sync --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`. Migration's Wrangler child receives the selected D1 token/account only for that operation; subsequent independent Wrangler deploy uses your chosen workflow.
+6. Deploy: `pnpm exec wrangler deploy --config worker/wrangler.jsonc`.
+7. Bootstrap: `pnpm exec lace auth bootstrap --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`, then create the first administrator at `<LACE_PUBLIC_BASE_URL>admin/`.
 
-Redeploy after editing `lace.config.ts`, and sync with the remote target before the new Worker serves editors. Verified real-account deployment is part of the release gate; local tests do not prove it.
+Redeploy after editing `lace.config.ts`, and sync with the remote target before the new Worker serves editors. Verified real-account deployment remains release-gate work; local/stub tests do not prove it. Remote doctor, if needed, can be run with explicit private-file loading: `node --env-file=.env --env-file=.lace/cloudflare-operator.env node_modules/@lacecms/cli/dist/bin.js doctor --target cloudflare-remote --stage setup`; review the remote API origin in `.env` first. Doctor is not credential preflight.
 
 <!-- lace-site: starter existing -->
 

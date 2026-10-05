@@ -16,7 +16,7 @@ export interface TemplateFile {
   readonly metadata?: true;
 }
 
-export const TEMPLATE_VERSION = "0.14.0";
+export const TEMPLATE_VERSION = "0.15.0";
 
 const STARTER = ["starter"] as const;
 const SITE = ["starter", "existing"] as const;
@@ -38,6 +38,7 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "deploy/minio.Dockerfile", owner: "managed" },
   { path: "deploy/nginx.conf", owner: "managed" },
   { path: "docs/lace-astro-site.md", owner: "managed" },
+  { path: "docs/cloudflare-operator.env.example", owner: "managed", cloudflare: true },
   { path: "docs/lace-operations.md", owner: "managed", render: "markers" },
   { path: "lace.config.ts", owner: "user" },
   { path: "package.json", owner: "managed", interpolateName: true, render: "root-package" },

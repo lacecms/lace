@@ -216,6 +216,8 @@ export async function runCommand(
         persistTo: environment.persistTo,
         wranglerConfig,
         d1: options.target === "cloudflare-remote" ? database : undefined,
+        accountId: environment.accountId,
+        apiToken: environment.apiToken,
       });
       if (options.target === "cloudflare-local") {
         const opened = await openLocalD1({

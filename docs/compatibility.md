@@ -101,6 +101,10 @@ version; mixing artifacts from different versions is unsupported.
 | `0.1.0-alpha.1` | `0.4.0` | Published 2026-09-30, immutable | Predates environment preparation, doctor, browser setup, the tour, existing-site mode, `lace add block`, `@lacecms/astro`/`@lacecms/render` and the generated Cloudflare Worker |
 | `0.1.0-alpha.2` | `0.14.0` | Candidate prepared and accepted locally (Step 32B); not published | Carries the onboarding feedback improvements of Steps 26–31 |
 
+The current source template is `0.15.0` (33F credential guidance and private
+operator-file support). It requires the freshly built 33F CLI; this source
+advance does not publish or replace the prepared alpha.2 artifacts above.
+
 Both runtime images target `linux/amd64` and `linux/arm64`; each platform is
 built and smoke-tested separately during preparation, while the full consumer
 journey runs on the host's platform. Consumer packages require Node

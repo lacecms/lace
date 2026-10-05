@@ -1608,6 +1608,7 @@ async function main() {
       "starter",
       "self-test",
       "upgrade",
+      "credentials",
     ].includes(phase)
   ) {
     throw new Error(`Unknown acceptance phase: ${phase}`);
@@ -1710,6 +1711,26 @@ async function main() {
   await verifySnapshots(parent);
   await run("mkdir-tarballs", "mkdir", ["-p", tarballDirectory]);
   const tarballs = await packConsumerGraph(tarballDirectory);
+  if (phase === "credentials") {
+    const project = join(parent, "credentials", "acceptance-site");
+    await mkdir(dirname(project), { recursive: true });
+    await run("credentials-generate", "node", [generatorBin, "create", project, "--cloudflare"]);
+    await installPackedConsumer(project, tarballs);
+    await copyFile(
+      join(workspace, "scripts/cloudflare-credentials-harness.mjs"),
+      join(project, "credentials-harness.mjs"),
+    );
+    await run("credentials-packed-contract", "node", ["credentials-harness.mjs"], { cwd: project });
+    await run("credentials-worker-bundle", "pnpm", ["cf:build"], { cwd: project });
+    await templateUpgradeJourney(parent, {
+      cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+      generator: generatorBin,
+      run,
+      secretValues,
+      workspace,
+    });
+    return;
+  }
   if (phase === "cloudflare") {
     await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
     return;
