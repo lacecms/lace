@@ -150,6 +150,13 @@ test("inserts between blocks and reorders with the keyboard drag handle", async 
   await expect(cards.nth(1)).toBeFocused();
   await expect(cards.nth(1)).toHaveAttribute("data-active", "true");
 
+  // Keep all sortable targets visible so keyboard coordinates do not depend on scrolling tall fields.
+  for (const label of ["Hero", "Hero", "Quote"]) {
+    await page
+      .getByRole("button", { name: `Collapse ${label} block` })
+      .first()
+      .click();
+  }
   const handle = page.getByRole("button", { name: "Reorder Quote block" });
   await handle.focus();
   await page.keyboard.press("Space");

@@ -52,11 +52,16 @@ export function entryStatus(entry: ContentEntryDto): ContentEntryStatusDto {
   return entry.published.revision === entry.draft.revision ? "published" : "changed";
 }
 
+/** Serializes the visible order without changing the editor's values or stable identities. */
+export function orderedDraftBlocks(blocks: readonly ContentBlockDto[]): ContentBlockDto[] {
+  return blocks.map((block, index) => ({ ...block, position: (index + 1) * 1_000 }));
+}
+
 /** Canonical JSON of the local draft so an author can keep it during a conflict. */
 export function localDraftJson(draft: DraftEditorValues): string {
   const values = withoutClearedValues(draft);
   return canonicalizeJson({
-    blocks: values.blocks,
+    blocks: orderedDraftBlocks(values.blocks),
     fields: values.fields,
     ...(values.slug === undefined ? {} : { slug: values.slug }),
     title: values.title,

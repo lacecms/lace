@@ -866,3 +866,37 @@ test("a writer clears a saved optional date and saves without it", async () => {
   await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
   expect(saveDraft).toHaveBeenCalledWith("entry-1", expect.objectContaining({ fields: {} }));
 });
+
+test("ordering rejection preserves the local draft and offers JSON recovery and retry", async () => {
+  const user = userEvent.setup();
+  const writeText = vi.fn(async (_text: string) => undefined);
+  vi.spyOn(navigator.clipboard, "writeText").mockImplementation(writeText);
+  let fail = true;
+  const saveDraft = vi.fn(
+    async (_entryId: string, input: Parameters<AdminClient["saveDraft"]>[1]) => {
+      if (fail)
+        throw new AdminClientError({
+          code: "CONTENT_INVALID_STATE",
+          message: "Block at index 1 has an invalid position.",
+          requestId: "order-request",
+        });
+      return { ...draftEntry, draft: { ...draftEntry.draft, ...input, revision: 3 } };
+    },
+  );
+  mountSummary({ saveDraft: saveDraft as unknown as AdminClient["saveDraft"] });
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.type(screen.getByLabelText("Title"), " unsaved");
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Block at index 1");
+  expect(screen.getByText(/Your unsaved changes are still here/u)).toBeInTheDocument();
+  expect(screen.getByText("Request ID: order-request")).toBeInTheDocument();
+  expect(screen.getByLabelText("Title")).toHaveValue(`${draftEntry.draft.title} unsaved`);
+  await user.click(screen.getByRole("button", { name: "Copy my JSON" }));
+  const json = JSON.parse(writeText.mock.calls[0]![0] as string);
+  expect(json.blocks.map((block: { position: number }) => block.position)).toEqual([1000, 2000]);
+  expect(json.title).toBe(`${draftEntry.draft.title} unsaved`);
+  fail = false;
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled());
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

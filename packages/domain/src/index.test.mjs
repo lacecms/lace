@@ -198,3 +198,24 @@ test("carries the stable media-in-use code for referenced-media refusals", () =>
   expect(error).toBeInstanceOf(Error);
   expect(error).toMatchObject({ code: "MEDIA_IN_USE", name: "DomainError" });
 });
+
+test.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, 1000, 500])(
+  "rejects invalid position %s with bounded ordering diagnostics",
+  (position) => {
+    const key = "01ARZ3NDEKTSV4RRFFQ69G5FA1";
+    const input = [block("first", 1000), block(key, position, { body: "secret-content" })];
+    expect(() => assertOrderedBlockPositions(input)).toThrow(`Block at index 1 (key ${key})`);
+    expect(input.map((block) => block.position)).toEqual([1000, position]);
+    for (const unsafe of ["secret\npassword", "x".repeat(200)]) {
+      try {
+        assertOrderedBlockPositions([block(unsafe, 0, { body: "secret-content" })]);
+      } catch (error) {
+        expect(error.code).toBe("CONTENT_INVALID_STATE");
+        expect(error.message).toContain("Block at index 0");
+        expect(error.message).toContain("Resubmit positions");
+        expect(error.message).not.toContain(unsafe);
+        expect(error.message).not.toContain("secret-content");
+      }
+    }
+  },
+);

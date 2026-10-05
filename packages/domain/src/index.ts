@@ -49,6 +49,18 @@ export class DomainError extends Error {
   }
 }
 
+/** A deliberately bounded ordering diagnostic safe to carry across transport boundaries. */
+export class BlockOrderError extends DomainError {
+  public constructor(index: number, key: string) {
+    const safeKey = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/u.test(key) ? ` (key ${key})` : "";
+    super(
+      "CONTENT_INVALID_STATE",
+      `Block at index ${Number.isSafeInteger(index) && index >= 0 ? index : 0}${safeKey} has an invalid position. Positions must be positive safe integers in strictly increasing order. Resubmit positions in the displayed block order.`,
+    );
+    this.name = "BlockOrderError";
+  }
+}
+
 function fail(code: DomainErrorCode, message: string): never {
   throw new DomainError(code, message);
 }
@@ -381,12 +393,12 @@ function assertBlockKeys(blocks: readonly ContentBlock[]): void {
 export function assertOrderedBlockPositions(blocks: readonly ContentBlock[]): void {
   assertBlockKeys(blocks);
   let previousPosition = 0;
-  for (const block of blocks) {
+  for (const [index, block] of blocks.entries()) {
     if (!Number.isSafeInteger(block.position) || block.position <= 0) {
-      fail("CONTENT_INVALID_STATE", "Block positions must be positive safe integers.");
+      throw new BlockOrderError(index, block.key);
     }
     if (block.position <= previousPosition) {
-      fail("CONTENT_INVALID_STATE", "Block positions must be strictly increasing.");
+      throw new BlockOrderError(index, block.key);
     }
     previousPosition = block.position;
   }

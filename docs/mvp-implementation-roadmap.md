@@ -2306,6 +2306,11 @@ complete subprocess logs in the admin are not required.
 
 ### Session 33A — Block order on draft save
 
+Completed 2026-10-05. Save and recovery JSON derive sparse positions from the
+displayed order; safe ordering diagnostics preserve unsaved work. See
+[`step-33a-block-order-acceptance.md`](./step-33a-block-order-acceptance.md) for
+the SQLite/D1, browser, export and Astro verification. Sessions 33B–33H remain.
+
 1. Guarantee that the saved block list satisfies the domain ordering invariant
    after pointer and keyboard reordering, insertion or duplication in the
    middle, removal, and undo of removal, while keeping stable block `key`s and

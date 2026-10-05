@@ -66,6 +66,14 @@ use sparse increments of 1,000; insertion SHALL use a safe in-between position
 when one exists and SHALL require normalization when no integer gap remains.
 Normalization SHALL preserve block order.
 
+Invalid non-positive, unsafe, duplicate, or descending positions SHALL be rejected
+with `CONTENT_INVALID_STATE` before persistence on both runtimes. The ordering
+message SHALL identify the zero-based offending block index, include its key
+only when it is a bounded safe identifier, and explain that positions must be
+positive safe integers in strictly increasing order. It SHALL advise resubmitting
+positions in displayed order, without exposing block data or arbitrary key text.
+The domain SHALL NOT sort or normalize invalid client input into acceptance.
+
 #### Scenario: Detect a page singleton race
 - **WHEN** a second entry is created for a `page` model that already has its
   singleton entry
@@ -85,6 +93,14 @@ Normalization SHALL preserve block order.
 - **WHEN** an insertion has no integer position between adjacent ordered blocks
 - **THEN** the system normalizes the complete list into increasing 1,000-step
   positions without changing block order
+
+#### Scenario: Reject invalid ordering without changing state
+- **WHEN** a writer submits non-positive, unsafe, duplicate or descending positions
+- **THEN** the request fails with the offending index and a safe reason, and draft revision, published snapshot and build state remain unchanged
+
+#### Scenario: Diagnostics exclude arbitrary key text and block data
+- **WHEN** an invalid ordered aggregate carries an unsafe or oversized key or sensitive block data
+- **THEN** the ordering error includes the index and recovery instruction without echoing that key or data
 
 ### Requirement: Draft and publication lifecycle invariants
 Every committed content entry SHALL have exactly one mutable draft snapshot and

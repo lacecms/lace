@@ -5,6 +5,7 @@ import {
   entryStatus,
   fieldLabel,
   localDraftJson,
+  orderedDraftBlocks,
   resolvedPublicPath,
 } from "./draft.js";
 
@@ -63,4 +64,26 @@ test("derives draft, published, and changed status from the revisions", () => {
   expect(entryStatus(draft)).toBe("draft");
   expect(entryStatus(published)).toBe("published");
   expect(entryStatus(changed)).toBe("changed");
+});
+
+test("derives sparse positions in displayed order without mutating keys or data", () => {
+  expect(orderedDraftBlocks([])).toEqual([]);
+  const blocks = [8000, 1, 1, 0].map((position, index) =>
+    Object.freeze({
+      data: Object.freeze({ heading: `Block ${index}` }),
+      key: `key-${index}`,
+      position,
+      schemaVersion: 1,
+      type: "hero",
+    }),
+  );
+  const ordered = orderedDraftBlocks(blocks);
+  expect(ordered.map((block) => block.position)).toEqual([1000, 2000, 3000, 4000]);
+  expect(ordered.map(({ position: _position, ...block }) => block)).toEqual(
+    blocks.map(({ position: _position, ...block }) => block),
+  );
+  expect(blocks.map((block) => block.position)).toEqual([8000, 1, 1, 0]);
+  expect(
+    JSON.parse(localDraftJson({ blocks: [...blocks], fields: {}, title: "T" })).blocks,
+  ).toEqual(ordered);
 });

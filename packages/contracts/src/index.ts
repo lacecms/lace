@@ -1,6 +1,6 @@
 import { canonicalizeJson, defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
-import { DomainError, unixMilliseconds } from "@lacecms/domain";
+import { BlockOrderError, DomainError, unixMilliseconds } from "@lacecms/domain";
 import type {
   ContentBlock,
   ContentEntry,
@@ -1001,7 +1001,13 @@ export function transportError(code: TransportErrorCode): ClassifiedError {
 export function classifyError(error: unknown): ClassifiedError {
   if (error instanceof DomainError) {
     return {
-      body: { error: { code: error.code, message: domainErrorMessage[error.code] } },
+      body: {
+        error: {
+          code: error.code,
+          message:
+            error instanceof BlockOrderError ? error.message : domainErrorMessage[error.code],
+        },
+      },
       status: domainErrorStatus[error.code],
     };
   }

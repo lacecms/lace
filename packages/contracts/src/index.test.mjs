@@ -1,5 +1,6 @@
 import {
   DomainError,
+  BlockOrderError,
   actorId,
   blockKey,
   contentEntryId,
@@ -607,5 +608,19 @@ test("setup state is a strict boolean-only contract", () => {
   expect(v.safeParse(setupStateSchema, { setupComplete: "false" }).success).toBe(false);
   expect(v.safeParse(setupStateSchema, { setupComplete: true, userId: "private" }).success).toBe(
     false,
+  );
+});
+
+test("transports only bounded block-order diagnostics and keeps other domain messages private", () => {
+  const error = new BlockOrderError(1, "01ARZ3NDEKTSV4RRFFQ69G5FA1");
+  expect(classifyError(error)).toEqual({
+    status: 422,
+    body: { error: { code: "CONTENT_INVALID_STATE", message: error.message } },
+  });
+  expect(
+    classifyError(new DomainError("CONTENT_INVALID_STATE", "secret-content")).body.error.message,
+  ).not.toContain("secret-content");
+  expect(classifyError(new BlockOrderError(1, "password=secret")).body.error.message).not.toContain(
+    "password",
   );
 });

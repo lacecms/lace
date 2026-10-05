@@ -136,6 +136,10 @@ the response provides field paths.
 - **THEN** the client sends no draft-save request and the server draft revision
   remains unchanged
 
+#### Scenario: Server rejects block ordering
+- **WHEN** Save returns `CONTENT_INVALID_STATE` for invalid block positions
+- **THEN** the editor shows the safe server reason, the request ID when provided, and advice to retry Save or preserve recovery JSON before reloading, while retaining unsaved values, order, keys and dirty state
+
 ### Requirement: Draft blocks are authored as an ordered allowed aggregate
 The authenticated entry editor SHALL expose only the configured model's allowed
 registered block definitions whose portable metadata validates at the browser
@@ -144,10 +148,11 @@ and reorder blocks without mutating another block's data. The browser SHALL
 assign a ULID-format stable key to every newly added, inserted, or duplicated
 block, retain it through local reorders and saves, and ensure a duplicate
 receives a distinct key. Keyboard and pointer reorder interactions SHALL update
-one shared visible order. The editor SHALL retain sparse local positions while
-editing, submit its blocks as an ordered complete-draft list, and replace its
-local list only with the server-returned canonical positions after a successful
-save.
+one shared visible order. The editor SHALL treat the visible array as the authoritative local order.
+Before each complete-draft save or recovery JSON copy it SHALL derive positive
+positions in increments of 1,000 from that order without changing stable keys,
+data, types, or schema versions. It SHALL replace its local list and baseline
+only with the server-returned canonical positions after a successful save.
 
 Each block SHALL render as a card whose header shows a reorder handle, an icon
 for its type, its label (or a label derived from its type when none is
@@ -236,6 +241,10 @@ SHALL name the moved block by its label and position rather than by its key.
 #### Scenario: A block with an error stays expanded
 - **WHEN** the server rejects a field of a collapsed block
 - **THEN** the block renders expanded and shows the error on its field
+
+#### Scenario: Structural operations preserve saved and published order
+- **WHEN** a writer performs pointer or keyboard reordering, middle insertion or duplication, removal, or removal followed by Undo, then saves, reloads, and publishes
+- **THEN** the saved draft, published export, and Astro output retain the displayed sequence and the surviving blocks retain their stable keys and data
 
 ### Requirement: Rich text is edited only through the shared safe document subset
 The editor SHALL provide rich-text controls for model rich-text fields and
