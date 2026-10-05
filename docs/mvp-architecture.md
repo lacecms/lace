@@ -1218,7 +1218,7 @@ server-only constraints that Step 30 implements. Exact DTO fields and spec
 wording belong to the implementing OpenSpec changes. The public build-export DTO
 is unchanged: public entries still reuse the content-entry schema with an
 always-present `published` and a mirrored `draft` snapshot, and the loader hides
-that shape (a dedicated public schema is a Step 33 question).
+that shape (a dedicated public schema is a Step 34 question).
 
 ### 13.1 SDK client
 

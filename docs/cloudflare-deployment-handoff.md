@@ -1,6 +1,6 @@
 # Cloudflare real-account deployment handoff
 
-This is the procedure and checklist for the Step 33 release gate. It deploys a
+This is the procedure and checklist for the Step 34 release gate. It deploys a
 project generated with `create-lace --cloudflare` to a real Cloudflare account:
 the CMS Worker (D1, R2, packaged admin, scheduled recovery) and the separate
 static Astro site rebuilt through a deploy hook.
@@ -17,7 +17,7 @@ real values privately, never in the repository.
 
 ## Inputs
 
-- The exact candidate artifacts from Step 32: `create-lace`, `@lacecms/*`
+- The exact candidate artifacts from Step 33: `create-lace`, `@lacecms/*`
   packages (including `@lacecms/platform-cloudflare` with `admin/`) at one
   version and template version. Record both versions.
 - Node `>=24.12.0 <25` and pnpm 12, as declared by the generated project.

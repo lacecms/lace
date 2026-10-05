@@ -150,6 +150,7 @@ foundation
   -> shared rendering core + block installation
   -> complete Cloudflare consumer onboarding
   -> feedback regression + next alpha verification
+  -> alpha.2 field-trial fixes + next alpha verification
   -> cross-runtime/security/release gate
 ```
 
@@ -190,9 +191,10 @@ foundation
 | 30 | Shared rendering core and block installation | L | 30A, 30B, 30C, 30D, 30E |
 | 31 | Complete generated Cloudflare consumer onboarding | M | 31A, 31B |
 | 32 | Feedback regression acceptance and next alpha preparation | M | 32A, 32B |
-| 33 | MVP release gate | L | 33A, 33B, 33C |
+| 33 | Alpha.2 field-trial fixes and next alpha | L | 33A, 33B, 33C, 33D, 33E, 33F, 33G, 33H |
+| 34 | MVP release gate | L | 34A, 34B, 34C |
 
-The roadmap is therefore **86 recommended session units**. Small neighboring
+The roadmap is therefore **94 recommended session units**. Small neighboring
 units can be combined after the foundation stabilizes, but units that introduce
 a database migration, a runtime adapter, or a security boundary should remain
 separate.
@@ -203,7 +205,7 @@ Steps 0–25 are the completed baseline for this continuation. The owner's
 published-alpha trial in an independent Astro project is recorded in
 [`onboarding-feedback.md`](./onboarding-feedback.md). Steps 26–32 address that
 feedback and the remaining Cloudflare consumer-installation gap before the
-former Step 26 release gate, now Step 33. Existing archived change names and
+former Step 26 release gate, now Step 34. Existing archived change names and
 historical session references retain their original meaning.
 
 The feedback is input to future proposals, not an accepted capability spec.
@@ -220,6 +222,18 @@ generated starter optional at project creation. In-place CMS
 installation into a nonempty project (§11) stays post-MVP. Selecting an external site's build
 source in Step 29 is operator configuration alongside a separately generated
 CMS directory, not a relaxation of the generator's empty-target contract.
+
+After `0.1.0-alpha.2` was published, the owner connected it to an existing Astro
+project, ran it in Docker Compose dev and production, and deployed the CMS
+Worker and the Pages-hosted static site to a real Cloudflare account. The
+defects and documentation gaps from that trial are recorded in
+[`lace-alpha-2-feedback.md`](./lace-alpha-2-feedback.md) (§1–§6 plus a
+cross-cutting diagnostics requirement). Step 33 fixes them and prepares the
+next compatible alpha; the release gate moves to Step 34. That trial is
+early field evidence, not Step 34 deployment acceptance: the gate still runs
+against the final candidate. The alpha.2 feedback, like the earlier feedback,
+is proposal input rather than an accepted spec, and its documented workarounds
+are not product fixes.
 
 ## 6. Detailed implementation steps
 
@@ -1440,9 +1454,9 @@ The artifacts are verified before their first publication.
 This step prepares an experimental release such as `0.1.0-alpha.1` with the npm
 `next` tag; it does not declare the MVP stable. Actual registry publication, the
 owner's subsequent test repository, and a real Cloudflare deployment follow
-separately. The full release gate remains Step 33. Preserve existing Node/D1 and
+separately. The full release gate remains Step 34. Preserve existing Node/D1 and
 Worker checks; complete Cloudflare consumer onboarding after local user feedback
-and before the Cloudflare deployment acceptance in Step 33.
+and before the Cloudflare deployment acceptance in Step 34.
 
 ### Session 25A — Minimal generated-project onboarding
 
@@ -1500,7 +1514,7 @@ preparation/publication. Registry publication and 25C acceptance remain separate
 Completed on 2026-09-30 against the exact clean `0.1.0-alpha.1` artifact set,
 template `0.4.0`, with the full local arm64 consumer/security/recovery journey
 and independent amd64/arm64 preparation smokes.
-Alpha publication and Step 33 remain separate explicit release boundaries.
+Alpha publication and Step 34 remain separate explicit release boundaries.
 
 1. Extend the existing generated-project acceptance to install the exact packed
    alpha dependency graph and use its matching built images in an isolated
@@ -1523,7 +1537,7 @@ Alpha publication and Step 33 remain separate explicit release boundaries.
    prepared artifacts, plus required root quality and strict OpenSpec checks.
    Inspect package/image contents and record the exact tested versions and
    results. Resolve blocking failures before alpha publication; document the
-   experimental limits and the remaining Step 33 checks explicitly.
+   experimental limits and the remaining Step 34 checks explicitly.
 
 ### Acceptance
 
@@ -1806,7 +1820,7 @@ rewrites of user-owned files.
   conflict detection; the CLI never edits arbitrary user source.
 - *Public DTO shape is unchanged in this step.* The loader hides that public
   entries reuse the content-entry schema (always-present `published`, mirrored
-  `draft`); a dedicated public schema is an open question for Step 33.
+  `draft`); a dedicated public schema is an open question for Step 34.
 - `create-lace init .` still requires an empty target. Adding blocks to an
   existing site is site-side tooling, not in-place CMS installation (§11).
 - *Starter and reference site have separate roles.* The `create-lace` starter is
@@ -2178,14 +2192,14 @@ controlled HTTPS deploy hook (unavailable, then accepted as `running`), the
 Astro build from the Worker export, draft isolation, restart persistence and
 secret exclusion; the generated guide (template `0.13.0`) documents that
 journey and its recovery; `docs/cloudflare-deployment-handoff.md` is the
-real-account procedure for Session 33C.
+real-account procedure for Session 34C.
 
 ### Acceptance
 
 - A generated Cloudflare consumer operates its CMS and builds its Astro site
   from versioned artifacts without the Lace engine checkout.
 - Local Node and Worker share setup/security/content contracts; the real-account
-  deployment verification remains explicit in Step 33.
+  deployment verification remains explicit in Step 34.
 
 **Session boundary:** M; use 31A and 31B.
 
@@ -2268,16 +2282,243 @@ passed preparation smokes, and the suite passed on `linux/arm64`; see
   documented flows using the exact compatible candidate artifacts.
 - Upgrades preserve user source and detect modified managed infrastructure.
 - The next alpha is ready for publication; stable MVP status still depends on
-  Step 33, and remote publication/deployment is not a side effect of testing.
+  Step 34, and remote publication/deployment is not a side effect of testing.
 
 **Session boundary:** M; use 32A and 32B.
 
-## Step 33 — MVP release gate
+## Step 33 — Alpha.2 field-trial fixes and next alpha preparation
+
+**Outcome:** the defects found while operating the published `0.1.0-alpha.2` in
+an existing Astro project, Docker Compose dev/production, and a real Cloudflare
+account are fixed and diagnosable, each supported scenario has its own guide,
+and a coherent next alpha candidate carries the fixes.
+
+**Basis:** [`lace-alpha-2-feedback.md`](./lace-alpha-2-feedback.md) §1–§6 and
+its general diagnostics requirement. Depends on Step 32 and the published
+`0.1.0-alpha.2`. Preserves the fixed-command builder, single-site, atomic
+release, server-only build credential, and protected user-source invariants.
+
+Cross-cutting rule for every session: a known failure reaches the surface the
+operator actually uses (CLI, editor, Builds) with a sanitized reason, a next
+action, and the request or build ID. Never expose tokens, passwords, `.env`
+contents, deploy-hook URLs, raw subprocess output, or full provider responses;
+complete subprocess logs in the admin are not required.
+
+### Session 33A — Block order on draft save
+
+1. Guarantee that the saved block list satisfies the domain ordering invariant
+   after pointer and keyboard reordering, insertion or duplication in the
+   middle, removal, and undo of removal, while keeping stable block `key`s and
+   data. Settle in the proposal whether the editor derives positions from the
+   current order at save time or maintains sparse gaps per mutation with the
+   normalization described in architecture §9.5. The server keeps rejecting
+   non-ascending positions; the domain must not silently reorder client input.
+2. Make an ordering rejection (`CONTENT_INVALID_STATE`) identify the problem
+   safely, such as the offending block index and key without content data, and
+   have the editor show the reason and recovery while preserving unsaved work.
+3. Cover position derivation with unit tests and the listed operations with
+   Playwright through save, reload, and publish; verify the published export and
+   Astro output keep the displayed order, plus an API negative test.
+
+### Session 33B — Weak and strong build-export ETags
+
+1. Accept strong `"N"` and weak `W/"N"` version-derived validators in the shared
+   contract and keep rejecting arbitrary or malformed values. Define how the SDK
+   stores and returns the validator and how Node and Worker `If-None-Match`
+   handling (weak comparison) produce `304` or `200`, including after a new
+   publication changes `published_state.version`.
+2. Make the standard Astro/published-site loaders work through Cloudflare
+   response compression without a custom `fetch` override. Distinguish a
+   missing from a malformed ETag in `LaceContractError`, and show a bounded safe
+   received value, the expected format, and the next action, never the build
+   token or export body.
+3. Test strong, weak, missing, and malformed headers in contracts and the SDK,
+   conditional reads against both runtime composition roots, `304` followed by a
+   post-publication `200`, and dev revalidate mode behind a compressing proxy.
+   A real Pages build with default compression is evidence for 33H/34C.
+
+### Session 33C — Builder source policy and failure diagnostics
+
+1. Decide the supported treatment of symbolic links in the selected source tree,
+   for example excluding links the Astro build does not need, such as a
+   repository-root `CLAUDE.md -> AGENTS.md`, or rejecting them with the named
+   relative path. Never follow links outside the source root or copy their
+   targets. Update the fixed-command builder ADR/spec when the policy changes.
+2. Carry a specific sanitized reason and source-relative path from the builder
+   through its authenticated response, the dispatcher, `site_builds.error`, the
+   admin build DTO, and the Builds screen. `provider_failed` stays a fallback
+   for unknown failures only. Define the closed reason vocabulary and DTO delta
+   in the proposal; never expose host or container absolute paths.
+3. Test a service link at the workspace root, a link inside the site source, a
+   link escaping the root, an unreadable entry, and missing required files.
+   Each failure keeps the previous release, gives a concrete correction, and is
+   retryable afterwards; verify with a packed Compose production consumer in
+   existing-site layout.
+
+### Session 33D — Truthful site-build outcome model
+
+Decided on 2026-10-05: `site_builds.status` stays one enum with seven values.
+`succeeded` requires proof that the site was published.
+
+| Status | Meaning | Terminal |
+| --- | --- | :---: |
+| `pending` | Queued: debounce, waiting for a retry, not yet claimed | no |
+| `running` | Lace is executing the build (VPS builder, hook call) or tracking an accepted provider deployment | no |
+| `accepted` | The provider accepted the request; its outcome is not tracked | yes |
+| `succeeded` | Publication proven: the VPS release switched, or the Pages deploy stage succeeded | yes |
+| `failed` | Proven failure: attempts exhausted, builder failure, Pages build or deploy failure | yes |
+| `cancelled` | The provider cancelled or skipped the deployment; the reason says which | yes |
+| `unknown` | Tracking stopped without proof: deadline expired, deployment not found, or no read permission | yes |
+
+Transitions: `pending → running` when the dispatcher claims the build, on every
+runtime; `running → pending` with a safe error for a retryable failure;
+`running → succeeded/failed` for the VPS builder; `running → accepted` for a hook
+response without an ID or without configured tracking; `running` stays while
+33E tracks a deployment ID, then ends in `succeeded`, `failed`, `cancelled`, or
+`unknown`. A successful hook response without an ID never becomes `succeeded`.
+Admin retry is allowed from `failed`, `cancelled`, `unknown`, and `accepted`.
+The site's current version is the highest `target_version` among `succeeded`
+builds. Late provider results do not reopen `unknown`.
+
+1. Update architecture §9.8 and the site-build specs before code with this model.
+   Mark VPS builds `running` at claim. A build whose process terminated is reclaimed
+   after its lease expires through a guarded `running → running` update, so no row
+   stays orphaned. Settle the SQLite/D1 migration, the provider stage and
+   last-check fields needed by 33E, and the DTO/admin compatibility in the proposal.
+2. Migrate existing rows. In D1, `running` rows and `succeeded` rows without
+   `provider_build_id` come from deploy hooks and become `accepted`. In SQLite,
+   `succeeded` comes from the builder and stays. Keep coalescing, retries,
+   leases, and timeouts unchanged.
+3. Next to each build status in Builds and the entry publication details, add an
+   info button that opens the existing design-system `Popover` (not a hover-only
+   tooltip). It shows what the status means, what it proves about the public
+   site, and the next action. Descriptions come from one shared status map and
+   stay consistent with the tour and the generated guides. The control has an
+   accessible name and works with keyboard, screen readers, touch, and narrow
+   layouts; the build-specific safe reason from 33C stays visible beside it.
+   Never claim a deployed site from provider acceptance.
+4. Cover Node and D1 repository contracts (transitions, guarded reclaim,
+   migration), the dispatcher on both runtimes, and the admin with unit,
+   Playwright, and axe checks for every status and its popover.
+
+### Session 33E — Cloudflare Pages deployment tracking
+
+1. Add optional Pages tracking to the scheduled Worker. With an account ID,
+   project name, and a separate Worker secret limited to Pages read access, poll
+   the exact deployment identified by the stored `providerBuildId`. Do not reuse
+   the D1 operator token; installations without tracking settings record
+   `accepted` from 33D.
+2. Report `succeeded` only after the deploy stage succeeds. Map build or deploy
+   failure to `failed`, cancellation or skip to `cancelled`, and `401`/`403`,
+   a missing deployment, or an expired deadline to `unknown` with the next
+   action. Record the stage, last-check time, and a safe deployment reference.
+   Keep tracking state in `site_builds`, not in the outbox retry budget. Each
+   cron run selects a bounded number of due `running` rows, backs off on
+   transient `5xx`/`429`/network errors, and survives Worker restarts. Guarded
+   updates (`status = 'running'` and the same `provider_build_id`) make
+   checks idempotent and never change another build's record. Settle the
+   default deadline in the proposal.
+3. Never persist or display the hook URL, API token, or full Pages API response,
+   which can contain environment settings. Test against a controlled Pages API
+   stub: success, Astro build failure, deploy failure, cancel/skip, transient
+   outage, insufficient permission, parallel builds and late results, restart
+   recovery, and a hook without an ID. Decide in the proposal whether an
+   authenticated CI callback for generic hooks is in scope or deferred.
+
+### Session 33F — Explicit Cloudflare CLI credentials
+
+1. Make the credential choice explicit in generated Cloudflare projects: either
+   one API token with documented permissions, or a D1-scoped Lace operator token
+   plus Wrangler OAuth for deploy and secret commands. Keep Lace remote-command
+   credentials out of files Wrangler loads implicitly (`.env`, `.env.local`),
+   for example in a dedicated private env file that Lace commands load
+   explicitly; settle its name, loading, ownership, and ignore rules in the
+   proposal.
+2. Add a read-only preflight, such as an extended Cloudflare `lace doctor`
+   target, that reports the active authentication source and selected account
+   without printing secrets and explains insufficient permissions with a next
+   action before remote migrate/sync/bootstrap or deploy. Remote targets still
+   require explicit selection.
+3. Explain `LACE_AUTH_SECRET`, the Cloudflare API token, and Wrangler OAuth, and
+   which settings are local versus Worker secrets. Test login → D1-only operator
+   token → remote migrate/sync → deploy with the token in the shell, `.env`, and
+   `.env.local`; documentation must not recommend a workaround that reloads the
+   same token. Provide upgrade guidance for alpha.2 projects that already store
+   the token in `.env`.
+
+### Session 33G — Scenario guides and minimum-version policy
+
+1. Replace the mixed generated CMS README with a short entry README
+   (requirements, CMS/site layout, links) and separate guides for Docker Compose
+   dev, Docker Compose production, and Cloudflare (local, then real account).
+   Each guide states the working directory, prerequisites, expected result, next
+   step, one-time versus repeat actions, CMS Worker versus static site, and local
+   versus remote data. Keep `lace-astro-site.md` and `lace-operations.md` as
+   linked references. Describe the behavior delivered in 33A–33F; label any
+   remaining workaround as such.
+2. Remove the `<25`/`<13` upper bounds from Node and pnpm `engines`
+   consistently across generator templates, published package manifests, the
+   repository root, compatibility/handoff/generated docs, and doctor checks and
+   tests, while enforcing the minimums (`>=24.12.0`, `>=12`). Confirm the actual
+   requirements of the engine and published packages first. Separate minimum
+   requirements from versions pinned for CI, Docker images, lockfiles, and
+   `packageManager`, and describe how newer majors enter the compatibility
+   matrix.
+3. Bump the template version and update ownership and snapshots. Upgrades keep
+   the user-owned README byte-for-byte and explain how to reach the new guides;
+   managed operations documentation changes through conflict detection; an
+   existing site's root README is never rewritten, only offered links. Verify
+   fresh generation, existing-site mode, and upgrade from template `0.14.0`.
+
+### Session 33H — Field-trial regressions and next alpha candidate
+
+1. Record `0.1.0-alpha.2` as published in `release/alpha.json`,
+   `compatibility.md`, and `alpha-release.md`, then select the next unused alpha
+   version and a new template version from one reviewed revision; refresh
+   packages, generator, admin, Worker, builder/API images, and upgrade
+   instructions without altering published artifacts.
+2. Extend the exact-artifact suite to the field-trial regressions in packed
+   consumers: block reorder through publication, builder source diagnostics in
+   Compose production with an existing site, weak ETag through a compressing
+   proxy, credential separation, Pages tracking against a stub, the new guides'
+   command sequences (drift fails), and upgrade from alpha.2 template `0.14.0`.
+3. Map every alpha.2 feedback item to tests, documentation, or an explicit
+   decision in an acceptance record guarded by a test, like
+   `onboarding-feedback-acceptance.md`. Real-account re-verification of §3–§5
+   is input to 34C rather than a local-test claim; registry publication remains
+   a separate explicit act.
+
+### Acceptance
+
+- Reordered, inserted, duplicated, and restored blocks save and publish in the
+  displayed order; ordering rejections are explained without losing edits.
+- The standard Astro loader builds on Cloudflare Pages with strong or weak
+  ETags, and conditional reads are correct on both runtimes.
+- A failed build shows a safe cause and next action in the admin, and the
+  previous static release remains served.
+- Builds show neither `succeeded` without deployment proof nor endless
+  `running`; tracked Pages deployments reach their correct terminal state, and
+  every status explains itself through an accessible info popover.
+- The documented Cloudflare onboarding completes without an unexpected
+  authentication switch, and remote commands target an explicitly chosen account.
+- Each scenario can be followed from its own guide; generated `engines` declare
+  minimums only.
+- The next alpha candidate passes the exact-artifact suite, and nothing is
+  published as a side effect of testing.
+
+**Session boundary:** L; use 33A–33H. Keep 33D (status model and migration) and
+33E (runtime adapter and new secret) separate. Implement 33G after 33A–33F so
+the guides describe fixed behavior, and 33H last.
+
+## Step 34 — MVP release gate
 
 **Outcome:** both supported deployments satisfy the product flow, security
 requirements, and operational recovery promises.
 
-### Session 33A — Cross-runtime and browser suite
+**Basis:** the final candidate from Step 33. The owner's alpha.2 field trial is
+early evidence, not a substitute for the checks below.
+
+### Session 34A — Cross-runtime and browser suite
 
 1. Run repository contracts against Node SQLite and local D1.
 2. Run API contracts against Node and Worker composition roots using the same
@@ -2293,7 +2534,7 @@ requirements, and operational recovery promises.
    updates contracts, SDK, render core (`@lacecms/render`), and
    the public API specs together.
 
-### Session 33B — Security and resilience pass
+### Session 34B — Security and resilience pass
 
 1. Review auth/session configuration, CSRF/origin behavior, permission checks,
    rate limits, upload parsing, URL/rich-text sanitization, token hashing, secret
@@ -2309,10 +2550,10 @@ requirements, and operational recovery promises.
 4. Audit dependency vulnerabilities and licenses; document accepted risks rather
    than silently suppressing them.
 
-### Session 33C — Operations and release documentation
+### Session 34C — Operations and release documentation
 
 The generated Cloudflare onboarding from Step 31 and the exact candidate
-artifacts from Step 32 are prerequisites. Follow `docs/cloudflare-deployment-handoff.md` for
+artifacts from Step 33 are prerequisites. Follow `docs/cloudflare-deployment-handoff.md` for
 the Cloudflare deployment and its evidence. Verify real VPS and Cloudflare
 installations, including the separate public-site deployment and publish/build
 path, and record the tested versions and provider outcomes. Local simulation
@@ -2347,7 +2588,7 @@ From a clean machine/project template:
    Update an installed block with `lace add block` and prove an edited block is
    reported as a conflict instead of overwritten.
 
-**Session boundary:** L; use 33A, 33B, and 33C. Do not combine the security pass
+**Session boundary:** L; use 34A, 34B, and 34C. Do not combine the security pass
 with the release-documentation session.
 
 ## 7. Recommended first delivery slices
@@ -2399,7 +2640,10 @@ best checkpoints for demonstrating useful progress are:
 21. **After step 32:** the feedback improvements pass together against the next
     compatible alpha artifact set, ready for explicit publication. Completed
     2026-10-04 with candidate `0.1.0-alpha.2` (template `0.14.0`).
-22. **After step 33:** the MVP is release-ready.
+22. **After step 33:** the alpha.2 field-trial defects are fixed, each
+    deployment scenario has its own guide, and the next compatible alpha
+    candidate is ready for explicit publication.
+23. **After step 34:** the MVP is release-ready.
 
 Steps 0–3 should be implemented in order. After step 5, SDK fixture work and
 some admin visual-foundation work may proceed in parallel, but persistence,
