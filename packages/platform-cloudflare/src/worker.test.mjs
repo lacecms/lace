@@ -509,3 +509,86 @@ test.each([null, { id: "real-site", label: "Real site" }])(
     expect(response.body).toEqual({ site });
   },
 );
+
+test("Worker/D1 compares strong and weak export validators through publication", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  const created = await fixture.call("/api/v1/admin/models/posts/entries", {
+    json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "etag", title: "First" },
+    method: "POST",
+  });
+  const path = `/api/v1/admin/entries/${created.body.id}`;
+  expect(
+    (await fixture.call(`${path}/publish`, { json: { expectedRevision: 1 }, method: "POST" }))
+      .response.status,
+  ).toBe(200);
+  const buildToken = await fixture.runtime.security.createBuildToken({
+    name: "etag-test",
+    now: unixMilliseconds(Date.now()),
+  });
+  const headers = { authorization: `Bearer ${buildToken.token}` };
+  const fresh = await fixture.call("/api/v1/public/build-export", { headers });
+  expect(fresh.response.status).toBe(200);
+  const etag = fresh.response.headers.get("etag");
+  expect(etag).toBe(`"${fresh.body.version}"`);
+  for (const tag of [etag, `W/${etag}`]) {
+    const result = await fixture.call("/api/v1/public/build-export", {
+      headers: { ...headers, "if-none-match": tag },
+    });
+    expect(result.response.status).toBe(304);
+    expect(result.body).toBeUndefined();
+    expect(result.response.headers.get("etag")).toBe(etag);
+  }
+  expect(
+    (
+      await fixture.call("/api/v1/public/build-export", {
+        headers: { "if-none-match": `W/${etag}` },
+      })
+    ).response.status,
+  ).toBe(403);
+  for (const tag of ["*", 'W/"bad"', '"1", "2"', '"9007199254740992"'])
+    expect(
+      (
+        await fixture.call("/api/v1/public/build-export", {
+          headers: { ...headers, "if-none-match": tag },
+        })
+      ).response.status,
+    ).toBe(422);
+  expect(
+    (
+      await fixture.call(`${path}/draft`, {
+        json: {
+          blocks: [],
+          expectedRevision: 1,
+          fields: { publishedAt: "2026-09-24" },
+          slug: "etag",
+          title: "Second",
+        },
+        method: "PUT",
+      })
+    ).response.status,
+  ).toBe(200);
+  expect(
+    (
+      await fixture.call(`${path}/publish`, {
+        headers: { "if-match": 'W/"2"' },
+        json: { expectedRevision: 2 },
+        method: "POST",
+      })
+    ).response.status,
+  ).toBe(422);
+  expect(
+    (await fixture.call(`${path}/publish`, { json: { expectedRevision: 2 }, method: "POST" }))
+      .response.status,
+  ).toBe(200);
+  const changed = await fixture.call("/api/v1/public/build-export", {
+    headers: { ...headers, "if-none-match": `W/${etag}` },
+  });
+  expect(changed.response.status).toBe(200);
+  expect(changed.body.version).toBe(fresh.body.version + 1);
+  expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
+  expect(
+    changed.body.entries.find(({ entry }) => entry.id === created.body.id).entry.published.title,
+  ).toBe("Second");
+  await fixture.settle();
+});

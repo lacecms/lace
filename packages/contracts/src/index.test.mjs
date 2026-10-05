@@ -624,3 +624,39 @@ test("transports only bounded block-order diagnostics and keeps other domain mes
     "password",
   );
 });
+
+test.each(['"0"', 'W/"0"', '"7"', 'W/"7"', 'W/"007"', '"9007199254740991"'])(
+  "accepts a safe version-derived validator %s",
+  (tag) => {
+    expect(v.safeParse(entityTagSchema, tag).success).toBe(true);
+    expect(versionFromEntityTag(tag)).toBe(Number(tag.replace(/^W\//u, "").slice(1, -1)));
+  },
+);
+
+test.each([
+  "7",
+  '"hash"',
+  "*",
+  '"1", "2"',
+  'w/"1"',
+  'W/ "1"',
+  '"-1"',
+  '"1.5"',
+  '""',
+  '"9007199254740992"',
+  'W/"9007199254740992"',
+  ' "1"',
+  '"1"\n',
+])("rejects unsupported validator %s", (tag) => {
+  expect(v.safeParse(entityTagSchema, tag).success).toBe(false);
+  expect(() => versionFromEntityTag(tag)).toThrow(TypeError);
+});
+
+test("rejects unsafe generated versions and weak mutation preconditions", () => {
+  for (const version of [-1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1])
+    expect(() => entityTagForVersion(version)).toThrow(TypeError);
+  expect(() => resolveExpectedRevision({ ifMatch: 'W/"4"' })).toThrow("strong");
+  expect(() => resolveExpectedRevision({ expectedRevision: 4, ifMatch: 'W/"4"' })).toThrow(
+    "strong",
+  );
+});

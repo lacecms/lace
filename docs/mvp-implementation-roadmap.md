@@ -2309,7 +2309,7 @@ complete subprocess logs in the admin are not required.
 Completed 2026-10-05. Save and recovery JSON derive sparse positions from the
 displayed order; safe ordering diagnostics preserve unsaved work. See
 [`step-33a-block-order-acceptance.md`](./step-33a-block-order-acceptance.md) for
-the SQLite/D1, browser, export and Astro verification. Sessions 33B–33H remain.
+the SQLite/D1, browser, export and Astro verification. Sessions 33C–33H remain.
 
 1. Guarantee that the saved block list satisfies the domain ordering invariant
    after pointer and keyboard reordering, insertion or duplication in the
@@ -2326,6 +2326,13 @@ the SQLite/D1, browser, export and Astro verification. Sessions 33B–33H remain
    Astro output keep the displayed order, plus an API negative test.
 
 ### Session 33B — Weak and strong build-export ETags
+
+Completed 2026-10-05. Shared contracts and SDK accept strong and weak numeric
+validators, both runtimes compare published versions, and standard loaders
+revalidate through compression with default fetch. See
+[`step-33b-build-export-etags-acceptance.md`](./step-33b-build-export-etags-acceptance.md)
+for contract, SDK, SQLite/D1 and gzip-proxy verification. Real Pages build
+verification with default compression remains in 33H/34C.
 
 1. Accept strong `"N"` and weak `W/"N"` version-derived validators in the shared
    contract and keep rejecting arbitrary or malformed values. Define how the SDK

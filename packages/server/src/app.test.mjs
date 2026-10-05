@@ -294,6 +294,13 @@ test("serves public content and short-circuits matching build exports", async ()
       .response.status,
   ).toBe(304);
   expect(exportLoads()).toBe(1);
+  const weak = await json(app, "/api/v1/public/build-export", {
+    headers: { "if-none-match": 'W/"1"' },
+  });
+  expect(weak.response.status).toBe(304);
+  expect(weak.response.headers.get("etag")).toBe('"1"');
+  expect(weak.body).toBeUndefined();
+  expect(exportLoads()).toBe(1);
   expect(
     (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"0"' } }))
       .response.status,
@@ -1054,3 +1061,23 @@ test.each([[[1000, 1000]], [[2000, 1000]], [[0, 1000]]])(
     expect(await store.exportBuildContent()).toEqual(exported);
   },
 );
+
+test("the export ETag follows its payload when publication races the version lookup", async () => {
+  const { app, store, content } = await fixture();
+  const entry = await content.create({
+    actor: admin,
+    blocks: [],
+    fields: {},
+    modelKey: "posts",
+    slug: "race",
+    title: "Race",
+  });
+  const original = store.exportBuildContent.bind(store);
+  store.exportBuildContent = async () => {
+    await content.publish({ actor: admin, entryId: entry.id, expectedRevision: 1 });
+    return original();
+  };
+  const result = await json(app, "/api/v1/public/build-export");
+  expect(result.body.version).toBe(1);
+  expect(result.response.headers.get("etag")).toBe('"1"');
+});

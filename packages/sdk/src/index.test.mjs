@@ -195,3 +195,69 @@ test("distinguishes timeout and caller abort transport failures", async () => {
   await expect(pending).rejects.toBeInstanceOf(LaceTransportError);
   await expect(pending).rejects.toMatchObject({ cause: reason });
 });
+
+test.each(['"7"', 'W/"7"'])("preserves received and supplied build validators %s", async (etag) => {
+  const mock = queuedFetch([
+    json({ entries: [publicEntry()], version: 7 }, { headers: { etag } }),
+    new Response(null, { headers: { etag: 'W/"7"' }, status: 304 }),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
+  expect(await client.getBuildExport()).toMatchObject({ etag, export: { version: 7 } });
+  expect(await client.getBuildExport({ etag })).toEqual({ changed: false, etag: 'W/"7"' });
+  expect(mock.requests[1].headers.get("if-none-match")).toBe(etag);
+});
+
+test.each([200, 304])("diagnoses missing and invalid ETags on %i safely", async (status) => {
+  const token = "build-secret";
+  for (const etag of [
+    null,
+    "",
+    'W/"hash"',
+    'w/"7"',
+    "*",
+    '"7", "8"',
+    '"9007199254740992"',
+    `Bearer ${token}\t${"x".repeat(200)}`,
+  ]) {
+    const response = new Response(status === 200 ? "PRIVATE EXPORT BODY" : null, {
+      headers: etag === null ? {} : { etag },
+      status,
+    });
+    const client = createLaceClient({
+      baseUrl: "https://cms.example",
+      token,
+      fetch: async () => response,
+    });
+    const error = await client.getBuildExport({ etag: '"7"' }).catch((cause) => cause);
+    expect(error).toBeInstanceOf(LaceContractError);
+    expect(error.message).toContain(etag === null ? "missing its ETag" : "invalid ETag");
+    expect(error.message).toContain('Expected "N" or W/"N"');
+    expect(error.message).toContain("proxy preserves ETag");
+    expect(error.message).not.toContain(token);
+    expect(error.message).not.toContain("PRIVATE EXPORT BODY");
+    expect(error.message).not.toContain("\t");
+    expect(error.message.length).toBeLessThan(800);
+    if (etag?.startsWith("Bearer")) {
+      expect(error.message).toContain("[redacted]");
+      expect(error.message).toContain("truncated");
+      expect(error.message).toContain("\\t");
+    }
+  }
+});
+
+test("rejects inconsistent response versions and malformed caller validators", async () => {
+  for (const response of [
+    json({ entries: [publicEntry()], version: 8 }, { headers: { etag: 'W/"7"' } }),
+    new Response(null, { headers: { etag: 'W/"8"' }, status: 304 }),
+  ]) {
+    const client = createLaceClient({
+      baseUrl: "https://cms.example",
+      fetch: async () => response,
+    });
+    await expect(client.getBuildExport({ etag: '"7"' })).rejects.toBeInstanceOf(LaceContractError);
+  }
+  const mock = queuedFetch([]);
+  const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
+  await expect(client.getBuildExport({ etag: 'W/"hash"' })).rejects.toBeInstanceOf(TypeError);
+  expect(mock.requests).toHaveLength(0);
+});

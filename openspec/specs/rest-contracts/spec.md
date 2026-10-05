@@ -62,6 +62,8 @@ version; when a request supplies that current valid entity tag in
 no response body. A changed or absent valid entity tag SHALL produce the
 validated build-export representation with its current ETag.
 
+Build-export validators SHALL accept exactly one strong `"N"` or weak `W/"N"` tag whose decimal version is a non-negative safe integer, preserving the received spelling. Weak comparison SHALL compare the encoded version. Arbitrary opaque tags, lists, wildcards, signs, fractions, lowercase weak prefixes, whitespace inside the tag, and unsafe integers SHALL be rejected. The origin SHALL emit the strong form.
+
 #### Scenario: A timestamp is serialized for JSON
 - **WHEN** a portable content value contains a valid UTC timestamp
 - **THEN** its response DTO exposes a canonical ISO-8601 UTC string and the
@@ -83,6 +85,14 @@ validated build-export representation with its current ETag.
   published-state version
 - **THEN** the API returns the validated build-export DTO and the current ETag
 
+#### Scenario: Weak and strong versions agree
+- **WHEN** a consumer supplies `W/"7"` for published-state version 7
+- **THEN** validation succeeds and the API returns an empty `304` with origin ETag `"7"`
+
+#### Scenario: Unsupported validators are rejected
+- **WHEN** a consumer supplies `*`, `"hash"`, `"1", "2"`, or an unsafe numeric version
+- **THEN** shared validation rejects the value
+
 ### Requirement: Mutable request preconditions are unambiguous
 The complete-draft-save, publish, and delete contracts SHALL use a non-negative
 integer `expectedRevision` in the JSON body as the canonical generated-client
@@ -90,6 +100,8 @@ precondition. They SHALL also accept an equivalent `If-Match` revision header
 for HTTP clients. If both are supplied, their revisions SHALL match; a missing
 body value may be supplied by `If-Match`, and a disagreement SHALL be rejected
 as a validation failure before the operation reaches application code.
+
+Mutation `If-Match` SHALL accept only strong revision tags; a weak tag SHALL fail validation even when its numeric revision agrees with the body.
 
 #### Scenario: Header and body revisions agree
 - **WHEN** a client sends the same expected revision in the request body and
@@ -108,6 +120,10 @@ as a validation failure before the operation reaches application code.
   after that revision was read
 - **THEN** deletion fails with `CONTENT_REVISION_CONFLICT` and leaves the entry,
   public route, published state, and build work unchanged
+
+#### Scenario: A weak mutation precondition is rejected
+- **WHEN** a writer supplies `W/"4"` in `If-Match` with expected revision 4
+- **THEN** validation rejects the request before any mutation
 
 ### Requirement: Errors use stable sanitized envelopes
 The system SHALL represent every transport failure as `{ error: { code,

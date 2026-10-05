@@ -18,7 +18,7 @@ export const packageName = "@lacecms/contracts";
 const identifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(255));
 const nonNegativeIntegerSchema = v.pipe(v.number(), v.integer(), v.minValue(0));
 const utcTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
-const entityTagPattern = /^"[0-9]+"$/u;
+const entityTagPattern = /^(?:W\/)?"[0-9]+"$/u;
 const idempotencyKeyPattern = /^[\x21-\x7e]{1,255}$/u;
 const jsonPointerPattern = /^(?:\/(?:[^~/]|~[01])*)*$/u;
 
@@ -60,7 +60,12 @@ export const identifierSchemaPublic = identifierSchema;
 export const expectedRevisionSchema = nonNegativeIntegerSchema;
 export const opaqueCursorSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4_096));
 export const isoTimestampSchema = v.custom<string>(isUtcTimestamp);
-export const entityTagSchema = v.pipe(v.string(), v.regex(entityTagPattern));
+/** A single strong or weak validator encoding a safe published-state version. */
+export const entityTagSchema = v.pipe(
+  v.string(),
+  v.regex(entityTagPattern),
+  v.check((value) => Number.isSafeInteger(Number(value.replace(/^W\//u, "").slice(1, -1)))),
+);
 export const idempotencyKeySchema = v.pipe(v.string(), v.regex(idempotencyKeyPattern));
 export const jsonPointerSchema = v.pipe(v.string(), v.regex(jsonPointerPattern));
 
@@ -211,15 +216,17 @@ export function fromIsoTimestamp(value: string): UnixMilliseconds {
 /** Derives the build-export entity tag from the published-state version. */
 export function entityTagForVersion(version: number): EntityTag {
   const parsed = v.safeParse(nonNegativeIntegerSchema, version);
-  if (!parsed.success) throw new TypeError("An ETag version must be a non-negative integer.");
+  if (!parsed.success || !Number.isSafeInteger(version))
+    throw new TypeError("An ETag version must be a non-negative safe integer.");
   return `"${parsed.output}"` as EntityTag;
 }
 
 /** Parses the version encoded in a supported, version-derived entity tag. */
 export function versionFromEntityTag(value: string): number {
   const parsed = v.safeParse(entityTagSchema, value);
-  if (!parsed.success) throw new TypeError("An ETag must be a quoted non-negative integer.");
-  const version = Number(parsed.output.slice(1, -1));
+  if (!parsed.success)
+    throw new TypeError('An ETag must be "N" or W/"N" with a non-negative safe integer version.');
+  const version = Number(parsed.output.replace(/^W\//u, "").slice(1, -1));
   if (!Number.isSafeInteger(version))
     throw new TypeError("An ETag version must be a safe integer.");
   return version;
@@ -932,6 +939,8 @@ export function resolveExpectedRevision(input: RevisionPreconditionInput): numbe
   if (body !== undefined && !body.success) {
     throw new TypeError("expectedRevision must be a non-negative integer.");
   }
+  if (input.ifMatch?.startsWith("W/"))
+    throw new TypeError("If-Match requires a strong revision ETag.");
   const header = input.ifMatch === undefined ? undefined : versionFromEntityTag(input.ifMatch);
   if (body === undefined && header === undefined) {
     throw new TypeError("An expected revision is required.");

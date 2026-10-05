@@ -181,6 +181,49 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
         })
       ).response.status,
     ).toBe(304);
+    const weakTag = `W/${etag}`;
+    const headers = { authorization: `Bearer ${buildToken.token}`, "if-none-match": weakTag };
+    const unchanged = await json(value.server, "/api/v1/public/build-export", { headers });
+    expect(unchanged.response.status).toBe(304);
+    expect(unchanged.response.headers.get("etag")).toBe(etag);
+    expect(unchanged.body).toBeUndefined();
+    expect(
+      (
+        await json(value.server, "/api/v1/public/build-export", {
+          headers: { "if-none-match": weakTag },
+        })
+      ).response.status,
+    ).toBe(403);
+    for (const tag of ["*", 'W/"bad"', '"1", "2"', '"9007199254740992"'])
+      expect(
+        (
+          await json(value.server, "/api/v1/public/build-export", {
+            headers: { ...headers, "if-none-match": tag },
+          })
+        ).response.status,
+      ).toBe(422);
+    const weakMutation = await json(value.server, `/api/v1/admin/entries/${entryId}/publish`, {
+      body: JSON.stringify({ expectedRevision: 3 }),
+      headers: { "content-type": "application/json", "if-match": 'W/"3"' },
+      method: "POST",
+    });
+    expect(weakMutation.response.status).toBe(422);
+    expect(
+      (
+        await json(value.server, `/api/v1/admin/entries/${entryId}/publish`, {
+          body: JSON.stringify({ expectedRevision: 3 }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        })
+      ).response.status,
+    ).toBe(200);
+    const changed = await json(value.server, "/api/v1/public/build-export", { headers });
+    expect(changed.response.status).toBe(200);
+    expect(changed.body.version).toBe(buildExport.body.version + 1);
+    expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
+    expect(
+      changed.body.entries.find(({ entry }) => entry.id === entryId).entry.published.title,
+    ).toBe("Draft-only title");
     expect((await json(value.server, "/health/ready")).response.status).toBe(200);
   } finally {
     await value.close();

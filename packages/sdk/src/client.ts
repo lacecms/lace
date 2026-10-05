@@ -1,6 +1,7 @@
 import {
   buildExportSchema,
   entityTagSchema,
+  versionFromEntityTag,
   errorEnvelopeSchema,
   identifierSchemaPublic,
   opaqueCursorSchema,
@@ -209,13 +210,21 @@ function publicUrl(baseUrl: URL, segments: readonly string[]): URL {
   return new URL(`api/v1/public/${path}`, baseUrl);
 }
 
-function parseResponseEtag(response: Response): EntityTag {
+function parseResponseEtag(response: Response, token?: string): EntityTag {
   const value = response.headers.get("etag");
-  if (value === null) throw new LaceContractError("The build-export response is missing its ETag.");
+  const guidance =
+    'Expected "N" or W/"N" with a non-negative safe integer version. Upgrade the Lace API and SDK to compatible versions and check that the proxy preserves ETag headers.';
+  if (value === null)
+    throw new LaceContractError(`The build-export response is missing its ETag. ${guidance}`);
   try {
     return assertEntityTag(value);
   } catch (cause) {
-    throw new LaceContractError("The build-export response has an invalid ETag.", { cause });
+    const redacted = token === undefined ? value : value.replaceAll(token, "[redacted]");
+    const preview = JSON.stringify(redacted.slice(0, 80));
+    throw new LaceContractError(
+      `The build-export response has an invalid ETag: ${preview}${redacted.length > 80 ? " (truncated)" : ""}. ${guidance}`,
+      { cause },
+    );
   }
 }
 
@@ -328,13 +337,21 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
         ...(requestOptions.signal === undefined ? {} : { signal: requestOptions.signal }),
       });
       if (response.status !== 304 && !response.ok) return parseFailure(response);
-      const responseEtag = parseResponseEtag(response);
-      if (response.status === 304) return { changed: false, etag: responseEtag };
-      return {
-        changed: true,
-        etag: responseEtag,
-        export: parseSchema(buildExportSchema, await parseJson(response)),
-      };
+      const responseEtag = parseResponseEtag(response, token);
+      const responseVersion = versionFromEntityTag(responseEtag);
+      if (response.status === 304) {
+        if (etag !== undefined && responseVersion !== versionFromEntityTag(etag))
+          throw new LaceContractError(
+            "The build-export 304 ETag does not match the requested version. Check the API and proxy conditional-response configuration.",
+          );
+        return { changed: false, etag: responseEtag };
+      }
+      const exported = parseSchema(buildExportSchema, await parseJson(response));
+      if (responseVersion !== exported.version)
+        throw new LaceContractError(
+          "The build-export ETag does not match the export version. Upgrade the Lace API and SDK to compatible versions and check the proxy configuration.",
+        );
+      return { changed: true, etag: responseEtag, export: exported };
     },
 
     getByPath(path, requestOptions = {}) {
