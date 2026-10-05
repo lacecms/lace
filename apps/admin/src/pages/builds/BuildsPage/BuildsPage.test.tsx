@@ -188,3 +188,61 @@ test.each([
     expect(detail).not.toHaveTextContent("Source entry:");
   },
 );
+
+const statuses = [
+  "pending",
+  "running",
+  "accepted",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "unknown",
+] as const;
+
+test("every build status has an info popover from the shared status map", async () => {
+  const user = userEvent.setup();
+  const items = statuses.map((status, index) => ({
+    ...failed,
+    id: `build-${status}`,
+    status,
+    targetVersion: index + 1,
+    error: status === "failed" ? failed.error : undefined,
+  }));
+  renderRoute(
+    "/builds",
+    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    stubClient({ listBuilds: async () => ({ items }) }),
+  );
+  const table = await screen.findByRole("table", { name: "Build history" });
+  for (const status of statuses) {
+    const label = status[0]!.toUpperCase() + status.slice(1);
+    const trigger = within(table).getByRole("button", { name: `About the ${label} status` });
+    await user.click(trigger);
+    const popover = await screen.findByRole("dialog", { name: label });
+    expect(popover).toHaveTextContent("What it means");
+    expect(popover).toHaveTextContent("Public site");
+    expect(popover).toHaveTextContent("Next step");
+    if (status === "succeeded")
+      expect(popover).toHaveTextContent("The public site serves content for this target version.");
+    else expect(popover).not.toHaveTextContent("serves content for this target version");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  }
+});
+
+test.each(statuses)("administrator retry availability for a %s build", async (status) => {
+  const user = userEvent.setup();
+  const record = { ...failed, status, error: status === "failed" ? failed.error : undefined };
+  renderRoute(
+    "/builds",
+    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    stubClient({ listBuilds: async () => ({ items: [record] }), getBuild: async () => record }),
+  );
+  await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
+  const detail = await screen.findByRole("region", { name: "Build details" });
+  await within(detail).findByText("build-1");
+  const retry = within(detail).queryByRole("button", { name: "Retry build" });
+  if (["failed", "cancelled", "unknown", "accepted"].includes(status)) expect(retry).not.toBeNull();
+  else expect(retry).toBeNull();
+});

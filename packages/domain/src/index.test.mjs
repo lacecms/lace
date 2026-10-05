@@ -264,3 +264,36 @@ test("build diagnostics preserve known reasons and reject unsafe paths", async (
   for (const path of ["pnpm-lock.yaml", "web/src/page.astro", "src/a b.txt", "a".repeat(512)])
     expect(safeBuildSourcePath(path)).toBe(path);
 });
+
+test("site-build statuses form one closed lifecycle with explicit terminal and retry sets", async () => {
+  const {
+    isRetryableSiteBuildStatus,
+    isSiteBuildStatus,
+    isTerminalSiteBuildStatus,
+    retryableSiteBuildStatuses,
+    siteBuildStatuses,
+    terminalSiteBuildStatuses,
+    trackedSiteBuildOutcomes,
+  } = await import("../dist/index.js");
+  expect(siteBuildStatuses).toEqual([
+    "pending",
+    "running",
+    "accepted",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "unknown",
+  ]);
+  expect(siteBuildStatuses.filter(isTerminalSiteBuildStatus)).toEqual([
+    ...terminalSiteBuildStatuses,
+  ]);
+  expect(isTerminalSiteBuildStatus("pending")).toBe(false);
+  expect(isTerminalSiteBuildStatus("running")).toBe(false);
+  expect(siteBuildStatuses.filter(isRetryableSiteBuildStatus).sort()).toEqual(
+    [...retryableSiteBuildStatuses].sort(),
+  );
+  expect(isRetryableSiteBuildStatus("succeeded")).toBe(false);
+  expect(trackedSiteBuildOutcomes).toEqual(["succeeded", "failed", "cancelled", "unknown"]);
+  expect(isSiteBuildStatus("accepted")).toBe(true);
+  expect(isSiteBuildStatus("deployed")).toBe(false);
+});

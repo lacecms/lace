@@ -194,7 +194,7 @@ Git: its deploy hook, stored as the Worker secret `LACE_DEPLOY_HOOK_URL`, is the
 site build trigger, and Pages builds the site with the Worker origin and a
 read-only build token. The generated manual workflow (direct upload) is the
 alternative without hook-driven rebuilds. A hook accepted by the provider is
-recorded as a running build, not as a confirmed deployment. The real-account
+recorded as an `accepted` build, not as a confirmed deployment (see §9.8). The real-account
 procedure for the release gate is `docs/cloudflare-deployment-handoff.md`.
 
 ### VPS deployment
@@ -886,10 +886,41 @@ site_builds
 ├── requested_at        INTEGER NOT NULL
 ├── started_at          INTEGER
 ├── completed_at        INTEGER
-└── error               TEXT
+├── error               TEXT
+├── provider_stage      TEXT
+├── provider_checked_at INTEGER
+└── provider_check_after INTEGER
 ```
 
-`site_builds.status` is one of `pending`, `running`, `succeeded`, or `failed`.
+`site_builds.status` is one closed enum. `succeeded` requires proof that the
+site was published:
+
+| Status | Meaning | Terminal |
+| --- | --- | :---: |
+| `pending` | Queued: debounce, waiting for a retry, not yet claimed | no |
+| `running` | Lace is executing the build (VPS builder, hook call) or tracking an accepted provider deployment | no |
+| `accepted` | The provider accepted the request; its outcome is not tracked | yes |
+| `succeeded` | Publication proven: the VPS release switched, or the tracked provider deploy stage succeeded | yes |
+| `failed` | Proven failure: attempts exhausted, builder failure, provider build or deploy failure | yes |
+| `cancelled` | The provider cancelled or skipped the deployment | yes |
+| `unknown` | Tracking stopped without proof: deadline, missing deployment, or no read permission | yes |
+
+Transitions: `pending → running` when a dispatcher claims the build, on every
+runtime; `running → running` when an expired lease is reclaimed (guarded, start
+time kept, so no row is orphaned); `running → pending` with a safe error for a
+retryable failure; `running → succeeded/failed` for the VPS builder;
+`running → accepted` for a provider acceptance that is not tracked (a hook
+response without an ID never becomes `succeeded`). A tracked provider
+deployment stays `running` with its `provider_build_id` after its outbox event
+is completed and ends in `succeeded`, `failed`, `cancelled`, or `unknown` only
+through a completion naming that build and provider ID. Terminal rows are never
+reopened, so a late provider result does not change `unknown`. Administrator
+retry is accepted from `failed`, `cancelled`, `unknown`, and `accepted` and
+creates a new request. The site's current version is the highest
+`target_version` among `succeeded` builds. The nullable `provider_*` fields hold
+the tracked deployment's stage, last check, and next due check; they are
+internal tracking state, never provider responses or credentials.
+
 The optional snapshot ID identifies the publication that initiated a request;
 `target_version` is authoritative when requests are coalesced.
 

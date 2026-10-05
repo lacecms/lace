@@ -113,9 +113,9 @@ project root unless noted.
    `POST` without credentials.
 10. **Publish and rebuild.** Publish a change in Admin. Within a few minutes the
     scheduled trigger (cron every minute) or the post-commit pass calls the hook.
-    Admin's build history must show the build `running` with the Pages
-    deployment ID. Lace does not poll the provider, so `running` means only that
-    the provider accepted the request.
+    Admin's build history must show the build `accepted` with the Pages
+    deployment ID. Lace does not poll the provider, so `accepted` means only
+    that the provider accepted the request, not that the site was published.
 11. **Confirm the deployment separately.** In the Pages dashboard or with
     `wrangler pages deployment list --project-name <project>`, confirm that the
     deployment with the recorded ID succeeded. Then fetch the published page
@@ -138,7 +138,7 @@ Record privately and summarize, without secrets, in the release record:
 - artifact versions, template version, Wrangler version, date, account type;
 - output of `health/ready` and of remote doctor `ready`;
 - the browser setup, sign-in, media upload and publication outcome;
-- the build history entry with status `running` and the provider deployment ID,
+- the build history entry with status `accepted` and the provider deployment ID,
   next to the provider's own `success` result for that ID;
 - the served Pages page containing the published change, its media loading
   from the Worker origin, and a later unpublished draft absent from it;

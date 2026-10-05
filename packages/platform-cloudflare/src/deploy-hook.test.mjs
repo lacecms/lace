@@ -30,7 +30,7 @@ test("sends one bodiless POST without following redirects", async () => {
   expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
 });
 
-test("a 2xx response without a valid deployment ID is dispatch success", async () => {
+test("a 2xx response without a valid deployment ID is acceptance, never success", async () => {
   for (const response of [
     () => new Response(null, { status: 204 }),
     () => new Response("queued", { status: 200 }),
@@ -41,7 +41,7 @@ test("a 2xx response without a valid deployment ID is dispatch success", async (
     () => Response.json([1, 2]),
     () => new Response("x".repeat(DEPLOY_HOOK_MAX_RESPONSE_BYTES + 1), { status: 200 }),
   ]) {
-    expect(await trigger(response).adapter.trigger(input)).toEqual({ status: "succeeded" });
+    expect(await trigger(response).adapter.trigger(input)).toEqual({ status: "accepted" });
   }
 });
 

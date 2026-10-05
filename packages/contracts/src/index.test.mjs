@@ -690,3 +690,45 @@ test("admin build diagnostics validate closed reasons and coherent safe paths", 
   ])
     expect(v.safeParse(siteBuildRecordSchema, { ...base, ...item }).success).toBe(false);
 });
+
+test("admin build DTOs accept exactly the seven lifecycle statuses", async () => {
+  const { siteBuildRecordSchema, siteBuildStatusSchema, toSiteBuildRecordDto } =
+    await import("../dist/index.js");
+  const base = {
+    id: "build",
+    reason: "publication",
+    targetVersion: 4,
+    requestedBy: "admin",
+    requestedAt: "2026-10-05T00:00:00.000Z",
+  };
+  expect(siteBuildStatusSchema.options).toEqual([
+    "pending",
+    "running",
+    "accepted",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "unknown",
+  ]);
+  for (const status of siteBuildStatusSchema.options)
+    expect(v.safeParse(siteBuildRecordSchema, { ...base, status }).success).toBe(true);
+  for (const status of ["deployed", "Accepted", ""])
+    expect(v.safeParse(siteBuildRecordSchema, { ...base, status }).success).toBe(false);
+  expect(
+    toSiteBuildRecordDto({
+      id: "build",
+      reason: "publication",
+      status: "accepted",
+      targetVersion: 4,
+      requestedBy: "admin",
+      requestedAt: 1,
+      startedAt: 2,
+      completedAt: 3,
+      providerBuildId: "dep-1",
+    }),
+  ).toMatchObject({
+    status: "accepted",
+    providerBuildId: "dep-1",
+    completedAt: expect.any(String),
+  });
+});

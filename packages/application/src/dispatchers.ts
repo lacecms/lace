@@ -95,6 +95,16 @@ export class SiteBuildDispatcher {
       await this.options.work.recordSiteBuildAccepted({
         leaseId: lease.id,
         now: this.options.clock.now(),
+        ...(result.providerBuildId === undefined
+          ? {}
+          : { providerBuildId: result.providerBuildId }),
+      });
+      return;
+    }
+    if (result.status === "tracking") {
+      await this.options.work.recordSiteBuildTracking({
+        leaseId: lease.id,
+        now: this.options.clock.now(),
         providerBuildId: result.providerBuildId,
       });
       return;

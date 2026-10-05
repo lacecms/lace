@@ -8,6 +8,7 @@ import {
   DISPATCHER_LEASE_DURATION_MS,
   SITE_BUILD_DEBOUNCE_MS,
   siteBuildRetryPolicy,
+  SiteBuildDispatcher,
   SiteBuildUseCases,
   checkConfigurationSynchronization,
   contentSyncActor,
@@ -505,4 +506,59 @@ test("reloads catalog views after create and deletion commands", async () => {
     media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "cover.png" }),
   ).rejects.toThrow("Created media could not be reloaded.");
   expect(cleanup).toEqual([]);
+});
+
+test("site-build dispatcher maps every trigger result to one truthful lifecycle write", async () => {
+  const lease = (id) =>
+    Object.freeze({
+      buildId: id,
+      event: { attempts: 0, availableAt: 0, id, payload: {}, type: "site.build.requested" },
+      expiresAt: 60_000,
+      id: dispatcherLeaseId(`lease-${id}`),
+      targetVersion: 3,
+    });
+  const results = {
+    accepted: { status: "accepted" },
+    acceptedWithId: { status: "accepted", providerBuildId: "dep-1" },
+    failed: { status: "failed", reason: "source_missing", path: "pnpm-lock.yaml" },
+    succeeded: { status: "succeeded" },
+    tracking: { status: "tracking", providerBuildId: "dep-2" },
+  };
+  const writes = [];
+  const work = {
+    claimSiteBuilds: async () => Object.keys(results).map(lease),
+    renewSiteBuildLease: async () => true,
+    recordSiteBuildAccepted: async (input) => writes.push(["accepted", input]),
+    recordSiteBuildTracking: async (input) => writes.push(["tracking", input]),
+    recordSiteBuildSuccess: async (input) => writes.push(["succeeded", input]),
+    recordSiteBuildFailure: async (input) => writes.push(["failed", input]),
+    completeTrackedSiteBuild: async () => {
+      throw new Error("dispatch never completes tracked builds");
+    },
+  };
+  const dispatcher = new SiteBuildDispatcher({
+    clock: { now: () => 7 },
+    logger: { error: () => undefined },
+    random: () => 0,
+    trigger: { trigger: async ({ buildId }) => results[buildId] },
+    work,
+  });
+  await dispatcher.runOnce();
+  expect(writes).toEqual([
+    ["accepted", { leaseId: "lease-accepted", now: 7 }],
+    ["accepted", { leaseId: "lease-acceptedWithId", now: 7, providerBuildId: "dep-1" }],
+    [
+      "failed",
+      {
+        leaseId: "lease-failed",
+        now: 7,
+        path: "pnpm-lock.yaml",
+        reason: "source_missing",
+        retryAt: 7,
+        terminal: false,
+      },
+    ],
+    ["succeeded", { leaseId: "lease-succeeded", now: 7 }],
+    ["tracking", { leaseId: "lease-tracking", now: 7, providerBuildId: "dep-2" }],
+  ]);
 });

@@ -224,12 +224,16 @@ export const siteBuilds = sqliteTable(
     startedAt: integer("started_at"),
     completedAt: integer("completed_at"),
     error: text("error"),
+    providerStage: text("provider_stage"),
+    providerCheckedAt: integer("provider_checked_at"),
+    providerCheckAfter: integer("provider_check_after"),
   },
   (table) => [
     index("site_builds_history_idx").on(table.requestedAt, table.id),
+    index("site_builds_tracking_idx").on(table.status, table.providerCheckAfter),
     check(
       "site_builds_status_check",
-      sql`${table.status} in ('pending', 'running', 'succeeded', 'failed')`,
+      sql`${table.status} in ('pending', 'running', 'accepted', 'succeeded', 'failed', 'cancelled', 'unknown')`,
     ),
     check("site_builds_target_version_check", sql`${table.targetVersion} >= 0`),
   ],

@@ -72,6 +72,11 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
         trigger: {
           trigger: async (input) => {
             calls.push(input);
+            expect(
+              database.connection
+                .prepare("select status from site_builds where id = ?")
+                .get(input.buildId),
+            ).toEqual({ status: "running" });
             return outcome === "accepted"
               ? { status: "accepted", providerBuildId: "provider-1" }
               : outcome === "succeeded"
@@ -129,7 +134,7 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
         database.connection
           .prepare("select status, provider_build_id from site_builds where id = ?")
           .get(accepted.eventId),
-      ).toEqual({ status: "running", provider_build_id: "provider-1" });
+      ).toEqual({ status: "accepted", provider_build_id: "provider-1" });
 
       now = 30_000;
       const thrown = await repository.requestBuild({
@@ -802,12 +807,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(3);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(4);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(3);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(4);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -928,7 +933,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
           .prepare(
             "insert into site_builds (id, reason, status, target_version, requested_by, requested_at) values (?, ?, ?, ?, ?, ?)",
           )
-          .run("invalid-build", "manual", "unknown", 0, "admin", 1),
+          .run("invalid-build", "manual", "deployed", 0, "admin", 1),
       ).toThrow();
 
       insertModel.run("posts", "collection", "Posts", 1, "structure", "projection", 1, 1);

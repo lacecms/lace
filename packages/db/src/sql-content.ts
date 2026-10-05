@@ -34,6 +34,8 @@ import {
   contentEntryId,
   contentModelKey,
   contentSnapshotId,
+  isSiteBuildStatus,
+  retryableSiteBuildStatuses,
   siteBuildId,
   unixMilliseconds,
 } from "@lacecms/domain";
@@ -67,6 +69,29 @@ export const PUBLICATION_IDEMPOTENCY_TTL_MS = 86_400_000;
 /** Maps the current runtime configuration to a persisted content-model identity. */
 export type ContentModelResolver = (key: string) => ContentModelRoute | undefined;
 
+/** Literal SQL list of closed status values; never built from input. */
+function statusListSql(statuses: readonly string[]): string {
+  return `(${statuses.map((status) => `'${status}'`).join(", ")})`;
+}
+
+/** Statuses an administrator may retry from. */
+export const RETRYABLE_SITE_BUILD_STATUS_SQL = statusListSql(retryableSiteBuildStatuses);
+/** A claim may (re)start only a queued or orphaned in-progress row. */
+export const CLAIMABLE_SITE_BUILD_STATUS_SQL = statusListSql(["pending", "running"]);
+export const RETRYABLE_SITE_BUILD_REFUSAL =
+  "Only a failed, cancelled, unknown, or accepted build can be retried.";
+
+/** Provider deployment references are bounded opaque identifiers. */
+export function assertProviderBuildId(value: string): void {
+  if (value.length === 0 || value.length > 200)
+    throw new TypeError("Provider build ID is invalid.");
+}
+
+/** Stored error for a tracked outcome; only `failed` carries a closed reason in 33D. */
+export function trackedOutcomeError(outcome: string, reason: string | undefined): string | null {
+  return outcome === "failed" ? sanitizeBuildReason(reason ?? "provider_failed") : null;
+}
+
 export interface SiteBuildRow {
   readonly id: string;
   readonly reason: string;
@@ -78,6 +103,9 @@ export interface SiteBuildRow {
   readonly completed_at: number | null;
   readonly provider_build_id: string | null;
   readonly error: string | null;
+  readonly provider_stage?: string | null;
+  readonly provider_checked_at?: number | null;
+  readonly provider_check_after?: number | null;
 }
 
 export interface EntryRow {
@@ -299,6 +327,7 @@ export function revisionConflict(message: string): never {
 }
 
 export function siteBuildRecord(row: SiteBuildRow): SiteBuildRecord {
+  if (!isSiteBuildStatus(row.status)) failure("Stored build status is invalid.");
   return {
     id: siteBuildId(row.id),
     reason: row.reason,

@@ -4,8 +4,10 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 const migrationsDirectory = new URL("../../db/drizzle/", import.meta.url);
 
 /** Checked-in forward migrations split into D1-executable statements. */
-export async function migrationStatements() {
-  const files = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
+export async function migrationStatements(include = () => true) {
+  const files = (await readdir(migrationsDirectory))
+    .filter((file) => file.endsWith(".sql") && include(file))
+    .sort();
   const statements = [];
   for (const file of files) {
     const sql = await readFile(new URL(file, migrationsDirectory), "utf8");

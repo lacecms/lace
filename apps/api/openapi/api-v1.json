@@ -2730,7 +2730,15 @@
                           },
                           "startedAt": {},
                           "status": {
-                            "enum": ["failed", "pending", "running", "succeeded"]
+                            "enum": [
+                              "pending",
+                              "running",
+                              "accepted",
+                              "succeeded",
+                              "failed",
+                              "cancelled",
+                              "unknown"
+                            ]
                           },
                           "targetVersion": {
                             "minimum": 0,
@@ -2830,7 +2838,15 @@
                     },
                     "startedAt": {},
                     "status": {
-                      "enum": ["failed", "pending", "running", "succeeded"]
+                      "enum": [
+                        "pending",
+                        "running",
+                        "accepted",
+                        "succeeded",
+                        "failed",
+                        "cancelled",
+                        "unknown"
+                      ]
                     },
                     "targetVersion": {
                       "minimum": 0,

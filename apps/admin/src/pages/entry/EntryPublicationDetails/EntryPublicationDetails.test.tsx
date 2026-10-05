@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import type { SiteBuildRecordDto } from "@lacecms/contracts";
 import { draftEntry, models, renderInRouter, stubClient } from "../../../app/testing/index.js";
@@ -103,7 +104,7 @@ test("a covering build is followed from pending to succeeded with the current si
     await vi.advanceTimersByTimeAsync(5_000);
     expect(
       await screen.findByText(
-        "Published. Build for version 4 of Main site is pending (queued or building).",
+        "Published. Build for version 4 of Main site is pending (queued or waiting for a retry).",
       ),
     ).toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(5_000);
@@ -126,6 +127,30 @@ test("a failed covering build keeps the previous release and links to Builds", a
     ),
   ).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "View builds" })).toHaveAttribute("href", "/builds");
+});
+
+test("an accepted covering build is terminal and explains that acceptance is not publication", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const listBuilds = vi.fn(async () => ({
+      items: [build({ providerBuildId: "dep-1", status: "accepted" })],
+    }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderQueued(stubClient({ listBuilds }));
+    expect(
+      await screen.findByText(
+        "Published. Build for version 4 was accepted by the provider; Lace has not confirmed the site changed.",
+      ),
+    ).toBeInTheDocument();
+    const calls = listBuilds.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(listBuilds).toHaveBeenCalledTimes(calls);
+    await user.click(screen.getByRole("button", { name: "About the Accepted status" }));
+    const popover = await screen.findByRole("dialog", { name: "Accepted" });
+    expect(popover).toHaveTextContent("Lace has not confirmed that the public site changed.");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("unavailable build history keeps the dispatch result", async () => {

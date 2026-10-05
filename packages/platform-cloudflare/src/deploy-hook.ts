@@ -104,9 +104,10 @@ export class DeployHookSiteBuildTrigger implements SiteBuildTrigger {
     if (response.status < 200 || response.status > 299) return rejected;
     const envelope = parseEnvelope(text);
     if (envelope?.success === false) return rejected;
+    // Acceptance never proves publication; without tracking it is terminal `accepted`.
     const id = providerId(envelope);
     return id === undefined
-      ? Object.freeze({ status: "succeeded" })
+      ? Object.freeze({ status: "accepted" })
       : Object.freeze({ providerBuildId: id, status: "accepted" });
   }
 }

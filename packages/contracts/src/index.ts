@@ -5,6 +5,7 @@ import {
   DomainError,
   unixMilliseconds,
   siteBuildFailureReasons,
+  siteBuildStatuses,
   sourceFailureReasons,
   safeBuildSourcePath,
   normalizeBuildFailure,
@@ -18,6 +19,7 @@ import type {
   ContentSnapshot,
   DomainErrorCode,
   SiteBuildState,
+  SiteBuildStatus,
   UnixMilliseconds,
 } from "@lacecms/domain";
 import * as v from "valibot";
@@ -576,12 +578,15 @@ export const mediaDetailSchema = v.strictObject({
   usage: v.pipe(v.array(mediaUsageEntrySchema), v.maxLength(MAX_MEDIA_USAGE_ENTRIES)),
 });
 
+/** The closed site-build lifecycle; only `succeeded` proves publication. */
+export const siteBuildStatusSchema = v.picklist(siteBuildStatuses);
+
 export const siteBuildSchema = v.strictObject({
   id: identifierSchema,
   publishedSnapshotId: v.optional(identifierSchema),
   requestedAt: isoTimestampSchema,
   requestedBy: identifierSchema,
-  status: v.picklist(["failed", "pending", "running", "succeeded"]),
+  status: siteBuildStatusSchema,
   targetVersion: nonNegativeIntegerSchema,
 });
 
@@ -601,7 +606,7 @@ export const siteBuildRecordSchema = v.pipe(
   v.strictObject({
     id: identifierSchema,
     reason: identifierSchema,
-    status: v.picklist(["failed", "pending", "running", "succeeded"]),
+    status: siteBuildStatusSchema,
     targetVersion: nonNegativeIntegerSchema,
     requestedBy: identifierSchema,
     requestedAt: isoTimestampSchema,
@@ -883,7 +888,7 @@ export function toSiteBuildDto(build: SiteBuildState): SiteBuildDto {
 export function toSiteBuildRecordDto(build: {
   readonly id: string;
   readonly reason: string;
-  readonly status: "failed" | "pending" | "running" | "succeeded";
+  readonly status: SiteBuildStatus;
   readonly targetVersion: number;
   readonly requestedBy: string;
   readonly requestedAt: number;

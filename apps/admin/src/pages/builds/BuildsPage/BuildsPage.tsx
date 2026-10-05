@@ -1,4 +1,5 @@
 import { CurrentBuildSite } from "../../../widgets/current-build-site/index.js";
+import { BuildStatusBadge, isRetryableBuildStatus } from "../../../entities/site-build/index.js";
 import { publicationVisibilityModes } from "../../../features/publish-entry/index.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Hammer, RotateCw } from "lucide-react";
@@ -11,7 +12,6 @@ import {
   useAdminClient,
 } from "../../../shared/api/index.js";
 import { formatAbsoluteTime, formatRelativeTime } from "../../../shared/lib/index.js";
-import { Badge } from "../../../shared/ui/Badge/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { EmptyState } from "../../../shared/ui/EmptyState/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
@@ -26,7 +26,6 @@ import {
   TableRow,
 } from "../../../shared/ui/Table/index.js";
 import { buildFailureGuidance } from "./build-failure.js";
-import type { SiteBuildRecordDto } from "@lacecms/contracts";
 
 function BuildTime({ value }: { readonly value: string | undefined }) {
   return value === undefined ? (
@@ -36,18 +35,6 @@ function BuildTime({ value }: { readonly value: string | undefined }) {
       {formatRelativeTime(value)}
     </time>
   );
-}
-
-function BuildStatus({ status }: { readonly status: SiteBuildRecordDto["status"] }) {
-  const variant =
-    status === "failed"
-      ? "destructive"
-      : status === "succeeded"
-        ? "success"
-        : status === "running"
-          ? "warning"
-          : "secondary";
-  return <Badge variant={variant}>{status[0]!.toUpperCase() + status.slice(1)}</Badge>;
 }
 
 /** Verified mode guidance; the CMS cannot tell which mode serves the site. */
@@ -66,8 +53,9 @@ function PublicationVisibility() {
         ))}
       </dl>
       <p className="m-0 text-sm text-muted-foreground">
-        A self-hosted build stays pending while it runs. One build can cover several publications. A
-        recorded build does not confirm Astro dev or a manual deployment.
+        A self-hosted build is running while the builder works and succeeds once its release is
+        served. Accepted means only that a provider took the request. One build can cover several
+        publications. A recorded build does not confirm Astro dev or a manual deployment.
       </p>
     </section>
   );
@@ -116,7 +104,7 @@ export function BuildsPage() {
         <div className="grid gap-1">
           <h1 id="builds-title">Builds</h1>
           <p className="m-0 text-muted-foreground">
-            Track static site releases and recover failed builds.
+            Track static site releases and retry builds that did not publish.
           </p>
         </div>
         {isAdmin ? (
@@ -175,7 +163,7 @@ export function BuildsPage() {
                     data-state={selectedId === build.id ? "selected" : undefined}
                   >
                     <TableCell>
-                      <BuildStatus status={build.status} />
+                      <BuildStatusBadge status={build.status} />
                     </TableCell>
                     <TableCell>v{build.targetVersion}</TableCell>
                     <TableCell className="capitalize">
@@ -224,7 +212,7 @@ export function BuildsPage() {
                     <dd className="m-0 break-all">{detail.data.id}</dd>
                     <dt>Status</dt>
                     <dd className="m-0">
-                      <BuildStatus status={detail.data.status} />
+                      <BuildStatusBadge status={detail.data.status} />
                     </dd>
                     <dt>Target version</dt>
                     <dd className="m-0">{detail.data.targetVersion}</dd>
@@ -264,7 +252,7 @@ export function BuildsPage() {
                       ) : undefined}
                     </div>
                   )}
-                  {isAdmin && detail.data.status === "failed" ? (
+                  {isAdmin && isRetryableBuildStatus(detail.data.status) ? (
                     <Button
                       disabled={action !== null}
                       onClick={() => void send("retry", detail.data.id)}

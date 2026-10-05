@@ -14,6 +14,8 @@ import type {
   MediaMetadata,
   PublishedSnapshot,
   SiteBuildId,
+  SiteBuildStatus,
+  TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
 import { requirePermission } from "@lacecms/domain";
@@ -337,8 +339,13 @@ export interface SiteBuildRequest {
   readonly targetVersion: number;
 }
 
+/**
+ * `succeeded` is proven publication only. `accepted` is untracked provider
+ * acceptance; `tracking` means this runtime will track the exact deployment.
+ */
 export type BuildTriggerResult =
-  | Readonly<{ readonly status: "accepted"; readonly providerBuildId: string }>
+  | Readonly<{ readonly status: "accepted"; readonly providerBuildId?: string }>
+  | Readonly<{ readonly status: "tracking"; readonly providerBuildId: string }>
   | Readonly<{ readonly status: "succeeded" }>
   | Readonly<{ readonly status: "failed"; readonly reason: string; readonly path?: string }>;
 
@@ -366,7 +373,7 @@ export interface SiteBuildCommandPort {
 export interface SiteBuildRecord {
   readonly id: SiteBuildId;
   readonly reason: string;
-  readonly status: "pending" | "running" | "succeeded" | "failed";
+  readonly status: SiteBuildStatus;
   readonly targetVersion: number;
   readonly requestedBy: string;
   readonly requestedAt: UnixMilliseconds;
@@ -396,7 +403,14 @@ export interface SiteBuildDispatchPort {
     readonly leaseId: DispatcherLeaseId;
     readonly now: UnixMilliseconds;
   }): Promise<boolean>;
+  /** Untracked provider acceptance: terminal `accepted`, optional provider ID. */
   recordSiteBuildAccepted(input: {
+    readonly leaseId: DispatcherLeaseId;
+    readonly now: UnixMilliseconds;
+    readonly providerBuildId?: string;
+  }): Promise<void>;
+  /** Tracked provider acceptance: the build stays `running` and its event completes. */
+  recordSiteBuildTracking(input: {
     readonly leaseId: DispatcherLeaseId;
     readonly now: UnixMilliseconds;
     readonly providerBuildId: string;
@@ -413,11 +427,15 @@ export interface SiteBuildDispatchPort {
     readonly retryAt?: UnixMilliseconds;
     readonly terminal: boolean;
   }): Promise<void>;
-  completeAcceptedSiteBuild(input: {
+  /**
+   * Ends a tracked deployment for the exact build and provider ID; idempotent
+   * for the same outcome and never reopens a terminal build.
+   */
+  completeTrackedSiteBuild(input: {
     readonly buildId: SiteBuildId;
     readonly providerBuildId: string;
     readonly now: UnixMilliseconds;
-    readonly outcome: "succeeded" | "failed";
+    readonly outcome: TrackedSiteBuildOutcome;
     readonly reason?: string;
   }): Promise<void>;
 }

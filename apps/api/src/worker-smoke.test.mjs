@@ -207,10 +207,10 @@ test("Worker bundle smoke: health, auth, R2 upload, publish, deploy hook, export
   let build;
   for (let attempt = 0; attempt < 40; attempt += 1) {
     build = (await call("/api/v1/admin/site-builds")).body.items[0];
-    if (build?.status !== "pending") break;
+    if (build !== undefined && !["pending", "running"].includes(build.status)) break;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  expect(build).toMatchObject({ providerBuildId: "smoke-dep-1", status: "running" });
+  expect(build).toMatchObject({ providerBuildId: "smoke-dep-1", status: "accepted" });
   await worker.scheduled({ cron: "* * * * *" });
   expect(hookCalls).toEqual([
     { authorization: null, body: "", cookie: null, method: "POST", url: hook },

@@ -1,5 +1,6 @@
 import { MAX_SLUG_LENGTH } from "@lacecms/content";
 import type { JsonObject, JsonValue } from "@lacecms/content";
+import type { SiteBuildStatus } from "./build-status.js";
 
 export const packageName = "@lacecms/domain";
 export const BLOCK_POSITION_STEP = 1_000;
@@ -154,8 +155,6 @@ export interface MediaMetadata {
   readonly updatedAt: UnixMilliseconds;
   readonly width?: number;
 }
-
-export type SiteBuildStatus = "failed" | "pending" | "running" | "succeeded";
 
 /** Publication and build completion are deliberately represented separately. */
 export interface SiteBuildState {
@@ -595,3 +594,13 @@ export {
   normalizeBuildFailure,
 } from "./build-diagnostics.js";
 export type { SiteBuildFailureReason } from "./build-diagnostics.js";
+export {
+  siteBuildStatuses,
+  terminalSiteBuildStatuses,
+  retryableSiteBuildStatuses,
+  trackedSiteBuildOutcomes,
+  isSiteBuildStatus,
+  isTerminalSiteBuildStatus,
+  isRetryableSiteBuildStatus,
+} from "./build-status.js";
+export type { SiteBuildStatus, TrackedSiteBuildOutcome } from "./build-status.js";

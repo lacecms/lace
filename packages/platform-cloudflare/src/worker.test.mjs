@@ -426,7 +426,7 @@ test("a scheduled run with many pending deletions stays within 50 D1 queries", a
   for (const id of ids) expect(await fixture.local.bucket.head(`media/${id}`)).toBeNull();
 });
 
-test("a configured deploy hook receives scheduled builds and records the provider ID", async () => {
+test("a configured deploy hook receives scheduled builds and records untracked acceptance", async () => {
   const hook = "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/hook-secret";
   const calls = [];
   vi.stubGlobal("fetch", async (target, init) => {
@@ -452,7 +452,7 @@ test("a configured deploy hook receives scheduled builds and records the provide
   await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
   expect(calls).toEqual([{ body: undefined, method: "POST", target: hook }]);
   const builds = await fixture.call("/api/v1/admin/site-builds");
-  expect(builds.body.items[0]).toMatchObject({ providerBuildId: "dep-42", status: "running" });
+  expect(builds.body.items[0]).toMatchObject({ providerBuildId: "dep-42", status: "accepted" });
   expect(JSON.stringify(builds.body)).not.toContain("hook-secret");
   expect(JSON.stringify(fixture.logs)).not.toContain("hook-secret");
 });

@@ -84,14 +84,19 @@ or build records. The call does not follow redirects, is aborted after
 
 | Hook response | Recorded outcome |
 | --- | --- |
-| 2xx with a Cloudflare envelope `result.id` | Build `running`, with that provider deployment ID |
-| 2xx without a usable ID | Build `succeeded`: the provider accepted the request |
+| 2xx with a Cloudflare envelope `result.id` | Build `accepted`, with that provider deployment ID |
+| 2xx without a usable ID | Build `accepted`, without a provider ID |
 | 2xx with `success: false`, redirect, or other 4xx | Retryable failure, `provider_failed` |
 | `408`, `425`, `429`, 5xx, network error, or timeout | Retryable failure, `trigger_unavailable` |
 
-Failures follow the normal eight-attempt retry policy. Lace does not poll the
-provider, so an accepted build stays `running`. Use the recorded provider ID
-to find the deployment in the Cloudflare dashboard.
+Failures follow the normal eight-attempt retry policy. While the hook call is
+in progress the build is `running`. Lace does not yet track the provider's
+deployment, so `accepted` is a final status that means only that the provider
+took the request; it never proves the site was published (only `succeeded`
+does). Use the recorded provider ID to find the deployment in the Cloudflare
+dashboard, and retry an `accepted` build from Admin if the deployment failed.
+Databases migrated from earlier alphas record former `running` hook builds,
+and hook `succeeded` builds without a provider ID, as `accepted`.
 
 Cloudflare Pages offers deploy hooks only for projects connected to Git. A
 project deployed by direct upload (`wrangler pages deploy`) has no hook. The

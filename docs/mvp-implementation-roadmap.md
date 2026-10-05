@@ -2421,6 +2421,16 @@ builds. Late provider results do not reopen `unknown`.
    migration), the dispatcher on both runtimes, and the admin with unit,
    Playwright, and axe checks for every status and its popover.
 
+Session 33D completed on 2026-10-06 via `step-33d-truthful-site-build-outcomes`:
+the seven-status enum, claim-time `running` with guarded reclaim, deploy-hook
+acceptance recorded as `accepted`, retry from every retryable terminal status,
+and migration `0003_site_build_outcomes` (tracking fields, D1-only
+reclassification of unproven hook outcomes). The application port already
+distinguishes a `tracking` trigger result and offers exact, idempotent
+`completeTrackedSiteBuild`; 33E adds the Pages adapter and poller on top of
+them. Builds, entry publication details, the tour and the generated operations
+guide share one status map with keyboard/touch popovers. Sessions 33E–33H remain.
+
 ### Session 33E — Cloudflare Pages deployment tracking
 
 1. Add optional Pages tracking to the scheduled Worker. With an account ID,
