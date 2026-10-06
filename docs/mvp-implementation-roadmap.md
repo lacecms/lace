@@ -2543,6 +2543,21 @@ runs remain unverified; no artifacts were published. Session 33H remains.
    is input to 34C rather than a local-test claim; registry publication remains
    a separate explicit act.
 
+33H delivered 2026-10-06: `0.1.0-alpha.2` recorded as published; candidate
+`0.1.0-alpha.3` with template `0.17.0` (upgrade instructions include the
+`0003_site_build_outcomes` database step) prepared from clean revision
+`5343121` for both platforms. `pnpm acceptance:release` passed on arm64 with
+the field-trial journeys (block order in the packed admin through the served
+release, weak ETags through a compressing proxy, builder source diagnostics on
+the loaded images, credential separation, Pages tracking against a stub,
+guide command contracts, 0.4.0/0.14.0 upgrades). The run found and fixed one
+guide defect: the production guide ran doctor's ready stage against the running
+WAL database. The feedback logs moved to `docs/archive/`; the guarded map is
+`docs/archive/step-33/alpha-2-feedback-acceptance.md`. Evidence:
+`docs/archive/step-33/step-33h-verification.md`. Nothing was published;
+publication and real-account/real-server re-verification are owner acts
+feeding 34C. Step 33 is complete.
+
 ### Acceptance
 
 - Reordered, inserted, duplicated, and restored blocks save and publish in the

@@ -21,11 +21,11 @@
 
 - [x] 4.1 Run focused tests (release tooling, create-lace, CLI, consumer guides, feedback maps), root `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, strict OpenSpec validation and a package-only `--preview` preparation.
 - [x] 4.2 Run the new journeys once against a working-tree preview or the workspace suite where feasible to shake out harness defects before the clean candidate.
-- [ ] 4.3 Commit the implementation; from that clean commit run `pnpm release:prepare --output .release-artifacts/alpha-3` (both platforms) and `pnpm release:verify`; confirm `complete` and `publicationEligible`.
-- [ ] 4.4 Run `pnpm acceptance:release --artifacts .release-artifacts/alpha-3` and require the full receipt including the field-trial journeys.
+- [x] 4.3 Commit the implementation; from that clean commit run `pnpm release:prepare --output .release-artifacts/alpha-3` (both platforms) and `pnpm release:verify`; confirm `complete` and `publicationEligible`.
+- [x] 4.4 Run `pnpm acceptance:release --artifacts .release-artifacts/alpha-3` and require the full receipt including the field-trial journeys.
 
 ## 5. Evidence, documentation and archive
 
-- [ ] 5.1 Record `docs/archive/step-33/step-33h-verification.md` and `step-33h-artifacts.json` (source revision, fingerprint, versions, checksums, image IDs, receipt, registry evidence, remaining owner checks).
-- [ ] 5.2 Reconcile `docs/alpha-release.md`, `docs/compatibility.md`, architecture §25, roadmap (33H and Step 33 summary), root README and the feedback map with delivered behavior; publication and real-account/real-server checks remain explicit owner acts (input to 34C).
-- [ ] 5.3 Validate strictly, sync delta specs, archive the change and commit the evidence.
+- [x] 5.1 Record `docs/archive/step-33/step-33h-verification.md` and `step-33h-artifacts.json` (source revision, fingerprint, versions, checksums, image IDs, receipt, registry evidence, remaining owner checks).
+- [x] 5.2 Reconcile `docs/alpha-release.md`, `docs/compatibility.md`, architecture §25, roadmap (33H and Step 33 summary), root README and the feedback map with delivered behavior; publication and real-account/real-server checks remain explicit owner acts (input to 34C).
+- [x] 5.3 Validate strictly, sync delta specs, archive the change and commit the evidence.
