@@ -6,10 +6,13 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import {
+  guideCommands,
+  guideDrift,
   guideFiles,
   developmentGuide,
   developmentSetupCommands,
   reviewEnvironment,
+  scenarioGuides,
   setupDrift,
   updateEnvironment,
 } from "../scripts/consumer-guides.mjs";
@@ -18,6 +21,7 @@ const exec = promisify(execFile);
 const workspace = fileURLToPath(new URL("..", import.meta.url));
 let root;
 let project;
+let cloudflareProject;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "lace-consumer-guides-"));
@@ -27,6 +31,14 @@ beforeAll(async () => {
     "create",
     project,
     "--starter",
+  ]);
+  cloudflareProject = join(root, "cloudflare-site");
+  await exec(process.execPath, [
+    join(workspace, "packages/create-lace/dist/bin.js"),
+    "create",
+    cloudflareProject,
+    "--starter",
+    "--cloudflare",
   ]);
 });
 afterAll(() => rm(root, { recursive: true, force: true }));
@@ -60,6 +72,31 @@ test("development guide drift names the guide and the differing step", async () 
     'docs/lace-compose-dev.md "pnpm db:setup" names no package script',
   );
 });
+
+test.each(["development", "production", "cloudflare"])(
+  "the generated %s guide documents the sequence acceptance runs",
+  async (name) => {
+    const guide = scenarioGuides[name];
+    const markdown = await readFile(join(cloudflareProject, guide.path), "utf8");
+    const { scripts } = JSON.parse(await readFile(join(cloudflareProject, "package.json"), "utf8"));
+    const commands = guideCommands(markdown, guide);
+    expect(commands).toEqual(guide.sequence);
+    expect(guideDrift(guide, commands, scripts)).toBeNull();
+    // Reordering two documented commands fails naming the guide and the step.
+    const [first, second] = [guide.sequence[1], guide.sequence[2]];
+    const swapped = guideCommands(
+      markdown
+        .replace(`${first}\n`, "@first@\n")
+        .replace(`${second}\n`, `${first}\n`)
+        .replace("@first@\n", `${second}\n`),
+      guide,
+    );
+    expect(guideDrift(guide, swapped, scripts)).toBe(
+      `${guide.path} step 2 documents "${second}", acceptance runs "${first}"`,
+    );
+    expect(() => guideCommands("# Guide\n", guide)).toThrow(guide.path);
+  },
+);
 
 test("the generated connection guide yields the existing-site fixture's own files", async () => {
   const files = guideFiles(await readFile(join(project, "docs/lace-astro-site.md"), "utf8"));

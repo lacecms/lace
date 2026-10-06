@@ -279,6 +279,12 @@ export async function templateUpgradeJourney(temporary, operations) {
             `upgrade-${version}-${variant.name}-apply: instructions do not name ${guide}`,
           );
       }
+      // Published alpha.2 engines lack the 33D build-outcome migration the candidate requires.
+      for (const step of ["0003_site_build_outcomes", "Downgrading to 0.1.0-alpha.2"])
+        if (!applied.report.guidance?.includes(step))
+          throw new Error(
+            `upgrade-${version}-${variant.name}-apply: instructions lack the database step (${step})`,
+          );
       if (variant.name !== "cloudflare" && "docs/lace-cloudflare.md" in after)
         throw new Error(
           `upgrade-${version}-${variant.name}-apply: Cloudflare guide without Cloudflare`,
@@ -304,6 +310,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}-repeat: upgraded project is not current`);
   }
   console.info(
-    "Template 0.4.0/0.14.0 default and Cloudflare projects: managed conflicts and new-guide collisions refused, scenario guides delivered, user README, configuration and site source preserved, repeat plan current",
+    "Template 0.4.0/0.14.0 default and Cloudflare projects: managed conflicts and new-guide collisions refused, scenario guides and the alpha.2 database step delivered, user README, configuration and site source preserved, repeat plan current",
   );
 }

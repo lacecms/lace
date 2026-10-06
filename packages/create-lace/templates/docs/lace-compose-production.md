@@ -40,7 +40,7 @@ This guide does not depend on the development guide; it repeats the one-time ini
 ## Prerequisites
 
 - A server with Docker, Compose and a running daemon, plus Node `>=24.12.0` and pnpm `>=12` for the host operator commands (tested baseline: Node `24.12.0`, pnpm `12.3.4`).
-- Compatible API and builder images for your Lace release (`0.1.0-alpha.2` or a later compatible release). Pin exact tags or digests; the packages in `package.json` must come from the same release.
+- Compatible API and builder images for your Lace release (`0.1.0-alpha.3` or a later compatible release; published `0.1.0-alpha.2` images lack builder source diagnostics and the seven-status build history). Pin exact tags or digests; the packages in `package.json` must come from the same release.
 - A public HTTPS origin and a TLS-terminating reverse proxy that forwards to `LACE_HTTP_PORT`. The web proxy routes `/admin`, `/api/` and `/health/` to the API and everything else to the static site, so one origin can serve both.
 
 <!-- lace-site: starter -->
@@ -100,8 +100,10 @@ Open `<LACE_PUBLIC_BASE_URL>admin/`, create the first administrator on the setup
 
 ```bash
 pnpm prod:start
-pnpm exec lace doctor --target node --mode compose --stage ready
+docker compose ps
 ```
+
+Wait until `docker compose ps` lists every service as running (`healthy` where a health check exists) and `/health/ready` at your public origin answers `ready`.
 
 <!-- lace-site: starter existing -->
 
@@ -114,7 +116,7 @@ pnpm exec lace doctor --target node --mode compose --stage ready
 
 <!-- lace-site: end -->
 
-Doctor's `ready` stage reads the database read-only and refuses to probe a running write-ahead-log database; the API readiness result is the authority while services run. See [doctor limits](lace-operations.md#read-only-environment-checks).
+While the services run, `/health/ready` is the readiness authority: the API keeps SQLite in write-ahead-log mode, which doctor's `ready` stage refuses to inspect, so it reports the database as unavailable. To run it, stop the database users and switch the journal mode first as described in [doctor limits](lace-operations.md#read-only-environment-checks).
 
 ## Repeat operations
 

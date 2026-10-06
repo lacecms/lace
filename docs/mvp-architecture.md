@@ -2186,9 +2186,9 @@ The implementation plan uses these resolved defaults:
   `ghcr.io/lacecms/builder`;
 - experimental package/image versions on npm channel `next` with an
   independent ownership template version: `0.1.0-alpha.1` (template `0.4.0`)
-  is published and immutable, and `0.1.0-alpha.2` (template `0.14.0`) is the
-  current candidate; `release/alpha.json` records the candidate and published
-  versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
+  and `0.1.0-alpha.2` (template `0.14.0`) are published and immutable, and
+  `0.1.0-alpha.3` (template `0.17.0`) is the current candidate;
+  `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
 
 The following choices are release and operations work, not blockers for the

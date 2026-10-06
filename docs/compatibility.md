@@ -99,14 +99,15 @@ version; mixing artifacts from different versions is unsupported.
 | Release | Template | Status | Notes |
 | --- | --- | --- | --- |
 | `0.1.0-alpha.1` | `0.4.0` | Published 2026-09-30, immutable | Predates environment preparation, doctor, browser setup, the tour, existing-site mode, `lace add block`, `@lacecms/astro`/`@lacecms/render` and the generated Cloudflare Worker |
-| `0.1.0-alpha.2` | `0.14.0` | Candidate prepared and accepted locally (Step 32B); not published | Carries the onboarding feedback improvements of Steps 26–31 |
+| `0.1.0-alpha.2` | `0.14.0` | Published 2026-10-04, immutable | Carries the onboarding feedback improvements of Steps 26–31; field-tested by the owner (alpha.2 feedback) |
+| `0.1.0-alpha.3` | `0.17.0` | Candidate prepared and accepted locally (Step 33H); not published | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
 
-The current source template is `0.16.0` (33G scenario guides: a short entry
-README with managed Compose development, Compose production and Cloudflare
-guides, and minimum-only engine declarations). It builds on `0.15.0` (33F
-credential guidance and private operator-file support), which requires the
-freshly built 33F CLI; these source advances do not publish or replace the
-prepared alpha.2 artifacts above.
+Templates `0.15.0` and `0.16.0` were source-only steps between the published
+alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
+projects upgrading from `0.14.0`. Upgrading an alpha.2 installation also
+requires database migration `0003_site_build_outcomes` before the alpha.3
+engine serves traffic (back up first; downgrade restores the backup), as the
+`0.17.0` upgrade instructions state for Node SQLite and Cloudflare D1.
 
 Both runtime images target `linux/amd64` and `linux/arm64`; each platform is
 built and smoke-tested separately during preparation, while the full consumer
@@ -121,7 +122,8 @@ shared SQLite locks or WAL memory: host `lace` database commands must run only
 while the `api` and `dispatcher` services are stopped, as the generated guides
 state. Linux hosts share the kernel with their containers and are not affected.
 Exact candidate evidence is in
-`docs/archive/step-32/step-32b-verification.md`; preparation and publication
+`docs/archive/step-33/step-33h-verification.md` (alpha.3) and
+`docs/archive/step-32/step-32b-verification.md` (alpha.2); preparation and publication
 are described in `docs/alpha-release.md`.
 
 ## Minimum requirements and tested versions

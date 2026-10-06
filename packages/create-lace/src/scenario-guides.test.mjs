@@ -148,10 +148,13 @@ test.each(VARIANTS)(
     expectOrder(`${name}: production`, production, [
       ...setup,
       "pnpm prod:start",
+      "docker compose ps",
       "docker compose stop api dispatcher",
       "pnpm db:migrate",
       "pnpm prod:start",
     ]);
+    // Doctor's ready stage cannot inspect the running WAL database; the guide must not run it there.
+    expect(production).not.toContain("--mode compose --stage ready");
     if (site.mode === "existing") {
       expect(development).toContain("pnpm exec lace add block --all --site ..");
       expect(development).toContain("**existing site** at `..`");

@@ -22,20 +22,81 @@ export const developmentSetupSections = Object.freeze([
   "Prepare the database and start the CMS",
 ]);
 
-function section(markdown, heading) {
+/**
+ * The generated scenario guides acceptance follows, the sections whose fenced
+ * `bash` commands it runs and the reviewed order of those commands for a
+ * starter project. A guide that drops, renames or reorders one fails the suite.
+ */
+export const scenarioGuides = Object.freeze({
+  development: Object.freeze({
+    path: developmentGuide,
+    sections: developmentSetupSections,
+    sequence: Object.freeze([
+      "pnpm install",
+      "pnpm env:prepare",
+      "pnpm exec lace doctor --target node --mode compose --stage setup",
+      "pnpm db:migrate",
+      "pnpm content:sync",
+      "pnpm auth:bootstrap",
+      "pnpm dev:api",
+    ]),
+  }),
+  production: Object.freeze({
+    path: "docs/lace-compose-production.md",
+    sections: Object.freeze([
+      "Install and prepare the environment",
+      "Initialize the CMS",
+      "Start the full stack",
+      "Repeat operations",
+    ]),
+    sequence: Object.freeze([
+      "pnpm install",
+      "pnpm env:prepare",
+      "pnpm exec lace doctor --target node --mode compose --stage setup",
+      "pnpm db:migrate",
+      "pnpm content:sync",
+      "pnpm auth:bootstrap",
+      "pnpm dev:api",
+      "pnpm prod:start",
+      "docker compose ps",
+      "docker compose stop api dispatcher",
+      "pnpm db:migrate",
+      "pnpm content:sync",
+      "pnpm prod:start",
+    ]),
+  }),
+  cloudflare: Object.freeze({
+    path: "docs/lace-cloudflare.md",
+    sections: Object.freeze(["Run the Worker locally", "Build the site against the local Worker"]),
+    sequence: Object.freeze([
+      "pnpm install",
+      "pnpm env:prepare",
+      "pnpm cf:env:prepare",
+      "pnpm cf:db:migrate",
+      "pnpm cf:content:sync",
+      "pnpm cf:auth:bootstrap",
+      "pnpm cf:dev",
+      "pnpm build",
+      "pnpm exec lace doctor --target cloudflare-local --stage ready",
+      "pnpm cf:build",
+    ]),
+  }),
+});
+
+function section(markdown, heading, path) {
   const lines = markdown.split("\n");
   const start = lines.indexOf(`## ${heading}`);
-  if (start === -1) throw new Error(`${developmentGuide} section "${heading}" is missing`);
+  if (start === -1) throw new Error(`${path} section "${heading}" is missing`);
   const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
   return lines.slice(start + 1, end === -1 ? undefined : end);
 }
 
-/** Shell lines of the fenced `bash` blocks in the development guide's setup sections, in order. */
-export function developmentSetupCommands(guide) {
+/** Shell lines of the fenced `bash` blocks in a scenario guide's command sections, in order. */
+export function guideCommands(markdown, guide) {
   const commands = [];
-  for (const heading of developmentSetupSections) {
+  for (const heading of guide.sections) {
     let fenced = false;
-    for (const line of section(guide, heading)) {
+    for (const line of section(markdown, heading, guide.path)) {
       if (!fenced && line.trim() === "```bash") fenced = true;
       else if (fenced && line.trim() === "```") fenced = false;
       else if (fenced && line.trim() !== "" && !line.trim().startsWith("#"))
@@ -46,18 +107,31 @@ export function developmentSetupCommands(guide) {
 }
 
 /**
+ * Compares the documented commands with the guide's reviewed sequence and the
+ * project's scripts; returns the first discrepancy naming the guide, or null.
+ */
+export function guideDrift(guide, commands, scripts, expected = guide.sequence) {
+  for (let index = 0; index < Math.max(commands.length, expected.length); index++) {
+    if (commands[index] !== expected[index])
+      return `${guide.path} step ${index + 1} documents "${commands[index] ?? "(none)"}", acceptance runs "${expected[index] ?? "(none)"}"`;
+    const [tool, script] = commands[index].split(" ");
+    if (tool === "pnpm" && !["install", "exec"].includes(script) && !(script in scripts))
+      return `${guide.path} "${commands[index]}" names no package script`;
+  }
+  return null;
+}
+
+/** Shell lines of the fenced `bash` blocks in the development guide's setup sections, in order. */
+export function developmentSetupCommands(guide) {
+  return guideCommands(guide, scenarioGuides.development);
+}
+
+/**
  * Compares the documented setup commands with the reviewed sequence and the
  * project's scripts; returns the first discrepancy naming the guide, or null.
  */
 export function setupDrift(commands, expected, scripts) {
-  for (let index = 0; index < Math.max(commands.length, expected.length); index++) {
-    if (commands[index] !== expected[index])
-      return `${developmentGuide} step ${index + 1} documents "${commands[index] ?? "(none)"}", acceptance runs "${expected[index] ?? "(none)"}"`;
-    const [tool, script] = commands[index].split(" ");
-    if (tool === "pnpm" && !["install", "exec"].includes(script) && !(script in scripts))
-      return `${developmentGuide} "${commands[index]}" names no package script`;
-  }
-  return null;
+  return guideDrift(scenarioGuides.development, commands, scripts, expected);
 }
 
 /** Files the connection guide asks the operator to create: a `` `path`: `` line, then a fence. */

@@ -241,12 +241,13 @@ Vitest's default timeout. The human and JSON sync/bootstrap cases run separately
 with fresh databases so neither mode consumes the other's deadline.
 
 Generated-consumer acceptance runs outside this checkout. `pnpm
-acceptance:generated` is the onboarding feedback regression suite against a
-workspace-packed package graph and locally built images. For a release candidate,
+acceptance:generated` is the onboarding and alpha.2 field-trial feedback
+regression suite against a workspace-packed package graph and locally built
+images. For a release candidate,
 `pnpm release:prepare --output <new-dir>` prepares the exact package and image
 set from a clean commit and `pnpm acceptance:release --artifacts <new-dir>` runs
 the same journeys against only those artifacts. The current candidate is
-`0.1.0-alpha.2` (template `0.14.0`); see
+`0.1.0-alpha.3` (template `0.17.0`; `0.1.0-alpha.2` is published); see
 [docs/alpha-release.md](./docs/alpha-release.md). No command publishes.
 
 ## Troubleshooting

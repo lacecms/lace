@@ -57,9 +57,12 @@ test("generates deterministic owned source and hashed managed files", async () =
     ].sort(),
   );
   expect(left.manifest.files).not.toHaveProperty(".lace/upgrade-instructions.json");
-  expect(
-    JSON.parse(await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8")),
-  ).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION, database: [] });
+  const instructions = JSON.parse(
+    await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
+  );
+  expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
+  // Upgrading from the published alpha.2 engines needs the 33D build-outcome migration.
+  expect(instructions.database.join("\n")).toContain("0003_site_build_outcomes");
   expect(files).not.toContain("wrangler.jsonc");
   expect(files.every((file) => !file.startsWith("apps/") && !file.startsWith("packages/"))).toBe(
     true,
@@ -259,18 +262,18 @@ test("alpha generation selects exact compatible packages and overridable images"
   for (const file of ["package.json", "site/package.json"]) {
     const manifest = JSON.parse(await readFile(join(project.path, file), "utf8"));
     for (const [name, version] of Object.entries(manifest.dependencies)) {
-      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-alpha.2");
+      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-alpha.3");
     }
   }
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
-  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.2");
-  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.2");
-  expect(TEMPLATE_VERSION).toBe("0.16.0");
+  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.3");
+  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.3");
+  expect(TEMPLATE_VERSION).toBe("0.17.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");
   expect(await readFile(join(project.path, "docs/lace-operations.md"), "utf8")).toContain(
-    "pnpm create lace@0.1.0-alpha.2",
+    "pnpm create lace@0.1.0-alpha.3",
   );
 });
 

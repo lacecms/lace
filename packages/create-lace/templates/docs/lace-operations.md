@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.16.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The scenario guides, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.17.0` and Lace `0.1.0-alpha.3` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.3` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-alpha.2 my-site
+pnpm create lace@0.1.0-alpha.3 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -209,7 +209,7 @@ Once the real build token is configured, run `pnpm prod:start`. It starts API/ad
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.14.0` with the exact `0.1.0-alpha.2` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.17.0` with the exact `0.1.0-alpha.3` candidate artifacts.
 
 <!-- lace-site: starter -->
 

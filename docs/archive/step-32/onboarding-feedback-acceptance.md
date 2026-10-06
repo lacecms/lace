@@ -16,7 +16,7 @@ MVP), `open` (an unresolved defect; the suite is then not accepted).
 Session 32B reconciled the statuses inside the feedback log with delivered
 artifacts and ran the same journeys against the exact candidate artifacts
 (`pnpm acceptance:release --artifacts`, `0.1.0-alpha.2`, template `0.14.0`):
-see [step-32b-verification.md](archive/step-32/step-32b-verification.md).
+see [step-32b-verification.md](step-32b-verification.md).
 
 | §   | Feedback                                  | Status   | Evidence                                                                                                                                                                                                                                                                                                                                    |
 | --- | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -6,11 +6,16 @@ import { reviewEnvironment } from "./consumer-guides.mjs";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { assertSecretFree } from "./consumer-security.mjs";
 
-/** Fault injection only in an independent, disposable packed existing-site consumer. */
+/**
+ * Fault injection only in an independent, disposable packed existing-site
+ * consumer. `releaseArtifacts` selects already loaded API/builder images; without
+ * `existingJourney` the existing-site consumer under `parent` must already exist.
+ */
 export async function builderDiagnosticsJourney(parent, operations) {
   const {
     existingJourney,
     prepareCompose,
+    releaseArtifacts,
     compose,
     run,
     request,
@@ -19,7 +24,8 @@ export async function builderDiagnosticsJourney(parent, operations) {
     secretValues,
     workspace,
   } = operations;
-  await existingJourney();
+  // The suite may already have connected the existing-site consumer in this parent.
+  if (existingJourney) await existingJourney();
   const root = join(parent, "existing-site");
   const project = join(root, "cms");
   // This disposable consumer uses newly packed/current dependencies. Declare its
@@ -29,7 +35,8 @@ export async function builderDiagnosticsJourney(parent, operations) {
     workspaceFile,
     (await readFile(workspaceFile, "utf8")) + "\nminimumReleaseAge: 0\n",
   );
-  const context = await prepareCompose(project, parent);
+  // Exact-artifact acceptance supplies the loaded release images instead of local builds.
+  const context = await prepareCompose(project, parent, releaseArtifacts);
   const base = `http://127.0.0.1:${context.apiPort}/`;
   const publicBase = `http://127.0.0.1:${context.httpPort}/`;
   const envFile = join(project, ".env");

@@ -27,7 +27,7 @@ Site mode: **none**. This project has no site, so it has no static-site workflow
 ## Prerequisites
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, pnpm `12.3.4`). The project pins Wrangler in `package.json`; always use it through `pnpm exec wrangler`.
-- Lace `0.1.0-alpha.2` or a later compatible release. The private operator file, `--operator-env` and `lace cloudflare preflight` need a compatible CLI that supports them (introduced with ownership template `0.15.0`); published `0.1.0-alpha.2` packages do not contain them.
+- Lace `0.1.0-alpha.3` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking arrive with `0.1.0-alpha.3`; published `0.1.0-alpha.2` packages do not contain them.
 - For the account part only: a Cloudflare account with Workers, D1 and R2.
 
 ## Run the Worker locally

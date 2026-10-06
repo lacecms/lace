@@ -55,6 +55,13 @@ test("the coherent model accepts historical prose about published versions", asy
   expect(() => validateReleaseModel(model)).not.toThrow();
 });
 
+test("the published alpha.2 set is recorded and cannot be prepared again", async () => {
+  const model = await coherentModel();
+  expect(model.definition.publishedVersions).toEqual(["0.1.0-alpha.1", "0.1.0-alpha.2"]);
+  model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.2";
+  expect(() => validateReleaseModel(model)).toThrow(/0\.1\.0-alpha\.2 is already published/u);
+});
+
 test.each([
   "version",
   "private",

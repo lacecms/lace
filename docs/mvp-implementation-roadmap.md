@@ -203,7 +203,7 @@ separate.
 
 Steps 0–25 are the completed baseline for this continuation. The owner's
 published-alpha trial in an independent Astro project is recorded in
-[`onboarding-feedback.md`](./onboarding-feedback.md). Steps 26–32 address that
+[`onboarding-feedback.md`](./archive/step-32/onboarding-feedback.md). Steps 26–32 address that
 feedback and the remaining Cloudflare consumer-installation gap before the
 former Step 26 release gate, now Step 34. Existing archived change names and
 historical session references retain their original meaning.
@@ -227,7 +227,7 @@ After `0.1.0-alpha.2` was published, the owner connected it to an existing Astro
 project, ran it in Docker Compose dev and production, and deployed the CMS
 Worker and the Pages-hosted static site to a real Cloudflare account. The
 defects and documentation gaps from that trial are recorded in
-[`lace-alpha-2-feedback.md`](./lace-alpha-2-feedback.md) (§1–§6 plus a
+[`lace-alpha-2-feedback.md`](./archive/step-33/lace-alpha-2-feedback.md) (§1–§6 plus a
 cross-cutting diagnostics requirement). Step 33 fixes them and prepares the
 next compatible alpha; the release gate moves to Step 34. That trial is
 early field evidence, not Step 34 deployment acceptance: the gate still runs
@@ -2239,7 +2239,7 @@ build), styling hooks, public media bytes and operator block edits across a
 rerun and a simulated update. The Cloudflare consumer journey follows, then the
 packed CLI upgrades the published template `0.4.0` default and Cloudflare
 projects (`tests/fixtures/template-0.4.0/`): a modified managed file is refused,
-user README/config/site bytes are preserved. `docs/onboarding-feedback-acceptance.md`
+user README/config/site bytes are preserved. `docs/archive/step-32/onboarding-feedback-acceptance.md`
 maps §1–§12 to evidence, guarded by a test (§11 deferred, no open defects).
 
 ### Session 32B — Coherent artifact refresh and verification
@@ -2293,7 +2293,7 @@ an existing Astro project, Docker Compose dev/production, and a real Cloudflare
 account are fixed and diagnosable, each supported scenario has its own guide,
 and a coherent next alpha candidate carries the fixes.
 
-**Basis:** [`lace-alpha-2-feedback.md`](./lace-alpha-2-feedback.md) §1–§6 and
+**Basis:** [`lace-alpha-2-feedback.md`](./archive/step-33/lace-alpha-2-feedback.md) §1–§6 and
 its general diagnostics requirement. Depends on Step 32 and the published
 `0.1.0-alpha.2`. Preserves the fixed-command builder, single-site, atomic
 release, server-only build credential, and protected user-source invariants.
@@ -2308,7 +2308,7 @@ complete subprocess logs in the admin are not required.
 
 Completed 2026-10-05. Save and recovery JSON derive sparse positions from the
 displayed order; safe ordering diagnostics preserve unsaved work. See
-[`step-33a-block-order-acceptance.md`](./step-33a-block-order-acceptance.md) for
+[`step-33a-block-order-acceptance.md`](./archive/step-33/step-33a-block-order-acceptance.md) for
 the SQLite/D1, browser, export and Astro verification. Sessions 33C–33H remain.
 
 1. Guarantee that the saved block list satisfies the domain ordering invariant
@@ -2330,7 +2330,7 @@ the SQLite/D1, browser, export and Astro verification. Sessions 33C–33H remain
 Completed 2026-10-05. Shared contracts and SDK accept strong and weak numeric
 validators, both runtimes compare published versions, and standard loaders
 revalidate through compression with default fetch. See
-[`step-33b-build-export-etags-acceptance.md`](./step-33b-build-export-etags-acceptance.md)
+[`step-33b-build-export-etags-acceptance.md`](./archive/step-33/step-33b-build-export-etags-acceptance.md)
 for contract, SDK, SQLite/D1 and gzip-proxy verification. Real Pages build
 verification with default compression remains in 33H/34C.
 
@@ -2372,7 +2372,7 @@ Session 33C completed on 2026-10-05 via
 closed reason/safe-path diagnostics through builder, dispatch, SQLite/D1, REST
 and Builds, plus correction/retry guidance. Packed existing-site Compose
 acceptance verified all source fault cases, unchanged releases and successful
-browser retries; see [acceptance evidence](step-33c-builder-source-diagnostics-acceptance.md).
+browser retries; see [acceptance evidence](./archive/step-33/step-33c-builder-source-diagnostics-acceptance.md).
 Sessions 33D–33H remain.
 
 ### Session 33D — Truthful site-build outcome model
@@ -2539,7 +2539,7 @@ runs remain unverified; no artifacts were published. Session 33H remains.
    command sequences (drift fails), and upgrade from alpha.2 template `0.14.0`.
 3. Map every alpha.2 feedback item to tests, documentation, or an explicit
    decision in an acceptance record guarded by a test, like
-   `onboarding-feedback-acceptance.md`. Real-account re-verification of §3–§5
+   `docs/archive/step-32/onboarding-feedback-acceptance.md`. Real-account re-verification of §3–§5
    is input to 34C rather than a local-test claim; registry publication remains
    a separate explicit act.
 

@@ -28,7 +28,7 @@ async function registry(items) {
       blockType: item.name,
       blockVersion: 1,
       revision: 1,
-      requires: { "@lacecms/astro": "0.1.0-alpha.2" },
+      requires: { "@lacecms/astro": "0.1.0-alpha.3" },
       files: [{ source: "Block.astro", target: `${item.name}.astro`, role: "component" }],
       dependencies: item.dependencies ?? [],
       ...item.manifest,

@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -59,18 +60,70 @@ export function withVariable(text, name, value) {
 }
 
 /** The controlled hook's answer for one mode: unavailable or accepted with an ID. */
-export function hookResponse(mode) {
+export function hookResponse(mode, id = providerDeploymentId) {
   return mode === "accepted"
     ? {
         status: 200,
         body: JSON.stringify({
           errors: [],
           messages: [],
-          result: { id: providerDeploymentId },
+          result: { id },
           success: true,
         }),
       }
     : { status: 503, body: JSON.stringify({ success: false }) };
+}
+
+/** Local Pages tracking settings; the account and project are fixtures, never a real account. */
+export const pagesTracking = Object.freeze({
+  accountId: "0123456789abcdef0123456789abcdef",
+  projectName: "lace-acceptance-site",
+});
+
+/**
+ * The stub Pages API answer for one deployment (`GET .../deployments/:id`), in
+ * the shape of Cloudflare's deployment status: unknown deployments are 404.
+ */
+export function pagesDeploymentResponse(deployments, path) {
+  const prefix = `/client/v4/accounts/${pagesTracking.accountId}/pages/projects/${pagesTracking.projectName}/deployments/`;
+  const id = path.startsWith(prefix) ? decodeURIComponent(path.slice(prefix.length)) : undefined;
+  const stage = id === undefined ? undefined : deployments.get(id);
+  if (stage === undefined) return { status: 404, body: JSON.stringify({ success: false }) };
+  return {
+    status: 200,
+    body: JSON.stringify({
+      errors: [],
+      messages: [],
+      result: {
+        id,
+        is_skipped: false,
+        latest_stage: { name: stage.name, status: stage.status },
+        // Settings the real API returns and the adapter must never pass on.
+        env_vars: { SECRET_SITE_SETTING: { type: "secret_text", value: "stub-secret" } },
+      },
+      success: true,
+    }),
+  };
+}
+
+/** A loopback Pages API stub that records the authorization it receives. */
+async function startPagesApi() {
+  const pages = { deployments: new Map(), authorizations: [] };
+  pages.server = createHttpServer((request, response) => {
+    pages.authorizations.push(request.headers.authorization ?? null);
+    const answer =
+      request.method === "GET"
+        ? pagesDeploymentResponse(pages.deployments, request.url ?? "")
+        : { status: 405, body: "{}" };
+    response.writeHead(answer.status, { "content-type": "application/json" });
+    response.end(answer.body);
+  });
+  await new Promise((resolve, reject) => {
+    pages.server.once("error", reject);
+    pages.server.listen(0, "127.0.0.1", resolve);
+  });
+  pages.base = `http://127.0.0.1:${pages.server.address().port}/client/v4/`;
+  return pages;
 }
 
 /** Relative project paths that hold local secrets or state by design and are scanned separately. */
@@ -113,7 +166,7 @@ async function startHook(directory, run) {
     "-addext",
     "subjectAltName=IP:127.0.0.1",
   ]);
-  const hook = { calls: [], mode: "unavailable", certificate };
+  const hook = { calls: [], mode: "unavailable", certificate, deploymentId: providerDeploymentId };
   const path = `/deploy-hooks/${randomBytes(24).toString("hex")}`;
   hook.server = createHttpsServer(
     { cert: await readFile(certificate), key: await readFile(key) },
@@ -131,7 +184,7 @@ async function startHook(directory, run) {
           cookie: request.headers.cookie ?? null,
           method: request.method,
         });
-        const answer = hookResponse(hook.mode);
+        const answer = hookResponse(hook.mode, hook.deploymentId);
         response.writeHead(answer.status, { "content-type": "application/json" });
         response.end(answer.body);
       });
@@ -181,6 +234,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     capturedDiagnostics,
     freePort,
     generator,
+    guideContract,
     installPackedConsumer,
     run,
     sanitize,
@@ -198,6 +252,8 @@ export async function cloudflareConsumerJourney(parent, operations) {
     "--cloudflare",
   ]);
   await installPackedConsumer(project);
+  // The journey below runs the local commands of the generated Cloudflare guide.
+  await guideContract(project, "cloudflare");
   const admin = join(project, "node_modules/@lacecms/platform-cloudflare/admin/index.html");
   if (!(await stat(admin).catch(() => undefined))?.isFile())
     throw new Error("cloudflare-admin: packed platform package lacks admin/index.html");
@@ -310,6 +366,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
   const args = workerCommand(scripts["cf:dev"], port);
   let worker;
   let browser;
+  let pages;
   const workerOutput = [];
   const start = async (stage) => {
     worker = startWorker(project, args, hook.certificate);
@@ -563,6 +620,95 @@ export async function cloudflareConsumerJourney(parent, operations) {
     });
     if (JSON.stringify(afterDraft.draft) !== JSON.stringify(draft.draft))
       throw new Error("cloudflare-restart: saved draft did not persist");
+
+    // Pages deployment tracking (33E) against a loopback Pages API stub: the
+    // Worker follows the exact hook-accepted deployment to its proven outcome.
+    console.info("Acceptance: cloudflare-pages-tracking-configure");
+    await stop();
+    pages = await startPagesApi();
+    const pagesToken = randomBytes(24).toString("hex");
+    secretValues.add(pagesToken);
+    await writeFile(
+      variablesPath,
+      `${await readFile(variablesPath, "utf8")}LACE_PAGES_ACCOUNT_ID=${pagesTracking.accountId}\nLACE_PAGES_PROJECT_NAME=${pagesTracking.projectName}\nLACE_PAGES_API_TOKEN=${pagesToken}\nLACE_PAGES_API_BASE_URL=${pages.base}\n`,
+    );
+    await start("cloudflare-dev-tracking");
+    const tracker = await login(base, email, password, secretValues);
+    const publishTracked = async (deploymentId, title) => {
+      hook.deploymentId = deploymentId;
+      pages.deployments.set(deploymentId, { name: "build", status: "active" });
+      const current = await json(base, `api/v1/admin/entries/${entryId}`, {
+        headers: { cookie: tracker },
+      });
+      const saved = await json(base, `api/v1/admin/entries/${entryId}/draft`, {
+        method: "PUT",
+        headers: { cookie: tracker, origin },
+        json: {
+          blocks: current.draft.blocks,
+          expectedRevision: current.draft.revision,
+          fields: current.draft.fields,
+          slug: current.draft.slug,
+          title,
+        },
+      });
+      await json(base, `api/v1/admin/entries/${entryId}/publish`, {
+        method: "POST",
+        headers: { cookie: tracker, origin },
+        json: { expectedRevision: saved.draft.revision },
+      });
+      const running = await waitBuild(
+        base,
+        tracker,
+        (build) => build.providerBuildId === deploymentId && build.providerStage === "build",
+        90_000,
+        () => scheduled(base),
+      );
+      if (running.status !== "running")
+        throw new Error(
+          `cloudflare-pages-tracking: in-progress deployment reported ${running.status}`,
+        );
+      return running;
+    };
+    const finish = async (stage, deploymentId, outcome, terminal) => {
+      console.info(`Acceptance: ${stage}`);
+      pages.deployments.set(deploymentId, outcome);
+      const done = await waitBuild(
+        base,
+        tracker,
+        (build) => build.providerBuildId === deploymentId && build.status !== "running",
+        120_000,
+        () => scheduled(base),
+      );
+      if (done.status !== terminal.status || done.providerStage !== outcome.name)
+        throw new Error(`${stage}: unexpected build ${JSON.stringify(done)}`);
+      if (terminal.error !== undefined && done.error !== terminal.error)
+        throw new Error(`${stage}: unexpected reason ${JSON.stringify(done)}`);
+      return done;
+    };
+    console.info("Acceptance: cloudflare-pages-tracking-succeeded");
+    await publishTracked("acceptance-deploy-tracked-ok", "Cloudflare tracked title");
+    await finish(
+      "cloudflare-pages-tracking-succeeded",
+      "acceptance-deploy-tracked-ok",
+      { name: "deploy", status: "success" },
+      { status: "succeeded" },
+    );
+    console.info("Acceptance: cloudflare-pages-tracking-failed");
+    await publishTracked("acceptance-deploy-tracked-failed", "Cloudflare failing title");
+    await finish(
+      "cloudflare-pages-tracking-failed",
+      "acceptance-deploy-tracked-failed",
+      { name: "build", status: "failure" },
+      { status: "failed", error: "provider_build_failed" },
+    );
+    if (pages.authorizations.some((value) => value !== `Bearer ${pagesToken}`))
+      throw new Error("cloudflare-pages-tracking: the Pages API stub saw another credential");
+    const trackedHistory = JSON.stringify(
+      await json(base, "api/v1/admin/site-builds", { headers: { cookie: tracker } }),
+    );
+    assertSecretFree(trackedHistory, [pagesToken, hook.url], "tracked build history");
+    if (trackedHistory.includes("stub-secret"))
+      throw new Error("cloudflare-pages-tracking: Pages API settings reached build history");
   } catch (error) {
     // Network failures carry no stage context; keep the local Worker's own output.
     const output = sanitize(worker?.output ?? "").slice(-4000);
@@ -573,6 +719,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     await browser?.close();
     await stop();
     await new Promise((resolve) => hook.server.close(resolve));
+    if (pages) await new Promise((resolve) => pages.server.close(resolve));
   }
 
   console.info("Acceptance: cloudflare-secret-scan");
@@ -583,18 +730,39 @@ export async function cloudflareConsumerJourney(parent, operations) {
   for (const output of [...diagnostics, ...capturedDiagnostics])
     assertSecretFree(output, secretValues, "captured diagnostics");
   console.info(
-    "Generated Cloudflare journey: bundle, local doctor, migrate/sync/bootstrap, expired-token recovery, browser setup/edit/publish, scheduled hook dispatch (unavailable, then accepted), Astro build, draft isolation, restart persistence and secret exclusion passed",
+    "Generated Cloudflare journey: bundle, local doctor, migrate/sync/bootstrap, expired-token recovery, browser setup/edit/publish, scheduled hook dispatch (unavailable, then accepted), Astro build, draft isolation, restart persistence, Pages deployment tracking (succeeded, failed) and secret exclusion passed",
   );
   return { project };
 }
 
+/** Wrangler removes its dev bundles under `.wrangler/tmp` asynchronously after a stop. */
+export function transientWranglerFile(path, error) {
+  return error?.code === "ENOENT" && /(^|\/)\.wrangler\/tmp\//u.test(path);
+}
+
 async function scanProject(project, directory, secrets, prefix = "") {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (transientWranglerFile(`${prefix}/`, error)) return;
+    throw error;
+  }
+  for (const entry of entries) {
     const path = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (excludedFromProjectScan(path)) continue;
     if (entry.isDirectory()) await scanProject(project, join(directory, entry.name), secrets, path);
-    else if (entry.isFile())
-      assertSecretFree(await readFile(join(directory, entry.name)), secrets, `generated ${path}`);
+    else if (entry.isFile()) {
+      let bytes;
+      try {
+        bytes = await readFile(join(directory, entry.name));
+      } catch (error) {
+        // Only a vanished Wrangler temporary bundle is skipped; anything else fails the scan.
+        if (transientWranglerFile(path, error)) continue;
+        throw error;
+      }
+      assertSecretFree(bytes, secrets, `generated ${path}`);
+    }
   }
 }
 
