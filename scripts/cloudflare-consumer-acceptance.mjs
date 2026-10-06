@@ -492,6 +492,12 @@ export async function cloudflareConsumerJourney(parent, operations) {
       json: { expectedRevision: 1 },
     });
 
+    console.info("Acceptance: cloudflare-browser-complete");
+    // Keep both publications together for build coalescing. Browser assertions
+    // are complete: drain requests, then stop polling before the API journey.
+    await tab.waitForLoadState("networkidle");
+    await context.close();
+
     console.info("Acceptance: cloudflare-hook-unavailable");
     await new Promise((resolve) => setTimeout(resolve, 5_600));
     await scheduled(base);
