@@ -6,8 +6,13 @@ export const RELEASE_GUIDES = [
   "packages/create-lace/README.md",
   "packages/create-lace/templates/README.md",
   "packages/create-lace/templates/docs/lace-astro-site.md",
+  "packages/create-lace/templates/docs/lace-cloudflare.md",
+  "packages/create-lace/templates/docs/lace-compose-dev.md",
+  "packages/create-lace/templates/docs/lace-compose-production.md",
   "packages/create-lace/templates/docs/lace-operations.md",
 ];
+/** Minimum-only engine declarations; reproducibility pins live in packageManager, CI and images. */
+export const ENGINE_MINIMUMS = Object.freeze({ node: ">=24.12.0", pnpm: ">=12" });
 export const RELEASE_DOCKERFILES = ["apps/api/Dockerfile", "apps/builder/Dockerfile"];
 const COORDINATE =
   /(?:create[ -]lace@|@lacecms\/[a-z-]+@|ghcr\.io\/lacecms\/(?:api|builder):)(\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?)/gu;
@@ -91,6 +96,15 @@ export function validateReleaseModel(model, { templates = true } = {}) {
   if (publicNames.size !== 15 || publicNames.has("@lacecms/test-utils"))
     throw new Error("Invalid public package allowlist");
   if (!model.rootManifest.private) throw new Error("Workspace root must remain private");
+  const engineManifests = [["workspace root", model.rootManifest]];
+  if (templates) engineManifests.push(["generated CMS template", model.templates[0]]);
+  for (const [label, manifest] of engineManifests) {
+    if (
+      manifest.engines?.node !== ENGINE_MINIMUMS.node ||
+      manifest.engines?.pnpm !== ENGINE_MINIMUMS.pnpm
+    )
+      throw new Error(`Engine minimum mismatch: ${label}`);
+  }
   for (const [name, { manifest }] of Object.entries(manifests)) {
     if (!publicNames.has(name) && !manifest.private)
       throw new Error(`Non-release package must remain private: ${name}`);
@@ -106,7 +120,10 @@ export function validateReleaseModel(model, { templates = true } = {}) {
       throw new Error(`Missing/private release dependency: ${name}`);
     if (manifest.version !== release.version || manifest.publishConfig?.access !== "public")
       throw new Error(`Release version/access mismatch: ${name}`);
-    if (manifest.engines?.node !== ">=24.12.0 <25")
+    if (
+      manifest.engines?.node !== ENGINE_MINIMUMS.node ||
+      (manifest.engines.pnpm !== undefined && manifest.engines.pnpm !== ENGINE_MINIMUMS.pnpm)
+    )
       throw new Error(`Release Node requirement mismatch: ${name}`);
     visiting.add(name);
     for (const [dependency, reference] of Object.entries({

@@ -2518,6 +2518,13 @@ unverified; no artifacts were published.
    existing site's root README is never rewritten, only offered links. Verify
    fresh generation, existing-site mode, and upgrade from template `0.14.0`.
 
+33G delivered 2026-10-06: a short generated README index, managed Compose
+development/production and Cloudflare scenario guides, minimum-only engines
+(Node `>=24.12.0`, pnpm `>=12`) with unchanged reproducibility pins, template
+`0.16.0` and ownership-safe 0.14.0 upgrades. Evidence is in
+`docs/archive/step-33/step-33g-verification.md`. Real-server and real-account
+runs remain unverified; no artifacts were published. Session 33H remains.
+
 ### Session 33H — Field-trial regressions and next alpha candidate
 
 1. Record `0.1.0-alpha.2` as published in `release/alpha.json`,

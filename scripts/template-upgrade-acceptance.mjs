@@ -147,6 +147,27 @@ export async function templateUpgradeJourney(temporary, operations) {
       Object.entries(await files(project)).filter(([path]) => isUser(path)),
     );
 
+    if (version === "0.14.0") {
+      // A user file at a new managed guide path is a conflict, never overwritten.
+      const path = "docs/lace-compose-dev.md";
+      await writeFile(join(project, path), "# operator guide notes\n");
+      const collision = upgrade(
+        `upgrade-${version}-${variant.name}-guide-collision`,
+        project,
+        template,
+        true,
+      );
+      if (collision.status === 0 || collision.report.code !== "UPGRADE_CONFLICTS")
+        throw new Error(
+          `upgrade-${version}-${variant.name}-guide-collision: new guide path was overwritten`,
+        );
+      if ((await readFile(join(project, path), "utf8")) !== "# operator guide notes\n")
+        throw new Error(
+          `upgrade-${version}-${variant.name}-guide-collision: collision bytes changed`,
+        );
+      await rm(join(project, path));
+      await rm(join(project, ".lace/conflicts"), { recursive: true, force: true });
+    }
     if (version === "0.14.0" && variant.name === "cloudflare") {
       const path = "docs/cloudflare-operator.env.example";
       await writeFile(join(project, path), "# operator collision\n");
@@ -244,6 +265,25 @@ export async function templateUpgradeJourney(temporary, operations) {
         );
       }
     }
+    if (version === "0.14.0") {
+      const guides = [
+        "docs/lace-compose-dev.md",
+        "docs/lace-compose-production.md",
+        ...(variant.name === "cloudflare" ? ["docs/lace-cloudflare.md"] : []),
+      ];
+      for (const guide of guides) {
+        if (!changed.some((decision) => decision.path === guide && decision.action === "add"))
+          throw new Error(`upgrade-${version}-${variant.name}-apply: ${guide} was not delivered`);
+        if (!applied.report.guidance?.includes(guide))
+          throw new Error(
+            `upgrade-${version}-${variant.name}-apply: instructions do not name ${guide}`,
+          );
+      }
+      if (variant.name !== "cloudflare" && "docs/lace-cloudflare.md" in after)
+        throw new Error(
+          `upgrade-${version}-${variant.name}-apply: Cloudflare guide without Cloudflare`,
+        );
+    }
     if (variant.name === "cloudflare" && version === "0.4.0") {
       if (
         "wrangler.jsonc" in after ||
@@ -264,6 +304,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}-repeat: upgraded project is not current`);
   }
   console.info(
-    "Template 0.4.0/0.14.0 default and Cloudflare projects: managed conflict refused, upgrade applied, user README, configuration and site source preserved",
+    "Template 0.4.0/0.14.0 default and Cloudflare projects: managed conflicts and new-guide collisions refused, scenario guides delivered, user README, configuration and site source preserved, repeat plan current",
   );
 }

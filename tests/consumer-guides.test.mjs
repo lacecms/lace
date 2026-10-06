@@ -7,8 +7,10 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import {
   guideFiles,
-  readmeSetupCommands,
+  developmentGuide,
+  developmentSetupCommands,
   reviewEnvironment,
+  setupDrift,
   updateEnvironment,
 } from "../scripts/consumer-guides.mjs";
 
@@ -29,17 +31,34 @@ beforeAll(async () => {
 });
 afterAll(() => rm(root, { recursive: true, force: true }));
 
-test("the generated README documents the Node setup sequence acceptance executes", async () => {
-  expect(readmeSetupCommands(await readFile(join(project, "README.md"), "utf8"))).toEqual([
-    "pnpm install",
-    "pnpm env:prepare",
-    "pnpm exec lace doctor --target node --mode compose --stage setup",
-    "pnpm db:migrate",
-    "pnpm content:sync",
-    "pnpm auth:bootstrap",
-    "pnpm dev:api",
-  ]);
-  expect(() => readmeSetupCommands("# Site\n")).toThrow("Prerequisites and installation");
+test("the generated development guide documents the Node setup sequence acceptance executes", async () => {
+  expect(developmentSetupCommands(await readFile(join(project, developmentGuide), "utf8"))).toEqual(
+    [
+      "pnpm install",
+      "pnpm env:prepare",
+      "pnpm exec lace doctor --target node --mode compose --stage setup",
+      "pnpm db:migrate",
+      "pnpm content:sync",
+      "pnpm auth:bootstrap",
+      "pnpm dev:api",
+    ],
+  );
+  expect(() => developmentSetupCommands("# Site\n")).toThrow("Install and prepare the environment");
+});
+
+test("development guide drift names the guide and the differing step", async () => {
+  const guide = await readFile(join(project, developmentGuide), "utf8");
+  const { scripts } = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
+  const expected = developmentSetupCommands(guide);
+  expect(setupDrift(expected, expected, scripts)).toBeNull();
+  const dropped = developmentSetupCommands(guide.replace("pnpm content:sync\n", ""));
+  expect(setupDrift(dropped, expected, scripts)).toBe(
+    'docs/lace-compose-dev.md step 5 documents "pnpm auth:bootstrap", acceptance runs "pnpm content:sync"',
+  );
+  const renamed = expected.map((line) => line.replace("pnpm db:migrate", "pnpm db:setup"));
+  expect(setupDrift(renamed, renamed, scripts)).toBe(
+    'docs/lace-compose-dev.md "pnpm db:setup" names no package script',
+  );
 });
 
 test("the generated connection guide yields the existing-site fixture's own files", async () => {

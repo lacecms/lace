@@ -9,24 +9,28 @@
     "deploy/nginx.conf",
     "docker-compose.yml",
     "docs/lace-astro-site.md",
+    "docs/lace-compose-dev.md",
+    "docs/lace-compose-production.md",
     "docs/lace-operations.md",
     "lace.config.ts",
     "package.json",
     "pnpm-workspace.yaml"
   ],
-  "manifest": "{\n  \"schemaVersion\": 1,\n  \"templateVersion\": \"0.15.0\",\n  \"site\": {\n    \"mode\": \"none\",\n    \"path\": null\n  },\n  \"files\": {\n    \".env.example\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"92881afb2f6ed5b4b602f110bc4638abc834bc919d6da66940c6f729f4eb1dbb\"\n    },\n    \".gitignore\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"66db9c5a089fa9b739c08f000d1d2898745150da8f3d3770c0e07be0d1712f1a\"\n    },\n    \"README.md\": {\n      \"owner\": \"user\"\n    },\n    \"deploy/minio.Dockerfile\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"14ec240a2a063cc7c9ad8a08bcc33089272180274a46ec17b3b711a098060eb0\"\n    },\n    \"deploy/nginx.conf\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"da347ca11d864b082a060e010e74f83bbf457f5e07f491a52a22f5676fcf0c5b\"\n    },\n    \"docker-compose.yml\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"1ed263d3d36eec8a3c9906516cfc6dc3c7067d202f04aa02ba854b38894db528\"\n    },\n    \"docs/lace-astro-site.md\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"bc03030434e9bf57e3738e5fddf262d4d227756ccefffb071d1743fee2feee7f\"\n    },\n    \"docs/lace-operations.md\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"a41b9087019e49d853e7f33f7619f746184d8e6b98b9ff2615dda16efda60928\"\n    },\n    \"lace.config.ts\": {\n      \"owner\": \"user\"\n    },\n    \"package.json\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"ff506fb7841b96c85e334f0e8e2549a5b8444c9bed92f5534468da7094f44716\"\n    },\n    \"pnpm-workspace.yaml\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"0231bba7098bf12cba25f86eefc52a66c10c4eb3fab1bbe468731f8064c31bb3\"\n    }\n  }\n}\n",
+  "manifest": "{\n  \"schemaVersion\": 1,\n  \"templateVersion\": \"0.16.0\",\n  \"site\": {\n    \"mode\": \"none\",\n    \"path\": null\n  },\n  \"files\": {\n    \".env.example\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"92881afb2f6ed5b4b602f110bc4638abc834bc919d6da66940c6f729f4eb1dbb\"\n    },\n    \".gitignore\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"66db9c5a089fa9b739c08f000d1d2898745150da8f3d3770c0e07be0d1712f1a\"\n    },\n    \"README.md\": {\n      \"owner\": \"user\"\n    },\n    \"deploy/minio.Dockerfile\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"14ec240a2a063cc7c9ad8a08bcc33089272180274a46ec17b3b711a098060eb0\"\n    },\n    \"deploy/nginx.conf\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"da347ca11d864b082a060e010e74f83bbf457f5e07f491a52a22f5676fcf0c5b\"\n    },\n    \"docker-compose.yml\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"1ed263d3d36eec8a3c9906516cfc6dc3c7067d202f04aa02ba854b38894db528\"\n    },\n    \"docs/lace-astro-site.md\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"bc03030434e9bf57e3738e5fddf262d4d227756ccefffb071d1743fee2feee7f\"\n    },\n    \"docs/lace-compose-dev.md\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"f17e455c36d50369e54951f64980cd150369b303e62135ff65ba79af3060787b\"\n    },\n    \"docs/lace-compose-production.md\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"799da803369fd98994eb5d12101546f9c5a3b68c2b2137fcc5654b4a7cd921f0\"\n    },\n    \"docs/lace-operations.md\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"9996202e65b845834812e405248198b4b9e7b77e21a5f7df9b7976d8df2012bf\"\n    },\n    \"lace.config.ts\": {\n      \"owner\": \"user\"\n    },\n    \"package.json\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"47071d0b8c53d7fdb152adace951b28f6a5b7e895f77a78723e61bf04ae7162e\"\n    },\n    \"pnpm-workspace.yaml\": {\n      \"owner\": \"managed\",\n      \"sha256\": \"0231bba7098bf12cba25f86eefc52a66c10c4eb3fab1bbe468731f8064c31bb3\"\n    }\n  }\n}\n",
   "digests": {
-    ".lace/upgrade-instructions.json": "1210e7730c980e4a5c31bfc62193eb5c0d6a3258ea32224843f0ee1011b4515e",
+    ".lace/upgrade-instructions.json": "893a9b8d6c0811df7efdff5913b882a82308d7cdc31b7f07a3bc1bc1b9326955",
     ".env.example": "92881afb2f6ed5b4b602f110bc4638abc834bc919d6da66940c6f729f4eb1dbb",
     ".gitignore": "66db9c5a089fa9b739c08f000d1d2898745150da8f3d3770c0e07be0d1712f1a",
-    "README.md": "afa46d82b9401853840f4ddce5c1f5146541425536d9d6cca235f7b3a673bcbb",
+    "README.md": "2c921a69cfeb8eb6d00bba7972e9b017640887cb7ed5993decba4f805674517d",
     "deploy/minio.Dockerfile": "14ec240a2a063cc7c9ad8a08bcc33089272180274a46ec17b3b711a098060eb0",
     "deploy/nginx.conf": "da347ca11d864b082a060e010e74f83bbf457f5e07f491a52a22f5676fcf0c5b",
     "docker-compose.yml": "1ed263d3d36eec8a3c9906516cfc6dc3c7067d202f04aa02ba854b38894db528",
     "docs/lace-astro-site.md": "bc03030434e9bf57e3738e5fddf262d4d227756ccefffb071d1743fee2feee7f",
-    "docs/lace-operations.md": "a41b9087019e49d853e7f33f7619f746184d8e6b98b9ff2615dda16efda60928",
+    "docs/lace-compose-dev.md": "f17e455c36d50369e54951f64980cd150369b303e62135ff65ba79af3060787b",
+    "docs/lace-compose-production.md": "799da803369fd98994eb5d12101546f9c5a3b68c2b2137fcc5654b4a7cd921f0",
+    "docs/lace-operations.md": "9996202e65b845834812e405248198b4b9e7b77e21a5f7df9b7976d8df2012bf",
     "lace.config.ts": "bf8eb770d5ce0188e6269ec8241f520a7da4fee7246d013a1acc9988b3740ad4",
-    "package.json": "ff506fb7841b96c85e334f0e8e2549a5b8444c9bed92f5534468da7094f44716",
+    "package.json": "47071d0b8c53d7fdb152adace951b28f6a5b7e895f77a78723e61bf04ae7162e",
     "pnpm-workspace.yaml": "0231bba7098bf12cba25f86eefc52a66c10c4eb3fab1bbe468731f8064c31bb3"
   }
 }

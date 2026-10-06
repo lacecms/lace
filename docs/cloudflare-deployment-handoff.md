@@ -20,7 +20,7 @@ real values privately, never in the repository.
 - The exact candidate artifacts from Step 33: `create-lace`, `@lacecms/*`
   packages (including `@lacecms/platform-cloudflare` with `admin/`) at one
   version and template version. Record both versions.
-- Node `>=24.12.0 <25` and pnpm 12, as declared by the generated project.
+- Node `>=24.12.0` and pnpm `>=12` (minimums declared by the generated project; tested with Node 24.12.0 and pnpm 12.3.4).
 - A Git repository (GitHub or GitLab) the release owner controls, for the
   static site's Pages project.
 - A dedicated Cloudflare account, or one where creating and deleting the

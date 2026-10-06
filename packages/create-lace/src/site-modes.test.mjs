@@ -210,11 +210,12 @@ test("interactive none with --cloudflare generates a headless Worker project", a
     input: input("3"),
   });
   expect(result.code).toBe(0);
-  expect(result.stdout).toContain("Cloudflare Worker section of docs/lace-operations.md");
+  expect(result.stdout).toContain("the CMS Worker is in worker/; follow docs/lace-cloudflare.md");
   const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
   expect(manifest.site).toEqual({ mode: "none", path: null });
   expect(manifest.files).toHaveProperty("worker/index.ts");
   expect(manifest.files).not.toHaveProperty(".github/workflows/cloudflare.yml");
+  expect(manifest.files["docs/lace-cloudflare.md"]?.owner).toBe("managed");
 });
 
 test("existing-site path grammar", () => {

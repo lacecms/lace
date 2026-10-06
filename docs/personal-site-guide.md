@@ -21,7 +21,7 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 
 Сейчас `@lacecms/*` имеют `private: true` и версию `0.0.0`; шаблоны не дают готовых опубликованных координат API/builder images. Поэтому команду `pnpm create lace@latest` пока нельзя считать обеспеченным способом установки нашей текущей реализации. Рабочий обход — локальная сборка и tarballs, как в generated-project acceptance.
 
-Нужны Node `>=24.12.0 <25`, pnpm `12.3.4`, а для VPS — Docker Compose. Каталог назначения должен быть новым либо содержать только `.git`, `README.md`, `LICENSE`.
+Нужны Node `>=24.12.0` и pnpm `>=12` (минимумы; проверено на Node `24.12.0` и pnpm `12.3.4`), а для VPS — Docker Compose. Каталог назначения должен быть новым либо содержать только `.git`, `README.md`, `LICENSE`.
 
 Из репозитория Lace:
 

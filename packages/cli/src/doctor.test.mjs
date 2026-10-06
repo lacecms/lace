@@ -58,7 +58,7 @@ async function project() {
   const root = await directory();
   await writeFile(
     join(root, "package.json"),
-    JSON.stringify({ engines: { node: ">=24.12.0 <25", pnpm: ">=12 <13" } }),
+    JSON.stringify({ engines: { node: ">=24.12.0", pnpm: ">=12" } }),
   );
   return root;
 }
@@ -100,6 +100,46 @@ test("doctor uses project semver ranges and aggregates independent settings fail
     await writeFile(join(root, "package.json"), JSON.stringify({ engines }));
     expect(getCheck(await execute(root), "project").code).toBe("PROJECT_INVALID");
   }
+});
+
+test("generated minimum-only engines accept newer majors and reject older versions", async () => {
+  const template = JSON.parse(
+    await readFile(
+      resolve(import.meta.dirname, "../../create-lace/templates/package.json"),
+      "utf8",
+    ),
+  );
+  expect(template.engines).toEqual({ node: ">=24.12.0", pnpm: ">=12" });
+  const root = await project();
+  await writeFile(join(root, "package.json"), JSON.stringify({ engines: template.engines }));
+  const before = await readdir(root);
+  const versions = (node, pnpm) => ({
+    nodeVersion: node,
+    process: async (command) => (command === "pnpm" ? pnpm : "missing"),
+  });
+  for (const [node, pnpm] of [
+    ["v24.12.0", "12.0.0"],
+    ["v25.2.1", "13.0.0"],
+    ["v26.0.0", "14.1.0"],
+  ]) {
+    const result = await execute(root, settings, baseOptions, versions(node, pnpm));
+    expect(getCheck(result, "node").status, node).toBe("pass");
+    expect(getCheck(result, "pnpm").status, pnpm).toBe("pass");
+    expect(getCheck(result, "node").reason).not.toMatch(/tested|verified/u);
+    expect(result.exitCode).toBe(0);
+  }
+  const below = await execute(root, settings, baseOptions, versions("v24.11.9", "11.9.9"));
+  for (const id of ["node", "pnpm"])
+    expect(getCheck(below, id)).toMatchObject({ status: "fail", code: "VERSION_INCOMPATIBLE" });
+  expect(below.exitCode).toBe(4);
+  // A consumer that keeps its own upper bound is still held to it.
+  const bounded = JSON.stringify({ engines: { node: ">=24.12.0 <25", pnpm: ">=12 <13" } });
+  await writeFile(join(root, "package.json"), bounded);
+  const newer = await execute(root, settings, baseOptions, versions("v26.0.0", "13.0.0"));
+  for (const id of ["node", "pnpm"]) expect(getCheck(newer, id).status).toBe("fail");
+  expect(newer.exitCode).toBe(4);
+  expect(await readFile(join(root, "package.json"), "utf8")).toBe(bounded);
+  expect(await readdir(root)).toEqual(before);
 });
 
 test("dotenv is read without executing bytes and process environment wins", async () => {
@@ -438,7 +478,7 @@ async function siteProject(site, parentAstro = false) {
   await mkdir(join(root, ".lace"), { recursive: true });
   await writeFile(
     join(root, "package.json"),
-    JSON.stringify({ engines: { node: ">=24.12.0 <25", pnpm: ">=12 <13" } }),
+    JSON.stringify({ engines: { node: ">=24.12.0", pnpm: ">=12" } }),
   );
   const manifest = { schemaVersion: 1, templateVersion: "0.11.0", files: {} };
   if (site !== undefined) manifest.site = site;

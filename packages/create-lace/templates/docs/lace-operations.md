@@ -22,11 +22,20 @@ Site mode: **none**, recorded in `.lace/manifest.json` as mode `none`. This proj
 
 <!-- lace-site: end -->
 
-Start with the generated root `README.md` for the concise quickstart. README is user-owned, without a manifest hash; upgrades preserve its edits. If `init .` encounters an allowed existing README, it preserves every byte and prints this guide's path. Follow this guide directly or manually copy relevant Lace instructions into your existing README. In a `cms/` installation these paths and commands are relative to `cms/`, not its parent application. This guide is managed with hash/conflict review.
+<!-- lace-cloudflare: on -->
+
+This guide is the reference. Follow a scenario guide for an ordered journey: [Docker Compose development](lace-compose-dev.md), [Docker Compose production](lace-compose-production.md) or [Cloudflare](lace-cloudflare.md).
+<!-- lace-cloudflare: end -->
+<!-- lace-cloudflare: off -->
+
+This guide is the reference. Follow a scenario guide for an ordered journey: [Docker Compose development](lace-compose-dev.md) or [Docker Compose production](lace-compose-production.md).
+<!-- lace-cloudflare: end -->
+
+The generated root `README.md` is a short index of requirements, layout and these guides. README is user-owned, without a manifest hash; upgrades preserve its edits. If `init .` encounters an allowed existing README, it preserves every byte and prints the scenario guide paths. Follow the guides directly or manually copy relevant Lace instructions into your existing README. In a `cms/` installation these paths and commands are relative to `cms/`, not its parent application. This guide is managed with hash/conflict review.
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.15.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The root quickstart, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.16.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The scenario guides, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 

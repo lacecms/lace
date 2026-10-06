@@ -25,7 +25,7 @@ Both runtime images support `linux/amd64` and `linux/arm64` only when both platf
 
 ## Prerequisites
 
-- Node `24.12.0` and project-pinned pnpm `12.3.4`; consumer packages require Node `>=24.12.0 <25`.
+- Node `24.12.0` and project-pinned pnpm `12.3.4` for preparation; consumer packages declare the minimum Node `>=24.12.0` (and generated projects pnpm `>=12`) without upper bounds.
 - Git, tar, Docker with buildx and the ability to run both Linux platforms (native or emulated), plus enough disk for build layers and four saved images.
 - Public dependency/network access for frozen installs and image base/toolchain downloads. Build does not need npm or GHCR publishing credentials.
 - A clean reviewed source commit for release-eligible preparation. Registry credentials and local runtime data must remain outside tracked release inputs and build contexts.

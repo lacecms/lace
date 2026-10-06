@@ -101,14 +101,17 @@ version; mixing artifacts from different versions is unsupported.
 | `0.1.0-alpha.1` | `0.4.0` | Published 2026-09-30, immutable | Predates environment preparation, doctor, browser setup, the tour, existing-site mode, `lace add block`, `@lacecms/astro`/`@lacecms/render` and the generated Cloudflare Worker |
 | `0.1.0-alpha.2` | `0.14.0` | Candidate prepared and accepted locally (Step 32B); not published | Carries the onboarding feedback improvements of Steps 26–31 |
 
-The current source template is `0.15.0` (33F credential guidance and private
-operator-file support). It requires the freshly built 33F CLI; this source
-advance does not publish or replace the prepared alpha.2 artifacts above.
+The current source template is `0.16.0` (33G scenario guides: a short entry
+README with managed Compose development, Compose production and Cloudflare
+guides, and minimum-only engine declarations). It builds on `0.15.0` (33F
+credential guidance and private operator-file support), which requires the
+freshly built 33F CLI; these source advances do not publish or replace the
+prepared alpha.2 artifacts above.
 
 Both runtime images target `linux/amd64` and `linux/arm64`; each platform is
 built and smoke-tested separately during preparation, while the full consumer
-journey runs on the host's platform. Consumer packages require Node
-`>=24.12.0 <25` and pnpm 12. Existing projects move between template versions
+journey runs on the host's platform. Consumer packages and generated projects
+declare minimum-only engines (see below). Existing projects move between template versions
 with `lace upgrade` (user-owned README, `lace.config.ts`, `.env`, site source
 and `worker/wrangler.jsonc` are never modified; managed-file edits are reported
 as conflicts) and then follow the template's upgrade instructions to update
@@ -120,6 +123,44 @@ state. Linux hosts share the kernel with their containers and are not affected.
 Exact candidate evidence is in
 `docs/archive/step-32/step-32b-verification.md`; preparation and publication
 are described in `docs/alpha-release.md`.
+
+## Minimum requirements and tested versions
+
+Engine declarations state minimums only. The repository root, the generated CMS
+`package.json` and every public Lace package declare Node `>=24.12.0`; the root
+and generated CMS also declare pnpm `>=12`. Release validation
+(`scripts/release-model.mjs`) rejects any other declaration, including the
+former `<25`/`<13` upper bounds. Doctor evaluates the consumer project's own
+declaration, so a project that keeps an explicit upper bound is still held to it.
+
+A version that satisfies a minimum is **eligible**, not tested. Reproducibility
+pins are separate and unchanged by the minimums:
+
+| Pin | Value | Where |
+| --- | --- | --- |
+| Tested Node | `24.12.0` | CI workflows, `node:24.12.0-bookworm-slim` API/builder images, release preparation |
+| Tested pnpm | `12.3.4` | `packageManager` (root and generated CMS), API/builder images |
+| Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
+
+Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1
+`>=22.12.0`, better-sqlite3 13.0.3 `>=22`, Wrangler 4.129.0 and Miniflare
+`>=22.0.0`, Vite 8.2.2/8.3.0, Oxlint 1.81.0 and Oxfmt 0.66.0
+`^20.19.0 || >=22.12.0`, `@aws-sdk/client-s3` 3.1133.0 `>=20.0.0`, OpenSpec
+1.12.0 `>=20.19.0`, TypeScript 7.0.2 `>=16.20.0`, Hono `>=16.9.0`, workerd
+`>=16`; Better Auth, Drizzle ORM and Turbo declare none; pnpm 12.3.4 declares
+Node `>=18.*`. Nothing requires more than Node 24.12.0. Vitest 5.0.0 declares
+`^22.12.0 || ^24.0.0 || >=26.0.0`, so Node 25 is eligible for consumers but not
+for running this repository's test suite. Engine metadata alone is not runtime
+certification.
+
+A newer Node or pnpm major enters the tested matrix only after a recorded check
+on that exact version: frozen install of the workspace and a packed generated
+consumer, native `better-sqlite3` loading, CLI generation and `lace doctor`,
+`pnpm build` of a generated site, and the relevant runtime smoke (Node API
+readiness; local Worker bundle and `cf:dev` for Cloudflare). Record the exact
+version, platform, date and passing scope here. Adding a tested major does not
+change the minimums or the pins above, and it is never real-account
+verification.
 
 ## Baseline refresh policy
 
