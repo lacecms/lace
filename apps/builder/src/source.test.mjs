@@ -97,3 +97,70 @@ test("copy excludes configured output and nested CMS data without changing sourc
   }
   expect(await readFile(join(destination, "site/src/pages/index.astro"), "utf8")).toBe("sentinel");
 });
+
+test.each(["site", "."])("root service links are excluded for %s", async (site) => {
+  const { root, source, selection } = await fixture(site);
+  await symlink("../absent-secret-target", join(source, "AGENTS.md"));
+  await symlink("AGENTS.md", join(source, "CLAUDE.md"));
+  await copySource(source, join(root, "copy"), selection);
+  for (const name of ["AGENTS.md", "CLAUDE.md"])
+    await expect(readFile(join(root, "copy", name))).rejects.toThrow();
+});
+test.each(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "site/package.json"])(
+  "identifies missing required %s",
+  async (path) => {
+    const { source, selection } = await fixture();
+    await rm(join(source, path));
+    await expect(validateSource(source, selection)).rejects.toMatchObject({
+      reason: "source_missing",
+      path,
+    });
+  },
+);
+test.each(["site/linked.astro", "site/CLAUDE.md", "escape", "site/unsafe\nname", "site/é"])(
+  "rejects included link without its target: %s",
+  async (path) => {
+    const { root, source, selection } = await fixture();
+    await symlink("/outside/secret-sentinel", join(source, path));
+    const error = await copySource(source, join(root, "copy"), selection).catch((error) => error);
+    expect(error.reason).toBe("source_symlink");
+    expect(error.path).toBe(/\n|é/u.test(path) ? undefined : path);
+    expect(JSON.stringify(error)).not.toContain("secret-sentinel");
+  },
+);
+test("identifies linked required file and special entry", async () => {
+  const { root, source, selection } = await fixture();
+  await rm(join(source, "pnpm-lock.yaml"));
+  await symlink("package.json", join(source, "pnpm-lock.yaml"));
+  await expect(validateSource(source, selection)).rejects.toMatchObject({
+    reason: "source_symlink",
+    path: "pnpm-lock.yaml",
+  });
+  await rm(join(source, "pnpm-lock.yaml"));
+  await writeFile(join(source, "pnpm-lock.yaml"), "{}");
+  const { execFileSync } = await import("node:child_process");
+  execFileSync("mkfifo", [join(source, "site/fifo")]);
+  await expect(copySource(source, join(root, "copy"), selection)).rejects.toMatchObject({
+    reason: "source_special_file",
+    path: "site/fifo",
+  });
+});
+test.skipIf(process.getuid?.() === 0)(
+  "identifies unreadable included entry and recovers after correction",
+  async () => {
+    const { chmod } = await import("node:fs/promises");
+    const { root, source, selection } = await fixture();
+    const file = join(source, "site/unreadable");
+    await writeFile(file, "private");
+    await chmod(file, 0);
+    try {
+      await expect(copySource(source, join(root, "failed-copy"), selection)).rejects.toMatchObject({
+        reason: "source_unreadable",
+        path: "site/unreadable",
+      });
+    } finally {
+      await chmod(file, 0o644);
+    }
+    await expect(copySource(source, join(root, "retry-copy"), selection)).resolves.toBeUndefined();
+  },
+);

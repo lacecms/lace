@@ -147,38 +147,47 @@ test("admin build routes queue strict requests without running a trigger", async
   expect(calls).toHaveLength(2);
 });
 
-test("authenticated build reads expose persisted history and missing detail", async () => {
-  const build = {
-    id: "build-1",
-    reason: "publication",
-    status: "failed",
-    targetVersion: 3,
-    requestedBy: "admin",
-    requestedAt: unixMilliseconds(1_000),
-    startedAt: unixMilliseconds(2_000),
-    completedAt: unixMilliseconds(3_000),
-    error: "provider_failed",
-  };
-  const builds = new SiteBuildUseCases({
-    clock: { now: () => unixMilliseconds(1) },
-    builds: {
-      listSiteBuilds: async () => [build],
-      getSiteBuild: async (id) => (id === build.id ? build : null),
-      requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 3 }),
-    },
-  });
-  const { app } = await fixture({ actor: editor, builds });
-  const get = (path) => app.fetch(new Request(`https://lace.test${path}`));
-  expect(await (await get("/api/v1/admin/site-builds")).json()).toMatchObject({
-    items: [{ id: "build-1", targetVersion: 3, error: "provider_failed" }],
-  });
-  expect((await get("/api/v1/admin/site-builds/build-1")).status).toBe(200);
-  expect((await get("/api/v1/admin/site-builds/missing")).status).toBe(404);
-  const anonymous = (await fixture({ actor: null, builds })).app;
-  expect(
-    (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/site-builds"))).status,
-  ).toBe(403);
-});
+test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
+  "authenticated build reads expose source diagnostics for $role",
+  async (actor) => {
+    const build = {
+      id: "build-1",
+      reason: "publication",
+      status: "failed",
+      targetVersion: 3,
+      requestedBy: "admin",
+      requestedAt: unixMilliseconds(1_000),
+      startedAt: unixMilliseconds(2_000),
+      completedAt: unixMilliseconds(3_000),
+      error: "source_symlink",
+      errorPath: "src/linked.astro",
+    };
+    const builds = new SiteBuildUseCases({
+      clock: { now: () => unixMilliseconds(1) },
+      builds: {
+        listSiteBuilds: async () => [build],
+        getSiteBuild: async (id) => (id === build.id ? build : null),
+        requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 3 }),
+      },
+    });
+    const { app } = await fixture({ actor, builds });
+    const get = (path) => app.fetch(new Request(`https://lace.test${path}`));
+    expect(await (await get("/api/v1/admin/site-builds")).json()).toMatchObject({
+      items: [
+        { id: "build-1", targetVersion: 3, error: "source_symlink", errorPath: "src/linked.astro" },
+      ],
+    });
+    expect(await (await get("/api/v1/admin/site-builds/build-1")).json()).toMatchObject({
+      error: "source_symlink",
+      errorPath: "src/linked.astro",
+    });
+    expect((await get("/api/v1/admin/site-builds/missing")).status).toBe(404);
+    const anonymous = (await fixture({ actor: null, builds })).app;
+    expect(
+      (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/site-builds"))).status,
+    ).toBe(403);
+  },
+);
 
 test("mounts authentication before API and admin fallbacks", async () => {
   const { app } = await fixture({
@@ -293,6 +302,13 @@ test("serves public content and short-circuits matching build exports", async ()
     (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"1"' } }))
       .response.status,
   ).toBe(304);
+  expect(exportLoads()).toBe(1);
+  const weak = await json(app, "/api/v1/public/build-export", {
+    headers: { "if-none-match": 'W/"1"' },
+  });
+  expect(weak.response.status).toBe(304);
+  expect(weak.response.headers.get("etag")).toBe('"1"');
+  expect(weak.body).toBeUndefined();
   expect(exportLoads()).toBe(1);
   expect(
     (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"0"' } }))
@@ -1002,4 +1018,75 @@ test("current build site is unknown by default and anonymous reads fail", async 
   expect(
     (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/build-site"))).status,
   ).toBe(403);
+});
+
+test.each([[[1000, 1000]], [[2000, 1000]], [[0, 1000]]])(
+  "rejects ordered-draft positions %j atomically with actionable diagnostics",
+  async (positions) => {
+    const { app, content, store } = await fixture({ maxBodyBytes: 4096 });
+    const created = await content.create({
+      actor: admin,
+      modelKey: "posts",
+      title: "Order",
+      slug: "order",
+      fields: {},
+      blocks: [],
+    });
+    await content.publish({
+      actor: admin,
+      entryId: created.id,
+      expectedRevision: 1,
+      idempotencyKey: "order-test",
+    });
+    const before = await store.load({ entryId: created.id });
+    const exported = await store.exportBuildContent();
+    const response = await app.fetch(
+      new Request(`https://lace.test/api/v1/admin/entries/${created.id}/draft`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedRevision: 1,
+          title: "Order",
+          fields: {},
+          slug: "order",
+          blocks: positions.map((position, index) => ({
+            data: { heading: "secret-content" },
+            key: `01ARZ3NDEKTSV4RRFFQ69G5FA${index + 1}`,
+            position,
+            schemaVersion: 1,
+            type: "hero",
+          })),
+        }),
+      }),
+    );
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.error.code).toBe("CONTENT_INVALID_STATE");
+    expect(body.error.message).toContain(`Block at index ${positions[0] === 0 ? 0 : 1}`);
+    expect(body.error.message).toContain("Resubmit positions");
+    expect(body.error.message).not.toContain("secret-content");
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+    expect(await store.load({ entryId: created.id })).toEqual(before);
+    expect(await store.exportBuildContent()).toEqual(exported);
+  },
+);
+
+test("the export ETag follows its payload when publication races the version lookup", async () => {
+  const { app, store, content } = await fixture();
+  const entry = await content.create({
+    actor: admin,
+    blocks: [],
+    fields: {},
+    modelKey: "posts",
+    slug: "race",
+    title: "Race",
+  });
+  const original = store.exportBuildContent.bind(store);
+  store.exportBuildContent = async () => {
+    await content.publish({ actor: admin, entryId: entry.id, expectedRevision: 1 });
+    return original();
+  };
+  const result = await json(app, "/api/v1/public/build-export");
+  expect(result.body.version).toBe(1);
+  expect(result.response.headers.get("etag")).toBe('"1"');
 });

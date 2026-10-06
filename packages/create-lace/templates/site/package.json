@@ -8,10 +8,10 @@
     "typecheck": "astro sync && tsc --noEmit"
   },
   "dependencies": {
-    "@lacecms/astro": "0.1.0-alpha.2",
-    "@lacecms/content": "0.1.0-alpha.2",
-    "@lacecms/render": "0.1.0-alpha.2",
-    "@lacecms/sdk": "0.1.0-alpha.2",
+    "@lacecms/astro": "0.1.0-alpha.3",
+    "@lacecms/content": "0.1.0-alpha.3",
+    "@lacecms/render": "0.1.0-alpha.3",
+    "@lacecms/sdk": "0.1.0-alpha.3",
     "astro": "7.3.1"
   },
   "devDependencies": {

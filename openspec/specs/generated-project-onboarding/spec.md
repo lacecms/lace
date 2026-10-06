@@ -67,27 +67,27 @@ Generated projects SHALL expose `pnpm env:prepare` invoking the packaged `lace e
 
 ### Requirement: Root quickstart describes the delivered consumer workflow
 
-The generated root README SHALL describe compatible Node/pnpm, Docker Compose and matching release prerequisites; dependency installation; protected environment preparation before environment-loaded scripts; settings/origins; setup-stage doctor; explicit migration and configuration sync; API start; bootstrap and first-admin creation; login and Settings-issued build token; Home publication; Astro development/static build; Compose operation and stop commands that preserve data. It SHALL explain root `lace.config.ts`, Home/Posts models, user-owned routes, SDK export loading, renderers, layouts and styling, linking to `docs/lace-operations.md` for detailed operation and private setup input. It SHALL distinguish draft save, publication and static deployment, identify the explicit generated `site/` default and link to deployment-time external Astro source selection. In a project generated with `--cloudflare` it SHALL summarize the local CMS Worker commands and state that the Worker and the static site are separate deployments, linking to the operations guide's Cloudflare Worker section; in other projects it SHALL state that `--cloudflare` adds a separate CMS Worker and static-site workflow. It SHALL NOT claim that the static-site workflow or Pages configuration deploys the CMS. It SHALL state that source-template behavior requires matching freshly built packages/images or a later compatible release and is not retroactively added to published alpha artifacts.
+The generated root README SHALL be a short entry guide stating minimum Node/pnpm requirements, separately pinned and tested versions, matching Lace artifacts, the selected CMS/site layout and ownership, and links to the Compose development, Compose production, existing-site connection and operations guides. With `--cloudflare` it SHALL link to the generated Cloudflare guide; without it SHALL explain that Cloudflare files require a fresh matching `--cloudflare` project without linking to an absent file. It SHALL distinguish draft save, publication and static deployment and state that the CMS Worker and static site are separate deployments. The complete installation, setup and operation sequence SHALL live in the scenario guides rather than be duplicated in README. It SHALL state that newer template behavior requires matching freshly built packages/images or a later compatible release and does not retroactively change published alpha artifacts.
 
 #### Scenario: Consumer starts from README
-- **WHEN** a fresh consumer follows README with compatible artifacts
-- **THEN** preparation precedes migration/sync, the consumer can complete first-admin setup and Home publication, and the site can read published content with a server-only build token using documented commands
+- **WHEN** a fresh consumer opens README with compatible artifacts
+- **THEN** the requirements and recorded layout identify the right scenario guide and every linked local file and anchor exists
 
 #### Scenario: User extends the site
 - **WHEN** the consumer adds a model or custom block
-- **THEN** README explains explicit sync and user-owned route/renderer work, identifies the layout and SDK loader, and refers to the operations guide for guarded structural changes
+- **THEN** the entry guide points to the connection and operations references for explicit sync and user-owned route/renderer work
 
 #### Scenario: Later roadmap capabilities are absent
-- **WHEN** a consumer reads the Cloudflare, setup or builder sections
-- **THEN** the guide describes the existing API setup and generated-site/Pages support with browser setup for compatible Step 28A or later API/admin artifacts and the retained API alternative, with external-site selection requiring compatible Step 29A or later artifacts, and describes the generated CMS Worker as requiring compatible Step 31A or later packages without claiming a verified real-account deployment
+- **WHEN** a consumer reads artifact compatibility and scenario guidance
+- **THEN** it distinguishes delivered source behavior from immutable published artifacts and unverified real-account deployment
 
 #### Scenario: Cloudflare consumer reads README
 - **WHEN** a consumer opens README of a project generated with `--cloudflare`
-- **THEN** it lists the local Worker preparation, migration, sync, bootstrap and development commands with their explicit local target, and links to the Cloudflare Worker section for remote provisioning and deployment
+- **THEN** it links to a guide that starts with the local Worker, then covers explicit remote provisioning and separate CMS/site deployment
 
 ### Requirement: Concise setup example uses placeholders and the configured public origin
 
-README and operations SHALL include the same short placeholder-only `curl` example for `POST /api/v1/setup/admin` with JSON `token`, `email` and `password` and a placeholder configured public API base URL retaining its optional path prefix. Adjacent guidance SHALL explain obtaining the one-time expiring token via bootstrap, a 12-character password minimum, completed-setup closure, shell-history/process exposure when replacing inline placeholders, and the existing private-input script as the safer practical option. Examples SHALL contain no usable credentials and SHALL NOT weaken server setup authorization or imply a setup token is a build token.
+The Compose development guide and operations reference SHALL include the same short placeholder-only `curl` example for `POST /api/v1/setup/admin` with JSON `token`, `email` and `password` and a placeholder configured public API base URL retaining its optional path prefix. Adjacent guidance SHALL explain obtaining the one-time expiring token via bootstrap, a 12-character password minimum, completed-setup closure, shell-history/process exposure when replacing inline placeholders, and the existing private-input script as the safer practical option. Examples SHALL contain no usable credentials and SHALL NOT weaken server setup authorization or imply a setup token is a build token.
 
 #### Scenario: Request shape and configured origin
 - **WHEN** a consumer replaces placeholders with test values and an API base URL including a path prefix
@@ -117,10 +117,10 @@ The operations guide SHALL document generated and external-site selection for No
 - **THEN** the guide explains which reads appear on reload and which require a dev restart, without prescribing a restart after every publication
 
 ### Requirement: Generated guides explain publication visibility per mode
-The generated README and operations guide SHALL separately explain draft save, CMS publication, Astro dev visibility, manual static build and deployment, and automatic Compose build/release visibility. They SHALL state that dev shows publications to existing routes on reload and needs a restart for new or renamed slugs, token or environment changes; that a manual static build requires a fresh build and the operator's own deployment; and that Compose serves content after a succeeded covering build, keeps the previous release on failure, may serve a release moments before Builds records success, and sends revalidating cache headers. They SHALL direct operators to Builds for pending/running/succeeded/failed state and SHALL NOT claim dev, manual or provider deployment success from CMS publication state.
+The generated Compose development and production guides and the operations guide SHALL separately explain draft save, CMS publication, Astro dev visibility, manual static build and deployment, and automatic Compose build/release visibility as applicable to their scenario. They SHALL state that dev shows publications to existing routes on reload and needs a restart for new or renamed slugs, token or environment changes; that a manual static build requires a fresh build and the operator's own deployment; and that Compose serves content after a succeeded covering build, keeps the previous release on failure, may serve a release moments before Builds records success, and sends revalidating cache headers. They SHALL direct operators to Builds for build state and SHALL NOT claim dev, manual or provider deployment success from CMS publication state. The entry README SHALL distinguish draft save, publication and deployment and link to these guides.
 
 #### Scenario: Operator publishes in each mode
-- **WHEN** an operator follows the guide after publishing a change
+- **WHEN** an operator follows the applicable scenario guide after publishing a change
 - **THEN** the documented next action for dev, manual static and Compose produces the observed visible result without an unnecessary restart or rebuild
 
 ### Requirement: Existing Astro sites connect through a verified guide
@@ -135,7 +135,7 @@ Generated projects SHALL include a guide for connecting an existing Astro site t
 - **THEN** the existing-site fixture build test fails
 
 ### Requirement: Guides describe the project's site mode
-The generated README and operations guide SHALL state the project's site mode and path. For existing-site mode they SHALL give the sequence: install the Lace site packages in the site, run `pnpm exec lace add block --all --site <path>` from the CMS directory, create the loader file and routes per `docs/lace-astro-site.md`, and build with the root `dev`/`build` scripts or the Compose builder selecting that site; they SHALL state that the generator did not modify the site. For no-site mode they SHALL state that no site is built, that build requests fail until a site is configured, and how to connect a site later with the existing-site guide and build-site settings. Starter-mode guidance SHALL remain as before.
+The generated README, scenario guides and operations guide SHALL state the project's site mode and path. For existing-site mode the README SHALL name the site path, the block-install command and the connection guide, and the development guide and operations guide SHALL give the sequence: install the Lace site packages in the site, run `pnpm exec lace add block --all --site <path>` from the CMS directory, create the loader file and routes per `docs/lace-astro-site.md`, and build with the root `dev`/`build` scripts or the Compose builder selecting that site; they SHALL state that the generator did not modify the site. For no-site mode they SHALL state that no site is built, that build requests fail until a site is configured, and how to connect a site later with the existing-site guide and build-site settings, without instructing absent site scripts. Starter-mode guidance SHALL name the generated `site/` sources.
 
 #### Scenario: Existing-site README
 - **WHEN** a project is generated with `--existing-site ..`
@@ -174,3 +174,49 @@ The guide SHALL NOT describe CMS Worker onboarding or its doctor path as future 
 #### Scenario: Deploy hook never fires a direct-upload workflow
 - **WHEN** an operator reads how publication rebuilds the site
 - **THEN** the guide states that the hook requires a Git-connected Pages project or an equivalent provider hook and that the manual workflow must be run explicitly otherwise
+
+### Requirement: Cloudflare onboarding makes credential choices explicit
+Generated Cloudflare guidance and repository handoff SHALL document a single sufficiently scoped token or a D1-scoped Lace token plus Wrangler OAuth. The split choice SHALL store remote credentials in `.lace/cloudflare-operator.env` loaded explicitly through the CLI option, never in `.env` or `.env.local`; the guide SHALL give protected-file creation and ignore instructions without usable credentials. A single token SHALL be supplied explicitly for the intended Wrangler invocation rather than recommended for implicit root dotenv storage. Permission tables SHALL distinguish D1 operations, Workers deploy/secrets, resource provisioning, Pages and optional KV/routes. LACE_AUTH_SECRET SHALL be described as the CMS authentication secret (local Worker variables versus uploaded Worker secret), not a Cloudflare management credential; operator, OAuth, build/setup and Pages tracking credentials SHALL have distinct purposes.
+
+Before remote commands the guide SHALL run preflight with the explicit target/account/database and chosen Wrangler authentication mode. Before deployment/secrets it SHALL require separate project-pinned `wrangler whoami` and permission review; preflight SHALL not be presented as proof of write access. The split-choice recovery SHALL remove API-token assignments from both implicit root dotenv files and clear inherited token variables, then recheck, so the next command cannot reload the token. Upgrade guidance for alpha.2 SHALL retain private/user files and explain manual migration, one-time login and repeat preflight, without automatic remote action.
+
+#### Scenario: Login followed by D1-only token
+- **WHEN** an operator follows OAuth login, private D1 token configuration and remote migration/sync
+- **THEN** subsequent Wrangler deploy/secret instructions use OAuth after checking shell and both implicit dotenv locations, without leaking the D1 token into their environment
+
+#### Scenario: Legacy token survives in dotenv-local
+- **WHEN** an alpha.2 project removes the shell token but still stores it in `.env.local`
+- **THEN** the guide and preflight identify the remaining source and require removal before claiming the split credential choice is ready
+
+#### Scenario: Single-token operation
+- **WHEN** the operator chooses one token for both tools
+- **THEN** the guide identifies every required operation scope and explicit loading, distinguishing read-only preflight evidence from write permission review
+
+### Requirement: Scenario guides document complete distinct operator journeys
+Generated projects SHALL deliver separate managed Compose development and Compose production guides, and a managed Cloudflare guide when generated with `--cloudflare`. Each SHALL identify its working directory, prerequisites, ordered commands, one-time versus repeat actions, expected result, next step and failure recovery. Guides SHALL render the selected starter/existing/none mode, preserving explicit migration/sync/bootstrap and existing-site integration requirements; no-site projects SHALL NOT be instructed to run absent site scripts. References SHALL cover setup tokens and private input, model/route/block extension, build-site selection, doctor limits, backup and persistent-data-preserving stops. Each scenario SHALL be followable without reading another scenario's lifecycle first; shared detail SHALL be linked to existing references.
+
+The development guide SHALL cover environment preparation before environment-loaded commands, setup doctor, migration/sync/bootstrap with stopped database users, browser setup/login/build-token issuance, publication, editable Astro and static builds when applicable, and restart/repeat operation. Production SHALL cover compatible images, reviewed public origins and service secrets, explicit initialization, build token and source/lockfile prerequisites, dispatcher/builder/static serving, prior-release preservation on failure, repeat maintenance and recovery. The host/Compose SQLite access rule SHALL precede every relevant command sequence and not be labelled fixed by 33A–33F.
+
+The Cloudflare guide SHALL cover account-free local Worker preparation, local persistence, stopped-Worker operator commands, browser setup, doctor and site build, followed by explicit real-account provisioning, credential/preflight choices delivered by 33F, Worker secrets, remote migration/sync/bootstrap/deploy, and separate static-site deployment. Local and remote data SHALL be labelled independent; Wrangler OAuth, the operator API token, LACE_AUTH_SECRET, setup/build tokens and Pages tracking token SHALL have separate purposes and locations. The guide SHALL use the settled 33F credential loading contract and SHALL NOT recommend storing the D1-only operator token in files Wrangler loads implicitly.
+
+Guides SHALL describe delivered ordered blocks, weak/strong export ETags, sanitized builder source failures, retries preserving publication and prior output, untracked hook `accepted` versus deployment proof, and tracked Pages terminal outcomes. Remaining workarounds SHALL be labelled and real-account verification SHALL remain a release gate rather than a local-test claim.
+
+#### Scenario: Compose development from an empty consumer
+- **WHEN** an operator follows only the development guide and its linked detail references
+- **THEN** documented commands complete preparation, first-admin setup, publication and an applicable site build without undocumented steps or overwritten credentials
+
+#### Scenario: Repeated host maintenance with a running Compose stack
+- **WHEN** an operator repeats migration, sync or bootstrap after starting Compose
+- **THEN** the relevant sequence first stops api and dispatcher, performs the explicit command and restarts services while retaining content
+
+#### Scenario: Production build fails
+- **WHEN** selected source is invalid or a site build fails
+- **THEN** production guidance identifies sanitized diagnostics and corrective retry, and explains that the prior release remains served
+
+#### Scenario: Local then remote Cloudflare
+- **WHEN** an operator follows the Cloudflare guide from local development to the real account section
+- **THEN** remote operations require explicit account/database selection and the delivered 33F credential preflight, do not copy local content automatically and keep Worker and static deployment separate
+
+#### Scenario: Existing-site or headless mode
+- **WHEN** a guide is generated for an existing site or no site
+- **THEN** it identifies the recorded external site path and connection prerequisites, or explains unavailable site builds without referring to missing starter scripts

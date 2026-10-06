@@ -258,12 +258,23 @@ still has the expected status and at least one reference, and
   `MEDIA_IN_USE`
 
 ### Requirement: Node build claims and outcomes are atomic
-The Node SQLite adapter SHALL claim site-build work and create or recover its build row in one transaction. It SHALL preserve the target version captured at claim, use lease-guarded transitions, and atomically record retry or terminal outcome with the event. A new publication after claim SHALL enqueue separate unclaimed work.
+The Node SQLite adapter SHALL claim site-build work and create or recover its build row as `running` in one transaction. Recovery SHALL be a guarded update that succeeds only from `pending` or `running` and keeps the original start time; an unprocessed event whose build row is already terminal SHALL be completed without dispatch. It SHALL preserve the target version captured at claim, use lease- and status-guarded transitions from `running`, and atomically record retry, terminal, accepted, tracked, or succeeded outcome with the event. Tracked completion SHALL require the same provider ID, a `running` row, and a completed event. A new publication after claim SHALL enqueue separate unclaimed work.
 
 #### Scenario: Two workers race to claim a build
 - **WHEN** two Node workers concurrently claim one available build event
-- **THEN** only one holds the lease and exactly one build row is created for that event
+- **THEN** only one holds the lease and exactly one `running` build row is created for that event
 
 #### Scenario: Old worker completes after reclaim
 - **WHEN** an expired build lease is reclaimed and its former worker reports success
 - **THEN** the former worker changes neither the recovered event nor its build row
+
+#### Scenario: Claimed row is not running
+- **WHEN** a claimed lease records an outcome for a row that is no longer `running`
+- **THEN** the transaction is rejected and neither the event nor the build changes
+
+### Requirement: Node tracking checks use guarded leases
+The Node SQLite adapter SHALL implement tracking check claims, check records, and stage-aware tracked completion with the same guards, ordering, lease, and results as the D1 adapter, inside transactions, so the shared repository contract proves parity.
+
+#### Scenario: Lease expiry makes a check due again
+- **WHEN** a claimed tracking check is not recorded before its lease expires
+- **THEN** a later claim returns the same build with its unchanged provider ID and tracking start

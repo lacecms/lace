@@ -194,7 +194,11 @@ Git: its deploy hook, stored as the Worker secret `LACE_DEPLOY_HOOK_URL`, is the
 site build trigger, and Pages builds the site with the Worker origin and a
 read-only build token. The generated manual workflow (direct upload) is the
 alternative without hook-driven rebuilds. A hook accepted by the provider is
-recorded as a running build, not as a confirmed deployment. The real-account
+recorded as an `accepted` build, not as a confirmed deployment (see §9.8). With
+optional Pages tracking settings (`LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME`
+and the separate Pages-Read-only Worker secret `LACE_PAGES_API_TOKEN`) the
+scheduled Worker instead tracks the exact deployment until a proven outcome or
+the tracking deadline. The real-account
 procedure for the release gate is `docs/cloudflare-deployment-handoff.md`.
 
 ### VPS deployment
@@ -886,10 +890,58 @@ site_builds
 ├── requested_at        INTEGER NOT NULL
 ├── started_at          INTEGER
 ├── completed_at        INTEGER
-└── error               TEXT
+├── error               TEXT
+├── provider_stage      TEXT
+├── provider_checked_at INTEGER
+└── provider_check_after INTEGER
 ```
 
-`site_builds.status` is one of `pending`, `running`, `succeeded`, or `failed`.
+`site_builds.status` is one closed enum. `succeeded` requires proof that the
+site was published:
+
+| Status | Meaning | Terminal |
+| --- | --- | :---: |
+| `pending` | Queued: debounce, waiting for a retry, not yet claimed | no |
+| `running` | Lace is executing the build (VPS builder, hook call) or tracking an accepted provider deployment | no |
+| `accepted` | The provider accepted the request; its outcome is not tracked | yes |
+| `succeeded` | Publication proven: the VPS release switched, or the tracked provider deploy stage succeeded | yes |
+| `failed` | Proven failure: attempts exhausted, builder failure, provider build or deploy failure | yes |
+| `cancelled` | The provider cancelled or skipped the deployment | yes |
+| `unknown` | Tracking stopped without proof: deadline, missing deployment, or no read permission | yes |
+
+Transitions: `pending → running` when a dispatcher claims the build, on every
+runtime; `running → running` when an expired lease is reclaimed (guarded, start
+time kept, so no row is orphaned); `running → pending` with a safe error for a
+retryable failure; `running → succeeded/failed` for the VPS builder;
+`running → accepted` for a provider acceptance that is not tracked (a hook
+response without an ID never becomes `succeeded`). A tracked provider
+deployment stays `running` with its `provider_build_id` after its outbox event
+is completed and ends in `succeeded`, `failed`, `cancelled`, or `unknown` only
+through a completion naming that build and provider ID. Terminal rows are never
+reopened, so a late provider result does not change `unknown`. Administrator
+retry is accepted from `failed`, `cancelled`, `unknown`, and `accepted` and
+creates a new request. The site's current version is the highest
+`target_version` among `succeeded` builds. The nullable `provider_*` fields hold
+the tracked deployment's stage, last check, and next due check; they are
+internal tracking state, never provider responses or credentials.
+
+Provider tracking (Cloudflare Pages, optional): the tracking start is the
+completion time of the build's outbox event, so processed events of `running`
+builds must be kept. Each scheduled run claims at most 5 due tracked rows
+through a 60-second check lease on `provider_check_after` (guarded by build ID,
+provider ID, `running`, and the selected value), reads exactly the stored
+deployment, and records the closed stage (`queued`, `initialize`, `clone_repo`,
+`build`, `deploy`) and last successful check. Only a successful `deploy` stage is
+`succeeded`; build/deploy failure is `failed` (`provider_build_failed`,
+`provider_deploy_failed`); cancel or skip is `cancelled` (`provider_cancelled`,
+`provider_skipped`); missing permission, a deployment still missing after a
+5-minute grace, other rejections, removed tracking settings, or the overall
+deadline (default 60 minutes, configurable 5–1440) are `unknown`
+(`tracking_forbidden`, `tracking_not_found`, `tracking_rejected`,
+`tracking_unconfigured`, `tracking_timeout`). Transient provider errors back off
+from 30 seconds to 10 minutes, never past the deadline, and never consume the
+outbox retry budget. Progress is polled every 30 seconds.
+
 The optional snapshot ID identifies the publication that initiated a request;
 `target_version` is authoritative when requests are coalesced.
 
@@ -1625,6 +1677,7 @@ Implementations:
 | Cache | Workers KV | in-memory or no-op initially |
 | API runtime | Cloudflare Worker | Hono Node server |
 | Build trigger | Cloudflare deploy hook | authenticated fixed-command builder |
+| Deployment tracking | optional Pages API reader (Pages Read token, Worker secret) | not needed (builder result is proof) |
 | Recovery dispatch | scheduled Worker | container timer/worker |
 
 R2 and MinIO use different concrete adapters even though both expose S3-compatible concepts. Cloudflare code should prefer the native R2 binding, while Node uses the S3 client against MinIO.
@@ -2133,9 +2186,9 @@ The implementation plan uses these resolved defaults:
   `ghcr.io/lacecms/builder`;
 - experimental package/image versions on npm channel `next` with an
   independent ownership template version: `0.1.0-alpha.1` (template `0.4.0`)
-  is published and immutable, and `0.1.0-alpha.2` (template `0.14.0`) is the
-  current candidate; `release/alpha.json` records the candidate and published
-  versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
+  and `0.1.0-alpha.2` (template `0.14.0`) are published and immutable, and
+  `0.1.0-alpha.3` (template `0.17.0`) is the current candidate;
+  `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
 
 The following choices are release and operations work, not blockers for the

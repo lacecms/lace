@@ -1,3 +1,4 @@
+import { normalizeBuildFailure, type SiteBuildFailureReason } from "./diagnostics.js";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
@@ -15,7 +16,7 @@ import {
 } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 
-import { copySource, disjointRoots, type SourceSelection } from "./source.js";
+import { copySource, disjointRoots, SourceError, type SourceSelection } from "./source.js";
 
 export interface BuildRequest {
   readonly buildId: string;
@@ -26,7 +27,8 @@ export type BuildResult =
   | Readonly<{ readonly status: "succeeded" }>
   | Readonly<{
       readonly status: "failed";
-      readonly reason: "source_invalid" | "install_failed" | "build_failed" | "version_changed";
+      readonly reason: SiteBuildFailureReason;
+      readonly path?: string;
     }>;
 
 export interface BuilderSettings extends SourceSelection {
@@ -157,7 +159,8 @@ export class FixedCommandBuilder {
       const project = join(workDirectory, "project");
       try {
         await copySource(sourceRoot, project, this.settings);
-      } catch {
+      } catch (error) {
+        if (error instanceof SourceError) throw error;
         throw new StageError("source_invalid");
       }
       if (
@@ -267,7 +270,14 @@ export class FixedCommandBuilder {
     } catch (error) {
       return {
         status: "failed",
-        reason: error instanceof StageError ? error.stage : "build_failed",
+        ...normalizeBuildFailure(
+          error instanceof SourceError
+            ? error.reason
+            : error instanceof StageError
+              ? error.stage
+              : "build_failed",
+          error instanceof SourceError ? error.path : undefined,
+        ),
       };
     } finally {
       if (workDirectory !== undefined) {

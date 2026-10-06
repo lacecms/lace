@@ -37,25 +37,15 @@ containing no provider deployment ID.
   `trigger_unavailable` failure
 
 ### Requirement: Deploy-hook responses map onto the build lifecycle
-A 2xx response SHALL be treated as acceptance by the provider. When its JSON
-body is a Cloudflare API envelope with `success` not equal to `false` and a
-`result.id` of 1–200 characters from letters, digits, `.`, `_`, `:`, and `-`,
-the build SHALL be recorded as accepted and running with that provider
-deployment ID. A 2xx response without such an ID SHALL be recorded as a
-synchronous dispatch success. A 2xx envelope with `success: false`, and any
-non-2xx response other than `408`, `425`, `429`, or `5xx`, SHALL be a
-`provider_failed` failure. Those four throttling or server statuses, network
-errors, and timeouts SHALL be `trigger_unavailable` failures. Failures SHALL use
-the existing retry policy and SHALL never record provider response text.
+A 2xx response SHALL be treated as acceptance by the provider, never as proof of publication. When its JSON body is a Cloudflare API envelope with `success` not equal to `false` and a `result.id` of 1–200 characters from letters, digits, `.`, `_`, `:`, and `-`, the acceptance SHALL carry that provider deployment ID. Without deployment tracking, every accepted hook call SHALL be recorded as terminal `accepted`, with the provider ID when one was returned. A 2xx response without such an ID SHALL also be `accepted` and SHALL NOT be recorded as `succeeded`. A 2xx envelope with `success: false`, and any non-2xx response other than `408`, `425`, `429`, or `5xx`, SHALL be a `provider_failed` failure. Those four throttling or server statuses, network errors, and timeouts SHALL be `trigger_unavailable` failures. Failures SHALL use the existing retry policy and SHALL never record provider response text.
 
 #### Scenario: Cloudflare returns a deployment ID
-- **WHEN** the hook returns `200` with `{"success":true,"result":{"id":"dep-1"}}`
-- **THEN** the build becomes running with provider ID `dep-1` and its event is
-  not claimed again
+- **WHEN** the hook returns `200` with `{"success":true,"result":{"id":"dep-1"}}` and no tracking is configured
+- **THEN** the build becomes `accepted` with provider ID `dep-1` and its event is not claimed again
 
 #### Scenario: Hook accepts without an ID
 - **WHEN** the hook returns a 2xx response whose body has no valid deployment ID
-- **THEN** the build becomes succeeded
+- **THEN** the build becomes `accepted` without a provider ID and never `succeeded`
 
 #### Scenario: Hook is throttled or down
 - **WHEN** the hook returns `429` or `503`, or the network call fails
@@ -65,3 +55,14 @@ the existing retry policy and SHALL never record provider response text.
 #### Scenario: Hook is revoked
 - **WHEN** the hook returns `404` or an envelope with `success: false`
 - **THEN** the attempt is recorded with sanitized reason `provider_failed`
+
+### Requirement: Identified acceptance is tracked when Pages tracking is configured
+When Pages deployment tracking is configured, a deploy-hook acceptance carrying a valid provider deployment ID SHALL be returned as the tracked outcome, so the build stays `running` with that ID and its outbox event completes. An acceptance without a valid ID SHALL remain terminal `accepted` without a provider ID, and failure mappings SHALL be unchanged.
+
+#### Scenario: Tracked hook acceptance
+- **WHEN** tracking is configured and the hook returns `{"success":true,"result":{"id":"dep-1"}}`
+- **THEN** the build stays `running` with provider ID `dep-1`, its event is completed, and it becomes due for a tracking check
+
+#### Scenario: Tracked installation, hook without ID
+- **WHEN** tracking is configured and the hook returns 2xx without a valid ID
+- **THEN** the build becomes `accepted` without a provider ID and is never polled

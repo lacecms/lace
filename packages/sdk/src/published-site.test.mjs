@@ -400,3 +400,27 @@ test("rejects an entry without a published snapshot", async () => {
   expect(error.code).toBe("invalid_export");
   expect(error.message).toContain("draft-only");
 });
+
+test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {
+  const conditions = [];
+  const responses = [
+    exportResponse(buildExport(7, [])),
+    notModified('W/"7"'),
+    exportResponse(buildExport(8, []), '"bad"'),
+    exportResponse(buildExport(8, []), 'W/"8"'),
+  ];
+  const getSite = createPublishedSiteLoader({
+    baseUrl: "https://cms.example",
+    token: "build-secret",
+    revalidate: true,
+    fetch: async (_url, init) => {
+      conditions.push(new Headers(init.headers).get("if-none-match"));
+      return responses.shift();
+    },
+  });
+  const first = await getSite();
+  expect(await getSite()).toBe(first);
+  await expect(getSite()).rejects.toBeInstanceOf(LaceContractError);
+  expect((await getSite()).version).toBe(8);
+  expect(conditions).toEqual([null, '"7"', 'W/"7"', 'W/"7"']);
+});

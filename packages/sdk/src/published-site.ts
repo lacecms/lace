@@ -292,6 +292,7 @@ export function createPublishedSiteLoader(
         if (result.changed) current = { etag: result.etag, site: result.site };
         if (current === undefined)
           failure("invalid_export", "The Lace API returned 304 without a prior build export.");
+        current = { etag: result.etag, site: current.site };
         return current.site;
       })
       .finally(() => {

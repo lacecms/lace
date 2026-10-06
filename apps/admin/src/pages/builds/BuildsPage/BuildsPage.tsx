@@ -1,5 +1,11 @@
 import { CurrentBuildSite } from "../../../widgets/current-build-site/index.js";
+import {
+  BuildStatusBadge,
+  isRetryableBuildStatus,
+  isTerminalBuildStatus,
+} from "../../../entities/site-build/index.js";
 import { publicationVisibilityModes } from "../../../features/publish-entry/index.js";
+import type { SiteBuildRecordDto } from "@lacecms/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Hammer, RotateCw } from "lucide-react";
 import { useState } from "react";
@@ -11,7 +17,6 @@ import {
   useAdminClient,
 } from "../../../shared/api/index.js";
 import { formatAbsoluteTime, formatRelativeTime } from "../../../shared/lib/index.js";
-import { Badge } from "../../../shared/ui/Badge/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { EmptyState } from "../../../shared/ui/EmptyState/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
@@ -25,7 +30,15 @@ import {
   TableHeader,
   TableRow,
 } from "../../../shared/ui/Table/index.js";
-import type { SiteBuildRecordDto } from "@lacecms/contracts";
+import { buildFailureGuidance } from "./build-failure.js";
+
+const providerStageLabels: Record<NonNullable<SiteBuildRecordDto["providerStage"]>, string> = {
+  queued: "Queued",
+  initialize: "Initializing",
+  clone_repo: "Cloning repository",
+  build: "Build",
+  deploy: "Deploy",
+};
 
 function BuildTime({ value }: { readonly value: string | undefined }) {
   return value === undefined ? (
@@ -35,18 +48,6 @@ function BuildTime({ value }: { readonly value: string | undefined }) {
       {formatRelativeTime(value)}
     </time>
   );
-}
-
-function BuildStatus({ status }: { readonly status: SiteBuildRecordDto["status"] }) {
-  const variant =
-    status === "failed"
-      ? "destructive"
-      : status === "succeeded"
-        ? "success"
-        : status === "running"
-          ? "warning"
-          : "secondary";
-  return <Badge variant={variant}>{status[0]!.toUpperCase() + status.slice(1)}</Badge>;
 }
 
 /** Verified mode guidance; the CMS cannot tell which mode serves the site. */
@@ -65,8 +66,9 @@ function PublicationVisibility() {
         ))}
       </dl>
       <p className="m-0 text-sm text-muted-foreground">
-        A self-hosted build stays pending while it runs. One build can cover several publications. A
-        recorded build does not confirm Astro dev or a manual deployment.
+        A self-hosted build is running while the builder works and succeeds once its release is
+        served. Accepted means only that a provider took the request. One build can cover several
+        publications. A recorded build does not confirm Astro dev or a manual deployment.
       </p>
     </section>
   );
@@ -89,6 +91,11 @@ export function BuildsPage() {
     queryKey: adminQueryKeys.buildDetail(selectedId ?? ""),
     queryFn: () => client.getBuild(selectedId!),
     enabled: selectedId !== null,
+    // A tracked provider deployment changes stage and status without user action.
+    refetchInterval: (query) =>
+      query.state.data === undefined || isTerminalBuildStatus(query.state.data.status)
+        ? false
+        : 5_000,
   });
   useSessionRecovery(history.error ?? detail.error ?? actionError);
   const isAdmin = session.role === "admin";
@@ -115,7 +122,7 @@ export function BuildsPage() {
         <div className="grid gap-1">
           <h1 id="builds-title">Builds</h1>
           <p className="m-0 text-muted-foreground">
-            Track static site releases and recover failed builds.
+            Track static site releases and retry builds that did not publish.
           </p>
         </div>
         {isAdmin ? (
@@ -174,7 +181,7 @@ export function BuildsPage() {
                     data-state={selectedId === build.id ? "selected" : undefined}
                   >
                     <TableCell>
-                      <BuildStatus status={build.status} />
+                      <BuildStatusBadge status={build.status} />
                     </TableCell>
                     <TableCell>v{build.targetVersion}</TableCell>
                     <TableCell className="capitalize">
@@ -219,9 +226,11 @@ export function BuildsPage() {
               {detail.data === undefined ? undefined : (
                 <>
                   <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm [&_dt]:text-muted-foreground">
+                    <dt>Build ID</dt>
+                    <dd className="m-0 break-all">{detail.data.id}</dd>
                     <dt>Status</dt>
                     <dd className="m-0">
-                      <BuildStatus status={detail.data.status} />
+                      <BuildStatusBadge status={detail.data.status} />
                     </dd>
                     <dt>Target version</dt>
                     <dd className="m-0">{detail.data.targetVersion}</dd>
@@ -243,16 +252,47 @@ export function BuildsPage() {
                     </dd>
                     <dt>Provider ID</dt>
                     <dd className="m-0 break-all">{detail.data.providerBuildId ?? "—"}</dd>
+                    {detail.data.providerStage === undefined ? undefined : (
+                      <>
+                        <dt>Provider stage</dt>
+                        <dd className="m-0">{providerStageLabels[detail.data.providerStage]}</dd>
+                      </>
+                    )}
+                    {detail.data.providerCheckedAt === undefined ? undefined : (
+                      <>
+                        <dt>Last checked</dt>
+                        <dd className="m-0">
+                          <BuildTime value={detail.data.providerCheckedAt} />
+                        </dd>
+                      </>
+                    )}
                   </dl>
                   {detail.data.error === undefined ? undefined : (
-                    <p
-                      className="m-0 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
-                      role="alert"
+                    <div
+                      className={
+                        detail.data.status === "cancelled" || detail.data.status === "unknown"
+                          ? "grid gap-2 rounded-md border bg-muted p-3 text-sm"
+                          : "grid gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                      }
+                      role={
+                        detail.data.status === "cancelled" || detail.data.status === "unknown"
+                          ? "status"
+                          : "alert"
+                      }
                     >
-                      {detail.data.error.replaceAll("_", " ")}
-                    </p>
+                      <p className="m-0">{buildFailureGuidance[detail.data.error].explanation}</p>
+                      {detail.data.errorPath === undefined ? undefined : (
+                        <p className="m-0 break-all">
+                          Source entry: <code>{detail.data.errorPath}</code>
+                        </p>
+                      )}
+                      <p className="m-0">{buildFailureGuidance[detail.data.error].correction}</p>
+                      {detail.data.status === "pending" ? (
+                        <p className="m-0">An automatic retry is scheduled.</p>
+                      ) : undefined}
+                    </div>
                   )}
-                  {isAdmin && detail.data.status === "failed" ? (
+                  {isAdmin && isRetryableBuildStatus(detail.data.status) ? (
                     <Button
                       disabled={action !== null}
                       onClick={() => void send("retry", detail.data.id)}

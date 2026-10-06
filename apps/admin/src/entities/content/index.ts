@@ -18,6 +18,7 @@ export {
   entryStatus,
   fieldLabel,
   localDraftJson,
+  orderedDraftBlocks,
   resolvedPublicPath,
 } from "./draft.js";
 export {

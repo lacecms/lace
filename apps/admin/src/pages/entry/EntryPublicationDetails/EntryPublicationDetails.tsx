@@ -12,6 +12,7 @@ import {
   resolvedPublicPath,
 } from "../../../entities/content/index.js";
 import { useSessionRecovery } from "../../../entities/session/index.js";
+import { BuildStatusInfo } from "../../../entities/site-build/index.js";
 import {
   buildDispatchDescription,
   coveringBuildState,
@@ -63,17 +64,22 @@ function QueuedBuild({ targetVersion }: { readonly targetVersion: number }) {
   });
   const site = useQuery({ queryKey: adminQueryKeys.buildSite, queryFn: client.loadBuildSite });
   useSessionRecovery(history.error ?? site.error);
+  const state =
+    history.data === undefined ? undefined : coveringBuildState(history.data.items, targetVersion);
   const description =
-    history.data === undefined
+    state === undefined
       ? buildDispatchDescription("queued")
-      : publicationBuildDescription(
-          coveringBuildState(history.data.items, targetVersion),
-          targetVersion,
-          site.data?.site?.label,
-        );
+      : publicationBuildDescription(state, targetVersion, site.data?.site?.label);
   return (
     <>
-      <span role="status">{description}</span> <ViewBuilds />
+      <span role="status">{description}</span>
+      {state === undefined || state === "waiting" ? undefined : (
+        <>
+          {" "}
+          <BuildStatusInfo status={state} />
+        </>
+      )}{" "}
+      <ViewBuilds />
     </>
   );
 }

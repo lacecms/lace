@@ -21,7 +21,7 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 
 Сейчас `@lacecms/*` имеют `private: true` и версию `0.0.0`; шаблоны не дают готовых опубликованных координат API/builder images. Поэтому команду `pnpm create lace@latest` пока нельзя считать обеспеченным способом установки нашей текущей реализации. Рабочий обход — локальная сборка и tarballs, как в generated-project acceptance.
 
-Нужны Node `>=24.12.0 <25`, pnpm `12.3.4`, а для VPS — Docker Compose. Каталог назначения должен быть новым либо содержать только `.git`, `README.md`, `LICENSE`.
+Нужны Node `>=24.12.0` и pnpm `>=12` (минимумы; проверено на Node `24.12.0` и pnpm `12.3.4`), а для VPS — Docker Compose. Каталог назначения должен быть новым либо содержать только `.git`, `README.md`, `LICENSE`.
 
 Из репозитория Lace:
 
@@ -554,7 +554,7 @@ pnpm exec wrangler secret put LACE_DEPLOY_HOOK_URL --config wrangler.worker.json
 
 После Publish Worker ставит build event в outbox и отправляет POST hook; cron раз в минуту восстанавливает необработанные события. Pages собирает сайт с опубликованным export. При смене CSS/Astro Git integration также может собирать по commit.
 
-**Ограничение статуса:** Lace сейчас не опрашивает Cloudflare после принятия hook. С provider ID запись может остаться `running`; без ID `succeeded` означает принятие trigger, а не доказанный успешный HTML deployment. Финальный результат проверяй в Pages dashboard.
+**Ограничение статуса:** Lace сейчас не опрашивает Cloudflare после принятия hook. Принятый hook (с provider ID или без него) записывается как `accepted`: это только подтверждение, что провайдер принял запрос, а не доказанный успешный HTML deployment. `succeeded` означает доказанную публикацию. Финальный результат проверяй в Pages dashboard; если deployment не удался, повтори сборку через Retry в Admin.
 
 HTML статический, но картинки в данном примере загружаются с public media endpoint CMS, который читает R2/MinIO. Для полностью независимого от CMS набора HTML+картинки нужен отдельный build pipeline копирования media в static output; сейчас автоматически его нет.
 

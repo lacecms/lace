@@ -185,12 +185,27 @@ or raw infrastructure errors.
   reporting a successful completion
 
 ### Requirement: Build commands and trigger outcomes remain portable
-The application SHALL expose actor-checked build request/retry commands and portable ports for claiming build work, recording trigger outcomes, and completing asynchronously accepted builds. Trigger outcomes SHALL distinguish accepted with provider ID, synchronously succeeded, and failed without exposing HTTP or database row types. Publication result and durable build-dispatch status SHALL remain independent.
+The application SHALL expose actor-checked build request/retry commands and portable ports for claiming build work, recording trigger outcomes, and completing tracked provider deployments. Trigger outcomes SHALL distinguish proven synchronous success, untracked provider acceptance with an optional provider ID, tracked provider acceptance with a required provider ID, and failure, without exposing HTTP or database row types. Only proven success SHALL map to `succeeded`; untracked acceptance SHALL map to `accepted`; tracked acceptance SHALL keep the build `running`. The tracked completion port SHALL accept only `succeeded`, `failed`, `cancelled`, or `unknown`. Publication result and durable build-dispatch status SHALL remain independent.
 
 #### Scenario: Publication trigger is unavailable
 - **WHEN** publication commits and subsequent site-build triggering is unavailable
 - **THEN** publication remains successful and its durable build event remains recoverable
 
 #### Scenario: Runtime reports a synchronous trigger result
-- **WHEN** a runtime trigger returns synchronous success
+- **WHEN** a runtime trigger returns proven synchronous success
 - **THEN** the application can persist a succeeded build without requiring a provider ID
+
+#### Scenario: Runtime reports untracked acceptance
+- **WHEN** a runtime trigger returns acceptance without tracking, with or without a provider ID
+- **THEN** the application persists an `accepted` build and never a `succeeded` one
+
+### Requirement: Provider deployment tracking is portable
+The application SHALL provide a provider deployment reader port returning only closed observations (in-progress stage; `succeeded`, `failed`, or `cancelled` outcome with stage and optional closed reason; forbidden; not found; rejected; transient) and a site-build tracker that claims due tracked builds, reads each exact deployment, and records progress, backoff, or a terminal outcome through the dispatch port, enforcing the overall deadline and not-found grace. The dispatch port SHALL offer guarded check claims with a lease, guarded check records, and stage-aware tracked completion. The tracker SHALL check builds sequentially, isolate a failure or completion conflict to the affected build, and SHALL treat a thrown reader error as transient. Without a reader every due tracked build SHALL be completed as `unknown` with `tracking_unconfigured`.
+
+#### Scenario: Reader throws
+- **WHEN** the reader throws for one of two due builds
+- **THEN** that build is rescheduled with backoff and the other build is still checked
+
+#### Scenario: Completion conflict
+- **WHEN** a completion is rejected because another run already completed the build differently
+- **THEN** the tracker logs a closed `tracking_conflict` reason and continues with the next build

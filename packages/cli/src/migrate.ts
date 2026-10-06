@@ -65,6 +65,8 @@ export interface MigrateInput {
   readonly wranglerConfig?: string | undefined;
   readonly d1?: D1Database | undefined;
   readonly run?: typeof spawnSync;
+  readonly accountId?: string | undefined;
+  readonly apiToken?: string | undefined;
 }
 
 export async function runMigration(input: MigrateInput): Promise<readonly string[]> {
@@ -97,7 +99,17 @@ export async function runMigration(input: MigrateInput): Promise<readonly string
   const result = runner(wrangler, args, {
     cwd: dirname(configPath),
     encoding: "utf8",
-    env: { ...process.env, CI: "true", WRANGLER_SEND_METRICS: "false" },
+    env: {
+      ...process.env,
+      CI: "true",
+      WRANGLER_SEND_METRICS: "false",
+      ...(input.target === "cloudflare-remote"
+        ? {
+            CLOUDFLARE_ACCOUNT_ID: input.accountId ?? process.env.CLOUDFLARE_ACCOUNT_ID,
+            CLOUDFLARE_API_TOKEN: input.apiToken ?? process.env.CLOUDFLARE_API_TOKEN,
+          }
+        : {}),
+    },
   });
   if (result.error) throw result.error;
   if (result.status !== 0)

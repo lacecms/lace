@@ -203,7 +203,7 @@ separate.
 
 Steps 0–25 are the completed baseline for this continuation. The owner's
 published-alpha trial in an independent Astro project is recorded in
-[`onboarding-feedback.md`](./onboarding-feedback.md). Steps 26–32 address that
+[`onboarding-feedback.md`](./archive/step-32/onboarding-feedback.md). Steps 26–32 address that
 feedback and the remaining Cloudflare consumer-installation gap before the
 former Step 26 release gate, now Step 34. Existing archived change names and
 historical session references retain their original meaning.
@@ -227,7 +227,7 @@ After `0.1.0-alpha.2` was published, the owner connected it to an existing Astro
 project, ran it in Docker Compose dev and production, and deployed the CMS
 Worker and the Pages-hosted static site to a real Cloudflare account. The
 defects and documentation gaps from that trial are recorded in
-[`lace-alpha-2-feedback.md`](./lace-alpha-2-feedback.md) (§1–§6 plus a
+[`lace-alpha-2-feedback.md`](./archive/step-33/lace-alpha-2-feedback.md) (§1–§6 plus a
 cross-cutting diagnostics requirement). Step 33 fixes them and prepares the
 next compatible alpha; the release gate moves to Step 34. That trial is
 early field evidence, not Step 34 deployment acceptance: the gate still runs
@@ -2239,7 +2239,7 @@ build), styling hooks, public media bytes and operator block edits across a
 rerun and a simulated update. The Cloudflare consumer journey follows, then the
 packed CLI upgrades the published template `0.4.0` default and Cloudflare
 projects (`tests/fixtures/template-0.4.0/`): a modified managed file is refused,
-user README/config/site bytes are preserved. `docs/onboarding-feedback-acceptance.md`
+user README/config/site bytes are preserved. `docs/archive/step-32/onboarding-feedback-acceptance.md`
 maps §1–§12 to evidence, guarded by a test (§11 deferred, no open defects).
 
 ### Session 32B — Coherent artifact refresh and verification
@@ -2293,7 +2293,7 @@ an existing Astro project, Docker Compose dev/production, and a real Cloudflare
 account are fixed and diagnosable, each supported scenario has its own guide,
 and a coherent next alpha candidate carries the fixes.
 
-**Basis:** [`lace-alpha-2-feedback.md`](./lace-alpha-2-feedback.md) §1–§6 and
+**Basis:** [`lace-alpha-2-feedback.md`](./archive/step-33/lace-alpha-2-feedback.md) §1–§6 and
 its general diagnostics requirement. Depends on Step 32 and the published
 `0.1.0-alpha.2`. Preserves the fixed-command builder, single-site, atomic
 release, server-only build credential, and protected user-source invariants.
@@ -2305,6 +2305,11 @@ contents, deploy-hook URLs, raw subprocess output, or full provider responses;
 complete subprocess logs in the admin are not required.
 
 ### Session 33A — Block order on draft save
+
+Completed 2026-10-05. Save and recovery JSON derive sparse positions from the
+displayed order; safe ordering diagnostics preserve unsaved work. See
+[`step-33a-block-order-acceptance.md`](./archive/step-33/step-33a-block-order-acceptance.md) for
+the SQLite/D1, browser, export and Astro verification. Sessions 33C–33H remain.
 
 1. Guarantee that the saved block list satisfies the domain ordering invariant
    after pointer and keyboard reordering, insertion or duplication in the
@@ -2321,6 +2326,13 @@ complete subprocess logs in the admin are not required.
    Astro output keep the displayed order, plus an API negative test.
 
 ### Session 33B — Weak and strong build-export ETags
+
+Completed 2026-10-05. Shared contracts and SDK accept strong and weak numeric
+validators, both runtimes compare published versions, and standard loaders
+revalidate through compression with default fetch. See
+[`step-33b-build-export-etags-acceptance.md`](./archive/step-33/step-33b-build-export-etags-acceptance.md)
+for contract, SDK, SQLite/D1 and gzip-proxy verification. Real Pages build
+verification with default compression remains in 33H/34C.
 
 1. Accept strong `"N"` and weak `W/"N"` version-derived validators in the shared
    contract and keep rejecting arbitrary or malformed values. Define how the SDK
@@ -2354,6 +2366,14 @@ complete subprocess logs in the admin are not required.
    Each failure keeps the previous release, gives a concrete correction, and is
    retryable afterwards; verify with a packed Compose production consumer in
    existing-site layout.
+
+Session 33C completed on 2026-10-05 via
+`step-33c-builder-source-diagnostics`: exact root service-document exclusions,
+closed reason/safe-path diagnostics through builder, dispatch, SQLite/D1, REST
+and Builds, plus correction/retry guidance. Packed existing-site Compose
+acceptance verified all source fault cases, unchanged releases and successful
+browser retries; see [acceptance evidence](./archive/step-33/step-33c-builder-source-diagnostics-acceptance.md).
+Sessions 33D–33H remain.
 
 ### Session 33D — Truthful site-build outcome model
 
@@ -2401,6 +2421,16 @@ builds. Late provider results do not reopen `unknown`.
    migration), the dispatcher on both runtimes, and the admin with unit,
    Playwright, and axe checks for every status and its popover.
 
+Session 33D completed on 2026-10-06 via `step-33d-truthful-site-build-outcomes`:
+the seven-status enum, claim-time `running` with guarded reclaim, deploy-hook
+acceptance recorded as `accepted`, retry from every retryable terminal status,
+and migration `0003_site_build_outcomes` (tracking fields, D1-only
+reclassification of unproven hook outcomes). The application port already
+distinguishes a `tracking` trigger result and offers exact, idempotent
+`completeTrackedSiteBuild`; 33E adds the Pages adapter and poller on top of
+them. Builds, entry publication details, the tour and the generated operations
+guide share one status map with keyboard/touch popovers. Sessions 33E–33H remain.
+
 ### Session 33E — Cloudflare Pages deployment tracking
 
 1. Add optional Pages tracking to the scheduled Worker. With an account ID,
@@ -2425,6 +2455,18 @@ builds. Late provider results do not reopen `unknown`.
    recovery, and a hook without an ID. Decide in the proposal whether an
    authenticated CI callback for generic hooks is in scope or deferred.
 
+Session 33E completed on 2026-10-06 via `step-33e-pages-deployment-tracking`:
+optional Pages tracking (`LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME`, the
+Pages-Read-only secret `LACE_PAGES_API_TOKEN`) makes identified hook acceptances
+`tracking`; the scheduled Worker checks at most five due builds per run through
+a 60-second check lease in `site_builds`, maps the exact deployment's latest
+stage to `succeeded` (deploy success only), `failed`, `cancelled` or `unknown`
+with closed reasons, backs off transient errors from 30 s to 10 min, and ends
+every tracked build by an overall deadline (`LACE_PAGES_TRACKING_TIMEOUT_MINUTES`,
+default 60, 5–1440) or as `tracking_unconfigured` when tracking is removed.
+Builds shows the stage, last check and next action; no migration was needed.
+An authenticated CI callback for generic hooks is deferred. Sessions 33F–33H remain.
+
 ### Session 33F — Explicit Cloudflare CLI credentials
 
 1. Make the credential choice explicit in generated Cloudflare projects: either
@@ -2445,6 +2487,12 @@ builds. Late provider results do not reopen `unknown`.
    `.env.local`; documentation must not recommend a workaround that reloads the
    same token. Provide upgrade guidance for alpha.2 projects that already store
    the token in `.env`.
+
+33F delivered 2026-10-06: explicit private credentials, read-only credential
+preflight, template `0.15.0`, packed credential/Worker checks and ownership-safe
+0.14.0 upgrades. Evidence and the prerequisite contract for 33G are in
+`docs/archive/step-33/step-33f-verification.md`. Real-account OAuth/deploy remains
+unverified; no artifacts were published.
 
 ### Session 33G — Scenario guides and minimum-version policy
 
@@ -2470,6 +2518,13 @@ builds. Late provider results do not reopen `unknown`.
    existing site's root README is never rewritten, only offered links. Verify
    fresh generation, existing-site mode, and upgrade from template `0.14.0`.
 
+33G delivered 2026-10-06: a short generated README index, managed Compose
+development/production and Cloudflare scenario guides, minimum-only engines
+(Node `>=24.12.0`, pnpm `>=12`) with unchanged reproducibility pins, template
+`0.16.0` and ownership-safe 0.14.0 upgrades. Evidence is in
+`docs/archive/step-33/step-33g-verification.md`. Real-server and real-account
+runs remain unverified; no artifacts were published. Session 33H remains.
+
 ### Session 33H — Field-trial regressions and next alpha candidate
 
 1. Record `0.1.0-alpha.2` as published in `release/alpha.json`,
@@ -2484,9 +2539,24 @@ builds. Late provider results do not reopen `unknown`.
    command sequences (drift fails), and upgrade from alpha.2 template `0.14.0`.
 3. Map every alpha.2 feedback item to tests, documentation, or an explicit
    decision in an acceptance record guarded by a test, like
-   `onboarding-feedback-acceptance.md`. Real-account re-verification of §3–§5
+   `docs/archive/step-32/onboarding-feedback-acceptance.md`. Real-account re-verification of §3–§5
    is input to 34C rather than a local-test claim; registry publication remains
    a separate explicit act.
+
+33H delivered 2026-10-06: `0.1.0-alpha.2` recorded as published; candidate
+`0.1.0-alpha.3` with template `0.17.0` (upgrade instructions include the
+`0003_site_build_outcomes` database step) prepared from clean revision
+`5343121` for both platforms. `pnpm acceptance:release` passed on arm64 with
+the field-trial journeys (block order in the packed admin through the served
+release, weak ETags through a compressing proxy, builder source diagnostics on
+the loaded images, credential separation, Pages tracking against a stub,
+guide command contracts, 0.4.0/0.14.0 upgrades). The run found and fixed one
+guide defect: the production guide ran doctor's ready stage against the running
+WAL database. The feedback logs moved to `docs/archive/`; the guarded map is
+`docs/archive/step-33/alpha-2-feedback-acceptance.md`. Evidence:
+`docs/archive/step-33/step-33h-verification.md`. Nothing was published;
+publication and real-account/real-server re-verification are owner acts
+feeding 34C. Step 33 is complete.
 
 ### Acceptance
 

@@ -1,6 +1,17 @@
 import { canonicalizeJson, defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
-import { DomainError, unixMilliseconds } from "@lacecms/domain";
+import {
+  BlockOrderError,
+  DomainError,
+  unixMilliseconds,
+  siteBuildFailureReasons,
+  siteBuildProviderStages,
+  siteBuildStatuses,
+  sourceFailureReasons,
+  safeBuildSourcePath,
+  normalizeBuildFailure,
+  BUILD_SOURCE_PATH_PATTERN,
+} from "@lacecms/domain";
 import type {
   ContentBlock,
   ContentEntry,
@@ -8,7 +19,9 @@ import type {
   ContentModelRoute,
   ContentSnapshot,
   DomainErrorCode,
+  SiteBuildProviderStage,
   SiteBuildState,
+  SiteBuildStatus,
   UnixMilliseconds,
 } from "@lacecms/domain";
 import * as v from "valibot";
@@ -18,7 +31,7 @@ export const packageName = "@lacecms/contracts";
 const identifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(255));
 const nonNegativeIntegerSchema = v.pipe(v.number(), v.integer(), v.minValue(0));
 const utcTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
-const entityTagPattern = /^"[0-9]+"$/u;
+const entityTagPattern = /^(?:W\/)?"[0-9]+"$/u;
 const idempotencyKeyPattern = /^[\x21-\x7e]{1,255}$/u;
 const jsonPointerPattern = /^(?:\/(?:[^~/]|~[01])*)*$/u;
 
@@ -60,7 +73,12 @@ export const identifierSchemaPublic = identifierSchema;
 export const expectedRevisionSchema = nonNegativeIntegerSchema;
 export const opaqueCursorSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4_096));
 export const isoTimestampSchema = v.custom<string>(isUtcTimestamp);
-export const entityTagSchema = v.pipe(v.string(), v.regex(entityTagPattern));
+/** A single strong or weak validator encoding a safe published-state version. */
+export const entityTagSchema = v.pipe(
+  v.string(),
+  v.regex(entityTagPattern),
+  v.check((value) => Number.isSafeInteger(Number(value.replace(/^W\//u, "").slice(1, -1)))),
+);
 export const idempotencyKeySchema = v.pipe(v.string(), v.regex(idempotencyKeyPattern));
 export const jsonPointerSchema = v.pipe(v.string(), v.regex(jsonPointerPattern));
 
@@ -211,15 +229,17 @@ export function fromIsoTimestamp(value: string): UnixMilliseconds {
 /** Derives the build-export entity tag from the published-state version. */
 export function entityTagForVersion(version: number): EntityTag {
   const parsed = v.safeParse(nonNegativeIntegerSchema, version);
-  if (!parsed.success) throw new TypeError("An ETag version must be a non-negative integer.");
+  if (!parsed.success || !Number.isSafeInteger(version))
+    throw new TypeError("An ETag version must be a non-negative safe integer.");
   return `"${parsed.output}"` as EntityTag;
 }
 
 /** Parses the version encoded in a supported, version-derived entity tag. */
 export function versionFromEntityTag(value: string): number {
   const parsed = v.safeParse(entityTagSchema, value);
-  if (!parsed.success) throw new TypeError("An ETag must be a quoted non-negative integer.");
-  const version = Number(parsed.output.slice(1, -1));
+  if (!parsed.success)
+    throw new TypeError('An ETag must be "N" or W/"N" with a non-negative safe integer version.');
+  const version = Number(parsed.output.replace(/^W\//u, "").slice(1, -1));
   if (!Number.isSafeInteger(version))
     throw new TypeError("An ETag version must be a safe integer.");
   return version;
@@ -560,28 +580,55 @@ export const mediaDetailSchema = v.strictObject({
   usage: v.pipe(v.array(mediaUsageEntrySchema), v.maxLength(MAX_MEDIA_USAGE_ENTRIES)),
 });
 
+/** The closed site-build lifecycle; only `succeeded` proves publication. */
+export const siteBuildStatusSchema = v.picklist(siteBuildStatuses);
+
 export const siteBuildSchema = v.strictObject({
   id: identifierSchema,
   publishedSnapshotId: v.optional(identifierSchema),
   requestedAt: isoTimestampSchema,
   requestedBy: identifierSchema,
-  status: v.picklist(["failed", "pending", "running", "succeeded"]),
+  status: siteBuildStatusSchema,
   targetVersion: nonNegativeIntegerSchema,
 });
 
 /** Persisted build history exposed to authenticated admin sessions. */
-export const siteBuildRecordSchema = v.strictObject({
-  id: identifierSchema,
-  reason: identifierSchema,
-  status: v.picklist(["failed", "pending", "running", "succeeded"]),
-  targetVersion: nonNegativeIntegerSchema,
-  requestedBy: identifierSchema,
-  requestedAt: isoTimestampSchema,
-  startedAt: v.optional(isoTimestampSchema),
-  completedAt: v.optional(isoTimestampSchema),
-  providerBuildId: v.optional(identifierSchema),
-  error: v.optional(identifierSchema),
-});
+export const buildFailureReasonSchema = v.picklist(siteBuildFailureReasons);
+export const buildSourcePathSchema = v.pipe(
+  v.string(),
+  v.minLength(1),
+  v.maxLength(512),
+  v.regex(BUILD_SOURCE_PATH_PATTERN),
+  v.check((value) => safeBuildSourcePath(value) !== undefined),
+  v.description(
+    "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
+  ),
+);
+/** Latest observed stage of a tracked provider deployment. */
+export const siteBuildProviderStageSchema = v.picklist(siteBuildProviderStages);
+export const siteBuildRecordSchema = v.pipe(
+  v.strictObject({
+    id: identifierSchema,
+    reason: identifierSchema,
+    status: siteBuildStatusSchema,
+    targetVersion: nonNegativeIntegerSchema,
+    requestedBy: identifierSchema,
+    requestedAt: isoTimestampSchema,
+    startedAt: v.optional(isoTimestampSchema),
+    completedAt: v.optional(isoTimestampSchema),
+    providerBuildId: v.optional(identifierSchema),
+    providerStage: v.optional(siteBuildProviderStageSchema),
+    providerCheckedAt: v.optional(isoTimestampSchema),
+    error: v.optional(buildFailureReasonSchema),
+    errorPath: v.optional(buildSourcePathSchema),
+  }),
+  v.check(
+    (value) =>
+      value.errorPath === undefined ||
+      (value.error !== undefined && sourceFailureReasons.includes(value.error)),
+    "Source path requires a source failure reason.",
+  ),
+);
 export const siteBuildListSchema = v.strictObject({
   items: v.pipe(v.array(siteBuildRecordSchema), v.maxLength(100)),
 });
@@ -847,14 +894,17 @@ export function toSiteBuildDto(build: SiteBuildState): SiteBuildDto {
 export function toSiteBuildRecordDto(build: {
   readonly id: string;
   readonly reason: string;
-  readonly status: "failed" | "pending" | "running" | "succeeded";
+  readonly status: SiteBuildStatus;
   readonly targetVersion: number;
   readonly requestedBy: string;
   readonly requestedAt: number;
   readonly startedAt?: number;
   readonly completedAt?: number;
   readonly providerBuildId?: string;
+  readonly providerStage?: SiteBuildProviderStage;
+  readonly providerCheckedAt?: number;
   readonly error?: string;
+  readonly errorPath?: string;
 }): SiteBuildRecordDto {
   return {
     id: build.id,
@@ -866,7 +916,15 @@ export function toSiteBuildRecordDto(build: {
     ...(build.startedAt === undefined ? {} : { startedAt: toIsoTimestamp(build.startedAt) }),
     ...(build.completedAt === undefined ? {} : { completedAt: toIsoTimestamp(build.completedAt) }),
     ...(build.providerBuildId === undefined ? {} : { providerBuildId: build.providerBuildId }),
-    ...(build.error === undefined ? {} : { error: build.error }),
+    ...(build.providerStage === undefined ? {} : { providerStage: build.providerStage }),
+    ...(build.providerCheckedAt === undefined
+      ? {}
+      : { providerCheckedAt: toIsoTimestamp(build.providerCheckedAt) }),
+    ...(build.error === undefined ? {} : { error: normalizeBuildFailure(build.error).reason }),
+    ...(build.error === undefined ||
+    normalizeBuildFailure(build.error, build.errorPath).path === undefined
+      ? {}
+      : { errorPath: normalizeBuildFailure(build.error, build.errorPath).path! }),
   };
 }
 
@@ -932,6 +990,8 @@ export function resolveExpectedRevision(input: RevisionPreconditionInput): numbe
   if (body !== undefined && !body.success) {
     throw new TypeError("expectedRevision must be a non-negative integer.");
   }
+  if (input.ifMatch?.startsWith("W/"))
+    throw new TypeError("If-Match requires a strong revision ETag.");
   const header = input.ifMatch === undefined ? undefined : versionFromEntityTag(input.ifMatch);
   if (body === undefined && header === undefined) {
     throw new TypeError("An expected revision is required.");
@@ -1001,7 +1061,13 @@ export function transportError(code: TransportErrorCode): ClassifiedError {
 export function classifyError(error: unknown): ClassifiedError {
   if (error instanceof DomainError) {
     return {
-      body: { error: { code: error.code, message: domainErrorMessage[error.code] } },
+      body: {
+        error: {
+          code: error.code,
+          message:
+            error instanceof BlockOrderError ? error.message : domainErrorMessage[error.code],
+        },
+      },
       status: domainErrorStatus[error.code],
     };
   }

@@ -1,10 +1,19 @@
+import { blockOrderJourney } from "./block-order-acceptance.mjs";
+import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs";
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
 import { cloudflareConsumerJourney } from "./cloudflare-consumer-acceptance.mjs";
 import { existingSiteJourney } from "./existing-site-acceptance.mjs";
 import { publicationVisibilityJourney } from "./publication-visibility-acceptance.mjs";
-import { readmeSetupCommands, reviewEnvironment, updateEnvironment } from "./consumer-guides.mjs";
+import {
+  guideCommands,
+  guideDrift,
+  reviewEnvironment,
+  scenarioGuides,
+  updateEnvironment,
+} from "./consumer-guides.mjs";
 import { nodeBrowserJourney } from "./node-browser-acceptance.mjs";
 import { templateUpgradeJourney } from "./template-upgrade-acceptance.mjs";
+import { weakEtagJourney } from "./weak-etag-acceptance.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -294,30 +303,27 @@ async function request(base, path, options = {}) {
   return { body, response };
 }
 
-/** The reviewed README setup sequence; the README must document exactly these commands. */
-export const readmeNodeSetup = Object.freeze([
-  "pnpm install",
-  "pnpm env:prepare",
-  "pnpm exec lace doctor --target node --mode compose --stage setup",
-  "pnpm db:migrate",
-  "pnpm content:sync",
-  "pnpm auth:bootstrap",
-  "pnpm dev:api",
-]);
+/** The reviewed development-guide setup sequence; the guide must document exactly these commands. */
+export const developmentNodeSetup = scenarioGuides.development.sequence;
 
-async function readmeContract(project) {
-  console.info("Acceptance: readme-setup-contract");
-  const commands = readmeSetupCommands(await readFile(join(project, "README.md"), "utf8"));
-  const scripts = (await packageMetadata(project)).scripts;
-  for (let index = 0; index < Math.max(commands.length, readmeNodeSetup.length); index++) {
-    if (commands[index] !== readmeNodeSetup[index])
-      throw new Error(
-        `readme-setup-contract: step ${index + 1} documents "${commands[index] ?? "(none)"}", acceptance runs "${readmeNodeSetup[index] ?? "(none)"}"`,
-      );
-    const [tool, script] = commands[index].split(" ");
-    if (tool === "pnpm" && !["install", "exec"].includes(script) && !(script in scripts))
-      throw new Error(`readme-setup-contract: "${commands[index]}" names no package script`);
-  }
+/**
+ * Requires a consumer's generated scenario guide to document exactly the
+ * reviewed command sequence the journeys run (`development`, `production` or
+ * `cloudflare`), each naming an existing package script; drift fails naming the guide.
+ */
+const guideContractStages = Object.freeze({
+  development: "development-guide-contract",
+  production: "production-guide-contract",
+  cloudflare: "cloudflare-guide-contract",
+});
+
+async function guideContract(project, name) {
+  const stage = guideContractStages[name];
+  console.info(`Acceptance: ${stage}`);
+  const guide = scenarioGuides[name];
+  const commands = guideCommands(await readFile(join(project, guide.path), "utf8"), guide);
+  const drift = guideDrift(guide, commands, (await packageMetadata(project)).scripts);
+  if (drift !== null) throw new Error(`${stage}: ${drift}`);
 }
 
 /** Runs one documented command whose exit status is part of the check. */
@@ -353,7 +359,7 @@ async function waitApiReady(base) {
 }
 
 /**
- * Follows the generated README: packed install (substituting `pnpm install`),
+ * Follows the generated Compose development guide: packed install (substituting `pnpm install`),
  * environment preparation and review, setup doctor, migration without a
  * pre-created directory, sync, bootstrap and `pnpm dev:api`; then browser setup,
  * tour and media, and publication through the API.
@@ -361,7 +367,7 @@ async function waitApiReady(base) {
 async function nodeJourney(context) {
   const { project, apiPort } = context;
   const base = `http://127.0.0.1:${apiPort}/`;
-  await readmeContract(project);
+  await guideContract(project, "development");
 
   const prepared = JSON.parse(
     (await run("env-prepare", "pnpm", ["env:prepare", "--json"], { cwd: project }))
@@ -372,7 +378,7 @@ async function nodeJourney(context) {
   if (prepared.ok !== true || prepared.code !== "ENV_PREPARED")
     throw new Error("env-prepare: unexpected preparation result");
   const envPath = join(project, ".env");
-  // The README's review step: images, ports and both origins; credentials stay generated.
+  // The development guide's review step: images, ports and both origins; credentials stay generated.
   const reviewed = reviewEnvironment(await readFile(envPath, "utf8"), {
     LACE_API_IMAGE: context.images.api,
     LACE_BUILDER_IMAGE: context.images.builder,
@@ -397,7 +403,7 @@ async function nodeJourney(context) {
   const doctor = runStatus(
     "doctor-setup",
     "pnpm",
-    [...readmeNodeSetup[2].split(" ").slice(1), "--json"],
+    [...developmentNodeSetup[2].split(" ").slice(1), "--json"],
     {
       cwd: project,
     },
@@ -584,7 +590,7 @@ async function nodeJourney(context) {
   const buildToken = createdToken.body?.token;
   if (typeof buildToken !== "string") throw new Error("build: token missing");
   secretValues.add(buildToken);
-  // README: put the one-time build token value into LACE_BUILD_TOKEN in .env.
+  // Development guide: put the one-time build token value into LACE_BUILD_TOKEN in .env.
   context.values.LACE_BUILD_TOKEN = buildToken;
   await writeEnvironment(context);
   await run("astro-build", "pnpm", ["build"], {
@@ -611,7 +617,7 @@ async function nodeJourney(context) {
   }
   if (html.includes(buildToken)) throw new Error("astro-build: exposed build token");
   console.info(
-    "Generated Node journey from the README: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish and Astro build passed",
+    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish and Astro build passed",
   );
   return { base, cookie, png, entryId, mediaId, blocks, buildToken, token, password, email };
 }
@@ -629,14 +635,17 @@ async function verifyRenderedMedia(html, base, bytes) {
 }
 
 async function productionSmoke(context, session) {
+  await guideContract(context.project, "production");
   await writeEnvironment(context);
-  await compose("compose-production", ["up", "--detach", "--wait"], {
+  // The production guide's "Start the full stack" command, under this run's Compose project.
+  await run("compose-production", "pnpm", ["prod:start"], {
+    cwd: context.project,
+    env: { COMPOSE_PROJECT_NAME: composeProject },
     timeoutMs: 10 * 60_000,
   });
+  await compose("compose-production-ps", ["ps"]);
   const publicBase = `http://127.0.0.1:${context.httpPort}/`;
-  const health = await request(publicBase, "/health/ready");
-  if (health.body?.status !== "ready")
-    throw new Error("compose-production: web proxy is not ready");
+  await waitHealthy(publicBase, "compose-production");
   const admin = await fetch(new URL("/admin/", publicBase), {
     signal: AbortSignal.timeout(20_000),
   });
@@ -696,6 +705,26 @@ async function productionSmoke(context, session) {
     );
   }
   console.info("Generated Compose production services and web proxy passed");
+}
+
+/** Waits for the web proxy's readiness after a detached Compose start. */
+async function waitHealthy(publicBase, stage) {
+  const deadline = Date.now() + 5 * 60_000;
+  let last = "no response";
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(new URL("/health/ready", publicBase), {
+        signal: AbortSignal.timeout(2000),
+      });
+      const body = await response.json().catch(() => undefined);
+      if (response.ok && body?.status === "ready") return;
+      last = `status ${response.status}`;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`${stage}: web proxy is not ready (${sanitize(last)})`);
 }
 
 /** Previews a generated `--cloudflare` project's static output built against the Node API. */
@@ -780,6 +809,7 @@ function cloudflareOperations(tarballs) {
     capturedDiagnostics,
     freePort,
     generator: generatorBin,
+    guideContract,
     installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
     run,
     sanitize,
@@ -1580,13 +1610,77 @@ async function feedbackJourneys(parent, context, session, tarballs, upgradeOpera
     assertSecretFree(output, secretValues, "captured diagnostics");
   return [
     "snapshots",
-    "node-readme-browser",
+    "node-development-guide-browser",
     "compose-release",
     "cloudflare-pages-preview",
     "publication-visibility",
     "existing-astro",
     "cloudflare-consumer",
-    "template-0.4.0-upgrade",
+    "cloudflare-pages-tracking",
+    "template-0.4.0-and-0.14.0-upgrade",
+  ];
+}
+
+/**
+ * The packed Cloudflare credential journey (33F): the installed CLI keeps remote
+ * credentials in the explicit operator file and preflight reports dotenv/shell
+ * shadowing with stubbed providers, and the Worker bundles without an account.
+ */
+async function credentialsJourney(parent, tarballs) {
+  const project = join(parent, "credentials", "acceptance-site");
+  await mkdir(dirname(project), { recursive: true });
+  await run("credentials-generate", "node", [generatorBin, "create", project, "--cloudflare"]);
+  await installPackedConsumer(project, tarballs);
+  await copyFile(
+    join(workspace, "scripts/cloudflare-credentials-harness.mjs"),
+    join(project, "credentials-harness.mjs"),
+  );
+  await run("credentials-packed-contract", "node", ["credentials-harness.mjs"], { cwd: project });
+  await run("credentials-worker-bundle", "pnpm", ["cf:build"], { cwd: project });
+  return project;
+}
+
+/**
+ * The alpha.2 field-trial regressions after the onboarding journeys, with the
+ * same packages, generator and images: block order and weak ETags on the
+ * running Compose release, then (after it stops) builder source diagnostics on
+ * the existing-site consumer and the credential journey. Pages tracking and the
+ * scenario-guide contracts run inside the journeys above.
+ */
+async function fieldTrialJourneys(parent, context, session, tarballs) {
+  const operations = { request, run, secretValues, waitBuild, workspace };
+  await blockOrderJourney(context, session, operations);
+  await weakEtagJourney(context, session, operations);
+  await compose("compose-release-down", ["down", "--volumes", "--remove-orphans"], {
+    timeoutMs: 3 * 60_000,
+  });
+  await builderDiagnosticsJourney(parent, {
+    // `feedbackJourneys` already connected the existing-site consumer under `parent`.
+    existingJourney: undefined,
+    releaseArtifacts: context.releaseArtifacts ?? {
+      images: {
+        api: { imageId: context.images.api },
+        builder: { imageId: context.images.builder },
+      },
+    },
+    prepareCompose,
+    compose,
+    run,
+    request,
+    writeEnvironment,
+    waitApiReady,
+    secretValues,
+    workspace,
+  });
+  await credentialsJourney(parent, tarballs);
+  for (const output of capturedDiagnostics)
+    assertSecretFree(output, secretValues, "captured diagnostics");
+  return [
+    "scenario-guides",
+    "block-order",
+    "weak-etag",
+    "builder-source-diagnostics",
+    "cloudflare-credentials",
   ];
 }
 
@@ -1599,6 +1693,7 @@ async function main() {
       "node",
       "all",
       "build-site",
+      "builder-diagnostics",
       "cloudflare",
       "existing-site",
       "publication-visibility",
@@ -1606,6 +1701,8 @@ async function main() {
       "starter",
       "self-test",
       "upgrade",
+      "credentials",
+      "field-trial",
     ].includes(phase)
   ) {
     throw new Error(`Unknown acceptance phase: ${phase}`);
@@ -1684,6 +1781,7 @@ async function main() {
       secretValues,
       workspace,
     });
+    journeys.push(...(await fieldTrialJourneys(parent, context, session, artifacts.tarballs)));
     console.info(
       JSON.stringify(
         {
@@ -1708,8 +1806,40 @@ async function main() {
   await verifySnapshots(parent);
   await run("mkdir-tarballs", "mkdir", ["-p", tarballDirectory]);
   const tarballs = await packConsumerGraph(tarballDirectory);
+  if (phase === "credentials") {
+    const project = await credentialsJourney(parent, tarballs);
+    await templateUpgradeJourney(parent, {
+      cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+      generator: generatorBin,
+      run,
+      secretValues,
+      workspace,
+    });
+    return;
+  }
   if (phase === "cloudflare") {
     await cloudflareConsumerJourney(parent, cloudflareOperations(tarballs));
+    return;
+  }
+  if (phase === "builder-diagnostics") {
+    await builderDiagnosticsJourney(parent, {
+      existingJourney: () =>
+        existingSiteJourney(parent, {
+          generator: generatorBin,
+          installPackedConsumer: (project) => installPackedConsumer(project, tarballs),
+          run,
+          secretValues,
+          workspace,
+        }),
+      prepareCompose,
+      compose,
+      run,
+      request,
+      writeEnvironment,
+      waitApiReady,
+      secretValues,
+      workspace,
+    });
     return;
   }
   if (phase === "existing-site") {
@@ -1767,9 +1897,22 @@ async function main() {
     await publicationVisibilityJourney(context, session, { request, run, secretValues });
     return;
   }
+  if (phase === "field-trial") {
+    // Iteration aid: only the existing-site consumer the field-trial journeys need.
+    await existingSiteJourney(parent, {
+      generator: generatorBin,
+      installPackedConsumer: (target) => installPackedConsumer(target, tarballs),
+      run,
+      secretValues,
+      workspace,
+    });
+    await fieldTrialJourneys(parent, context, session, tarballs);
+    return;
+  }
   await feedbackJourneys(parent, context, session, tarballs, upgradeOperations);
+  await fieldTrialJourneys(parent, context, session, tarballs);
   console.info(
-    "Onboarding feedback regression suite passed: README-driven Node consumer, Compose release, Pages preview, publication visibility, existing-Astro consumer, Cloudflare consumer and template 0.4.0 upgrade",
+    "Feedback regression suite passed: development-guide-driven Node consumer, Compose release, Pages preview, publication visibility, existing-Astro consumer, Cloudflare consumer with Pages tracking, template 0.4.0/0.14.0 upgrade, block order, weak ETags, builder source diagnostics and Cloudflare credentials",
   );
 }
 

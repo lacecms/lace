@@ -24,5 +24,6 @@
   // Scheduled outbox recovery; post-commit waitUntil dispatch only reduces latency.
   "triggers": { "crons": ["* * * * *"] },
   "vars": { "LACE_PUBLIC_BASE_URL": "http://localhost:8787/" },
-  // Secrets: LACE_AUTH_SECRET and optional LACE_DEPLOY_HOOK_URL via `wrangler secret put`.
+  // Secrets: LACE_AUTH_SECRET and optional LACE_DEPLOY_HOOK_URL and LACE_PAGES_API_TOKEN
+  // (Pages Read only, with LACE_PAGES_ACCOUNT_ID/LACE_PAGES_PROJECT_NAME vars) via `wrangler secret put`.
 }

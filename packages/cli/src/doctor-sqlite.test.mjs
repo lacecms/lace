@@ -63,7 +63,7 @@ test("concurrent complete doctors preserve a populated installation", async () =
   const root = await directory();
   await writeFile(
     join(root, "package.json"),
-    JSON.stringify({ engines: { node: ">=24.12.0 <25", pnpm: ">=12 <13" } }),
+    JSON.stringify({ engines: { node: ">=24.12.0", pnpm: ">=12" } }),
   );
   database(join(root, "db.sqlite")).close();
   const before = await snapshot(root);

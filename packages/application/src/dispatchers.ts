@@ -1,4 +1,4 @@
-import { mediaId, unixMilliseconds } from "@lacecms/domain";
+import { mediaId, unixMilliseconds, normalizeBuildFailure } from "@lacecms/domain";
 import {
   defaultDispatcherRetryPolicy,
   dispatcherRetryDelay,
@@ -95,6 +95,16 @@ export class SiteBuildDispatcher {
       await this.options.work.recordSiteBuildAccepted({
         leaseId: lease.id,
         now: this.options.clock.now(),
+        ...(result.providerBuildId === undefined
+          ? {}
+          : { providerBuildId: result.providerBuildId }),
+      });
+      return;
+    }
+    if (result.status === "tracking") {
+      await this.options.work.recordSiteBuildTracking({
+        leaseId: lease.id,
+        now: this.options.clock.now(),
         providerBuildId: result.providerBuildId,
       });
       return;
@@ -106,20 +116,20 @@ export class SiteBuildDispatcher {
       });
       return;
     }
-    await this.fail(lease, result.reason);
+    await this.fail(lease, result.reason, result.path);
   }
 
-  private async fail(lease: SiteBuildWorkLease, reason: string): Promise<void> {
+  private async fail(lease: SiteBuildWorkLease, reason: string, path?: string): Promise<void> {
     const failedAt = this.options.clock.now();
     const failedAttempt = lease.event.attempts + 1;
     const terminal = failedAttempt >= this.policy.maxAttempts;
-    const safeReason =
-      reason === "trigger_unavailable" || reason === "build_timeout" ? reason : "provider_failed";
+    const failure = normalizeBuildFailure(reason, path);
+    const safeReason = failure.reason;
     this.options.logger.error({ buildId: lease.buildId, reason: safeReason });
     await this.options.work.recordSiteBuildFailure({
       leaseId: lease.id,
       now: failedAt,
-      reason: safeReason,
+      ...failure,
       terminal,
       ...(terminal
         ? {}

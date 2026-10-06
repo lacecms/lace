@@ -2,7 +2,13 @@ import { CliError, EXIT, type Command, type Target } from "./index.js";
 import { UpgradeError } from "./upgrade-input.js";
 import { BlockError } from "./blocks-registry.js";
 
-export type Operation = Command | "upgrade" | "doctor" | "add block" | "cli";
+export type Operation =
+  | Command
+  | "upgrade"
+  | "doctor"
+  | "cloudflare preflight"
+  | "add block"
+  | "cli";
 export type DiagnosticKind =
   | "permission"
   | "path"
@@ -15,7 +21,8 @@ export type DiagnosticKind =
   | "env-exists"
   | "env-template"
   | "env-filesystem"
-  | "project-config";
+  | "project-config"
+  | "operator-file";
 export interface Diagnostic {
   readonly operation: Operation;
   readonly reason: string;
@@ -24,11 +31,15 @@ export interface Diagnostic {
 
 /** Recognize command words only; never interpolate supplied arguments. */
 export function identifyOperation(argv: readonly string[]): Operation {
+  if (argv[0] === "cloudflare" && argv[1] === "preflight") return "cloudflare preflight";
   if (argv[0] === "doctor") return "doctor";
   if (argv[0] === "upgrade") return "upgrade";
   if (argv[0] === "add" && argv[1] === "block") return "add block";
   const words = argv.filter(
-    (word, index) => !word.startsWith("--") && argv[index - 1] !== "--target",
+    (word, index) =>
+      !word.startsWith("--") &&
+      argv[index - 1] !== "--target" &&
+      argv[index - 1] !== "--operator-env",
   );
   const command = words.slice(0, 2).join(" ");
   return command === "db migrate" ||
@@ -75,6 +86,10 @@ export function failureDiagnostic(
   const worker = operation === "env prepare" && target === "cloudflare-local";
   const envFile = worker ? "worker/.dev.vars" : ".env";
   const catalog: Record<string, readonly [string, string]> = {
+    "operator-file": [
+      "The selected operator file cannot be safely loaded.",
+      "Use --operator-env with a private regular non-symlink file, owner-only permissions and unique supported assignments; preserve existing credentials.",
+    ],
     "env-exists": [
       `The ${envFile} destination already exists; preparation refuses to overwrite it.`,
       `Keep the existing ${envFile} and review its settings privately. Preparation does not rotate credentials; do not delete an active installation's configuration to rerun it.`,

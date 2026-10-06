@@ -338,33 +338,34 @@ async function detectAstroParent(target: string): Promise<boolean> {
 
 function nextSteps(project: GeneratedProject): string[] {
   const { site } = project.manifest;
-  const guide = project.readmePreserved ? "docs/lace-operations.md" : "README.md";
+  const start = project.readmePreserved
+    ? "Next: follow docs/lace-compose-dev.md"
+    : "Next: follow README.md to choose a guide, starting with docs/lace-compose-dev.md";
   const lines =
     site.mode === "existing"
       ? [
           `Site mode: existing site at ${site.path} (the generator did not modify it).`,
-          `Next: follow ${guide} for setup; after pnpm install, install @lacecms/astro and @lacecms/render in the site, run pnpm exec lace add block --all --site ${site.path} and follow docs/lace-astro-site.md.`,
+          `${start}; it connects the site: install @lacecms/astro and @lacecms/render in the site, run pnpm exec lace add block --all --site ${site.path} and follow docs/lace-astro-site.md.`,
         ]
       : site.mode === "none"
         ? [
             "Site mode: none (CMS only). No site is built; build requests fail until a site is configured.",
-            `Next: follow ${guide} for setup; to connect an Astro site later, follow docs/lace-astro-site.md.`,
+            `${start}; to connect an Astro site later, follow docs/lace-astro-site.md.`,
           ]
         : [
             "Site mode: starter (site/).",
-            ...(project.readmePreserved
-              ? []
-              : [
-                  "Next: follow README.md for setup, first admin and publication; see docs/lace-operations.md for detailed operation.",
-                ]),
+            `${start} for setup, first admin, publication and the site build.`,
           ];
+  lines.push(
+    `Guides: docs/lace-compose-dev.md (development), docs/lace-compose-production.md (production)${project.cloudflare ? ", docs/lace-cloudflare.md (Cloudflare)" : ""}; reference: docs/lace-operations.md.`,
+  );
   if (project.cloudflare)
     lines.push(
-      "Cloudflare: the CMS Worker is in worker/; follow the Cloudflare Worker section of docs/lace-operations.md (local: pnpm cf:env:prepare, cf:db:migrate, cf:content:sync, cf:auth:bootstrap, cf:dev).",
+      "Cloudflare: the CMS Worker is in worker/; follow docs/lace-cloudflare.md, local first (pnpm cf:env:prepare, cf:db:migrate, cf:content:sync, cf:auth:bootstrap, cf:dev), then explicit account commands.",
     );
   if (project.readmePreserved)
     lines.push(
-      "Preserved existing README.md. Follow docs/lace-operations.md for Lace setup; manually copy relevant instructions into your README if desired.",
+      "Preserved existing README.md. Follow the guides above for Lace setup and docs/lace-operations.md for reference; manually copy relevant instructions into your README if desired.",
     );
   return lines;
 }

@@ -198,3 +198,135 @@ test("carries the stable media-in-use code for referenced-media refusals", () =>
   expect(error).toBeInstanceOf(Error);
   expect(error).toMatchObject({ code: "MEDIA_IN_USE", name: "DomainError" });
 });
+
+test.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, 1000, 500])(
+  "rejects invalid position %s with bounded ordering diagnostics",
+  (position) => {
+    const key = "01ARZ3NDEKTSV4RRFFQ69G5FA1";
+    const input = [block("first", 1000), block(key, position, { body: "secret-content" })];
+    expect(() => assertOrderedBlockPositions(input)).toThrow(`Block at index 1 (key ${key})`);
+    expect(input.map((block) => block.position)).toEqual([1000, position]);
+    for (const unsafe of ["secret\npassword", "x".repeat(200)]) {
+      try {
+        assertOrderedBlockPositions([block(unsafe, 0, { body: "secret-content" })]);
+      } catch (error) {
+        expect(error.code).toBe("CONTENT_INVALID_STATE");
+        expect(error.message).toContain("Block at index 0");
+        expect(error.message).toContain("Resubmit positions");
+        expect(error.message).not.toContain(unsafe);
+        expect(error.message).not.toContain("secret-content");
+      }
+    }
+  },
+);
+
+test("build diagnostics preserve known reasons and reject unsafe paths", async () => {
+  const { siteBuildFailureReasons, normalizeBuildFailure, safeBuildSourcePath } =
+    await import("../dist/index.js");
+  for (const reason of siteBuildFailureReasons)
+    expect(normalizeBuildFailure(reason).reason).toBe(reason);
+  expect(normalizeBuildFailure("secret /host/root", "src/file")).toEqual({
+    reason: "provider_failed",
+  });
+  expect(normalizeBuildFailure("source_symlink", "src/file.astro")).toEqual({
+    reason: "source_symlink",
+    path: "src/file.astro",
+  });
+  expect(normalizeBuildFailure("install_failed", "src/file")).toEqual({ reason: "install_failed" });
+  for (const path of [
+    "",
+    ".",
+    "..",
+    "/source/file",
+    "C:/file",
+    "src/../file",
+    "src//file",
+    "src/./file",
+    "--file",
+    "src/--file",
+    "src\\file",
+    "src/é",
+    "src/line\n",
+    "a".repeat(513),
+    ".env",
+    "cms/.env.production",
+    ".git/config",
+    ".aws/key",
+    "cms/.lace/data/db",
+    ".npmrc",
+    ".ssh/key",
+    ".agents/a",
+    ".codex/a",
+    ".claude/a",
+    ".pnpmfile.cjs",
+  ])
+    expect(safeBuildSourcePath(path), path).toBeUndefined();
+  for (const path of ["pnpm-lock.yaml", "web/src/page.astro", "src/a b.txt", "a".repeat(512)])
+    expect(safeBuildSourcePath(path)).toBe(path);
+});
+
+test("site-build statuses form one closed lifecycle with explicit terminal and retry sets", async () => {
+  const {
+    isRetryableSiteBuildStatus,
+    isSiteBuildStatus,
+    isTerminalSiteBuildStatus,
+    retryableSiteBuildStatuses,
+    siteBuildStatuses,
+    terminalSiteBuildStatuses,
+    trackedSiteBuildOutcomes,
+  } = await import("../dist/index.js");
+  expect(siteBuildStatuses).toEqual([
+    "pending",
+    "running",
+    "accepted",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "unknown",
+  ]);
+  expect(siteBuildStatuses.filter(isTerminalSiteBuildStatus)).toEqual([
+    ...terminalSiteBuildStatuses,
+  ]);
+  expect(isTerminalSiteBuildStatus("pending")).toBe(false);
+  expect(isTerminalSiteBuildStatus("running")).toBe(false);
+  expect(siteBuildStatuses.filter(isRetryableSiteBuildStatus).sort()).toEqual(
+    [...retryableSiteBuildStatuses].sort(),
+  );
+  expect(isRetryableSiteBuildStatus("succeeded")).toBe(false);
+  expect(trackedSiteBuildOutcomes).toEqual(["succeeded", "failed", "cancelled", "unknown"]);
+  expect(isSiteBuildStatus("accepted")).toBe(true);
+  expect(isSiteBuildStatus("deployed")).toBe(false);
+});
+
+test("tracked outcomes keep only their own closed reasons and stages are closed", async () => {
+  const {
+    isSiteBuildProviderStage,
+    normalizeTrackedOutcomeReason,
+    siteBuildFailureReasons,
+    siteBuildProviderStages,
+    sourceFailureReasons,
+    trackedOutcomeReasons,
+  } = await import("../dist/index.js");
+  for (const reasons of Object.values(trackedOutcomeReasons))
+    for (const reason of reasons) expect(siteBuildFailureReasons).toContain(reason);
+  expect(sourceFailureReasons).not.toContain("provider_build_failed");
+  expect(normalizeTrackedOutcomeReason("failed", "provider_deploy_failed")).toBe(
+    "provider_deploy_failed",
+  );
+  expect(normalizeTrackedOutcomeReason("failed", "secret text")).toBe("provider_failed");
+  expect(normalizeTrackedOutcomeReason("failed", undefined)).toBe("provider_failed");
+  expect(normalizeTrackedOutcomeReason("cancelled", "provider_skipped")).toBe("provider_skipped");
+  expect(normalizeTrackedOutcomeReason("cancelled", "tracking_timeout")).toBeUndefined();
+  expect(normalizeTrackedOutcomeReason("unknown", "tracking_timeout")).toBe("tracking_timeout");
+  expect(normalizeTrackedOutcomeReason("unknown", "provider_build_failed")).toBeUndefined();
+  expect(normalizeTrackedOutcomeReason("succeeded", "provider_failed")).toBeUndefined();
+  expect(siteBuildProviderStages).toEqual([
+    "queued",
+    "initialize",
+    "clone_repo",
+    "build",
+    "deploy",
+  ]);
+  expect(isSiteBuildProviderStage("deploy")).toBe(true);
+  expect(isSiteBuildProviderStage("upload")).toBe(false);
+});

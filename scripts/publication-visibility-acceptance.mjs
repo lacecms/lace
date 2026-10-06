@@ -273,7 +273,7 @@ const { item } = Astro.props;
       await delay(250);
     }
     observe("compose", step, "transitions", transitions.join(" > "));
-    // VPS builds stay pending while the synchronous builder runs; success is recorded after the switch.
+    // VPS builds are running while the synchronous builder works; success is recorded after the switch.
     observe(
       "compose",
       step,

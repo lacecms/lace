@@ -30,7 +30,7 @@ test("sends one bodiless POST without following redirects", async () => {
   expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
 });
 
-test("a 2xx response without a valid deployment ID is dispatch success", async () => {
+test("a 2xx response without a valid deployment ID is acceptance, never success", async () => {
   for (const response of [
     () => new Response(null, { status: 204 }),
     () => new Response("queued", { status: 200 }),
@@ -41,7 +41,7 @@ test("a 2xx response without a valid deployment ID is dispatch success", async (
     () => Response.json([1, 2]),
     () => new Response("x".repeat(DEPLOY_HOOK_MAX_RESPONSE_BYTES + 1), { status: 200 }),
   ]) {
-    expect(await trigger(response).adapter.trigger(input)).toEqual({ status: "succeeded" });
+    expect(await trigger(response).adapter.trigger(input)).toEqual({ status: "accepted" });
   }
 });
 
@@ -99,4 +99,19 @@ test("results never contain the hook URL and settings are validated", async () =
   expect(
     () => new DeployHookSiteBuildTrigger({ url: new URL("http://hooks.example.test/") }),
   ).toThrow(TypeError);
+});
+
+test("with tracking configured an identified acceptance is tracked, an anonymous one is not", async () => {
+  const tracked = (respond) =>
+    new DeployHookSiteBuildTrigger({ fetch: async () => respond(), tracked: true, url });
+  expect(
+    await tracked(() => Response.json({ result: { id: "dep-7" }, success: true })).trigger(input),
+  ).toEqual({ providerBuildId: "dep-7", status: "tracking" });
+  expect(await tracked(() => Response.json({ result: {}, success: true })).trigger(input)).toEqual({
+    status: "accepted",
+  });
+  expect(await tracked(() => Response.json({ success: false })).trigger(input)).toEqual({
+    reason: "provider_failed",
+    status: "failed",
+  });
 });

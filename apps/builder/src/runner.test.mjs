@@ -280,7 +280,24 @@ ln -s ../unsafe.html apps/site/dist/index.html
   await symlink("apps/site", join(source, "linked"));
   expect(await builder.build({ buildId: "linked-source", targetVersion: 1 })).toEqual({
     status: "failed",
-    reason: "source_invalid",
+    reason: "source_symlink",
+    path: "linked",
   });
   expect(await readlink(join(root, "output/current"))).toBe(current);
+});
+
+test("specific source failures keep the old release and a correction is retryable", async () => {
+  const { builder, root, source } = await fixture();
+  expect((await builder.build({ buildId: "initial", targetVersion: 1 })).status).toBe("succeeded");
+  const current = await readlink(join(root, "output/current"));
+  await symlink("/outside/secret-sentinel", join(source, "apps/site/linked"));
+  expect(await builder.build({ buildId: "failure", targetVersion: 1 })).toEqual({
+    status: "failed",
+    reason: "source_symlink",
+    path: "apps/site/linked",
+  });
+  expect(await readlink(join(root, "output/current"))).toBe(current);
+  await rm(join(source, "apps/site/linked"));
+  expect((await builder.build({ buildId: "retry", targetVersion: 1 })).status).toBe("succeeded");
+  expect(await readlink(join(root, "output/current"))).not.toBe(current);
 });

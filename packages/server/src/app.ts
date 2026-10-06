@@ -1309,7 +1309,9 @@ export function createLaceApp(input: LaceAppInput): Hono {
           return new Response(null, { headers: { etag }, status: 304 });
       }
       const buildExport = await input.publicContent.exportBuildContent();
-      return response(buildExportSchema, toBuildExportDto(buildExport), 200, { etag });
+      return response(buildExportSchema, toBuildExportDto(buildExport), 200, {
+        etag: entityTagForVersion(buildExport.version),
+      });
     },
   );
 

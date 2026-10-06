@@ -62,6 +62,8 @@ version; when a request supplies that current valid entity tag in
 no response body. A changed or absent valid entity tag SHALL produce the
 validated build-export representation with its current ETag.
 
+Build-export validators SHALL accept exactly one strong `"N"` or weak `W/"N"` tag whose decimal version is a non-negative safe integer, preserving the received spelling. Weak comparison SHALL compare the encoded version. Arbitrary opaque tags, lists, wildcards, signs, fractions, lowercase weak prefixes, whitespace inside the tag, and unsafe integers SHALL be rejected. The origin SHALL emit the strong form.
+
 #### Scenario: A timestamp is serialized for JSON
 - **WHEN** a portable content value contains a valid UTC timestamp
 - **THEN** its response DTO exposes a canonical ISO-8601 UTC string and the
@@ -83,6 +85,14 @@ validated build-export representation with its current ETag.
   published-state version
 - **THEN** the API returns the validated build-export DTO and the current ETag
 
+#### Scenario: Weak and strong versions agree
+- **WHEN** a consumer supplies `W/"7"` for published-state version 7
+- **THEN** validation succeeds and the API returns an empty `304` with origin ETag `"7"`
+
+#### Scenario: Unsupported validators are rejected
+- **WHEN** a consumer supplies `*`, `"hash"`, `"1", "2"`, or an unsafe numeric version
+- **THEN** shared validation rejects the value
+
 ### Requirement: Mutable request preconditions are unambiguous
 The complete-draft-save, publish, and delete contracts SHALL use a non-negative
 integer `expectedRevision` in the JSON body as the canonical generated-client
@@ -90,6 +100,8 @@ precondition. They SHALL also accept an equivalent `If-Match` revision header
 for HTTP clients. If both are supplied, their revisions SHALL match; a missing
 body value may be supplied by `If-Match`, and a disagreement SHALL be rejected
 as a validation failure before the operation reaches application code.
+
+Mutation `If-Match` SHALL accept only strong revision tags; a weak tag SHALL fail validation even when its numeric revision agrees with the body.
 
 #### Scenario: Header and body revisions agree
 - **WHEN** a client sends the same expected revision in the request body and
@@ -108,6 +120,10 @@ as a validation failure before the operation reaches application code.
   after that revision was read
 - **THEN** deletion fails with `CONTENT_REVISION_CONFLICT` and leaves the entry,
   public route, published state, and build work unchanged
+
+#### Scenario: A weak mutation precondition is rejected
+- **WHEN** a writer supplies `W/"4"` in `If-Match` with expected revision 4
+- **THEN** validation rejects the request before any mutation
 
 ### Requirement: Errors use stable sanitized envelopes
 The system SHALL represent every transport failure as `{ error: { code,
@@ -432,3 +448,44 @@ The shared REST contracts SHALL define strict, versioned administrator build req
 #### Scenario: Arbitrary build override supplied
 - **WHEN** a request includes a command, path, environment, or arbitrary argument field
 - **THEN** contract validation rejects the request before enqueueing work
+
+### Requirement: Admin build failure DTOs expose closed reasons and safe entry paths
+Admin build history and detail SHALL retain optional `error` as a closed failure reason under the site-build diagnostic vocabulary and SHALL add optional `errorPath` carrying only a source-relative entry under the builder diagnostic path contract. `errorPath` SHALL be absent unless `error` is a source reason. Shared runtime validation and generated OpenAPI SHALL describe the same constraints. Existing build IDs, lifecycle, reason, target version, requester and timestamps SHALL retain their shapes. No failure diagnostic SHALL include raw provider responses, commands, credentials, output, configured roots or absolute paths. Node and Worker SHALL use identical DTOs. Anonymous reads SHALL remain denied; admin, editor and viewer SHALL retain read access without configuration authority.
+
+#### Scenario: Source failure in list and detail
+- **WHEN** an authenticated reader requests history and detail for a failed or retrying source build
+- **THEN** both return the persisted specific `error` and safe optional `errorPath` with the same build ID
+
+#### Scenario: Existing reason-only record
+- **WHEN** a stored build has a recognized error without a path
+- **THEN** its DTO remains valid with `error` and no `errorPath`
+
+#### Scenario: Invalid diagnostic payload
+- **WHEN** a build DTO contains an unknown error, unsafe path, orphaned path, or a path attached to `install_failed`
+- **THEN** shared contract validation rejects it
+
+#### Scenario: Anonymous request
+- **WHEN** an anonymous client requests build history or detail
+- **THEN** the API returns the existing authentication error without diagnostic data
+
+### Requirement: Admin build DTOs expose the seven-status lifecycle
+Admin build history and detail DTOs SHALL validate `status` as exactly one of `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, or `unknown`, in shared runtime validation and in generated OpenAPI. All other build fields, the 33C `error`/`errorPath` rules, and authorization SHALL be unchanged. Node and Worker SHALL return identical DTOs for identical persisted builds.
+
+#### Scenario: New statuses are readable
+- **WHEN** an authenticated reader requests history containing `accepted`, `cancelled`, and `unknown` builds
+- **THEN** each DTO validates and carries its status, provider ID when present, and completion time
+
+#### Scenario: Unsupported status
+- **WHEN** a build DTO carries a status outside the seven values
+- **THEN** shared contract validation rejects it
+
+### Requirement: Admin build DTOs expose tracking progress and reasons
+Admin build history and detail DTOs SHALL accept optional `providerStage` as one of `queued`, `initialize`, `clone_repo`, `build`, or `deploy` and optional `providerCheckedAt` as an ISO timestamp, in shared runtime validation and generated OpenAPI. The closed `error` vocabulary SHALL include `provider_build_failed`, `provider_deploy_failed`, `provider_cancelled`, `provider_skipped`, `tracking_forbidden`, `tracking_not_found`, `tracking_rejected`, `tracking_timeout`, and `tracking_unconfigured`, none of which may carry `errorPath`. An unrecognized stored stage SHALL be omitted. Node and Worker SHALL return identical DTOs, and no DTO SHALL contain provider response data or credentials.
+
+#### Scenario: Tracked build detail
+- **WHEN** an authenticated reader requests a tracked build at the build stage
+- **THEN** the DTO carries status `running`, its provider ID, `providerStage: "build"`, and `providerCheckedAt`
+
+#### Scenario: Invalid stage
+- **WHEN** a build DTO carries `providerStage: "upload"`
+- **THEN** shared contract validation rejects it

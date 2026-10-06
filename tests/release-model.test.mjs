@@ -13,7 +13,7 @@ async function coherentModel() {
       version: model.definition.version,
       private: false,
       publishConfig: { access: "public" },
-      engines: { node: ">=24.12.0 <25" },
+      engines: { node: ">=24.12.0" },
     });
   }
   for (const template of model.templates)
@@ -55,6 +55,13 @@ test("the coherent model accepts historical prose about published versions", asy
   expect(() => validateReleaseModel(model)).not.toThrow();
 });
 
+test("the published alpha.2 set is recorded and cannot be prepared again", async () => {
+  const model = await coherentModel();
+  expect(model.definition.publishedVersions).toEqual(["0.1.0-alpha.1", "0.1.0-alpha.2"]);
+  model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.2";
+  expect(() => validateReleaseModel(model)).toThrow(/0\.1\.0-alpha\.2 is already published/u);
+});
+
 test.each([
   "version",
   "private",
@@ -70,6 +77,9 @@ test.each([
   "guide-package",
   "guide-image",
   "registry",
+  "engine-package",
+  "engine-template",
+  "engine-root",
 ])("rejects %s release graph drift", async (failure) => {
   const model = await coherentModel();
   const manifest = model.manifests["@lacecms/content"].manifest;
@@ -90,11 +100,24 @@ test.each([
     model.dockerfiles["apps/builder/Dockerfile"] = "ARG LACE_VERSION=0.1.0-alpha.1\n";
   if (failure === "registry")
     model.registry["registry/astro/quote/item.json"]["@lacecms/astro"] = "0.1.0-alpha.1";
+  if (failure === "engine-package") manifest.engines = { node: ">=24.12.0 <25" };
+  if (failure === "engine-template") model.templates[0].engines.pnpm = ">=12 <13";
+  if (failure === "engine-root") model.rootManifest.engines.node = ">=24.12.0 <25";
   const guide = "packages/create-lace/templates/docs/lace-operations.md";
   if (failure === "guide-create") model.guides[guide] += "pnpm create lace@0.1.0-alpha.1 x\n";
   if (failure === "guide-package") model.guides[guide] += "pnpm add @lacecms/astro@0.1.0-alpha.1\n";
   if (failure === "guide-image") model.guides[guide] += "ghcr.io/lacecms/api:0.1.0-alpha.1\n";
   expect(() => validateReleaseModel(model)).toThrow();
+});
+
+test("scenario guides are registered release guides with candidate coordinates", async () => {
+  const model = await readReleaseModel(new URL("..", import.meta.url).pathname);
+  for (const guide of ["lace-compose-dev.md", "lace-compose-production.md", "lace-cloudflare.md"])
+    expect(Object.keys(model.guides)).toContain(`packages/create-lace/templates/docs/${guide}`);
+  const model2 = await coherentModel();
+  model2.guides["packages/create-lace/templates/docs/lace-cloudflare.md"] +=
+    "pnpm add @lacecms/cli@0.1.0-alpha.1\n";
+  expect(() => validateReleaseModel(model2)).toThrow("lace-cloudflare.md");
 });
 
 test("packed metadata rejects workspace/catalog/local/private dependencies", async () => {

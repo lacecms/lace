@@ -2,7 +2,10 @@ import { expect, test } from "vitest";
 import {
   excludedFromProjectScan,
   hookResponse,
+  pagesDeploymentResponse,
+  pagesTracking,
   providerDeploymentId,
+  transientWranglerFile,
   withVariable,
   workerCommand,
 } from "../scripts/cloudflare-consumer-acceptance.mjs";
@@ -16,6 +19,44 @@ test("controlled hook answers as an unavailable or accepting provider", () => {
     success: true,
     result: { id: providerDeploymentId },
   });
+});
+
+test("controlled hook can accept a specific tracked deployment ID", () => {
+  expect(JSON.parse(hookResponse("accepted", "tracked-1").body).result.id).toBe("tracked-1");
+});
+
+test("Pages API stub answers only the configured account, project and known deployments", () => {
+  const deployments = new Map([["tracked-1", { name: "deploy", status: "success" }]]);
+  const path = (id) =>
+    `/client/v4/accounts/${pagesTracking.accountId}/pages/projects/${pagesTracking.projectName}/deployments/${id}`;
+  const found = pagesDeploymentResponse(deployments, path("tracked-1"));
+  expect(found.status).toBe(200);
+  expect(JSON.parse(found.body)).toMatchObject({
+    success: true,
+    result: {
+      id: "tracked-1",
+      is_skipped: false,
+      latest_stage: { name: "deploy", status: "success" },
+    },
+  });
+  expect(pagesDeploymentResponse(deployments, path("other")).status).toBe(404);
+  expect(
+    pagesDeploymentResponse(deployments, path("tracked-1").replace(pagesTracking.projectName, "x"))
+      .status,
+  ).toBe(404);
+  expect(pagesTracking.accountId).toMatch(/^[0-9a-f]{32}$/u);
+});
+
+test("only vanished Wrangler temporary bundles are skipped by the project scan", () => {
+  const missing = Object.assign(new Error("gone"), { code: "ENOENT" });
+  expect(transientWranglerFile("worker/.wrangler/tmp/dev-x/index.js.map", missing)).toBe(true);
+  expect(transientWranglerFile("worker/index.ts", missing)).toBe(false);
+  expect(
+    transientWranglerFile(
+      "worker/.wrangler/tmp/dev-x/index.js",
+      Object.assign(new Error(), { code: "EACCES" }),
+    ),
+  ).toBe(false);
 });
 
 test("project secret scan skips only local secrets, state, dependencies and scanned output", () => {

@@ -1,4 +1,5 @@
 import type { AdminRole } from "../../entities/session/index.js";
+import { buildStatusTourSummary } from "../../entities/site-build/index.js";
 import { publicationVisibilityModes } from "../../features/publish-entry/index.js";
 import { navigationGroups } from "./navigation.js";
 
@@ -71,10 +72,10 @@ export function tourSteps(
             id: "builds",
             title: item.label,
             paragraphs: [
-              "Inspect recorded site builds and their target versions. Pending work is queued or, on a self-hosted builder, building; running work is in progress at a deployment provider; succeeded and failed are terminal outcomes. One build can cover several publications. Failure details explain problems without changing the published content, and the previous release stays served.",
+              buildStatusTourSummary(),
               ...(role === "admin"
                 ? [
-                    "Request a build or retry a failed build here. Requests enter the queue and can coalesce; inspect their status rather than assuming the site is already updated.",
+                    "Request a build, or retry a failed, cancelled, unknown or accepted build here. Requests enter the queue and can coalesce; inspect their status rather than assuming the site is already updated.",
                   ]
                 : []),
             ],

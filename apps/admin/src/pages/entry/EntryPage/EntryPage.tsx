@@ -12,6 +12,7 @@ import {
   FieldRendererProvider,
   issueLocation,
   localDraftJson,
+  orderedDraftBlocks,
   locationField,
   resolvedPublicPath,
   serverIssueMessage,
@@ -158,7 +159,7 @@ export function EntryPage() {
       if (currentEntry === undefined) throw new Error("The entry has not loaded.");
       const values = withoutClearedValues(submitted);
       return client.saveDraft(entryId, {
-        blocks: values.blocks,
+        blocks: orderedDraftBlocks(values.blocks),
         expectedRevision: currentEntry.draft.revision,
         fields: values.fields,
         ...(modelRef.current?.kind === "collection" && values.slug !== undefined
@@ -360,7 +361,28 @@ export function EntryPage() {
               )}
               {conflict === undefined ? (
                 save.error === null || validationRejected(save.error) ? undefined : (
-                  <PageError error={save.error} />
+                  <div className="grid gap-2">
+                    <PageError error={save.error} />
+                    {save.error instanceof AdminClientError &&
+                    save.error.code === "CONTENT_INVALID_STATE" ? (
+                      <div className="grid gap-2 text-sm">
+                        <p>
+                          Your unsaved changes are still here. Retry Save draft to send the
+                          displayed block order. Copy your JSON before reloading if the problem
+                          continues.
+                        </p>
+                        <Button
+                          className="justify-self-start"
+                          onClick={() => void copyLocalDraft()}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Copy my JSON
+                        </Button>
+                        {copyError === undefined ? undefined : <p role="alert">{copyError}</p>}
+                      </div>
+                    ) : undefined}
+                  </div>
                 )
               ) : (
                 <EntryConflictAlert

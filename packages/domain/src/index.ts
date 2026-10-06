@@ -1,5 +1,6 @@
 import { MAX_SLUG_LENGTH } from "@lacecms/content";
 import type { JsonObject, JsonValue } from "@lacecms/content";
+import type { SiteBuildStatus } from "./build-status.js";
 
 export const packageName = "@lacecms/domain";
 export const BLOCK_POSITION_STEP = 1_000;
@@ -46,6 +47,18 @@ export class DomainError extends Error {
   ) {
     super(message);
     this.name = "DomainError";
+  }
+}
+
+/** A deliberately bounded ordering diagnostic safe to carry across transport boundaries. */
+export class BlockOrderError extends DomainError {
+  public constructor(index: number, key: string) {
+    const safeKey = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/u.test(key) ? ` (key ${key})` : "";
+    super(
+      "CONTENT_INVALID_STATE",
+      `Block at index ${Number.isSafeInteger(index) && index >= 0 ? index : 0}${safeKey} has an invalid position. Positions must be positive safe integers in strictly increasing order. Resubmit positions in the displayed block order.`,
+    );
+    this.name = "BlockOrderError";
   }
 }
 
@@ -142,8 +155,6 @@ export interface MediaMetadata {
   readonly updatedAt: UnixMilliseconds;
   readonly width?: number;
 }
-
-export type SiteBuildStatus = "failed" | "pending" | "running" | "succeeded";
 
 /** Publication and build completion are deliberately represented separately. */
 export interface SiteBuildState {
@@ -381,12 +392,12 @@ function assertBlockKeys(blocks: readonly ContentBlock[]): void {
 export function assertOrderedBlockPositions(blocks: readonly ContentBlock[]): void {
   assertBlockKeys(blocks);
   let previousPosition = 0;
-  for (const block of blocks) {
+  for (const [index, block] of blocks.entries()) {
     if (!Number.isSafeInteger(block.position) || block.position <= 0) {
-      fail("CONTENT_INVALID_STATE", "Block positions must be positive safe integers.");
+      throw new BlockOrderError(index, block.key);
     }
     if (block.position <= previousPosition) {
-      fail("CONTENT_INVALID_STATE", "Block positions must be strictly increasing.");
+      throw new BlockOrderError(index, block.key);
     }
     previousPosition = block.position;
   }
@@ -574,3 +585,31 @@ export function requireMutableDraft(snapshot: ContentSnapshot): DraftSnapshot {
   assertDraft(snapshot);
   return snapshot;
 }
+
+export {
+  siteBuildFailureReasons,
+  sourceFailureReasons,
+  BUILD_SOURCE_PATH_PATTERN,
+  safeBuildSourcePath,
+  normalizeBuildFailure,
+} from "./build-diagnostics.js";
+export type { SiteBuildFailureReason } from "./build-diagnostics.js";
+export {
+  siteBuildStatuses,
+  terminalSiteBuildStatuses,
+  retryableSiteBuildStatuses,
+  trackedSiteBuildOutcomes,
+  isSiteBuildStatus,
+  isTerminalSiteBuildStatus,
+  isRetryableSiteBuildStatus,
+  trackedOutcomeReasons,
+  normalizeTrackedOutcomeReason,
+  siteBuildProviderStages,
+  isSiteBuildProviderStage,
+  siteBuildTrackingPolicy,
+} from "./build-status.js";
+export type {
+  SiteBuildProviderStage,
+  SiteBuildStatus,
+  TrackedSiteBuildOutcome,
+} from "./build-status.js";

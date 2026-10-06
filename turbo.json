@@ -18,6 +18,17 @@
       "dependsOn": ["^build", "^typecheck"],
       "outputs": []
     },
+    "@lacecms/app-admin#typecheck": {
+      "dependsOn": [
+        "^build",
+        "^typecheck",
+        "@lacecms/application#build",
+        "@lacecms/config#build",
+        "@lacecms/domain#build",
+        "@lacecms/platform-node#build"
+      ],
+      "outputs": []
+    },
     "lint": {
       "dependsOn": ["^lint"],
       "outputs": []

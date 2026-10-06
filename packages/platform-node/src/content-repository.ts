@@ -99,7 +99,19 @@ import {
   publicEntry,
   sameStoredModelStates,
   sanitizeBuildReason,
+  encodeBuildError,
   sanitizeDispatchError,
+  CLAIMABLE_SITE_BUILD_STATUS_SQL,
+  RETRYABLE_SITE_BUILD_REFUSAL,
+  assertProviderBuildId,
+  assertTrackingClaim,
+  DUE_TRACKED_SITE_BUILDS_SQL,
+  LEASE_TRACKED_SITE_BUILD_SQL,
+  trackedCompletionStage,
+  trackedOutcomeError,
+  trackedSiteBuildCheck,
+  trackedSiteBuildCheckUpdate,
+  RETRYABLE_SITE_BUILD_STATUS_SQL,
   siteBuildPayload,
   siteBuildRecord,
   snapshotIdsOf,
@@ -108,6 +120,7 @@ import {
   storedSnapshots,
 } from "@lacecms/db";
 import type {
+  DueTrackedSiteBuildRow,
   BlockRow,
   ContentModelResolver,
   EntryRow,
@@ -1239,9 +1252,11 @@ export class NodeContentRepository
       return this.connection.transaction(() => {
         if (input.retryOfBuildId !== undefined) {
           const prior = this.connection
-            .prepare("select status from site_builds where id = ?")
-            .get(input.retryOfBuildId) as { status: string } | undefined;
-          if (prior?.status !== "failed") failure("Only a failed build can be retried.");
+            .prepare(
+              `select 1 as retryable from site_builds where id = ? and status in ${RETRYABLE_SITE_BUILD_STATUS_SQL}`,
+            )
+            .get(input.retryOfBuildId) as { retryable: number } | undefined;
+          if (prior === undefined) failure(RETRYABLE_SITE_BUILD_REFUSAL);
         }
         const state = this.connection
           .prepare("select version from published_state where singleton_key = 1")
@@ -1299,7 +1314,7 @@ export class NodeContentRepository
             typeof payload.publishedSnapshotId === "string" ? payload.publishedSnapshotId : null;
           this.connection
             .prepare(
-              "insert or ignore into site_builds (id, reason, status, target_version, published_snapshot_id, requested_by, requested_at) values (?, ?, 'pending', ?, (select id from content_snapshots where id = ?), ?, ?)",
+              "insert or ignore into site_builds (id, reason, status, target_version, published_snapshot_id, requested_by, requested_at, started_at) values (?, ?, 'running', ?, (select id from content_snapshots where id = ?), ?, ?, ?)",
             )
             .run(
               row.id,
@@ -1308,7 +1323,24 @@ export class NodeContentRepository
               snapshotId,
               payload.requestedBy,
               payload.requestedAt,
+              input.now,
             );
+          // pending → running after a retry, or running → running when an
+          // orphaned claim is recovered; the first start time is kept.
+          const started = this.connection
+            .prepare(
+              `update site_builds set status = 'running', started_at = coalesce(started_at, ?) where id = ? and status in ${CLAIMABLE_SITE_BUILD_STATUS_SQL}`,
+            )
+            .run(input.now, row.id);
+          if (started.changes !== 1) {
+            // Defensive: a terminal build never runs again; finish its stray event.
+            this.connection
+              .prepare(
+                "update outbox_events set processed_at = ?, locked_at = null, locked_by = null where id = ? and locked_by = ?",
+              )
+              .run(input.now, row.id, leaseId);
+            continue;
+          }
           leases.push(
             Object.freeze({
               buildId: siteBuildId(row.id),
@@ -1361,19 +1393,46 @@ export class NodeContentRepository
   public async recordSiteBuildAccepted(input: {
     readonly leaseId: import("@lacecms/application").DispatcherLeaseId;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
+    readonly providerBuildId?: string;
+  }): Promise<void> {
+    if (input.providerBuildId !== undefined) assertProviderBuildId(input.providerBuildId);
+    this.finishLeasedSiteBuild(
+      input,
+      "Build cannot be accepted.",
+      "update site_builds set status = 'accepted', provider_build_id = ?, started_at = coalesce(started_at, ?), completed_at = ?, error = null where id = ? and status = 'running'",
+      [input.providerBuildId ?? null, input.now, input.now],
+    );
+  }
+
+  public async recordSiteBuildTracking(input: {
+    readonly leaseId: import("@lacecms/application").DispatcherLeaseId;
+    readonly now: import("@lacecms/domain").UnixMilliseconds;
     readonly providerBuildId: string;
   }): Promise<void> {
-    if (!input.providerBuildId || input.providerBuildId.length > 200)
-      throw new TypeError("Provider build ID is invalid.");
+    assertProviderBuildId(input.providerBuildId);
+    this.finishLeasedSiteBuild(
+      input,
+      "Build cannot be tracked.",
+      "update site_builds set provider_build_id = ?, provider_check_after = ?, error = null where id = ? and status = 'running'",
+      [input.providerBuildId, input.now],
+    );
+  }
+
+  /** Applies a lease-guarded `running` transition and completes its event atomically. */
+  private finishLeasedSiteBuild(
+    input: {
+      readonly leaseId: import("@lacecms/application").DispatcherLeaseId;
+      readonly now: import("@lacecms/domain").UnixMilliseconds;
+    },
+    refusal: string,
+    update: string,
+    parameters: readonly (number | string | null)[],
+  ): void {
     try {
       this.connection.transaction(() => {
         const id = this.requireLeasedSiteBuild(input.leaseId, input.now);
-        const updated = this.connection
-          .prepare(
-            "update site_builds set status = 'running', provider_build_id = ?, started_at = ?, error = null where id = ? and status = 'pending'",
-          )
-          .run(input.providerBuildId, input.now, id);
-        if (updated.changes !== 1) failure("Build cannot be accepted.");
+        const updated = this.connection.prepare(update).run(...parameters, id);
+        if (updated.changes !== 1) failure(refusal);
         this.connection
           .prepare(
             "update outbox_events set processed_at = ?, locked_at = null, locked_by = null where id = ? and locked_by = ?",
@@ -1389,48 +1448,40 @@ export class NodeContentRepository
     readonly leaseId: import("@lacecms/application").DispatcherLeaseId;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
   }): Promise<void> {
-    try {
-      this.connection.transaction(() => {
-        const id = this.requireLeasedSiteBuild(input.leaseId, input.now);
-        const updated = this.connection
-          .prepare(
-            "update site_builds set status = 'succeeded', started_at = coalesce(started_at, ?), completed_at = ?, error = null where id = ? and status = 'pending'",
-          )
-          .run(input.now, input.now, id);
-        if (updated.changes !== 1) failure("Build cannot be completed.");
-        this.connection
-          .prepare(
-            "update outbox_events set processed_at = ?, locked_at = null, locked_by = null where id = ? and locked_by = ?",
-          )
-          .run(input.now, id, input.leaseId);
-      })();
-    } catch (error) {
-      this.throwWriteError(error, false);
-    }
+    this.finishLeasedSiteBuild(
+      input,
+      "Build cannot be completed.",
+      "update site_builds set status = 'succeeded', started_at = coalesce(started_at, ?), completed_at = ?, error = null where id = ? and status = 'running'",
+      [input.now, input.now],
+    );
   }
 
   public async recordSiteBuildFailure(input: {
     readonly leaseId: import("@lacecms/application").DispatcherLeaseId;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
     readonly reason: string;
+    readonly path?: string;
     readonly retryAt?: import("@lacecms/domain").UnixMilliseconds;
     readonly terminal: boolean;
   }): Promise<void> {
     const reason = sanitizeBuildReason(input.reason);
+    const error = encodeBuildError(input.reason, input.path);
     try {
       this.connection.transaction(() => {
         const id = this.requireLeasedSiteBuild(input.leaseId, input.now);
         if (input.terminal) {
           const updated = this.connection
             .prepare(
-              "update site_builds set status = 'failed', started_at = coalesce(started_at, ?), completed_at = ?, error = ? where id = ? and status = 'pending'",
+              "update site_builds set status = 'failed', started_at = coalesce(started_at, ?), completed_at = ?, error = ? where id = ? and status = 'running'",
             )
-            .run(input.now, input.now, reason, id);
+            .run(input.now, input.now, error, id);
           if (updated.changes !== 1) failure("Build cannot be failed.");
         } else {
           const updated = this.connection
-            .prepare("update site_builds set error = ? where id = ? and status = 'pending'")
-            .run(reason, id);
+            .prepare(
+              "update site_builds set status = 'pending', error = ? where id = ? and status = 'running'",
+            )
+            .run(error, id);
           if (updated.changes !== 1) failure("Build cannot be retried.");
         }
         this.connection
@@ -1450,34 +1501,95 @@ export class NodeContentRepository
     }
   }
 
-  public async completeAcceptedSiteBuild(input: {
+  public async completeTrackedSiteBuild(input: {
     readonly buildId: import("@lacecms/domain").SiteBuildId;
     readonly providerBuildId: string;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
-    readonly outcome: "succeeded" | "failed";
+    readonly outcome: import("@lacecms/domain").TrackedSiteBuildOutcome;
     readonly reason?: string;
+    readonly stage?: import("@lacecms/domain").SiteBuildProviderStage;
   }): Promise<void> {
+    const error = trackedOutcomeError(input.outcome, input.reason);
+    const [stage, checkedAt] = trackedCompletionStage(input.stage, input.now);
     try {
       this.connection.transaction(() => {
         const row = this.connection
-          .prepare("select status, provider_build_id, error from site_builds where id = ?")
+          .prepare(
+            "select b.status, b.provider_build_id, b.error, e.processed_at from site_builds b left join outbox_events e on e.id = b.id where b.id = ?",
+          )
           .get(input.buildId) as
-          | { status: string; provider_build_id: string | null; error: string | null }
+          | {
+              status: string;
+              provider_build_id: string | null;
+              error: string | null;
+              processed_at: number | null;
+            }
           | undefined;
         if (row === undefined || row.provider_build_id !== input.providerBuildId)
           failure("Provider build does not match.");
-        const reason =
-          input.outcome === "failed"
-            ? sanitizeBuildReason(input.reason ?? "provider_failed")
-            : null;
-        if (row.status === input.outcome && row.error === reason) return;
+        if (row.status === input.outcome && row.error === error) return;
         if (row.status !== "running") failure("Build already has a different terminal outcome.");
+        if (row.processed_at === null) failure("Build is still owned by dispatch.");
         this.connection
           .prepare(
-            "update site_builds set status = ?, completed_at = ?, error = ? where id = ? and status = 'running'",
+            "update site_builds set status = ?, completed_at = ?, error = ?, provider_check_after = null, provider_stage = coalesce(?, provider_stage), provider_checked_at = coalesce(?, provider_checked_at) where id = ? and status = 'running' and provider_build_id = ?",
           )
-          .run(input.outcome, input.now, reason, input.buildId);
+          .run(
+            input.outcome,
+            input.now,
+            error,
+            stage,
+            checkedAt,
+            input.buildId,
+            input.providerBuildId,
+          );
       })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+  }
+
+  public async claimTrackedSiteBuildChecks(input: {
+    readonly limit: number;
+    readonly leaseMs: number;
+    readonly now: import("@lacecms/domain").UnixMilliseconds;
+  }): Promise<readonly import("@lacecms/application").TrackedSiteBuildCheck[]> {
+    assertTrackingClaim(input);
+    try {
+      return this.connection.transaction(() => {
+        const rows = this.connection
+          .prepare(DUE_TRACKED_SITE_BUILDS_SQL)
+          .all(input.now, input.limit) as DueTrackedSiteBuildRow[];
+        const lease = this.connection.prepare(LEASE_TRACKED_SITE_BUILD_SQL);
+        return Object.freeze(
+          rows
+            .filter(
+              (row) =>
+                lease.run(
+                  input.now + input.leaseMs,
+                  row.id,
+                  row.provider_build_id,
+                  row.provider_check_after,
+                ).changes === 1,
+            )
+            .map(trackedSiteBuildCheck),
+        );
+      })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+  }
+
+  public async recordTrackedSiteBuildCheck(input: {
+    readonly buildId: import("@lacecms/domain").SiteBuildId;
+    readonly providerBuildId: string;
+    readonly now: import("@lacecms/domain").UnixMilliseconds;
+    readonly checkAfter: import("@lacecms/domain").UnixMilliseconds;
+    readonly stage?: import("@lacecms/domain").SiteBuildProviderStage;
+  }): Promise<boolean> {
+    const update = trackedSiteBuildCheckUpdate(input);
+    try {
+      return this.connection.prepare(update.sql).run(...update.params).changes === 1;
     } catch (error) {
       this.throwWriteError(error, false);
     }

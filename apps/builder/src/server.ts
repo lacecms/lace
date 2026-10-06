@@ -4,12 +4,8 @@ import type { BuildRequest, BuildResult } from "./runner.js";
 
 const MAX_BODY_BYTES = 1024;
 const BUILD_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
-const SAFE_REASONS = new Set([
-  "source_invalid",
-  "install_failed",
-  "build_failed",
-  "version_changed",
-]);
+import { siteBuildFailureReasons, normalizeBuildFailure } from "./diagnostics.js";
+const SAFE_REASONS = new Set<string>(siteBuildFailureReasons.slice(0, 8));
 
 function sameSecret(actual: string | undefined, expected: string): boolean {
   const left = createHash("sha256")
@@ -116,10 +112,18 @@ export function createBuilderHandler(input: {
       send(response, 200, { status: "succeeded", log: "Static build succeeded." });
     else {
       const reason = SAFE_REASONS.has(result.reason) ? result.reason : "build_failed";
-      console.error(JSON.stringify({ component: "builder", status: "failed", reason }));
+      const failure = normalizeBuildFailure(reason, result.path);
+      console.error(
+        JSON.stringify({
+          component: "builder",
+          buildId: buildRequest.buildId,
+          status: "failed",
+          reason,
+        }),
+      );
       send(response, 503, {
         status: "failed",
-        reason,
+        ...failure,
         log: `Static build failed: ${reason}.`,
       });
     }

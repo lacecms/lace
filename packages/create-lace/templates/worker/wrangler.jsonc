@@ -1,8 +1,8 @@
 // Lace CMS Worker configuration. This file is yours: Lace upgrades never change it.
 // It serves the API, authentication and admin (/admin/) from one origin. The static
 // Astro site is a separate deployment; see docs/lace-operations.md#cloudflare-worker.
-// Never put secrets here: upload LACE_AUTH_SECRET (and the optional LACE_DEPLOY_HOOK_URL)
-// with `pnpm exec wrangler secret put <NAME> --config worker/wrangler.jsonc`; local
+// Never put secrets here: upload LACE_AUTH_SECRET (and the optional LACE_DEPLOY_HOOK_URL and
+// LACE_PAGES_API_TOKEN) with `pnpm exec wrangler secret put <NAME> --config worker/wrangler.jsonc`; local
 // values live in the ignored worker/.dev.vars (pnpm cf:env:prepare).
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
@@ -45,5 +45,9 @@
     "LACE_BUILD_SITE_ID": "main-site",
     "LACE_BUILD_SITE_LABEL": "Main site",
     // lace-site: end
+    // Optional Pages deployment tracking (with the LACE_PAGES_API_TOKEN secret, Pages Read only):
+    // "LACE_PAGES_ACCOUNT_ID": "<32-hex account ID>",
+    // "LACE_PAGES_PROJECT_NAME": "<pages-project>",
+    // "LACE_PAGES_TRACKING_TIMEOUT_MINUTES": "60",
   },
 }

@@ -2685,8 +2685,35 @@
                         "properties": {
                           "completedAt": {},
                           "error": {
-                            "maxLength": 255,
+                            "enum": [
+                              "source_invalid",
+                              "source_symlink",
+                              "source_unreadable",
+                              "source_missing",
+                              "source_special_file",
+                              "install_failed",
+                              "build_failed",
+                              "version_changed",
+                              "trigger_unavailable",
+                              "build_timeout",
+                              "invalid_build_event",
+                              "provider_failed",
+                              "provider_build_failed",
+                              "provider_deploy_failed",
+                              "provider_cancelled",
+                              "provider_skipped",
+                              "tracking_forbidden",
+                              "tracking_not_found",
+                              "tracking_rejected",
+                              "tracking_timeout",
+                              "tracking_unconfigured"
+                            ]
+                          },
+                          "errorPath": {
+                            "description": "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
+                            "maxLength": 512,
                             "minLength": 1,
+                            "pattern": "^(?!.*(?:^|\\/)(?:\\.{1,2})(?:\\/|$))[A-Za-z0-9_.][A-Za-z0-9_. -]*(?:\\/[A-Za-z0-9_.][A-Za-z0-9_. -]*)*$",
                             "type": "string"
                           },
                           "id": {
@@ -2698,6 +2725,10 @@
                             "maxLength": 255,
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "providerCheckedAt": {},
+                          "providerStage": {
+                            "enum": ["queued", "initialize", "clone_repo", "build", "deploy"]
                           },
                           "reason": {
                             "maxLength": 255,
@@ -2712,7 +2743,15 @@
                           },
                           "startedAt": {},
                           "status": {
-                            "enum": ["failed", "pending", "running", "succeeded"]
+                            "enum": [
+                              "pending",
+                              "running",
+                              "accepted",
+                              "succeeded",
+                              "failed",
+                              "cancelled",
+                              "unknown"
+                            ]
                           },
                           "targetVersion": {
                             "minimum": 0,
@@ -2767,8 +2806,35 @@
                   "properties": {
                     "completedAt": {},
                     "error": {
-                      "maxLength": 255,
+                      "enum": [
+                        "source_invalid",
+                        "source_symlink",
+                        "source_unreadable",
+                        "source_missing",
+                        "source_special_file",
+                        "install_failed",
+                        "build_failed",
+                        "version_changed",
+                        "trigger_unavailable",
+                        "build_timeout",
+                        "invalid_build_event",
+                        "provider_failed",
+                        "provider_build_failed",
+                        "provider_deploy_failed",
+                        "provider_cancelled",
+                        "provider_skipped",
+                        "tracking_forbidden",
+                        "tracking_not_found",
+                        "tracking_rejected",
+                        "tracking_timeout",
+                        "tracking_unconfigured"
+                      ]
+                    },
+                    "errorPath": {
+                      "description": "Installation-relative ASCII entry path; excludes credentials, environment files, Git and CMS data. Present only with a source failure reason.",
+                      "maxLength": 512,
                       "minLength": 1,
+                      "pattern": "^(?!.*(?:^|\\/)(?:\\.{1,2})(?:\\/|$))[A-Za-z0-9_.][A-Za-z0-9_. -]*(?:\\/[A-Za-z0-9_.][A-Za-z0-9_. -]*)*$",
                       "type": "string"
                     },
                     "id": {
@@ -2780,6 +2846,10 @@
                       "maxLength": 255,
                       "minLength": 1,
                       "type": "string"
+                    },
+                    "providerCheckedAt": {},
+                    "providerStage": {
+                      "enum": ["queued", "initialize", "clone_repo", "build", "deploy"]
                     },
                     "reason": {
                       "maxLength": 255,
@@ -2794,7 +2864,15 @@
                     },
                     "startedAt": {},
                     "status": {
-                      "enum": ["failed", "pending", "running", "succeeded"]
+                      "enum": [
+                        "pending",
+                        "running",
+                        "accepted",
+                        "succeeded",
+                        "failed",
+                        "cancelled",
+                        "unknown"
+                      ]
                     },
                     "targetVersion": {
                       "minimum": 0,

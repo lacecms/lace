@@ -8,6 +8,7 @@
     "acceptance:generated": "node scripts/generated-project-acceptance.mjs all",
     "acceptance:starter": "node scripts/generated-project-acceptance.mjs starter",
     "acceptance:cloudflare": "node scripts/generated-project-acceptance.mjs cloudflare",
+    "acceptance:builder-diagnostics": "node scripts/generated-project-acceptance.mjs builder-diagnostics",
     "acceptance:existing-site": "node scripts/generated-project-acceptance.mjs existing-site",
     "acceptance:start": "node scripts/dev-stack.mjs acceptance:start",
     "acceptance:stop": "node scripts/dev-stack.mjs acceptance:stop",
@@ -58,8 +59,8 @@
     "vitest": "catalog:"
   },
   "engines": {
-    "node": ">=24.12.0 <25",
-    "pnpm": ">=12 <13"
+    "node": ">=24.12.0",
+    "pnpm": ">=12"
   },
   "packageManager": "pnpm@12.3.4"
 }

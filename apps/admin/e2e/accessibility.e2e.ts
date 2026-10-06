@@ -165,6 +165,32 @@ const token = {
   tokenPrefix: "lace_bt_ab12",
 };
 
+const buildStatuses = [
+  "pending",
+  "running",
+  "accepted",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "unknown",
+] as const;
+const buildLabel = (status: (typeof buildStatuses)[number]) =>
+  status[0]!.toUpperCase() + status.slice(1);
+const builds = buildStatuses.map((status, index) => ({
+  id: `build-${status}`,
+  reason: "publication",
+  status,
+  targetVersion: buildStatuses.length - index,
+  requestedBy: "admin-1",
+  requestedAt: createdAt,
+  ...(status === "pending" ? {} : { startedAt: createdAt }),
+  ...(["pending", "running"].includes(status) ? {} : { completedAt: updatedAt }),
+  ...(["accepted", "cancelled", "unknown"].includes(status)
+    ? { providerBuildId: `dep-${status}` }
+    : {}),
+  ...(status === "failed" ? { error: "build_failed" } : {}),
+}));
+
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ body: JSON.stringify(body), contentType: "application/json", status });
 }
@@ -295,6 +321,16 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
         { disabled: false, email: body.email, id: "user-4", role: body.role },
         201,
       );
+    }
+    if (path === "/api/v1/admin/build-site")
+      return json(route, { site: { id: "main-site", label: "Main site" } });
+    if (path === "/api/v1/admin/site-builds") return json(route, { items: builds });
+    const buildDetail = /^\/api\/v1\/admin\/site-builds\/([^/]+)$/u.exec(path);
+    if (buildDetail !== null) {
+      const found = builds.find((item) => item.id === buildDetail[1]);
+      return found === undefined
+        ? json(route, { error: { code: "NOT_FOUND", message: "Not found." } }, 404)
+        : json(route, found);
     }
     if (path === "/api/v1/admin/settings/status")
       return json(route, { configuredModels: 2, ready: true });
@@ -515,6 +551,53 @@ test("the entry column stacks below the blocks on a narrow screen", async ({ bro
 
   await page.getByRole("button", { name: "Add block" }).focus();
   await tabTo(page, summaryField);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await page.close();
+});
+
+test("every build status popover works by keyboard and passes the accessibility audit", async ({
+  page,
+}) => {
+  await mockAdmin(page);
+  await openAdmin(page, "/builds", (current) =>
+    current.getByRole("table", { name: "Build history" }),
+  );
+  const table = page.getByRole("table", { name: "Build history" });
+  for (const status of buildStatuses) {
+    const trigger = table.getByRole("button", { name: `About the ${buildLabel(status)} status` });
+    await tabTo(page, trigger, 120);
+    await page.keyboard.press("Enter");
+    const popover = page.getByRole("dialog", { name: buildLabel(status) });
+    await expect(popover).toBeVisible();
+    await expect(popover).toContainText("Public site");
+    if (status === "accepted") {
+      await expect(popover).toContainText("Lace has not confirmed that the public site changed.");
+      await expectNoAccessibilityViolations(page, "accepted status popover");
+    }
+    await page.keyboard.press("Escape");
+    await expect(popover).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  }
+  await table.getByRole("button", { name: "View build for version 5" }).click();
+  const detail = page.getByRole("region", { name: "Build details" });
+  await detail.getByRole("button", { name: "About the Accepted status" }).press("Space");
+  await expect(page.getByRole("dialog", { name: "Accepted" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(detail.getByRole("button", { name: "Retry build" })).toBeVisible();
+});
+
+test("a build status popover fits a 375px viewport", async ({ browser }) => {
+  const page = await narrowPage(browser);
+  await openAdmin(page, "/builds", (current) =>
+    current.getByRole("table", { name: "Build history" }),
+  );
+  await page.getByRole("button", { name: "About the Unknown status" }).click();
+  const popover = page.getByRole("dialog", { name: "Unknown" });
+  await expect(popover).toBeVisible();
+  const box = await popover.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(375);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await page.close();
 });

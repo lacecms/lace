@@ -33,6 +33,21 @@ entry deletion. Public-projection mutations atomically enqueue durable build
 work; build dispatch occurs later. Media deletion only marks unreferenced media
 for asynchronous cleanup, never deleting an object in the database transaction.
 
+### Site-build outcome migration
+
+Migration `0003_site_build_outcomes` rebuilds `site_builds` for the seven-status
+build lifecycle (architecture §9.8) and adds nullable provider tracking fields.
+It reclassifies history in one shared file: former `running` rows become
+`accepted` everywhere, because no runtime tracked provider deployments; on D1,
+`succeeded` rows without a provider ID also become `accepted`, because a deploy
+hook response never proved publication; Node SQLite builder `succeeded` rows are
+kept. The file recognises D1 by the absence of the Drizzle migrator ledger
+(`__drizzle_migrations`), which the Node migrator always creates before applying
+files, so apply Node migrations only with `pnpm db:migrate:node` (or the
+generated project's migration command), never by running SQL files by hand.
+Stop dispatch and back up the database first; downgrading requires restoring
+that backup because older engines reject the new statuses.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

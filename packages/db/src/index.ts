@@ -8,6 +8,7 @@ export const checkedInMigrations = Object.freeze([
   { createdAt: 1789240330790, name: "0000_exotic_tarantula.sql" },
   { createdAt: 1789240330791, name: "0001_security_controls.sql" },
   { createdAt: 1790624606153, name: "0002_mutation_guards.sql" },
+  { createdAt: 1791238354782, name: "0003_site_build_outcomes.sql" },
 ]);
 
 export interface AppliedMigration {

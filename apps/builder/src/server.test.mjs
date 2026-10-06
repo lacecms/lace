@@ -85,7 +85,38 @@ test("builder does not return thrown tool output or secrets", async () => {
   expect(JSON.stringify(response.body)).not.toContain(secret);
   expect(JSON.stringify(response.body)).not.toContain("/source/private");
   expect(log).toHaveBeenCalledWith(
-    JSON.stringify({ component: "builder", status: "failed", reason: "build_failed" }),
+    JSON.stringify({
+      component: "builder",
+      buildId: "failure",
+      status: "failed",
+      reason: "build_failed",
+    }),
   );
   log.mockRestore();
+});
+
+test("authenticated source diagnostics carry only bounded safe relative paths", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    for (const path of [
+      "src/page.astro",
+      "/source/private",
+      "../outside",
+      "a".repeat(513),
+      ".env",
+    ]) {
+      const response = await invoke(
+        createBuilderHandler({
+          secret,
+          build: async () => ({ status: "failed", reason: "source_symlink", path }),
+        }),
+        { buildId: "diagnostic", targetVersion: 1 },
+      );
+      expect(response.body.reason).toBe("source_symlink");
+      expect(response.body.path).toBe(path === "src/page.astro" ? path : undefined);
+      expect(Buffer.byteLength(JSON.stringify(response.body))).toBeLessThanOrEqual(1024);
+    }
+  } finally {
+    log.mockRestore();
+  }
 });

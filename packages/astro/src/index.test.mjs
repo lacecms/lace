@@ -1,5 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
-import { LacePublishedSiteError } from "@lacecms/sdk";
+import { LacePublishedSiteError, createPublishedSiteLoader } from "@lacecms/sdk";
+import { createServer } from "node:http";
+import { gzipSync } from "node:zlib";
 import { afterEach, expect, test } from "vitest";
 import { createAstroSiteLoader } from "../dist/index.js";
 
@@ -111,4 +113,119 @@ test("the adapter exports only its server module and the two generic components"
     name.endsWith(".astro"),
   );
   expect(components.sort()).toEqual(["LaceBlocks.astro", "RichText.astro", "RichTextNodes.astro"]);
+});
+
+async function listen(server) {
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+async function close(server) {
+  server.closeAllConnections();
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+}
+
+test.each([
+  ["published-site static", false, (baseUrl) => createPublishedSiteLoader({ baseUrl, token })],
+  [
+    "published-site dev",
+    true,
+    (baseUrl) => createPublishedSiteLoader({ baseUrl, token, revalidate: true }),
+  ],
+  [
+    "Astro static",
+    false,
+    (baseUrl) => createAstroSiteLoader({ env: { ...env, LACE_API_BASE_URL: baseUrl } }),
+  ],
+  [
+    "Astro dev",
+    true,
+    (baseUrl) => createAstroSiteLoader({ dev: true, env: { ...env, LACE_API_BASE_URL: baseUrl } }),
+  ],
+])("%s works with default fetch through a gzip proxy", async (_name, dev, factory) => {
+  let version = 7;
+  const requests = [];
+  const origin = createServer((request, response) => {
+    if (
+      request.url !== "/api/v1/public/build-export" ||
+      request.headers.authorization !== `Bearer ${token}`
+    ) {
+      response.writeHead(403).end();
+      return;
+    }
+    const etag = `"${version}"`;
+    if (request.headers["if-none-match"]?.replace(/^W\//u, "") === etag) {
+      response.writeHead(304, { etag }).end();
+      return;
+    }
+    const exported = structuredClone(fixture);
+    exported.version = version;
+    exported.entries[0].entry.published.title = `Home v${version}`;
+    response
+      .writeHead(200, { "content-type": "application/json", etag })
+      .end(JSON.stringify(exported));
+  });
+  const originUrl = await listen(origin);
+  const proxy = createServer(async (request, response) => {
+    try {
+      const condition = request.headers["if-none-match"];
+      requests.push({ condition, encoding: request.headers["accept-encoding"] });
+      const upstream = await fetch(`${originUrl}${request.url}`, {
+        headers: {
+          authorization: request.headers.authorization,
+          ...(condition === undefined ? {} : { "if-none-match": condition }),
+        },
+      });
+      const etag = upstream.headers.get("etag");
+      if (upstream.status === 304) {
+        response.writeHead(304, { etag }).end();
+        return;
+      }
+      const compressed = gzipSync(await upstream.text());
+      response
+        .writeHead(upstream.status, {
+          "content-encoding": "gzip",
+          "content-length": compressed.length,
+          "content-type": "application/json",
+          etag: `W/${etag}`,
+          vary: "Accept-Encoding",
+        })
+        .end(compressed);
+    } catch {
+      response.writeHead(502).end();
+    }
+  });
+  try {
+    const proxyUrl = await listen(proxy);
+    const getSite = factory(proxyUrl);
+    const [first, concurrent] = await Promise.all([getSite(), getSite()]);
+    expect(concurrent).toBe(first);
+    expect(first.byPath("/")?.title).toBe("Home v7");
+    expect(await getSite()).toBe(first);
+    version = 8;
+    const changed = await getSite();
+    if (dev) {
+      expect(changed.version).toBe(8);
+      expect(changed.byPath("/")?.title).toBe("Home v8");
+      expect(await getSite()).toBe(changed);
+      expect(requests.map(({ condition }) => condition)).toEqual([
+        undefined,
+        'W/"7"',
+        '"7"',
+        'W/"8"',
+      ]);
+    } else {
+      expect(changed).toBe(first);
+      expect(requests).toHaveLength(1);
+    }
+    expect(requests.every(({ encoding }) => encoding.includes("gzip"))).toBe(true);
+  } finally {
+    await close(proxy);
+    await close(origin);
+  }
 });

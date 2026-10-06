@@ -26,11 +26,11 @@ function curlExample(text) {
   return examples[0];
 }
 
-test("README commands, setup order and local links match the generated project", async () => {
+test("development guide commands, setup order and README index match the generated project", async () => {
   const root = await project();
-  const readme = await readFile(join(root, "README.md"), "utf8");
+  const guide = await readFile(join(root, "docs/lace-compose-dev.md"), "utf8");
   const { scripts } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  const blocks = [...readme.matchAll(/```bash\n([\s\S]*?)\n```/gu)].map((match) => match[1]);
+  const blocks = [...guide.matchAll(/```bash\n([\s\S]*?)\n```/gu)].map((match) => match[1]);
   for (const block of blocks) {
     for (const line of block.split("\n")) {
       if (!line.startsWith("pnpm ")) continue;
@@ -55,34 +55,43 @@ test("README commands, setup order and local links match the generated project",
     "pnpm dev\n",
     "pnpm build\n",
   ];
-  const positions = sequence.map((command) => readme.indexOf(command));
+  const fenced = `${blocks.join("\n")}\n`;
+  const positions = sequence.map((command) => fenced.indexOf(command));
   expect(positions.every((position) => position >= 0)).toBe(true);
   expect(positions).toEqual([...positions].sort((left, right) => left - right));
-  for (const [, link] of readme.matchAll(/\]\(([^)]+)\)/gu)) {
-    const [path, fragment] = link.split("#");
-    expect((await stat(join(root, path))).isFile()).toBe(true);
-    if (fragment) {
-      const contents = await readFile(join(root, path), "utf8");
-      const anchors = [...contents.matchAll(/^## (.+)$/gmu)].map((match) =>
-        match[1].toLowerCase().replaceAll(",", "").replaceAll(" ", "-"),
-      );
-      expect(anchors).toContain(fragment);
-    }
-  }
+  // The stopped-services rule precedes the first host database command sequence.
+  expect(guide.indexOf("Run them only while those services are stopped")).toBeLessThan(
+    guide.indexOf("```bash\npnpm exec lace doctor"),
+  );
   // Every documented source/config path exists; guides describe actual delivered files.
-  for (const [, path] of readme.matchAll(/`((?:site\/[^`]+|lace\.config\.ts))`/gu)) {
+  for (const [, path] of guide.matchAll(/`((?:site\/[^`]+|lace\.config\.ts))`/gu)) {
     if (path.includes("*") || path === "site/dist/") continue;
     await stat(join(root, path));
   }
-  expect(readme).toContain("shell history and process arguments");
-  expect(readme).toContain("at least 12 characters");
-  expect(readme).toContain("later requests return 404");
-  expect(readme).toContain("server-side");
+  expect(guide).toContain("shell history and process arguments");
+  expect(guide).toContain("at least 12 characters");
+  expect(guide).toContain("later requests return 404");
+  expect(guide).toContain("server-side");
+  expect(guide).toContain("**Working directory:**");
+
+  const readme = await readFile(join(root, "README.md"), "utf8");
+  expect(readme).not.toContain("```bash");
+  expect(readme).toContain("Node `>=24.12.0` and pnpm `>=12`");
+  expect(readme).toContain("pins pnpm `12.3.4`");
+  expect(readme).not.toMatch(/<25|<13/u);
+  for (const path of [
+    "docs/lace-compose-dev.md",
+    "docs/lace-compose-production.md",
+    "docs/lace-operations.md",
+    "docs/lace-astro-site.md",
+  ])
+    expect(readme).toContain(`](${path}`);
+  expect(readme).not.toContain("docs/lace-cloudflare.md");
 });
 
 test("documented curl examples send the exact setup request with a public path prefix", async () => {
   const root = await project();
-  const readme = await readFile(join(root, "README.md"), "utf8");
+  const readme = await readFile(join(root, "docs/lace-compose-dev.md"), "utf8");
   const guide = await readFile(join(root, "docs/lace-operations.md"), "utf8");
   expect(curlExample(readme)).toBe(curlExample(guide));
   expect(guide).toContain("read -r -s -p 'Setup token: '");

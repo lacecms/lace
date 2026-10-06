@@ -57,9 +57,12 @@ test("generates deterministic owned source and hashed managed files", async () =
     ].sort(),
   );
   expect(left.manifest.files).not.toHaveProperty(".lace/upgrade-instructions.json");
-  expect(
-    JSON.parse(await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8")),
-  ).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION, database: [] });
+  const instructions = JSON.parse(
+    await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
+  );
+  expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
+  // Upgrading from the published alpha.2 engines needs the 33D build-outcome migration.
+  expect(instructions.database.join("\n")).toContain("0003_site_build_outcomes");
   expect(files).not.toContain("wrangler.jsonc");
   expect(files.every((file) => !file.startsWith("apps/") && !file.startsWith("packages/"))).toBe(
     true,
@@ -145,8 +148,13 @@ test("optional Cloudflare files are managed only when selected", async () => {
   expect(guide).toContain("acceptance is not proof of a successful static deploy");
   expect(guide).not.toContain("future work");
   const readme = await read("README.md");
-  expect(readme).toContain("docs/lace-operations.md#cloudflare-worker");
-  expect(readme).toContain("pnpm exec lace doctor --target cloudflare-local --stage ready");
+  expect(readme).toContain("](docs/lace-cloudflare.md)");
+  expect(readme).toContain("separate deployments");
+  expect(readme).not.toContain("docs/lace-operations.md#optional-cloudflare");
+  const scenario = await read("docs/lace-cloudflare.md");
+  expect(scenario).toContain("pnpm exec lace doctor --target cloudflare-local --stage ready");
+  expect(scenario).toContain("lace-operations.md#choose-cloudflare-management-credentials");
+  expect(files["docs/lace-cloudflare.md"]?.owner).toBe("managed");
   expect(await read(".gitignore")).toContain(".dev.vars\n");
 });
 
@@ -164,7 +172,12 @@ test("projects without Cloudflare keep empty operator settings and no Worker scr
   const guide = await read("docs/lace-operations.md");
   expect(guide).toContain("## Optional Cloudflare");
   expect(guide).not.toContain("## Cloudflare Worker");
+  expect(guide).not.toContain("lace-cloudflare.md");
   expect(await listFiles(project.path)).not.toContain("worker/index.ts");
+  expect(await listFiles(project.path)).not.toContain("docs/lace-cloudflare.md");
+  const readme = await read("README.md");
+  expect(readme).toContain("docs/lace-operations.md#optional-cloudflare");
+  expect(readme).not.toContain("lace-cloudflare.md");
 });
 
 test.each([false, true])("fresh cms README is user-owned (cloudflare=%s)", async (cloudflare) => {
@@ -181,8 +194,12 @@ test.each([false, true])("fresh cms README is user-owned (cloudflare=%s)", async
   ).toBe(0);
   const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
   expect(manifest.files["README.md"]).toEqual({ owner: "user" });
-  expect(await readFile(join(parent, "cms/README.md"), "utf8")).toContain("pnpm env:prepare");
+  const readme = await readFile(join(parent, "cms/README.md"), "utf8");
+  expect(readme).toContain("](docs/lace-compose-dev.md)");
+  expect(readme).toContain("](docs/lace-compose-production.md)");
+  expect(readme.includes("](docs/lace-cloudflare.md)")).toBe(cloudflare);
   expect(output.join("")).toContain("follow README.md");
+  expect(output.join("")).toContain("docs/lace-compose-dev.md");
   expect(output.join("")).toContain("docs/lace-operations.md");
   expect(errors).toEqual([]);
   expect(await readdir(parent)).toEqual(["cms"]);
@@ -245,18 +262,18 @@ test("alpha generation selects exact compatible packages and overridable images"
   for (const file of ["package.json", "site/package.json"]) {
     const manifest = JSON.parse(await readFile(join(project.path, file), "utf8"));
     for (const [name, version] of Object.entries(manifest.dependencies)) {
-      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-alpha.2");
+      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-alpha.3");
     }
   }
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
-  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.2");
-  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.2");
-  expect(TEMPLATE_VERSION).toBe("0.14.0");
+  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.3");
+  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.3");
+  expect(TEMPLATE_VERSION).toBe("0.17.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");
   expect(await readFile(join(project.path, "docs/lace-operations.md"), "utf8")).toContain(
-    "pnpm create lace@0.1.0-alpha.2",
+    "pnpm create lace@0.1.0-alpha.3",
   );
 });
 

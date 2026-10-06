@@ -22,16 +22,25 @@ Site mode: **none**, recorded in `.lace/manifest.json` as mode `none`. This proj
 
 <!-- lace-site: end -->
 
-Start with the generated root `README.md` for the concise quickstart. README is user-owned, without a manifest hash; upgrades preserve its edits. If `init .` encounters an allowed existing README, it preserves every byte and prints this guide's path. Follow this guide directly or manually copy relevant Lace instructions into your existing README. In a `cms/` installation these paths and commands are relative to `cms/`, not its parent application. This guide is managed with hash/conflict review.
+<!-- lace-cloudflare: on -->
+
+This guide is the reference. Follow a scenario guide for an ordered journey: [Docker Compose development](lace-compose-dev.md), [Docker Compose production](lace-compose-production.md) or [Cloudflare](lace-cloudflare.md).
+<!-- lace-cloudflare: end -->
+<!-- lace-cloudflare: off -->
+
+This guide is the reference. Follow a scenario guide for an ordered journey: [Docker Compose development](lace-compose-dev.md) or [Docker Compose production](lace-compose-production.md).
+<!-- lace-cloudflare: end -->
+
+The generated root `README.md` is a short index of requirements, layout and these guides. README is user-owned, without a manifest hash; upgrades preserve its edits. If `init .` encounters an allowed existing README, it preserves every byte and prints the scenario guide paths. Follow the guides directly or manually copy relevant Lace instructions into your existing README. In a `cms/` installation these paths and commands are relative to `cms/`, not its parent application. This guide is managed with hash/conflict review.
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0 <25`, pnpm 12 and Docker Compose. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.14.0` and Lace `0.1.0-alpha.2` packages and images; published `0.1.0-alpha.1` packages/images retain their original template `0.4.0` and behavior and are not retroactively updated. The root quickstart, environment preparation, doctor, browser setup, tour, existing-site mode and Cloudflare Worker require `0.1.0-alpha.2` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.17.0` and Lace `0.1.0-alpha.3` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.3` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-alpha.2 my-site
+pnpm create lace@0.1.0-alpha.3 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -200,7 +209,7 @@ Once the real build token is configured, run `pnpm prod:start`. It starts API/ad
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.14.0` with the exact `0.1.0-alpha.2` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.17.0` with the exact `0.1.0-alpha.3` candidate artifacts.
 
 <!-- lace-site: starter -->
 
@@ -221,7 +230,7 @@ Saving a draft never changes any site output and never requests a build. Publish
 
 <!-- lace-site: end -->
 
-On the VPS builder a build stays **Pending** while it waits and while the synchronous builder runs, then becomes **Succeeded** or **Failed**; **Running** appears only for providers that report an accepted deployment. The new release can be served a moment before Builds records success. Builds coalesce: one build may cover several publications, so look for a build whose target version is at least the version your publication queued. The web proxy sends `Cache-Control: no-cache` for site responses, so browsers revalidate with the file validators after a release switch instead of reusing heuristically cached HTML. Admin's entry editor follows the covering build and names the current build site, but a succeeded build does not prove a manual or provider deployment.
+Build statuses: **Pending** (queued or waiting for a retry), **Running** (building, or tracking a provider deployment), **Accepted** (a provider accepted the request; its outcome is not tracked), **Succeeded** (published), **Failed** (failed with a recorded reason), **Cancelled** (cancelled or skipped by the provider) and **Unknown** (tracking stopped without proof). Only Succeeded proves the site was published; each status in Builds has an info button with its meaning and next step, and administrators can retry Failed, Cancelled, Unknown and Accepted builds. On the VPS builder a build is **Pending** while it waits and **Running** while the synchronous builder runs, then becomes **Succeeded** or **Failed**. The new release can be served a moment before Builds records success. Builds coalesce: one build may cover several publications, so look for a build whose target version is at least the version your publication queued. The web proxy sends `Cache-Control: no-cache` for site responses, so browsers revalidate with the file validators after a release switch instead of reusing heuristically cached HTML. Admin's entry editor follows the covering build and names the current build site, but a succeeded build does not prove a manual or provider deployment.
 
 <!-- lace-site: starter -->
 
@@ -345,28 +354,83 @@ pnpm exec lace doctor --target cloudflare-local --stage setup
 pnpm exec lace doctor --target cloudflare-local --stage ready
 ```
 
-Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and skips migration evidence, and `ready` fails. With the Worker running and a build token present, `ready` passes with migration readiness derived from the Worker's `/health/ready`. Doctor never starts the Worker or creates `.lace/data/cloudflare`. For your account, `pnpm exec lace doctor --target cloudflare-remote --stage ready` reads only the remote D1 migration ledger with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and skips migration evidence, and `ready` fails. With the Worker running and a build token present, `ready` passes with migration readiness derived from the Worker's `/health/ready`. Doctor never starts the Worker or creates `.lace/data/cloudflare`. For your account use the explicit private-file remote diagnosis described below; doctor reads the remote D1 ledger and does not verify deployment permissions.
 
 ### Recovery
 
 - **Expired or lost setup token.** Tokens expire after one hour. The setup screen then reports that setup is still incomplete and creates no account. Stop `cf:dev`, run `pnpm cf:auth:bootstrap` again for a fresh token, start `cf:dev` and retry. After setup completes, bootstrap reports that setup is closed.
 - **Deploy hook unavailable or rejected.** Publication stays committed. The build stays `pending` with a sanitized reason (`trigger_unavailable` for timeouts, throttling, server errors or network failures; `provider_failed` for rejected or revoked hooks), and the scheduled trigger retries with backoff, up to eight attempts. The build then becomes `failed`. Fix the hook, then use Retry in Admin. Locally no cron runs by itself: `cf:dev` exposes `http://127.0.0.1:8787/__scheduled` to run the scheduled handler once.
-- **Accepted is not deployed.** When the provider accepts the hook and returns a deployment ID, Admin records the build as `running` with that ID. Lace does not poll the provider. Confirm the deployment's result in your provider before you treat the site as updated.
+- **Accepted is not deployed.** Without Pages tracking, when the provider accepts the hook Admin records the build as `accepted`, with the provider's deployment ID when it returns one. `accepted` never proves the site changed: confirm the deployment's result in your provider before you treat the site as updated, and retry the build in Admin if it failed. Upgrading from an earlier alpha records former `running` hook builds, and hook `succeeded` builds without a deployment ID, as `accepted`.
+- **Pages deployment tracking.** Set `LACE_PAGES_ACCOUNT_ID` and `LACE_PAGES_PROJECT_NAME` in `worker/wrangler.jsonc` `vars` and the Worker secret `LACE_PAGES_API_TOKEN` (a separate token with only _Account · Cloudflare Pages · Read_, never your operator token). Identified hook builds then stay `running` while the scheduled Worker reads that exact deployment every minute; Builds shows the Pages stage and last check. Only a successful deploy stage becomes `succeeded`; build or deploy failure is `failed` (`provider_build_failed`, `provider_deploy_failed`), cancel or skip is `cancelled`, and a missing permission (`tracking_forbidden`), an unknown deployment (`tracking_not_found`) or no result within `LACE_PAGES_TRACKING_TIMEOUT_MINUTES` (default 60, 5–1440; `tracking_timeout`) is `unknown`. Temporary Pages API errors are retried with backoff until that deadline, so no build stays `running` longer. Removing the settings ends tracked builds as `unknown` (`tracking_unconfigured`). Retry `failed`, `cancelled` or `unknown` builds in Admin after checking Pages.
 - **Restarts.** Content, accounts, setup state and media survive `cf:dev` restarts in `.lace/data/cloudflare`. Reset only by deleting that directory with the Worker stopped.
 - **Worker unavailable.** The Worker answers with a generic unavailable error and logs only the names of missing or invalid variables. Check `worker/.dev.vars` locally or the Worker's secrets and `vars` remotely.
 
+### Choose Cloudflare management credentials
+
+Work from this generated CMS root; Wrangler commands use `--config worker/wrangler.jsonc` in the default environment. Local `cf:*` scripts stay local. Remote commands need an explicit account and database; local content is not copied to your account.
+
+Choose one of these management workflows:
+
+| Choice            | Lace remote migrate/sync/bootstrap                                                   | Wrangler deploy/secrets                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Split credentials | D1-scoped API token in `.lace/cloudflare-operator.env`, loaded with `--operator-env` | OAuth from a one-time `pnpm exec wrangler login`; no API token in shell, `.env` or `.env.local` |
+| Single token      | One sufficiently scoped token in the same private file                               | Explicitly load that file only for the intended Wrangler invocation                             |
+
+An operator token needs **Account · D1 · Edit** for remote D1 operations. The single-token choice additionally needs **Account · Workers Scripts · Edit** (current equivalent Workers Editor for an existing Worker; creating one may need Workers product Admin), **Account · Account Settings · Read** for account resolution, **Account · Workers R2 Storage · Edit** for bucket creation, **Account · Cloudflare Pages · Edit** for Pages operations, and **Account · Workers KV Storage · Edit** only for optional KV. Custom domain/route provisioning may also need **Zone · Workers Routes · Edit** and **DNS · Edit**. Scope the token to the intended account/resources. Check current provider permissions for each operation; a successful read-only probe does not prove write permissions. A D1-only token is insufficient for Worker deploy or secrets.
+
+| Credential             | Purpose and location                                                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LACE_AUTH_SECRET`     | CMS sessions/authentication; local Worker `worker/.dev.vars`, production Worker secret uploaded separately. Not a Cloudflare management token. |
+| `CLOUDFLARE_API_TOKEN` | Account management; private operator file or intended process only. Never upload it as a CMS Worker secret.                                    |
+| Wrangler OAuth         | Management login stored by Wrangler; never copied into the operator file or Worker.                                                            |
+| Setup token / password | One-time first-admin setup / subsequent admin login; neither is a build credential.                                                            |
+| `LACE_BUILD_TOKEN`     | Read-only published exports; private site build environment, never public browser configuration.                                               |
+| `LACE_PAGES_API_TOKEN` | Separate Pages-Read-only Worker secret for deployment tracking; never reuse the operator token.                                                |
+
+Create the private file once without overwriting an existing copy. The generated `.lace/` exists already:
+
+```bash
+node --input-type=module -e 'import { copyFile, chmod, constants } from "node:fs/promises"; process.umask(0o077); await copyFile("docs/cloudflare-operator.env.example", ".lace/cloudflare-operator.env", constants.COPYFILE_EXCL); await chmod(".lace/cloudflare-operator.env", 0o600);'
+```
+
+Edit it privately: set `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `LACE_D1_DATABASE_ID` and `LACE_WRANGLER_CONFIG=worker/wrangler.jsonc`. The account ID is 32 hexadecimal characters. The D1 ID must match the `DB` binding. This file is ignored, user-owned and loaded only when selected; the CLI never sources shell code. Process values override it, including empty values. Selected-file failures never fall back. Do not add other assignments to the operator file.
+
+For split credentials, remove API-token assignments from **both** `.env` and `.env.local` and clear `CLOUDFLARE_API_TOKEN` in the current shell before login or deploy. `unset CLOUDFLARE_API_TOKEN` alone is insufficient when Wrangler can reload a file. A plain `CLOUDFLARE_ACCOUNT_ID` may remain in `.env` to select the same account for Wrangler; align it with the private file and Worker configuration. Then:
+
+```bash
+unset CLOUDFLARE_API_TOKEN
+pnpm exec wrangler login
+pnpm exec lace cloudflare preflight --target cloudflare-remote --wrangler-auth oauth --operator-env .lace/cloudflare-operator.env
+pnpm exec wrangler whoami --account <account-id> --config worker/wrangler.jsonc
+```
+
+Preflight reads only the explicit D1 endpoint (`SELECT 1`) and default-root credential inputs. It prints source categories and the validated account ID, never token values or private paths. `oauth-candidate` means no overriding token was found; OAuth login/account membership and Workers/Pages write permissions remain unverified. Inspect `whoami` and the operation permission checklist before deployment/secrets. Missing permissions, authorization rejection, conflicting account settings or stale dotenv tokens need correction before proceeding. Preflight itself never logs in, launches Wrangler, changes files or refreshes OAuth credentials. Named environments/profiles and alternative API-key authentication are outside its default-root scope and fail with advice.
+
+For the single-token choice, explicitly load the same private file into these individual processes (the token stays out of shell arguments):
+
+```bash
+node --env-file=.lace/cloudflare-operator.env node_modules/@lacecms/cli/dist/bin.js cloudflare preflight --target cloudflare-remote --wrangler-auth token
+node --env-file=.lace/cloudflare-operator.env node_modules/wrangler/bin/wrangler.js whoami --account <account-id> --config worker/wrangler.jsonc
+node --env-file=.lace/cloudflare-operator.env node_modules/wrangler/bin/wrangler.js deploy --config worker/wrangler.jsonc
+```
+
+Use that explicit Wrangler invocation also for provisioning and `secret put` in the single-token choice. Login is unnecessary for a valid API token. Preflight reports when the intended Wrangler token differs from the Lace token; it cannot certify equal permissions.
+
+**Alpha.2 upgrade:** install a compatible new CLI before using `--operator-env` or preflight. Template `0.15.0` supplies the example and managed guidance; published alpha.2 packages are immutable and do not gain these commands retroactively. `lace upgrade` preserves `.env`, `.env.local`, README, the private operator file, Worker configuration and site source. Manually move the legacy API token into the protected file, remove its assignments from both implicit dotenv files, clear the inherited token, then repeat preflight and `whoami`. Do not print/copy credentials through chat, logs or inline shell commands. Upgrade never relocates credentials automatically.
+
 ### Deploy the Worker to your account
 
-Every command in this section is an explicit mutation of your Cloudflare account; generation, installation and the `cf:*` scripts never perform them. You need an account with Workers, D1 and R2, and either `pnpm exec wrangler login` or an API token with Workers Scripts, D1 and R2 edit permissions (plus Pages edit for the site). Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` only in your private `.env` or CI secrets. Replace `<name>` with the names in `worker/wrangler.jsonc`.
+Every provisioning/deployment command here is an explicit mutation of your Cloudflare account; generation, installation and the local `cf:*` scripts never perform them. Preflight and `whoami` are diagnostic steps. You need Workers, D1 and R2. First choose the credential workflow above; the commands below show split credentials, while the single-token choice uses its explicit Node env-file Wrangler invocation.
 
-1. Provision: `pnpm exec wrangler d1 create <name>-cms` and `pnpm exec wrangler r2 bucket create <name>-media`. Optionally create a KV namespace for `CACHE`.
-2. Configure: put the returned D1 ID into `worker/wrangler.jsonc` and `LACE_D1_DATABASE_ID` in `.env`, add the optional KV binding, and set `LACE_PUBLIC_BASE_URL` in the configuration's `vars` to the Worker's HTTPS origin (its `workers.dev` address or a custom domain route), with a trailing slash.
-3. Secrets: `pnpm exec wrangler secret put LACE_AUTH_SECRET --config worker/wrangler.jsonc` with at least 32 random bytes (for example from `openssl rand -hex 32`), and optionally `LACE_DEPLOY_HOOK_URL` with the static site's HTTPS deploy hook.
-4. Migrate and sync with the remote target, after setting `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env`: `node --env-file=.env node_modules/@lacecms/cli/dist/bin.js db migrate --target cloudflare-remote`, then the same with `content sync --target cloudflare-remote`. A placeholder D1 ID never reaches a real database.
-5. Deploy: `pnpm exec wrangler deploy --config worker/wrangler.jsonc`.
-6. Bootstrap: `node --env-file=.env node_modules/@lacecms/cli/dist/bin.js auth bootstrap --target cloudflare-remote`, then create the first administrator at `<LACE_PUBLIC_BASE_URL>admin/`.
+1. Provision: `pnpm exec wrangler d1 create <name>-cms --config worker/wrangler.jsonc` and `pnpm exec wrangler r2 bucket create <name>-media --config worker/wrangler.jsonc`. Optionally create a KV namespace for `CACHE`.
+2. Configure: put the returned D1 ID into `worker/wrangler.jsonc`, local `LACE_D1_DATABASE_ID` in `.env` and remote `LACE_D1_DATABASE_ID` in the private operator file; align the account ID and public HTTPS origin. Configure `vars` with a trailing-slash `LACE_PUBLIC_BASE_URL`. Changing the D1 ID selects different local simulated data.
+3. Preflight: `pnpm exec lace cloudflare preflight --target cloudflare-remote --wrangler-auth oauth --operator-env .lace/cloudflare-operator.env`, then `pnpm exec wrangler whoami --account <account-id> --config worker/wrangler.jsonc` and review operation permissions.
+4. Secrets: `pnpm exec wrangler secret put LACE_AUTH_SECRET --config worker/wrangler.jsonc` with at least 32 random bytes, optionally `LACE_DEPLOY_HOOK_URL` and the separate `LACE_PAGES_API_TOKEN`. Secret changes can create/deploy a Worker version; they are explicit account mutations.
+5. Migrate and sync: `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`, then `pnpm exec lace content sync --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`. Migration's Wrangler child receives the selected D1 token/account only for that operation; subsequent independent Wrangler deploy uses your chosen workflow.
+6. Deploy: `pnpm exec wrangler deploy --config worker/wrangler.jsonc`.
+7. Bootstrap: `pnpm exec lace auth bootstrap --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`, then create the first administrator at `<LACE_PUBLIC_BASE_URL>admin/`.
 
-Redeploy after editing `lace.config.ts`, and sync with the remote target before the new Worker serves editors. Verified real-account deployment is part of the release gate; local tests do not prove it.
+Redeploy after editing `lace.config.ts`, and sync with the remote target before the new Worker serves editors. Verified real-account deployment remains release-gate work; local/stub tests do not prove it. Remote doctor, if needed, can be run with explicit private-file loading: `node --env-file=.env --env-file=.lace/cloudflare-operator.env node_modules/@lacecms/cli/dist/bin.js doctor --target cloudflare-remote --stage setup`; review the remote API origin in `.env` first. Doctor is not credential preflight.
 
 <!-- lace-site: starter existing -->
 
@@ -374,7 +438,7 @@ Redeploy after editing `lace.config.ts`, and sync with the remote target before 
 
 The Astro site is a separate static deployment; deploying it never deploys, migrates or configures the CMS Worker, and deploying the Worker never publishes the site. The generated manual workflow `.github/workflows/cloudflare.yml` installs and builds `{{SITE_PATH}}` and deploys `{{SITE_PATH}}/dist` with `wrangler pages deploy` to the Pages project named by the `CLOUDFLARE_PAGES_PROJECT` variable. Set repository variables `LACE_API_BASE_URL` (the Worker origin, used to read the authenticated build export) and `LACE_PUBLIC_BASE_URL` (the Worker's public origin, used in rendered media URLs), and secrets `LACE_BUILD_TOKEN` (a read-only token from Admin Settings), `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. After building, `pnpm exec wrangler pages dev {{SITE_PATH}}/dist` previews the output locally.
 
-To rebuild after publication, the site needs a deploy hook. Cloudflare Pages offers deploy hooks only for projects connected to a Git repository, which build the site themselves: set the project's root directory to this project, build command `pnpm build`, output directory `{{SITE_PATH}}/dist`, and build variables `LACE_API_BASE_URL`, `LACE_PUBLIC_BASE_URL` (both the Worker origin) and an encrypted `LACE_BUILD_TOKEN`. The manual workflow above uploads directly and has no hook, so with it you rebuild by running the workflow yourself. Another provider works if its build hook accepts a bodiless `POST` without credentials. Store the hook URL only as the Worker secret `LACE_DEPLOY_HOOK_URL`. Admin then records whether the provider accepted the hook (`running` with the provider's deployment ID); acceptance is not proof of a successful static deploy.
+To rebuild after publication, the site needs a deploy hook. Cloudflare Pages offers deploy hooks only for projects connected to a Git repository, which build the site themselves: set the project's root directory to this project, build command `pnpm build`, output directory `{{SITE_PATH}}/dist`, and build variables `LACE_API_BASE_URL`, `LACE_PUBLIC_BASE_URL` (both the Worker origin) and an encrypted `LACE_BUILD_TOKEN`. The manual workflow above uploads directly and has no hook, so with it you rebuild by running the workflow yourself. Another provider works if its build hook accepts a bodiless `POST` without credentials. Store the hook URL only as the Worker secret `LACE_DEPLOY_HOOK_URL`. Admin then records whether the provider accepted the hook (`accepted`, with the provider's deployment ID when returned); acceptance is not proof of a successful static deploy. Enable Pages deployment tracking (see Troubleshooting) to have Admin record the deployment's proven outcome instead.
 
 <!-- lace-site: end -->
 <!-- lace-site: none -->
@@ -438,5 +502,36 @@ The image runs frozen installation followed by direct `pnpm --dir <selected-site
 `LACE_BUILD_SITE_ID` is a 1–64 character lowercase kebab-case name. `LACE_BUILD_SITE_LABEL` is a 1–80 character display name using ASCII letters/digits, spaces, hyphens and underscores, beginning/ending with a letter or digit. Supply names, never paths, URLs or credentials. Generated Compose supplies the same identity to API and builder. For manual Node/Worker deployments set the identity explicitly; absent identity is shown as unconfigured. Builds shows current configuration separately from historical build records; it does not verify mount accessibility or provider completion.
 
 Review `docker compose config` privately, then recreate affected services using compatible images with `docker compose up -d --force-recreate api dispatcher builder`. Use the existing administrator Request build/Retry build actions in Builds. If a mount is missing or inaccessible, correct the host bind and permissions; if installation/build fails, correct the selected dependencies/lockfile/source and retry. The trigger still accepts only build ID and published version; no HTTP request can change source, command, arguments or environment. A failed build preserves the current complete release until a successful retry switches it atomically. Keep internal `http://api:3000/` export transport separate from `LACE_PUBLIC_BASE_URL` for browser-facing media. Stop without deleting volumes to preserve data and releases.
+
+### Builder source diagnostics
+
+With compatible 33C API, dispatcher, admin and builder artifacts, the disposable
+copy also excludes the exact installation-root `AGENTS.md` and `CLAUDE.md`
+entries, including links, without reading their targets. Other included links
+are rejected, even when they point inside the installation. The same filenames
+inside site source are not excluded.
+
+Builds details shows a specific failure, its correction, the build ID and an
+optional source entry relative to the selected installation root. Paths are
+bounded ASCII text; absolute host/container locations, link targets, credentials
+and raw process output are never shown. Unsafe entry names are omitted. For
+`source_symlink`, replace the included link with regular source; for
+`source_unreadable`, restore read/traverse access for the builder's `node` user;
+for `source_missing`, restore the required entry; for `source_special_file`,
+remove or replace the special entry. `source_invalid` requires checking selected
+paths, manifests and the Astro dependency. `install_failed`, `build_failed` and
+`version_changed` respectively require correcting dependencies/lockfile, the
+local Astro build, or building the latest published version. Connectivity and
+timeout failures have separate guidance; `provider_failed` is only the unknown
+failure fallback.
+
+Pending errors retain their explanation during automatic retries. After eight
+failed attempts, correct the source and use the administrator Retry build
+action. The previous complete release remains served throughout failure.
+Upgrade API, dispatcher, admin and builder together. Legacy reason-only errors
+remain readable; new path-bearing diagnostics use the existing SQL error text
+column. Before downgrading, stop dispatch, back up the database and convert
+validated structured error records to their reason strings, discarding path
+metadata without deleting history or changing statuses/attempts.
 
 This section defines deployment selection; a configured identity does not prove a successful deployment. See [publication visibility](#when-published-content-becomes-visible) for dev, manual and automatic behavior after publication.
