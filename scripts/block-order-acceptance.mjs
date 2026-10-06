@@ -1,4 +1,5 @@
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
+import { moveFirstHeroWithKeyboard } from "../apps/admin/e2e/helpers/block-order-keyboard.ts";
 
 /** The admin's explicit save resequences positions from the displayed order. */
 export const savedPositions = (count) =>
@@ -210,32 +211,7 @@ export async function blockOrderJourney(context, session, operations) {
     await prove("block-order-pointer");
 
     const keyboardOrder = await values();
-    const keyboardHandle = cards.first().getByRole("button", { name: "Reorder Hero block" });
-    await keyboardHandle.scrollIntoViewIfNeeded();
-    await keyboardHandle.focus();
-    const liveRegion = page.locator("[id^=DndLiveRegion]").first();
-    const waitFor = async (check, stage) => {
-      for (let attempt = 0; attempt < 100; attempt++) {
-        if (await check()) return;
-        await page.waitForTimeout(100);
-      }
-      throw new Error(`${stage}: keyboard reordering did not respond`);
-    };
-    await keyboardHandle.press("Space");
-    await waitFor(
-      async () => (await keyboardHandle.getAttribute("aria-pressed")) === "true",
-      "block-order-keyboard-pick",
-    );
-    await page.keyboard.press("ArrowDown");
-    await waitFor(
-      async () => (await liveRegion.textContent())?.includes("moved to position 2 of 3") === true,
-      "block-order-keyboard-move",
-    );
-    await page.keyboard.press("Space");
-    await waitFor(
-      async () => (await liveRegion.textContent())?.includes("dropped at position 2 of 3") === true,
-      "block-order-keyboard-drop",
-    );
+    await moveFirstHeroWithKeyboard(page, cards);
     if ((await heading(cards.first()).inputValue()) !== keyboardOrder[1])
       throw new Error("block-order-keyboard: keyboard move did not reorder the blocks");
     await prove("block-order-keyboard");

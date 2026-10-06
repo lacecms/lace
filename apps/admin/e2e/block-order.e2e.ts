@@ -17,6 +17,7 @@ import {
   NodePlaceholderObjectStorage,
 } from "../../../packages/platform-node/dist/index.js";
 import type { ContentBlockDto } from "../../../packages/contracts/dist/index.js";
+import { moveFirstHeroWithKeyboard } from "./helpers/block-order-keyboard.js";
 
 // This fixture uses the production HTTP/use-case/SQLite path. Only identity and
 // unused object storage are supplied by the test; no content responses are mocked.
@@ -244,20 +245,7 @@ test("block structural actions survive real saves, reloads, publication, export 
     await prove();
 
     const keyboardOrder = await values();
-    const keyboardHandle = cards.first().getByRole("button", { name: "Reorder Hero block" });
-    await keyboardHandle.scrollIntoViewIfNeeded();
-    await keyboardHandle.focus();
-    await expect(keyboardHandle).toBeFocused();
-    await keyboardHandle.press("Space");
-    await expect(keyboardHandle).toHaveAttribute("aria-pressed", "true");
-    await page.keyboard.press("ArrowDown");
-    await expect(page.locator("[id^=DndLiveRegion]")).toHaveText(
-      "Hero block moved to position 2 of 3.",
-    );
-    await page.keyboard.press("Space");
-    await expect(page.locator("[id^=DndLiveRegion]")).toHaveText(
-      "Hero block dropped at position 2 of 3.",
-    );
+    await moveFirstHeroWithKeyboard(page, cards);
     await expect(cards.first().getByRole("textbox", { name: "Heading", exact: true })).toHaveValue(
       keyboardOrder[1]!,
     );
