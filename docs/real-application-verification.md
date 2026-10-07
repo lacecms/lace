@@ -236,3 +236,22 @@ Before claiming real-deployment release readiness:
 Keep or remove disposable test resources as the owner chooses, following the
 Cloudflare handoff's cleanup procedure. Check the target before destructive
 cleanup; retain the evidence and backups needed for the release record.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+
+## Post-roadmap owner evidence
+
+The implementation roadmap's local completion leaves these owner gates pending:
+
+| Gate | Required owner evidence | Status |
+| --- | --- | --- |
+| Real VPS | Exact artifact identity; TLS/secure cookies; trusted ingress/proxy rate limits; origin denials; editor/admin journey; MinIO media and failed/corrected build with previous release preserved | Pending |
+| Real Cloudflare | Selected account/Worker/D1/R2 IDs; credential preflight; deployment and sign-in; real query/row/payload/capacity observations; object access; provider tracking with served output | Pending |
+| Coordinated remote restore | Quiescence time; private D1 SQL/SQLite and object backup identities; separate restore targets; metadata/object checksums; fresh sign-in and static rebuild; original resumption | Pending |
+| Production rotations | Old credential denial and replacement recovery for auth/build token, storage, builder or hook/provider; retained data and last served release | Pending |
+| Publication/install | Reviewed source/inventory/checksums; explicit npm/image publication; independent clean install from published coordinates | Pending |
+| Stable approval | Reviewed local and owner evidence, residual security/dependency risks, observability gaps and explicit release decision | Pending |
+
+Use [MVP traceability](mvp-traceability.md) and [local operations](local-operations-verification.md) as the local baseline. Simulator snapshots and controlled hook/Pages responses cannot mark any real-account gate passed.

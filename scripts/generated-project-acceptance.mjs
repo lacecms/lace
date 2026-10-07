@@ -1798,6 +1798,15 @@ async function main() {
       workspace,
     });
     journeys.push(...(await fieldTrialJourneys(parent, context, session, artifacts.tarballs)));
+    await run(
+      "34c-packed-restore-rotation",
+      "pnpm",
+      ["exec", "vitest", "run", "--config", "vitest.operations.config.mjs"],
+      {
+        env: { LACE_34C_PACKED_ROOT: project },
+      },
+    );
+    journeys.push("34c-packed-platform-restore-rotation");
     console.info(
       JSON.stringify(
         {

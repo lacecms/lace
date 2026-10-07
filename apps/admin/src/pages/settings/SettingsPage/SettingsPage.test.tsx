@@ -33,7 +33,11 @@ test("settings shows status cards, issues a once-shown token, and keeps metadata
     client({
       createToken,
       listTokens: async () => ({ items }),
-      loadSettingsStatus: async () => ({ configuredModels: 2, ready: true }),
+      loadSettingsStatus: async () => ({
+        configuredModels: 2,
+        engineVersion: "0.1.0-alpha.4",
+        ready: true,
+      }),
       revokeToken,
     }),
   );
@@ -88,7 +92,7 @@ test("failed status and token reads offer Try again", async () => {
   let fail = true;
   const loadSettingsStatus = vi.fn(async () => {
     if (fail) throw new AdminClientError({ message: "Status unavailable.", status: 503 });
-    return { configuredModels: 1, ready: false };
+    return { configuredModels: 1, engineVersion: "0.1.0-alpha.4", ready: false };
   });
   renderRoute(
     "/settings",
@@ -106,7 +110,11 @@ test("failed status and token reads offer Try again", async () => {
 });
 
 test("viewers see access denied without settings or token requests", async () => {
-  const loadSettingsStatus = vi.fn(async () => ({ configuredModels: 0, ready: true }));
+  const loadSettingsStatus = vi.fn(async () => ({
+    configuredModels: 0,
+    engineVersion: "0.1.0-alpha.4",
+    ready: true,
+  }));
   const listTokens = vi.fn(async () => ({ items: [] }));
   renderRoute(
     "/settings",
@@ -119,4 +127,48 @@ test("viewers see access denied without settings or token requests", async () =>
   expect(screen.getByRole("link", { name: "Go to Content" })).toBeInTheDocument();
   expect(loadSettingsStatus).not.toHaveBeenCalled();
   expect(listTokens).not.toHaveBeenCalled();
+});
+
+test("refresh replaces the server-confirmed release", async () => {
+  let engineVersion = "0.1.0-alpha.4";
+  renderRoute(
+    "/settings",
+    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    client({
+      loadSettingsStatus: async () => ({ configuredModels: 0, engineVersion, ready: true }),
+    }),
+  );
+  const card = await screen.findByRole("group", { name: "CMS version" });
+  await waitFor(() => expect(card).toHaveTextContent(engineVersion));
+  engineVersion = "0.1.0-alpha.5";
+  await userEvent.setup().click(screen.getByRole("button", { name: "Refresh status" }));
+  await waitFor(() => expect(card).toHaveTextContent(engineVersion));
+});
+
+test("expired status session removes the protected version and returns to sign-in", async () => {
+  let expired = false;
+  const source = {
+    get: async () => (expired ? null : { id: "admin-1", role: "admin" as const }),
+    invalidate() {},
+  };
+  renderRoute(
+    "/settings",
+    source,
+    client({
+      loadSettingsStatus: async () => {
+        if (expired)
+          throw new AdminClientError({
+            code: "AUTHORIZATION_DENIED",
+            status: 403,
+            message: "Session expired",
+          });
+        return { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true };
+      },
+    }),
+  );
+  await screen.findByText("0.1.0-alpha.4");
+  expired = true;
+  await userEvent.setup().click(screen.getByRole("button", { name: "Refresh status" }));
+  await screen.findByRole("button", { name: /^Sign in$/u });
+  expect(screen.queryByText("0.1.0-alpha.4")).not.toBeInTheDocument();
 });

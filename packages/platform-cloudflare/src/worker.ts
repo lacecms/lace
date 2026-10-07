@@ -1,3 +1,4 @@
+import { engineVersion } from "./release-version.js";
 import {
   ContentUseCases,
   MediaDeletionDispatcher,
@@ -302,7 +303,7 @@ export function createCloudflareRuntime(
     config: input.config,
     buildSite: settings.buildSite ?? null,
     content,
-    environment: { engineVersion: "0.0.0", openApiTitle: "Lace API" },
+    environment: { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultLogger,
     maxBodyBytes: 1_048_576,
     media,

@@ -645,6 +645,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     await usersActor(context);
     return response(adminSettingsStatusSchema, {
       configuredModels: input.config.content.length,
+      engineVersion: input.environment.engineVersion,
       ready: await input.readiness.isReady(),
     });
   });

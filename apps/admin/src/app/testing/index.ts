@@ -101,7 +101,11 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     createUser: async () => ({}) as never,
     updateUser: async () => ({}) as never,
     listUsers: async () => ({ items: [] }),
-    loadSettingsStatus: async () => ({ configuredModels: 0, ready: true }),
+    loadSettingsStatus: async () => ({
+      configuredModels: 0,
+      engineVersion: "0.1.0-alpha.4",
+      ready: true,
+    }),
     listTokens: async () => ({ items: [] }),
     createToken: async () => ({}) as never,
     revokeToken: async () => ({}) as never,

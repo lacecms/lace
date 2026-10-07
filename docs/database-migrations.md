@@ -80,3 +80,7 @@ lifecycle cases. The same cases run against file-backed SQLite, in-memory
 SQLite, and local D1 through Miniflare; each runtime only supplies a factory for
 a freshly migrated database, and every run also asserts that no
 `mutation_guards` row remains.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.

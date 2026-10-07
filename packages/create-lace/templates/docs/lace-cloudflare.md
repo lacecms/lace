@@ -160,3 +160,7 @@ Real-account deployment is verified by the release gate; local and stub tests do
 
 - Extend models, routes and blocks: [configuration, routes, renderers and styling](lace-operations.md#configuration-routes-renderers-and-styling).
 - Run the CMS with Docker Compose instead: [Docker Compose development](lace-compose-dev.md).
+
+## Backup, rotation and observation
+
+Follow [Operator observation and recovery](lace-operations.md#operator-observation-and-recovery) for the CMS release card, health/log meanings, coordinated database/object backup, isolated restore, credential rotation and migration/upgrade recovery. Verify the whole restored site before trusting a backup. Remote account operations remain owner-operated.

@@ -469,6 +469,7 @@ export const managedUserSchema = v.strictObject({
 export const managedUserListSchema = v.strictObject({ items: v.array(managedUserSchema) });
 export const adminSettingsStatusSchema = v.strictObject({
   configuredModels: nonNegativeIntegerSchema,
+  engineVersion: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
   ready: v.boolean(),
 });
 export type AdminSettingsStatusDto = v.InferOutput<typeof adminSettingsStatusSchema>;

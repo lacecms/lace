@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import {
   applyPreparedConfigurationSynchronization,
@@ -250,6 +251,13 @@ function safeJson(text) {
     return text;
   }
 }
+
+test("Worker metadata identifies the bundled platform release", async () => {
+  const fixture = await workerFixture();
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const result = await fixture.call("/api/v1/openapi.json");
+  expect(result.body.info.version).toBe(manifest.version);
+});
 
 async function png(width = 3, height = 2) {
   return sharp({ create: { background: { b: 3, g: 2, r: 1 }, channels: 3, height, width } })

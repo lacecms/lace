@@ -64,7 +64,7 @@ export function SiteStatusCards({
           Refresh status
         </Button>
       </div>
-      {error === null || status !== undefined ? undefined : (
+      {error === null ? undefined : (
         <ErrorState
           description={errorDescription(error)}
           onRetry={onRefresh}
@@ -72,7 +72,20 @@ export function SiteStatusCards({
           technicalDetails={technicalDetails(error)}
         />
       )}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {error !== null && status !== undefined ? (
+        <p className="m-0 text-sm text-muted-foreground" role="status">
+          Status is stale. Showing the last confirmed values.
+        </p>
+      ) : undefined}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatusCard
+          detail="Release of the running Lace CMS."
+          icon={Server}
+          label="CMS version"
+          loading={status === undefined && error === null}
+        >
+          <span className="break-all">{status?.engineVersion ?? "—"}</span>
+        </StatusCard>
         <StatusCard
           detail={
             status === undefined

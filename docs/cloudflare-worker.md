@@ -231,3 +231,7 @@ pnpm db:migrate:cloudflare -- --remote
   authenticated build export, and static admin fallback.
 - Root tests cover migration target parsing, remote confirmation, the
   development configuration, and gateway routing.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.

@@ -188,3 +188,7 @@ Delete the Pages project and its hook, the Pages-Read tracking token, the Worker
 bucket (after emptying it) and the KV namespace, and revoke the API token and
 build token. Deleting resources is irreversible. Confirm the account before
 running any delete.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.

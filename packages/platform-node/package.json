@@ -27,9 +27,9 @@
     "tag": "next"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node ../../scripts/platform-release-version.mjs && tsc -p tsconfig.json",
     "db:migrate": "pnpm run build && node dist/migrate.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
     "test": "vitest run src/*.test.mjs"
   },

@@ -24,8 +24,8 @@
     "tag": "next"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-admin-assets.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../scripts/platform-release-version.mjs && tsc -p tsconfig.json && node scripts/copy-admin-assets.mjs",
+    "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
     "test": "vitest run src/*.test.mjs"
   },

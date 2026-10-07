@@ -1,3 +1,4 @@
+import { engineVersion } from "./release-version.js";
 import { ContentUseCases, MediaUseCases, SiteBuildUseCases } from "@lacecms/application";
 import type {
   Cache,
@@ -489,7 +490,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     buildSite: input.settings.buildSite ?? null,
     config: input.config,
     content,
-    environment: input.environment ?? { engineVersion: "0.0.0", openApiTitle: "Lace API" },
+    environment: input.environment ?? { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultNodeLogger,
     maxBodyBytes: input.maxBodyBytes ?? 1_048_576,
     media,

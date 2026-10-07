@@ -191,3 +191,7 @@ Upgrading a template never edits your `.env`; add this setting explicitly when
 needed. On Cloudflare the Worker ingress uses the edge-supplied CF-Connecting-IP;
 direct calls to the internal runtime do not establish that trust. Restrict any
 same-zone Worker subrequests that can rewrite client-IP headers at your ingress.
+
+## Backup, rotation and observation
+
+Follow [Operator observation and recovery](lace-operations.md#operator-observation-and-recovery) for the CMS release card, health/log meanings, coordinated database/object backup, isolated restore, credential rotation and migration/upgrade recovery. Verify the whole restored site before trusting a backup. Remote account operations remain owner-operated.
