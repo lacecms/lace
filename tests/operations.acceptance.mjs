@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { openProductRuntime } from "./support/cross-runtime-fixture.mjs";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
@@ -165,11 +165,28 @@ for (const kind of ["node", "worker"]) {
 for (const kind of ["node", "worker"]) {
   test(`34C ${kind}: coordinated restore, missing/corrupt media and credential rotation`, async () => {
     const root = await mkdtemp(join(tmpdir(), `lace-34c-drill-${kind}-`));
-    const f = await openProductRuntime(kind, { operations: true });
+    const operational = [];
+    const errors = vi.spyOn(console, "error").mockImplementation((entry) => {
+      if (typeof entry === "string" && entry.startsWith("{")) operational.push(JSON.parse(entry));
+    });
+    const f = await openProductRuntime(kind, {
+      operations: true,
+      operationalLogger: { error: (entry) => operational.push(entry) },
+    });
     let restored;
     try {
       const seed = await apiJourney(f);
       await f.settle();
+      const failures = operational.filter((entry) => entry.component === "site-build");
+      expect(failures.length).toBeGreaterThan(0);
+      for (const entry of failures) {
+        expect(entry).toEqual({
+          component: "site-build",
+          buildId: expect.any(String),
+          reason: "build_failed",
+        });
+      }
+      expect(JSON.stringify(operational)).not.toContain(seed.token);
       const metadata = await fingerprints(f);
       const objects = await objectHashes(f);
       const started = Date.now();
@@ -183,6 +200,16 @@ for (const kind of ["node", "worker"]) {
         expect(hash(await readFile(join(snapshot, "project", file)))).toBe(
           hash(await readFile(file)),
         );
+      if (process.env.LACE_34C_PACKED_ROOT)
+        for (const file of [
+          "lace.config.ts",
+          "package.json",
+          "pnpm-lock.yaml",
+          ".lace/manifest.json",
+        ])
+          expect(hash(await readFile(join(snapshot, "consumer", file)))).toBe(
+            hash(await readFile(join(process.env.LACE_34C_PACKED_ROOT, file))),
+          );
       // A new origin, SQLite/D1/R2 state and MinIO container keep restored work isolated.
       restored = await openProductRuntime(kind, {
         operations: true,
@@ -306,6 +333,7 @@ for (const kind of ["node", "worker"]) {
           ) + "\n",
         );
     } finally {
+      errors.mockRestore();
       if (restored) await restored.close();
       await f.close();
       await rm(root, { recursive: true, force: true });

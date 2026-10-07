@@ -79,6 +79,12 @@ export async function openProductRuntime(kind, options = {}) {
     const captureMetadata = async (destination) => {
       await mkdir(join(destination, "project"), { recursive: true, mode: 0o700 });
       for (const file of metadataFiles) await cp(resolve(file), join(destination, "project", file));
+      if (process.env.LACE_34C_PACKED_ROOT) {
+        const consumer = join(destination, "consumer");
+        await mkdir(join(consumer, ".lace"), { recursive: true, mode: 0o700 });
+        for (const file of [...metadataFiles, ".lace/manifest.json"])
+          await cp(join(process.env.LACE_34C_PACKED_ROOT, file), join(consumer, file));
+      }
     };
     let dispatchPending = async () => {};
     const buildTrigger = { trigger: async () => ({ status: "failed", reason: "build_failed" }) };

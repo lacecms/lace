@@ -81,6 +81,11 @@ export async function main() {
       "tests/consumer-guides.test.mjs",
       "--maxWorkers=2",
     ]),
+    ...["node", "cloudflare"].map((target) => ({
+      name: `generated-${target}-setup`,
+      command: "node",
+      args: ["scripts/generated-project-acceptance.mjs", target],
+    })),
     testPhase("health-restore-rotation", ["--config", "vitest.operations.config.mjs"]),
     testPhase("forward-migration-upgrade", [
       "packages/platform-node/src/migrate.test.mjs",
