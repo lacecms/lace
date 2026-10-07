@@ -2617,7 +2617,8 @@ sessions use this refreshed inventory. See
 [34A verification](./archive/step-34/step-34a-verification.md) and
 [artifact inventory](./archive/step-34/step-34a-artifacts.json).
 This 34A inventory remains historical; subsequent 34B fixes use the separate
-34B inventory below. Session 34C and owner real-deployment acceptance remain open.
+34B inventory below. Final local completion is recorded in Session 34C; owner
+real-deployment acceptance remains open.
 
 1. Run repository contracts against Node SQLite and local D1.
 2. Run API contracts against Node and local Worker composition roots using the
@@ -2644,8 +2645,9 @@ smokes and full arm64/Worker consumer security and recovery acceptance. Two
 restricted tooling advisory risks remain explicitly dispositioned. See
 [34B verification](./archive/step-34/step-34b-verification.md) and the separate
 [artifact/result inventory](./archive/step-34/step-34b-artifacts.json).
-The 34A inventory remains historical. Session 34C, owner real-deployment
-acceptance, remote D1 capacity confirmation and publication remain open.
+The 34A and 34B inventories remain historical. Final local completion is recorded
+in Session 34C; owner real-deployment acceptance, remote D1 capacity confirmation
+and publication remain open.
 
 1. Review auth/session configuration, CSRF/origin behavior, permission checks,
    rate limits, upload parsing, URL/rich-text sanitization, token hashing, secret
@@ -2667,6 +2669,22 @@ acceptance, remote D1 capacity confirmation and publication remain open.
    than silently suppressing them.
 
 ### Session 34C — Local operations verification and owner documentation
+
+**Completed locally 2026-10-08.** All 19 tasks passed. Administrator Settings now
+shows the artifact-bound CMS release. The expanded local runner passed seven
+phases (71 tests without skips), including real generated Node and Worker setup,
+coordinated database/object restores, credential rotation and migration/upgrade
+recovery. The clean alpha.4 / template 0.20.0 candidate passed both-platform image
+smokes and full native arm64 exact-artifact consumer acceptance, including
+installed-platform restore/rotation, generated starter and independent Astro
+ownership. See [34C verification](./archive/step-34/step-34c-verification.md),
+[artifact/result inventory](./archive/step-34/step-34c-artifacts.json),
+[local operations](./local-operations-verification.md) and
+[MVP traceability](./mvp-traceability.md). Step 34 and the implementation roadmap
+are locally complete. The [separate owner plan](./real-application-verification.md#post-roadmap-owner-evidence)
+keeps real VPS/Cloudflare, remote D1 capacity/restore, publication and stable
+approval pending. 34B residual risks remain visible; neither active change is
+archived or synchronized implicitly.
 
 The generated onboarding from Step 31 and the exact candidate artifacts from
 Step 33 are prerequisites. This session prepares and locally checks operations;
