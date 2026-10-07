@@ -438,6 +438,7 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
       expect(state.response.headers.get("cache-control")).toBe("no-store");
       expect(state.body).toEqual({ setupComplete: false });
     }
+    expect((await json(value.server, "/api/auth/get-session")).response.status).toBe(200);
     const setup = await value.runtime.security.createSetupToken();
     const init = {
       method: "POST",
@@ -449,6 +450,25 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
       }),
     };
     expect((await json(value.server, "/api/v1/setup/admin", init)).response.status).toBe(201);
+    const login = await json(value.server, "/api/auth/sign-in/email", {
+      method: "POST",
+      headers: {
+        origin: "https://public.lace.test",
+        "content-type": "application/json",
+        "x-lace-client-address": "forged-transport-identity",
+      },
+      body: JSON.stringify({
+        email: "browser@lace.test",
+        password: "correct horse battery staple",
+      }),
+    });
+    expect(login.response.status).toBe(200);
+    const cookie = login.response.headers.getSetCookie()[0].split(";")[0];
+    const session = await json(value.server, "/api/auth/get-session", { headers: { cookie } });
+    expect(session.response.status).toBe(200);
+    expect(session.body.user.email).toBe("browser@lace.test");
+    expect(session.body.user.role).toBe("admin");
+
     const stale = await Promise.all([
       json(value.server, "/api/v1/setup/admin", init),
       json(value.server, "/api/v1/setup/admin", init),

@@ -12,6 +12,7 @@ import {
 } from "../scripts/release-artifacts.mjs";
 import { readJson, readReleaseModel } from "../scripts/release-model.mjs";
 import { prepareRelease } from "../scripts/release.mjs";
+import { releaseVersionSource } from "../scripts/platform-release-version.mjs";
 
 test("clean snapshots are stable, dirty inputs require an explicit preview", async () => {
   const parent = await mkdtemp(join(tmpdir(), "lace-release-source-"));
@@ -74,6 +75,13 @@ test("injected preparation failure leaves no inventory or success", async () => 
     await fixtureFile("package.json", JSON.stringify(model.rootManifest));
     for (const { directory, manifest } of Object.values(model.manifests))
       await fixtureFile(`${directory}/package.json`, JSON.stringify(manifest));
+    for (const platform of ["node", "cloudflare"]) {
+      const { directory, manifest } = model.manifests[`@lacecms/platform-${platform}`];
+      await fixtureFile(
+        `${directory}/src/release-version.ts`,
+        releaseVersionSource(manifest.version),
+      );
+    }
     for (const [index, path] of ["package.json", "site/package.json"].entries())
       await fixtureFile(
         `packages/create-lace/templates/${path}`,

@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { platformReleaseVersion } from "./platform-release-version.mjs";
 
 /** Delivered consumer guides whose versioned coordinates must name the candidate. */
 export const RELEASE_GUIDES = [
@@ -34,6 +35,8 @@ async function readRegistryRequirements(root) {
 }
 
 export async function readReleaseModel(root) {
+  for (const platform of ["node", "cloudflare"])
+    await platformReleaseVersion(join(root, "packages", `platform-${platform}`), { check: true });
   const definition = await readJson(join(root, "release/alpha.json"));
   const manifests = {};
   for (const area of ["packages", "apps"]) {

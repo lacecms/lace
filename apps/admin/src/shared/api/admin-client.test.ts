@@ -156,7 +156,7 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   };
   const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
     if (path.endsWith("/settings/status"))
-      return Response.json({ configuredModels: 2, ready: true });
+      return Response.json({ configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: true });
     if (path.endsWith("/users") && init?.method === "POST")
       return Response.json(account, { status: 201 });
     if (path.endsWith("/users")) return Response.json({ items: [account] });
@@ -174,7 +174,11 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   await expect(client.updateUser("user-1", { role: "admin" })).resolves.toMatchObject({
     role: "admin",
   });
-  await expect(client.loadSettingsStatus()).resolves.toEqual({ configuredModels: 2, ready: true });
+  await expect(client.loadSettingsStatus()).resolves.toEqual({
+    configuredModels: 2,
+    engineVersion: "0.1.0-alpha.4",
+    ready: true,
+  });
   await expect(client.listTokens()).resolves.toEqual({ items: [token] });
   await expect(client.createToken("Local site")).resolves.toMatchObject({ token: "secret" });
   await expect(client.revokeToken("token-1")).resolves.toMatchObject({

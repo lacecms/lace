@@ -13,6 +13,7 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
+  adminSettingsStatusSchema,
   setupStateSchema,
   blockMetadataSchema,
   classifyError,
@@ -56,6 +57,15 @@ import {
   validationError,
   versionFromEntityTag,
 } from "../dist/index.js";
+
+test("operational status requires a bounded engine release", () => {
+  const status = { configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: false };
+  expect(v.parse(adminSettingsStatusSchema, status)).toEqual(status);
+  for (const engineVersion of [undefined, "", "x".repeat(121), 4])
+    expect(v.safeParse(adminSettingsStatusSchema, { ...status, engineVersion }).success).toBe(
+      false,
+    );
+});
 
 const timestamp = unixMilliseconds(1_735_689_600_000);
 const actor = { id: actorId("actor-1"), role: "admin" };

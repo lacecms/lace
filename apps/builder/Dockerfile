@@ -7,7 +7,7 @@ RUN pnpm install --frozen-lockfile --filter @lacecms/app-builder... \
     && pnpm --filter @lacecms/app-builder build
 
 FROM node:24.12.0-bookworm-slim
-ARG LACE_VERSION=0.1.0-alpha.3
+ARG LACE_VERSION=0.1.0-alpha.4
 ARG LACE_REVISION=unrecorded
 LABEL org.opencontainers.image.source="https://github.com/lacecms/lace" \
     org.opencontainers.image.version=$LACE_VERSION \

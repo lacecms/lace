@@ -26,7 +26,7 @@ Site mode: **none**. This project builds no site, so this guide ends with publis
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, the project-pinned pnpm `12.3.4`).
 - Docker with Compose and a running daemon. MinIO's first image build needs network access and disk space.
-- Lace `0.1.0-alpha.3` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`. Published `0.1.0-alpha.1` artifacts predate this workflow; published `0.1.0-alpha.2` artifacts lack the block-order fix, builder source diagnostics and the seven-status build history.
+- Lace `0.1.0-alpha.4` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`. Published `0.1.0-alpha.1` artifacts predate this workflow; published `0.1.0-alpha.2` artifacts lack the block-order fix, builder source diagnostics and the seven-status build history.
 
 ## Install and prepare the environment
 
@@ -49,7 +49,7 @@ Keep every generated credential.
 
 ## Prepare the database and start the CMS
 
-The host commands `pnpm db:migrate`, `pnpm content:sync` and `pnpm auth:bootstrap` open the same SQLite file as the Compose `api` and `dispatcher` services. Run them only while those services are stopped. This is a remaining workaround, not fixed in this release: on Docker Desktop and OrbStack the data directory crosses a virtual-machine file share that does not share SQLite locks, and a host command run against a running stack can stop publications from triggering builds until the services restart. On the first run nothing is running yet.
+The host commands `pnpm db:migrate`, `pnpm content:sync` and `pnpm auth:bootstrap` open the same SQLite file as the Compose `api` and `dispatcher` services. Run them only while those services are stopped. The CLI now checks Docker storage mappings before opening SQLite and refuses access while a Compose container uses that file. This protects the maintenance window: on Docker Desktop and OrbStack the data directory crosses a virtual-machine file share that does not share SQLite locks, and a host command run against a running stack can stop publications from triggering builds until the services restart. On the first run nothing is running yet.
 
 One-time, in this order:
 
@@ -192,3 +192,7 @@ pnpm dev:api
 <!-- lace-cloudflare: end -->
 
 - Extend models, routes and blocks: [configuration, routes, renderers and styling](lace-operations.md#configuration-routes-renderers-and-styling).
+
+## Backup, rotation and observation
+
+Follow [Operator observation and recovery](lace-operations.md#operator-observation-and-recovery) for the CMS release card, health/log meanings, coordinated database/object backup, isolated restore, credential rotation and migration/upgrade recovery. Verify the whole restored site before trusting a backup. Remote account operations remain owner-operated.

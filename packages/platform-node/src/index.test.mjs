@@ -53,6 +53,38 @@ const minioEnvironment = Object.freeze({
 
 test("exports its package identity", () => expect(packageName).toBe("@lacecms/platform-node"));
 
+test.each([undefined, { engineVersion: "2.3.4-custom", openApiTitle: "Embedded" }])(
+  "Node metadata identifies the platform release and preserves explicit overrides: %j",
+  async (environment) => {
+    const directory = await mkdtemp(join(tmpdir(), "lace-node-version-"));
+    try {
+      const settings = parseNodeRuntimeSettings({
+        ...minioEnvironment,
+        LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+        LACE_DATABASE_PATH: join(directory, "db.sqlite"),
+        LACE_PUBLIC_BASE_URL: "https://lace.test/",
+      });
+      const config = await defineConfig({ content: [] });
+      const runtime = createNodeRuntime({ config, settings, environment });
+      try {
+        const response = await runtime.app.fetch(
+          new Request("https://lace.test/api/v1/openapi.json"),
+        );
+        const manifest = JSON.parse(
+          await readFile(new URL("../package.json", import.meta.url), "utf8"),
+        );
+        expect((await response.json()).info.version).toBe(
+          environment?.engineVersion ?? manifest.version,
+        );
+      } finally {
+        runtime.close();
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
 test("site-build dispatcher bounds failures at eight attempts and handles trigger outcomes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lace-build-dispatch-"));
   const databasePath = join(directory, "lace.sqlite");
@@ -1221,3 +1253,27 @@ test.each([null, { id: "real-site", label: "Real site" }])(
     }
   },
 );
+
+test("accepts an empty generated proxy setting and rejects empty list members", () => {
+  const environment = {
+    ...minioEnvironment,
+    LACE_DATABASE_PATH: "/tmp/lace.sqlite",
+    LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+    LACE_PUBLIC_BASE_URL: "https://lace.test/",
+  };
+  for (const value of [undefined, "", "   "])
+    expect(
+      parseNodeRuntimeSettings({ ...environment, LACE_TRUSTED_PROXY_CIDRS: value })
+        .trustedProxyCidrs,
+    ).toEqual([]);
+  expect(
+    parseNodeRuntimeSettings({
+      ...environment,
+      LACE_TRUSTED_PROXY_CIDRS: " 127.0.0.1/32, ::1/128 ",
+    }).trustedProxyCidrs,
+  ).toEqual(["127.0.0.1/32", "::1/128"]);
+  for (const value of [",", "127.0.0.1/32,", ",::1/128", "invalid"])
+    expect(() =>
+      parseNodeRuntimeSettings({ ...environment, LACE_TRUSTED_PROXY_CIDRS: value }),
+    ).toThrow("LACE_TRUSTED_PROXY_CIDRS");
+});

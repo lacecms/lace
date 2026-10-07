@@ -57,7 +57,11 @@ test("the coherent model accepts historical prose about published versions", asy
 
 test("the published alpha.2 set is recorded and cannot be prepared again", async () => {
   const model = await coherentModel();
-  expect(model.definition.publishedVersions).toEqual(["0.1.0-alpha.1", "0.1.0-alpha.2"]);
+  expect(model.definition.publishedVersions).toEqual([
+    "0.1.0-alpha.1",
+    "0.1.0-alpha.2",
+    "0.1.0-alpha.3",
+  ]);
   model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.2";
   expect(() => validateReleaseModel(model)).toThrow(/0\.1\.0-alpha\.2 is already published/u);
 });
@@ -144,4 +148,10 @@ test("packed metadata rejects workspace/catalog/local/private dependencies", asy
       definition,
     ),
   ).not.toThrow();
+});
+
+test("published alpha.3 is immutable after the 34A candidate refresh", async () => {
+  const model = await coherentModel();
+  model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.3";
+  expect(() => validateReleaseModel(model)).toThrow(/already published/u);
 });

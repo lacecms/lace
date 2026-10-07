@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { parseEnv } from "node:util";
 import { reviewEnvironment } from "./consumer-guides.mjs";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
+import { expectNoAccessibilityViolations } from "../apps/admin/e2e/support/accessibility.ts";
 import { assertSecretFree } from "./consumer-security.mjs";
 
 /**
@@ -284,6 +285,7 @@ export async function builderDiagnosticsJourney(parent, operations) {
           !(await details.textContent()).includes(fault.correction)
         )
           throw new Error("diagnostics: Builds lacks correction/path");
+        await expectNoAccessibilityViolations(tab, "packed failed-build details");
         assertSecretFree(await tab.content(), secretValues, "diagnostic browser");
         const logs = await compose("diagnostics-safe-logs", [
           "logs",

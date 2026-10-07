@@ -272,7 +272,7 @@ export function BuildsPage() {
                       className={
                         detail.data.status === "cancelled" || detail.data.status === "unknown"
                           ? "grid gap-2 rounded-md border bg-muted p-3 text-sm"
-                          : "grid gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                          : "grid gap-2 rounded-md bg-destructive/10 p-3 text-sm text-foreground"
                       }
                       role={
                         detail.data.status === "cancelled" || detail.data.status === "unknown"

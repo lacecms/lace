@@ -40,7 +40,7 @@ This guide does not depend on the development guide; it repeats the one-time ini
 ## Prerequisites
 
 - A server with Docker, Compose and a running daemon, plus Node `>=24.12.0` and pnpm `>=12` for the host operator commands (tested baseline: Node `24.12.0`, pnpm `12.3.4`).
-- Compatible API and builder images for your Lace release (`0.1.0-alpha.3` or a later compatible release; published `0.1.0-alpha.2` images lack builder source diagnostics and the seven-status build history). Pin exact tags or digests; the packages in `package.json` must come from the same release.
+- Compatible API and builder images for your Lace release (`0.1.0-alpha.4` or a later compatible release; published `0.1.0-alpha.2` images lack builder source diagnostics and the seven-status build history). Pin exact tags or digests; the packages in `package.json` must come from the same release.
 - A public HTTPS origin and a TLS-terminating reverse proxy that forwards to `LACE_HTTP_PORT`. The web proxy routes `/admin`, `/api/` and `/health/` to the API and everything else to the static site, so one origin can serve both.
 
 <!-- lace-site: starter -->
@@ -80,7 +80,7 @@ Review `.env`:
 
 ## Initialize the CMS
 
-Host database commands share the SQLite file with the Compose `api` and `dispatcher` services: run them only while those services are stopped (a remaining workaround for virtual-machine file shares, see the [development guide](lace-compose-dev.md#prepare-the-database-and-start-the-cms)). On a fresh server nothing runs yet.
+Host database commands share the SQLite file with the Compose `api` and `dispatcher` services: run them only while those services are stopped (see the [development guide](lace-compose-dev.md#prepare-the-database-and-start-the-cms)). On a fresh server nothing runs yet.
 
 One-time:
 
@@ -165,3 +165,33 @@ Backups: with `api` and `dispatcher` stopped, copy `.lace/data/` (the SQLite dat
 - Run the CMS on Cloudflare instead: [Cloudflare](lace-cloudflare.md).
 
 <!-- lace-cloudflare: end -->
+
+## Trusted client identity
+
+The API ignores forwarding headers unless its immediate TCP peer matches
+`LACE_TRUSTED_PROXY_CIDRS` (comma-separated IPv4/IPv6 CIDRs). Empty is the secure
+default: clients behind one proxy share the authentication/setup IP limit. Upload
+and token-management limits use the authenticated user even behind a shared proxy.
+Better Auth and Lace use the same resolved client identity. Missing transport
+identity uses a conservative shared fallback; arbitrary headers cannot replace it.
+
+Before exposing a proxy deployment, identify the ingress proxy address/subnet on
+its isolated Docker network, set only that controlled subnet in your user-owned
+`.env`, and recreate `api` and `dispatcher`. Inspect the proxy's network addresses
+with `docker inspect --format '{{json .NetworkSettings.Networks}}' <web-container>`;
+choose the configured network CIDR, not an unrelated private range. Restrict direct
+API ingress so untrusted services cannot impersonate a trusted peer. Do not trust
+all addresses or an entire shared corporate/container network. The proxy must
+append the observed peer to X-Forwarded-For or replace that header; Lace walks the
+chain from the trusted end and stops at the first untrusted address. Hostnames,
+ports and malformed chains are not client addresses. Local TLS/proxy tests do not
+confirm your deployed ingress configuration.
+
+Upgrading a template never edits your `.env`; add this setting explicitly when
+needed. On Cloudflare the Worker ingress uses the edge-supplied CF-Connecting-IP;
+direct calls to the internal runtime do not establish that trust. Restrict any
+same-zone Worker subrequests that can rewrite client-IP headers at your ingress.
+
+## Backup, rotation and observation
+
+Follow [Operator observation and recovery](lace-operations.md#operator-observation-and-recovery) for the CMS release card, health/log meanings, coordinated database/object backup, isolated restore, credential rotation and migration/upgrade recovery. Verify the whole restored site before trusting a backup. Remote account operations remain owner-operated.

@@ -24,6 +24,22 @@ This plan defines scenarios and evidence rather than duplicating versioned CLI
 commands. Keep credentials, account/resource IDs and private logs out of the
 repository; use redacted summaries and private evidence references.
 
+## Local 34B evidence and remaining owner checks
+
+The local security/resilience pass is recorded in
+[34B verification](archive/step-34/step-34b-verification.md) and its separate
+[artifact/result inventory](archive/step-34/step-34b-artifacts.json). Use that
+candidate's exact revisions/checksums when selecting a deployed baseline; the
+historical 34A inventory predates these fixes. No checkbox below is satisfied by
+local Docker, Miniflare, browser or controlled provider acceptance.
+
+In particular, confirm deployed proxy/CIDR isolation, TLS/cookies, provider
+client identity, real D1 query/runtime capacity, remote retry/recovery and
+coordinated backups on the actual installation. Local export fixtures contain
+100/201/501 entries and impose no product export cap. Retain the documented
+restricted dependency risks and distribution notices when publishing. Session
+34C operations verification and registry publication are separate, pending work.
+
 ## 1. Select the application and record the baseline
 
 - [ ] Select the exact candidate package, generator and template versions; record
@@ -220,3 +236,22 @@ Before claiming real-deployment release readiness:
 Keep or remove disposable test resources as the owner chooses, following the
 Cloudflare handoff's cleanup procedure. Check the target before destructive
 cleanup; retain the evidence and backups needed for the release record.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+
+## Post-roadmap owner evidence
+
+The implementation roadmap's local completion leaves these owner gates pending:
+
+| Gate | Required owner evidence | Status |
+| --- | --- | --- |
+| Real VPS | Exact artifact identity; TLS/secure cookies; trusted ingress/proxy rate limits; origin denials; editor/admin journey; MinIO media and failed/corrected build with previous release preserved | Pending |
+| Real Cloudflare | Selected account/Worker/D1/R2 IDs; credential preflight; deployment and sign-in; real query/row/payload/capacity observations; object access; provider tracking with served output | Pending |
+| Coordinated remote restore | Quiescence time; private D1 SQL/SQLite and object backup identities; separate restore targets; metadata/object checksums; fresh sign-in and static rebuild; original resumption | Pending |
+| Production rotations | Old credential denial and replacement recovery for auth/build token, storage, builder or hook/provider; retained data and last served release | Pending |
+| Publication/install | Reviewed source/inventory/checksums; explicit npm/image publication; independent clean install from published coordinates | Pending |
+| Stable approval | Reviewed local and owner evidence, residual security/dependency risks, observability gaps and explicit release decision | Pending |
+
+Use [MVP traceability](mvp-traceability.md) and [local operations](local-operations-verification.md) as the local baseline. Simulator snapshots and controlled hook/Pages responses cannot mark any real-account gate passed.

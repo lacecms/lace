@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node ../../scripts/write-third-party-notices.mjs apps/admin/dist/third-party-notices.txt",
     "dev": "vite --host 127.0.0.1",
     "dev:container": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "test:e2e": "playwright test",

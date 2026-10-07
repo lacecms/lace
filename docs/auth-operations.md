@@ -70,3 +70,7 @@ storage cannot be read/written, an in-memory record lasts for the current docume
 and shell remounts, but reload may offer again. Replacing a database behind the
 same address and same user ID cannot be distinguished without clearing storage.
 No email, password, session credential, build token, or content enters tour storage.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.

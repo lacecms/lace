@@ -1,0 +1,53 @@
+{
+  "models": ["about", "home", "notes", "posts"],
+  "denied": { "status": 403, "code": "AUTHORIZATION_DENIED" },
+  "conflict": { "status": 409, "code": "CONTENT_REVISION_CONFLICT" },
+  "routes": ["/", "/about", "/blog/alpha", "/blog/beta"],
+  "site": [
+    {
+      "path": "/",
+      "modelKey": "home",
+      "title": "Published home",
+      "fields": {},
+      "blocks": [
+        {
+          "key": "hero-one",
+          "type": "hero",
+          "position": 1000,
+          "schemaVersion": 1,
+          "data": { "heading": "Published hero" }
+        },
+        {
+          "key": "image-one",
+          "type": "image",
+          "position": 2000,
+          "schemaVersion": 1,
+          "data": { "media": "<cover>", "alt": "Published cover" }
+        }
+      ]
+    },
+    {
+      "path": "/about",
+      "modelKey": "about",
+      "title": "Published about",
+      "fields": {},
+      "blocks": []
+    },
+    {
+      "path": "/blog/alpha",
+      "modelKey": "posts",
+      "slug": "alpha",
+      "title": "Published alpha",
+      "fields": { "publishedAt": "2026-10-07" },
+      "blocks": []
+    },
+    {
+      "path": "/blog/beta",
+      "modelKey": "posts",
+      "slug": "beta",
+      "title": "Published beta",
+      "fields": { "publishedAt": "2026-10-07" },
+      "blocks": []
+    }
+  ]
+}

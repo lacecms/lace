@@ -1,3 +1,4 @@
+import { consumer34bSecurity } from "./consumer-34b-security.mjs";
 import { blockOrderJourney } from "./block-order-acceptance.mjs";
 import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs";
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
@@ -456,7 +457,7 @@ async function nodeJourney(context) {
   const password = randomBytes(24).toString("hex");
   secretValues.add(password);
   const png = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5mcAAAAASUVORK5CYII=",
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgZGIGAAAOAAeCcsnOAAAAAElFTkSuQmCC",
     "base64",
   );
   await nodeBrowserJourney({
@@ -473,7 +474,7 @@ async function nodeJourney(context) {
   // As the generated guide instructs, host database commands run while the Compose
   // API is stopped: host access to its live SQLite file through a VM file share
   // leaves container processes with diverging views.
-  await compose("stop-api-for-host-command", ["stop", "api"]);
+  await compose("stop-api-for-host-command", ["stop", "api", "dispatcher"]);
   const refusedBootstrap = runStatus(
     "cli-bootstrap-refused",
     "pnpm",
@@ -1245,6 +1246,21 @@ async function signInHonoringRetry(base, email, password) {
 
 async function securityJourney(context, session) {
   const { base, cookie, entryId, buildToken, token, email, password } = session;
+  await consumer34bSecurity({ base, cookie, png: session.png });
+  for (const script of ["db:migrate", "content:sync", "auth:bootstrap"]) {
+    const denied = runStatus(`34b-live-host-${script}`, "pnpm", [script, "--json"], {
+      cwd: context.project,
+    });
+    const refusal = JSON.parse(denied.stdout.trim().split("\n").at(-1));
+    if (
+      denied.status !== 6 ||
+      refusal.code !== "OPERATION_FAILED" ||
+      !/running Compose/u.test(refusal.reason ?? "") ||
+      "token" in (refusal.data ?? {})
+    )
+      throw new Error("Exact consumer host maintenance guard failed");
+  }
+  console.info("34B exact consumer: live Compose host maintenance refused before database access");
   const exportPath = "/api/v1/public/build-export";
   const auth = { authorization: `Bearer ${buildToken}` };
   const before = (await request(base, exportPath, { headers: auth })).body;
@@ -1782,6 +1798,15 @@ async function main() {
       workspace,
     });
     journeys.push(...(await fieldTrialJourneys(parent, context, session, artifacts.tarballs)));
+    await run(
+      "34c-packed-restore-rotation",
+      "pnpm",
+      ["exec", "vitest", "run", "--config", "vitest.operations.config.mjs"],
+      {
+        env: { LACE_34C_PACKED_ROOT: project },
+      },
+    );
+    journeys.push("34c-packed-platform-restore-rotation");
     console.info(
       JSON.stringify(
         {

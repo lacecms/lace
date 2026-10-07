@@ -333,7 +333,7 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
         : json(route, found);
     }
     if (path === "/api/v1/admin/settings/status")
-      return json(route, { configuredModels: 2, ready: true });
+      return json(route, { configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: true });
     if (path === "/api/v1/admin/api-tokens" && method === "GET")
       return json(route, { items: tokens });
     if (path === "/api/v1/admin/api-tokens" && method === "POST") {
@@ -526,6 +526,8 @@ test("every route fits a 375px viewport without horizontal scrolling", async ({ 
   const page = await narrowPage(browser);
   for (const [screen, path, ready] of routes) {
     await openAdmin(page, path, ready);
+    if (path === "/settings")
+      await expect(page.getByRole("group", { name: "CMS version" })).toContainText("0.1.0-alpha.4");
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
       `${screen} scrolls horizontally`,

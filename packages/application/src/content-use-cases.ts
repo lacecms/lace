@@ -48,7 +48,7 @@ import type {
   ContentEntrySort,
   ContentEntryStatus,
   IdGenerator,
-  MediaReadPort,
+  ContentMediaReadPort,
   OpaqueCursor,
   PublicationIdempotencyKey,
   PublicContentReadPort,
@@ -59,7 +59,7 @@ export interface ContentUseCaseDependencies {
   readonly config: RuntimeConfigProjection;
   readonly content: ContentEntryReadPort & ContentEntryCommandPort & PublicContentReadPort;
   readonly idGenerator: IdGenerator;
-  readonly media: MediaReadPort;
+  readonly media: ContentMediaReadPort;
 }
 
 export interface CompleteDraftInput {
@@ -372,32 +372,44 @@ export class ContentUseCases {
       ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
       title: aggregate.title,
     };
-    const mediaReferences = await this.validateMedia(normalized.fields, model.fields, "$fields");
+    const mediaReferences = this.collectMedia(normalized.fields, model.fields, "$fields");
     for (const block of normalized.blocks) {
       mediaReferences.push(
-        ...(await this.validateMedia(
+        ...this.collectMedia(
           block.data,
           this.dependencies.config.blocks.get(block.type)!.fields,
           block.key,
-        )),
+        ),
       );
+    }
+    if (mediaReferences.length > 200) {
+      throw new DomainError(
+        "CONTENT_INVALID_STATE",
+        "A draft must not contain more than 200 media references.",
+      );
+    }
+    const ids = [...new Set(mediaReferences.map((reference) => reference.mediaId))];
+    const active = new Set(
+      (ids.length === 0 ? [] : await this.dependencies.media.loadMediaMany(ids))
+        .filter((media) => media.status === "active")
+        .map((media) => media.id),
+    );
+    for (const id of ids) {
+      if (!active.has(id))
+        throw new DomainError("CONTENT_INVALID_STATE", `Media ${id} is unavailable.`);
     }
     return { ...normalized, mediaReferences: Object.freeze(mediaReferences) };
   }
 
-  private async validateMedia(
+  private collectMedia(
     values: JsonObject,
     definitions: Readonly<Record<string, FieldDefinition>>,
     sourceKey: "$fields" | ReturnType<typeof blockKey>,
-  ): Promise<DraftMediaReference[]> {
+  ): DraftMediaReference[] {
     const references: DraftMediaReference[] = [];
     for (const [key, definition] of Object.entries(definitions)) {
       if (definition.type !== "media" || !Object.hasOwn(values, key)) continue;
       const value = values[key] as string;
-      const media = await this.dependencies.media.loadMedia(value);
-      if (media === null || media.status !== "active") {
-        throw new DomainError("CONTENT_INVALID_STATE", `Media ${value} is unavailable.`);
-      }
       references.push({ fieldPath: key, mediaId: mediaId(value), sourceKey });
     }
     return references;

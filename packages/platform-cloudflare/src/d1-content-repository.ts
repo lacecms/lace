@@ -395,6 +395,16 @@ export class D1ContentRepository
     return row === undefined ? null : mediaMetadata(row);
   }
 
+  public async loadMediaMany(ids: readonly string[]): Promise<readonly MediaMetadata[]> {
+    const result: MediaMetadata[] = [];
+    for (const group of chunks([...new Set(ids)], D1_MAX_BOUND_PARAMETERS)) {
+      const sql = `select * from media where id in (${group.map(() => "?").join(", ")})`;
+      const rows = await this.all<Record<string, unknown>>(sql, ...group);
+      result.push(...rows.map(mediaMetadata));
+    }
+    return result;
+  }
+
   public async loadMedia(id: string): Promise<MediaMetadata | null> {
     const row = await this.first(MEDIA_BY_ID_SQL, id);
     return row === undefined ? null : mediaMetadata(row);

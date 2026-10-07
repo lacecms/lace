@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-07T19:26:33.290051+00:00",
+  "scope": "clean final source with local D1 simulator; not remote D1 or a product export cap",
+  "sourceRevision": "70ab0d7e7e15952da94886d6144b95f69240e2a5",
+  "workingTree": "clean",
+  "command": "pnpm verify:34b (d1-http-budgets phase)",
+  "outcome": "2 tests passed",
+  "measurements": [
+    {
+      "name": "create-200",
+      "maxParameters": 100,
+      "queries": 30,
+      "bytes": 27085,
+      "status": 201
+    },
+    {
+      "name": "save-200",
+      "maxParameters": 100,
+      "queries": 36,
+      "bytes": 26281,
+      "status": 200
+    },
+    {
+      "name": "publish-200",
+      "maxParameters": 100,
+      "queries": 25,
+      "bytes": 52465,
+      "status": 200
+    },
+    {
+      "name": "public-200",
+      "maxParameters": 2,
+      "queries": 3,
+      "bytes": 52332,
+      "status": 200
+    },
+    {
+      "name": "create-201-denied",
+      "maxParameters": 1,
+      "queries": 2,
+      "bytes": 214,
+      "status": 422
+    },
+    {
+      "name": "save-201-denied",
+      "maxParameters": 2,
+      "queries": 5,
+      "bytes": 214,
+      "status": 422
+    },
+    {
+      "name": "save-deleting-last-chunk",
+      "maxParameters": 100,
+      "queries": 7,
+      "bytes": 98,
+      "status": 422
+    },
+    {
+      "name": "save-missing-last-chunk",
+      "maxParameters": 100,
+      "queries": 7,
+      "bytes": 98,
+      "status": 422
+    },
+    {
+      "name": "save-200-duplicate-ids",
+      "maxParameters": 99,
+      "queries": 35,
+      "bytes": 54103,
+      "status": 200
+    },
+    {
+      "name": "export-100",
+      "maxParameters": 100,
+      "queries": 9,
+      "bytes": 4212273,
+      "status": 200
+    },
+    {
+      "name": "export-201",
+      "maxParameters": 100,
+      "queries": 15,
+      "bytes": 4314485,
+      "status": 200
+    },
+    {
+      "name": "export-501",
+      "maxParameters": 100,
+      "queries": 27,
+      "bytes": 4618085,
+      "status": 200
+    }
+  ],
+  "exportFixtures": [
+    {
+      "entries": 100,
+      "maximalEntries": 2,
+      "mediaReferences": 400,
+      "fieldsJsonBytes": 999914,
+      "blockJsonBytes": 999935
+    },
+    {
+      "entries": 201,
+      "maximalEntries": 2,
+      "mediaReferences": 400,
+      "fieldsJsonBytes": 999914,
+      "blockJsonBytes": 999935
+    },
+    {
+      "entries": 501,
+      "maximalEntries": 2,
+      "mediaReferences": 400,
+      "fieldsJsonBytes": 999914,
+      "blockJsonBytes": 999935
+    }
+  ],
+  "limits": {
+    "parametersPerStatement": 100,
+    "statementsPerInvocation": 50
+  },
+  "limitations": [
+    "Local Miniflare does not establish remote D1 quotas, timing or memory capacity.",
+    "Export fixture sizes are evidence points, not product caps or proof of an unbounded maximum.",
+    "Fixture raw SQL seeding is excluded from measured invocations; measured calls include authentication, actual handler and owned waitUntil work."
+  ],
+  "sourceFingerprint": "53f6c605363d2b8844131ed5607b17c88f2e54e841a89e822381558a48abffe1"
+}

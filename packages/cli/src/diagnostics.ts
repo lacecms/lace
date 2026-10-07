@@ -10,6 +10,8 @@ export type Operation =
   | "add block"
   | "cli";
 export type DiagnosticKind =
+  | "compose-active"
+  | "compose-inspection"
   | "permission"
   | "path"
   | "locked"
@@ -86,6 +88,14 @@ export function failureDiagnostic(
   const worker = operation === "env prepare" && target === "cloudflare-local";
   const envFile = worker ? "worker/.dev.vars" : ".env";
   const catalog: Record<string, readonly [string, string]> = {
+    "compose-active": [
+      "A running Compose service uses the selected SQLite storage.",
+      "Stop api and dispatcher (and any other matching storage consumer), keep them stopped during maintenance, then retry and restart them.",
+    ],
+    "compose-inspection": [
+      "Compose storage safety could not be established.",
+      "Restore local Docker inspection, stop api and dispatcher during maintenance, and retry. No database was opened.",
+    ],
     "operator-file": [
       "The selected operator file cannot be safely loaded.",
       "Use --operator-env with a private regular non-symlink file, owner-only permissions and unique supported assignments; preserve existing credentials.",

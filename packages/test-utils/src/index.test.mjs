@@ -922,6 +922,9 @@ test("runs the authorized in-memory content lifecycle with validation and isolat
     content: store,
     idGenerator: new DeterministicIdGenerator("content"),
     media: {
+      async loadMediaMany(ids) {
+        return (await Promise.all(ids.map((id) => this.loadMedia(id)))).filter(Boolean);
+      },
       async loadMedia(id) {
         return id === "media-1"
           ? {
@@ -1151,6 +1154,9 @@ test("reports rejected and unavailable builds without undoing a publication", as
     content: store,
     idGenerator: new DeterministicIdGenerator("build"),
     media: {
+      async loadMediaMany(ids) {
+        return (await Promise.all(ids.map((id) => this.loadMedia(id)))).filter(Boolean);
+      },
       async loadMedia() {
         return {
           createdAt: unixMilliseconds(1),
@@ -1627,4 +1633,60 @@ test("derives in-memory media usage and in-use refusals from current snapshots",
       states: ["draft", "published"],
     },
   ]);
+});
+
+test("content rejects 201 reference locations before bulk metadata reads or writes", async () => {
+  const config = await defineConfig({
+    blocks: [
+      defineBlock({
+        type: "asset",
+        version: 1,
+        fields: { first: field.media(), second: field.media() },
+      }),
+    ],
+    content: [
+      defineCollection({ key: "posts", version: 1, route: "/blog/:slug", blocks: ["asset"] }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  let reads = 0;
+  let writes = 0;
+  const create = store.create.bind(store);
+  store.create = async (input) => {
+    writes++;
+    return create(input);
+  };
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(1)),
+    config: config.runtime,
+    content: store,
+    idGenerator: new DeterministicIdGenerator("refs"),
+    media: {
+      loadMedia: async () => null,
+      loadMediaMany: async () => {
+        reads++;
+        return [];
+      },
+    },
+  });
+  const blocks = Array.from({ length: 101 }, (_, index) => ({
+    key: `block-${index}`,
+    type: "asset",
+    schemaVersion: 1,
+    position: (index + 1) * 1000,
+    data: index === 100 ? { first: "same-id" } : { first: "same-id", second: "same-id" },
+  }));
+  await expect(
+    useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      slug: "oversize-refs",
+      title: "Too many references",
+      fields: {},
+      blocks,
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(reads).toBe(0);
+  expect(writes).toBe(0);
+  expect(await store.loadPublic("/blog/oversize-refs")).toBeNull();
 });

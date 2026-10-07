@@ -17,6 +17,8 @@ import {
   checkedInMigrations,
   listAppliedMigrations,
   openNodeDatabase,
+  assertHostDatabaseSafe,
+  HostDatabaseSafetyError,
 } from "@lacecms/platform-node";
 import { openLocalD1, RemoteD1Database } from "./d1-transport.js";
 import { CliError, EXIT, type CliEnvironment, type CliOptions } from "./index.js";
@@ -142,6 +144,17 @@ export async function runCommand(
   if (options.target === "node") {
     const databasePath = environment.databasePath;
     if (!databasePath) throw new CliError("CONFIG", "Missing LACE_DATABASE_PATH.", EXIT.CONFIG);
+    try {
+      await assertHostDatabaseSafe({ databasePath, cwd });
+    } catch (error) {
+      if (!(error instanceof HostDatabaseSafetyError)) throw error;
+      throw new CliError(
+        "OPERATION_FAILED",
+        "Host SQLite safety check refused access.",
+        EXIT.OPERATION,
+        error.reason,
+      );
+    }
     if (options.command === "db migrate") {
       const versions = await runMigration({ target: "node", databasePath });
       return {

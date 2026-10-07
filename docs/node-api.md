@@ -222,3 +222,7 @@ The Node runtime streams verified MinIO media through authenticated previews
 and stable published-media URLs. The test actor is a Vitest-only adapter and is
 never enabled by a request header, query string, or production environment
 variable.
+
+## Local operations evidence
+
+See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.

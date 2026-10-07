@@ -251,6 +251,9 @@ export function EntryPage() {
     },
   });
   useSessionRecovery(models.error ?? entry.error);
+  useSessionRecovery(save.error);
+  useSessionRecovery(publish.error);
+  useSessionRecovery(reloadServerDraft.error);
   if (models.isPending || entry.isPending) return <PageLoading label="Loading draft" />;
   if (models.error !== null) return <PageError error={models.error} />;
   if (entry.error !== null) return <PageError error={entry.error} />;

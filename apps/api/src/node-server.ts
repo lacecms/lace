@@ -154,7 +154,15 @@ export async function startNodeServer(input: {
   const fetch = input.developmentGateway
     ? createNodeDevelopmentGateway(input.runtime.app.fetch, input.settings)
     : input.runtime.app.fetch;
-  const server = createServer(getRequestListener(fetch, { overrideGlobalObjects: false }));
+  const server = createServer(
+    getRequestListener(
+      (request, bindings) => {
+        input.runtime.setRequestPeer(request, bindings.incoming.socket.remoteAddress);
+        return fetch(request);
+      },
+      { overrideGlobalObjects: false },
+    ),
+  );
   const connections = new Set<Duplex>();
   server.on("connection", (socket) => {
     connections.add(socket);

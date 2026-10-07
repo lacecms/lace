@@ -27,7 +27,7 @@ Site mode: **none**. This project has no site, so it has no static-site workflow
 ## Prerequisites
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, pnpm `12.3.4`). The project pins Wrangler in `package.json`; always use it through `pnpm exec wrangler`.
-- Lace `0.1.0-alpha.3` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking arrive with `0.1.0-alpha.3`; published `0.1.0-alpha.2` packages do not contain them.
+- Lace `0.1.0-alpha.4` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking arrive with `0.1.0-alpha.4`; published `0.1.0-alpha.2` packages do not contain them.
 - For the account part only: a Cloudflare account with Workers, D1 and R2.
 
 ## Run the Worker locally
@@ -160,3 +160,7 @@ Real-account deployment is verified by the release gate; local and stub tests do
 
 - Extend models, routes and blocks: [configuration, routes, renderers and styling](lace-operations.md#configuration-routes-renderers-and-styling).
 - Run the CMS with Docker Compose instead: [Docker Compose development](lace-compose-dev.md).
+
+## Backup, rotation and observation
+
+Follow [Operator observation and recovery](lace-operations.md#operator-observation-and-recovery) for the CMS release card, health/log meanings, coordinated database/object backup, isolated restore, credential rotation and migration/upgrade recovery. Verify the whole restored site before trusting a backup. Remote account operations remain owner-operated.

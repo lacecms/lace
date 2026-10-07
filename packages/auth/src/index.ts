@@ -1,3 +1,4 @@
+export * from "./client-address.js";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { actorId, type Actor, type Role } from "@lacecms/domain";
@@ -17,6 +18,7 @@ export interface BetterAuthBoundary extends AuthRouteHandler {
 }
 
 export interface CreateBetterAuthBoundaryInput {
+  readonly clientAddress?: (request: Request) => string;
   readonly database: object;
   readonly origin: URL;
   readonly production: boolean;
@@ -41,8 +43,10 @@ function trustedOrigins(origin: URL, production: boolean): string[] {
 /** Creates the Node Better Auth boundary without leaking provider types to HTTP routes. */
 export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): BetterAuthBoundary {
   const origin = input.origin.origin;
+  const allowedOrigins = trustedOrigins(input.origin, input.production);
   const auth = betterAuth({
     advanced: {
+      ipAddress: { ipAddressHeaders: ["x-lace-client-address"], ipv6Subnet: 128 },
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: "lax",
@@ -61,8 +65,19 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
       disableSignUp: true,
       enabled: true,
     },
+    // Provider messages can contain caller origins or raw upstream errors.
+    // Keep a closed diagnostic while the HTTP boundary records request/status.
+    logger: {
+      log: (level) => {
+        if (level === "warn" || level === "error")
+          console.error(
+            JSON.stringify({ component: "auth", level, reason: "provider_operation_failed" }),
+          );
+      },
+    },
+    rateLimit: { enabled: input.production },
     secret: input.secret,
-    trustedOrigins: trustedOrigins(input.origin, input.production),
+    trustedOrigins: allowedOrigins,
     user: {
       additionalFields: {
         disabled: {
@@ -84,6 +99,14 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
   return Object.freeze({
     actors: Object.freeze({
       resolve: async (request: Request) => {
+        if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+          const requestOrigin = request.headers.get("origin");
+          if (requestOrigin !== null) {
+            if (!allowedOrigins.includes(requestOrigin)) return null;
+          } else if (request.headers.get("sec-fetch-site") === "cross-site") {
+            return null;
+          }
+        }
         const session = await auth.api.getSession({ headers: request.headers });
         const role = laceRole(session?.user.role);
         return session === null ||
@@ -94,6 +117,12 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
           : Object.freeze({ id: actorId(session.user.id), role });
       },
     }),
-    fetch: async (request: Request) => auth.handler(request),
+    fetch: async (request: Request) => {
+      const headers = new Headers(request.headers);
+      headers.set("x-lace-client-address", input.clientAddress?.(request) ?? "0.0.0.0");
+      // The Node transport may supply a Request-compatible facade; clone materializes
+      // its native Request before the platform constructor performs brand checks.
+      return auth.handler(new Request(request.clone(), { headers }));
+    },
   });
 }

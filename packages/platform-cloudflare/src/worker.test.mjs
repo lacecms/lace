@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import {
   applyPreparedConfigurationSynchronization,
@@ -140,7 +141,9 @@ test("only successful dispatch-producing admin mutations schedule post-commit wo
   expect(producesDispatchWork(request("PUT", "/api/v1/admin/entries/e/draft"), 200)).toBe(false);
 });
 
+let fixtureAddress = 0;
 async function workerFixture(options = {}) {
+  const clientAddress = `203.0.113.${++fixtureAddress}`;
   const local = await openLocalCloudflare();
   cleanups.push(local.dispose);
   const logs = [];
@@ -185,7 +188,7 @@ async function workerFixture(options = {}) {
   let cookie;
   const call = async (path, init = {}) => {
     const headers = new Headers(init.headers);
-    headers.set("cf-connecting-ip", "203.0.113.7");
+    headers.set("cf-connecting-ip", clientAddress);
     if (cookie !== undefined) headers.set("cookie", cookie);
     if (init.json !== undefined) headers.set("content-type", "application/json");
     const response = await worker.fetch(
@@ -210,7 +213,7 @@ async function workerFixture(options = {}) {
     const session = await worker.fetch(
       new Request(`${origin}/api/auth/sign-in/email`, {
         body: JSON.stringify({ email: "admin@lace.test", password }),
-        headers: { "content-type": "application/json", origin },
+        headers: { "content-type": "application/json", origin, "cf-connecting-ip": clientAddress },
         method: "POST",
       }),
       env,
@@ -248,6 +251,13 @@ function safeJson(text) {
     return text;
   }
 }
+
+test("Worker metadata identifies the bundled platform release", async () => {
+  const fixture = await workerFixture();
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const result = await fixture.call("/api/v1/openapi.json");
+  expect(result.body.info.version).toBe(manifest.version);
+});
 
 async function png(width = 3, height = 2) {
   return sharp({ create: { background: { b: 3, g: 2, r: 1 }, channels: 3, height, width } })
@@ -955,4 +965,28 @@ test("a scheduled run with many due tracked builds stays within 50 D1 queries", 
     SCHEDULED_TRACKING_CHECKS,
   );
   expect(history.filter((build) => build.status === "running")).toHaveLength(3);
+});
+
+test("Worker identity trusts only its ingress and ignores arbitrary provider/forwarding headers", async () => {
+  const fixture = await workerFixture();
+  const make = (ip) =>
+    new Request(`${origin}/api/v1/setup/admin`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": ip,
+        "x-forwarded-for": "192.0.2.99",
+        "x-lace-client-address": "192.0.2.98",
+      },
+      body: "{}",
+    });
+  const direct = make("198.51.100.1");
+  await fixture.runtime.app.fetch(direct);
+  expect(fixture.runtime.clients.get(direct)).toBe("0.0.0.0");
+  const ingress = make("198.51.100.2");
+  await fixture.worker.fetch(ingress, fixture.env, fixture.ctx);
+  expect(fixture.runtime.clients.get(ingress)).toBe("198.51.100.2");
+  const invalid = make("secret-not-an-ip");
+  await fixture.worker.fetch(invalid, fixture.env, fixture.ctx);
+  expect(fixture.runtime.clients.get(invalid)).toBe("0.0.0.0");
 });

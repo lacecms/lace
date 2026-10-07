@@ -135,6 +135,7 @@ export interface RequestRateLimiter {
   check(input: {
     readonly request: Request;
     readonly requestId: string;
+    readonly actor?: Actor;
   }): Promise<boolean | RateLimitDecision>;
 }
 
@@ -498,7 +499,13 @@ export function createLaceApp(input: LaceAppInput): Hono {
     return jsonBodyLimit(context, next);
   });
   app.use(async (context, next) => {
+    const path = context.req.path;
+    const actorLimited =
+      (path.startsWith("/api/v1/admin/api-tokens") && context.req.method !== "GET") ||
+      (path === "/api/v1/admin/media" && context.req.method === "POST");
+    const resolvedActor = actorLimited ? await actor(context) : undefined;
     const decision = await input.rateLimiter.check({
+      ...(resolvedActor === undefined ? {} : { actor: resolvedActor }),
       request: context.req.raw,
       requestId: context.get("lace.requestId") as string,
     });
@@ -638,6 +645,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     await usersActor(context);
     return response(adminSettingsStatusSchema, {
       configuredModels: input.config.content.length,
+      engineVersion: input.environment.engineVersion,
       ready: await input.readiness.isReady(),
     });
   });

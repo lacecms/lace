@@ -1,7 +1,7 @@
 # Connect an existing Astro site
 
 Use this guide when your Astro site already exists and the Lace CMS lives in a
-subdirectory generated with `pnpm create lace@0.1.0-alpha.3 cms`. The CMS never
+subdirectory generated with `pnpm create lace@0.1.0-alpha.4 cms`. The CMS never
 modifies your site; every file below is yours. For build-site selection,
 mounts and the Compose builder, see
 [Selecting the build site](lace-operations.md#selecting-the-build-site).
@@ -22,7 +22,7 @@ my-site/                 your Astro project (lockfile root)
 Astro `^7.3.1` must already be a dependency. In the site root:
 
 ```sh
-pnpm add @lacecms/astro@0.1.0-alpha.3 @lacecms/render@0.1.0-alpha.3 @lacecms/sdk@0.1.0-alpha.3 @lacecms/content@0.1.0-alpha.3
+pnpm add @lacecms/astro@0.1.0-alpha.4 @lacecms/render@0.1.0-alpha.4 @lacecms/sdk@0.1.0-alpha.4 @lacecms/content@0.1.0-alpha.4
 ```
 
 `@lacecms/sdk` loads published content, `@lacecms/render` validates blocks and

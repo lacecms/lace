@@ -25,7 +25,7 @@ const unsafeHref = "javascript:alert(1)";
 
 /** Bytes of the 1×1 PNG every published media ID serves from the controlled origin. */
 const mediaBytes = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5mcAAAAASUVORK5CYII=",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgZGIGAAAOAAeCcsnOAAAAAElFTkSuQmCC",
   "base64",
 );
 

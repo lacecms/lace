@@ -71,6 +71,9 @@ export async function nodeBrowserJourney(options) {
     await tab.keyboard.press("Escape");
     await tab.getByRole("dialog").waitFor({ state: "detached", timeout: 30_000 });
 
+    await sidebar.getByRole("link", { name: "Settings", exact: true }).click();
+    await visible(tab.getByText("CMS version", { exact: true }), "node-cms-version");
+    await visible(tab.getByText("0.1.0-alpha.4", { exact: true }), "node-cms-release");
     console.info("Acceptance: node-browser-media");
     await sidebar.getByRole("link", { name: "Media", exact: true }).click();
     await tab.getByLabel("Upload images").setInputFiles({
