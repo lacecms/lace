@@ -1,9 +1,9 @@
 import { expect, test, vi } from "vitest";
 import { openProductRuntime } from "./support/cross-runtime-fixture.mjs";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { apiJourney } from "../scripts/cross-runtime-api.mjs";
 import { astroJourney } from "../scripts/cross-runtime-astro.mjs";
 import { createServer } from "node:http";
@@ -12,6 +12,11 @@ import { node, cloudflare } from "./support/operational-platforms.mjs";
 const { NodeBuilderSiteBuildTrigger } = node;
 const { DeployHookSiteBuildTrigger, PagesDeploymentStatusReader } = cloudflare;
 
+let evidenceDirectory = process.env.LACE_34C_EVIDENCE;
+if (!evidenceDirectory && process.env.LACE_34C_PACKED_ROOT) {
+  await mkdir(resolve(".lace-acceptance"), { recursive: true });
+  evidenceDirectory = await mkdtemp(resolve(".lace-acceptance/step-34c-packed-results-"));
+}
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 
 test("34C rotated builder, hook and Pages credentials reject old values and recover", async () => {
@@ -297,12 +302,14 @@ for (const kind of ["node", "worker"]) {
       ).toBe(200);
       expect(await fingerprints(f)).toEqual(metadata);
       await verifyObjects(f, objects);
-      if (process.env.LACE_34C_EVIDENCE)
+      if (evidenceDirectory)
         await writeFile(
-          join(process.env.LACE_34C_EVIDENCE, `${kind}-restore.json`),
+          join(evidenceDirectory, `${kind}-restore.json`),
           JSON.stringify(
             {
               kind,
+              packedPlatformArtifacts: Boolean(process.env.LACE_34C_PACKED_ROOT),
+              consumerOwnershipCaptured: Boolean(process.env.LACE_34C_PACKED_ROOT),
               simulatorVersion:
                 kind === "worker"
                   ? JSON.parse(
