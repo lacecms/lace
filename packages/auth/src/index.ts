@@ -120,7 +120,9 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
     fetch: async (request: Request) => {
       const headers = new Headers(request.headers);
       headers.set("x-lace-client-address", input.clientAddress?.(request) ?? "0.0.0.0");
-      return auth.handler(new Request(request, { headers }));
+      // The Node transport may supply a Request-compatible facade; clone materializes
+      // its native Request before the platform constructor performs brand checks.
+      return auth.handler(new Request(request.clone(), { headers }));
     },
   });
 }
