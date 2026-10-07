@@ -25,7 +25,11 @@ export async function consumer34bSecurity({ base, cookie, png }) {
   const crossSite = await invoke("/api/v1/admin/users", {
     method: "POST",
     headers: { "sec-fetch-site": "cross-site", "content-type": "application/json" },
-    body: "{}",
+    body: JSON.stringify({
+      email: "denied-34b@lace.test",
+      password: "Unused-local-regression-password-34B!",
+      role: "admin",
+    }),
   });
   assert.equal(
     crossSite.status,
