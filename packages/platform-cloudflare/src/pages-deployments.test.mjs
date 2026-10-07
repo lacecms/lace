@@ -163,3 +163,21 @@ test("observations never carry provider response data", async () => {
       }),
   ).toThrow("Pages API timeout is invalid.");
 });
+
+test("a hanging Pages request aborts within its configured deadline", async () => {
+  let aborted = false;
+  const { adapter } = reader(
+    (init) =>
+      new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => {
+          aborted = true;
+          reject(init.signal.reason);
+        });
+      }),
+    { timeoutMs: 20 },
+  );
+  const started = Date.now();
+  expect(await adapter.read("dep-1")).toEqual({ kind: "transient" });
+  expect(aborted).toBe(true);
+  expect(Date.now() - started).toBeLessThan(2000);
+});

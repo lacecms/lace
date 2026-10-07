@@ -15,7 +15,7 @@ import type {
   RateLimitDecision,
   SiteBuildTrigger,
 } from "@lacecms/application";
-import { createBetterAuthBoundary } from "@lacecms/auth";
+import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
 import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
 import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
@@ -88,6 +88,7 @@ export interface CreateCloudflareWorkerInput {
 }
 
 export interface CloudflareRuntime {
+  readonly clients: TrustedClientAddresses;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly buildDispatcher: SiteBuildDispatcher;
   readonly buildTracker: SiteBuildTracker;
@@ -141,9 +142,13 @@ class CloudflareRequestRateLimiter implements RequestRateLimiter {
   public constructor(
     private readonly limiter: D1FixedWindowRateLimiter,
     private readonly clock: Clock,
+    private readonly clients: TrustedClientAddresses,
   ) {}
 
-  public async check(input: { readonly request: Request }): Promise<boolean | RateLimitDecision> {
+  public async check(input: {
+    readonly request: Request;
+    readonly actor?: { readonly id: string };
+  }): Promise<boolean | RateLimitDecision> {
     const pathname = new URL(input.request.url).pathname;
     const method = input.request.method;
     const operation =
@@ -157,7 +162,11 @@ class CloudflareRequestRateLimiter implements RequestRateLimiter {
               ? "upload"
               : undefined;
     if (operation === undefined) return true;
-    const subject = input.request.headers.get("cf-connecting-ip")?.trim() || "unknown-client";
+    if ((operation === "upload" || operation === "token") && input.actor === undefined) return true;
+    const subject =
+      operation === "upload" || operation === "token"
+        ? `actor:${input.actor!.id}`
+        : this.clients.get(input.request);
     return this.limiter.check({ now: this.clock.now(), operation, subject });
   }
 }
@@ -213,10 +222,12 @@ export function createCloudflareRuntime(
     },
     { nextId: () => ids.next() },
   );
+  const clients = new TrustedClientAddresses();
   const security = new D1SecurityService(settings.database, () => clock.now());
   const rateLimiter = new CloudflareRequestRateLimiter(
     new D1FixedWindowRateLimiter(settings.database, settings.authSecret),
     clock,
+    clients,
   );
   const cache =
     settings.cache === undefined
@@ -274,6 +285,7 @@ export function createCloudflareRuntime(
     storage,
   });
   const auth = createBetterAuthBoundary({
+    clientAddress: (request) => clients.get(request),
     database: drizzle(settings.database as never),
     origin: settings.publicBaseUrl,
     production: settings.production,
@@ -302,6 +314,7 @@ export function createCloudflareRuntime(
     security,
   });
   return Object.freeze({
+    clients,
     app,
     buildDispatcher,
     buildTracker,
@@ -375,6 +388,9 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
     async fetch(request: Request, env: CloudflareWorkerEnv, ctx: WorkerExecutionContext) {
       const runtime = configured(env);
       if (runtime === undefined) return unavailableResponse();
+      // Only the Worker ingress accepts Cloudflare's edge-supplied header.
+      // Direct runtime.app calls have no trusted client identity.
+      runtime.clients.set(request, request.headers.get("cf-connecting-ip"));
       const response = await runtime.app.fetch(request);
       if (producesDispatchWork(request, response.status)) ctx.waitUntil(postCommit(runtime));
       return response;

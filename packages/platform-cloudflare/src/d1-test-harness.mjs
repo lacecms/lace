@@ -22,11 +22,12 @@ export async function migrationStatements(include = () => true) {
 }
 
 /** Starts isolated in-memory local D1 (migrated), R2, and KV bindings. */
-export async function openLocalCloudflare() {
+export async function openLocalCloudflare(options = {}) {
   const miniflare = new Miniflare(
     convertV4MiniflareOptions({
       compatibilityDate: "2026-09-01",
       d1Databases: ["DB"],
+      ...(options.persistTo ? { resourcePersistencePath: options.persistTo } : {}),
       kvNamespaces: ["CACHE"],
       modules: true,
       r2Buckets: ["MEDIA"],
@@ -34,17 +35,21 @@ export async function openLocalCloudflare() {
     }),
   );
   const database = await miniflare.getD1Database("DB");
-  const statements = await migrationStatements();
-  await database.batch(statements.map((statement) => database.prepare(statement)));
-  await database
-    .prepare("create table d1_migrations (id integer primary key, name text not null)")
-    .run();
-  const files = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-  for (const [index, name] of files.entries())
+  if (options.migrate !== false) {
+    const statements = await migrationStatements();
+    await database.batch(statements.map((statement) => database.prepare(statement)));
     await database
-      .prepare("insert into d1_migrations (id, name) values (?, ?)")
-      .bind(index + 1, name)
+      .prepare("create table d1_migrations (id integer primary key, name text not null)")
       .run();
+    const files = (await readdir(migrationsDirectory))
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    for (const [index, name] of files.entries())
+      await database
+        .prepare("insert into d1_migrations (id, name) values (?, ?)")
+        .bind(index + 1, name)
+        .run();
+  }
   return {
     bucket: await miniflare.getR2Bucket("MEDIA"),
     database,
@@ -71,9 +76,13 @@ export function countingD1(database) {
       stats.maxParameters = Math.max(stats.maxParameters, values.length);
       return wrap(statement.bind(...values), values.length);
     },
-    first: () => {
+    first: (...args) => {
       stats.queries += 1;
-      return statement.first();
+      return statement.first(...args);
+    },
+    raw: (...args) => {
+      stats.queries += 1;
+      return statement.raw(...args);
     },
     inner: statement,
     parameters,

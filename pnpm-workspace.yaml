@@ -80,7 +80,7 @@ catalog:
   vitest: 5.0.0
   wrangler: 4.129.0
   "@aws-sdk/client-s3": ^3.1133.0
-  sharp: ^0.35.4
+  sharp: ^0.35.5
   semver: 7.8.5
   "@mjackson/multipart-parser": ^0.10.1
 
@@ -89,3 +89,12 @@ allowBuilds:
   esbuild: true
   pnpm: true
   workerd: true
+
+overrides:
+  "miniflare>sharp": 0.35.5
+  "sharp@0.35.4": 0.35.5
+  "undici@7.29.0": 7.29.1
+  "tinypool@2.1.0": 2.1.2
+  "http-cache-semantics@4.2.0": 4.3.0
+  "smol-toml@1.8.0": 1.9.0
+  "source-map-js@1.2.1": 1.2.2

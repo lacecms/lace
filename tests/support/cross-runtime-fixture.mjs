@@ -35,7 +35,7 @@ export const png = await nodeRequire("sharp")({
   .toBuffer();
 
 /** Only fixture-owned state is ever removed. No development paths or remote bindings. */
-export async function openProductRuntime(kind) {
+export async function openProductRuntime(kind, options = {}) {
   const cleanups = [];
   let closed = false;
   const close = async () => {
@@ -78,6 +78,7 @@ export async function openProductRuntime(kind) {
     const origin = `http://127.0.0.1:${listener.address().port}`;
     const admin = createNodeAdminAssets(resolve("apps/admin/dist"));
     let runtime, request, expireSessions, dispatch;
+    let dispatchPending = async () => {};
     const buildTrigger = { trigger: async () => ({ status: "failed", reason: "build_failed" }) };
     if (kind === "node") {
       const directory = await mkdtemp(join(tmpdir(), "lace-34a-node-"));
@@ -160,6 +161,9 @@ export async function openProductRuntime(kind) {
           promise.finally(() => pending.delete(promise));
         },
       };
+      dispatchPending = async () => {
+        await Promise.all(pending);
+      };
       const worker = createCloudflareWorker({
         config,
         logger: { log() {} },
@@ -168,7 +172,7 @@ export async function openProductRuntime(kind) {
         postCommitBuildDelayMs: 0,
       });
       const env = {
-        DB: local.database,
+        DB: options.instrumentD1 ? options.instrumentD1(local.database) : local.database,
         MEDIA: local.bucket,
         LACE_ENVIRONMENT: "development",
         LACE_AUTH_SECRET: "cross-runtime-local-auth-secret-34a-long-enough",
@@ -258,6 +262,9 @@ export async function openProductRuntime(kind) {
       dispatch,
       expireSessions,
       close,
+      settle: async () => {
+        if (kind === "worker") await dispatchPending();
+      },
     };
   } catch (error) {
     try {

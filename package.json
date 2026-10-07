@@ -46,7 +46,8 @@
     "release:publish:npm": "node scripts/release-publish.mjs npm",
     "release:publish:images": "node scripts/release-publish.mjs images",
     "release:verify": "node scripts/release.mjs verify",
-    "verify:34a": "node scripts/cross-runtime-verification.mjs"
+    "verify:34a": "node scripts/cross-runtime-verification.mjs",
+    "verify:34b": "node scripts/security-resilience-verification.mjs"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",

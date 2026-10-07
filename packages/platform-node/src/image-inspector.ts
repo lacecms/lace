@@ -1,4 +1,9 @@
-import type { ImageDimensions, ImageInspector, MediaMimeType } from "@lacecms/application";
+import {
+  CompleteImageContainerInspector,
+  type ImageDimensions,
+  type ImageInspector,
+  type MediaMimeType,
+} from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
 import sharp from "sharp";
 
@@ -22,6 +27,7 @@ function expectedFormat(mimeType: MediaMimeType): "avif" | "jpeg" | "png" | "web
 export class NodeSharpImageInspector implements ImageInspector {
   public async inspect(bytes: Uint8Array, mimeType: MediaMimeType): Promise<ImageDimensions> {
     try {
+      await new CompleteImageContainerInspector().inspect(bytes, mimeType);
       const metadata = await sharp(bytes, { failOn: "error", limitInputPixels: false }).metadata();
       const format =
         mimeType === "image/avif" && metadata.format === "heif" ? "avif" : metadata.format;

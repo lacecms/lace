@@ -972,6 +972,16 @@ export class NodeContentRepository
     return row === undefined ? null : mediaMetadata(row);
   }
 
+  public async loadMediaMany(ids: readonly string[]): Promise<readonly MediaMetadata[]> {
+    const result: MediaMetadata[] = [];
+    for (const group of chunks([...new Set(ids)], SQLITE_BIND_CHUNK)) {
+      const sql = `select * from media where id in (${group.map(() => "?").join(", ")})`;
+      const rows = this.connection.prepare(sql).all(...group) as Record<string, unknown>[];
+      result.push(...rows.map(mediaMetadata));
+    }
+    return result;
+  }
+
   public async loadMedia(id: string): Promise<MediaMetadata | null> {
     const row = this.connection.prepare(MEDIA_BY_ID_SQL).get(id) as
       | Record<string, unknown>

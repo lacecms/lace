@@ -684,6 +684,11 @@ export interface MediaReadPort {
   loadMedia(id: string): Promise<MediaMetadata | null>;
 }
 
+/** Bounded set-based metadata validation for complete content mutations. */
+export interface ContentMediaReadPort extends MediaReadPort {
+  loadMediaMany(ids: readonly string[]): Promise<readonly MediaMetadata[]>;
+}
+
 /** Admin media-list order; a leading `-` sorts descending. */
 export type MediaSort = "-createdAt" | "-filename" | "-size" | "createdAt" | "filename" | "size";
 
@@ -818,3 +823,5 @@ export * from "./media-use-cases.js";
 export function requireContentReader(actor: Actor): void {
   requirePermission(actor, "content:read");
 }
+
+export { CompleteImageContainerInspector } from "./image-container.js";

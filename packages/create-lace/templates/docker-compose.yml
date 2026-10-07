@@ -47,6 +47,7 @@ services:
       LACE_BUILD_SITE_ID: ${LACE_BUILD_SITE_ID:-main-site}
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
       # lace-site: end
+      LACE_TRUSTED_PROXY_CIDRS: ${LACE_TRUSTED_PROXY_CIDRS:-}
       LACE_AUTH_SECRET: ${LACE_AUTH_SECRET:?set LACE_AUTH_SECRET}
       LACE_DATABASE_PATH: /data/lace.sqlite
       LACE_HOST: 0.0.0.0

@@ -1,3 +1,4 @@
+import { consumer34bSecurity } from "./consumer-34b-security.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer as createHttpServer } from "node:http";
@@ -482,6 +483,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       "cloudflare-browser-publish",
     );
     const cookie = await login(base, email, password, secretValues);
+    await consumer34bSecurity({ base, cookie, png });
     // The starter needs the synchronized home page published as well.
     const homes = await json(base, "api/v1/admin/models/home/entries", { headers: { cookie } });
     const homeId = homes?.items?.[0]?.id;

@@ -4,18 +4,23 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 import { expected } from "./cross-runtime-api.mjs";
 const exec = promisify(execFile);
 export async function astroJourney(f, seed) {
   console.info(`34A ${f.kind} Astro: build actual authenticated export`);
   const directory = await mkdtemp(join(tmpdir(), `lace-34a-astro-${f.kind}-`));
   try {
-    await exec("pnpm", ["exec", "astro", "build", "--outDir", directory], {
+    const sentinel = "static-build-credential-sentinel-34b-private-value";
+    const secrets = [seed.token, sentinel];
+    const built = await exec("pnpm", ["exec", "astro", "build", "--outDir", directory], {
       cwd: resolve("apps/site"),
       timeout: 90000,
       maxBuffer: 4 * 1024 * 1024,
       env: {
         ...process.env,
+        LACE_AUTH_SECRET: sentinel,
+        AWS_SECRET_ACCESS_KEY: sentinel,
         LACE_SITE_DATA_MODE: "live",
         LACE_API_BASE_URL: f.origin,
         LACE_BUILD_TOKEN: seed.token,
@@ -23,6 +28,8 @@ export async function astroJourney(f, seed) {
         LACE_EXPECTED_PUBLISHED_VERSION: "5",
       },
     });
+    assertSecretFree(built.stdout + built.stderr, secrets, `${f.kind} Astro build diagnostics`);
+    await scanTree(directory, secrets, `${f.kind} generated static output`);
     const files = (await readdir(directory, { recursive: true, withFileTypes: true }))
       .filter((file) => file.isFile())
       .map((file) => join(file.parentPath, file.name));

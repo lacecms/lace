@@ -8,7 +8,8 @@ import type {
   SiteBuildTrigger,
 } from "@lacecms/application";
 import { type ContentModelDefinition, type NormalizedConfig } from "@lacecms/config";
-import { createBetterAuthBoundary } from "@lacecms/auth";
+import { resolveNodeClientAddress, trustedProxyPolicy } from "./client-address.js";
+import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
 import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
@@ -49,6 +50,7 @@ export class NodeEnvironmentError extends Error {
 
 export interface NodeRuntimeSettings {
   readonly buildSite?: LaceAppInput["buildSite"];
+  readonly trustedProxyCidrs?: readonly string[];
   readonly authSecret: string;
   readonly adminDevOrigin?: URL;
   readonly databasePath: string;
@@ -123,6 +125,13 @@ function positiveInteger(
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
+  const trustedProxyCidrs =
+    environment.LACE_TRUSTED_PROXY_CIDRS?.split(",").map((item) => item.trim()) ?? [];
+  try {
+    trustedProxyPolicy(trustedProxyCidrs);
+  } catch {
+    issues.push({ reason: "invalid", variable: "LACE_TRUSTED_PROXY_CIDRS" });
+  }
   const buildSite = parseBuildSiteIdentity(environment);
   const databasePath = requiredString(environment, "LACE_DATABASE_PATH", issues);
   const authSecret = requiredString(environment, "LACE_AUTH_SECRET", issues);
@@ -197,6 +206,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
   }
   return Object.freeze({
     buildSite,
+    trustedProxyCidrs,
     ...(adminDevOrigin === undefined ? {} : { adminDevOrigin }),
     authSecret,
     databasePath,
@@ -307,9 +317,11 @@ class NodeRequestRateLimiter implements RequestRateLimiter {
   public constructor(
     private readonly limiter: NodeFixedWindowRateLimiter,
     private readonly clock: Clock,
+    private readonly clients: TrustedClientAddresses,
   ) {}
   public async check(input: {
     readonly request: Request;
+    readonly actor?: { readonly id: string };
   }): Promise<boolean | import("@lacecms/application").RateLimitDecision> {
     const pathname = new URL(input.request.url).pathname;
     const method = input.request.method;
@@ -324,8 +336,11 @@ class NodeRequestRateLimiter implements RequestRateLimiter {
               ? "upload"
               : undefined;
     if (operation === undefined) return true;
+    if ((operation === "upload" || operation === "token") && input.actor === undefined) return true;
     const subject =
-      input.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown-client";
+      operation === "upload" || operation === "token"
+        ? `actor:${input.actor!.id}`
+        : this.clients.get(input.request);
     return this.limiter.check({ now: this.clock.now(), operation, subject });
   }
 }
@@ -350,6 +365,7 @@ export interface CreateNodeRuntimeInput {
 }
 
 export interface NodeRuntime {
+  readonly setRequestPeer: (request: Request, peer: string | undefined) => void;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly cache: Cache;
   readonly close: () => void;
@@ -373,6 +389,8 @@ function hasStartupStorageCheck(
 
 /** Creates the SQLite-backed Node composition without importing Node code into portable packages. */
 export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
+  const clients = new TrustedClientAddresses();
+  const trusted = trustedProxyPolicy(input.settings.trustedProxyCidrs);
   const database = openNodeDatabase(input.settings.databasePath);
   try {
     const installed = database.connection.prepare(appliedMigrationQuery).all() as {
@@ -406,6 +424,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     new NodeRequestRateLimiter(
       new NodeFixedWindowRateLimiter(database.connection, input.settings.authSecret),
       clock,
+      clients,
     );
   const cache = new NoopNodeCache();
   const storage = input.storage ?? new NodeMinioObjectStorage(input.settings.minio);
@@ -453,6 +472,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   const auth =
     input.auth ??
     createBetterAuthBoundary({
+      clientAddress: (request) => clients.get(request),
       database: database.drizzle,
       origin: input.settings.publicBaseUrl,
       production: process.env.NODE_ENV === "production",
@@ -479,6 +499,8 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     security,
   });
   return Object.freeze({
+    setRequestPeer: (request: Request, peer: string | undefined) =>
+      clients.set(request, resolveNodeClientAddress(request, peer, trusted)),
     app,
     cache,
     close: () => database.connection.close(),

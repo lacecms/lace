@@ -881,6 +881,13 @@ export class InMemoryContentStore
     return Object.freeze(this.mediaUsage(input.mediaId).slice(0, input.limit));
   }
 
+  public async loadMediaMany(ids: readonly string[]): Promise<readonly MediaMetadata[]> {
+    return [...new Set(ids)].flatMap((id) => {
+      const media = this.media.get(id);
+      return media === undefined ? [] : [clone(media)];
+    });
+  }
+
   public async loadMedia(id: string): Promise<MediaMetadata | null> {
     const media = this.media.get(id);
     return media === undefined ? null : clone(media);

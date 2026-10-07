@@ -49,7 +49,7 @@ Keep every generated credential.
 
 ## Prepare the database and start the CMS
 
-The host commands `pnpm db:migrate`, `pnpm content:sync` and `pnpm auth:bootstrap` open the same SQLite file as the Compose `api` and `dispatcher` services. Run them only while those services are stopped. This is a remaining workaround, not fixed in this release: on Docker Desktop and OrbStack the data directory crosses a virtual-machine file share that does not share SQLite locks, and a host command run against a running stack can stop publications from triggering builds until the services restart. On the first run nothing is running yet.
+The host commands `pnpm db:migrate`, `pnpm content:sync` and `pnpm auth:bootstrap` open the same SQLite file as the Compose `api` and `dispatcher` services. Run them only while those services are stopped. The CLI now checks Docker storage mappings before opening SQLite and refuses access while a Compose container uses that file. This protects the maintenance window: on Docker Desktop and OrbStack the data directory crosses a virtual-machine file share that does not share SQLite locks, and a host command run against a running stack can stop publications from triggering builds until the services restart. On the first run nothing is running yet.
 
 One-time, in this order:
 

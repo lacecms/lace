@@ -17,6 +17,8 @@ export * from "./media-deletion-dispatcher.js";
 export * from "./site-build-dispatcher.js";
 export * from "./builder-trigger.js";
 export * from "./runtime.js";
+export * from "./client-address.js";
+export * from "./host-database-safety.js";
 export * from "./security.js";
 
 export interface NodeDatabase {
