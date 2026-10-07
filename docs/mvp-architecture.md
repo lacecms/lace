@@ -1271,7 +1271,12 @@ server-only constraints that Step 30 implements. Exact DTO fields and spec
 wording belong to the implementing OpenSpec changes. The public build-export DTO
 is unchanged: public entries still reuse the content-entry schema with an
 always-present `published` and a mirrored `draft` snapshot, and the loader hides
-that shape (a dedicated public schema is a Step 34 question).
+that shape. Step 34A retains this v1 representation for compatibility before
+the stable contract freeze: `draft` in a public entry mirrors only its published
+snapshot, never the mutable editorial draft. The shared schema's optional
+`published` remains unchanged, while successful public entries must contain it.
+The published-site loader remains the published-only consumer view; a dedicated
+public wire schema would require a separately reviewed contract migration.
 
 ### 13.1 SDK client
 
@@ -2186,9 +2191,10 @@ The implementation plan uses these resolved defaults:
 - GHCR organization `lacecms`, with `ghcr.io/lacecms/api` and
   `ghcr.io/lacecms/builder`;
 - experimental package/image versions on npm channel `next` with an
-  independent ownership template version: `0.1.0-alpha.1` (template `0.4.0`)
-  and `0.1.0-alpha.2` (template `0.14.0`) are published and immutable, and
-  `0.1.0-alpha.3` (template `0.17.0`) is the current candidate;
+  independent ownership template version: `0.1.0-alpha.1` (template `0.4.0`),
+  `0.1.0-alpha.2` (template `0.14.0`) and `0.1.0-alpha.3` (template
+  `0.17.0`, npm publication recorded 2026-10-07) are published and immutable;
+  `0.1.0-alpha.4` (template `0.18.0`) is the current local candidate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
 

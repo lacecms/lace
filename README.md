@@ -247,7 +247,7 @@ images. For a release candidate,
 `pnpm release:prepare --output <new-dir>` prepares the exact package and image
 set from a clean commit and `pnpm acceptance:release --artifacts <new-dir>` runs
 the same journeys against only those artifacts. The current candidate is
-`0.1.0-alpha.3` (template `0.17.0`; `0.1.0-alpha.2` is published); see
+`0.1.0-alpha.4` (template `0.18.0`; alpha.3 npm packages are published); see
 [docs/alpha-release.md](./docs/alpha-release.md). No command publishes.
 
 ## Troubleshooting

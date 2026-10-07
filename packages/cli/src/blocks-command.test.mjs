@@ -50,7 +50,7 @@ async function astroSite(root, name = "site") {
   return site;
 }
 
-async function installPackages(site, version = "0.1.0-alpha.3") {
+async function installPackages(site, version = "0.1.0-alpha.4") {
   for (const name of ["astro", "render"]) {
     const directory = join(site, "node_modules/@lacecms", name);
     await mkdir(directory, { recursive: true });
@@ -194,11 +194,11 @@ describe("installation into an independent Astro site", () => {
     const result = await run(root, ["quote", "--site", "web"]);
     expect(result.ok).toBe(true);
     expect(result.data.packages.missing).toEqual([
-      { name: "@lacecms/astro", range: "0.1.0-alpha.3", installed: "0.0.1" },
-      { name: "@lacecms/render", range: "0.1.0-alpha.3", installed: "0.0.1" },
+      { name: "@lacecms/astro", range: "0.1.0-alpha.4", installed: "0.0.1" },
+      { name: "@lacecms/render", range: "0.1.0-alpha.4", installed: "0.0.1" },
     ]);
     expect(result.data.packages.command).toBe(
-      "pnpm --dir web add @lacecms/astro@0.1.0-alpha.3 @lacecms/render@0.1.0-alpha.3",
+      "pnpm --dir web add @lacecms/astro@0.1.0-alpha.4 @lacecms/render@0.1.0-alpha.4",
     );
     expect((await readFile(join(site, "package.json"))).equals(packageJson)).toBe(true);
     await stat(join(site, "src/components/lace/QuoteBlock.astro"));

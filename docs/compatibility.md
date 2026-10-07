@@ -100,7 +100,8 @@ version; mixing artifacts from different versions is unsupported.
 | --- | --- | --- | --- |
 | `0.1.0-alpha.1` | `0.4.0` | Published 2026-09-30, immutable | Predates environment preparation, doctor, browser setup, the tour, existing-site mode, `lace add block`, `@lacecms/astro`/`@lacecms/render` and the generated Cloudflare Worker |
 | `0.1.0-alpha.2` | `0.14.0` | Published 2026-10-04, immutable | Carries the onboarding feedback improvements of Steps 26–31; field-tested by the owner (alpha.2 feedback) |
-| `0.1.0-alpha.3` | `0.17.0` | Candidate prepared and accepted locally (Step 33H); not published | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
+| `0.1.0-alpha.3` | `0.17.0` | Prepared and accepted locally (Step 33H); npm publication recorded on 2026-10-07 | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
+| `0.1.0-alpha.4` | `0.18.0` | Local verification candidate (Step 34A); not published | Cross-runtime API/browser/Astro verification and accessible failed-build explanations; no new database migration |
 
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for

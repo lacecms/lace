@@ -900,3 +900,68 @@ test("ordering rejection preserves the local draft and offers JSON recovery and 
   await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled());
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
+
+test.each(["save", "publish", "reload"] as const)(
+  "expired session during %s offers sign-in recovery",
+  async (action) => {
+    const user = userEvent.setup();
+    let expired = false;
+    const expiredError = () => {
+      expired = true;
+      throw new AdminClientError({
+        code: "AUTHORIZATION_DENIED",
+        message: "Sign in again.",
+        status: 403,
+      });
+    };
+    const source = {
+      get: async () => (expired ? null : { id: "admin-1", role: "admin" as const }),
+      invalidate: vi.fn(),
+    };
+    let expireOnLoad = false;
+    renderRoute(
+      "/content/posts/entry-1",
+      source,
+      client({
+        loadEntry: async () => {
+          if (expireOnLoad) return expiredError();
+          return draftEntry;
+        },
+        saveDraft: async () => {
+          if (action === "reload")
+            throw new AdminClientError({
+              code: "CONTENT_REVISION_CONFLICT",
+              message: "Changed elsewhere.",
+              status: 409,
+            });
+          return expiredError();
+        },
+        publishEntry: async () => expiredError(),
+      }),
+    );
+    await screen.findByRole("heading", { name: "Edit posts" });
+    if (action === "publish") {
+      await user.click(screen.getByRole("button", { name: "Publish" }));
+      await user.click(screen.getByRole("button", { name: "Confirm publication" }));
+    } else {
+      await user.clear(screen.getByLabelText("Title"));
+      await user.type(screen.getByLabelText("Title"), "Unsaved local title");
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      if (action === "reload") {
+        await screen.findByRole("heading", { name: "Draft changed elsewhere" });
+        expireOnLoad = true;
+        await user.click(screen.getByRole("button", { name: "Reload server draft" }));
+      }
+      await screen.findByRole("button", { name: "Leave without saving" });
+      expect(screen.getByLabelText("Title")).toHaveValue("Unsaved local title");
+      if (action === "save") {
+        await user.click(screen.getByRole("button", { name: "Stay" }));
+        expect(screen.getByLabelText("Title")).toHaveValue("Unsaved local title");
+        await user.click(screen.getByRole("button", { name: "Save draft" }));
+      }
+      await user.click(await screen.findByRole("button", { name: "Leave without saving" }));
+    }
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(source.invalidate).toHaveBeenCalled();
+  },
+);

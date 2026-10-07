@@ -27,8 +27,9 @@ export function useSessionRecovery(error: unknown) {
     void (async () => {
       sessionSource.invalidate();
       if ((await sessionSource.get()) !== null) return;
-      queryClient.clear();
+      // Keep the dirty editor mounted while its leave confirmation resolves.
       await router.navigate({ search: { redirect: "/content" }, to: "/login" });
+      if (router.state.matches.some((match) => match.routeId === "/login")) queryClient.clear();
     })();
   }, [error, queryClient, router, sessionSource]);
 }
