@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-10-07T18:52:26.592Z",
+  "recordedAt": "2026-10-07T19:24:10.199Z",
   "lockSha256": "16f28c3a4f46ef074d0604319a9fe2d2db86485bdeea8d61bee084befe224ccc",
   "node": "v24.12.0",
   "pnpm": "12.3.4",
@@ -12,10 +12,10 @@
           {
             "version": "0.18.20",
             "paths": [
-              "packages__platform-node>better-auth>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild",
               "packages__platform-cloudflare>better-auth>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild",
-              "packages__auth>better-auth>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild",
-              ".>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild"
+              "packages__platform-node>better-auth>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild",
+              ".>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild",
+              "packages__auth>better-auth>drizzle-kit>@esbuild-kit/esm-loader>@esbuild-kit/core-utils>esbuild"
             ],
             "dev": false,
             "optional": false,

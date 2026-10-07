@@ -2616,7 +2616,8 @@ smokes and full arm64 consumer acceptance without publication. Subsequent
 sessions use this refreshed inventory. See
 [34A verification](./archive/step-34/step-34a-verification.md) and
 [artifact inventory](./archive/step-34/step-34a-artifacts.json).
-Sessions 34B/34C and owner real-deployment acceptance remain open.
+This 34A inventory remains historical; subsequent 34B fixes use the separate
+34B inventory below. Session 34C and owner real-deployment acceptance remain open.
 
 1. Run repository contracts against Node SQLite and local D1.
 2. Run API contracts against Node and local Worker composition roots using the
@@ -2633,6 +2634,18 @@ Sessions 34B/34C and owner real-deployment acceptance remain open.
    the public API specs together.
 
 ### Session 34B — Local security and resilience pass
+
+**Completed 2026-10-07.** The active 34B change completes 18/18 implementation
+and verification tasks. Trusted transport identity, host SQLite safety, mutation
+origin checks, complete image validation and bulk media metadata reads were
+corrected. The full local runner passed ten phases (323 tests without skips);
+the refreshed alpha.4 / template 0.19.0 candidate passed both-platform image
+smokes and full arm64/Worker consumer security and recovery acceptance. Two
+restricted tooling advisory risks remain explicitly dispositioned. See
+[34B verification](./archive/step-34/step-34b-verification.md) and the separate
+[artifact/result inventory](./archive/step-34/step-34b-artifacts.json).
+The 34A inventory remains historical. Session 34C, owner real-deployment
+acceptance, remote D1 capacity confirmation and publication remain open.
 
 1. Review auth/session configuration, CSRF/origin behavior, permission checks,
    rate limits, upload parsing, URL/rich-text sanitization, token hashing, secret

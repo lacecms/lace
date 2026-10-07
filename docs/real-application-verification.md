@@ -24,6 +24,22 @@ This plan defines scenarios and evidence rather than duplicating versioned CLI
 commands. Keep credentials, account/resource IDs and private logs out of the
 repository; use redacted summaries and private evidence references.
 
+## Local 34B evidence and remaining owner checks
+
+The local security/resilience pass is recorded in
+[34B verification](archive/step-34/step-34b-verification.md) and its separate
+[artifact/result inventory](archive/step-34/step-34b-artifacts.json). Use that
+candidate's exact revisions/checksums when selecting a deployed baseline; the
+historical 34A inventory predates these fixes. No checkbox below is satisfied by
+local Docker, Miniflare, browser or controlled provider acceptance.
+
+In particular, confirm deployed proxy/CIDR isolation, TLS/cookies, provider
+client identity, real D1 query/runtime capacity, remote retry/recovery and
+coordinated backups on the actual installation. Local export fixtures contain
+100/201/501 entries and impose no product export cap. Retain the documented
+restricted dependency risks and distribution notices when publishing. Session
+34C operations verification and registry publication are separate, pending work.
+
 ## 1. Select the application and record the baseline
 
 - [ ] Select the exact candidate package, generator and template versions; record

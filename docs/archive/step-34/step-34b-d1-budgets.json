@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-10-07T18:15:44.636335+00:00",
-  "scope": "local source; not refreshed candidate or deployed D1",
-  "sourceRevision": "35273f425cace64ba20c6a4883fae34ae98f504c",
-  "workingTree": "dirty",
-  "command": "pnpm exec vitest run --config vitest.d1-budgets.config.mjs --reporter=verbose",
+  "recordedAt": "2026-10-07T19:26:33.290051+00:00",
+  "scope": "clean final source with local D1 simulator; not remote D1 or a product export cap",
+  "sourceRevision": "70ab0d7e7e15952da94886d6144b95f69240e2a5",
+  "workingTree": "clean",
+  "command": "pnpm verify:34b (d1-http-budgets phase)",
   "outcome": "2 tests passed",
   "measurements": [
     {
@@ -123,5 +123,6 @@
     "Local Miniflare does not establish remote D1 quotas, timing or memory capacity.",
     "Export fixture sizes are evidence points, not product caps or proof of an unbounded maximum.",
     "Fixture raw SQL seeding is excluded from measured invocations; measured calls include authentication, actual handler and owned waitUntil work."
-  ]
+  ],
+  "sourceFingerprint": "53f6c605363d2b8844131ed5607b17c88f2e54e841a89e822381558a48abffe1"
 }
