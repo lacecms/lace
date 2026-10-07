@@ -2608,6 +2608,16 @@ success never counts as real-deployment evidence.
 
 ### Session 34A — Cross-runtime and browser suite
 
+**Completed 2026-10-07.** Shared repository/API/browser/Astro verification passed
+on Node and local Worker; the v1 public DTO is retained for compatibility.
+The suite found and fixed failed-build text contrast and editor session recovery.
+The refreshed alpha.4 / template 0.18.0 candidate passed both-platform image
+smokes and full arm64 consumer acceptance without publication. Subsequent
+sessions use this refreshed inventory. See
+[34A verification](./archive/step-34/step-34a-verification.md) and
+[artifact inventory](./archive/step-34/step-34a-artifacts.json).
+Sessions 34B/34C and owner real-deployment acceptance remain open.
+
 1. Run repository contracts against Node SQLite and local D1.
 2. Run API contracts against Node and local Worker composition roots using the
    same seeded data and expected response fixtures.

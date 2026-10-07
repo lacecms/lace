@@ -101,6 +101,8 @@ export async function main(args = process.argv.slice(2)) {
       "vitest",
       "run",
       ...args,
+      "--exclude=.release-artifacts/**",
+      "--exclude=.lace-acceptance/**",
       "--reporter=default",
       "--reporter=json",
       `--outputFile=${join(output, name + ".json")}`,
