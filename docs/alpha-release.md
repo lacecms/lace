@@ -1,6 +1,6 @@
 # Preparing and publishing a Lace alpha
 
-This procedure prepares the current experimental candidate recorded in `release/alpha.json`: package/generator/image version `0.1.0-alpha.3`, ownership template `0.17.0` and npm channel `next`. `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`, published 2026-10-04) are immutable; the definition lists both in `publishedVersions`, and `release:check` refuses to prepare a version recorded there. Nothing in the repository's `release:*` or acceptance commands publishes, pushes, creates a remote release or changes package visibility. The owner publishes separately after exact-artifact acceptance passes. Step 34 remains the stable-MVP gate, including the real VPS and Cloudflare deployments.
+This procedure prepares the current experimental candidate recorded in `release/alpha.json`: package/generator/image version `0.1.0-alpha.3`, ownership template `0.17.0` and npm channel `next`. `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`, published 2026-10-04) are immutable; the definition lists both in `publishedVersions`, and `release:check` refuses to prepare a version recorded there. Preparation (`release:check`, `release:plan`, `release:packages`, `release:images`, `release:prepare`, `release:verify`) and acceptance commands never publish. The owner runs `release:publish:npm` and `release:publish:images` explicitly after exact-artifact acceptance passes; those commands publish the saved artifacts. They do not create a GitHub release or change package visibility. Step 34 remains the stable-MVP gate, including the real VPS and Cloudflare deployments.
 
 ## Coordinates and ownership
 
@@ -92,26 +92,27 @@ npm view create-lace maintainers --json
 
 An E404 means currently unpublished, not reserved. If it exists and you lack publishing permission, stop and revise the generator name and onboarding commands through OpenSpec. Do not silently fall back to another name. For existing release versions, check published integrity/maintainers before doing anything further.
 
-From the repository root, first review every exact tarball through the npm dry-run. Set the local inventory directory to the clean, acceptance-verified output:
+Publish from the repository root using the clean, acceptance-verified artifact directory:
 
 ```sh
-export LACE_RELEASE_DIR="$PWD/.release-artifacts/alpha-3"
-pnpm release:verify --output "$LACE_RELEASE_DIR"
-node --input-type=module <<'JS'
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
-const directory = process.env.LACE_RELEASE_DIR;
-const inventory = JSON.parse(readFileSync(join(directory, 'inventory.json'), 'utf8'));
-if (!inventory.publicationEligible) throw new Error('Requires clean complete preparation');
-for (const item of inventory.packages) {
-  const result = spawnSync('npm', ['publish', join(directory, item.file), '--dry-run', '--access', 'public', '--tag', inventory.release.channel], { stdio: 'inherit' });
-  if (result.status !== 0) process.exit(1);
-}
-JS
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-3
 ```
 
-After reviewing that output and completing exact-artifact acceptance, execute the same owner-operated block with `--dry-run` removed. Publish the exact saved tarballs in inventory order; do not repack or run `npm publish` in source directories. Keep `--access public --tag next`; do not move `latest` during this experimental release. npm set `latest` to `0.1.0-alpha.1` when the first-alpha packages were first published, and to `0.1.0-alpha.2` for `@lacecms/astro` and `@lacecms/render`; leave those tags as they are. Verify each name/version with `npm view <name>@0.1.0-alpha.3 version dist.integrity` and verify `create-lace@next` points to the intended version.
+This is a **live publication**. The script verifies the complete inventory and all archive checksums, checks every selected registry version before publishing anything, and publishes the exact saved tarballs in inventory order with `--access public --tag next`. It never repacks source directories and never moves `latest`. Authentication uses your local npm configuration (`npm login`).
+
+To inspect the npm publication without publishing, explicitly add `--dry-run`:
+
+```sh
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-3 --dry-run
+```
+
+Omit `--packages` to publish all fifteen packages. To select packages, pass a comma-separated list of full names or short scoped names; inventory order is preserved:
+
+```sh
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-3 --packages cli,sdk,create-lace
+```
+
+Matching published archives are skipped after comparing registry integrity with the saved tarball; a different archive stops the entire selected preflight. Re-running the same command resumes missing packages and ensures `next` points to the selected version. All missing packages are submitted consecutively in inventory order, without waiting for registry processing between uploads. Only after the entire batch has been sent does the script verify each version and its `next` tag against npm. npm may process an accepted upload for several minutes. This final batch verification polls pending versions concurrently for up to ten minutes, tolerates transient metadata errors, and saves each successful submission immediately in `publication-npm-submitted.json`. On timeout, rerun the same command: submitted versions are verified without uploading them again. Keep this journal with the artifact directory. A successful live run writes `publication-npm.json` beside the inventory; dry-runs write no receipt. The preparation inventory stays unchanged. A selected subset's receipt covers only that subset.
 
 Published npm versions are immutable. If a run stops midway, compare existing versions' registry integrity with the saved artifacts, record already-published items and resume only the missing ones. A different archive requires a new prerelease version and a new prepared/verified set. Do not overwrite versions or announce a partially published set.
 
@@ -123,25 +124,30 @@ The source repository is `https://github.com/lacecms/lace`. Package repository m
 
 Use your GitHub account with publishing rights in organization `lacecms`. For manual Docker authentication, GHCR accepts a personal access token (classic) with `write:packages`; authenticate locally with `docker login ghcr.io` and keep the token outside the repository. The source label is `https://github.com/lacecms/lace`, matching the repository transferred to organization `lacecms`. A future GitHub Actions workflow would need separately granted organization/package permissions.
 
-Load the exact saved archives, retag their recorded image IDs to the platform coordinates, and push those tags. Example for the API amd64 artifact (replace the ID with the inventory's actual `imageId`):
+Publish the saved API and builder archives for all prepared platforms, then assemble their versioned manifest lists:
 
 ```sh
-docker load --input "$LACE_RELEASE_DIR/images/api-0.1.0-alpha.3-amd64.tar"
-docker tag sha256:<inventory-image-id> ghcr.io/lacecms/api:0.1.0-alpha.3-amd64
-docker push ghcr.io/lacecms/api:0.1.0-alpha.3-amd64
+pnpm release:publish:images --artifacts .release-artifacts/alpha-3
 ```
 
-Repeat using the matching saved archive and ID for API arm64 and builder amd64/arm64. Do not rebuild with `--push`: publication must use the tested archives. Once both platform tags exist for each runtime:
+This is a **live publication**. The script verifies the complete inventory/checksums and checks existing remote platform tags and versioned manifest lists before any local load or remote push. It loads the exact archives, verifies their image IDs and platforms, tags/pushes only missing platform images, and uses `docker buildx imagetools create` with verified remote digests to publish each multi-platform version tag. It never rebuilds images and never changes `latest`.
+
+To review the plan without loading, tagging or pushing images, add `--dry-run`. This performs read-only registry checks and needs Docker CLI/Buildx and registry access:
 
 ```sh
-docker manifest create ghcr.io/lacecms/api:0.1.0-alpha.3 ghcr.io/lacecms/api:0.1.0-alpha.3-amd64 ghcr.io/lacecms/api:0.1.0-alpha.3-arm64
-docker manifest push ghcr.io/lacecms/api:0.1.0-alpha.3
-docker manifest create ghcr.io/lacecms/builder:0.1.0-alpha.3 ghcr.io/lacecms/builder:0.1.0-alpha.3-amd64 ghcr.io/lacecms/builder:0.1.0-alpha.3-arm64
-docker manifest push ghcr.io/lacecms/builder:0.1.0-alpha.3
+pnpm release:publish:images --artifacts .release-artifacts/alpha-3 --dry-run
 ```
 
-New GHCR packages default to private. For both organization packages, open their Package settings and explicitly set visibility to Public, then verify anonymous pulling and both platform entries with `docker buildx imagetools inspect <versioned-coordinate>`. Record actual remote manifest/platform digests in a separate publication receipt after push; local IDs do not substitute for them. Leave `latest` unchanged.
+Omit `--images` for both images, or select `api`, `builder`, or `api,builder`. Each selected image always includes all inventory platforms:
+
+```sh
+pnpm release:publish:images --artifacts .release-artifacts/alpha-3 --images api
+```
+
+Re-running resumes missing platform tags and manifests. Existing artifacts must match the recorded config/image identities and expected platforms; conflicts stop publication. Registry authentication/network errors stop the run rather than being treated as missing images. A successful live run writes `publication-images.json` beside the inventory with remote platform/manifest digests and source identity. A selected subset's receipt covers only that subset. Neither publication command proves real deployment success or replaces exact-artifact acceptance.
+
+New GHCR packages default to private. For both organization packages, open their Package settings and explicitly set visibility to Public, then verify anonymous pulling and both platform entries with `docker buildx imagetools inspect <versioned-coordinate>`. Keep the generated publication receipt with its remote manifest/platform digests; local IDs do not substitute for them. Leave `latest` unchanged.
 
 If publication is interrupted, compare any existing platform tag's config/image identity to the inventory before resuming. Do not overwrite a different image at a released tag. Resume missing platform tags and assemble the full version manifest only once both are verified. Announce availability only after npm and both public image manifests are complete; a consumer must be able to use the generated defaults without an engine checkout or registry credentials.
 
-Official references: [npm organization packages](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/), [GHCR authentication, visibility and image labels](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+Official references: [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish/), [Docker manifest inspection](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/), [Docker manifest creation](https://docs.docker.com/reference/cli/docker/buildx/imagetools/create/), [npm organization packages](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/), [GHCR authentication, visibility and image labels](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).

@@ -192,7 +192,7 @@ foundation
 | 31 | Complete generated Cloudflare consumer onboarding | M | 31A, 31B |
 | 32 | Feedback regression acceptance and next alpha preparation | M | 32A, 32B |
 | 33 | Alpha.2 field-trial fixes and next alpha | L | 33A, 33B, 33C, 33D, 33E, 33F, 33G, 33H |
-| 34 | MVP release gate | L | 34A, 34B, 34C |
+| 34 | Local MVP verification and owner handoff | L | 34A, 34B, 34C |
 
 The roadmap is therefore **94 recommended session units**. Small neighboring
 units can be combined after the foundation stabilizes, but units that introduce
@@ -205,7 +205,8 @@ Steps 0–25 are the completed baseline for this continuation. The owner's
 published-alpha trial in an independent Astro project is recorded in
 [`onboarding-feedback.md`](./archive/step-32/onboarding-feedback.md). Steps 26–32 address that
 feedback and the remaining Cloudflare consumer-installation gap before the
-former Step 26 release gate, now Step 34. Existing archived change names and
+former Step 26 release gate, now split between local Step 34 and the
+post-roadmap owner verification plan. Existing archived change names and
 historical session references retain their original meaning.
 
 The feedback is input to future proposals, not an accepted capability spec.
@@ -229,9 +230,10 @@ Worker and the Pages-hosted static site to a real Cloudflare account. The
 defects and documentation gaps from that trial are recorded in
 [`lace-alpha-2-feedback.md`](./archive/step-33/lace-alpha-2-feedback.md) (§1–§6 plus a
 cross-cutting diagnostics requirement). Step 33 fixes them and prepares the
-next compatible alpha; the release gate moves to Step 34. That trial is
-early field evidence, not Step 34 deployment acceptance: the gate still runs
-against the final candidate. The alpha.2 feedback, like the earlier feedback,
+next compatible alpha; local release verification moves to Step 34. That trial is
+early field evidence. Real deployment acceptance against the final candidate
+is an owner-operated check after Step 34, following
+[`real-application-verification.md`](./real-application-verification.md). The alpha.2 feedback, like the earlier feedback,
 is proposal input rather than an accepted spec, and its documented workarounds
 are not product fixes.
 
@@ -1454,9 +1456,10 @@ The artifacts are verified before their first publication.
 This step prepares an experimental release such as `0.1.0-alpha.1` with the npm
 `next` tag; it does not declare the MVP stable. Actual registry publication, the
 owner's subsequent test repository, and a real Cloudflare deployment follow
-separately. The full release gate remains Step 34. Preserve existing Node/D1 and
+separately. Local release verification remains Step 34; real deployment
+acceptance follows the post-roadmap owner plan. Preserve existing Node/D1 and
 Worker checks; complete Cloudflare consumer onboarding after local user feedback
-and before the Cloudflare deployment acceptance in Step 34.
+and before the owner verifies the real Cloudflare deployment.
 
 ### Session 25A — Minimal generated-project onboarding
 
@@ -2192,14 +2195,14 @@ controlled HTTPS deploy hook (unavailable, then accepted as `running`), the
 Astro build from the Worker export, draft isolation, restart persistence and
 secret exclusion; the generated guide (template `0.13.0`) documents that
 journey and its recovery; `docs/cloudflare-deployment-handoff.md` is the
-real-account procedure for Session 34C.
+real-account procedure for the post-roadmap owner verification plan.
 
 ### Acceptance
 
 - A generated Cloudflare consumer operates its CMS and builds its Astro site
   from versioned artifacts without the Lace engine checkout.
 - Local Node and Worker share setup/security/content contracts; the real-account
-  deployment verification remains explicit in Step 34.
+  deployment verification remains explicit in the post-roadmap owner plan.
 
 **Session boundary:** M; use 31A and 31B.
 
@@ -2282,7 +2285,8 @@ passed preparation smokes, and the suite passed on `linux/arm64`; see
   documented flows using the exact compatible candidate artifacts.
 - Upgrades preserve user source and detect modified managed infrastructure.
 - The next alpha is ready for publication; stable MVP status still depends on
-  Step 34, and remote publication/deployment is not a side effect of testing.
+  Step 34 and the post-roadmap owner verification, and remote
+  publication/deployment is not a side effect of testing.
 
 **Session boundary:** M; use 32A and 32B.
 
@@ -2332,7 +2336,7 @@ validators, both runtimes compare published versions, and standard loaders
 revalidate through compression with default fetch. See
 [`step-33b-build-export-etags-acceptance.md`](./archive/step-33/step-33b-build-export-etags-acceptance.md)
 for contract, SDK, SQLite/D1 and gzip-proxy verification. Real Pages build
-verification with default compression remains in 33H/34C.
+verification with default compression remains in the post-roadmap owner plan.
 
 1. Accept strong `"N"` and weak `W/"N"` version-derived validators in the shared
    contract and keep rejecting arbitrary or malformed values. Define how the SDK
@@ -2347,7 +2351,8 @@ verification with default compression remains in 33H/34C.
 3. Test strong, weak, missing, and malformed headers in contracts and the SDK,
    conditional reads against both runtime composition roots, `304` followed by a
    post-publication `200`, and dev revalidate mode behind a compressing proxy.
-   A real Pages build with default compression is evidence for 33H/34C.
+   A real Pages build with default compression is evidence for the
+   post-roadmap owner verification.
 
 ### Session 33C — Builder source policy and failure diagnostics
 
@@ -2540,7 +2545,7 @@ runs remain unverified; no artifacts were published. Session 33H remains.
 3. Map every alpha.2 feedback item to tests, documentation, or an explicit
    decision in an acceptance record guarded by a test, like
    `docs/archive/step-32/onboarding-feedback-acceptance.md`. Real-account re-verification of §3–§5
-   is input to 34C rather than a local-test claim; registry publication remains
+   is input to the post-roadmap owner plan rather than a local-test claim; registry publication remains
    a separate explicit act.
 
 33H delivered 2026-10-06: `0.1.0-alpha.2` recorded as published; candidate
@@ -2556,7 +2561,7 @@ WAL database. The feedback logs moved to `docs/archive/`; the guarded map is
 `docs/archive/step-33/alpha-2-feedback-acceptance.md`. Evidence:
 `docs/archive/step-33/step-33h-verification.md`. Nothing was published;
 publication and real-account/real-server re-verification are owner acts
-feeding 34C. Step 33 is complete.
+feeding the post-roadmap owner plan. Step 33 is complete.
 
 ### Acceptance
 
@@ -2580,21 +2585,34 @@ feeding 34C. Step 33 is complete.
 33E (runtime adapter and new secret) separate. Implement 33G after 33A–33F so
 the guides describe fixed behavior, and 33H last.
 
-## Step 34 — MVP release gate
+## Step 34 — Local MVP verification and owner handoff
 
-**Outcome:** both supported deployments satisfy the product flow, security
-requirements, and operational recovery promises.
+**Outcome:** both runtime implementations pass local product, security and
+recovery checks; operational documentation and a separate owner verification
+plan are ready. Completion closes the implementation roadmap, not real-deployment
+acceptance or authorization to publish a stable release.
 
-**Basis:** the final candidate from Step 33. The owner's alpha.2 field trial is
-early evidence, not a substitute for the checks below.
+**Basis:** the exact final candidate artifacts from Step 33 (or a newly reviewed
+candidate if Step 34 changes shipped behavior). All required execution uses local
+Node/Docker, SQLite/MinIO, local Worker/D1/R2 and controlled provider stubs. No VPS,
+Cloudflare account, remote database, production secret or registry publication is
+required. Dependency advisory access may require the internet, not infrastructure
+credentials.
+
+Real infrastructure checks belong to the owner after the roadmap, following
+[`real-application-verification.md`](./real-application-verification.md). Earlier
+references to real-account checks as “34C” (including historical Step 33 evidence)
+now refer to that separate plan. Existing owner results may be reused when their
+version, configuration, scenario and evidence match the final candidate; local
+success never counts as real-deployment evidence.
 
 ### Session 34A — Cross-runtime and browser suite
 
 1. Run repository contracts against Node SQLite and local D1.
-2. Run API contracts against Node and Worker composition roots using the same
-   seeded data and expected response fixtures.
-3. Complete Playwright scenarios for admin, editor, viewer, conflict, media,
-   publish/build failure, and session expiry.
+2. Run API contracts against Node and local Worker composition roots using the
+   same seeded data and expected response fixtures.
+3. Complete local Playwright scenarios for admin, editor, viewer, conflict,
+   media, publish/build failure, and session expiry.
 4. Build the Astro fixture from both runtime exports and compare canonical output
    data, routes, and media references.
 5. Decide before the stable contract freeze whether public entries keep reusing
@@ -2604,62 +2622,76 @@ early evidence, not a substitute for the checks below.
    updates contracts, SDK, render core (`@lacecms/render`), and
    the public API specs together.
 
-### Session 34B — Security and resilience pass
+### Session 34B — Local security and resilience pass
 
 1. Review auth/session configuration, CSRF/origin behavior, permission checks,
    rate limits, upload parsing, URL/rich-text sanitization, token hashing, secret
-   redaction, and arbitrary-command/path resistance.
+   redaction, and arbitrary-command/path resistance. Verify with local negative
+   tests and controlled proxy configurations; deployed proxy, TLS and account
+   settings are covered by the owner's separate plan.
    Include the Step 32B findings: the Node request rate limiter keys clients on
    the first, client-controlled `X-Forwarded-For` value; Better Auth's sign-in
    limiter falls back to one shared bucket without a trusted client-IP header;
    and host database commands are only documented, not guarded, against a
    running Compose API on VM-backed Docker hosts.
-2. Fault-inject DB, object storage, deploy hook, builder, and process termination.
-   Confirm retry, lease expiry, previous-release preservation, and admin status.
-3. Test D1 query/parameter budgets at maximum block count and build-export size.
+2. Fault-inject local DB, object storage, builder, process termination and
+   controlled deploy-hook/Pages API failures. Confirm retry, lease expiry,
+   previous-release preservation, restart recovery and truthful admin status.
+3. Test D1 query/parameter budgets at maximum block count and build-export size
+   using local D1 and explicit query-budget assertions. Document simulator limits
+   and carry remote D1 confirmation into the owner plan.
 4. Audit dependency vulnerabilities and licenses; document accepted risks rather
    than silently suppressing them.
 
-### Session 34C — Operations and release documentation
+### Session 34C — Local operations verification and owner documentation
 
-The generated Cloudflare onboarding from Step 31 and the exact candidate
-artifacts from Step 33 are prerequisites. Follow `docs/cloudflare-deployment-handoff.md` for
-the Cloudflare deployment and its evidence. Verify real VPS and Cloudflare
-installations, including the separate public-site deployment and publish/build
-path, and record the tested versions and provider outcomes. Local simulation
-alone does not satisfy deployment acceptance; missing account access is an
-explicit blocker rather than a passed check.
+The generated onboarding from Step 31 and the exact candidate artifacts from
+Step 33 are prerequisites. This session prepares and locally checks operations;
+executing the real VPS/Cloudflare procedures is outside its acceptance criteria.
 
-1. Write local development, generated-project, VPS deployment, Cloudflare
-   deployment, backup/restore, migration, key rotation, build recovery, and
-   troubleshooting guides.
-2. Document health/readiness semantics and structured log fields. Add an
-   operator checklist for migration/config hashes, object storage, latest build,
-   and engine version.
-3. Verify a backup/restore drill for SQLite + MinIO and D1 + R2 metadata/object
-   coordination. State the consistency caveat and recommended maintenance window.
+1. Complete local development, generated-project, VPS deployment, Cloudflare
+   deployment, backup/restore, migration, key rotation, build recovery and
+   troubleshooting guides. Run account-free command paths locally; identify
+   remote steps in the owner plan and keep the Cloudflare deployment handoff
+   consistent with the generated guides.
+2. Document and locally verify health/readiness semantics and structured log
+   fields. Add an operator checklist for migration/config hashes, object storage,
+   latest build and engine version.
+3. Verify a local backup/restore drill for SQLite + MinIO and local D1 + R2,
+   including metadata/object coordination. State consistency caveats, maintenance
+   window guidance and differences between local and remote tooling. Real-server
+   and real-account restore drills belong to the owner plan.
 4. Produce an MVP traceability checklist mapping every “Included” product scope
-   item and security requirement to tests and documentation.
+   item and security requirement to tests and documentation. Link each external
+   check to the owner plan with its evidence requirements and current status;
+   completion of the roadmap must not mark unperformed external checks passed.
 
-### Final acceptance scenario
+### Final local acceptance scenario
 
-From a clean machine/project template:
+Run both paths from clean generated projects using the exact candidate artifacts:
+Node/Docker and Cloudflare-local. Exercise an independent user-owned Astro site
+as well as the generated starter where source ownership is relevant.
 
 1. Generate a Lace site with one command.
-2. Start either Node/Docker or Cloudflare-local mode.
+2. Start Node/Docker or Cloudflare-local mode for the current path.
 3. Migrate, sync config, and bootstrap the first admin.
 4. Sign in, create/edit structured content, upload/reuse media, and reorder blocks.
 5. Confirm an editor cannot publish and an admin can.
 6. Confirm the public API and Astro site show the published snapshot only.
 7. Edit the draft again and confirm public output is unchanged.
 8. Observe a coalesced build, simulate failure, recover it, and serve the last
-   successful static release throughout.
+   successful static release throughout. For Cloudflare-local, use controlled
+   provider responses and a locally served Astro build; record these as
+   simulation rather than a Pages deployment.
 9. Run an upgrade dry-run and prove user-owned site source is untouched.
    Update an installed block with `lace add block` and prove an edited block is
    reported as a conflict instead of overwritten.
 
 **Session boundary:** L; use 34A, 34B, and 34C. Do not combine the security pass
-with the release-documentation session.
+with the operations-documentation session. Propose each unit just in time under
+the normal OpenSpec workflow. The post-roadmap owner verification is a separate
+release acceptance activity, not another implementation session or a local
+completion blocker.
 
 ## 7. Recommended first delivery slices
 
@@ -2713,7 +2745,9 @@ best checkpoints for demonstrating useful progress are:
 22. **After step 33:** the alpha.2 field-trial defects are fixed, each
     deployment scenario has its own guide, and the next compatible alpha
     candidate is ready for explicit publication.
-23. **After step 34:** the MVP is release-ready.
+23. **After step 34:** local MVP verification and the owner handoff are complete.
+    Real deployment acceptance follows the separate owner plan before claiming
+    the MVP release-ready.
 
 Steps 0–3 should be implemented in order. After step 5, SDK fixture work and
 some admin visual-foundation work may proceed in parallel, but persistence,

@@ -1,6 +1,9 @@
 # Cloudflare real-account deployment handoff
 
-This is the procedure and checklist for the Step 34 release gate. It deploys a
+This is the detailed Cloudflare procedure for the owner-operated release gate
+after completion of the implementation roadmap. Use it alongside
+[the real-application verification plan](real-application-verification.md), which
+also covers VPS, shared product scenarios and recovery. It deploys a
 project generated with `create-lace --cloudflare` to a real Cloudflare account:
 the CMS Worker (D1, R2, packaged admin, scheduled recovery) and the separate
 static Astro site rebuilt through a deploy hook.
@@ -10,7 +13,8 @@ generated Worker under `wrangler dev --local` with Miniflare-simulated D1 and R2
 and a local HTTPS stand-in for the deploy hook. It proves the packaged consumer
 journey, not deployment. Real-account deployment stays unverified until the
 evidence in [Evidence and pass criteria](#evidence-and-pass-criteria) exists.
-Missing account access blocks the gate. It does not pass it.
+Missing account access leaves the owner-operated deployment gate unverified; it
+does not block completion of local Step 34 or count as a passed deployment check.
 
 This document contains no credentials, account IDs or resource IDs. Record the
 real values privately, never in the repository.
@@ -50,7 +54,9 @@ For Pages deployment tracking create a second, separate token with only
 `wrangler login` (OAuth) is acceptable for the release owner's shell. The token
 is still needed for the `cloudflare-remote` CLI target, which reads
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` from the project's private
-`.env`. The Pages Git integration needs the Cloudflare app installed on the Git
+`.lace/cloudflare-operator.env`, loaded explicitly by Lace commands. Keep a
+D1-only operator token out of the shell, `.env` and `.env.local` used by Wrangler.
+The Pages Git integration needs the Cloudflare app installed on the Git
 repository. Record which permissions were actually required. If any table row
 was insufficient or unnecessary, correct this document.
 
@@ -58,8 +64,8 @@ was insufficient or unnecessary, correct this document.
 
 | Value | Where it goes |
 | --- | --- |
-| Account ID | `.env` `CLOUDFLARE_ACCOUNT_ID` (private) |
-| D1 database name and ID | `worker/wrangler.jsonc` `database_id`, `.env` `LACE_D1_DATABASE_ID` |
+| Account ID | `.lace/cloudflare-operator.env` `CLOUDFLARE_ACCOUNT_ID` (private) |
+| D1 database name and ID | `worker/wrangler.jsonc` `database_id`, `.lace/cloudflare-operator.env` `LACE_D1_DATABASE_ID` |
 | R2 bucket name | `worker/wrangler.jsonc` `bucket_name` |
 | KV namespace ID (optional) | `worker/wrangler.jsonc` `kv_namespaces` |
 | Worker name and public origin (`https://<name>.<subdomain>.workers.dev/` or custom domain) | `worker/wrangler.jsonc` `name` and `vars.LACE_PUBLIC_BASE_URL` (trailing slash) |

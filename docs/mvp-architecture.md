@@ -199,7 +199,8 @@ optional Pages tracking settings (`LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_N
 and the separate Pages-Read-only Worker secret `LACE_PAGES_API_TOKEN`) the
 scheduled Worker instead tracks the exact deployment until a proven outcome or
 the tracking deadline. The real-account
-procedure for the release gate is `docs/cloudflare-deployment-handoff.md`.
+procedure is `docs/cloudflare-deployment-handoff.md`, used by the owner after
+the implementation roadmap as part of `docs/real-application-verification.md`.
 
 ### VPS deployment
 
@@ -2198,9 +2199,17 @@ first local vertical slices:
   immediately before first publication;
 - selecting the signing/provenance process for published artifacts;
 - defining hosted release channels and update metadata for `create-lace`;
-- confirming, during the real-account release gate, the Cloudflare Pages Git
-  integration selected as the reference static host for hook-driven rebuilds
-  (see `docs/cloudflare-deployment-handoff.md`).
+- confirming, during the owner-operated real-deployment release gate after
+  the implementation roadmap, the Cloudflare Pages Git integration selected as
+  the reference static host for hook-driven rebuilds (see
+  `docs/real-application-verification.md` and
+  `docs/cloudflare-deployment-handoff.md`).
+
+Step 34 completes local cross-runtime, security and operations verification and
+prepares the owner handoff. Real VPS and Cloudflare deployment acceptance remains
+a separate release requirement after the roadmap; local simulation does not
+satisfy it. The owner records exact candidate versions and results using
+`docs/real-application-verification.md` before claiming deployment readiness.
 
 If package-name ownership differs, only published names and generator templates
 change; internal package boundaries and domain contracts remain the same.
