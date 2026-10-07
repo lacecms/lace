@@ -125,8 +125,10 @@ function positiveInteger(
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
-  const trustedProxyCidrs =
-    environment.LACE_TRUSTED_PROXY_CIDRS?.split(",").map((item) => item.trim()) ?? [];
+  const configuredProxies = environment.LACE_TRUSTED_PROXY_CIDRS?.trim();
+  const trustedProxyCidrs = configuredProxies
+    ? configuredProxies.split(",").map((item) => item.trim())
+    : [];
   try {
     trustedProxyPolicy(trustedProxyCidrs);
   } catch {

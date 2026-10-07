@@ -1221,3 +1221,27 @@ test.each([null, { id: "real-site", label: "Real site" }])(
     }
   },
 );
+
+test("accepts an empty generated proxy setting and rejects empty list members", () => {
+  const environment = {
+    ...minioEnvironment,
+    LACE_DATABASE_PATH: "/tmp/lace.sqlite",
+    LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+    LACE_PUBLIC_BASE_URL: "https://lace.test/",
+  };
+  for (const value of [undefined, "", "   "])
+    expect(
+      parseNodeRuntimeSettings({ ...environment, LACE_TRUSTED_PROXY_CIDRS: value })
+        .trustedProxyCidrs,
+    ).toEqual([]);
+  expect(
+    parseNodeRuntimeSettings({
+      ...environment,
+      LACE_TRUSTED_PROXY_CIDRS: " 127.0.0.1/32, ::1/128 ",
+    }).trustedProxyCidrs,
+  ).toEqual(["127.0.0.1/32", "::1/128"]);
+  for (const value of [",", "127.0.0.1/32,", ",::1/128", "invalid"])
+    expect(() =>
+      parseNodeRuntimeSettings({ ...environment, LACE_TRUSTED_PROXY_CIDRS: value }),
+    ).toThrow("LACE_TRUSTED_PROXY_CIDRS");
+});
