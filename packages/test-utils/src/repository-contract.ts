@@ -2690,5 +2690,295 @@ contract(
   },
 );
 
+function block(key: string, type: string, position: number, data: JsonObject) {
+  return Object.freeze({ data, key: blockKey(key), position, schemaVersion: 1, type });
+}
+
+/** Seeds hinted-rewrite content: two media fields, an image block and a quote block. */
+async function seedHintedEntries(repository: ContractRepository, sql: ContractSql): Promise<void> {
+  for (const id of ["m-1", "m-2", "m-3"]) await seedMedia(sql, id);
+  await repository.create({
+    entry: entry("draft-only", "posts", {
+      blocks: [
+        richTextBlock("text-1"),
+        block("img-1", "image", 2000, { alt: "Alt", media: "m-2" }),
+        block("quote-1", "quote", 3000, { quote: "Q" }),
+      ],
+      fields: { cover: "m-1", headline: "Draft head", keep: "k", thumb: "m-3" },
+      title: "Draft",
+      updatedAt: 20,
+    }),
+    mediaReferences: [
+      { fieldPath: "cover", mediaId: mediaId("m-1"), sourceKey: "$fields" },
+      { fieldPath: "thumb", mediaId: mediaId("m-3"), sourceKey: "$fields" },
+      { fieldPath: "media", mediaId: mediaId("m-2"), sourceKey: blockKey("img-1") },
+    ],
+  });
+  await repository.create({
+    entry: entry("live", "posts", {
+      fields: { cover: "m-1", headline: "Live head" },
+      slug: "live",
+      title: "Live",
+      updatedAt: 21,
+    }),
+    mediaReferences: [{ fieldPath: "cover", mediaId: mediaId("m-1"), sourceKey: "$fields" }],
+  });
+  await repository.publish(publish("live", 1, 22, "live-published"));
+}
+
+async function hintedState(sql: ContractSql) {
+  return {
+    ...(await syncEvidenceState(sql)),
+    blocks: await sql.all(
+      "select snapshot_id, block_key, block_type, position, data_json from content_blocks order by snapshot_id, position",
+    ),
+    references: await sql.all(
+      "select snapshot_id, source_key, field_path, media_id from content_media_references order by snapshot_id, source_key, field_path",
+    ),
+  };
+}
+
+const hintedFieldsV1 = {
+  cover: field.media(),
+  headline: field.text(),
+  keep: field.text(),
+  thumb: field.media(),
+};
+
+contract(
+  "renames, prunes and drops hinted data with its media references",
+  async (runtime, expect) => {
+    const v1 = await evolvingPosts({ fields: hintedFieldsV1 });
+    const { repository, sql } = await runtime.open({ resolveModel: syncResolver([v1]) });
+    await applySync(repository, [v1], 10);
+    await seedHintedEntries(repository, sql);
+    const request = (id: string) => ({
+      mediaId: mediaId(id),
+      requestedAt: unixMilliseconds(40),
+      requestedBy: editor,
+    });
+    await expect(repository.markForDeletion(request("m-3"))).rejects.toMatchObject({
+      code: "MEDIA_IN_USE",
+    });
+    const usage = (id: string) =>
+      repository.loadMediaCatalogItem(id).then((item) => item!.usageCount);
+    const coverUsage = await usage("m-1");
+    const before = await hintedState(sql);
+
+    const v2 = await evolvingPosts({
+      blocks: ["richText", "quote"],
+      fields: {
+        heroImage: field.media({ renamedFrom: "cover" }),
+        keep: field.text(),
+        title: field.text({ renamedFrom: "headline" }),
+      },
+      removedBlocks: ["image"],
+      removedFields: ["thumb"],
+      version: 2,
+    });
+    const prepared = await prepareConfigurationSynchronization({ models: [v2], state: repository });
+    expect(prepared.plan).toMatchObject({
+      isValid: true,
+      operations: [
+        {
+          action: "version-update",
+          evolution: {
+            blockRemovals: ["image"],
+            fieldRemovals: ["thumb"],
+            renames: [
+              { from: "cover", to: "heroImage" },
+              { from: "headline", to: "title" },
+            ],
+          },
+        },
+      ],
+    });
+    expect(prepared.report.text).toContain(
+      "planned renames: cover -> heroImage, headline -> title",
+    );
+    expect(prepared.report.text).toContain("planned field removals: thumb");
+    expect(prepared.report.text).toContain("planned block removals: image");
+    expect(await hintedState(sql)).toEqual(before);
+
+    await expect(applySync(repository, [v2], 30, prepared)).resolves.toMatchObject({
+      status: "applied",
+      targetVersion: before.version! + 1,
+    });
+    expect(await count(sql, "select count(*) as count from outbox_events")).toBe(1);
+    const draftOnly = await repository.load({ entryId: contentEntryId("draft-only") });
+    const live = await repository.load({ entryId: contentEntryId("live") });
+    expect(draftOnly!.draft).toMatchObject({
+      fields: { heroImage: "m-1", keep: "k", title: "Draft head" },
+      revision: 1,
+      updatedAt: 20,
+    });
+    expect(draftOnly!.draft.fields).not.toHaveProperty("thumb");
+    expect(draftOnly!.draft.fields).not.toHaveProperty("headline");
+    expect(draftOnly!.draft.blocks.map((value) => [value.key, value.type, value.position])).toEqual(
+      [
+        ["text-1", "richText", 1000],
+        ["quote-1", "quote", 3000],
+      ],
+    );
+    expect(live!.published).toMatchObject({
+      fields: { heroImage: "m-1", title: "Live head" },
+      revision: 1,
+    });
+    expect(live!.published!.fields).not.toHaveProperty("cover");
+
+    expect(await usage("m-1")).toBe(coverUsage);
+    expect(await usage("m-2")).toBe(0);
+    expect(await usage("m-3")).toBe(0);
+    expect(
+      await sql.all(
+        "select distinct field_path from content_media_references where media_id = 'm-1'",
+      ),
+    ).toEqual([{ field_path: "heroImage" }]);
+    await expect(repository.markForDeletion(request("m-3"))).resolves.toMatchObject({
+      status: "deleting",
+    });
+
+    await expect(applySync(repository, [v2], 31)).resolves.toMatchObject({ status: "noop" });
+    const settled = await hintedState(sql);
+    const v3 = await evolvingPosts({
+      blocks: ["richText", "quote"],
+      fields: {
+        extra: field.text(),
+        heroImage: field.media({ renamedFrom: "cover" }),
+        keep: field.text(),
+        title: field.text({ renamedFrom: "headline" }),
+      },
+      removedBlocks: ["image"],
+      removedFields: ["thumb"],
+      version: 3,
+    });
+    const inert = await prepareConfigurationSynchronization({ models: [v3], state: repository });
+    expect(inert.plan.operations).toMatchObject([
+      {
+        action: "version-update",
+        evolution: { changes: [{ kind: "field-added", target: "extra" }] },
+      },
+    ]);
+    await applySync(repository, [v3], 32, inert);
+    const after = await hintedState(sql);
+    expect(after.snapshots).toEqual(settled.snapshots);
+    expect(after.blocks).toEqual(settled.blocks);
+    expect(after.references).toEqual(settled.references);
+  },
+);
+
+contract(
+  "refuses unhinted removals of stored data and renames onto stored data",
+  async (runtime, expect) => {
+    const v1 = await evolvingPosts({ fields: hintedFieldsV1 });
+    const { repository, sql } = await runtime.open({ resolveModel: syncResolver([v1]) });
+    await applySync(repository, [v1], 10);
+    await seedHintedEntries(repository, sql);
+    const before = await hintedState(sql);
+
+    const unhinted = await evolvingPosts({
+      blocks: ["richText", "quote"],
+      fields: { cover: field.media(), headline: field.text(), keep: field.text() },
+      version: 2,
+    });
+    const refused = await prepareConfigurationSynchronization({
+      models: [unhinted],
+      state: repository,
+    });
+    expect(refused.plan.diagnostics).toMatchObject([
+      {
+        affectedCount: 1,
+        blockType: "image",
+        code: "BLOCK_TYPE_REMOVAL_HAS_BLOCKS",
+        snapshots: [{ entryId: "draft-only", state: "draft", title: "Draft" }],
+      },
+      {
+        affectedCount: 1,
+        code: "FIELD_REMOVAL_HAS_DATA",
+        fieldKey: "thumb",
+        snapshots: [{ entryId: "draft-only", state: "draft", title: "Draft" }],
+      },
+    ]);
+    expect(refused.report.text).toContain('removedBlocks: ["image"]');
+    expect(refused.report.text).toContain('removedFields: ["thumb"]');
+    await expect(applySync(repository, [unhinted], 30, refused)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    expect(await hintedState(sql)).toEqual(before);
+
+    // A stray stored value under the new key blocks the move instead of being overwritten.
+    await sql.run(
+      "update content_snapshots set fields_json = json_set(fields_json, '$.title', 'stray') where id = 'live-published'",
+    );
+    const stray = await hintedState(sql);
+    const renamed = await evolvingPosts({
+      fields: {
+        cover: field.media(),
+        keep: field.text(),
+        thumb: field.media(),
+        title: field.text({ renamedFrom: "headline" }),
+      },
+      version: 2,
+    });
+    const onto = await prepareConfigurationSynchronization({
+      models: [renamed],
+      state: repository,
+    });
+    expect(onto.plan.diagnostics).toMatchObject([
+      {
+        affectedCount: 1,
+        code: "FIELD_RENAME_TARGET_HAS_DATA",
+        fieldKey: "title",
+        snapshots: [{ entryId: "live", state: "published" }],
+      },
+    ]);
+    await expect(applySync(repository, [renamed], 31, onto)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    expect(await hintedState(sql)).toEqual(stray);
+  },
+);
+
+contract("renames a model and one of its fields in one apply", async (runtime, expect) => {
+  const v1 = await evolvingPosts({ fields: hintedFieldsV1 });
+  const articles = await evolvingPosts({
+    fields: {
+      cover: field.media(),
+      keep: field.text(),
+      thumb: field.media(),
+      title: field.text({ renamedFrom: "headline" }),
+    },
+    key: "articles",
+    renamedFrom: "posts",
+    version: 2,
+  });
+  const { repository, sql } = await runtime.open({
+    resolveModel: syncResolver([v1, articles]),
+  });
+  await applySync(repository, [v1], 10);
+  await seedHintedEntries(repository, sql);
+
+  const prepared = await prepareConfigurationSynchronization({
+    models: [articles],
+    state: repository,
+  });
+  expect(prepared.plan.operations).toMatchObject([
+    {
+      action: "rename",
+      evolution: { renames: [{ from: "headline", to: "title" }] },
+      renamedFrom: "posts",
+    },
+  ]);
+  await expect(applySync(repository, [articles], 30, prepared)).resolves.toMatchObject({
+    status: "applied",
+  });
+  expect(await sql.all("select model_key from content_entries order by id")).toEqual([
+    { model_key: "articles" },
+    { model_key: "articles" },
+  ]);
+  const live = await repository.load({ entryId: contentEntryId("live") });
+  expect(live!.published!.fields).toEqual({ cover: "m-1", title: "Live head" });
+});
+
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   Object.freeze(cases);

@@ -664,7 +664,8 @@ baseline with the configured structure and classifies every difference
 | Add a field; relax a constraint (`minLength`/`maxLength`/`min`/`max`, `required` → optional, new `select` option); add, change or remove a `defaultValue`; allow a new block type | compatible | apply; a declared default is backfilled into drafts and published snapshots lacking the field |
 | Reorder `select` options or the block allowlist | display | apply |
 | Tighten a constraint on an existing field (including optional → required and a removed `select` option) | validated | apply only if every stored value satisfies it; otherwise refuse and name the snapshots |
-| Remove a field or disallow a block type | destructive | apply only when no snapshot holds that data; otherwise refuse |
+| Remove a field or disallow a block type | destructive | without a hint: apply only when no snapshot holds that data, otherwise refuse; with a `removedFields` or `removedBlocks` hint: prune the field values or drop the blocks |
+| Rename a field (field-level `renamedFrom` hint) | destructive | move the stored values to the new key; refuse if the new key already holds data |
 | Change the definition of an allowed block type | migration | apply only when no snapshot holds a block of that type; otherwise refuse |
 | Change a field type or an unrecognized field property | breaking | refuse |
 | Change a page path or collection route | breaking | refuse while the model has published snapshots |
@@ -678,8 +679,25 @@ audit actors, or timestamps, and media-field defaults are never backfilled.
 When a model has snapshots but no valid baseline, sync refuses a structural
 change and tells the operator to restore the previous definition, synchronize
 once to record a baseline, and then apply the change. Sync never guesses a
-rename or silently transforms content; destructive hints and block-data
-migrations are added by later roadmap sessions.
+rename or silently transforms content.
+
+Destructive changes to populated data need explicit, temporary hints: a model
+field may declare `renamedFrom: "<former key>"` in its field options, and a
+model may declare `removedFields` and `removedBlocks`. Hints are excluded from
+the canonical structure, both hashes and the public projection, so adding or
+removing one never needs a version bump; block fields cannot declare
+`renamedFrom` (block data changes use block versions). A hint takes effect only
+when the model's structure changed and is checked against the baseline: a
+rename applies when the former key is in the baseline and the new key is not,
+is inert once applied, and is refused when both or neither key are in the
+baseline; a removal hint for a key or block type absent from the baseline is
+inert. In the same guarded mutation that records the model, sync moves
+renamed values, prunes removed fields, drops blocks of removed types, and
+moves or deletes the matching `content_media_references` rows, so media usage
+and the deletion guard stay correct. These rewrites are set-based and do not
+change revisions, audit actors or timestamps; renames run before backfills.
+Hints are removed from configuration after every environment has synchronized.
+Block-data migrations are added by a later roadmap session.
 
 When a successful sync changes the serializable configuration visible to public
 consumers, it increments `published_state.version` and requests a build in the

@@ -29,6 +29,12 @@ export interface CommonFieldOptions<Value> {
   readonly defaultValue?: Value;
   readonly description?: string;
   readonly label?: string;
+  /**
+   * Temporary synchronization hint naming the field's former key in a content
+   * model. Configuration moves it out of the field definition; block fields
+   * reject it.
+   */
+  readonly renamedFrom?: string;
   readonly required?: boolean;
 }
 
@@ -317,6 +323,8 @@ function deepFreeze<Value>(value: Value): Value {
   return value;
 }
 
+const RENAMED_FROM_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
+
 function readOptionalString(options: MutableJsonObject, name: string): string | undefined {
   const value = options[name];
   if (value === undefined) {
@@ -379,12 +387,21 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
     definition.description = description;
   }
 
+  const renamedFrom = readOptionalString(options, "renamedFrom");
+  if (renamedFrom !== undefined) {
+    if (!RENAMED_FROM_PATTERN.test(renamedFrom)) {
+      fail("options.renamedFrom", "must be a valid field key.");
+    }
+    definition.renamedFrom = renamedFrom;
+  }
+
   definition.required = readOptionalBoolean(options, "required") ?? false;
 }
 
 function assertAllowedOptions(options: MutableJsonObject, allowed: readonly string[]): void {
   for (const key of Object.keys(options)) {
-    if (!allowed.includes(key)) {
+    // Every field kind accepts the temporary `renamedFrom` hint.
+    if (!allowed.includes(key) && key !== "renamedFrom") {
       fail(`options.${key}`, "is not supported by this field type.");
     }
   }
@@ -1116,6 +1133,11 @@ function normalizeBlockFields(value: unknown): ModelFieldDefinitions {
   for (const [key, definition] of Object.entries(value)) {
     if (!FIELD_KEY_PATTERN.test(key)) {
       blockFail(`fields.${key} must be a valid field key.`);
+    }
+    if (isRecord(definition) && Object.hasOwn(definition, "renamedFrom")) {
+      blockFail(
+        `fields.${key} must not declare renamedFrom; block data changes use block versions.`,
+      );
     }
     try {
       fields[key] = toFieldMetadata(definition as FieldDefinition);

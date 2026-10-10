@@ -546,3 +546,28 @@ test("enforces entry system-field and JSON payload limits", () => {
     validateEntryPayload({ ...base, fields: { text: "x".repeat(MAX_JSON_BYTES) } }, "draft"),
   ).toThrow(/\$\.fields/u);
 });
+
+test("keeps a valid renamedFrom hint on every field kind and rejects it in blocks", () => {
+  const renamed = field.text({ maxLength: 20, renamedFrom: "headline" });
+  expect(renamed).toEqual({
+    maxLength: 20,
+    renamedFrom: "headline",
+    required: false,
+    type: "text",
+  });
+  expect(validateFieldValue(renamed, "Hello")).toBe("Hello");
+  expect(field.media({ renamedFrom: "cover" }).renamedFrom).toBe("cover");
+  expect(field.select({ options: ["a"], renamedFrom: "kind" }).renamedFrom).toBe("kind");
+  expect(field.number({ renamedFrom: "count2" }).renamedFrom).toBe("count2");
+
+  for (const value of ["", "1abc", "has-hyphen", 3]) {
+    expect(() => field.text({ renamedFrom: value })).toThrow(FieldConfigurationError);
+  }
+  expect(() =>
+    defineBlock({
+      fields: { title: field.text({ renamedFrom: "heading" }) },
+      type: "hero",
+      version: 1,
+    }),
+  ).toThrow(/fields\.title must not declare renamedFrom/u);
+});

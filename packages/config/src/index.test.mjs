@@ -390,3 +390,71 @@ test("treats list fields as projection-only identity", async () => {
   expect(relisted.content[0].projectionHash).not.toBe(listed.content[0].projectionHash);
   expect(listed.projectionHash).not.toBe(plain.projectionHash);
 });
+
+test("keeps field rename and removal hints out of identity and projections", async () => {
+  const plain = await defineConfig({
+    blocks,
+    content: [postModel({ fields: { author: field.text(), title: field.text() } })],
+  });
+  const hinted = await defineConfig({
+    blocks,
+    content: [
+      postModel({
+        fields: { author: field.text(), title: field.text({ renamedFrom: "headline" }) },
+        removedBlocks: ["retired-block", "quote"],
+        removedFields: ["legacy"],
+      }),
+    ],
+  });
+  const [plainModel] = plain.runtime.content;
+  const [hintedModel] = hinted.runtime.content;
+
+  expect(hintedModel.structureHash).toBe(plainModel.structureHash);
+  expect(hintedModel.projectionHash).toBe(plainModel.projectionHash);
+  expect(hinted.structureHash).toBe(plain.structureHash);
+  expect(hinted.projectionHash).toBe(plain.projectionHash);
+  expect(hinted.public).toEqual(plain.public);
+  expect(JSON.stringify(hinted.public)).not.toMatch(/renamed|removed/u);
+  expect(hintedModel.structure).toEqual(plainModel.structure);
+  expect(hintedModel.fields.title).toEqual({ required: false, type: "text" });
+  expect(hintedModel.renamedFields).toEqual({ title: "headline" });
+  expect(hintedModel.removedFields).toEqual(["legacy"]);
+  expect(hintedModel.removedBlocks).toEqual(["quote", "retired-block"]);
+  expect(Object.isFrozen(hintedModel.renamedFields)).toBe(true);
+  expect(plainModel).not.toHaveProperty("renamedFields");
+  expect(plainModel).not.toHaveProperty("removedFields");
+});
+
+test("rejects synchronization hints that contradict the model", () => {
+  const cases = [
+    [{ fields: { title: field.text({ renamedFrom: "title" }) } }, /renamed from its own key/u],
+    [
+      { fields: { author: field.text(), title: field.text({ renamedFrom: "author" }) } },
+      /renamed from configured field "author"/u,
+    ],
+    [
+      {
+        fields: {
+          title: field.text({ renamedFrom: "headline" }),
+          name: field.text({ renamedFrom: "headline" }),
+        },
+      },
+      /share renamedFrom "headline"/u,
+    ],
+    [{ fields: { title: field.text() }, removedFields: ["title"] }, /configured field "title"/u],
+    [
+      { fields: { title: field.text({ renamedFrom: "headline" }) }, removedFields: ["headline"] },
+      /rename source "headline"/u,
+    ],
+    [{ removedFields: ["a", "a"] }, /duplicate key "a"/u],
+    [{ removedFields: ["bad-key"] }, /removedFields must contain valid keys/u],
+    [{ removedBlocks: ["image"] }, /allowed block type "image"/u],
+    [{ removedBlocks: "quote" }, /removedBlocks must be an array/u],
+  ];
+  for (const [overrides, message] of cases) {
+    expect(() => postModel(overrides)).toThrow(ConfigurationError);
+    expect(() => postModel(overrides)).toThrow(message);
+  }
+  expect(() => postModel({ removedFields: ["title"] })).not.toThrow();
+  expect(() => postModel({ fields: { title: field.text() } })).not.toThrow();
+});

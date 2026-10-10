@@ -23,6 +23,7 @@ import {
   changeNeedsEvidence,
   createSnapshotEvidenceAccumulator,
   diffContentModelStructures,
+  validateStructureHints,
 } from "./configuration-evolution.js";
 import type {
   ConfigurationSyncEvidence,
@@ -30,6 +31,7 @@ import type {
   ConfigurationSyncSnapshotPage,
   ConfigurationSyncSnapshotReference,
   ModelSnapshotEvidence,
+  SnapshotHolders,
   SnapshotStateCounts,
   StructuralChange,
   StructuralChangeClass,
@@ -79,6 +81,10 @@ export interface ConfigurationSyncChange {
   /** Snapshots that receive the configured default. */
   readonly backfill?: SnapshotStateCounts;
   readonly class: StructuralChangeClass;
+  /** Former field key of a renamed field. */
+  readonly from?: string;
+  /** Whether a destructive removal is declared by a hint. */
+  readonly hinted?: true;
   readonly kind: StructuralChangeKind;
   readonly properties?: readonly string[];
   readonly scope: StructuralChange["scope"];
@@ -91,9 +97,28 @@ export interface ConfigurationSyncChange {
 export interface ConfigurationSyncEvolution {
   /** Field keys whose configured defaults are written into snapshots lacking them. */
   readonly backfills: readonly string[];
+  /** Hinted block types whose stored blocks are dropped; present when non-empty. */
+  readonly blockRemovals?: readonly string[];
   readonly changes: readonly ConfigurationSyncChange[];
+  /** Hinted field keys whose stored values are pruned; present when non-empty. */
+  readonly fieldRemovals?: readonly string[];
+  /** Hinted field renames whose stored values are moved; present when non-empty. */
+  readonly renames?: readonly ConfigurationSyncFieldRename[];
   readonly snapshots: SnapshotStateCounts;
 }
+
+/** One field whose stored values move from a former key to the configured key. */
+export interface ConfigurationSyncFieldRename {
+  readonly from: string;
+  readonly to: string;
+}
+
+/** One ordered content write of an applied evolution. */
+export type ConfigurationSyncContentWrite =
+  | { readonly action: "backfill-field"; readonly fieldKey: string; readonly json: string }
+  | { readonly action: "remove-block-type"; readonly blockType: string }
+  | { readonly action: "remove-field"; readonly fieldKey: string }
+  | { readonly action: "rename-field"; readonly from: string; readonly to: string };
 
 interface ConfigurationSyncModelOperation {
   readonly model: ConfigurationSyncModel;
@@ -132,6 +157,9 @@ export type ConfigurationSyncDiagnosticCode =
   | "DUPLICATE_STORED_MODEL"
   | "FIELD_CHANGE_UNSUPPORTED"
   | "FIELD_REMOVAL_HAS_DATA"
+  | "FIELD_RENAME_SOURCE_MISSING"
+  | "FIELD_RENAME_TARGET_EXISTS"
+  | "FIELD_RENAME_TARGET_HAS_DATA"
   | "FIELD_TYPE_CHANGED"
   | "MEDIA_DEFAULT_BACKFILL_UNSUPPORTED"
   | "MODEL_KIND_CHANGED"
@@ -337,6 +365,13 @@ function total(counts: SnapshotStateCounts | undefined): number {
   return counts === undefined ? 0 : counts.draft + counts.published;
 }
 
+/** Draft and published counts of holder evidence, without the named snapshots. */
+function holderCounts(holders: SnapshotHolders | undefined): SnapshotStateCounts | undefined {
+  return holders === undefined
+    ? undefined
+    : Object.freeze({ draft: holders.draft, published: holders.published });
+}
+
 function incompatible(
   model: ConfigurationSyncModel,
   stored: StoredContentModelState,
@@ -353,6 +388,8 @@ function incompatible(
 function undecidedChange(change: StructuralChange): ConfigurationSyncChange {
   return Object.freeze({
     class: change.class,
+    ...(change.from === undefined ? {} : { from: change.from }),
+    ...(change.hinted === undefined ? {} : { hinted: change.hinted }),
     kind: change.kind,
     ...(change.properties === undefined ? {} : { properties: change.properties }),
     scope: change.scope,
@@ -437,6 +474,9 @@ function decideEvolution(
   };
   const decided: ConfigurationSyncChange[] = [];
   const backfills: string[] = [];
+  const renames: ConfigurationSyncFieldRename[] = [];
+  const fieldRemovals: string[] = [];
+  const blockRemovals: string[] = [];
   for (const change of changes) {
     const fieldKey = change.scope === "field" ? change.target : undefined;
     const blockType = change.scope === "block" ? change.target : undefined;
@@ -466,26 +506,63 @@ function decideEvolution(
         } in a way synchronization cannot apply while snapshots exist.`,
         { changeClass: change.class, ...(fieldKey === undefined ? {} : { fieldKey }) },
       );
-    } else if (change.kind === "field-removed") {
-      affected = evidence?.fieldHolders[change.target];
-      if (total(affected) > 0) {
+    } else if (change.kind === "field-renamed") {
+      const occupied = evidence?.fieldHolders[change.target];
+      affected = holderCounts(evidence?.fieldHolders[change.from ?? ""]);
+      if (occupied !== undefined && total(occupied) > 0) {
         refuse(
-          "FIELD_REMOVAL_HAS_DATA",
-          `Model ${modelKey} removes field ${change.target}, which holds data in ${total(affected)} snapshots (${countsDescription(affected!)}).`,
-          { affectedCount: total(affected), changeClass: change.class, fieldKey },
+          "FIELD_RENAME_TARGET_HAS_DATA",
+          `Model ${modelKey} renames field ${change.from} to ${change.target}, but ${total(occupied)} snapshots already hold ${change.target} (${countsDescription(occupied)}).`,
+          {
+            affectedCount: total(occupied),
+            changeClass: change.class,
+            fieldKey,
+            snapshots: occupied.snapshots,
+          },
         );
+      } else if (total(affected) > 0) {
+        renames.push(Object.freeze({ from: change.from!, to: change.target }));
+      }
+    } else if (change.kind === "field-removed") {
+      const holders = evidence?.fieldHolders[change.target];
+      affected = holderCounts(holders);
+      if (holders !== undefined && total(holders) > 0) {
+        if (change.hinted === true) {
+          fieldRemovals.push(change.target);
+        } else {
+          refuse(
+            "FIELD_REMOVAL_HAS_DATA",
+            `Model ${modelKey} removes field ${change.target}, which holds data in ${total(holders)} snapshots (${countsDescription(holders)}). Declare removedFields: ["${change.target}"] to prune it, or renamedFrom: "${change.target}" on the field that replaces it.`,
+            {
+              affectedCount: total(holders),
+              changeClass: change.class,
+              fieldKey,
+              snapshots: holders.snapshots,
+            },
+          );
+        }
       }
     } else if (change.kind === "block-type-removed" || change.kind === "block-definition-changed") {
-      affected = evidence?.blockHolders[change.target];
-      if (total(affected) > 0) {
+      const holders = evidence?.blockHolders[change.target];
+      affected = holderCounts(holders);
+      if (holders !== undefined && total(holders) > 0) {
         const removal = change.kind === "block-type-removed";
-        refuse(
-          removal ? "BLOCK_TYPE_REMOVAL_HAS_BLOCKS" : "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS",
-          removal
-            ? `Model ${modelKey} disallows block type ${change.target}, which ${total(affected)} snapshots use (${countsDescription(affected!)}).`
-            : `Block type ${change.target} changes its definition while ${total(affected)} snapshots of model ${modelKey} hold such blocks (${countsDescription(affected!)}); a block migration is required.`,
-          { affectedCount: total(affected), blockType, changeClass: change.class },
-        );
+        if (removal && change.hinted === true) {
+          blockRemovals.push(change.target);
+        } else {
+          refuse(
+            removal ? "BLOCK_TYPE_REMOVAL_HAS_BLOCKS" : "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS",
+            removal
+              ? `Model ${modelKey} disallows block type ${change.target}, which ${total(holders)} snapshots use (${countsDescription(holders)}). Declare removedBlocks: ["${change.target}"] to drop those blocks.`
+              : `Block type ${change.target} changes its definition while ${total(holders)} snapshots of model ${modelKey} hold such blocks (${countsDescription(holders)}); a block migration is required.`,
+            {
+              affectedCount: total(holders),
+              blockType,
+              changeClass: change.class,
+              snapshots: holders.snapshots,
+            },
+          );
+        }
       }
     } else if (change.class === "validated") {
       const findings = evidence?.violations[change.target];
@@ -523,6 +600,8 @@ function decideEvolution(
         ...(affected === undefined ? {} : { affected }),
         ...(backfill === undefined ? {} : { backfill }),
         class: change.class,
+        ...(change.from === undefined ? {} : { from: change.from }),
+        ...(change.hinted === undefined ? {} : { hinted: change.hinted }),
         kind: change.kind,
         ...(change.properties === undefined ? {} : { properties: change.properties }),
         scope: change.scope,
@@ -534,14 +613,21 @@ function decideEvolution(
   if (evidence !== undefined && evidence.oversized.count > 0) {
     refuse(
       "BACKFILL_EXCEEDS_LIMIT",
-      `Model ${modelKey} backfill would push ${evidence.oversized.count} snapshots above the content size limit.`,
+      `Model ${modelKey} field rewrites would push ${evidence.oversized.count} snapshots above the content size limit.`,
       { affectedCount: evidence.oversized.count, snapshots: evidence.oversized.snapshots },
     );
   }
   return {
     evolution: Object.freeze({
       backfills: Object.freeze(backfills.sort()),
+      ...(blockRemovals.length === 0 ? {} : { blockRemovals: Object.freeze(blockRemovals.sort()) }),
       changes: Object.freeze(decided),
+      ...(fieldRemovals.length === 0 ? {} : { fieldRemovals: Object.freeze(fieldRemovals.sort()) }),
+      ...(renames.length === 0
+        ? {}
+        : {
+            renames: Object.freeze(renames.sort((left, right) => left.to.localeCompare(right.to))),
+          }),
       snapshots: evidence?.snapshots ?? storedCounts,
     }),
     refused,
@@ -595,10 +681,34 @@ function classifyMatchedModel(
 
   let evolution: ConfigurationSyncEvolution | undefined;
   if (structureChanged && hasBaseline && current.structure !== undefined) {
+    const hints = {
+      ...(current.removedBlocks === undefined ? {} : { removedBlocks: current.removedBlocks }),
+      ...(current.removedFields === undefined ? {} : { removedFields: current.removedFields }),
+      ...(current.renamedFields === undefined ? {} : { renamedFields: current.renamedFields }),
+    };
+    const issues = validateStructureHints(stored.structure!, hints);
+    for (const issue of issues) {
+      diagnostics.push(
+        issue.kind === "target-exists"
+          ? diagnostic(
+              "FIELD_RENAME_TARGET_EXISTS",
+              model.key,
+              `Model ${model.key} renames field ${issue.from} to ${issue.target}, but the stored structure already has both fields.`,
+              { fieldKey: issue.target },
+            )
+          : diagnostic(
+              "FIELD_RENAME_SOURCE_MISSING",
+              model.key,
+              `Model ${model.key} renames field ${issue.from} to ${issue.target}, but the stored structure has neither field.`,
+              { fieldKey: issue.target },
+            ),
+      );
+    }
+    if (issues.length > 0) return incompatible(model, stored);
     const decided = decideEvolution(
       current,
       stored,
-      diffContentModelStructures(stored.structure!, current.structure),
+      diffContentModelStructures(stored.structure!, current.structure, hints),
       context,
     );
     if (decided.refused) return incompatible(model, stored, decided.evolution);
@@ -830,6 +940,33 @@ export function configurationSyncBackfills(
   });
 }
 
+/**
+ * Ordered content writes of an applied operation: field renames, field
+ * removals, block-type removals, then default backfills.
+ */
+export function configurationSyncContentWrites(
+  operation: ConfigurationSyncOperation,
+  model: NormalizedContentModel,
+): readonly ConfigurationSyncContentWrite[] {
+  if (operation.action !== "version-update" && operation.action !== "rename") return [];
+  const evolution = operation.evolution;
+  if (evolution === undefined) return [];
+  return Object.freeze([
+    ...(evolution.renames ?? []).map((rename) =>
+      Object.freeze({ action: "rename-field" as const, from: rename.from, to: rename.to }),
+    ),
+    ...(evolution.fieldRemovals ?? []).map((fieldKey) =>
+      Object.freeze({ action: "remove-field" as const, fieldKey }),
+    ),
+    ...(evolution.blockRemovals ?? []).map((blockType) =>
+      Object.freeze({ action: "remove-block-type" as const, blockType }),
+    ),
+    ...configurationSyncBackfills(operation, model).map((backfill) =>
+      Object.freeze({ action: "backfill-field" as const, ...backfill }),
+    ),
+  ]);
+}
+
 /** Canonical baseline JSON an applied model write stores, or null without a structure. */
 export function configurationSyncBaseline(model: NormalizedContentModel): {
   readonly hash: string | null;
@@ -864,6 +1001,8 @@ export function renderConfigurationSyncPlanJson(plan: ConfigurationSyncPlan): st
 
 function changeLine(change: ConfigurationSyncChange): string {
   const details: string[] = [];
+  if (change.from !== undefined) details.push(`from ${change.from}`);
+  if (change.hinted === true) details.push("hinted");
   if (change.properties !== undefined) details.push(change.properties.join(", "));
   if (change.affected !== undefined)
     details.push(`affected: ${countsDescription(change.affected)}`);
@@ -893,6 +1032,16 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
     if (evolution === undefined) continue;
     lines.push(`  snapshots: ${countsDescription(evolution.snapshots)}`);
     for (const change of evolution.changes) lines.push(changeLine(change));
+    if (evolution.renames !== undefined) {
+      const renames = evolution.renames.map((rename) => `${rename.from} -> ${rename.to}`);
+      lines.push(`  planned renames: ${renames.join(", ")}`);
+    }
+    if (evolution.fieldRemovals !== undefined) {
+      lines.push(`  planned field removals: ${evolution.fieldRemovals.join(", ")}`);
+    }
+    if (evolution.blockRemovals !== undefined) {
+      lines.push(`  planned block removals: ${evolution.blockRemovals.join(", ")}`);
+    }
     if (evolution.backfills.length > 0) {
       lines.push(`  planned backfills: ${evolution.backfills.join(", ")}`);
     }

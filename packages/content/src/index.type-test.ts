@@ -84,3 +84,7 @@ void exhaustiveVisitor;
 // @ts-expect-error A visitor must handle every field discriminant.
 const incompleteVisitor: FieldDefinitionVisitor<string> = { boolean: () => "boolean" };
 void incompleteVisitor;
+
+const renamedText = field.text({ renamedFrom: "headline", required: true });
+const renamedValue: FieldValue<typeof renamedText> = "value";
+void renamedValue;

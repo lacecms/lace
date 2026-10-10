@@ -61,3 +61,19 @@ to structural identity.
 - Any content edit during sync makes the plan stale; the operator reruns.
 - Destructive hints (CE1B) and block migrations (CE1C) build on the baseline
   and classification.
+
+## Addendum: destructive hints (CE1B)
+
+Field renames and removals of populated fields or block types are applied only
+through temporary configuration hints: a field-level `renamedFrom` and the
+model-level `removedFields` and `removedBlocks`. Hints are excluded from
+structure, hashes and the public projection and are validated against the
+baseline. The data rewrite follows decision 4: one set-based statement per
+hinted field or block type plus one statement maintaining
+`content_media_references`, revision-neutral, in the guarded mutation. Bumping
+draft revisions was rejected for the same reason as for backfill; bumping
+draft and published revisions together was rejected because a published
+revision one below its draft could then equal the draft revision and show the
+entry as unchanged. Rebuilding media references from recomputed values was
+rejected because it needs per-snapshot statements; references are keyed by
+source and field, so targeted updates produce the same rows.

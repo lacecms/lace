@@ -7,7 +7,7 @@ import {
   foldAscii,
   MAX_MEDIA_USAGE_ENTRIES,
   configurationSyncAdvancesPublicState,
-  configurationSyncBackfills,
+  configurationSyncContentWrites,
   configurationSyncBaseline,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
@@ -86,7 +86,7 @@ import {
   STORED_MODEL_STATE_JSON_SQL,
   SYNC_BLOCKS_SQL,
   SYNC_SNAPSHOTS_SQL,
-  backfillFieldSql,
+  configurationSyncWriteStatements,
   syncSnapshotPage,
   assertDraftPersistenceBounds,
   assertNonNegativeInteger,
@@ -916,14 +916,11 @@ export class D1ContentRepository
         expected.projectionHash,
         token,
       );
-      for (const backfill of configurationSyncBackfills(operation, configuration)) {
-        batch.checkpoint("sync.model.backfill");
-        batch.add(
-          `${backfillFieldSql(backfill.fieldKey)} and ${GUARD_SQL}`,
-          backfill.json,
-          operation.model.key,
-          token,
-        );
+      for (const write of configurationSyncContentWrites(operation, configuration)) {
+        batch.checkpoint(`sync.model.${write.action}`);
+        for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {
+          batch.add(`${statement.sql} and ${GUARD_SQL}`, ...statement.params, token);
+        }
       }
     }
     if (!configurationSyncAdvancesPublicState(actualPlan)) {

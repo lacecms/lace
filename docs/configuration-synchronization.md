@@ -67,7 +67,7 @@ neither. Any failed statement rolls
 back model identities, generated page drafts, public state, and outbox work
 together.
 
-## Schema evolution (CE1A)
+## Schema evolution (CE1A, CE1B)
 
 Sync can now evolve a model that already has draft or published content.
 Decisions follow [ADR 0007](adr/0007-schema-evolution-during-sync.md) and the
@@ -112,7 +112,7 @@ For populated models sync diffs the baseline against the configured structure
 | `compatible` | added field, relaxed limit, `required` → optional, new `select` option, default added/changed/removed, newly allowed block type | applied |
 | `display` | reordered `select` options or block allowlist | applied |
 | `validated` | tightened limit, removed `select` option, optional → required | applied only if every stored value conforms (published snapshots must hold a newly required value) |
-| `destructive` | removed field or allowed block type | applied only when no snapshot holds the data |
+| `destructive` | removed field or allowed block type; field renamed through a hint | with a hint: data is moved or pruned (see below); without a hint: applied only when no snapshot holds the data |
 | `migration` | changed definition of an allowed block type | applied only when no snapshot holds such a block |
 | `breaking` | field type change, unknown field property change, path/route change | refused (path/route only while entries are published) |
 
@@ -133,16 +133,74 @@ published version and coalesces one build. Media-field defaults are refused
 (`MEDIA_DEFAULT_BACKFILL_UNSUPPORTED`), as is a backfill that would exceed the
 content size limit (`BACKFILL_EXCEEDS_LIMIT`).
 
+### Rename and removal hints (CE1B)
+
+Renaming or removing a field, or disallowing a block type, while stored content
+uses it requires an explicit, reviewed hint. Sync never infers one from a
+matching removal and addition.
+
+```ts
+defineCollection({
+  key: "posts",
+  version: 3,
+  blocks: ["richText"],
+  fields: {
+    title: field.text({ renamedFrom: "headline" }), // moves headline → title
+  },
+  removedFields: ["legacy"], // prunes stored legacy values
+  removedBlocks: ["quote"], // drops stored quote blocks
+});
+```
+
+- `renamedFrom` is valid on model fields only; `defineBlock` rejects it because
+  block data changes use block versions.
+- Configuration rejects contradictory hints: a field renamed from its own key
+  or from another configured field, two fields sharing a former key, a removed
+  field that is still configured or is also a rename source, and a removed
+  block type that is still allowed. A removed block type need not be
+  registered anymore.
+- Hints are not part of the structure, either hash or the public projection.
+  Adding or removing a hint alone never needs a version bump.
+- Hints are evaluated only when the model's structure changed and a baseline
+  exists. A rename applies when the former key is in the baseline and the new
+  key is not; once applied, it is inert. A rename is refused when both keys are
+  in the baseline (`FIELD_RENAME_TARGET_EXISTS`) or neither is
+  (`FIELD_RENAME_SOURCE_MISSING`). A removal hint for a key or block type absent
+  from the baseline is inert.
+- A renamed field is compared with its former definition: a type change is
+  still `breaking`, and a tightened constraint is validated against the moved
+  values. A rename onto a key that a stored snapshot already holds is refused
+  (`FIELD_RENAME_TARGET_HAS_DATA`).
+- In the guarded mutation that records the model, sync moves renamed values,
+  prunes removed fields and drops blocks of removed types in every draft and
+  published snapshot of the model, in that order and before default backfills.
+  Media references move with a renamed field and are deleted with a pruned
+  media field or a dropped block, so media usage and the deletion guard stay
+  correct. Remaining blocks keep their keys, data and order. Revisions, audit
+  actors and timestamps are unchanged; the published version advances and one
+  build is coalesced.
+
+Workflow: add the hint and bump the model version, review
+`lace content sync --check`, run `lace content sync` in every environment, then
+delete the hint (no version bump needed). Run sync right after deploying a
+configuration with hints: an editor whose admin already uses the new
+configuration but whose open draft predates sync could otherwise save an empty
+renamed field over the moved value.
+
 ### Reports and diagnostics
 
 Text and JSON reports list, per evolved model, the snapshot counts, each change
-as `<class> <kind> <scope> <target>` with changed properties, affected counts,
-violations and backfill counts, and the planned backfills. Refusals use stable
+as `<class> <kind> <scope> <target>` with the former key of a rename, a
+`hinted` marker, changed properties, affected counts, violations and backfill
+counts, and the planned renames, field removals, block removals and backfills. Refusals use stable
 codes: `STRUCTURE_BASELINE_MISSING`, `FIELD_TYPE_CHANGED`,
 `FIELD_CHANGE_UNSUPPORTED`, `CONSTRAINT_VIOLATED`, `FIELD_REMOVAL_HAS_DATA`,
 `BLOCK_TYPE_REMOVAL_HAS_BLOCKS`, `BLOCK_DEFINITION_CHANGE_HAS_BLOCKS`,
 `ROUTE_CHANGE_HAS_PUBLISHED`, `MEDIA_DEFAULT_BACKFILL_UNSUPPORTED`,
-`BACKFILL_EXCEEDS_LIMIT` and `SNAPSHOT_EVIDENCE_STALE`. Diagnostics that concern
-stored values name up to 20 snapshots (entry ID, state, title) and the total.
-Destructive hints and block migrations are not available yet; see the
-[content and editor roadmap](content-editor-roadmap.md) steps CE1B and CE1C.
+`BACKFILL_EXCEEDS_LIMIT` (any field rewrite above the content size limit),
+`FIELD_RENAME_SOURCE_MISSING`, `FIELD_RENAME_TARGET_EXISTS`,
+`FIELD_RENAME_TARGET_HAS_DATA` and `SNAPSHOT_EVIDENCE_STALE`. Diagnostics that
+concern stored values name up to 20 snapshots (entry ID, state, title) and the
+total; unhinted removal refusals name the hint to declare. Block migrations
+are not available yet; see the
+[content and editor roadmap](content-editor-roadmap.md) step CE1C.

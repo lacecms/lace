@@ -8,7 +8,7 @@ import {
   MAX_MEDIA_USAGE_ENTRIES,
   dispatcherLeaseId,
   configurationSyncAdvancesPublicState,
-  configurationSyncBackfills,
+  configurationSyncContentWrites,
   configurationSyncBaseline,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
@@ -80,7 +80,7 @@ import {
   STORED_MODEL_STATE_SQL,
   SYNC_BLOCKS_SQL,
   SYNC_SNAPSHOTS_SQL,
-  backfillFieldSql,
+  configurationSyncWriteStatements,
   syncSnapshotPage,
   SQL_MAX_PAGE_SIZE,
   assertDraftPersistenceBounds,
@@ -353,11 +353,11 @@ export class NodeContentRepository
               expected.projectionHash,
             );
           if (updated.changes !== 1) failure("Configuration synchronization plan is stale.");
-          for (const backfill of configurationSyncBackfills(operation, configuration)) {
-            this.checkpoint("sync.model.backfill");
-            this.connection
-              .prepare(backfillFieldSql(backfill.fieldKey))
-              .run(backfill.json, operation.model.key);
+          for (const write of configurationSyncContentWrites(operation, configuration)) {
+            this.checkpoint(`sync.model.${write.action}`);
+            for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {
+              this.connection.prepare(statement.sql).run(...statement.params);
+            }
           }
         }
         if (!configurationSyncAdvancesPublicState(actualPlan)) {

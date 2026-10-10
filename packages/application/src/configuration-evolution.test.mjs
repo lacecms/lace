@@ -5,6 +5,7 @@ import {
   CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT,
   configurationSyncAdvancesPublicState,
   configurationSyncBackfills,
+  configurationSyncContentWrites,
   createSnapshotEvidenceAccumulator,
   diffContentModelStructures,
   planConfigurationSyncScans,
@@ -12,6 +13,7 @@ import {
   prepareConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
   renderConfigurationSyncPlanText,
+  validateStructureHints,
 } from "../dist/index.js";
 
 const blocks = Object.values(builtInBlocks);
@@ -174,7 +176,13 @@ test("accumulates evidence across pages and caps named violations", async () => 
   const evidence = accumulator.result();
 
   expect(evidence.snapshots).toEqual({ draft: 25, published: 2 });
-  expect(evidence.fieldHolders).toEqual({ old: { draft: 0, published: 1 } });
+  expect(evidence.fieldHolders).toEqual({
+    old: {
+      draft: 0,
+      published: 1,
+      snapshots: [{ entryId: "entry-p2", state: "published", title: "Title p2" }],
+    },
+  });
   expect(evidence.backfills).toEqual({ flag: { draft: 25, published: 1 } });
   expect(evidence.violations.summary.count).toBe(26);
   expect(evidence.violations.summary.snapshots).toHaveLength(
@@ -365,4 +373,239 @@ test("renders identical reports for equivalent inputs", async () => {
   expect(renderConfigurationSyncPlanText(plan(first))).toBe(
     renderConfigurationSyncPlanText(plan(second)),
   );
+});
+
+test("pairs hinted renames with their former definitions and marks hinted removals", async () => {
+  const baseline = await posts({
+    blocks: ["richText", "image", "quote"],
+    fields: { count: field.text(), headline: field.text({ maxLength: 100 }), legacy: field.text() },
+  });
+  const target = await posts({
+    blocks: ["richText", "image"],
+    fields: {
+      amount: field.number({ renamedFrom: "count" }),
+      title: field.text({ maxLength: 80, renamedFrom: "headline" }),
+    },
+    removedBlocks: ["quote"],
+    removedFields: ["legacy"],
+    version: 2,
+  });
+  expect(target.renamedFields).toEqual({ amount: "count", title: "headline" });
+  expect(diffContentModelStructures(baseline.structure, target.structure, target)).toEqual([
+    {
+      class: "destructive",
+      from: "count",
+      kind: "field-renamed",
+      scope: "field",
+      target: "amount",
+    },
+    { class: "breaking", kind: "field-type-changed", scope: "field", target: "amount" },
+    { class: "destructive", hinted: true, kind: "field-removed", scope: "field", target: "legacy" },
+    {
+      class: "validated",
+      kind: "field-changed",
+      properties: ["maxLength"],
+      scope: "field",
+      target: "title",
+    },
+    {
+      class: "destructive",
+      from: "headline",
+      kind: "field-renamed",
+      scope: "field",
+      target: "title",
+    },
+    {
+      class: "destructive",
+      hinted: true,
+      kind: "block-type-removed",
+      scope: "block",
+      target: "quote",
+    },
+  ]);
+  // Without hints the same configuration is one addition and one removal per key.
+  expect(
+    diffContentModelStructures(baseline.structure, target.structure).map((change) => change.kind),
+  ).toEqual([
+    "field-added",
+    "field-removed",
+    "field-removed",
+    "field-removed",
+    "field-added",
+    "block-type-removed",
+  ]);
+  expect(validateStructureHints(baseline.structure, target)).toEqual([]);
+});
+
+test("treats applied hints as inert and rejects contradicting ones", async () => {
+  const applied = await posts({ fields: { summary: field.text(), title: field.text() } });
+  const target = await posts({
+    fields: {
+      extra: field.text(),
+      summary: field.text(),
+      title: field.text({ renamedFrom: "headline" }),
+    },
+    removedBlocks: ["quote"],
+    removedFields: ["legacy"],
+    version: 3,
+  });
+  expect(validateStructureHints(applied.structure, target)).toEqual([]);
+  expect(diffContentModelStructures(applied.structure, target.structure, target)).toEqual([
+    { class: "compatible", kind: "field-added", scope: "field", target: "extra" },
+  ]);
+
+  const both = await posts({ fields: { headline: field.text(), title: field.text() } });
+  const neither = await posts({ fields: { summary: field.text() } });
+  expect(validateStructureHints(both.structure, target)).toEqual([
+    { from: "headline", kind: "target-exists", target: "title" },
+  ]);
+  expect(validateStructureHints(neither.structure, target)).toEqual([
+    { from: "headline", kind: "source-missing", target: "title" },
+  ]);
+  const plan = planConfigurationSynchronization({
+    models: [target],
+    storedModels: [
+      storedFrom(both, { draftSnapshotCount: 0, entryCount: 0, publishedSnapshotCount: 0 }),
+    ],
+  });
+  expect(plan.isValid).toBe(false);
+  expect(plan.diagnostics).toMatchObject([
+    { code: "FIELD_RENAME_TARGET_EXISTS", fieldKey: "title" },
+  ]);
+  expect(plan.diagnostics[0].message).toContain("headline");
+});
+
+test("evaluates moved, pruned and backfilled values in apply order", async () => {
+  const baseline = await posts({ fields: { headline: field.text(), legacy: field.text() } });
+  const target = await posts({
+    fields: {
+      title: field.text({ defaultValue: "none", maxLength: 5, renamedFrom: "headline" }),
+    },
+    removedFields: ["legacy"],
+    version: 2,
+  });
+  const changes = diffContentModelStructures(baseline.structure, target.structure, target);
+  const accumulator = createSnapshotEvidenceAccumulator({
+    changes,
+    fields: target.fields,
+    fingerprint: "f",
+    modelKey: "posts",
+  });
+  accumulator.add([
+    snapshot(1, "draft", { headline: "short", legacy: "x" }),
+    snapshot(2, "published", { headline: "far too long" }),
+    snapshot(3, "draft", { title: "taken" }),
+    snapshot(4, "draft", {}),
+  ]);
+  const evidence = accumulator.result();
+  expect(evidence.fieldHolders).toMatchObject({
+    headline: { draft: 1, published: 1 },
+    legacy: { draft: 1, published: 0 },
+    title: { draft: 1, published: 0, snapshots: [{ entryId: "entry-3" }] },
+  });
+  // Snapshot 1 keeps its moved value; snapshot 4 receives the default.
+  expect(evidence.backfills).toEqual({ title: { draft: 1, published: 0 } });
+  // Only the moved value is too long; the backfilled default conforms.
+  expect(evidence.violations.title).toMatchObject({
+    count: 1,
+    snapshots: [{ entryId: "entry-2" }],
+  });
+});
+
+test("plans hinted rewrites, refuses unhinted removals and renames onto data", async () => {
+  const before = await posts({
+    blocks: ["richText", "image", "quote"],
+    fields: { headline: field.text(), legacy: field.text(), old: field.text() },
+  });
+  const after = await posts({
+    blocks: ["richText", "image"],
+    fields: {
+      flag: field.text({ defaultValue: "on" }),
+      title: field.text({ renamedFrom: "headline" }),
+    },
+    removedBlocks: ["quote"],
+    removedFields: ["legacy", "old"],
+    version: 2,
+  });
+  const stored = [storedFrom(before)];
+  const prepared = await prepareConfigurationSynchronization({
+    models: [after],
+    state: port(stored, [
+      snapshot(1, "draft", { headline: "a", legacy: "x" }, ["quote"]),
+      snapshot(2, "published", { headline: "b" }, ["richText"]),
+    ]),
+  });
+  expect(prepared.plan.isValid).toBe(true);
+  const [operation] = prepared.plan.operations;
+  expect(operation.evolution).toMatchObject({
+    backfills: ["flag"],
+    blockRemovals: ["quote"],
+    fieldRemovals: ["legacy"],
+    renames: [{ from: "headline", to: "title" }],
+  });
+  expect(operation.evolution.changes).toContainEqual({
+    affected: { draft: 1, published: 1 },
+    class: "destructive",
+    from: "headline",
+    kind: "field-renamed",
+    scope: "field",
+    target: "title",
+  });
+  expect(configurationSyncContentWrites(operation, after)).toEqual([
+    { action: "rename-field", from: "headline", to: "title" },
+    { action: "remove-field", fieldKey: "legacy" },
+    { action: "remove-block-type", blockType: "quote" },
+    { action: "backfill-field", fieldKey: "flag", json: '"on"' },
+  ]);
+  expect(prepared.report.text).toContain(
+    "destructive field-renamed field title (from headline; affected: draft=1, published=1)",
+  );
+  expect(prepared.report.text).toContain("destructive field-removed field legacy (hinted;");
+  expect(prepared.report.text).toContain("planned renames: headline -> title");
+  expect(prepared.report.text).toContain("planned field removals: legacy");
+  expect(prepared.report.text).toContain("planned block removals: quote");
+
+  const unhinted = await posts({
+    blocks: ["richText", "image"],
+    fields: { title: field.text() },
+    version: 2,
+  });
+  const refused = await prepareConfigurationSynchronization({
+    models: [unhinted],
+    state: port(stored, [
+      snapshot(1, "draft", { headline: "a" }, ["quote"]),
+      snapshot(2, "published", { title: "t", headline: "b" }),
+    ]),
+  });
+  expect(refused.plan.diagnostics).toMatchObject([
+    {
+      blockType: "quote",
+      code: "BLOCK_TYPE_REMOVAL_HAS_BLOCKS",
+      snapshots: [{ entryId: "entry-1", state: "draft" }],
+    },
+    { code: "FIELD_REMOVAL_HAS_DATA", fieldKey: "headline", affectedCount: 2 },
+  ]);
+  expect(refused.plan.diagnostics[0].message).toContain('removedBlocks: ["quote"]');
+  expect(refused.plan.diagnostics[1].message).toContain('removedFields: ["headline"]');
+  expect(refused.plan.diagnostics[1].snapshots).toHaveLength(2);
+
+  const onto = await prepareConfigurationSynchronization({
+    models: [after],
+    state: port(stored, [snapshot(1, "draft", { headline: "a", title: "already" })]),
+  });
+  expect(onto.plan.diagnostics).toMatchObject([
+    { code: "FIELD_RENAME_TARGET_HAS_DATA", fieldKey: "title", affectedCount: 1 },
+  ]);
+});
+
+test("keeps plans without hints free of hinted write fields", async () => {
+  const before = await posts({ fields: { old: field.text(), summary: field.text() } });
+  const after = await posts({ fields: { summary: field.text() }, version: 2 });
+  const prepared = await prepareConfigurationSynchronization({
+    models: [after],
+    state: port([storedFrom(before)], [snapshot(1, "draft", { summary: "a" })]),
+  });
+  const json = renderConfigurationSyncPlanJson(prepared.plan);
+  expect(json).not.toMatch(/renames|fieldRemovals|blockRemovals|hinted|"from"/u);
+  expect(configurationSyncContentWrites(prepared.plan.operations[0], after)).toEqual([]);
 });

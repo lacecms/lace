@@ -67,6 +67,10 @@ interface CommonModelInput<Fields extends FieldMap> {
   readonly key: string;
   readonly label?: string;
   readonly renamedFrom?: string;
+  /** Temporary hint: block types whose stored blocks sync may drop. */
+  readonly removedBlocks?: readonly string[];
+  /** Temporary hint: former field keys whose stored values sync may prune. */
+  readonly removedFields?: readonly string[];
   readonly version: number;
 }
 
@@ -93,6 +97,12 @@ interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly key: string;
   readonly label?: string;
   readonly renamedFrom?: string;
+  /** Runtime-only synchronization hint: block types removed from the allowlist. */
+  readonly removedBlocks?: readonly string[];
+  /** Runtime-only synchronization hint: removed field keys. */
+  readonly removedFields?: readonly string[];
+  /** Runtime-only synchronization hint: current field key to former field key. */
+  readonly renamedFields?: Readonly<Record<string, string>>;
   readonly version: number;
 }
 
@@ -118,8 +128,9 @@ export type ContentModelDefinition<Fields extends FieldMap = FieldMap> =
 
 /**
  * Canonical structural definition of a model whose SHA-256 is `structureHash`.
- * It is synchronization metadata: display properties, `listFields`, and
- * `renamedFrom` are excluded, and allowed block definitions are embedded.
+ * It is synchronization metadata: display properties, `listFields`, and the
+ * temporary hints (`renamedFrom`, `renamedFields`, `removedFields`,
+ * `removedBlocks`) are excluded, and allowed block definitions are embedded.
  */
 export type ContentModelStructure = JsonObject;
 
@@ -217,9 +228,18 @@ function assertVersion(value: unknown): asserts value is number {
   }
 }
 
-function normalizeFields<Fields extends FieldMap>(value: Fields | undefined): Fields {
+interface NormalizedFields<Fields extends FieldMap> {
+  readonly fields: Fields;
+  /** Current field key to former key, from field-level `renamedFrom` hints. */
+  readonly renamedFields: Readonly<Record<string, string>>;
+}
+
+/** Normalizes field descriptors and moves their `renamedFrom` hints out of the definitions. */
+function normalizeFields<Fields extends FieldMap>(
+  value: Fields | undefined,
+): NormalizedFields<Fields> {
   if (value === undefined) {
-    return deepFreeze({}) as Fields;
+    return { fields: deepFreeze({}) as Fields, renamedFields: {} };
   }
   if (
     value === null ||
@@ -231,6 +251,7 @@ function normalizeFields<Fields extends FieldMap>(value: Fields | undefined): Fi
   }
 
   const normalized: Record<string, FieldDefinition> = {};
+  const renamedFields: Record<string, string> = {};
   for (const [key, definition] of Object.entries(value)) {
     if (!FIELD_KEY_PATTERN.test(key)) {
       fail(`fields.${key} must be a valid field key.`);
@@ -238,9 +259,74 @@ function normalizeFields<Fields extends FieldMap>(value: Fields | undefined): Fi
     if (definition === null || typeof definition !== "object" || Array.isArray(definition)) {
       fail(`fields.${key} must be a field definition.`);
     }
-    normalized[key] = toFieldMetadata(definition as FieldDefinition);
+    const { renamedFrom, ...metadata } = toFieldMetadata(definition as FieldDefinition) as {
+      readonly renamedFrom?: unknown;
+    } & FieldDefinition;
+    if (renamedFrom !== undefined) {
+      if (typeof renamedFrom !== "string" || !FIELD_KEY_PATTERN.test(renamedFrom)) {
+        fail(`fields.${key}.renamedFrom must be a valid field key.`);
+      }
+      renamedFields[key] = renamedFrom;
+    }
+    normalized[key] = metadata as FieldDefinition;
   }
-  return deepFreeze(normalized) as Fields;
+  return { fields: deepFreeze(normalized) as Fields, renamedFields };
+}
+
+function normalizeKeyList(
+  value: readonly string[] | undefined,
+  name: string,
+  pattern: RegExp,
+): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail(`${name} must be an array of keys.`);
+  const seen = new Set<string>();
+  for (const key of value) {
+    if (typeof key !== "string" || !pattern.test(key)) {
+      fail(`${name} must contain valid keys.`);
+    }
+    if (seen.has(key)) fail(`${name} contains duplicate key "${key}".`);
+    seen.add(key);
+  }
+  return [...seen].sort();
+}
+
+/** Rejects synchronization hints that contradict the model's own configuration. */
+function assertSynchronizationHints(
+  modelKey: string,
+  fields: FieldMap,
+  blocks: readonly string[],
+  renamedFields: Readonly<Record<string, string>>,
+  removedFields: readonly string[],
+  removedBlocks: readonly string[],
+): void {
+  const sources = new Map<string, string>();
+  for (const [key, former] of Object.entries(renamedFields)) {
+    if (former === key) {
+      fail(`model "${modelKey}" field "${key}" is renamed from its own key.`);
+    }
+    if (Object.hasOwn(fields, former)) {
+      fail(`model "${modelKey}" field "${key}" is renamed from configured field "${former}".`);
+    }
+    const other = sources.get(former);
+    if (other !== undefined) {
+      fail(`model "${modelKey}" fields "${other}" and "${key}" share renamedFrom "${former}".`);
+    }
+    sources.set(former, key);
+  }
+  for (const key of removedFields) {
+    if (Object.hasOwn(fields, key)) {
+      fail(`model "${modelKey}" removedFields lists configured field "${key}".`);
+    }
+    if (sources.has(key)) {
+      fail(`model "${modelKey}" removedFields lists rename source "${key}".`);
+    }
+  }
+  for (const type of removedBlocks) {
+    if (blocks.includes(type)) {
+      fail(`model "${modelKey}" removedBlocks lists allowed block type "${type}".`);
+    }
+  }
 }
 
 function normalizeBlocks(value: readonly string[] | undefined): readonly string[] {
@@ -348,13 +434,29 @@ function normalizeCommonModel<Fields extends FieldMap>(
   assertOptionalDisplayValue(input.label, "label");
   assertOptionalDisplayValue(input.description, "description");
 
+  const blocks = normalizeBlocks(input.blocks);
+  const { fields, renamedFields } = normalizeFields(input.fields);
+  const removedFields = normalizeKeyList(input.removedFields, "removedFields", FIELD_KEY_PATTERN);
+  const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_KEY_PATTERN);
+  assertSynchronizationHints(
+    input.key,
+    fields,
+    blocks,
+    renamedFields,
+    removedFields,
+    removedBlocks,
+  );
+
   const normalized: NormalizedCommonModel<Fields> = {
-    blocks: normalizeBlocks(input.blocks),
+    blocks,
     ...(input.description === undefined ? {} : { description: input.description }),
-    fields: normalizeFields(input.fields),
+    fields,
     key: input.key,
     ...(input.label === undefined ? {} : { label: input.label }),
     ...(input.renamedFrom === undefined ? {} : { renamedFrom: input.renamedFrom }),
+    ...(removedBlocks.length === 0 ? {} : { removedBlocks }),
+    ...(removedFields.length === 0 ? {} : { removedFields }),
+    ...(Object.keys(renamedFields).length === 0 ? {} : { renamedFields }),
     version: input.version,
   };
   return deepFreeze(normalized);
@@ -578,6 +680,9 @@ function modelForHash(model: ContentModelDefinition, registry: BlockRegistry): J
   const {
     legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
+    removedBlocks: _removedBlocks,
+    removedFields: _removedFields,
+    renamedFields: _renamedFields,
     renamedFrom: _renamedFrom,
     structure: _structure,
     structureHash: _structureHash,
@@ -593,6 +698,9 @@ function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
   const {
     legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
+    removedBlocks: _removedBlocks,
+    removedFields: _removedFields,
+    renamedFields: _renamedFields,
     renamedFrom: _renamedFrom,
     structure: _structure,
     structureHash: _structureHash,
@@ -604,6 +712,9 @@ function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
 function publicModel(model: NormalizedContentModel): NormalizedContentModel {
   const {
     legacyStructureHash: _legacyStructureHash,
+    removedBlocks: _removedBlocks,
+    removedFields: _removedFields,
+    renamedFields: _renamedFields,
     renamedFrom: _renamedFrom,
     structure: _structure,
     ...projection
