@@ -60,9 +60,14 @@ test("injected preparation failure leaves no inventory or success", async () => 
   const output = join(parent, "failed");
   try {
     // Test post-validation recovery against a coherent source fixture. The
-    // working tree's template can advance independently of a published alpha.
+    // working tree's template can advance independently of a published alpha,
+    // and its version may already be recorded as published until the next
+    // candidate is selected.
     const root = join(parent, "source");
     const model = await readReleaseModel(new URL("..", import.meta.url).pathname);
+    const publishedVersions = model.definition.publishedVersions.filter(
+      (version) => version !== model.definition.version,
+    );
     const fixtureFile = async (path, contents) => {
       const file = join(root, path);
       await mkdir(dirname(file), { recursive: true });
@@ -70,7 +75,11 @@ test("injected preparation failure leaves no inventory or success", async () => 
     };
     await fixtureFile(
       "release/alpha.json",
-      JSON.stringify({ ...model.definition, templateVersion: model.templateVersion }),
+      JSON.stringify({
+        ...model.definition,
+        publishedVersions,
+        templateVersion: model.templateVersion,
+      }),
     );
     await fixtureFile("package.json", JSON.stringify(model.rootManifest));
     for (const { directory, manifest } of Object.values(model.manifests))

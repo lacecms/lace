@@ -5,8 +5,15 @@ import {
   validateReleaseModel,
 } from "../scripts/release-model.mjs";
 
+const repositoryRoot = new URL("..", import.meta.url).pathname;
+
 async function coherentModel() {
-  const model = await readReleaseModel(new URL("..", import.meta.url).pathname);
+  const model = await readReleaseModel(repositoryRoot);
+  // The repository can sit between a recorded publication and the next
+  // candidate selection; graph checks treat its coordinates as a candidate.
+  model.definition.publishedVersions = model.definition.publishedVersions.filter(
+    (version) => version !== model.definition.version,
+  );
   for (const directory of model.definition.packages) {
     const name = directory === "create-lace" ? directory : `@lacecms/${directory}`;
     Object.assign(model.manifests[name].manifest, {
@@ -55,15 +62,20 @@ test("the coherent model accepts historical prose about published versions", asy
   expect(() => validateReleaseModel(model)).not.toThrow();
 });
 
-test("the published alpha.2 set is recorded and cannot be prepared again", async () => {
-  const model = await coherentModel();
-  expect(model.definition.publishedVersions).toEqual([
+test("published versions are recorded and cannot be prepared again", async () => {
+  const { definition } = await readReleaseModel(repositoryRoot);
+  expect(definition.publishedVersions).toEqual([
     "0.1.0-alpha.1",
     "0.1.0-alpha.2",
     "0.1.0-alpha.3",
+    "0.1.0-alpha.4",
   ]);
-  model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.2";
-  expect(() => validateReleaseModel(model)).toThrow(/0\.1\.0-alpha\.2 is already published/u);
+  for (const version of ["0.1.0-alpha.2", "0.1.0-alpha.4"]) {
+    const model = await coherentModel();
+    model.definition.publishedVersions = definition.publishedVersions;
+    model.definition.version = model.definition.generatorVersion = version;
+    expect(() => validateReleaseModel(model)).toThrow(`${version} is already published`);
+  }
 });
 
 test.each([
@@ -115,7 +127,7 @@ test.each([
 });
 
 test("scenario guides are registered release guides with candidate coordinates", async () => {
-  const model = await readReleaseModel(new URL("..", import.meta.url).pathname);
+  const model = await readReleaseModel(repositoryRoot);
   for (const guide of ["lace-compose-dev.md", "lace-compose-production.md", "lace-cloudflare.md"])
     expect(Object.keys(model.guides)).toContain(`packages/create-lace/templates/docs/${guide}`);
   const model2 = await coherentModel();
