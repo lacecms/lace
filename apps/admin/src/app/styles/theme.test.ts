@@ -3,13 +3,31 @@ import themeSource from "./theme.css?raw";
 
 const source = themeSource.replace(/\/\*[\s\S]*?\*\//g, "");
 
-function lightTokens(): Map<string, string> {
-  const block = /:root,\s*:root\[data-theme="light"\]\s*\{([^}]*)\}/.exec(source);
-  if (block === null) throw new Error("Light theme block is missing.");
+type Theme = "light" | "dark";
+
+const themeBlocks: Record<Theme, RegExp> = {
+  light: /:root,\s*:root\[data-theme="light"\]\s*\{([^}]*)\}/,
+  dark: /:root\[data-theme="dark"\]\s*\{([^}]*)\}/,
+};
+
+function themeBlock(theme: Theme): string {
+  const block = themeBlocks[theme].exec(source);
+  if (block === null) throw new Error(`The ${theme} theme block is missing.`);
+  return block[1]!;
+}
+
+function themeTokens(theme: Theme): Map<string, string> {
   const tokens = new Map<string, string>();
-  for (const match of block[1]!.matchAll(/--([\w-]+):\s*([^;]+);/g))
+  for (const match of themeBlock(theme).matchAll(/--([\w-]+):\s*([^;]+);/g))
     tokens.set(match[1]!, match[2]!.trim());
   return tokens;
+}
+
+function colorTokenNames(theme: Theme): string[] {
+  return [...themeTokens(theme)]
+    .filter(([, value]) => value.startsWith("oklch("))
+    .map(([name]) => name)
+    .toSorted();
 }
 
 function luminance(value: string): number {
@@ -37,7 +55,7 @@ function contrast(foreground: string, background: string): number {
 }
 
 test("the theme defines every required token category", () => {
-  const tokens = lightTokens();
+  const tokens = themeTokens("light");
   for (const name of [
     "background",
     "foreground",
@@ -82,13 +100,23 @@ test("the theme defines every required token category", () => {
   expect(source).toContain("--text-sm: 0.8125rem;");
 });
 
-test("light is the only shipped theme and dark stays selector-ready", () => {
-  expect(source).not.toMatch(/\[data-theme="dark"\]\s*\{/);
-  expect(source).toContain('@custom-variant dark (&:where([data-theme="dark"]');
+test("light and dark are the shipped themes with the same color tokens", () => {
+  expect(source.match(/\[data-theme="[\w-]+"\]\s*\{/g)).toEqual([
+    '[data-theme="light"] {',
+    '[data-theme="dark"] {',
+  ]);
+  expect(themeBlock("light")).toContain("color-scheme: light;");
+  expect(themeBlock("dark")).toContain("color-scheme: dark;");
+  expect(colorTokenNames("dark")).toEqual(colorTokenNames("light"));
+  // Non-color tokens are shared from the light block rather than redefined.
+  expect([...themeTokens("dark").keys()].toSorted()).toEqual(colorTokenNames("dark"));
+  expect(source).toContain(
+    '@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));',
+  );
 });
 
-test("every foreground token meets AA contrast on its surface", () => {
-  const tokens = lightTokens();
+test.each(["light", "dark"] as const)("every %s foreground token meets AA contrast", (theme) => {
+  const tokens = themeTokens(theme);
   const pairs: Array<[string, string]> = [
     ["foreground", "background"],
     ["card-foreground", "card"],
@@ -114,10 +142,35 @@ test("every foreground token meets AA contrast on its surface", () => {
     ).toBeGreaterThanOrEqual(4.5);
 });
 
+test.each(["light", "dark"] as const)("%s inline links stand out from body text", (theme) => {
+  const tokens = themeTokens(theme);
+  // Inline text-primary links rely on color alone (axe link-in-text-block): 3:1
+  // against surrounding text, and AA as text on the page background.
+  expect(contrast(tokens.get("primary")!, tokens.get("foreground")!)).toBeGreaterThanOrEqual(3);
+  expect(contrast(tokens.get("primary")!, tokens.get("background")!)).toBeGreaterThanOrEqual(4.5);
+});
+
 test("global styles expose the light theme focus and motion tokens", async () => {
   await import("./styles.css");
   const rootStyles = getComputedStyle(document.documentElement);
   expect(rootStyles.getPropertyValue("--ring").trim()).toMatch(/^oklch\(/);
   expect(rootStyles.getPropertyValue("--primary").trim()).toMatch(/^oklch\(/);
   expect(rootStyles.getPropertyValue("--duration-normal").trim()).toBe("220ms");
+});
+
+test("the dark theme attribute switches the resolved token values", async () => {
+  await import("./styles.css");
+  const root = document.documentElement;
+  const light = getComputedStyle(root).getPropertyValue("--background").trim();
+  root.dataset.theme = "dark";
+  try {
+    const dark = getComputedStyle(root);
+    expect(dark.getPropertyValue("--background").trim()).toBe(
+      themeTokens("dark").get("background"),
+    );
+    expect(dark.getPropertyValue("--background").trim()).not.toBe(light);
+    expect(dark.getPropertyValue("--duration-normal").trim()).toBe("220ms");
+  } finally {
+    delete root.dataset.theme;
+  }
 });

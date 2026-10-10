@@ -376,66 +376,81 @@ const routes: ReadonlyArray<readonly [string, string, (page: Page) => Locator]> 
   ["not found", "/does-not-exist", (page) => page.getByRole("main").getByText("Page not found")],
 ];
 
-test("sign-in passes the accessibility audit", async ({ page }) => {
-  await mockAdmin(page, { signedIn: false });
-  await openAdmin(page, "/login", (current) => current.getByRole("textbox", { name: "Email" }));
-  await expectNoAccessibilityViolations(page, "sign-in");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText(/email/iu).first()).toBeVisible();
-  await expectNoAccessibilityViolations(page, "sign-in with validation errors");
-});
+/** Stores the admin theme preference before any admin script runs. */
+async function seedTheme(page: Page, theme: "light" | "dark") {
+  await page.addInitScript((value) => localStorage.setItem("lace:admin-theme", value), theme);
+}
 
-for (const [screen, path, ready] of routes)
-  test(`${screen} passes the accessibility audit`, async ({ page }) => {
-    await mockAdmin(page);
-    await openAdmin(page, path, ready);
-    await expectNoAccessibilityViolations(page, screen);
+for (const theme of ["light", "dark"] as const) {
+  test(`sign-in passes the accessibility audit (${theme} theme)`, async ({ page }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page, { signedIn: false });
+    await openAdmin(page, "/login", (current) => current.getByRole("textbox", { name: "Email" }));
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expectNoAccessibilityViolations(page, "sign-in");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByText(/email/iu).first()).toBeVisible();
+    await expectNoAccessibilityViolations(page, "sign-in with validation errors");
   });
 
-test("access denied passes the accessibility audit", async ({ page }) => {
-  await mockAdmin(page, { role: "editor" });
-  await openAdmin(page, "/users", (current) => current.getByText("Access denied"));
-  await expectNoAccessibilityViolations(page, "access denied");
-});
+  for (const [screen, path, ready] of routes)
+    test(`${screen} passes the accessibility audit (${theme} theme)`, async ({ page }) => {
+      await seedTheme(page, theme);
+      await mockAdmin(page);
+      await openAdmin(page, path, ready);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expectNoAccessibilityViolations(page, screen);
+    });
 
-test("main dialogs pass the accessibility audit while open", async ({ page }) => {
-  await mockAdmin(page);
-  await openAdmin(page, "/content/posts/entry-1", (current) =>
-    current.getByRole("textbox", { name: "Title" }),
-  );
+  test(`access denied passes the accessibility audit (${theme} theme)`, async ({ page }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page, { role: "editor" });
+    await openAdmin(page, "/users", (current) => current.getByText("Access denied"));
+    await expectNoAccessibilityViolations(page, "access denied");
+  });
 
-  await page.getByRole("button", { name: "Add block" }).click();
-  await expect(page.getByRole("dialog", { name: "Add block" })).toBeVisible();
-  await expectNoAccessibilityViolations(page, "add-block menu");
-  await page.keyboard.press("Escape");
+  test(`main dialogs pass the accessibility audit while open (${theme} theme)`, async ({
+    page,
+  }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page);
+    await openAdmin(page, "/content/posts/entry-1", (current) =>
+      current.getByRole("textbox", { name: "Title" }),
+    );
 
-  await page.getByRole("button", { name: "Replace media for Cover" }).click();
-  const picker = page.getByRole("dialog", { name: "Choose media for Cover" });
-  await expect(picker.getByRole("button", { name: "team.png" })).toBeVisible();
-  await expectNoAccessibilityViolations(page, "media picker");
-  await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Add block" }).click();
+    await expect(page.getByRole("dialog", { name: "Add block" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "add-block menu");
+    await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Confirm publication" })).toBeVisible();
-  await expectNoAccessibilityViolations(page, "publication confirmation");
-  await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Replace media for Cover" }).click();
+    const picker = page.getByRole("dialog", { name: "Choose media for Cover" });
+    await expect(picker.getByRole("button", { name: "team.png" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "media picker");
+    await page.keyboard.press("Escape");
 
-  await page.goto("/admin/users");
-  await page.getByRole("button", { name: "Create user" }).click();
-  await expect(page.getByRole("dialog", { name: "Create user" })).toBeVisible();
-  await expectNoAccessibilityViolations(page, "create-user dialog");
-  await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Confirm publication" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "publication confirmation");
+    await page.keyboard.press("Escape");
 
-  await page.goto("/admin/settings");
-  await page.getByRole("button", { name: "Create build token" }).click();
-  const tokenDialog = page.getByRole("dialog", { name: "Create build token" });
-  await expect(tokenDialog).toBeVisible();
-  await expectNoAccessibilityViolations(page, "build-token dialog");
-  await tokenDialog.getByRole("textbox", { name: "Token name" }).fill("Preview site");
-  await tokenDialog.getByRole("button", { name: "Create build token" }).click();
-  await expect(page.getByTestId("issued-token-value")).toBeVisible();
-  await expectNoAccessibilityViolations(page, "once-shown token dialog");
-});
+    await page.goto("/admin/users");
+    await page.getByRole("button", { name: "Create user" }).click();
+    await expect(page.getByRole("dialog", { name: "Create user" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "create-user dialog");
+    await page.keyboard.press("Escape");
+
+    await page.goto("/admin/settings");
+    await page.getByRole("button", { name: "Create build token" }).click();
+    const tokenDialog = page.getByRole("dialog", { name: "Create build token" });
+    await expect(tokenDialog).toBeVisible();
+    await expectNoAccessibilityViolations(page, "build-token dialog");
+    await tokenDialog.getByRole("textbox", { name: "Token name" }).fill("Preview site");
+    await tokenDialog.getByRole("button", { name: "Create build token" }).click();
+    await expect(page.getByTestId("issued-token-value")).toBeVisible();
+    await expectNoAccessibilityViolations(page, "once-shown token dialog");
+  });
+}
 
 /** Presses Tab until `target` has focus, proving it is reachable in tab order. */
 async function tabTo(page: Page, target: Locator, limit = 60) {
