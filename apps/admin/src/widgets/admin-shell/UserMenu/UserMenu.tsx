@@ -1,16 +1,33 @@
-import { useRef } from "react";
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import { useId, useRef } from "react";
+import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { roleLabel as labelOfRole, type AdminRole } from "../../../entities/session/index.js";
+import {
+  themePreferences,
+  useThemePreference,
+  type ThemePreference,
+} from "../../../shared/lib/index.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../shared/ui/DropdownMenu/index.js";
 
 const neutralName = "Signed-in user";
+
+const themeOptions: Readonly<Record<ThemePreference, { label: string; icon: typeof Monitor }>> = {
+  system: { label: "System", icon: Monitor },
+  light: { label: "Light", icon: Sun },
+  dark: { label: "Dark", icon: Moon },
+};
+
+function isThemePreference(value: string): value is ThemePreference {
+  return (themePreferences as readonly string[]).includes(value);
+}
 
 /** Up to two initials from a display name, or the first letter of an email. */
 function initialsOf(name: string | undefined): string {
@@ -22,7 +39,7 @@ function initialsOf(name: string | undefined): string {
     .join("");
 }
 
-/** The signed-in user's name and role with the log out action; never shows the user ID. */
+/** The signed-in user's name and role with theme selection and log out; never shows the user ID. */
 export function UserMenu({
   displayName,
   onSignOut,
@@ -38,6 +55,8 @@ export function UserMenu({
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const replayPending = useRef(false);
+  const themeLabel = useId();
+  const theme = useThemePreference();
   const name = displayName ?? neutralName;
   const roleLabel = labelOfRole(role);
   return (
@@ -78,6 +97,27 @@ export function UserMenu({
           </span>
           <span className="text-xs text-muted-foreground">{roleLabel}</span>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground" id={themeLabel}>
+          Theme
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          aria-labelledby={themeLabel}
+          onValueChange={(value) => {
+            if (isThemePreference(value)) theme.setPreference(value);
+          }}
+          value={theme.preference}
+        >
+          {themePreferences.map((value) => {
+            const { icon: Icon, label } = themeOptions[value];
+            return (
+              <DropdownMenuRadioItem key={value} value={value}>
+                <Icon aria-hidden="true" className="text-muted-foreground" />
+                {label}
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         {onIntroduction && (
           <DropdownMenuItem

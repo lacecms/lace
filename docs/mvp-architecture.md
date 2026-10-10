@@ -1838,9 +1838,13 @@ with the keyboard alone, checks visible focus along it, and checks 375px
 layouts, including the entry column stacking below the blocks. The local
 product acceptance walkthrough repeats the audits on real data.
 
-The MVP ships the light theme only. Token values are scoped by a `data-theme`
-selector on the document root so a dark theme can be added later by supplying
-alternative values, without component changes. Inter is self-hosted and body
+The admin ships a light and a dark theme. Token values are scoped by a
+`data-theme` selector on the document root, so components adopt either theme
+without theme-specific source, and both token sets meet the same contrast
+pairs. A System/Light/Dark preference in the user menu is remembered in the
+browser's local storage; System follows the operating system's color-scheme
+preference. The resolved theme is applied before the first screen renders, and
+the accessibility audits run in both themes. Inter is self-hosted and body
 text uses a 13px base size.
 
 ### Source layers

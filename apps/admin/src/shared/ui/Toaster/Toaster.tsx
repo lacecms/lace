@@ -7,13 +7,15 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { useThemePreference } from "../../lib/index.js";
 
-// Lace ships the light theme only; colors come from the popover tokens so a
-// later data-theme block restyles notifications without a component change.
+// Colors come from the popover tokens; the theme only switches Sonner's own
+// defaults (icons, close button) to match the resolved admin theme.
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { resolvedTheme } = useThemePreference();
   return (
     <Sonner
-      theme="light"
+      theme={resolvedTheme}
       className="toaster group"
       closeButton
       icons={{

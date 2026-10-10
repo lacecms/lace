@@ -9,3 +9,14 @@ export {
   saveShortcutLabel,
   useSaveShortcut,
 } from "./save-shortcut.js";
+export {
+  createThemePreference,
+  themePreference,
+  themePreferences,
+  themeStorageKey,
+  useThemePreference,
+  type ResolvedTheme,
+  type ThemeEnvironment,
+  type ThemePreference,
+  type ThemePreferenceStore,
+} from "./theme-preference.js";
