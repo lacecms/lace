@@ -22,3 +22,6 @@ The [architecture](mvp-architecture.md) and accepted specs remain sources of tru
 New product work continues through the repository-local OpenSpec workflow with
 a just-in-time proposal and explicit apply request. Use the archived roadmap
 for historical context rather than reopening completed implementation sessions.
+
+Active post-MVP work on the content model, editor, media and public delivery
+is sequenced in the [content and editor roadmap](content-editor-roadmap.md).
