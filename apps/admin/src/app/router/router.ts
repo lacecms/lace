@@ -11,14 +11,18 @@ import {
 import { readSetupState } from "../../entities/setup/index.js";
 import { SetupPage, SetupStateError } from "../../pages/setup/index.js";
 import { can, type AdminSessionSource } from "../../entities/session/index.js";
+import { AcceptInvitePage } from "../../pages/accept-invite/index.js";
+import { AccountPage } from "../../pages/account/index.js";
 import { BuildsPage } from "../../pages/builds/index.js";
 import { ContentPage } from "../../pages/content/index.js";
 import { EntryPage } from "../../pages/entry/index.js";
+import { ForgotPasswordPage } from "../../pages/forgot-password/index.js";
 import { LoginPage } from "../../pages/login/index.js";
 import { MediaPage } from "../../pages/media/index.js";
 import { ModelPage } from "../../pages/model/index.js";
 import { NotFoundPage, StandaloneNotFoundPage } from "../../pages/not-found/index.js";
 import { PendingPage } from "../../pages/pending/index.js";
+import { ResetPasswordPage } from "../../pages/reset-password/index.js";
 import { SettingsPage } from "../../pages/settings/index.js";
 import { UsersPage } from "../../pages/users/index.js";
 import { createAdminClient, type AdminClient } from "../../shared/api/index.js";
@@ -49,11 +53,35 @@ const loginRoute = createRoute({
   path: "/login",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { redirect?: string | undefined; setupComplete?: boolean | undefined } => ({
+  ): {
+    redirect?: string | undefined;
+    reset?: boolean | undefined;
+    setupComplete?: boolean | undefined;
+  } => ({
     setupComplete:
       search.setupComplete === true || search.setupComplete === "true" ? true : undefined,
     redirect: typeof search.redirect === "string" ? safeReturnPath(search.redirect) : undefined,
+    // Only a flag: the password-changed notice never carries the reset token.
+    reset: search.reset === true || search.reset === "true" ? true : undefined,
   }),
+});
+// Account screens reached from emailed links. They stay public even for a
+// signed-in visitor, who keeps their session; accept and reset read their
+// token from the URL fragment inside the page, never from route state.
+const acceptInviteRoute = createRoute({
+  component: AcceptInvitePage,
+  getParentRoute: () => rootRoute,
+  path: "/accept-invite",
+});
+const forgotPasswordRoute = createRoute({
+  component: ForgotPasswordPage,
+  getParentRoute: () => rootRoute,
+  path: "/forgot-password",
+});
+const resetPasswordRoute = createRoute({
+  component: ResetPasswordPage,
+  getParentRoute: () => rootRoute,
+  path: "/reset-password",
 });
 const setupRoute = createRoute({
   beforeLoad: async ({ context, search }) => {
@@ -136,6 +164,12 @@ const buildsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/builds",
 });
+// Every signed-in role manages its own account; no permission guard applies.
+const accountRoute = createRoute({
+  component: AccountPage,
+  getParentRoute: () => protectedRoute,
+  path: "/account",
+});
 const usersRoute = createRoute({
   beforeLoad: ({ context }) => ({ permitted: can(context.session, "users:manage") }),
   component: UsersPage,
@@ -157,6 +191,9 @@ const notFoundRoute = createRoute({
 });
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  acceptInviteRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
   setupRoute,
   protectedRoute.addChildren([
     adminIndexRoute,
@@ -165,6 +202,7 @@ const routeTree = rootRoute.addChildren([
     entryRoute,
     mediaRoute,
     buildsRoute,
+    accountRoute,
     usersRoute,
     settingsRoute,
     notFoundRoute,

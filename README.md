@@ -128,7 +128,10 @@ flow, signs in, uploads and reuses a private image, publishes `home` and a
 mode, and restarts only Astro. It verifies `/` and `/notes/acceptance-note`,
 then saves a new note title and slug without publishing and confirms that the
 build export and public route still show the previous publication. It also
-creates editor and viewer accounts and checks their browser permissions. Along
+invites editor and viewer accounts from Users, opens each invitation link from
+the email captured by the acceptance stack's own Mailpit (its port is recorded
+in `.lace-acceptance/state.json`), sets their passwords, and checks their
+browser permissions. Along
 the way it runs WCAG 2.x A/AA accessibility audits (axe) on the content home,
 a collection list, the entry editor, Media, Users, and Settings with the stack's
 real data; any violation fails the run. Focused browser and API checks cover

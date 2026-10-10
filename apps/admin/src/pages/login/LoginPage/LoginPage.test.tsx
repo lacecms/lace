@@ -49,3 +49,13 @@ test("sign-in renders a focused card without protected navigation", async () => 
   expect(screen.getByRole("button", { name: "Show password" })).toBeInTheDocument();
   expect(screen.queryByRole("complementary", { name: "Admin navigation" })).not.toBeInTheDocument();
 });
+
+test("sign-in links to password recovery and shows the reset notice", async () => {
+  const user = userEvent.setup();
+  renderRoute("/login?reset=true", { get: async () => null, invalidate: () => undefined });
+  expect(
+    await screen.findByText(/Your password was changed and your other sessions were signed out\./u),
+  ).toHaveAttribute("role", "status");
+  await user.click(screen.getByRole("link", { name: "Forgot password?" }));
+  expect(await screen.findByRole("region", { name: "Forgot password?" })).toBeInTheDocument();
+});

@@ -370,6 +370,48 @@ export const authVerifications = sqliteTable("verification", {
   updatedAt: authTimestamp("updated_at"),
 });
 
+/**
+ * Lace-owned invitations. Only SHA-256 token digests are stored; at most one
+ * active (unaccepted, unrevoked) invitation exists per normalized email.
+ */
+export const invitations = sqliteTable(
+  "invitations",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    role: text("role").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    invitedBy: text("invited_by").notNull(),
+    createdAt: timestamp("created_at"),
+    expiresAt: timestamp("expires_at"),
+    acceptedAt: integer("accepted_at"),
+    acceptedUserId: text("accepted_user_id"),
+    revokedAt: integer("revoked_at"),
+  },
+  (table) => [
+    check("invitations_role_check", sql`${table.role} in ('admin', 'editor', 'viewer')`),
+    uniqueIndex("invitations_active_email_idx")
+      .on(table.email)
+      .where(sql`${table.acceptedAt} is null and ${table.revokedAt} is null`),
+  ],
+);
+
+/** Lace-owned password-reset tokens, stored only as SHA-256 digests. */
+export const passwordResetTokens = sqliteTable(
+  "password_reset_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at"),
+    expiresAt: timestamp("expires_at"),
+    consumedAt: integer("consumed_at"),
+    requestedBy: text("requested_by"),
+  },
+  (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
+);
+
 /** Tables supplied to Better Auth's Drizzle adapter under its canonical names. */
 export const betterAuthSchema = Object.freeze({
   account: authAccounts,

@@ -61,7 +61,11 @@ export async function apiJourney(f) {
     expected.models,
   );
   for (const role of ["editor", "viewer"]) {
-    for (const path of ["/api/v1/admin/users", "/api/v1/admin/api-tokens"])
+    for (const path of [
+      "/api/v1/admin/users",
+      "/api/v1/admin/invitations",
+      "/api/v1/admin/api-tokens",
+    ])
       await denied(path, { cookie: f.cookies[role] });
   }
   // The editor's allowed mutation is asserted separately; no failure is swallowed.

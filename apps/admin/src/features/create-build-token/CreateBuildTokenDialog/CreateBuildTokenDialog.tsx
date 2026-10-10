@@ -1,6 +1,6 @@
 import type { BuildTokenCreatedDto } from "@lacecms/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, KeyRound } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import {
   adminQueryKeys,
@@ -20,9 +20,8 @@ import {
   DialogTrigger,
 } from "../../../shared/ui/Dialog/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
+import { OnceShownSecret } from "../../../shared/ui/OnceShownSecret/index.js";
 import { TextField } from "../../../shared/ui/TextField/index.js";
-
-type CopyState = "copied" | "failed" | "idle";
 
 /**
  * Issues a read-only build token. After confirmation the dialog shows the
@@ -35,7 +34,6 @@ export function CreateBuildTokenDialog() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [issued, setIssued] = useState<BuildTokenCreatedDto>();
-  const [copy, setCopy] = useState<CopyState>("idle");
   const create = useMutation({
     // The plaintext goes straight to component state and the mutation resolves
     // without data, so the mutation cache never holds it.
@@ -49,7 +47,6 @@ export function CreateBuildTokenDialog() {
     if (!next) {
       setName("");
       setIssued(undefined);
-      setCopy("idle");
       create.reset();
     }
   }
@@ -117,38 +114,7 @@ export function CreateBuildTokenDialog() {
                 {`This is the only time “${issued.name}” is shown. Store it as LACE_BUILD_TOKEN in the site's server-side configuration.`}
               </DialogDescription>
             </DialogHeader>
-            <code
-              className="block rounded-md border border-border bg-muted p-3 font-mono text-xs wrap-anywhere select-all"
-              data-testid="issued-token-value"
-            >
-              {issued.token}
-            </code>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(issued.token)
-                    .then(() => setCopy("copied"))
-                    .catch(() => setCopy("failed"));
-                }}
-                variant="outline"
-              >
-                {copy === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                Copy token
-              </Button>
-              <p aria-live="polite" className="m-0 text-xs text-muted-foreground" role="status">
-                {copy === "copied"
-                  ? "Copied to the clipboard."
-                  : copy === "failed"
-                    ? "Copy failed. Select the token text and copy it manually."
-                    : ""}
-              </p>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button>Done</Button>
-              </DialogClose>
-            </DialogFooter>
+            <OnceShownSecret name="token" value={issued.token} valueTestId="issued-token-value" />
           </>
         )}
       </DialogContent>

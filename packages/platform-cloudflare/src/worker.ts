@@ -25,6 +25,7 @@ import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
   createEmailSender,
   createLaceApp,
+  sensitiveRequestLimit,
   type EmailSettings,
   type ReadinessProbe,
   type RequestRateLimiter,
@@ -156,25 +157,12 @@ class CloudflareRequestRateLimiter implements RequestRateLimiter {
     readonly request: Request;
     readonly actor?: { readonly id: string };
   }): Promise<boolean | RateLimitDecision> {
-    const pathname = new URL(input.request.url).pathname;
-    const method = input.request.method;
-    const operation =
-      pathname.startsWith("/api/auth/") && method !== "GET"
-        ? "auth"
-        : pathname === "/api/v1/setup/admin"
-          ? "setup"
-          : pathname.startsWith("/api/v1/admin/api-tokens") && method !== "GET"
-            ? "token"
-            : pathname === "/api/v1/admin/media" && method === "POST"
-              ? "upload"
-              : pathname === "/api/v1/admin/settings/email-test" && method === "POST"
-                ? "email"
-                : undefined;
-    if (operation === undefined) return true;
-    const actorScoped = operation === "upload" || operation === "token" || operation === "email";
-    if (actorScoped && input.actor === undefined) return true;
-    const subject = actorScoped ? `actor:${input.actor!.id}` : this.clients.get(input.request);
-    return this.limiter.check({ now: this.clock.now(), operation, subject });
+    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
+    if (limit === undefined) return true;
+    if (limit.scope === "actor" && input.actor === undefined) return true;
+    const subject =
+      limit.scope === "actor" ? `actor:${input.actor!.id}` : this.clients.get(input.request);
+    return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
   }
 }
 
@@ -249,11 +237,8 @@ export function createCloudflareRuntime(
   );
   const clients = new TrustedClientAddresses();
   const security = new D1SecurityService(settings.database, () => clock.now());
-  const rateLimiter = new CloudflareRequestRateLimiter(
-    new D1FixedWindowRateLimiter(settings.database, settings.authSecret),
-    clock,
-    clients,
-  );
+  const sensitiveLimiter = new D1FixedWindowRateLimiter(settings.database, settings.authSecret);
+  const rateLimiter = new CloudflareRequestRateLimiter(sensitiveLimiter, clock, clients);
   const cache =
     settings.cache === undefined
       ? new NoopCloudflareCache()
@@ -327,6 +312,10 @@ export function createCloudflareRuntime(
     config: input.config,
     buildSite: settings.buildSite ?? null,
     content,
+    // Requests use their own `waitUntil`; this fallback serves direct app calls.
+    defer: (task) => {
+      void task.catch(() => logger.error({ component: "deferred", reason: "task_failed" }));
+    },
     email:
       input.email?.(settings) ?? createWorkerEmailSender(settings.email, settings.emailBinding),
     environment: { engineVersion, openApiTitle: "Lace API" },
@@ -339,6 +328,7 @@ export function createCloudflareRuntime(
     readiness: new D1Readiness(settings.database),
     requestIds: { next: () => ulid() },
     security,
+    sensitiveLimiter,
   });
   return Object.freeze({
     clients,
@@ -418,7 +408,12 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       // Only the Worker ingress accepts Cloudflare's edge-supplied header.
       // Direct runtime.app calls have no trusted client identity.
       runtime.clients.set(request, request.headers.get("cf-connecting-ip"));
-      const response = await runtime.app.fetch(request);
+      // Hono reads only `waitUntil`; the account flows defer email delivery through it.
+      const response = await runtime.app.fetch(request, env, {
+        passThroughOnException: () => undefined,
+        props: undefined,
+        waitUntil: (promise: Promise<unknown>) => ctx.waitUntil(promise),
+      });
       if (producesDispatchWork(request, response.status)) ctx.waitUntil(postCommit(runtime));
       return response;
     },

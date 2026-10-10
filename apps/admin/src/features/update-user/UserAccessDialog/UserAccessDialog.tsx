@@ -43,7 +43,7 @@ export function UserAccessDialog({ account }: { readonly account: ManagedUserDto
           <DialogTitle>{disabling ? "Disable user?" : "Enable user?"}</DialogTitle>
           <DialogDescription>
             {disabling
-              ? `${account.email} will no longer be able to sign in. You can enable the account again later.`
+              ? `${account.email} will be signed out on every device and will no longer be able to sign in. You can enable the account again later.`
               : `${account.email} will be able to sign in again with their existing password and role.`}
           </DialogDescription>
         </DialogHeader>

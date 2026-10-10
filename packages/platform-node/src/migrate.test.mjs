@@ -205,3 +205,58 @@ test("site-build outcome migration keeps Node builder successes and accepts prov
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("account-token migration upgrades a 0003 database and allows one active invitation per email", async () => {
+  const { cp } = await import("node:fs/promises");
+  const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
+  const source = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), "lace-account-tokens-"));
+  const previous = join(root, "previous");
+  const path = join(root, "lace.sqlite");
+  try {
+    await cp(source, previous, { recursive: true });
+    const journalPath = join(previous, "meta", "_journal.json");
+    const journal = JSON.parse(await readFile(journalPath, "utf8"));
+    journal.entries = journal.entries.filter((entry) => entry.idx < 4);
+    await writeFile(journalPath, JSON.stringify(journal));
+    const database = openNodeDatabase(path);
+    try {
+      migrate(database.drizzle, { migrationsFolder: previous });
+      database.connection
+        .prepare(
+          "insert into user (id, name, email, email_verified, role, disabled, created_at, updated_at) values ('u1', 'Admin', 'admin@example.com', 0, 'admin', 0, 1, 1)",
+        )
+        .run();
+    } finally {
+      database.connection.close();
+    }
+    migrateNodeDatabase(path);
+    const migrated = openNodeDatabase(path);
+    try {
+      expect(migrated.connection.prepare("select email from user").all()).toEqual([
+        { email: "admin@example.com" },
+      ]);
+      const invite = migrated.connection.prepare(
+        "insert into invitations (id, email, role, token_hash, invited_by, created_at, expires_at, accepted_at, revoked_at) values (?, 'new@example.com', ?, ?, 'u1', 1, 2, ?, ?)",
+      );
+      invite.run("i1", "editor", "h1", null, null);
+      invite.run("i0", "editor", "h0", 5, null);
+      invite.run("i9", "viewer", "h9", null, 5);
+      expect(() => invite.run("i2", "viewer", "h2", null, null)).toThrow(/UNIQUE constraint/u);
+      expect(() => invite.run("i3", "owner", "h3", null, 5)).toThrow(/CHECK constraint/u);
+      migrated.connection
+        .prepare(
+          "insert into password_reset_tokens (token_hash, user_id, created_at, expires_at) values ('r1', 'u1', 1, 2)",
+        )
+        .run();
+      migrated.connection.prepare("delete from user where id = 'u1'").run();
+      expect(
+        migrated.connection.prepare("select count(*) as n from password_reset_tokens").get().n,
+      ).toBe(0);
+    } finally {
+      migrated.connection.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -58,6 +58,26 @@ Settings → Email delivery → Send test email to check the configuration; the
 message always goes to their own account address and is limited to five
 requests per hour.
 
+The same sender delivers invitations, password-reset links, and
+password-changed notices. Without a working provider, invitation and
+administrator reset responses carry their link once instead (see
+[Authentication operations](auth-operations.md#invitations)); public reset
+requests still answer `202` and send nothing. Public reset emails and
+password-changed notices are scheduled after the response with a caught
+promise, so a slow provider never delays the request, and their failures are
+logged with the same sanitized fields. Links are built from
+`LACE_PUBLIC_BASE_URL`, never from request headers.
+
+### Accounts and migration `0004`
+
+Invitations, password resets, and account self-service use the Lace routes
+listed in [Authentication operations](auth-operations.md#invitations) and
+migration `0004_account_tokens`. Run `pnpm db:migrate:node` (or let the local
+migration role apply it) before starting the new API, and deploy the API and
+admin together: `POST /api/v1/admin/users` no longer exists. Only Better
+Auth's sign-in, sign-out, and get-session routes are forwarded; every other
+`/api/auth/*` path returns `404`.
+
 ## Local development
 
 `pnpm dev:node` starts all six development roles: private MinIO, its bucket
@@ -75,6 +95,8 @@ Outgoing email is captured by a local Mailpit service: the API uses the `smtp`
 provider against `mailpit:1025` with development-only plaintext transport, and
 the inbox is at `http://127.0.0.1:8025/` (`LACE_MAILPIT_PORT` changes the
 port). No message leaves the machine and no real credentials are involved.
+Invitation and password-reset emails therefore appear in Mailpit, and their
+links open the local admin.
 
 The full local environment list is in [`.env.example`](../.env.example); use
 `pnpm dev:env` rather than placing credentials in shell history. MinIO remains
@@ -99,8 +121,9 @@ For an isolated local product acceptance run, use `pnpm acceptance:start`,
 explicitly synchronizes code-owned models in separate SQLite and MinIO volumes;
 the browser check uses Admin for page and collection editing, media reuse,
 publication, and Settings token issuance. It refreshes Astro in live mode,
-checks the published routes and later-draft isolation, and checks editor/viewer
-affordances. See the [README](../README.md#local-product-acceptance-session-15c)
+checks the published routes and later-draft isolation, invites the editor and
+viewer and accepts both invitations from the links in the acceptance stack's
+Mailpit, and checks editor/viewer affordances. See the [README](../README.md#local-product-acceptance-session-15c)
 for the exact browser observations, manual variant, prerequisites, and cleanup.
 
 ## Editing content models

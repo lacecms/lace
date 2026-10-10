@@ -16,6 +16,7 @@ import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
   createEmailSender,
   createLaceApp,
+  sensitiveRequestLimit,
   parseBuildSiteIdentity,
   parseEmailSettings,
   type EmailSettings,
@@ -346,25 +347,12 @@ class NodeRequestRateLimiter implements RequestRateLimiter {
     readonly request: Request;
     readonly actor?: { readonly id: string };
   }): Promise<boolean | import("@lacecms/application").RateLimitDecision> {
-    const pathname = new URL(input.request.url).pathname;
-    const method = input.request.method;
-    const operation =
-      pathname.startsWith("/api/auth/") && method !== "GET"
-        ? "auth"
-        : pathname === "/api/v1/setup/admin"
-          ? "setup"
-          : pathname.startsWith("/api/v1/admin/api-tokens") && method !== "GET"
-            ? "token"
-            : pathname === "/api/v1/admin/media" && method === "POST"
-              ? "upload"
-              : pathname === "/api/v1/admin/settings/email-test" && method === "POST"
-                ? "email"
-                : undefined;
-    if (operation === undefined) return true;
-    const actorScoped = operation === "upload" || operation === "token" || operation === "email";
-    if (actorScoped && input.actor === undefined) return true;
-    const subject = actorScoped ? `actor:${input.actor!.id}` : this.clients.get(input.request);
-    return this.limiter.check({ now: this.clock.now(), operation, subject });
+    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
+    if (limit === undefined) return true;
+    if (limit.scope === "actor" && input.actor === undefined) return true;
+    const subject =
+      limit.scope === "actor" ? `actor:${input.actor!.id}` : this.clients.get(input.request);
+    return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
   }
 }
 export const defaultNodeLogger: ServerLogger = Object.freeze({
@@ -459,13 +447,12 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   );
   const clock = new SystemNodeClock();
   const security = new NodeSecurityService(database.connection, () => clock.now());
+  const sensitiveLimiter = new NodeFixedWindowRateLimiter(
+    database.connection,
+    input.settings.authSecret,
+  );
   const rateLimiter =
-    input.rateLimiter ??
-    new NodeRequestRateLimiter(
-      new NodeFixedWindowRateLimiter(database.connection, input.settings.authSecret),
-      clock,
-      clients,
-    );
+    input.rateLimiter ?? new NodeRequestRateLimiter(sensitiveLimiter, clock, clients);
   const cache = new NoopNodeCache();
   const storage = input.storage ?? new NodeMinioObjectStorage(input.settings.minio);
   const deletionDispatcher = new NodeMediaDeletionDispatcher({
@@ -527,6 +514,13 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     buildSite: input.settings.buildSite ?? null,
     config: input.config,
     content,
+    defer: (task) => {
+      void task.catch(() =>
+        console.error(
+          JSON.stringify({ component: "deferred", level: "warn", reason: "task_failed" }),
+        ),
+      );
+    },
     email: input.email ?? createNodeEmailSender(input.settings.email),
     environment: input.environment ?? { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultNodeLogger,
@@ -538,6 +532,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     readiness,
     requestIds: input.requestIds ?? defaultNodeRequestIds,
     security,
+    ...(input.rateLimiter === undefined ? { sensitiveLimiter } : {}),
   });
   return Object.freeze({
     setRequestPeer: (request: Request, peer: string | undefined) =>

@@ -1198,8 +1198,14 @@ POST   /api/v1/admin/site-builds
 GET    /api/v1/admin/session
 
 GET    /api/v1/admin/users
-POST   /api/v1/admin/users
 PATCH  /api/v1/admin/users/:userId
+POST   /api/v1/admin/users/:userId/password-reset
+POST   /api/v1/admin/users/:userId/sessions/revoke
+
+GET    /api/v1/admin/invitations
+POST   /api/v1/admin/invitations
+POST   /api/v1/admin/invitations/:invitationId/resend
+DELETE /api/v1/admin/invitations/:invitationId
 
 GET    /api/v1/admin/settings/status
 POST   /api/v1/admin/settings/email-test
@@ -1207,6 +1213,30 @@ GET    /api/v1/admin/api-tokens
 POST   /api/v1/admin/api-tokens
 DELETE /api/v1/admin/api-tokens/:tokenId
 ```
+
+### Account endpoints
+
+Every authenticated actor manages their own account; invitation and reset links
+are completed without a session:
+
+```text
+PATCH  /api/v1/account
+POST   /api/v1/account/password
+GET    /api/v1/account/sessions
+DELETE /api/v1/account/sessions/:sessionId
+POST   /api/v1/account/sessions/revoke-others
+
+POST   /api/v1/invitations/inspect
+POST   /api/v1/invitations/accept
+POST   /api/v1/password-reset/request
+POST   /api/v1/password-reset/confirm
+```
+
+Invitation and reset tokens travel only in JSON bodies, never in paths or
+queries. An invalid token returns one `410` envelope (`INVITATION_INVALID` or
+`RESET_INVALID`) without distinguishing unknown, expired, consumed, or revoked
+tokens. `POST /api/v1/password-reset/request` always returns `202` with the same
+body and schedules delivery without awaiting it.
 
 The draft `PUT` accepts `expectedRevision` plus the complete editable draft:
 `title`, `slug`, `fields`, and the ordered block list. It validates and persists
@@ -1532,11 +1562,13 @@ The CMS describes route patterns for validation and preview URLs, but it does no
 
 ## 14. Authentication and authorization
 
-Better Auth provides authentication, sessions, account records, and password flows. Its Drizzle SQLite schema is managed alongside the application schema.
+Better Auth provides sign-in, sessions, account records, and password hashing. Invitations, password resets, and account self-service are Lace routes over the same tables. Its Drizzle SQLite schema is managed alongside the application schema.
 
 The role is stored as a validated field on the Better Auth user record and
-defaults to `viewer`; public sign-up is disabled. Only the bootstrap flow and an
-administrator with `users:manage` may create users or change roles. Domain and
+defaults to `viewer`; public sign-up is disabled. Only the bootstrap flow
+creates an account directly. Every other account is created when its invitee
+accepts an invitation issued by an administrator with `users:manage`, who also
+changes roles; no administrator ever chooses another person's password. Domain and
 application code receive an `Actor` value from the auth adapter and do not import
 Better Auth session types.
 
@@ -1636,6 +1668,65 @@ base64url. Lace stores their SHA-256 digests because the source tokens already
 have high entropy; comparisons are constant-time. Human passwords remain wholly
 inside Better Auth's password-hashing implementation.
 
+Invitations and password resets use Lace-owned tokens rather than the provider's
+reset flow, so Node and D1 share one lifecycle and an administrator can receive a
+link once when email is not delivered:
+
+```text
+invitations
+├── id                  TEXT PRIMARY KEY
+├── email               TEXT NOT NULL          (normalized lower case)
+├── role                TEXT NOT NULL CHECK(role IN ('admin','editor','viewer'))
+├── token_hash          TEXT NOT NULL UNIQUE
+├── invited_by          TEXT NOT NULL
+├── created_at          INTEGER NOT NULL
+├── expires_at          INTEGER NOT NULL      (72 hours)
+├── accepted_at         INTEGER
+├── accepted_user_id    TEXT
+└── revoked_at          INTEGER
+-- unique (email) where accepted_at is null and revoked_at is null
+
+password_reset_tokens
+├── token_hash          TEXT PRIMARY KEY
+├── user_id             TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE
+├── created_at          INTEGER NOT NULL
+├── expires_at          INTEGER NOT NULL      (1 hour)
+├── consumed_at         INTEGER
+└── requested_by        TEXT                  (administrator, when admin-issued)
+```
+
+Both tokens are 32 random bytes stored only as SHA-256 digests. An invitation
+is accepted atomically (one `better-sqlite3` transaction on Node, one guarded
+D1 batch on Cloudflare): the user and credential account are created with the
+invited role and the invitation is marked accepted, so concurrent acceptances
+create exactly one account. Resending rotates the token and restarts the
+expiry; revoking invalidates the link. Links have the form
+`<LACE_PUBLIC_BASE_URL>/admin/accept-invite#token=…` or
+`…/admin/reset-password#token=…`; the fragment keeps the token out of server
+logs and `Referer`, and the admin screens remove it from the address bar after
+reading it. When delivery is not `sent`, the invite or administrator reset
+response contains the link once.
+
+A reset request returns the same `202` for enabled, disabled, and unknown
+addresses, issues a token only for enabled accounts, supersedes earlier
+unconsumed tokens, and defers delivery. Confirming a reset replaces the
+credential and deletes every session of the account. Passwords are hashed and
+verified with Better Auth's own `hashPassword`/`verifyPassword`, so provider
+sign-in keeps working. Every signed-in user can change their display name,
+change their password with the current one (optionally signing out other
+sessions, with a password-changed notice when email is configured), list their
+sessions with a browser and OS summary but never tokens or IP addresses, and end
+any other session. Administrators can sign a user out everywhere, and disabling
+an account deletes its sessions as well as failing actor resolution. The
+current session's identifier comes from the auth boundary alongside the actor.
+
+The auth boundary forwards only `POST /api/auth/sign-in/email`,
+`POST /api/auth/sign-out`, and `GET /api/auth/get-session` to Better Auth.
+Every other `/api/auth/*` path returns `404` before the provider runs, so
+provider routes such as change-password or list-sessions cannot bypass Lace
+rules or reveal session tokens. Exposing another provider route is an explicit,
+tested change.
+
 Rate limits use a portable fixed-window SQL projection so behavior does not
 depend on one process or Worker isolate:
 
@@ -1650,7 +1741,11 @@ rate_limit_buckets
 The key is an HMAC of operation plus the relevant actor, email, or client IP;
 raw IPs and emails are not stored. Defaults are 10 sensitive auth attempts per
 15 minutes, 5 setup attempts per hour, 30 upload attempts per minute per actor,
-and 20 token-management attempts per hour per admin. Successful requests still
+20 token-management attempts per hour per admin, 20 invitation and
+administrator-reset attempts per hour per admin, and 3 reset requests per hour
+per email address. Invitation inspection and acceptance, reset requests and
+confirmations count against the per-client sensitive auth limit; password
+changes count against the same limit per actor. Successful requests still
 count. Deployments may lower these limits. Expired buckets are removed by the
 same scheduled maintenance mechanism as expired idempotency rows.
 
@@ -1785,6 +1880,10 @@ Primary routes:
 
 ```text
 /login
+/accept-invite         public, token in the URL fragment
+/forgot-password       public
+/reset-password        public, token in the URL fragment
+/account               any signed-in user
 /content
 /content/:modelKey
 /content/:modelKey/:entryId
@@ -1798,7 +1897,7 @@ The content-model response drives navigation and field forms. Pages open their s
 
 The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL.
 
-The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, and errors inside the card. Users lists accounts with a "You" marker, role and status badges, and no raw IDs. Creating a user, changing a role, and disabling or enabling an account each happen in a confirmation dialog. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable for their own account and is warned before demoting it. Settings shows API readiness, configured models, active build tokens, and email delivery (provider and sender, with a rate-limited Send test email action addressed only to the signed-in administrator) as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
+The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, errors inside the card, and a "Forgot password?" link. The accept-invite, forgot-password, and reset-password screens are the same kind of public card. Accept and reset read the token from the URL fragment, remove it from the address bar, and keep it only in component state, never in the query string, router state, query cache, or browser storage. Forgot-password shows the same confirmation whether or not the address has an account. `/account` is available to every signed-in user from the user menu: it changes the display name, changes the password (signing out other sessions by default), and lists sessions with a "This device" marker and confirmed Sign out actions. Users lists accounts with a "You" marker, role and status badges, and no raw IDs, and below them the pending invitations with Resend and a confirmed Revoke. Inviting a user, changing a role, disabling or enabling an account, sending a password reset, and signing a user out everywhere each happen in a dialog; no admin screen collects another person's password. When an invitation or reset email is not sent, its dialog shows the link once, like a new build token. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable, Send password reset, or Sign out everywhere for their own account and is warned before demoting it. Settings shows API readiness, configured models, active build tokens, and email delivery (provider and sender, with a rate-limited Send test email action addressed only to the signed-in administrator) as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
 
 The media library at `/media` follows the same URL-state rules for its filename search, type filter, sort, and grid/list view. Tiles and rows load their thumbnails lazily through the authenticated admin preview endpoint. Writers can drop files anywhere over the library or choose several at once. Each file is checked for type and size in the browser and then uploads with its own progress and server error. The default browser client sends uploads through `XMLHttpRequest` so it can report bytes sent; every other request uses `fetch`, and both paths share error mapping and response validation. A details side panel shows an item's facts, its usage from the media detail read, and its public URL. Deletion there requires confirmation and is unavailable while content uses the item.
 

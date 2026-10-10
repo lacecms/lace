@@ -9,11 +9,35 @@ const root = resolve(import.meta.dirname, "../../..");
 const acceptanceDirectory = resolve(root, ".lace-acceptance");
 const accountPath = resolve(acceptanceDirectory, "account.json");
 const state = JSON.parse(readFileSync(resolve(acceptanceDirectory, "state.json"), "utf8")) as {
+  mailpitPort: number;
   port: number;
 };
 const origin = `http://127.0.0.1:${state.port}`;
+const mailpit = `http://127.0.0.1:${state.mailpitPort}`;
+
+/** Reads the newest accept link sent to one address from the acceptance stack's Mailpit. */
+async function invitationLink(address: string): Promise<string> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const search = await fetch(
+      `${mailpit}/api/v1/search?query=${encodeURIComponent(`to:"${address}"`)}`,
+    );
+    const { messages } = (await search.json()) as { messages: { ID: string }[] };
+    const newest = messages[0];
+    if (newest !== undefined) {
+      const message = (await (await fetch(`${mailpit}/api/v1/message/${newest.ID}`)).json()) as {
+        Text: string;
+      };
+      const link = /https?:\/\/\S+\/admin\/accept-invite#token=[A-Za-z0-9_-]{43}/u.exec(
+        message.Text,
+      )?.[0];
+      if (link !== undefined) return link;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`No invitation email reached ${address}.`);
+}
 const image = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9s5xQAAAAASUVORK5CYII=",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWOoiDoBAALoAZu/6UVvAAAAAElFTkSuQmCC",
   "base64",
 );
 
@@ -180,22 +204,43 @@ test("administrator completes the local editorial flow and preserves published o
   const userPassword = randomBytes(24).toString("base64url");
   await sidebar.getByRole("link", { name: "Users", exact: true }).click();
   for (const role of ["editor", "viewer"] as const) {
-    await page.getByRole("button", { name: "Create user" }).click();
-    const userDialog = page.getByRole("dialog", { name: "Create user" });
-    await userDialog
+    await page.getByRole("button", { name: "Invite user" }).click();
+    const inviteDialog = page.getByRole("dialog", { name: "Invite user" });
+    await inviteDialog
       .getByRole("textbox", { name: "Email" })
       .fill(`acceptance-${role}@example.test`);
-    await userDialog.getByLabel("Password", { exact: true }).fill(userPassword);
-    await userDialog.getByRole("combobox", { name: "Role", exact: true }).click();
+    await inviteDialog.getByRole("combobox", { name: "Role", exact: true }).click();
     await page.getByRole("option", { name: role === "editor" ? "Editor" : "Viewer" }).click();
-    await userDialog.getByRole("button", { name: "Create user" }).click();
+    await inviteDialog.getByRole("button", { name: "Send invitation" }).click();
+    // Mailpit accepted the message, so the dialog closes without showing a link.
+    await expect(inviteDialog).toHaveCount(0);
     await expect(
       page
-        .getByRole("table", { name: "Users" })
+        .getByRole("table", { name: "Pending invitations" })
         .getByRole("row", { name: new RegExp(`acceptance-${role}@example\\.test`, "u") }),
     ).toBeVisible();
   }
   await expectNoAccessibilityViolations(page, "users");
+  for (const role of ["editor", "viewer"] as const) {
+    const member = await browser.newPage();
+    const link = await invitationLink(`acceptance-${role}@example.test`);
+    expect(new URL(link).origin).toBe(origin);
+    await member.goto(link);
+    await expect(member.getByRole("textbox", { name: "Email" })).toHaveValue(
+      `acceptance-${role}@example.test`,
+    );
+    expect(member.url()).not.toContain("#token=");
+    await member.getByLabel("Password", { exact: true }).fill(userPassword);
+    await member.getByRole("button", { name: "Create account" }).click();
+    await expect(member.getByRole("heading", { name: "Content", exact: true })).toBeVisible();
+    await member.close();
+  }
+  await page.reload();
+  await expect(
+    page
+      .getByRole("table", { name: "Users" })
+      .getByRole("row", { name: /acceptance-viewer@example\.test/u }),
+  ).toBeVisible();
   for (const role of ["editor", "viewer"] as const) {
     const member = await browser.newPage();
     await member.goto(`${origin}/admin/login`);

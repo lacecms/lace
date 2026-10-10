@@ -35,7 +35,7 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.21.0` and Lace `0.1.0-alpha.4` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.4` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.22.0` and Lace `0.1.0-alpha.4` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.4` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
@@ -211,7 +211,7 @@ Once the real build token is configured, run `pnpm prod:start`. It starts API/ad
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.21.0` with the exact `0.1.0-alpha.4` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-alpha.4` candidate artifacts.
 
 <!-- lace-site: starter -->
 
@@ -302,6 +302,14 @@ Email is optional; without it the CMS works normally and Settings shows email de
 - `log` (local development only): messages are printed to the runtime output. It is refused in production because messages can contain account links.
 
 Keep SMTP passwords and API keys in the private `.env` or as Worker secrets (`pnpm exec wrangler secret put LACE_RESEND_API_KEY --config worker/wrangler.jsonc`), never in `vars`. Startup names invalid email settings without printing values, and `lace doctor --target node` validates them without sending mail. After restarting, sign in as an administrator and use Settings → Email delivery → Send test email: the message goes only to your own account address, and a failure names a closed reason (`rejected`, `rate_limited`, `unavailable`, ...) without provider text.
+
+## Accounts and invitations
+
+After setup, add people from Admin → Users → Invite user with an email address and a role. Lace never asks an administrator for another person's password: the invitee opens a single-use link, valid for 72 hours, and chooses their own password. Pending invitations can be resent (which replaces the link) or revoked. When email is configured the link is emailed; otherwise, or when delivery fails, the invite dialog shows the link once so you can pass it on another way. Links carry their token after `#`, so it never reaches server logs.
+
+Anyone can request a password reset from the sign-in screen ("Forgot password?"); the answer is the same whether or not the address has an account, and the one-hour link signs the account out everywhere once used. Administrators can also send a reset or sign a user out everywhere from the Users list, and disabling an account ends its sessions. Every signed-in user can change their display name and password and review or end their sessions under Account in the user menu.
+
+Invitations and resets need migration `0004_account_tokens`; see `.lace/upgrade-instructions.json` and deploy the API and admin artifacts together.
 
 ## Configuration, routes, renderers and styling
 

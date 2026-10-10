@@ -1293,10 +1293,19 @@ async function securityJourney(context, session) {
     const roleEmail = `${role}@lace.test`;
     const rolePassword = randomBytes(24).toString("hex");
     secretValues.add(rolePassword);
-    await request(base, "/api/v1/admin/users", {
+    // The consumer runs with email provider `none`, so the invitation returns its link once.
+    const invited = await request(base, "/api/v1/admin/invitations", {
       method: "POST",
       headers: { cookie },
-      json: { email: roleEmail, password: rolePassword, role },
+      json: { email: roleEmail, role },
+    });
+    const inviteToken = invited.body?.link?.split("#token=")[1];
+    if (invited.body?.delivery?.status === "sent" || !inviteToken)
+      throw new Error(`${role} invitation: copy-once link missing`);
+    secretValues.add(inviteToken);
+    await request(base, "/api/v1/invitations/accept", {
+      method: "POST",
+      json: { password: rolePassword, token: inviteToken },
     });
     const login = await signInHonoringRetry(base, roleEmail, rolePassword);
     const roleCookie = login.headers.getSetCookie()[0]?.split(";")[0];

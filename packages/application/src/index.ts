@@ -21,10 +21,12 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import { permissionsFor, requirePermission, type Permission } from "@lacecms/domain";
+import type { AccountSecurityPort } from "./accounts.js";
 import type { UserProfileReader } from "./email.js";
 
 export const packageName = "@lacecms/application";
 
+export * from "./accounts.js";
 export * from "./configuration-sync.js";
 export * from "./email.js";
 export * from "./site-build-use-cases.js";
@@ -537,7 +539,7 @@ export interface IssuedBuildToken extends BuildTokenMetadata {
 }
 
 /** Security lifecycle boundary implemented by each runtime's durable adapter. */
-export interface SecurityService extends UserProfileReader {
+export interface SecurityService extends UserProfileReader, AccountSecurityPort {
   /** Read-only durable completion marker; never infers completion from users. */
   isSetupComplete(): Promise<boolean>;
   bootstrap(input: {
@@ -549,15 +551,11 @@ export interface SecurityService extends UserProfileReader {
     readonly expiresAt: UnixMilliseconds;
     readonly token: OpaqueTokenSecret;
   }>;
-  createUser(input: {
-    readonly email: string;
-    readonly password: string;
-    readonly role: SecurityRole;
-  }): Promise<ManagedUser>;
   createBuildToken(input: {
     readonly name: string;
     readonly now: UnixMilliseconds;
   }): Promise<IssuedBuildToken>;
+  /** Disabling also deletes every session of the user in the same operation. */
   disableUser(input: { readonly userId: string }): Promise<ManagedUser>;
   listBuildTokens(): Promise<readonly BuildTokenMetadata[]>;
   listUsers(): Promise<readonly ManagedUser[]>;
@@ -565,6 +563,7 @@ export interface SecurityService extends UserProfileReader {
     readonly tokenId: string;
     readonly now: UnixMilliseconds;
   }): Promise<BuildTokenMetadata | null>;
+  /** Disabling also deletes every session of the user in the same operation. */
   updateUser(input: {
     readonly role?: SecurityRole;
     readonly userId: string;
@@ -581,9 +580,22 @@ export interface RateLimitDecision {
   readonly retryAfterSeconds: number;
 }
 
+/**
+ * `invite` covers invitation create, resend and revoke plus administrator
+ * resets per actor; `reset` counts public reset requests per normalized email.
+ */
+export type SensitiveRateLimitOperation =
+  | "auth"
+  | "email"
+  | "invite"
+  | "reset"
+  | "setup"
+  | "token"
+  | "upload";
+
 export interface SensitiveRateLimiter {
   check(input: {
-    readonly operation: "auth" | "email" | "setup" | "token" | "upload";
+    readonly operation: SensitiveRateLimitOperation;
     readonly subject: string;
     readonly now: UnixMilliseconds;
   }): Promise<RateLimitDecision>;

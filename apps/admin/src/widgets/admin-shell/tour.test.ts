@@ -22,6 +22,7 @@ test("tour mirrors navigation and available actions for each role", () => {
     expect(text.includes("Save to keep a draft")).toBe(role !== "viewer");
     expect(text.includes("Upload supported")).toBe(role !== "viewer");
     for (const instruction of [
+      "Invite people by email",
       "Publish a saved",
       "Request a build",
       "retry a failed",
@@ -34,6 +35,7 @@ test("tour mirrors navigation and available actions for each role", () => {
     expect(text).toContain("Run a fresh build after publishing");
     expect(text).toContain("previous release stays served");
     expect(text).not.toMatch(/restart[^.]*after (each|every) publication/i);
+    expect(text).not.toContain("Create accounts");
     if (role === "admin") {
       expect(text).toContain("read access only");
       expect(text).toContain("shown once");

@@ -192,6 +192,36 @@ const builds = buildStatuses.map((status, index) => ({
   ...(status === "failed" ? { error: "build_failed" } : {}),
 }));
 
+const accountToken = "e2eAccountToken_0123456789abcdefghijklmnopqr".slice(0, 43);
+const link = `http://127.0.0.1:4173/admin/accept-invite#token=${accountToken}`;
+const invitation = {
+  createdAt,
+  email: "pending@lace.test",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  id: "invitation-1",
+  invitedBy: "Ada Admin",
+  role: "editor",
+  state: "pending",
+};
+const accountSessions = [
+  {
+    browser: "Chrome",
+    createdAt,
+    current: true,
+    id: "session-1",
+    lastActiveAt: updatedAt,
+    os: "macOS",
+  },
+  {
+    browser: "Safari",
+    createdAt,
+    current: false,
+    id: "session-2",
+    lastActiveAt: createdAt,
+    os: "iOS",
+  },
+];
+
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ body: JSON.stringify(body), contentType: "application/json", status });
 }
@@ -213,6 +243,16 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
   };
   const library = [media("media-1", "hero.png", 1), media("media-2", "team.png", 0)];
   const tokens: Array<Omit<typeof token, "lastUsedAt"> & { lastUsedAt?: string }> = [token];
+  const invitations: Array<Omit<typeof invitation, "role"> & { role: string }> = [
+    invitation,
+    {
+      ...invitation,
+      email: "late@lace.test",
+      id: "invitation-0",
+      role: "viewer",
+      state: "expired",
+    },
+  ];
   await page.route(isApiRequest, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -312,14 +352,42 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
           { disabled: true, email: "vera@lace.test", id: "viewer-1", role: "viewer" },
         ],
       });
-    if (path === "/api/v1/admin/users" && method === "POST") {
+    if (path === "/api/v1/admin/invitations" && method === "GET")
+      return json(route, { items: invitations });
+    if (path === "/api/v1/admin/invitations" && method === "POST") {
       const body = request.postDataJSON() as { email: string; role: Role };
+      const created = { ...invitation, email: body.email, id: "invitation-2", role: body.role };
+      invitations.push(created);
+      // Email is not configured in this fixture, so the link is handed over once.
       return json(
         route,
-        { disabled: false, email: body.email, id: "user-4", role: body.role },
+        { delivery: { reason: "not_configured", status: "failed" }, invitation: created, link },
         201,
       );
     }
+    if (/^\/api\/v1\/admin\/invitations\/[^/]+\/resend$/u.test(path))
+      return json(route, { delivery: { status: "sent" }, invitation });
+    if (/^\/api\/v1\/admin\/users\/[^/]+\/password-reset$/u.test(path))
+      return json(route, { delivery: { status: "sent" } });
+    if (/^\/api\/v1\/admin\/users\/[^/]+\/sessions\/revoke$/u.test(path))
+      return json(route, { revoked: 2 });
+    if (path === "/api/v1/invitations/inspect")
+      return json(route, {
+        email: "new@lace.test",
+        expiresAt: invitation.expiresAt,
+        role: "editor",
+      });
+    if (path === "/api/v1/invitations/accept") return json(route, { email: "new@lace.test" }, 201);
+    if (path === "/api/v1/password-reset/request") return route.fulfill({ status: 202 });
+    if (path === "/api/v1/password-reset/confirm") return route.fulfill({ status: 204 });
+    if (path === "/api/v1/account" && method === "PATCH") {
+      const { displayName } = request.postDataJSON() as { displayName: string };
+      return json(route, sessionSummary({ displayName, id: `${role}-1`, role }));
+    }
+    if (path === "/api/v1/account/password" && method === "POST")
+      return json(route, { revoked: 1 });
+    if (path === "/api/v1/account/sessions") return json(route, { items: accountSessions });
+    if (path === "/api/v1/account/sessions/revoke-others") return json(route, { revoked: 1 });
     if (path === "/api/v1/admin/build-site")
       return json(route, { site: { id: "main-site", label: "Main site" } });
     if (path === "/api/v1/admin/site-builds") return json(route, { items: builds });
@@ -376,9 +444,35 @@ const routes: ReadonlyArray<readonly [string, string, (page: Page) => Locator]> 
   ],
   ["media library", "/media", (page) => page.getByRole("list", { name: "Media library" })],
   ["builds", "/builds", (page) => page.getByRole("heading", { name: "Builds", exact: true })],
-  ["users", "/users", (page) => page.getByRole("table", { name: "Users" })],
+  ["users", "/users", (page) => page.getByRole("table", { name: "Pending invitations" })],
+  ["account", "/account", (page) => page.getByText("This device")],
   ["settings", "/settings", (page) => page.getByText("Production site")],
   ["not found", "/does-not-exist", (page) => page.getByRole("main").getByText("Page not found")],
+];
+
+/** Public account screens, opened without a session from their emailed links. */
+const publicRoutes: ReadonlyArray<readonly [string, string, (page: Page) => Locator]> = [
+  [
+    "accept invitation",
+    `/accept-invite#token=${accountToken}`,
+    (page) => page.getByLabel("Password", { exact: true }),
+  ],
+  [
+    "invalid invitation",
+    "/accept-invite",
+    (page) => page.getByRole("heading", { name: "Invitation not valid" }),
+  ],
+  ["forgot password", "/forgot-password", (page) => page.getByRole("textbox", { name: "Email" })],
+  [
+    "reset password",
+    `/reset-password#token=${accountToken}`,
+    (page) => page.getByLabel("New password", { exact: true }),
+  ],
+  [
+    "invalid reset link",
+    "/reset-password",
+    (page) => page.getByRole("heading", { name: "Reset link not valid" }),
+  ],
 ];
 
 /** Stores the admin theme preference before any admin script runs. */
@@ -406,6 +500,45 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expectNoAccessibilityViolations(page, screen);
     });
+
+  for (const [screen, path, ready] of publicRoutes)
+    test(`${screen} passes the accessibility audit (${theme} theme)`, async ({ page }) => {
+      await seedTheme(page, theme);
+      await mockAdmin(page, { signedIn: false });
+      await openAdmin(page, path, ready);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      expect(new URL(page.url()).hash).toBe("");
+      await expectNoAccessibilityViolations(page, screen);
+    });
+
+  test(`account screen states pass the accessibility audit (${theme} theme)`, async ({ page }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page, { signedIn: false });
+    await openAdmin(page, "/forgot-password", (current) =>
+      current.getByRole("textbox", { name: "Email" }),
+    );
+    await page.getByRole("textbox", { name: "Email" }).fill("someone@lace.test");
+    await page.getByRole("button", { name: "Send reset link" }).click();
+    await expect(page.getByText(/If an account exists for/u)).toBeVisible();
+    await expectNoAccessibilityViolations(page, "forgot-password confirmation");
+
+    await openAdmin(page, "/login?reset=true", (current) =>
+      current.getByText(/Your password was changed/u),
+    );
+    await expectNoAccessibilityViolations(page, "sign-in after a password reset");
+
+    await mockAdmin(page);
+    await openAdmin(page, "/account", (current) => current.getByText("This device"));
+    await page.getByLabel("Current password", { exact: true }).fill("old-password");
+    await page.getByLabel("New password", { exact: true }).fill("new-password-123");
+    await page.getByLabel("Confirm new password", { exact: true }).fill("other-password-123");
+    await page.getByRole("button", { name: "Change password" }).click();
+    await expect(page.getByText("The new passwords do not match.")).toBeVisible();
+    await expectNoAccessibilityViolations(page, "account with a password validation message");
+    await page.getByRole("button", { name: "Sign out all other sessions" }).click();
+    await expect(page.getByRole("dialog", { name: "Sign out all other sessions?" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "sign-out-other-sessions dialog");
+  });
 
   test(`email delivery results pass the accessibility audit (${theme} theme)`, async ({ page }) => {
     await seedTheme(page, theme);
@@ -453,9 +586,30 @@ for (const theme of ["light", "dark"] as const) {
     await page.keyboard.press("Escape");
 
     await page.goto("/admin/users");
-    await page.getByRole("button", { name: "Create user" }).click();
-    await expect(page.getByRole("dialog", { name: "Create user" })).toBeVisible();
-    await expectNoAccessibilityViolations(page, "create-user dialog");
+    await page.getByRole("button", { name: "Invite user" }).click();
+    const inviteDialog = page.getByRole("dialog", { name: "Invite user" });
+    await expect(inviteDialog).toBeVisible();
+    await expectNoAccessibilityViolations(page, "invite-user dialog");
+    await inviteDialog.getByRole("textbox", { name: "Email" }).fill("new@lace.test");
+    await inviteDialog.getByRole("button", { name: "Send invitation" }).click();
+    await expect(page.getByTestId("once-shown-link")).toHaveText(link);
+    await expectNoAccessibilityViolations(page, "once-shown invitation link dialog");
+    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByTestId("once-shown-link")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Send password reset to eddie@lace.test" }).click();
+    await expect(page.getByRole("dialog", { name: "Send password reset?" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "send-password-reset dialog");
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Sign out eddie@lace.test everywhere" }).click();
+    await expect(page.getByRole("dialog", { name: "Sign out everywhere?" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "sign-out-everywhere dialog");
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Revoke invitation for pending@lace.test" }).click();
+    await expect(page.getByRole("dialog", { name: "Revoke invitation?" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "revoke-invitation dialog");
     await page.keyboard.press("Escape");
 
     await page.goto("/admin/settings");
@@ -539,14 +693,79 @@ test("an administrator completes the editorial flow with the keyboard alone", as
 
   await tabTo(page, sidebar.getByRole("link", { name: "Users", exact: true }));
   await page.keyboard.press("Enter");
-  const create = page.getByRole("button", { name: "Create user" });
-  await tabTo(page, create);
+  const invite = page.getByRole("button", { name: "Invite user" });
+  await tabTo(page, invite);
   await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Create user" });
+  const dialog = page.getByRole("dialog", { name: "Invite user" });
   await expect(dialog.getByRole("textbox", { name: "Email" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(create).toBeFocused();
+  await expect(invite).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("new@lace.test");
+  await tabTo(page, dialog.getByRole("button", { name: "Send invitation" }));
+  await page.keyboard.press("Enter");
+  const shown = page.getByRole("dialog", { name: "Share the invitation link" });
+  await expect(shown.getByRole("button", { name: "Copy link" })).toBeFocused();
+  await tabTo(page, shown.getByRole("button", { name: "Done" }));
+  await page.keyboard.press("Enter");
+  await expect(shown).toHaveCount(0);
+  await expect(invite).toBeFocused();
+
+  await sidebar.getByRole("button", { name: /account menu/u }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu")).toBeVisible();
+  for (let step = 0; step < 10; step += 1) {
+    if (
+      await page
+        .getByRole("menuitem", { name: "Account" })
+        .evaluate((item) => item === document.activeElement)
+    )
+      break;
+    await page.keyboard.press("ArrowDown");
+  }
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  const signOutOthers = page.getByRole("button", { name: "Sign out all other sessions" });
+  await tabTo(page, signOutOthers);
+  await page.keyboard.press("Enter");
+  const othersDialog = page.getByRole("dialog", { name: "Sign out all other sessions?" });
+  await tabTo(page, othersDialog.getByRole("button", { name: "Sign out other sessions" }));
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Signed out 1 other session.")).toBeVisible();
+});
+
+test("account screens reached from links work with the keyboard alone", async ({ page }) => {
+  await mockAdmin(page, { signedIn: false });
+  await page.goto("/admin/login");
+  await tabTo(page, page.getByRole("link", { name: "Forgot password?" }));
+  await page.keyboard.press("Enter");
+  const email = page.getByRole("textbox", { name: "Email" });
+  await expect(email).toBeFocused();
+  await page.keyboard.type("someone@lace.test");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/If an account exists for someone@lace\.test/u)).toBeVisible();
+
+  await page.goto(`/admin/reset-password#token=${accountToken}`);
+  const password = page.getByLabel("New password", { exact: true });
+  await expect(password).toBeFocused();
+  expect(new URL(page.url()).hash).toBe("");
+  await page.keyboard.type("new-password-123");
+  await tabTo(page, page.getByLabel("Confirm new password", { exact: true }));
+  await page.keyboard.type("new-password-123");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/Your password was changed/u)).toBeVisible();
+
+  await page.goto(`/admin/accept-invite#token=${accountToken}`);
+  const choose = page.getByLabel("Password", { exact: true });
+  await expect(choose).toBeFocused();
+  expect(new URL(page.url()).hash).toBe("");
+  expect(
+    await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),
+  ).not.toContain(accountToken);
+  await page.keyboard.type("long-password-123");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Content", exact: true })).toBeVisible();
 });
 
 async function narrowPage(browser: Browser) {
@@ -561,6 +780,21 @@ test("every route fits a 375px viewport without horizontal scrolling", async ({ 
     await openAdmin(page, path, ready);
     if (path === "/settings")
       await expect(page.getByRole("group", { name: "CMS version" })).toContainText("0.1.0-alpha.4");
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `${screen} scrolls horizontally`,
+    ).toBeLessThanOrEqual(375);
+  }
+  await page.close();
+});
+
+test("public account screens fit a 375px viewport without horizontal scrolling", async ({
+  browser,
+}) => {
+  const page = await browser.newPage({ viewport: { height: 740, width: 375 } });
+  await mockAdmin(page, { signedIn: false });
+  for (const [screen, path, ready] of publicRoutes) {
+    await openAdmin(page, path, ready);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
       `${screen} scrolls horizontally`,

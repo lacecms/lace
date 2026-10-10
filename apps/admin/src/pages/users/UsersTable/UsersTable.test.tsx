@@ -24,6 +24,16 @@ test("marks the signed-in account and offers only the actions each row allows", 
       .map((button) => button.textContent),
   ).toEqual(["Change role"]);
   expect(within(editor!).getByRole("button", { name: "Disable editor@lace.test" })).toBeVisible();
+  expect(
+    within(editor!)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual([
+    "Change role for editor@lace.test",
+    "Send password reset to editor@lace.test",
+    "Sign out editor@lace.test everywhere",
+    "Disable editor@lace.test",
+  ]);
   expect(editor).toHaveTextContent("Editor");
   expect(
     within(disabled!)

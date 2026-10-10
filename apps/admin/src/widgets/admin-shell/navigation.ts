@@ -121,6 +121,7 @@ export type Breadcrumb =
 
 const resourceCrumbs: Readonly<Record<string, string>> = {
   "/_protected/$": "Page not found",
+  "/_protected/account": "Account",
   "/_protected/builds": "Builds",
   "/_protected/media": "Media",
   "/_protected/settings": "Settings",

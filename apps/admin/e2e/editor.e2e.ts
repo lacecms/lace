@@ -374,6 +374,7 @@ test("admin routes distinguish empty and failure states at a narrow width", asyn
     }
     if (path === "/api/v1/admin/media") return json(route, { items: [] });
     if (path === "/api/v1/admin/users") return json(route, { items: [] });
+    if (path === "/api/v1/admin/invitations") return json(route, { items: [] });
     if (path === "/api/v1/admin/site-builds") return json(route, { items: [] });
     if (path === "/api/v1/admin/settings/status")
       return json(route, {

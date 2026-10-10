@@ -206,8 +206,12 @@ async function acceptance(command) {
     const project = `lace-acceptance-${randomBytes(5).toString("hex")}`;
     const port = await freePort();
     await mkdir(acceptanceDirectory, { mode: 0o700 });
-    await createEnvironment(acceptanceEnvironment, port, project, await freePort());
-    await writeFile(acceptanceState, JSON.stringify({ project, port }), { mode: 0o600 });
+    // The browser acceptance reads invitation emails from this Mailpit port.
+    const mailpitPort = await freePort();
+    await createEnvironment(acceptanceEnvironment, port, project, mailpitPort);
+    await writeFile(acceptanceState, JSON.stringify({ project, port, mailpitPort }), {
+      mode: 0o600,
+    });
     if (
       run(
         "docker",

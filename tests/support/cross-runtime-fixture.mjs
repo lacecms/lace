@@ -419,13 +419,21 @@ export async function openProductRuntime(kind, options = {}) {
     const cookie = await login("admin");
     if (!options.backup)
       for (const role of ["editor", "viewer"]) {
-        const response = await call("/api/v1/admin/users", {
+        // Email is not configured here, so the invitation returns its accept link once.
+        const invited = await call("/api/v1/admin/invitations", {
           method: "POST",
           cookie,
-          json: { email: `${role}@34a.test`, password, role },
+          json: { email: `${role}@34a.test`, role },
         });
-        if (response.status !== 201)
-          throw new Error(`34A ${kind}: create ${role} status ${response.status}`);
+        if (invited.status !== 201)
+          throw new Error(`34A ${kind}: invite ${role} status ${invited.status}`);
+        const { link } = await invited.json();
+        const accepted = await call("/api/v1/invitations/accept", {
+          method: "POST",
+          json: { password, token: link.split("#token=")[1] },
+        });
+        if (accepted.status !== 201)
+          throw new Error(`34A ${kind}: accept ${role} status ${accepted.status}`);
       }
     const cookies = { admin: cookie, editor: await login("editor"), viewer: await login("viewer") };
     return {

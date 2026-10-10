@@ -11,6 +11,28 @@ export interface AuthRouteHandler {
 
 export interface SessionActorResolver {
   resolve(request: Request): Promise<Actor | null>;
+  /** The opaque identifier of the session authenticating the request; never its token. */
+  sessionId(request: Request): Promise<string | null>;
+}
+
+/**
+ * The only provider routes Lace exposes. Every other `/api/auth/*` path returns
+ * `404` before the provider runs, so provider upgrades cannot add credential or
+ * session routes that bypass Lace rules.
+ */
+export const PROVIDER_ROUTE_ALLOWLIST: readonly (readonly [method: string, path: string])[] =
+  Object.freeze([
+    Object.freeze(["POST", "/api/auth/sign-in/email"] as const),
+    Object.freeze(["POST", "/api/auth/sign-out"] as const),
+    Object.freeze(["GET", "/api/auth/get-session"] as const),
+  ]);
+
+function allowedProviderRoute(request: Request): boolean {
+  const { pathname } = new URL(request.url);
+  const method = request.method === "HEAD" ? "GET" : request.method;
+  return PROVIDER_ROUTE_ALLOWLIST.some(
+    ([allowedMethod, path]) => allowedMethod === method && path === pathname,
+  );
 }
 
 export interface BetterAuthBoundary extends AuthRouteHandler {
@@ -96,28 +118,52 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
     },
   });
 
+  type ProviderSession = Awaited<ReturnType<typeof auth.api.getSession>>;
+  // One provider lookup per request serves both the actor and the session id.
+  const sessions = new WeakMap<Request, Promise<ProviderSession>>();
+  function providerSession(request: Request): Promise<ProviderSession> {
+    let pending = sessions.get(request);
+    if (pending === undefined) {
+      pending = auth.api.getSession({ headers: request.headers });
+      sessions.set(request, pending);
+    }
+    return pending;
+  }
+
+  function trustedRequestOrigin(request: Request): boolean {
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return true;
+    const requestOrigin = request.headers.get("origin");
+    if (requestOrigin !== null) return allowedOrigins.includes(requestOrigin);
+    return request.headers.get("sec-fetch-site") !== "cross-site";
+  }
+
+  async function activeSession(request: Request) {
+    if (!trustedRequestOrigin(request)) return null;
+    const session = await providerSession(request);
+    const role = laceRole(session?.user.role);
+    return session === null ||
+      session === undefined ||
+      role === undefined ||
+      session.user.disabled === true
+      ? null
+      : { role, session };
+  }
+
   return Object.freeze({
     actors: Object.freeze({
       resolve: async (request: Request) => {
-        if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
-          const requestOrigin = request.headers.get("origin");
-          if (requestOrigin !== null) {
-            if (!allowedOrigins.includes(requestOrigin)) return null;
-          } else if (request.headers.get("sec-fetch-site") === "cross-site") {
-            return null;
-          }
-        }
-        const session = await auth.api.getSession({ headers: request.headers });
-        const role = laceRole(session?.user.role);
-        return session === null ||
-          session === undefined ||
-          role === undefined ||
-          session.user.disabled === true
+        const active = await activeSession(request);
+        return active === null
           ? null
-          : Object.freeze({ id: actorId(session.user.id), role });
+          : Object.freeze({ id: actorId(active.session.user.id), role: active.role });
+      },
+      sessionId: async (request: Request) => {
+        const active = await activeSession(request);
+        return active === null ? null : active.session.session.id;
       },
     }),
     fetch: async (request: Request) => {
+      if (!allowedProviderRoute(request)) return new Response(null, { status: 404 });
       const headers = new Headers(request.headers);
       headers.set("x-lace-client-address", input.clientAddress?.(request) ?? "0.0.0.0");
       // The Node transport may supply a Request-compatible facade; clone materializes

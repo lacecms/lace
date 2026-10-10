@@ -50,6 +50,15 @@ Workers Free plan over HTTPS. The `cloudflare` provider uses the Email Service
 after the sending domain is onboarded; binding errors map to the same closed
 reasons as every other provider.
 
+The sender also delivers invitations, password-reset links, and
+password-changed notices (see
+[Authentication operations](auth-operations.md#invitations)). Public reset
+emails and password-changed notices run after the response through the
+request's `executionCtx.waitUntil`, so delivery never delays the request.
+Without a working provider, invitation and administrator reset responses carry
+their link once. Local `pnpm dev:cloudflare` uses the `log` provider, so those
+links appear in the Worker output.
+
 Set secrets with `wrangler secret put`, never through `vars`. When bindings or
 variables are invalid, every request receives a sanitized `503` envelope. The
 Worker logs only the names of the affected bindings or variables, never their
@@ -62,7 +71,9 @@ needs for `AsyncLocalStorage`. Static assets use `run_worker_first`, so every
 request reaches the Worker. Requests are handled in this order:
 
 1. `/api/v1/*` routes
-2. `/api/auth/*` routes
+2. `/api/auth/*` routes; only `POST sign-in/email`, `POST sign-out`, and
+   `GET get-session` reach Better Auth, and every other provider path returns
+   `404`
 3. `/health/*` routes
 4. `/admin/*`, which serves compiled files and falls back to `index.html` for
    extensionless client routes
@@ -229,6 +240,13 @@ pnpm db:migrate:cloudflare -- --remote
   database name at the prompt, and a non-interactive shell is refused. With
   `CI` set, the command runs without prompting.
 
+Migration `0004_account_tokens` adds the `invitations` and
+`password_reset_tokens` tables. It is additive; back up D1 (or record a Time
+Travel restore point), apply it remotely before deploying a Worker with
+invitations, and deploy the API and admin assets together because `POST
+/api/v1/admin/users` is gone. Invitation acceptance and reset confirmation are
+single atomic D1 batches, so concurrent uses of one token succeed at most once.
+
 ## Verification
 
 - `pnpm --filter @lacecms/platform-cloudflare test` runs the adapters,
@@ -242,7 +260,9 @@ pnpm db:migrate:cloudflare -- --remote
   with `db:migrate:cloudflare --local`, prepares it with the local helper, and
   intercepts the deploy hook. It covers health, setup and sign-in, an R2
   upload, publication, scheduled dispatch recording the provider ID,
-  authenticated build export, and static admin fallback.
+  authenticated build export, and static admin fallback. It also invites a
+  user with the copy-once link fallback, accepts the invitation, signs in as
+  the invitee, lists sessions, and checks that reset requests return `202`.
 - Root tests cover migration target parsing, remote confirmation, the
   development configuration, and gateway routing.
 

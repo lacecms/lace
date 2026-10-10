@@ -29,6 +29,13 @@
       "when": 1791238354782,
       "tag": "0003_site_build_outcomes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791633627420,
+      "tag": "0004_account_tokens",
+      "breakpoints": true
     }
   ]
 }

@@ -139,18 +139,32 @@ export interface RenderedEmail {
   readonly text: string;
 }
 
-/** Renders the shared minimal layout; every paragraph is escaped. */
+/**
+ * Renders the shared minimal layout; every paragraph and the optional link are
+ * escaped. The link follows the paragraphs on its own line, then any postscript.
+ */
 export function renderEmail(input: {
+  readonly link?: string;
   readonly paragraphs: readonly string[];
+  readonly postscript?: readonly string[];
   readonly subject: string;
 }): RenderedEmail {
-  const body = input.paragraphs
-    .map((paragraph) => `<p style="margin:0 0 16px">${escapeHtml(paragraph)}</p>`)
-    .join("");
+  const paragraph = (value: string) => `<p style="margin:0 0 16px">${escapeHtml(value)}</p>`;
+  const link =
+    input.link === undefined
+      ? ""
+      : `<p style="margin:0 0 16px"><a href="${escapeHtml(input.link)}">${escapeHtml(input.link)}</a></p>`;
+  const postscript = input.postscript ?? [];
+  const body = `${input.paragraphs.map(paragraph).join("")}${link}${postscript.map(paragraph).join("")}`;
+  const text = [
+    ...input.paragraphs,
+    ...(input.link === undefined ? [] : [input.link]),
+    ...postscript,
+  ];
   return Object.freeze({
     html: `<!doctype html><html><body style="margin:0;padding:24px;font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#18181b">${body}</body></html>`,
     subject: input.subject,
-    text: `${input.paragraphs.join("\n\n")}\n`,
+    text: `${text.join("\n\n")}\n`,
   });
 }
 

@@ -87,7 +87,7 @@ export function tourSteps(
             id: "users",
             title: item.label,
             paragraphs: [
-              "Create accounts, change roles, and enable or disable users through confirmation dialogs. Admins manage and publish, editors work on drafts and media, and viewers inspect without making changes. The final active administrator is protected.",
+              "Invite people by email with a role; each invitee chooses their own password. Change roles, send password resets, and disable or enable users through confirmation dialogs. Admins manage and publish, editors work on drafts and media, and viewers inspect without making changes. The final active administrator is protected.",
             ],
           });
           break;

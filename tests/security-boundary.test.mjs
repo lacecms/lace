@@ -15,6 +15,7 @@ import {
   parseNodeRuntimeSettings,
 } from "../packages/platform-node/dist/index.js";
 import { createCloudflareWorker } from "../packages/platform-cloudflare/dist/index.js";
+import { createUserByInvitation } from "../packages/test-utils/dist/index.js";
 import { openLocalCloudflare } from "../packages/platform-cloudflare/src/d1-test-harness.mjs";
 
 const cleanups = [];
@@ -165,8 +166,10 @@ for (const kind of ["node", "cloudflare"]) {
       password,
       token: setup.token,
     });
-    const second = await fixture.runtime.security.createUser({
+    const second = await createUserByInvitation(fixture.runtime.security, {
       email: "second@lace.test",
+      invitedBy: first.user.id,
+      now: Date.now(),
       password,
       role: "admin",
     });
@@ -225,6 +228,164 @@ for (const kind of ["node", "cloudflare"]) {
 }
 
 for (const kind of ["node", "cloudflare"]) {
+  test(`${kind}: invitation, reset and session flows keep their limits and boundaries`, async () => {
+    const f = await open(kind);
+    const base = kind === "node" ? 20 : 40;
+    const peer = (offset) => `198.51.100.${base + offset}`;
+    const invoke = (path, { cookie, json, method, client = peer(0) } = {}) =>
+      f.call(
+        new Request(origin + path, {
+          method: method ?? (json === undefined ? "GET" : "POST"),
+          headers: {
+            origin,
+            ...(cookie ? { cookie } : {}),
+            ...(json === undefined ? {} : { "content-type": "application/json" }),
+          },
+          ...(json === undefined ? {} : { body: JSON.stringify(json) }),
+        }),
+        client,
+      );
+    const signIn = async (email, secret, client) => {
+      const response = await invoke("/api/auth/sign-in/email", {
+        client,
+        json: { email, password: secret },
+      });
+      expect(response.status).toBe(200);
+      return response.headers.getSetCookie()[0].split(";")[0];
+    };
+    const setup = await f.runtime.security.createSetupToken();
+    const { user: admin } = await f.runtime.security.bootstrap({
+      email: "flow-admin@lace.test",
+      password,
+      token: setup.token,
+    });
+    const adminCookie = await signIn(admin.email, password, peer(1));
+
+    const invited = await invoke("/api/v1/admin/invitations", {
+      cookie: adminCookie,
+      json: { email: "Invitee@lace.test", role: "editor" },
+    });
+    expect(invited.status).toBe(201);
+    const issued = await invited.json();
+    expect(issued.delivery).toEqual({ reason: "not_configured", status: "failed" });
+    const token = issued.link.split("#token=")[1];
+    expect(issued.link).toBe(`${origin}/admin/accept-invite#token=${token}`);
+    expect(JSON.stringify(await f.query("select * from invitations"))).not.toContain(token);
+    const listed = await (
+      await invoke("/api/v1/admin/invitations", { cookie: adminCookie })
+    ).json();
+    expect(JSON.stringify(listed)).not.toContain(token);
+    expect(
+      (await invoke("/api/v1/invitations/accept", { client: peer(2), json: { password, token } }))
+        .status,
+    ).toBe(201);
+    const reused = await invoke("/api/v1/invitations/accept", {
+      client: peer(2),
+      json: { password, token },
+    });
+    expect(reused.status).toBe(410);
+    expect((await reused.json()).error.code).toBe("INVITATION_INVALID");
+
+    const first = await signIn("invitee@lace.test", password, peer(3));
+    const second = await signIn("invitee@lace.test", password, peer(3));
+    const sessions = await (await invoke("/api/v1/account/sessions", { cookie: first })).json();
+    expect(sessions.items).toHaveLength(2);
+    expect(sessions.items.filter((item) => item.current)).toHaveLength(1);
+    expect(JSON.stringify(sessions)).not.toMatch(/198\.51\.100|token/iu);
+    const changed = await invoke("/api/v1/account/password", {
+      cookie: first,
+      json: {
+        currentPassword: password,
+        newPassword: `${password}-changed`,
+        signOutOtherSessions: true,
+      },
+    });
+    expect(await changed.json()).toEqual({ revoked: 1 });
+    expect((await invoke("/api/v1/admin/session", { cookie: second })).status).toBe(403);
+    expect((await invoke("/api/v1/admin/session", { cookie: first })).status).toBe(200);
+
+    for (let index = 0; index < 3; index += 1)
+      expect(
+        (
+          await invoke("/api/v1/password-reset/request", {
+            client: peer(4),
+            json: { email: "INVITEE@lace.test" },
+          })
+        ).status,
+      ).toBe(202);
+    const limited = await invoke("/api/v1/password-reset/request", {
+      client: peer(5),
+      json: { email: "invitee@lace.test" },
+    });
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(
+      (
+        await invoke("/api/v1/password-reset/request", {
+          client: peer(5),
+          json: { email: "nobody@lace.test" },
+        })
+      ).status,
+    ).toBe(202);
+    const persisted = JSON.stringify(await f.rows());
+    expect(persisted).not.toContain("invitee@lace.test");
+    expect(persisted).not.toContain("198.51.100.");
+
+    const users = await (await invoke("/api/v1/admin/users", { cookie: adminCookie })).json();
+    const invitee = users.items.find((item) => item.email === "invitee@lace.test");
+    expect(invitee.role).toBe("editor");
+    const reset = await (
+      await invoke(`/api/v1/admin/users/${invitee.id}/password-reset`, {
+        cookie: adminCookie,
+        json: {},
+      })
+    ).json();
+    expect(reset.link).toMatch(/\/admin\/reset-password#token=/u);
+    const resetToken = reset.link.split("#token=")[1];
+    expect(
+      (
+        await invoke("/api/v1/password-reset/confirm", {
+          client: peer(6),
+          json: { password: `${password}-reset`, token: resetToken },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await invoke("/api/v1/admin/session", { cookie: first })).status).toBe(403);
+    await signIn("invitee@lace.test", `${password}-reset`, peer(7));
+
+    // Two invite-limited operations so far; the per-administrator limit is 20 per hour.
+    for (let index = 0; index < 18; index += 1)
+      expect(
+        (
+          await invoke("/api/v1/admin/invitations", {
+            cookie: adminCookie,
+            json: { email: `bulk-${index}@lace.test`, role: "viewer" },
+          })
+        ).status,
+      ).toBe(201);
+    const exhausted = await invoke("/api/v1/admin/invitations", {
+      cookie: adminCookie,
+      json: { email: "bulk-last@lace.test", role: "viewer" },
+    });
+    expect(exhausted.status).toBe(429);
+    expect((await f.runtime.security.listInvitations()).length).toBe(18);
+
+    const guesses = [];
+    for (let index = 0; index < 11; index += 1)
+      guesses.push(
+        (
+          await invoke("/api/v1/invitations/inspect", {
+            client: peer(8),
+            json: { token: "A".repeat(43) },
+          })
+        ).status,
+      );
+    expect(guesses.slice(0, 10).every((status) => status === 410)).toBe(true);
+    expect(guesses[10]).toBe(429);
+  }, 60000);
+}
+
+for (const kind of ["node", "cloudflare"]) {
   test(`${kind}: foreign-origin cookie mutation is denied without changing users`, async () => {
     const fixture = await open(kind);
     const setup = await fixture.runtime.security.createSetupToken();
@@ -246,25 +407,28 @@ for (const kind of ["node", "cloudflare"]) {
     const cookie = login.headers.getSetCookie()[0].split(";")[0];
     const before = await fixture.runtime.security.listUsers();
     const response = await fixture.call(
-      new Request(`${origin}/api/v1/admin/users`, {
+      new Request(`${origin}/api/v1/admin/invitations`, {
         method: "POST",
         headers: {
           origin: "https://foreign.lace.test",
           cookie,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ email: "forbidden@lace.test", password, role: "admin" }),
+        body: JSON.stringify({ email: "forbidden@lace.test", role: "admin" }),
       }),
       peer,
     );
     expect(response.status).toBe(403);
     expect(await fixture.runtime.security.listUsers()).toEqual(before);
+    expect(await fixture.runtime.security.listInvitations()).toEqual([]);
   }, 30000);
 }
 
 const protectedTables = [
   "user",
   "account",
+  "invitations",
+  "password_reset_tokens",
   "api_tokens",
   "setup_tokens",
   "installation_state",
@@ -313,13 +477,17 @@ for (const kind of ["node", "cloudflare"]) {
       password,
       token: setup.token,
     });
-    const editor = await f.runtime.security.createUser({
+    const editor = await createUserByInvitation(f.runtime.security, {
       email: "matrix-editor@lace.test",
+      invitedBy: admin.id,
+      now: Date.now(),
       password,
       role: "editor",
     });
-    const viewer = await f.runtime.security.createUser({
+    const viewer = await createUserByInvitation(f.runtime.security, {
       email: "matrix-viewer@lace.test",
+      invitedBy: admin.id,
+      now: Date.now(),
       password,
       role: "viewer",
     });
@@ -340,7 +508,7 @@ for (const kind of ["node", "cloudflare"]) {
       expect((await invoke(path, options)).status).toBe(status);
       expect(await protectedState(f)).toEqual(before);
     };
-    const create = { email: "denied@lace.test", password, role: "admin" };
+    const create = { email: "denied@lace.test", role: "admin" };
     for (const requestOrigin of [
       "https://foreign.lace.test",
       "null",
@@ -349,7 +517,7 @@ for (const kind of ["node", "cloudflare"]) {
       "malformed",
       origin + ",https://foreign.lace.test",
     ]) {
-      await deny("/api/v1/admin/users", {
+      await deny("/api/v1/admin/invitations", {
         cookie: cookies.admin,
         json: create,
         headers: { origin: requestOrigin },
@@ -357,7 +525,7 @@ for (const kind of ["node", "cloudflare"]) {
     }
     const before = await protectedState(f);
     const crossSite = await f.call(
-      new Request(origin + "/api/v1/admin/users", {
+      new Request(origin + "/api/v1/admin/invitations", {
         method: "POST",
         headers: {
           cookie: cookies.admin,
@@ -371,7 +539,7 @@ for (const kind of ["node", "cloudflare"]) {
     expect(crossSite.status).toBe(403);
     expect(await protectedState(f)).toEqual(before);
     for (const cookie of [undefined, "invalid=session", cookies.editor, cookies.viewer])
-      await deny("/api/v1/admin/users", { cookie, json: create });
+      await deny("/api/v1/admin/invitations", { cookie, json: create });
     for (const role of ["editor", "viewer"]) {
       await deny("/api/v1/admin/api-tokens", { cookie: cookies[role], json: { name: "denied" } });
       await deny("/api/v1/admin/builds", { cookie: cookies[role], json: {} });
@@ -416,7 +584,7 @@ for (const kind of ["node", "cloudflare"]) {
       name: "matrix-build",
       now: Date.now(),
     });
-    await deny("/api/v1/admin/users", {
+    await deny("/api/v1/admin/invitations", {
       json: create,
       headers: { authorization: `Bearer ${issued.token}` },
     });
@@ -430,7 +598,24 @@ for (const kind of ["node", "cloudflare"]) {
     await deny(
       "/api/auth/sign-up/email",
       { json: { name: "Public", email: "public@lace.test", password } },
-      400,
+      404,
+    );
+    // Provider account routes are not exposed, so they cannot bypass Lace rules.
+    for (const path of ["/api/auth/change-password", "/api/auth/update-user"])
+      await deny(
+        path,
+        {
+          cookie: cookies.viewer,
+          json: { currentPassword: password, name: "Mallory", newPassword: `${password}-x` },
+        },
+        404,
+      );
+    await deny("/api/auth/list-sessions", { cookie: cookies.viewer }, 404);
+    // The password-based creation route is gone.
+    await deny(
+      "/api/v1/admin/users",
+      { cookie: cookies.admin, json: { email: "direct@lace.test", password, role: "viewer" } },
+      404,
     );
     expect(await f.query("select * from session order by rowid")).toEqual(sessions);
     await deny("/api/auth/sign-out", {
@@ -440,11 +625,12 @@ for (const kind of ["node", "cloudflare"]) {
     });
     expect(await f.query("select * from session order by rowid")).toEqual(sessions);
     await f.runtime.security.disableUser({ userId: editor.id });
+    expect(await f.query(`select id from session where user_id = '${editor.id}'`)).toEqual([]);
     await deny("/api/v1/admin/content-models", { cookie: cookies.editor });
     await f.sql(`update session set expires_at = 1 where user_id = '${viewer.id}'`);
     await deny("/api/v1/admin/content-models", { cookie: cookies.viewer });
     await f.sql(`delete from session where user_id = '${admin.id}'`);
-    await deny("/api/v1/admin/users", { cookie: cookies.admin, json: create });
+    await deny("/api/v1/admin/invitations", { cookie: cookies.admin, json: create });
     // Origin-less non-browser requests retain their session/role authorization.
     const login = await f.call(
       new Request(origin + "/api/auth/sign-in/email", {
@@ -457,10 +643,10 @@ for (const kind of ["node", "cloudflare"]) {
     expect(login.status).toBe(200);
     const cookie = login.headers.getSetCookie()[0].split(";")[0];
     const operator = await f.call(
-      new Request(origin + "/api/v1/admin/users", {
+      new Request(origin + "/api/v1/admin/invitations", {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({ email: "operator@lace.test", password, role: "viewer" }),
+        body: JSON.stringify({ email: "operator@lace.test", role: "viewer" }),
       }),
       peer,
     );
@@ -498,10 +684,10 @@ for (const kind of ["node", "cloudflare"]) {
       const cookie = login.headers.getSetCookie()[0].split(";")[0];
       const before = await protectedState(f);
       const response = await f.call(
-        new Request(base + "/api/v1/admin/users", {
+        new Request(base + "/api/v1/admin/invitations", {
           method: "POST",
           headers: { origin: "http://localhost:3456", cookie, "content-type": "application/json" },
-          body: JSON.stringify({ email: "alias-created@lace.test", password, role: "viewer" }),
+          body: JSON.stringify({ email: "alias-created@lace.test", role: "viewer" }),
         }),
         peer,
       );

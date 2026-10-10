@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { LayoutGrid } from "lucide-react";
 import { useEntryOverview } from "../../../entities/content/index.js";
 import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
@@ -24,6 +24,7 @@ export function SidebarNav({
   readonly signingOut: boolean;
 }) {
   const session = useSession();
+  const navigate = useNavigate();
   const client = useAdminClient();
   const models = useQuery({ queryFn: client.listModels, queryKey: adminQueryKeys.models });
   useSessionRecovery(models.error);
@@ -81,6 +82,10 @@ export function SidebarNav({
         ))}
       </nav>
       <UserMenu
+        onAccount={() => {
+          onNavigate?.();
+          void navigate({ to: "/account" });
+        }}
         onIntroduction={onIntroduction}
         displayName={session.displayName}
         onSignOut={onSignOut}
