@@ -15,13 +15,18 @@ import type {
   ImageInspector,
   RateLimitDecision,
   SiteBuildTrigger,
+  EmailSender,
 } from "@lacecms/application";
+import { createCloudflareEmailSender, type SendEmailBinding } from "./email.js";
 import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
 import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
 import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
+  createEmailSender,
   createLaceApp,
+  sensitiveRequestLimit,
+  type EmailSettings,
   type ReadinessProbe,
   type RequestRateLimiter,
   type ServerLogger,
@@ -82,6 +87,8 @@ export interface CreateCloudflareWorkerInput {
   readonly buildTrigger?: (settings: CloudflareSettings) => SiteBuildTrigger;
   readonly clock?: Clock;
   readonly config: NormalizedConfig<readonly ContentModelDefinition[]>;
+  /** Overrides the sender composed from the Worker's email settings. */
+  readonly email?: (settings: CloudflareSettings) => EmailSender;
   readonly imageInspector?: ImageInspector;
   readonly logger?: ServerLogger;
   readonly operationalLogger?: WorkerOperationalLogger;
@@ -150,25 +157,12 @@ class CloudflareRequestRateLimiter implements RequestRateLimiter {
     readonly request: Request;
     readonly actor?: { readonly id: string };
   }): Promise<boolean | RateLimitDecision> {
-    const pathname = new URL(input.request.url).pathname;
-    const method = input.request.method;
-    const operation =
-      pathname.startsWith("/api/auth/") && method !== "GET"
-        ? "auth"
-        : pathname === "/api/v1/setup/admin"
-          ? "setup"
-          : pathname.startsWith("/api/v1/admin/api-tokens") && method !== "GET"
-            ? "token"
-            : pathname === "/api/v1/admin/media" && method === "POST"
-              ? "upload"
-              : undefined;
-    if (operation === undefined) return true;
-    if ((operation === "upload" || operation === "token") && input.actor === undefined) return true;
+    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
+    if (limit === undefined) return true;
+    if (limit.scope === "actor" && input.actor === undefined) return true;
     const subject =
-      operation === "upload" || operation === "token"
-        ? `actor:${input.actor!.id}`
-        : this.clients.get(input.request);
-    return this.limiter.check({ now: this.clock.now(), operation, subject });
+      limit.scope === "actor" ? `actor:${input.actor!.id}` : this.clients.get(input.request);
+    return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
   }
 }
 
@@ -179,6 +173,24 @@ const defaultLogger: ServerLogger = Object.freeze({
 const defaultOperationalLogger: WorkerOperationalLogger = Object.freeze({
   error: (entry: Record<string, string>) => console.error(JSON.stringify(entry)),
 });
+
+/** Composes the configured provider; the binding is the only Worker-specific one. */
+export function createWorkerEmailSender(
+  settings: EmailSettings = { provider: "none" },
+  binding?: SendEmailBinding,
+): EmailSender {
+  return createEmailSender(settings, {
+    runtimeSender: (configured) => {
+      if (configured.provider !== "cloudflare" || binding === undefined)
+        throw new Error(`Email provider ${configured.provider} is unavailable on the Worker.`);
+      return createCloudflareEmailSender({
+        binding,
+        from: configured.from,
+        timeoutMs: configured.timeoutMs,
+      });
+    },
+  });
+}
 
 function unavailableResponse(): Response {
   return Response.json(
@@ -225,11 +237,8 @@ export function createCloudflareRuntime(
   );
   const clients = new TrustedClientAddresses();
   const security = new D1SecurityService(settings.database, () => clock.now());
-  const rateLimiter = new CloudflareRequestRateLimiter(
-    new D1FixedWindowRateLimiter(settings.database, settings.authSecret),
-    clock,
-    clients,
-  );
+  const sensitiveLimiter = new D1FixedWindowRateLimiter(settings.database, settings.authSecret);
+  const rateLimiter = new CloudflareRequestRateLimiter(sensitiveLimiter, clock, clients);
   const cache =
     settings.cache === undefined
       ? new NoopCloudflareCache()
@@ -303,6 +312,12 @@ export function createCloudflareRuntime(
     config: input.config,
     buildSite: settings.buildSite ?? null,
     content,
+    // Requests use their own `waitUntil`; this fallback serves direct app calls.
+    defer: (task) => {
+      void task.catch(() => logger.error({ component: "deferred", reason: "task_failed" }));
+    },
+    email:
+      input.email?.(settings) ?? createWorkerEmailSender(settings.email, settings.emailBinding),
     environment: { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultLogger,
     maxBodyBytes: 1_048_576,
@@ -313,6 +328,7 @@ export function createCloudflareRuntime(
     readiness: new D1Readiness(settings.database),
     requestIds: { next: () => ulid() },
     security,
+    sensitiveLimiter,
   });
   return Object.freeze({
     clients,
@@ -392,7 +408,12 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       // Only the Worker ingress accepts Cloudflare's edge-supplied header.
       // Direct runtime.app calls have no trusted client identity.
       runtime.clients.set(request, request.headers.get("cf-connecting-ip"));
-      const response = await runtime.app.fetch(request);
+      // Hono reads only `waitUntil`; the account flows defer email delivery through it.
+      const response = await runtime.app.fetch(request, env, {
+        passThroughOnException: () => undefined,
+        props: undefined,
+        waitUntil: (promise: Promise<unknown>) => ctx.waitUntil(promise),
+      });
       if (producesDispatchWork(request, response.status)) ctx.waitUntil(postCommit(runtime));
       return response;
     },

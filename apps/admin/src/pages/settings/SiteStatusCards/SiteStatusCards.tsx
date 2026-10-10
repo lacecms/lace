@@ -7,6 +7,7 @@ import { Button } from "../../../shared/ui/Button/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { cardClass } from "../../../shared/ui/layout/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
+import { EmailDeliveryCard } from "../EmailDeliveryCard/index.js";
 
 function StatusCard({
   children,
@@ -41,17 +42,20 @@ function StatusCard({
   );
 }
 
-/** Read-only site health: API readiness, configured models, and active build tokens. */
+/** Site health: release, API readiness, configured models, build tokens and email delivery. */
 export function SiteStatusCards({
   activeTokens,
   error,
   onRefresh,
+  recipient,
   refreshing,
   status,
 }: {
   readonly activeTokens: number | undefined;
   readonly error: unknown;
   readonly onRefresh: () => void;
+  /** Where Send test email delivers: the signed-in administrator's address. */
+  readonly recipient: string;
   readonly refreshing: boolean;
   readonly status: AdminSettingsStatusDto | undefined;
 }) {
@@ -122,6 +126,11 @@ export function SiteStatusCards({
         >
           {activeTokens}
         </StatusCard>
+        <EmailDeliveryCard
+          email={status?.email}
+          loading={status === undefined && error === null}
+          recipient={recipient}
+        />
       </div>
     </section>
   );

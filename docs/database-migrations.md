@@ -48,6 +48,17 @@ generated project's migration command), never by running SQL files by hand.
 Stop dispatch and back up the database first; downgrading requires restoring
 that backup because older engines reject the new statuses.
 
+### Account-token migration
+
+Migration `0004_account_tokens` adds the `invitations` and
+`password_reset_tokens` tables used by invitations and password recovery. It is
+additive: existing users, sessions, and content are unchanged, and a partial
+unique index allows one active (unaccepted, unrevoked) invitation per
+normalized email. Both tables store only SHA-256 token digests. Run it before
+starting an engine with invitations, and deploy the API and admin together.
+Older engines check only their own migrations, so they still start against a
+migrated database.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

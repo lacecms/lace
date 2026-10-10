@@ -7,16 +7,16 @@ import {
   models,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
 } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError, type EntryListQuery } from "../../../shared/api/index.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const editor = createStaticSessionSource({ id: "editor-1", role: "editor" });
-const viewer = createStaticSessionSource({ id: "viewer-1", role: "viewer" });
+const editor = staticSessionSource({ id: "editor-1", role: "editor" });
+const viewer = staticSessionSource({ id: "viewer-1", role: "viewer" });
 
 const postsModel = {
   blocks: [],

@@ -17,26 +17,19 @@ export async function consumer34bSecurity({ base, cookie, png }) {
   console.info("34C exact consumer: running CMS release and administrator boundary passed");
   const users = await (await invoke("/api/v1/admin/users")).json();
   const media = await (await invoke("/api/v1/admin/media")).json();
+  const invitation = JSON.stringify({ email: "denied-34b@lace.test", role: "admin" });
   for (const origin of ["https://foreign-34b.test", "null"]) {
-    const denied = await invoke("/api/v1/admin/users", {
+    const denied = await invoke("/api/v1/admin/invitations", {
       method: "POST",
       headers: { origin, "content-type": "application/json" },
-      body: JSON.stringify({
-        email: "denied-34b@lace.test",
-        password: "Unused-local-regression-password-34B!",
-        role: "admin",
-      }),
+      body: invitation,
     });
     assert.equal(denied.status, 403, "exact consumer foreign-origin mutation was accepted");
   }
-  const crossSite = await invoke("/api/v1/admin/users", {
+  const crossSite = await invoke("/api/v1/admin/invitations", {
     method: "POST",
     headers: { "sec-fetch-site": "cross-site", "content-type": "application/json" },
-    body: JSON.stringify({
-      email: "denied-34b@lace.test",
-      password: "Unused-local-regression-password-34B!",
-      role: "admin",
-    }),
+    body: invitation,
   });
   assert.equal(
     crossSite.status,

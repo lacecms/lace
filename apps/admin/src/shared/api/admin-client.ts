@@ -1,10 +1,28 @@
 import {
+  accountSessionListSchema,
+  adminPasswordResetResultSchema,
+  adminSessionSchema,
+  invitationAcceptResultSchema,
+  invitationInspectResultSchema,
+  invitationIssueResultSchema,
+  invitationListSchema,
+  sessionRevocationResultSchema,
+  type AccountSessionListDto,
+  type AdminPasswordResetResultDto,
+  type AdminSessionDto,
+  type InvitationAcceptResultDto,
+  type InvitationInspectResultDto,
+  type InvitationIssueResultDto,
+  type InvitationListDto,
+  type SessionRevocationResultDto,
   buildSiteSelectionSchema,
   type BuildSiteSelectionDto,
   setupStateSchema,
   setupAdminRequestSchema,
   type SetupStateDto,
   adminSettingsStatusSchema,
+  emailTestResultSchema,
+  type EmailTestResultDto,
   buildTokenCreatedSchema,
   buildTokenListSchema,
   buildTokenSchema,
@@ -54,6 +72,9 @@ export const adminQueryKeys = Object.freeze({
   settingsStatus: ["admin", "settings", "status"] as const,
   tokens: ["admin", "tokens"] as const,
   users: ["admin", "users"] as const,
+  invitations: ["admin", "invitations"] as const,
+  /** The signed-in user's own sessions on the account screen. */
+  accountSessions: ["admin", "account", "sessions"] as const,
   entry: (entryId: string) => ["admin", "entry", entryId] as const,
   /** One searched, filtered, and sorted collection list; pages are held by the infinite query. */
   entryList: (modelKey: string, query: Pick<EntryListQuery, "q" | "sort" | "status">) =>
@@ -114,17 +135,48 @@ export interface AdminClient {
   getBuild(buildId: string): Promise<SiteBuildRecordDto>;
   requestBuild(): Promise<BuildQueueReceiptDto>;
   retryBuild(buildId: string): Promise<BuildQueueReceiptDto>;
-  createUser(input: {
-    email: string;
-    password: string;
-    role: "admin" | "editor" | "viewer";
-  }): Promise<ManagedUserDto>;
   updateUser(
     userId: string,
     input: { disabled?: boolean; role?: "admin" | "editor" | "viewer" },
   ): Promise<ManagedUserDto>;
   listUsers(): Promise<ManagedUserListDto>;
+  /** Ends every session of another account and reports how many ended. */
+  signOutUser(userId: string): Promise<SessionRevocationResultDto>;
+  /** Issues a reset for another account; the link is present only when the email was not sent. */
+  sendPasswordReset(userId: string): Promise<AdminPasswordResetResultDto>;
+  listInvitations(): Promise<InvitationListDto>;
+  /** Invites an address; the link is present only when the email was not sent. */
+  createInvitation(input: {
+    email: string;
+    role: "admin" | "editor" | "viewer";
+  }): Promise<InvitationIssueResultDto>;
+  resendInvitation(invitationId: string): Promise<InvitationIssueResultDto>;
+  revokeInvitation(invitationId: string): Promise<void>;
+  /** Public: reads the invited email, role and expiry for a fragment token. */
+  inspectInvitation(token: string): Promise<InvitationInspectResultDto>;
+  /** Public: creates the invited account; it does not sign in. */
+  acceptInvitation(input: {
+    displayName?: string;
+    password: string;
+    token: string;
+  }): Promise<InvitationAcceptResultDto>;
+  /** Public: always resolves the same way whether or not the address has an account. */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Public: replaces the password for a fragment token and ends every session. */
+  confirmPasswordReset(input: { password: string; token: string }): Promise<void>;
+  /** Renames the signed-in user and returns the updated session summary. */
+  updateProfile(input: { displayName: string }): Promise<AdminSessionDto>;
+  changePassword(input: {
+    currentPassword: string;
+    newPassword: string;
+    signOutOtherSessions: boolean;
+  }): Promise<SessionRevocationResultDto>;
+  listSessions(): Promise<AccountSessionListDto>;
+  deleteSession(sessionId: string): Promise<void>;
+  revokeOtherSessions(): Promise<SessionRevocationResultDto>;
   loadSettingsStatus(): Promise<AdminSettingsStatusDto>;
+  /** Sends the fixed test message to the signed-in administrator's own address. */
+  sendTestEmail(): Promise<EmailTestResultDto>;
   listTokens(): Promise<BuildTokenListDto>;
   createToken(name: string): Promise<BuildTokenCreatedDto>;
   revokeToken(tokenId: string): Promise<BuildTokenDto>;
@@ -258,6 +310,32 @@ async function request(fetcher: Fetcher, path: string, init: RequestInit = {}): 
   return body;
 }
 
+function postJson(fetcher: Fetcher, path: string, body: unknown): Promise<unknown> {
+  return request(fetcher, path, {
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+/**
+ * Drops validation issues from failures of requests that carry a secret
+ * (an account token or a password), so no echoed input can reach the screen.
+ */
+async function withoutIssues(pending: Promise<unknown>): Promise<unknown> {
+  try {
+    return await pending;
+  } catch (error) {
+    if (!(error instanceof AdminClientError) || error.issues === undefined) throw error;
+    throw new AdminClientError({
+      ...(error.code === undefined ? {} : { code: error.code }),
+      message: error.message,
+      ...(error.requestId === undefined ? {} : { requestId: error.requestId }),
+      ...(error.status === undefined ? {} : { status: error.status }),
+    });
+  }
+}
+
 /** Uploads through `fetch`, which cannot report intermediate upload progress. */
 export function fetchUploader(fetcher: Fetcher): MediaUploader {
   return async (path, body) => {
@@ -377,15 +455,6 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
           method: "POST",
         }),
       ),
-    createUser: async (input: Parameters<AdminClient["createUser"]>[0]) =>
-      parse(
-        managedUserSchema,
-        await request(fetcher, "/api/v1/admin/users", {
-          body: JSON.stringify(input),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        }),
-      ),
     updateUser: async (userId: string, input: Parameters<AdminClient["updateUser"]>[1]) =>
       parse(
         managedUserSchema,
@@ -397,8 +466,98 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       ),
     listUsers: async () =>
       parse(managedUserListSchema, await request(fetcher, "/api/v1/admin/users")),
+    signOutUser: async (userId: string) =>
+      parse(
+        sessionRevocationResultSchema,
+        await postJson(
+          fetcher,
+          `/api/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`,
+          {},
+        ),
+      ),
+    sendPasswordReset: async (userId: string) =>
+      parse(
+        adminPasswordResetResultSchema,
+        await postJson(
+          fetcher,
+          `/api/v1/admin/users/${encodeURIComponent(userId)}/password-reset`,
+          {},
+        ),
+      ),
+    listInvitations: async () =>
+      parse(invitationListSchema, await request(fetcher, "/api/v1/admin/invitations")),
+    createInvitation: async (input: Parameters<AdminClient["createInvitation"]>[0]) =>
+      parse(
+        invitationIssueResultSchema,
+        await postJson(fetcher, "/api/v1/admin/invitations", input),
+      ),
+    resendInvitation: async (invitationId: string) =>
+      parse(
+        invitationIssueResultSchema,
+        await postJson(
+          fetcher,
+          `/api/v1/admin/invitations/${encodeURIComponent(invitationId)}/resend`,
+          {},
+        ),
+      ),
+    revokeInvitation: async (invitationId: string) => {
+      await request(fetcher, `/api/v1/admin/invitations/${encodeURIComponent(invitationId)}`, {
+        method: "DELETE",
+      });
+    },
+    inspectInvitation: async (token: string) =>
+      parse(
+        invitationInspectResultSchema,
+        await withoutIssues(postJson(fetcher, "/api/v1/invitations/inspect", { token })),
+      ),
+    acceptInvitation: async (input: Parameters<AdminClient["acceptInvitation"]>[0]) =>
+      parse(
+        invitationAcceptResultSchema,
+        await withoutIssues(postJson(fetcher, "/api/v1/invitations/accept", input)),
+      ),
+    requestPasswordReset: async (email: string) => {
+      await postJson(fetcher, "/api/v1/password-reset/request", { email });
+    },
+    confirmPasswordReset: async (input: Parameters<AdminClient["confirmPasswordReset"]>[0]) => {
+      await withoutIssues(postJson(fetcher, "/api/v1/password-reset/confirm", input));
+    },
+    updateProfile: async (input: Parameters<AdminClient["updateProfile"]>[0]) =>
+      parse(
+        adminSessionSchema,
+        await request(fetcher, "/api/v1/account", {
+          body: JSON.stringify(input),
+          headers: { "content-type": "application/json" },
+          method: "PATCH",
+        }),
+      ),
+    changePassword: async (input: Parameters<AdminClient["changePassword"]>[0]) =>
+      parse(
+        sessionRevocationResultSchema,
+        await withoutIssues(postJson(fetcher, "/api/v1/account/password", input)),
+      ),
+    listSessions: async () =>
+      parse(accountSessionListSchema, await request(fetcher, "/api/v1/account/sessions")),
+    deleteSession: async (sessionId: string) => {
+      await request(fetcher, `/api/v1/account/sessions/${encodeURIComponent(sessionId)}`, {
+        method: "DELETE",
+      });
+    },
+    revokeOtherSessions: async () =>
+      parse(
+        sessionRevocationResultSchema,
+        await postJson(fetcher, "/api/v1/account/sessions/revoke-others", {}),
+      ),
     loadSettingsStatus: async () =>
       parse(adminSettingsStatusSchema, await request(fetcher, "/api/v1/admin/settings/status")),
+    sendTestEmail: async () =>
+      parse(
+        emailTestResultSchema,
+        await request(fetcher, "/api/v1/admin/settings/email-test", {
+          body: "{}",
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }),
+      ),
     listTokens: async () =>
       parse(buildTokenListSchema, await request(fetcher, "/api/v1/admin/api-tokens")),
     createToken: async (name: string) =>

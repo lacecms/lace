@@ -451,11 +451,6 @@ export const setupAdminRequestSchema = v.strictObject({
   password: passwordSchema,
   token: v.pipe(v.string(), v.minLength(40), v.maxLength(128)),
 });
-export const userCreateRequestSchema = v.strictObject({
-  email: emailSchema,
-  password: passwordSchema,
-  role: roleSchema,
-});
 export const userUpdateRequestSchema = v.strictObject({
   disabled: v.optional(v.boolean()),
   role: v.optional(roleSchema),
@@ -467,13 +462,189 @@ export const managedUserSchema = v.strictObject({
   role: roleSchema,
 });
 export const managedUserListSchema = v.strictObject({ items: v.array(managedUserSchema) });
+export const permissionSchema = v.picklist([
+  "content:read",
+  "content:write",
+  "content:publish",
+  "media:write",
+  "users:manage",
+  "settings:manage",
+]);
+export type PermissionDto = v.InferOutput<typeof permissionSchema>;
+/** The signed-in user's identity and server-derived permissions; no credential material. */
+export const adminSessionSchema = v.strictObject({
+  permissions: v.pipe(
+    v.array(permissionSchema),
+    v.check((items) => new Set(items).size === items.length, "Permissions must be unique."),
+  ),
+  user: v.strictObject({
+    displayName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(320))),
+    email: emailSchema,
+    id: identifierSchema,
+    role: roleSchema,
+  }),
+});
+export type AdminSessionDto = v.InferOutput<typeof adminSessionSchema>;
+export const emailProviderSchema = v.picklist(["none", "log", "smtp", "resend", "cloudflare"]);
+export type EmailProviderDto = v.InferOutput<typeof emailProviderSchema>;
+const emailSenderSchema = v.pipe(v.string(), v.minLength(3), v.maxLength(400));
+export const emailDeliveryStatusSchema = v.union([
+  v.strictObject({ provider: v.literal("none") }),
+  v.strictObject({
+    from: emailSenderSchema,
+    provider: v.picklist(["log", "smtp", "resend", "cloudflare"]),
+  }),
+]);
+export type EmailDeliveryStatusDto = v.InferOutput<typeof emailDeliveryStatusSchema>;
+export const emailFailureReasonSchema = v.picklist([
+  "not_configured",
+  "invalid_message",
+  "rejected",
+  "rate_limited",
+  "unavailable",
+]);
+export type EmailFailureReasonDto = v.InferOutput<typeof emailFailureReasonSchema>;
+export const emailTestRequestSchema = v.strictObject({});
+export const emailTestResultSchema = v.union([
+  v.strictObject({ status: v.literal("sent") }),
+  v.strictObject({ reason: emailFailureReasonSchema, status: v.literal("failed") }),
+]);
+export type EmailTestResultDto = v.InferOutput<typeof emailTestResultSchema>;
 export const adminSettingsStatusSchema = v.strictObject({
   configuredModels: nonNegativeIntegerSchema,
+  email: emailDeliveryStatusSchema,
   engineVersion: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
   ready: v.boolean(),
 });
 export type AdminSettingsStatusDto = v.InferOutput<typeof adminSettingsStatusSchema>;
 export type ManagedUserDto = v.InferOutput<typeof managedUserSchema>;
+
+/** Invitation and reset tokens: 32 random bytes as unpadded base64url. */
+export const accountTokenSchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
+// oxlint-disable-next-line no-control-regex -- rejects control characters by design.
+const controlCharacterPattern = /[\u0000-\u001f\u007f-\u009f]/u;
+/** A display name of 1 to 120 characters after trimming, without control characters. */
+export const displayNameSchema = v.pipe(
+  v.string(),
+  v.maxLength(1_024),
+  v.check(
+    (value) => value.trim().length >= 1 && value.trim().length <= 120,
+    "Enter a name of 1 to 120 characters.",
+  ),
+  v.check((value) => !controlCharacterPattern.test(value), "Control characters are not allowed."),
+);
+const accountLinkSchema = v.pipe(
+  v.string(),
+  v.url(),
+  v.maxLength(2_048),
+  v.regex(/^https?:\/\/[^\x23\s]+\x23token=[A-Za-z0-9_-]{43}$/u),
+);
+/** The closed outcome of one transactional email. */
+export const emailDeliveryOutcomeSchema = v.union([
+  v.strictObject({ status: v.literal("sent") }),
+  v.strictObject({ reason: emailFailureReasonSchema, status: v.literal("failed") }),
+]);
+export type EmailDeliveryOutcomeDto = v.InferOutput<typeof emailDeliveryOutcomeSchema>;
+function linkOnlyWhenUndelivered<
+  Value extends { readonly delivery: EmailDeliveryOutcomeDto; readonly link?: string | undefined },
+>(value: Value): boolean {
+  return (value.delivery.status === "sent") === (value.link === undefined);
+}
+
+export const invitationCreateRequestSchema = v.strictObject({
+  email: emailSchema,
+  role: roleSchema,
+});
+export const invitationResendRequestSchema = v.strictObject({});
+export const invitationStateSchema = v.picklist(["pending", "expired"]);
+/** A listed invitation; never carries a token or link. */
+export const invitationSchema = v.strictObject({
+  createdAt: isoTimestampSchema,
+  email: emailSchema,
+  expiresAt: isoTimestampSchema,
+  id: identifierSchema,
+  invitedBy: v.pipe(v.string(), v.minLength(1), v.maxLength(320)),
+  role: roleSchema,
+  state: invitationStateSchema,
+});
+export const invitationListSchema = v.strictObject({ items: v.array(invitationSchema) });
+/** The accept link is present exactly when the invitation email was not sent. */
+export const invitationIssueResultSchema = v.pipe(
+  v.strictObject({
+    delivery: emailDeliveryOutcomeSchema,
+    invitation: invitationSchema,
+    link: v.optional(accountLinkSchema),
+  }),
+  v.check(linkOnlyWhenUndelivered, "A link is present exactly when delivery was not sent."),
+);
+export const invitationInspectRequestSchema = v.strictObject({ token: accountTokenSchema });
+export const invitationInspectResultSchema = v.strictObject({
+  email: emailSchema,
+  expiresAt: isoTimestampSchema,
+  role: roleSchema,
+});
+export const invitationAcceptRequestSchema = v.strictObject({
+  displayName: v.optional(displayNameSchema),
+  password: passwordSchema,
+  token: accountTokenSchema,
+});
+export const invitationAcceptResultSchema = v.strictObject({ email: emailSchema });
+export const passwordResetRequestSchema = v.strictObject({ email: emailSchema });
+export const passwordResetConfirmRequestSchema = v.strictObject({
+  password: passwordSchema,
+  token: accountTokenSchema,
+});
+export const adminPasswordResetRequestSchema = v.strictObject({});
+/** The reset link is present exactly when the reset email was not sent. */
+export const adminPasswordResetResultSchema = v.pipe(
+  v.strictObject({ delivery: emailDeliveryOutcomeSchema, link: v.optional(accountLinkSchema) }),
+  v.check(linkOnlyWhenUndelivered, "A link is present exactly when delivery was not sent."),
+);
+export const accountProfileUpdateRequestSchema = v.strictObject({
+  displayName: displayNameSchema,
+});
+export const accountPasswordChangeRequestSchema = v.strictObject({
+  currentPassword: v.pipe(v.string(), v.minLength(1), v.maxLength(1_024)),
+  newPassword: passwordSchema,
+  signOutOtherSessions: v.boolean(),
+});
+export const sessionBrowserSchema = v.picklist([
+  "Chrome",
+  "Edge",
+  "Firefox",
+  "Opera",
+  "Safari",
+  "Unknown",
+]);
+export const sessionOsSchema = v.picklist([
+  "Android",
+  "iOS",
+  "Linux",
+  "macOS",
+  "Windows",
+  "Unknown",
+]);
+/** One of the signed-in user's sessions; never a session token or IP address. */
+export const accountSessionSchema = v.strictObject({
+  browser: sessionBrowserSchema,
+  createdAt: isoTimestampSchema,
+  current: v.boolean(),
+  id: identifierSchema,
+  lastActiveAt: isoTimestampSchema,
+  os: sessionOsSchema,
+});
+export const accountSessionListSchema = v.strictObject({ items: v.array(accountSessionSchema) });
+export const sessionRevokeRequestSchema = v.strictObject({});
+export const sessionRevocationResultSchema = v.strictObject({ revoked: nonNegativeIntegerSchema });
+export type InvitationDto = v.InferOutput<typeof invitationSchema>;
+export type InvitationListDto = v.InferOutput<typeof invitationListSchema>;
+export type InvitationIssueResultDto = v.InferOutput<typeof invitationIssueResultSchema>;
+export type InvitationInspectResultDto = v.InferOutput<typeof invitationInspectResultSchema>;
+export type InvitationAcceptResultDto = v.InferOutput<typeof invitationAcceptResultSchema>;
+export type AdminPasswordResetResultDto = v.InferOutput<typeof adminPasswordResetResultSchema>;
+export type AccountSessionDto = v.InferOutput<typeof accountSessionSchema>;
+export type AccountSessionListDto = v.InferOutput<typeof accountSessionListSchema>;
+export type SessionRevocationResultDto = v.InferOutput<typeof sessionRevocationResultSchema>;
 export type ManagedUserListDto = v.InferOutput<typeof managedUserListSchema>;
 export const buildTokenCreateRequestSchema = v.strictObject({
   name: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
@@ -659,6 +830,7 @@ export const contractValidationIssueSchema = v.strictObject({
 
 export const errorCodeSchema = v.picklist([
   "AUTHORIZATION_DENIED",
+  "CONFLICT",
   "CONTENT_INVALID_STATE",
   "CONTENT_MODEL_CARDINALITY_CONFLICT",
   "CONTENT_PUBLISHED_IMMUTABLE",
@@ -667,9 +839,12 @@ export const errorCodeSchema = v.picklist([
   "LAST_ADMIN_PROTECTED",
   "MEDIA_IN_USE",
   "INTERNAL_ERROR",
+  "INVALID_CREDENTIALS",
+  "INVITATION_INVALID",
   "NOT_FOUND",
   "PAYLOAD_TOO_LARGE",
   "RATE_LIMITED",
+  "RESET_INVALID",
   "VALIDATION_FAILED",
 ]);
 
@@ -1027,27 +1202,41 @@ const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
 
 export interface ClassifiedError {
   readonly body: ErrorEnvelope;
-  readonly status: 403 | 404 | 409 | 413 | 422 | 429 | 500;
+  readonly status: 400 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
 }
 
 export type TransportErrorCode =
   | "AUTHORIZATION_DENIED"
+  | "CONFLICT"
+  | "INVALID_CREDENTIALS"
+  | "INVITATION_INVALID"
   | "NOT_FOUND"
   | "PAYLOAD_TOO_LARGE"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "RESET_INVALID";
 
-const transportErrorStatus: Readonly<Record<TransportErrorCode, 403 | 404 | 413 | 429>> = {
+const transportErrorStatus: Readonly<
+  Record<TransportErrorCode, 400 | 403 | 404 | 409 | 410 | 413 | 429>
+> = {
   AUTHORIZATION_DENIED: 403,
+  CONFLICT: 409,
+  INVALID_CREDENTIALS: 400,
+  INVITATION_INVALID: 410,
   NOT_FOUND: 404,
   PAYLOAD_TOO_LARGE: 413,
   RATE_LIMITED: 429,
+  RESET_INVALID: 410,
 };
 
 const transportErrorMessage: Readonly<Record<TransportErrorCode, string>> = {
   AUTHORIZATION_DENIED: "The actor is not permitted to perform this operation.",
+  CONFLICT: "The request conflicts with the current state.",
+  INVALID_CREDENTIALS: "The current password is incorrect.",
+  INVITATION_INVALID: "The invitation is invalid or has expired.",
   NOT_FOUND: "The requested resource was not found.",
   PAYLOAD_TOO_LARGE: "The request body is too large.",
   RATE_LIMITED: "Too many requests were received.",
+  RESET_INVALID: "The password reset link is invalid or has expired.",
 };
 
 /** Creates one of the stable sanitized envelopes for HTTP boundary failures. */

@@ -4,6 +4,9 @@
 LACE_ENVIRONMENT=development
 LACE_PUBLIC_BASE_URL=http://127.0.0.1:8787/
 LACE_AUTH_SECRET=
+# Local email is written to the cf:dev output (including account links) and never sent.
+LACE_EMAIL_PROVIDER=log
+LACE_EMAIL_FROM=Lace Dev <lace@localhost.test>
 # Optional HTTPS deploy hook used by local build dispatch tests:
 # LACE_DEPLOY_HOOK_URL=
 # Optional Pages deployment tracking against a local stub of the Cloudflare API:

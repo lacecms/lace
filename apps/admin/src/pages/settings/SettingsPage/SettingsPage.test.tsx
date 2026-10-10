@@ -1,8 +1,12 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { renderRoute, stubClient as client } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import {
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+  sessionFor,
+} from "../../../app/testing/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -29,12 +33,13 @@ test("settings shows status cards, issues a once-shown token, and keeps metadata
   });
   const router = renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
       createToken,
       listTokens: async () => ({ items }),
       loadSettingsStatus: async () => ({
         configuredModels: 2,
+        email: { provider: "none" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,
       }),
@@ -92,11 +97,16 @@ test("failed status and token reads offer Try again", async () => {
   let fail = true;
   const loadSettingsStatus = vi.fn(async () => {
     if (fail) throw new AdminClientError({ message: "Status unavailable.", status: 503 });
-    return { configuredModels: 1, engineVersion: "0.1.0-alpha.4", ready: false };
+    return {
+      configuredModels: 1,
+      email: { provider: "none" as const },
+      engineVersion: "0.1.0-alpha.4",
+      ready: false,
+    };
   });
   renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ loadSettingsStatus }),
   );
   const alert = await screen.findByRole("alert");
@@ -112,13 +122,14 @@ test("failed status and token reads offer Try again", async () => {
 test("viewers see access denied without settings or token requests", async () => {
   const loadSettingsStatus = vi.fn(async () => ({
     configuredModels: 0,
+    email: { provider: "none" as const },
     engineVersion: "0.1.0-alpha.4",
     ready: true,
   }));
   const listTokens = vi.fn(async () => ({ items: [] }));
   renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
     client({ listTokens, loadSettingsStatus }),
   );
   expect(await screen.findByRole("region", { name: "Access denied" })).toHaveTextContent(
@@ -133,9 +144,14 @@ test("refresh replaces the server-confirmed release", async () => {
   let engineVersion = "0.1.0-alpha.4";
   renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
-      loadSettingsStatus: async () => ({ configuredModels: 0, engineVersion, ready: true }),
+      loadSettingsStatus: async () => ({
+        configuredModels: 0,
+        email: { provider: "none" as const },
+        engineVersion,
+        ready: true,
+      }),
     }),
   );
   const card = await screen.findByRole("group", { name: "CMS version" });
@@ -148,7 +164,7 @@ test("refresh replaces the server-confirmed release", async () => {
 test("expired status session removes the protected version and returns to sign-in", async () => {
   let expired = false;
   const source = {
-    get: async () => (expired ? null : { id: "admin-1", role: "admin" as const }),
+    get: async () => (expired ? null : sessionFor({ id: "admin-1", role: "admin" })),
     invalidate() {},
   };
   renderRoute(
@@ -162,7 +178,12 @@ test("expired status session removes the protected version and returns to sign-i
             status: 403,
             message: "Session expired",
           });
-        return { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true };
+        return {
+          configuredModels: 0,
+          email: { provider: "none" as const },
+          engineVersion: "0.1.0-alpha.4",
+          ready: true,
+        };
       },
     }),
   );

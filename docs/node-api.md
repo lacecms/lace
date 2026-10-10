@@ -33,6 +33,51 @@ Startup errors identify invalid variable names, never their values. The runtime
 does not derive public URLs from `Host`, `Forwarded`, or `X-Forwarded-*`
 headers.
 
+### Email delivery
+
+Email is optional. Without `LACE_EMAIL_PROVIDER` the API starts with delivery
+reported as not configured, and Settings offers no test action.
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `LACE_EMAIL_PROVIDER` | no | `none` (default), `smtp`, `resend`, or `log`. `log` is refused when `NODE_ENV=production`; `cloudflare` is Worker-only. |
+| `LACE_EMAIL_FROM` | with a provider | Sender as `address` or `Display Name <address>`. |
+| `LACE_EMAIL_TIMEOUT_MS` | no | Per-send timeout from 1 to 60000 ms; defaults to 10000. |
+| `LACE_SMTP_HOST` | with `smtp` | SMTP server host name. |
+| `LACE_SMTP_PORT` | no | Defaults to `587`. |
+| `LACE_SMTP_SECURITY` | no | `starttls` (default; refuses servers without STARTTLS), `tls` (implicit TLS, usually port 465), or `none` (development only). |
+| `LACE_SMTP_USER`, `LACE_SMTP_PASSWORD` | no | Supplied together or not at all; the password is never logged. |
+| `LACE_RESEND_API_KEY` | with `resend` | Resend API key; never logged. |
+| `LACE_RESEND_API_BASE_URL` | no | Test-only endpoint override; HTTPS outside development. |
+
+Every send reports `sent` (accepted by the provider) or `failed` with
+`not_configured`, `invalid_message`, `rejected`, `rate_limited`, or
+`unavailable`. Failures are logged as `{ "component": "email", "provider",
+"reason" }` without recipients, subjects, or provider text. Administrators use
+Settings → Email delivery → Send test email to check the configuration; the
+message always goes to their own account address and is limited to five
+requests per hour.
+
+The same sender delivers invitations, password-reset links, and
+password-changed notices. Without a working provider, invitation and
+administrator reset responses carry their link once instead (see
+[Authentication operations](auth-operations.md#invitations)); public reset
+requests still answer `202` and send nothing. Public reset emails and
+password-changed notices are scheduled after the response with a caught
+promise, so a slow provider never delays the request, and their failures are
+logged with the same sanitized fields. Links are built from
+`LACE_PUBLIC_BASE_URL`, never from request headers.
+
+### Accounts and migration `0004`
+
+Invitations, password resets, and account self-service use the Lace routes
+listed in [Authentication operations](auth-operations.md#invitations) and
+migration `0004_account_tokens`. Run `pnpm db:migrate:node` (or let the local
+migration role apply it) before starting the new API, and deploy the API and
+admin together: `POST /api/v1/admin/users` no longer exists. Only Better
+Auth's sign-in, sign-out, and get-session routes are forwarded; every other
+`/api/auth/*` path returns `404`.
+
 ## Local development
 
 `pnpm dev:node` starts all six development roles: private MinIO, its bucket
@@ -45,6 +90,13 @@ stay local to Node; `/admin/*` reaches Vite and all other frontend paths reach
 Astro through the same origin. Upgrade connections used by the frontend
 development servers are forwarded to their selected upstream. If a frontend
 upstream is unavailable, the gateway returns a sanitized `502` response.
+
+Outgoing email is captured by a local Mailpit service: the API uses the `smtp`
+provider against `mailpit:1025` with development-only plaintext transport, and
+the inbox is at `http://127.0.0.1:8025/` (`LACE_MAILPIT_PORT` changes the
+port). No message leaves the machine and no real credentials are involved.
+Invitation and password-reset emails therefore appear in Mailpit, and their
+links open the local admin.
 
 The full local environment list is in [`.env.example`](../.env.example); use
 `pnpm dev:env` rather than placing credentials in shell history. MinIO remains
@@ -69,8 +121,9 @@ For an isolated local product acceptance run, use `pnpm acceptance:start`,
 explicitly synchronizes code-owned models in separate SQLite and MinIO volumes;
 the browser check uses Admin for page and collection editing, media reuse,
 publication, and Settings token issuance. It refreshes Astro in live mode,
-checks the published routes and later-draft isolation, and checks editor/viewer
-affordances. See the [README](../README.md#local-product-acceptance-session-15c)
+checks the published routes and later-draft isolation, invites the editor and
+viewer and accepts both invitations from the links in the acceptance stack's
+Mailpit, and checks editor/viewer affordances. See the [README](../README.md#local-product-acceptance-session-15c)
 for the exact browser observations, manual variant, prerequisites, and cleanup.
 
 ## Editing content models

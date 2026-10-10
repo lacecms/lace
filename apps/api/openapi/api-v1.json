@@ -7,6 +7,409 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/account": {
+      "patch": {
+        "operationId": "patchApiV1Account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "displayName": {
+                    "maxLength": 1024,
+                    "type": "string"
+                  }
+                },
+                "required": ["displayName"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "permissions": {
+                      "items": {
+                        "enum": [
+                          "content:read",
+                          "content:write",
+                          "content:publish",
+                          "media:write",
+                          "users:manage",
+                          "settings:manage"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "user": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "maxLength": 320,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "enum": ["admin", "editor", "viewer"]
+                        }
+                      },
+                      "required": ["email", "id", "role"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["permissions", "user"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Updated session summary"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change the signed-in user's display name",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/account/password": {
+      "post": {
+        "operationId": "postApiV1AccountPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "currentPassword": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "maxLength": 1024,
+                    "minLength": 12,
+                    "type": "string"
+                  },
+                  "signOutOtherSessions": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["currentPassword", "newPassword", "signOutOtherSessions"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "revoked": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["revoked"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Password changed; count of other sessions ended"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The current password is incorrect"
+          }
+        },
+        "summary": "Change the signed-in user's password",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/account/sessions": {
+      "get": {
+        "operationId": "getApiV1AccountSessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "browser": {
+                            "enum": ["Chrome", "Edge", "Firefox", "Opera", "Safari", "Unknown"]
+                          },
+                          "createdAt": {},
+                          "current": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "lastActiveAt": {},
+                          "os": {
+                            "enum": ["Android", "iOS", "Linux", "macOS", "Windows", "Unknown"]
+                          }
+                        },
+                        "required": ["browser", "createdAt", "current", "id", "lastActiveAt", "os"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Sessions without tokens or IP addresses"
+          }
+        },
+        "summary": "List the signed-in user's sessions",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/account/sessions/{sessionId}": {
+      "delete": {
+        "operationId": "deleteApiV1AccountSessionsBySessionId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session ended"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such session for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The current session is ended by signing out instead"
+          }
+        },
+        "summary": "End another session of the signed-in user",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/account/sessions/revoke-others": {
+      "post": {
+        "operationId": "postApiV1AccountSessionsRevokeOthers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "revoked": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["revoked"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Count of sessions ended"
+          }
+        },
+        "summary": "End every other session of the signed-in user",
+        "tags": ["account"]
+      }
+    },
     "/api/v1/admin/api-tokens": {
       "post": {
         "operationId": "postApiV1AdminApiTokens",
@@ -1350,6 +1753,402 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/invitations": {
+      "get": {
+        "operationId": "getApiV1AdminInvitations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "createdAt": {},
+                          "email": {
+                            "format": "email",
+                            "maxLength": 320,
+                            "type": "string"
+                          },
+                          "expiresAt": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "invitedBy": {
+                            "maxLength": 320,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "role": {
+                            "enum": ["admin", "editor", "viewer"]
+                          },
+                          "state": {
+                            "enum": ["pending", "expired"]
+                          }
+                        },
+                        "required": [
+                          "createdAt",
+                          "email",
+                          "expiresAt",
+                          "id",
+                          "invitedBy",
+                          "role",
+                          "state"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invitations without tokens or links"
+          }
+        },
+        "summary": "List pending and expired invitations",
+        "tags": ["admin"]
+      },
+      "post": {
+        "operationId": "postApiV1AdminInvitations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "format": "email",
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": ["admin", "editor", "viewer"]
+                  }
+                },
+                "required": ["email", "role"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "sent"
+                            }
+                          },
+                          "required": ["status"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "enum": [
+                                "not_configured",
+                                "invalid_message",
+                                "rejected",
+                                "rate_limited",
+                                "unavailable"
+                              ]
+                            },
+                            "status": {
+                              "const": "failed"
+                            }
+                          },
+                          "required": ["reason", "status"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "invitation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {},
+                        "email": {
+                          "format": "email",
+                          "maxLength": 320,
+                          "type": "string"
+                        },
+                        "expiresAt": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "invitedBy": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "enum": ["admin", "editor", "viewer"]
+                        },
+                        "state": {
+                          "enum": ["pending", "expired"]
+                        }
+                      },
+                      "required": [
+                        "createdAt",
+                        "email",
+                        "expiresAt",
+                        "id",
+                        "invitedBy",
+                        "role",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "link": {
+                      "format": "uri",
+                      "maxLength": 2048,
+                      "pattern": "^https?:\\/\\/[^\\x23\\s]+\\x23token=[A-Za-z0-9_-]{43}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["delivery", "invitation"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invitation created; the link is present only when email was not sent"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The address has an account or an active invitation"
+          }
+        },
+        "summary": "Invite an email address with a role",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/invitations/{invitationId}": {
+      "delete": {
+        "operationId": "deleteApiV1AdminInvitationsByInvitationId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Invitation revoked"
+          }
+        },
+        "summary": "Revoke an invitation",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/invitations/{invitationId}/resend": {
+      "post": {
+        "operationId": "postApiV1AdminInvitationsByInvitationIdResend",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "sent"
+                            }
+                          },
+                          "required": ["status"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "enum": [
+                                "not_configured",
+                                "invalid_message",
+                                "rejected",
+                                "rate_limited",
+                                "unavailable"
+                              ]
+                            },
+                            "status": {
+                              "const": "failed"
+                            }
+                          },
+                          "required": ["reason", "status"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "invitation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {},
+                        "email": {
+                          "format": "email",
+                          "maxLength": 320,
+                          "type": "string"
+                        },
+                        "expiresAt": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "invitedBy": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "enum": ["admin", "editor", "viewer"]
+                        },
+                        "state": {
+                          "enum": ["pending", "expired"]
+                        }
+                      },
+                      "required": [
+                        "createdAt",
+                        "email",
+                        "expiresAt",
+                        "id",
+                        "invitedBy",
+                        "role",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "link": {
+                      "format": "uri",
+                      "maxLength": 2048,
+                      "pattern": "^https?:\\/\\/[^\\x23\\s]+\\x23token=[A-Za-z0-9_-]{43}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["delivery", "invitation"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invitation reissued; the link is present only when email was not sent"
+          }
+        },
+        "summary": "Resend an invitation with a new link",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/media": {
       "get": {
         "operationId": "getApiV1AdminMedia",
@@ -2669,6 +3468,151 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/session": {
+      "get": {
+        "operationId": "getApiV1AdminSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "permissions": {
+                      "items": {
+                        "enum": [
+                          "content:read",
+                          "content:write",
+                          "content:publish",
+                          "media:write",
+                          "users:manage",
+                          "settings:manage"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "user": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "maxLength": 320,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "enum": ["admin", "editor", "viewer"]
+                        }
+                      },
+                      "required": ["email", "id", "role"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["permissions", "user"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session summary without credential material"
+          }
+        },
+        "summary": "Read the signed-in user and server-derived permissions",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/settings/email-test": {
+      "post": {
+        "operationId": "postApiV1AdminSettingsEmailTest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "sent"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "enum": [
+                            "not_configured",
+                            "invalid_message",
+                            "rejected",
+                            "rate_limited",
+                            "unavailable"
+                          ]
+                        },
+                        "status": {
+                          "const": "failed"
+                        }
+                      },
+                      "required": ["reason", "status"],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Closed delivery outcome; failed sends are reported, not raised"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send a test email to the signed-in administrator",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/site-builds": {
       "get": {
         "operationId": "getApiV1AdminSiteBuilds",
@@ -2898,63 +3842,6 @@
         "tags": ["admin"]
       }
     },
-    "/api/v1/admin/users": {
-      "post": {
-        "operationId": "postApiV1AdminUsers",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "email": {
-                    "format": "email",
-                    "maxLength": 320,
-                    "type": "string"
-                  },
-                  "password": {
-                    "maxLength": 1024,
-                    "minLength": 12,
-                    "type": "string"
-                  },
-                  "role": {
-                    "enum": ["admin", "editor", "viewer"]
-                  }
-                },
-                "required": ["email", "password", "role"],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {},
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {},
-                    "error": {
-                      "items": {},
-                      "type": "array"
-                    },
-                    "success": {
-                      "enum": [false],
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["success", "error", "data"],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        }
-      }
-    },
     "/api/v1/admin/users/{userId}": {
       "patch": {
         "operationId": "patchApiV1AdminUsersByUserId",
@@ -3013,6 +3900,582 @@
             "description": "Validation Error"
           }
         }
+      }
+    },
+    "/api/v1/admin/users/{userId}/password-reset": {
+      "post": {
+        "operationId": "postApiV1AdminUsersByUserIdPasswordReset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "sent"
+                            }
+                          },
+                          "required": ["status"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "enum": [
+                                "not_configured",
+                                "invalid_message",
+                                "rejected",
+                                "rate_limited",
+                                "unavailable"
+                              ]
+                            },
+                            "status": {
+                              "const": "failed"
+                            }
+                          },
+                          "required": ["reason", "status"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "link": {
+                      "format": "uri",
+                      "maxLength": 2048,
+                      "pattern": "^https?:\\/\\/[^\\x23\\s]+\\x23token=[A-Za-z0-9_-]{43}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["delivery"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Reset issued; the link is present only when email was not sent"
+          }
+        },
+        "summary": "Send a password reset to a user",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/users/{userId}/sessions/revoke": {
+      "post": {
+        "operationId": "postApiV1AdminUsersByUserIdSessionsRevoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "revoked": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["revoked"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Count of sessions ended"
+          }
+        },
+        "summary": "Sign a user out everywhere",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/invitations/accept": {
+      "post": {
+        "operationId": "postApiV1InvitationsAccept",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "displayName": {
+                    "maxLength": 1024,
+                    "type": "string"
+                  },
+                  "password": {
+                    "maxLength": 1024,
+                    "minLength": 12,
+                    "type": "string"
+                  },
+                  "token": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["password", "token"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "email": {
+                      "format": "email",
+                      "maxLength": 320,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["email"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Account created; sign in with the returned email"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "An account for the address already exists"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unknown, expired, revoked or accepted invitation"
+          }
+        },
+        "summary": "Accept an invitation by choosing a password",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/invitations/inspect": {
+      "post": {
+        "operationId": "postApiV1InvitationsInspect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "token": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["token"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "email": {
+                      "format": "email",
+                      "maxLength": 320,
+                      "type": "string"
+                    },
+                    "expiresAt": {},
+                    "role": {
+                      "enum": ["admin", "editor", "viewer"]
+                    }
+                  },
+                  "required": ["email", "expiresAt", "role"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invited email, role and expiry"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unknown, expired, revoked or accepted invitation"
+          }
+        },
+        "summary": "Inspect an invitation token",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/password-reset/confirm": {
+      "post": {
+        "operationId": "postApiV1PasswordResetConfirm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "password": {
+                    "maxLength": 1024,
+                    "minLength": 12,
+                    "type": "string"
+                  },
+                  "token": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["password", "token"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Password replaced and every session ended"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unknown, expired, consumed or superseded reset link"
+          }
+        },
+        "summary": "Choose a new password with a reset token",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/password-reset/request": {
+      "post": {
+        "operationId": "postApiV1PasswordResetRequest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "format": "email",
+                    "maxLength": 320,
+                    "type": "string"
+                  }
+                },
+                "required": ["email"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted; identical whether or not the address has an account"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request a password reset link",
+        "tags": ["account"]
       }
     },
     "/api/v1/public/build-export": {

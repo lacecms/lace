@@ -9,8 +9,9 @@ import {
   models,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
+  sessionFor,
 } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -20,7 +21,7 @@ afterEach(() => {
 test("entry editor keeps an incompatible entry or failed load out of an editable form", async () => {
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
       loadEntry: async () => ({ ...draftEntry, model: { key: "home", kind: "page", path: "/" } }),
     }),
@@ -31,7 +32,7 @@ test("entry editor keeps an incompatible entry or failed load out of an editable
   document.body.replaceChildren();
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
       loadEntry: async () => Promise.reject(new AdminClientError({ message: "Not found." })),
     }),
@@ -69,7 +70,7 @@ test("entry editor renders metadata fields, preserves blocks, suggests a slug, a
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
       loadEntry: async () => ({
@@ -125,7 +126,7 @@ test("entry editor prevents invalid local submission and keeps manual slug edits
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
       saveDraft,
@@ -154,7 +155,7 @@ test("entry editor prevents invalid local submission and keeps manual slug edits
 test("entry editor shows separate draft and publication facts without offering publish to editors", async () => {
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       loadEntry: async () => ({
         ...draftEntry,
@@ -193,7 +194,7 @@ test("admin confirms publication and sees an independent pending-build outcome",
   }));
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ publishEntry }),
   );
   await screen.findByRole("heading", { name: "Edit posts" });
@@ -223,7 +224,7 @@ test("publish retries an uncertain network outcome with the same attempt key", a
     });
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ publishEntry }),
   );
   await screen.findByRole("heading", { name: "Edit posts" });
@@ -246,7 +247,7 @@ test("a publish revision conflict leaves the loaded form available for explicit 
   const user = userEvent.setup();
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
       publishEntry: async () => {
         throw new AdminClientError({
@@ -283,7 +284,7 @@ test("a later draft save preserves the published public output", async () => {
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
       loadEntry: async () => initiallyPublished,
       saveDraft: async (_entryId, input) =>
@@ -319,7 +320,7 @@ test("revision conflicts retain local values until reload and copying changes no
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       loadEntry,
       saveDraft: async () => {
@@ -380,7 +381,7 @@ test("rich-text controls refuse an unsafe link and an unsafe stored link blocks 
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
       loadEntry: async () => ({
@@ -447,7 +448,7 @@ test("a server-normalized media draft becomes clean after save", async () => {
   })) as unknown as AdminClient["saveDraft"];
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listMedia: async () => ({ items: [mediaItem] }),
       listModels: async () => ({ items: [model] }),
@@ -489,7 +490,7 @@ test("a server-normalized media draft becomes clean after save", async () => {
 test("page editors omit the collection slug controls", async () => {
   renderRoute(
     "/content/home/home-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       loadEntry: async () => ({
         ...draftEntry,
@@ -516,7 +517,7 @@ test("dirty entry navigation requires an explicit leave-or-stay choice without a
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
       saveDraft,
@@ -549,7 +550,7 @@ test("server validation issues remain on their field and keep the draft editable
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
       saveDraft: async () => {
@@ -612,7 +613,7 @@ function mountSummary(overrides: Partial<AdminClient> = {}, role: "admin" | "edi
   );
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: `${role}-1`, role }),
+    staticSessionSource({ id: `${role}-1`, role }),
     client({
       listModels: async () => ({ items: [models.items[0]!, summaryModel] }) as never,
       loadEntry: async () => ({
@@ -742,7 +743,7 @@ test("header actions sit in the shell header and the save shortcut saves once", 
   })) as unknown as AdminClient["saveDraft"];
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({ saveDraft }),
   );
   await screen.findByRole("heading", { name: "Edit posts" });
@@ -770,7 +771,7 @@ test("a failed save keeps local changes and reads as not saved", async () => {
   const user = userEvent.setup();
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       saveDraft: async () => {
         throw new AdminClientError({ message: "The Lace API could not be reached." });
@@ -800,7 +801,7 @@ test("viewers see the entry read-only with no save or publish action", async () 
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, viewerModel] }) as never,
       saveDraft,
@@ -823,7 +824,7 @@ test("an admin can cancel the publish confirmation without publishing", async ()
   const publishEntry = vi.fn();
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ publishEntry }),
   );
   await screen.findByRole("heading", { name: "Edit posts" });
@@ -848,7 +849,7 @@ test("a writer clears a saved optional date and saves without it", async () => {
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, dateModel] }) as never,
       loadEntry: async () => ({
@@ -915,7 +916,7 @@ test.each(["save", "publish", "reload"] as const)(
       });
     };
     const source = {
-      get: async () => (expired ? null : { id: "admin-1", role: "admin" as const }),
+      get: async () => (expired ? null : sessionFor({ id: "admin-1", role: "admin" })),
       invalidate: vi.fn(),
     };
     let expireOnLoad = false;

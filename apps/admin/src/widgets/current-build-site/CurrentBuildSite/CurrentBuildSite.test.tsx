@@ -1,12 +1,13 @@
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { renderRoute, stubClient } from "../../../app/testing/index.js";
 import {
-  createStaticSessionSource,
-  type AdminSessionSource,
-  type AdminSession,
-} from "../../../entities/session/index.js";
+  renderRoute,
+  stubClient,
+  staticSessionSource,
+  sessionFor,
+} from "../../../app/testing/index.js";
+import { type AdminSessionSource, type AdminSession } from "../../../entities/session/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 test.each(["admin", "editor", "viewer"] as const)(
@@ -14,7 +15,7 @@ test.each(["admin", "editor", "viewer"] as const)(
   async (role) => {
     renderRoute(
       "/builds",
-      createStaticSessionSource({ id: "user", role }),
+      staticSessionSource({ id: "user", role }),
       stubClient({
         loadBuildSite: async () => ({ site: { id: "real-site", label: "Real site" } }),
       }),
@@ -35,7 +36,7 @@ test("identity failure retries independently of build history", async () => {
   });
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "user", role: "viewer" }),
+    staticSessionSource({ id: "user", role: "viewer" }),
     stubClient({ loadBuildSite }),
   );
   const section = await screen.findByRole("region", { name: "Current build site" });
@@ -51,7 +52,7 @@ test("Settings identity read stays inside the administrator guard", async () => 
   const loadBuildSite = vi.fn(async () => ({ site: { id: "main", label: "Main" } }));
   renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "user", role: "viewer" }),
+    staticSessionSource({ id: "user", role: "viewer" }),
     stubClient({ loadBuildSite }),
   );
   expect(await screen.findByRole("heading", { name: "Access denied" })).toBeInTheDocument();
@@ -59,7 +60,7 @@ test("Settings identity read stays inside the administrator guard", async () => 
 });
 
 test("expired identity request clears the protected screen", async () => {
-  let current: AdminSession | null = { id: "user", role: "viewer" };
+  let current: AdminSession | null = sessionFor({ id: "user", role: "viewer" });
   const source: AdminSessionSource = { get: async () => current, invalidate: () => undefined };
   renderRoute(
     "/builds",
@@ -80,7 +81,7 @@ test("expired identity request clears the protected screen", async () => {
 test("administrator Settings shows the same safe current identity", async () => {
   renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "user", role: "admin" }),
+    staticSessionSource({ id: "user", role: "admin" }),
     stubClient({
       loadBuildSite: async () => ({ site: { id: "public-site", label: "Public site" } }),
     }),

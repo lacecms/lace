@@ -7,8 +7,8 @@ import {
   renderInRouter,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
 } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError, type EntryListQuery } from "../../../shared/api/index.js";
 import { CreateEntryDialog } from "./index.js";
 
@@ -32,7 +32,7 @@ test("entry creation and confirmed deletion refresh the active collection list",
     listEntries.mock.calls.filter(([key, , query]) => key === "posts" && query?.limit === 1);
   renderRoute(
     "/content/posts",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({ createEntry, deleteEntry, listEntries }),
   );
   await screen.findByRole("table", { name: "posts entries" });

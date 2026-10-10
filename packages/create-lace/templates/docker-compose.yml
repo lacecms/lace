@@ -59,6 +59,16 @@ services:
       LACE_MINIO_ENDPOINT: http://minio:9000
       LACE_MINIO_REGION: ${LACE_MINIO_REGION:-us-east-1}
       LACE_MINIO_TIMEOUT_MS: ${LACE_MINIO_TIMEOUT_MS:-5000}
+      # Optional transactional email; unset means delivery is not configured.
+      LACE_EMAIL_PROVIDER: ${LACE_EMAIL_PROVIDER:-}
+      LACE_EMAIL_FROM: ${LACE_EMAIL_FROM:-}
+      LACE_EMAIL_TIMEOUT_MS: ${LACE_EMAIL_TIMEOUT_MS:-}
+      LACE_SMTP_HOST: ${LACE_SMTP_HOST:-}
+      LACE_SMTP_PORT: ${LACE_SMTP_PORT:-}
+      LACE_SMTP_SECURITY: ${LACE_SMTP_SECURITY:-}
+      LACE_SMTP_USER: ${LACE_SMTP_USER:-}
+      LACE_SMTP_PASSWORD: ${LACE_SMTP_PASSWORD:-}
+      LACE_RESEND_API_KEY: ${LACE_RESEND_API_KEY:-}
     volumes:
       - ./.lace/data:/data
       - ./lace.config.ts:/opt/lace/workspace/lace.config.ts:ro

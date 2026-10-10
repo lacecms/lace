@@ -1,15 +1,19 @@
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { mediaItem, renderRoute, stubClient as client } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import {
+  mediaItem,
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+} from "../../../app/testing/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const viewer = () => createStaticSessionSource({ id: "viewer-1", role: "viewer" });
+const viewer = () => staticSessionSource({ id: "viewer-1", role: "viewer" });
 
 test("media route shows a paged grid and details to a viewer without write controls", async () => {
   const user = userEvent.setup();

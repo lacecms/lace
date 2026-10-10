@@ -2,7 +2,7 @@ import { CurrentBuildSite } from "../../../widgets/current-build-site/index.js";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { KeyRound } from "lucide-react";
-import { useSessionRecovery } from "../../../entities/session/index.js";
+import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { CreateBuildTokenDialog } from "../../../features/create-build-token/index.js";
 import {
   adminQueryKeys,
@@ -27,6 +27,7 @@ export function SettingsPage() {
 
 function SettingsManager() {
   const client = useAdminClient();
+  const session = useSession();
   const status = useQuery({
     queryKey: adminQueryKeys.settingsStatus,
     queryFn: client.loadSettingsStatus,
@@ -47,6 +48,7 @@ function SettingsManager() {
         activeTokens={items?.filter((token) => token.revokedAt === undefined).length}
         error={status.error}
         onRefresh={() => void status.refetch()}
+        recipient={session.email}
         refreshing={status.isFetching}
         status={status.data}
       />

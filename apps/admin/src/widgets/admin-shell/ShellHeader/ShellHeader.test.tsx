@@ -1,14 +1,18 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { draftEntry, renderRoute, stubClient as client } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import {
+  draftEntry,
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+} from "../../../app/testing/index.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const editor = () => createStaticSessionSource({ id: "editor-1", role: "editor" });
+const editor = () => staticSessionSource({ id: "editor-1", role: "editor" });
 
 test("breadcrumbs link the overview and model and mark the entry title current", async () => {
   renderRoute("/content/posts/entry-1", editor());

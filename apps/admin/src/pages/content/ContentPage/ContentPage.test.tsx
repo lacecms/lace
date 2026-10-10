@@ -6,8 +6,8 @@ import {
   entryList,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
 } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -20,7 +20,7 @@ const main = () => within(document.getElementById("main-content") as HTMLElement
 test("content landing explains no configured models without hiding API errors", async () => {
   renderRoute(
     "/content",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ listModels: async () => ({ items: [] }) }),
   );
   expect(
@@ -31,7 +31,7 @@ test("content landing explains no configured models without hiding API errors", 
   document.body.replaceChildren();
   renderRoute(
     "/content",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
       listModels: async () => Promise.reject(new AdminClientError({ message: "API unavailable" })),
     }),
@@ -43,7 +43,7 @@ test("content landing explains no configured models without hiding API errors", 
 });
 
 test("content landing guides missing page sync and opens the synced page editor and collection", async () => {
-  const source = createStaticSessionSource({ id: "editor-1", role: "editor" });
+  const source = staticSessionSource({ id: "editor-1", role: "editor" });
   renderRoute("/content", source, client({ listEntries: async () => entryList() }));
   expect(await screen.findByRole("heading", { name: "Page draft missing" })).toBeInTheDocument();
   expect(screen.getByText(/pnpm content:sync/)).toBeInTheDocument();
@@ -81,7 +81,7 @@ test("page cards show status, edit time, and editor; collection cards show total
   const updatedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   renderRoute(
     "/content",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listEntries: async (key) =>
         key === "home"
@@ -127,7 +127,7 @@ test("page cards show status, edit time, and editor; collection cards show total
 test("one failing model summary stays local and viewers see the same summaries", async () => {
   renderRoute(
     "/content",
-    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
     client({
       listEntries: async (key) =>
         key === "posts"

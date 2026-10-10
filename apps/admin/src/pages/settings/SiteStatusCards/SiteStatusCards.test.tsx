@@ -9,9 +9,15 @@ test("shows readiness, models, and active tokens with a refresh action", async (
     <SiteStatusCards
       activeTokens={3}
       error={null}
+      recipient="admin@lace.test"
       onRefresh={onRefresh}
       refreshing={false}
-      status={{ configuredModels: 4, engineVersion: "0.1.0-alpha.4", ready: true }}
+      status={{
+        configuredModels: 4,
+        email: { provider: "none" as const },
+        engineVersion: "0.1.0-alpha.4",
+        ready: true,
+      }}
     />,
   );
   expect(screen.getByRole("group", { name: "API" })).toHaveTextContent("Ready");
@@ -27,6 +33,7 @@ test("marks cards busy while loading", () => {
     <SiteStatusCards
       activeTokens={undefined}
       error={null}
+      recipient="admin@lace.test"
       onRefresh={() => undefined}
       refreshing
       status={undefined}
@@ -42,6 +49,7 @@ test("unavailable version is never guessed and cached status is labelled stale",
     activeTokens: 0,
     error: new Error("Unavailable"),
     onRefresh() {},
+    recipient: "admin@lace.test",
     refreshing: false,
   };
   const { rerender } = render(<SiteStatusCards {...props} status={undefined} />);
@@ -50,7 +58,12 @@ test("unavailable version is never guessed and cached status is labelled stale",
   rerender(
     <SiteStatusCards
       {...props}
-      status={{ configuredModels: 0, engineVersion: "1.2.3-alpha.7", ready: true }}
+      status={{
+        configuredModels: 0,
+        email: { provider: "none" as const },
+        engineVersion: "1.2.3-alpha.7",
+        ready: true,
+      }}
     />,
   );
   expect(screen.getByRole("group", { name: "CMS version" })).toHaveTextContent("1.2.3-alpha.7");

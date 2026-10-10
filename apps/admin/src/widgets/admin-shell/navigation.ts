@@ -1,6 +1,6 @@
 import type { ContentModelDto } from "@lacecms/contracts";
 import { FileText, Hammer, Image, Layers, Settings, Users, type LucideIcon } from "lucide-react";
-import type { AdminRole } from "../../entities/session/index.js";
+import { can, type AdminPermission, type AdminSession } from "../../entities/session/index.js";
 
 type ModelSummary = Pick<ContentModelDto, "key" | "kind" | "label">;
 
@@ -24,6 +24,8 @@ export type NavigationItem =
       readonly kind: "resource";
       readonly label: string;
       readonly path: ResourcePath;
+      /** The permission its route guard requires. */
+      readonly requires: AdminPermission;
     };
 
 export interface NavigationGroup {
@@ -38,12 +40,12 @@ export function modelLabel(model: Pick<ContentModelDto, "key" | "label">): strin
 }
 
 /**
- * Shell navigation groups for a role. Pages and Collections follow the
- * configured models; the Admin group exists only for administrators, matching
- * the route guards. Empty groups are omitted.
+ * Shell navigation groups for a session. Pages and Collections follow the
+ * configured models; resource items appear only with the permission their
+ * route guard requires. Empty groups are omitted.
  */
 export function navigationGroups(
-  role: AdminRole,
+  session: Pick<AdminSession, "permissions">,
   models: readonly ModelSummary[] = [],
 ): readonly NavigationGroup[] {
   const groups: NavigationGroup[] = [
@@ -73,23 +75,39 @@ export function navigationGroups(
     },
     {
       items: [
-        { icon: Image, kind: "resource", label: "Media", path: "/media" },
-        { icon: Hammer, kind: "resource", label: "Builds", path: "/builds" },
+        { icon: Image, kind: "resource", label: "Media", path: "/media", requires: "content:read" },
+        {
+          icon: Hammer,
+          kind: "resource",
+          label: "Builds",
+          path: "/builds",
+          requires: "content:read",
+        },
       ],
       key: "library",
       label: "Library",
     },
-  ];
-  if (role === "admin")
-    groups.push({
+    {
       items: [
-        { icon: Users, kind: "resource", label: "Users", path: "/users" },
-        { icon: Settings, kind: "resource", label: "Settings", path: "/settings" },
+        { icon: Users, kind: "resource", label: "Users", path: "/users", requires: "users:manage" },
+        {
+          icon: Settings,
+          kind: "resource",
+          label: "Settings",
+          path: "/settings",
+          requires: "settings:manage",
+        },
       ],
       key: "admin",
       label: "Admin",
-    });
-  return groups.filter((group) => group.items.length > 0);
+    },
+  ];
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.kind !== "resource" || can(session, item.requires)),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
 export type Breadcrumb =
@@ -103,6 +121,7 @@ export type Breadcrumb =
 
 const resourceCrumbs: Readonly<Record<string, string>> = {
   "/_protected/$": "Page not found",
+  "/_protected/account": "Account",
   "/_protected/builds": "Builds",
   "/_protected/media": "Media",
   "/_protected/settings": "Settings",

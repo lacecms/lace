@@ -8,8 +8,9 @@ import {
   mediaItem,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
 } from "../../../app/testing/index.js";
-import { type AdminRole, createStaticSessionSource } from "../../../entities/session/index.js";
+import { type AdminRole } from "../../../entities/session/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -53,7 +54,7 @@ function mount({
   const saveDraft = vi.fn(async () => ({}) as never);
   const router = renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: `${role}-1`, role }),
+    staticSessionSource({ id: `${role}-1`, role }),
     client({
       getMedia: async (id) => {
         const found = [mediaItem, later].find((item) => item.id === id);

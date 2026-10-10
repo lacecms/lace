@@ -11,9 +11,13 @@ role without duplicating authorization policy in HTTP handlers.
 ### Requirement: Email/password authentication is closed to public enrollment
 The system SHALL provide email/password browser authentication at `/api/auth/*`
 and SHALL reject public sign-up attempts. It SHALL create no user, account, or
-session as a result of a rejected public sign-up. Session and credential
-material SHALL be managed by the authentication provider and SHALL not be
-included in Lace API logs or error responses.
+session as a result of a rejected public sign-up. Only the provider's email
+sign-in, sign-out and get-session routes SHALL be reachable; every other
+`/api/auth/*` path, including provider sign-up, password-change, password-reset,
+user-update and session-listing routes, SHALL return `404` without reaching the
+provider, so account changes happen only through Lace routes. Session and
+credential material SHALL be managed by the authentication provider and SHALL
+not be included in Lace API logs or error responses.
 
 #### Scenario: Public sign-up is attempted
 - **WHEN** an unauthenticated client calls the provider's email sign-up route
@@ -25,6 +29,17 @@ included in Lace API logs or error responses.
   sign-in route from a trusted origin
 - **THEN** the response establishes the provider session according to its
   cookie policy without exposing the credential verifier
+
+#### Scenario: Provider account route is called directly
+- **WHEN** a signed-in client calls the provider's change-password or
+  list-sessions route
+- **THEN** the response is `404` and neither the credential nor any session
+  token is exposed or changed
+
+#### Scenario: First administrator setup is unchanged
+- **WHEN** setup is incomplete and a client submits the one-time setup token,
+  email and password to the setup route
+- **THEN** the first administrator is created exactly as before and can sign in
 
 ### Requirement: A validated session supplies the complete application actor
 The system SHALL resolve a protected request's actor only from a validated,
@@ -79,9 +94,53 @@ checks or extend loopback aliases to production or non-loopback origins.
 ### Requirement: Disabled accounts fail closed at actor resolution
 The authentication boundary SHALL refuse to resolve an actor from a valid
 provider session when its persisted user account has been disabled. It SHALL
-not disclose the disabled state through a session or actor response.
+not disclose the disabled state through a session or actor response. Disabling
+an account SHALL additionally delete its sessions, so the refusal also holds
+if the account is later re-enabled.
 
 #### Scenario: Disabled user presents a valid session
 - **WHEN** a session belonging to a disabled user reaches a protected route
 - **THEN** actor resolution fails and the route returns the standard
 authorization denial before application work runs
+
+#### Scenario: Re-enabled account does not revive old sessions
+- **WHEN** an administrator disables and then re-enables a user
+- **THEN** sessions created before the disable remain rejected and the user
+  must sign in again
+
+### Requirement: The authenticated session summary exposes server-derived permissions
+The system SHALL provide an authenticated session summary for the signed-in
+browser user containing the user identifier, email, an optional display name,
+the Lace role, and the complete permission list that the installation's domain
+role policy grants to that role. The permission list SHALL be computed on the
+server from the same policy that authorizes application use cases and SHALL
+NOT be accepted from or stored by the client. The summary SHALL be resolved
+through the same actor boundary as other protected requests, so an absent,
+expired, disabled, or invalid-role session SHALL receive the unauthenticated
+response and no summary. The summary SHALL contain no session token, credential
+material, or provider-internal fields.
+
+#### Scenario: Editor reads the session summary
+- **WHEN** a valid session belonging to an `editor` requests the session summary
+- **THEN** the response contains that user's identifier, email and role
+  `editor`, and exactly the permissions `content:read`, `content:write`, and
+  `media:write`
+
+#### Scenario: Disabled user reads the session summary
+- **WHEN** a session belonging to a disabled user requests the session summary
+- **THEN** the response is the unauthenticated error and contains no user data
+
+#### Scenario: Role policy changes
+- **WHEN** the domain role policy grants an additional permission to a role
+- **THEN** the session summary for that role includes the new permission, and
+  protected use cases and the summary agree on the grant
+
+### Requirement: Protected requests can identify their current session
+The authentication boundary SHALL expose, for a protected request, the opaque
+identifier of the provider session that authenticated it, without exposing the
+session token. Session-listing and session-revocation use cases SHALL use this
+identifier to mark and protect the current session.
+
+#### Scenario: Current session is marked
+- **WHEN** a user lists their sessions from one browser
+- **THEN** exactly the session authenticating that request is marked current

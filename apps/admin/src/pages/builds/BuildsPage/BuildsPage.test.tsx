@@ -1,8 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { renderRoute, stubClient } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import { renderRoute, stubClient, staticSessionSource } from "../../../app/testing/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 const failed = {
@@ -27,7 +26,7 @@ test("admin inspects and retries a failed build", async () => {
   }));
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({
       listBuilds: async () => ({ items: [failed] }),
       getBuild: async () => failed,
@@ -50,7 +49,7 @@ test("viewer can inspect history without build controls", async () => {
   const user = userEvent.setup();
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
     stubClient({
       listBuilds: async () => ({ items: [failed] }),
       getBuild: async () => failed,
@@ -67,7 +66,7 @@ test("a successful build shows completion without a retry action", async () => {
   const succeeded = { ...failed, status: "succeeded" as const, error: undefined };
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({
       listBuilds: async () => ({ items: [succeeded] }),
       getBuild: async () => succeeded,
@@ -89,7 +88,7 @@ test("empty history can queue a build and a failed read can recover", async () =
   });
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({ listBuilds }),
   );
   expect(await screen.findByRole("alert")).toHaveTextContent("Builds unavailable");
@@ -104,7 +103,7 @@ test("every role sees verified publication visibility guidance without deploymen
   for (const role of ["admin", "editor", "viewer"] as const) {
     renderRoute(
       "/builds",
-      createStaticSessionSource({ id: `${role}-1`, role }),
+      staticSessionSource({ id: `${role}-1`, role }),
       stubClient({ listBuilds: async () => ({ items: [] }) }),
     );
     const section = await screen.findByRole("region", {
@@ -133,7 +132,7 @@ test.each(["admin", "editor", "viewer"] as const)(
     };
     renderRoute(
       "/builds",
-      createStaticSessionSource({ id: `${role}-1`, role }),
+      staticSessionSource({ id: `${role}-1`, role }),
       stubClient({ listBuilds: async () => ({ items: [pending] }), getBuild: async () => pending }),
     );
     await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
@@ -179,7 +178,7 @@ test.each([
     const build = { ...failed, error };
     renderRoute(
       "/builds",
-      createStaticSessionSource({ id: "admin-1", role: "admin" }),
+      staticSessionSource({ id: "admin-1", role: "admin" }),
       stubClient({ listBuilds: async () => ({ items: [build] }), getBuild: async () => build }),
     );
     await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
@@ -210,7 +209,7 @@ test("every build status has an info popover from the shared status map", async 
   }));
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
     stubClient({ listBuilds: async () => ({ items }) }),
   );
   const table = await screen.findByRole("table", { name: "Build history" });
@@ -236,7 +235,7 @@ test.each(statuses)("administrator retry availability for a %s build", async (st
   const record = { ...failed, status, error: status === "failed" ? failed.error : undefined };
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({ listBuilds: async () => ({ items: [record] }), getBuild: async () => record }),
   );
   await user.click(await screen.findByRole("button", { name: "View build for version 4" }));
@@ -261,7 +260,7 @@ test("a tracked build shows its provider stage, last check and refreshes until i
   let reads = 0;
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({
       listBuilds: async () => ({ items: [running] }),
       getBuild: async () => (++reads > 1 ? done : running),
@@ -288,7 +287,7 @@ test("an unknown build after the tracking deadline explains the next step withou
   };
   renderRoute(
     "/builds",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({
       listBuilds: async () => ({ items: [timedOut] }),
       getBuild: async () => timedOut,

@@ -14,6 +14,20 @@ import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
   adminSettingsStatusSchema,
+  adminSessionSchema,
+  emailTestResultSchema,
+  accountPasswordChangeRequestSchema,
+  accountProfileUpdateRequestSchema,
+  accountSessionSchema,
+  adminPasswordResetResultSchema,
+  errorEnvelopeSchema,
+  invitationAcceptRequestSchema,
+  invitationCreateRequestSchema,
+  invitationIssueResultSchema,
+  invitationListSchema,
+  passwordResetConfirmRequestSchema,
+  passwordResetRequestSchema,
+  sessionRevocationResultSchema,
   setupStateSchema,
   blockMetadataSchema,
   classifyError,
@@ -59,12 +73,187 @@ import {
 } from "../dist/index.js";
 
 test("operational status requires a bounded engine release", () => {
-  const status = { configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: false };
+  const status = {
+    configuredModels: 2,
+    email: { provider: "none" },
+    engineVersion: "0.1.0-alpha.4",
+    ready: false,
+  };
   expect(v.parse(adminSettingsStatusSchema, status)).toEqual(status);
   for (const engineVersion of [undefined, "", "x".repeat(121), 4])
     expect(v.safeParse(adminSettingsStatusSchema, { ...status, engineVersion }).success).toBe(
       false,
     );
+});
+
+test("operational status reports email delivery without provider settings", () => {
+  const status = { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true };
+  const parse = (email) => v.safeParse(adminSettingsStatusSchema, { ...status, email }).success;
+  expect(parse({ provider: "none" })).toBe(true);
+  expect(parse({ from: "Lace <cms@example.com>", provider: "smtp" })).toBe(true);
+  expect(parse({ from: "cms@example.com", provider: "none" })).toBe(false);
+  expect(parse({ provider: "resend" })).toBe(false);
+  expect(parse({ from: "cms@example.com", host: "smtp.example.com", provider: "smtp" })).toBe(
+    false,
+  );
+  expect(parse({ from: "cms@example.com", provider: "sendgrid" })).toBe(false);
+  expect(parse(undefined)).toBe(false);
+});
+
+test("session summaries carry a closed, unique permission list", () => {
+  const session = {
+    permissions: ["content:read", "content:write", "media:write"],
+    user: { displayName: "Ed", email: "ed@example.com", id: "user-1", role: "editor" },
+  };
+  expect(v.parse(adminSessionSchema, session)).toEqual(session);
+  const parse = (value) => v.safeParse(adminSessionSchema, value).success;
+  expect(parse({ ...session, permissions: ["content:read", "content:delete"] })).toBe(false);
+  expect(parse({ ...session, permissions: ["content:read", "content:read"] })).toBe(false);
+  expect(parse({ ...session, token: "secret" })).toBe(false);
+  expect(parse({ ...session, user: { ...session.user, role: "owner" } })).toBe(false);
+  expect(parse({ ...session, user: { ...session.user, sessionToken: "secret" } })).toBe(false);
+});
+
+test("email test results use closed outcomes", () => {
+  const parse = (value) => v.safeParse(emailTestResultSchema, value).success;
+  expect(parse({ status: "sent" })).toBe(true);
+  for (const reason of [
+    "not_configured",
+    "invalid_message",
+    "rejected",
+    "rate_limited",
+    "unavailable",
+  ])
+    expect(parse({ reason, status: "failed" })).toBe(true);
+  expect(parse({ reason: "smtp 550 mailbox unavailable", status: "failed" })).toBe(false);
+  expect(parse({ detail: "provider text", status: "sent" })).toBe(false);
+});
+
+describe("account lifecycle contracts", () => {
+  const token = "A".repeat(43);
+  const invitation = {
+    createdAt: "2026-10-10T12:00:00.000Z",
+    email: "new@example.com",
+    expiresAt: "2026-10-13T12:00:00.000Z",
+    id: "inv-1",
+    invitedBy: "Ada",
+    role: "editor",
+    state: "pending",
+  };
+  const link = `https://cms.example.com/admin/accept-invite#token=${token}`;
+  const ok = (schema, value) => v.safeParse(schema, value).success;
+
+  test("issue results carry a link only when delivery was not sent", () => {
+    expect(ok(invitationIssueResultSchema, { delivery: { status: "sent" }, invitation })).toBe(
+      true,
+    );
+    expect(
+      ok(invitationIssueResultSchema, { delivery: { status: "sent" }, invitation, link }),
+    ).toBe(false);
+    const failed = { reason: "not_configured", status: "failed" };
+    expect(ok(invitationIssueResultSchema, { delivery: failed, invitation, link })).toBe(true);
+    expect(ok(invitationIssueResultSchema, { delivery: failed, invitation })).toBe(false);
+    expect(
+      ok(invitationIssueResultSchema, {
+        delivery: failed,
+        invitation,
+        link: "https://cms.example.com/admin/accept-invite?token=" + token,
+      }),
+    ).toBe(false);
+    expect(ok(adminPasswordResetResultSchema, { delivery: { status: "sent" } })).toBe(true);
+    expect(ok(adminPasswordResetResultSchema, { delivery: { status: "sent" }, link })).toBe(false);
+    expect(ok(adminPasswordResetResultSchema, { delivery: failed, link })).toBe(true);
+    expect(ok(adminPasswordResetResultSchema, { delivery: failed })).toBe(false);
+  });
+
+  test("invitation listings never carry tokens or links", () => {
+    expect(ok(invitationListSchema, { items: [invitation] })).toBe(true);
+    expect(ok(invitationListSchema, { items: [{ ...invitation, token }] })).toBe(false);
+    expect(ok(invitationListSchema, { items: [{ ...invitation, link }] })).toBe(false);
+    expect(ok(invitationListSchema, { items: [{ ...invitation, state: "accepted" }] })).toBe(false);
+  });
+
+  test("session records reject tokens and IP addresses", () => {
+    const session = {
+      browser: "Firefox",
+      createdAt: "2026-10-10T12:00:00.000Z",
+      current: true,
+      id: "session-1",
+      lastActiveAt: "2026-10-10T13:00:00.000Z",
+      os: "Linux",
+    };
+    expect(ok(accountSessionSchema, session)).toBe(true);
+    expect(ok(accountSessionSchema, { ...session, token })).toBe(false);
+    expect(ok(accountSessionSchema, { ...session, ipAddress: "203.0.113.5" })).toBe(false);
+    expect(ok(accountSessionSchema, { ...session, browser: "Netscape" })).toBe(false);
+    expect(ok(sessionRevocationResultSchema, { revoked: 2 })).toBe(true);
+    expect(ok(sessionRevocationResultSchema, { revoked: -1 })).toBe(false);
+  });
+
+  test("passwords, tokens and display names are bounded", () => {
+    const short = "x".repeat(11);
+    const result = v.safeParse(invitationAcceptRequestSchema, { password: short, token });
+    expect(result.success).toBe(false);
+    expect(result.issues.map((issue) => issue.path.map((item) => item.key).join("/"))).toEqual([
+      "password",
+    ]);
+    expect(ok(passwordResetConfirmRequestSchema, { password: short, token })).toBe(false);
+    expect(ok(passwordResetConfirmRequestSchema, { password: "x".repeat(12), token })).toBe(true);
+    expect(ok(passwordResetConfirmRequestSchema, { password: "x".repeat(1_025), token })).toBe(
+      false,
+    );
+    expect(
+      ok(passwordResetConfirmRequestSchema, { password: "x".repeat(12), token: "short" }),
+    ).toBe(false);
+    expect(
+      ok(invitationAcceptRequestSchema, { displayName: "Ada", password: "x".repeat(12), token }),
+    ).toBe(true);
+    for (const displayName of ["   ", "x".repeat(121), "Ada\u0007", "Ada\nLovelace"])
+      expect(ok(accountProfileUpdateRequestSchema, { displayName })).toBe(false);
+    expect(ok(accountProfileUpdateRequestSchema, { displayName: "  Ada Lovelace " })).toBe(true);
+    expect(
+      ok(accountPasswordChangeRequestSchema, {
+        currentPassword: "old",
+        newPassword: "x".repeat(11),
+        signOutOtherSessions: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("account requests reject unknown fields", () => {
+    expect(ok(invitationCreateRequestSchema, { email: "a@example.com", role: "viewer" })).toBe(
+      true,
+    );
+    expect(
+      ok(invitationCreateRequestSchema, {
+        email: "a@example.com",
+        password: "x".repeat(12),
+        role: "viewer",
+      }),
+    ).toBe(false);
+    expect(ok(passwordResetRequestSchema, { email: "a@example.com", userId: "u" })).toBe(false);
+    expect(
+      ok(accountPasswordChangeRequestSchema, {
+        currentPassword: "old",
+        newPassword: "x".repeat(12),
+        signOutOtherSessions: false,
+        userId: "other",
+      }),
+    ).toBe(false);
+  });
+
+  test("account error codes map to their documented statuses", () => {
+    for (const [code, status] of [
+      ["CONFLICT", 409],
+      ["INVALID_CREDENTIALS", 400],
+      ["INVITATION_INVALID", 410],
+      ["RESET_INVALID", 410],
+    ]) {
+      const error = transportError(code);
+      expect(error.status).toBe(status);
+      expect(ok(errorEnvelopeSchema, error.body)).toBe(true);
+    }
+  });
 });
 
 const timestamp = unixMilliseconds(1_735_689_600_000);

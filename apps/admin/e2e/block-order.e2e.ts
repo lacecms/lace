@@ -62,6 +62,12 @@ test("block structural actions survive real saves, reloads, publication, export 
       },
     },
   });
+  // The session summary reads the actor's persisted account, as for a real sign-in.
+  runtime.database.connection
+    .prepare(
+      "insert into user (id, name, email, email_verified, role, disabled, created_at, updated_at) values (?, ?, ?, 0, ?, 0, 0, 0)",
+    )
+    .run(actor.id, "Order Admin", "order-admin@lace.test", actor.role);
   const server = createServer(async (incoming, outgoing) => {
     const result = await runtime.app.fetch(
       new Request(`http://127.0.0.1${incoming.url}`, {

@@ -6,7 +6,7 @@ import type {
 } from "@lacecms/contracts";
 import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef } from "react";
-import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { CreateEntryDialog } from "../../../features/create-entry/index.js";
 import {
   adminQueryKeys,
@@ -89,7 +89,7 @@ export function CollectionEntries({
   const totals = entries.data?.pages[0]?.totals;
   const matching = totals === undefined ? 0 : totals[query.status ?? "all"];
   const filtered = query.q !== undefined || query.status !== undefined;
-  const canManage = session.role !== "viewer";
+  const canManage = can(session, "content:write");
   const empty = entries.data !== undefined && items.length === 0 && !filtered;
 
   return (

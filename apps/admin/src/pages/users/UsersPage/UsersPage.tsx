@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
-import { CreateUserDialog } from "../../../features/create-user/index.js";
+import { InviteUserDialog } from "../../../features/invite-user/index.js";
 import {
   adminQueryKeys,
   errorDescription,
@@ -14,6 +14,7 @@ import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { pageClass } from "../../../shared/ui/layout/index.js";
 import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 import { PageAccessDenied } from "../../../shared/ui/PageState/index.js";
+import { InvitationsTable } from "../InvitationsTable/index.js";
 import { UsersTable } from "../UsersTable/index.js";
 
 const usersRoute = getRouteApi("/_protected/users");
@@ -32,7 +33,12 @@ function UsersManager() {
   const client = useAdminClient();
   const session = useSession();
   const users = useQuery({ queryKey: adminQueryKeys.users, queryFn: client.listUsers });
-  useSessionRecovery(users.error);
+  const invitations = useQuery({
+    queryKey: adminQueryKeys.invitations,
+    queryFn: client.listInvitations,
+  });
+  useSessionRecovery(users.error ?? invitations.error);
+  const pending = invitations.data?.items;
   const items = users.data?.items;
   return (
     <section className={pageClass} aria-labelledby="users-title">
@@ -45,7 +51,8 @@ function UsersManager() {
               : accountSummary(items.length, items.filter((item) => item.disabled).length)}
           </p>
         </div>
-        <CreateUserDialog />
+        {/* One stable instance: the lists refreshing must not unmount a shown link. */}
+        <InviteUserDialog />
       </div>
       {users.isPending ? <LoadingState label="Loading users" lines={4} /> : undefined}
       {users.error === null ? undefined : (
@@ -58,7 +65,7 @@ function UsersManager() {
       )}
       {items?.length === 0 ? (
         <EmptyState
-          description="Use Create user to add an account for each person who edits or reviews this site."
+          description="Use Invite user to add each person who edits or reviews this site."
           icon={Users}
           title="No users found"
         />
@@ -66,6 +73,29 @@ function UsersManager() {
       {items === undefined || items.length === 0 ? undefined : (
         <UsersTable currentUserId={session.id} users={items} />
       )}
+      <section aria-labelledby="invitations-title" className="grid gap-3">
+        <div className="grid gap-1">
+          <h2 id="invitations-title">Pending invitations</h2>
+          <p className="m-0 text-muted-foreground">
+            Invited people appear under Users once they accept. Links expire after 72 hours.
+          </p>
+        </div>
+        {invitations.isPending ? <LoadingState label="Loading invitations" lines={2} /> : undefined}
+        {invitations.error === null ? undefined : (
+          <ErrorState
+            description={errorDescription(invitations.error)}
+            onRetry={() => void invitations.refetch()}
+            retrying={invitations.isFetching}
+            technicalDetails={technicalDetails(invitations.error)}
+          />
+        )}
+        {pending?.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">No pending invitations.</p>
+        ) : undefined}
+        {pending === undefined || pending.length === 0 ? undefined : (
+          <InvitationsTable invitations={pending} />
+        )}
+      </section>
     </section>
   );
 }

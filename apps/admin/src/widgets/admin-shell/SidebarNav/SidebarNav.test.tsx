@@ -5,8 +5,8 @@ import {
   renderInRouter,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
 } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 import { SidebarNav } from "./index.js";
 
@@ -51,10 +51,7 @@ test("groups configured pages, collections with counts, library, and admin items
 });
 
 test("marks the current collection on its entry routes", async () => {
-  renderRoute(
-    "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
-  );
+  renderRoute("/content/posts/entry-1", staticSessionSource({ id: "editor-1", role: "editor" }));
   const aside = await screen.findByRole("complementary", { name: "Admin navigation" });
   expect(await within(aside).findByRole("link", { name: /^posts/ })).toHaveAttribute(
     "aria-current",
@@ -66,7 +63,7 @@ test("marks the current collection on its entry routes", async () => {
 test("a failed count or missing page draft keeps the item available and the route rendered", async () => {
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listEntries: async (modelKey) =>
         modelKey === "posts"

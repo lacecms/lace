@@ -280,7 +280,11 @@ export async function templateUpgradeJourney(temporary, operations) {
           );
       }
       // Published alpha.2 engines lack the 33D build-outcome migration the candidate requires.
-      for (const step of ["0003_site_build_outcomes", "Downgrading to 0.1.0-alpha.2"])
+      for (const step of [
+        "0003_site_build_outcomes",
+        "Downgrading to 0.1.0-alpha.2",
+        "0004_account_tokens",
+      ])
         if (!applied.report.guidance?.includes(step))
           throw new Error(
             `upgrade-${version}-${variant.name}-apply: instructions lack the database step (${step})`,

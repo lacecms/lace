@@ -1,11 +1,16 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { entry, entryList, renderRoute, stubClient } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import {
+  entry,
+  entryList,
+  renderRoute,
+  stubClient,
+  staticSessionSource,
+} from "../../../app/testing/index.js";
 import { AdminClientError, type EntryListQuery } from "../../../shared/api/index.js";
 
-const editor = createStaticSessionSource({ id: "editor-1", role: "editor" });
+const editor = staticSessionSource({ id: "editor-1", role: "editor" });
 
 test("routes collections to their entry list and pages back to the landing route", async () => {
   renderRoute("/content/posts", editor);

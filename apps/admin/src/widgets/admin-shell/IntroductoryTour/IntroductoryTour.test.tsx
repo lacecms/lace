@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { sessionFor } from "../../../app/testing/index.js";
 import { userEvent } from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, expect, test, vi } from "vitest";
@@ -19,7 +20,13 @@ function fixture(role: "admin" | "editor" | "viewer" = "admin") {
   account.id = "fallback";
   document.body.append(account);
   const fallbackFocus = () => account;
-  const props = { steps: tourSteps(role), scope, ref, records, fallbackFocus };
+  const props = {
+    steps: tourSteps(sessionFor({ id: "user-1", role: role })),
+    scope,
+    ref,
+    records,
+    fallbackFocus,
+  };
   const result = render(<IntroductoryTour {...props} />);
   return { ...result, props, records, ref };
 }
@@ -65,7 +72,7 @@ test("returning user and document fallback survive remounts", async () => {
   const ref = createRef<TourHandle>();
   render(
     <IntroductoryTour
-      steps={tourSteps("viewer")}
+      steps={tourSteps(sessionFor({ id: "user-1", role: "viewer" }))}
       scope={scope}
       ref={ref}
       records={createTourRecords(scope, () => undefined, memory)}
@@ -86,17 +93,29 @@ test("delayed models preserve Media; role downgrade removes privileged active co
     { key: "home", kind: "page" as const },
     { key: "posts", kind: "collection" as const },
   ];
-  rerender(<IntroductoryTour {...props} steps={tourSteps("admin", models)} />);
+  rerender(
+    <IntroductoryTour
+      {...props}
+      steps={tourSteps(sessionFor({ id: "user-1", role: "admin" }), models)}
+    />,
+  );
   expect(screen.getByRole("heading", { name: /Media, Step 4 of 7/ })).toBeInTheDocument();
   for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
   expect(screen.getByRole("dialog", { name: /Settings/ })).toHaveTextContent(
     "Create a named build token",
   );
-  rerender(<IntroductoryTour {...props} steps={tourSteps("viewer", models)} />);
+  rerender(
+    <IntroductoryTour
+      {...props}
+      steps={tourSteps(sessionFor({ id: "user-1", role: "viewer" }), models)}
+    />,
+  );
   const dialog = screen.getByRole("dialog", { name: /Content/ });
   expect(dialog).not.toHaveTextContent(/Create a named|Save to keep|Publish a saved/);
   await user.click(within(dialog).getByRole("button", { name: "Next" }));
-  rerender(<IntroductoryTour {...props} steps={tourSteps("viewer")} />);
+  rerender(
+    <IntroductoryTour {...props} steps={tourSteps(sessionFor({ id: "user-1", role: "viewer" }))} />,
+  );
   expect(screen.getByRole("dialog", { name: /Content/ })).toBeInTheDocument();
 });
 

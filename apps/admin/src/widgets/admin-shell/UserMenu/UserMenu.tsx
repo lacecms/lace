@@ -1,5 +1,5 @@
 import { useId, useRef } from "react";
-import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { ChevronsUpDown, LogOut, Monitor, Moon, Sun, UserRound } from "lucide-react";
 import { roleLabel as labelOfRole, type AdminRole } from "../../../entities/session/index.js";
 import {
   themePreferences,
@@ -39,15 +39,20 @@ function initialsOf(name: string | undefined): string {
     .join("");
 }
 
-/** The signed-in user's name and role with theme selection and log out; never shows the user ID. */
+/**
+ * The signed-in user's name and role with Account, theme selection, and log
+ * out; never shows the user ID.
+ */
 export function UserMenu({
   displayName,
+  onAccount,
   onSignOut,
   onIntroduction,
   role,
   signingOut,
 }: {
   readonly displayName?: string | undefined;
+  readonly onAccount?: (() => void) | undefined;
   readonly onIntroduction?: ((opener: HTMLElement | null) => void) | undefined;
   readonly onSignOut: () => void;
   readonly role: AdminRole;
@@ -98,6 +103,15 @@ export function UserMenu({
           <span className="text-xs text-muted-foreground">{roleLabel}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {onAccount && (
+          <>
+            <DropdownMenuItem onSelect={onAccount}>
+              <UserRound aria-hidden="true" />
+              Account
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground" id={themeLabel}>
           Theme
         </DropdownMenuLabel>

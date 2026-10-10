@@ -14,8 +14,13 @@ import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth"
 import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
+  createEmailSender,
   createLaceApp,
+  sensitiveRequestLimit,
   parseBuildSiteIdentity,
+  parseEmailSettings,
+  type EmailSettings,
+  type EmailSettingsResult,
   type ActorResolver,
   type BuiltAdminResponder,
   type LaceAppInput,
@@ -33,6 +38,8 @@ import { NodeMinioObjectStorage, type NodeMinioSettings } from "./minio-storage.
 import { NodeMediaDeletionDispatcher } from "./media-deletion-dispatcher.js";
 import { NodeSiteBuildDispatcher } from "./site-build-dispatcher.js";
 import { NodeBuilderSiteBuildTrigger, type NodeBuilderTriggerSettings } from "./builder-trigger.js";
+import { createSmtpEmailSender } from "./smtp-email.js";
+import type { EmailSender } from "@lacecms/application";
 
 export type NodeEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -55,6 +62,8 @@ export interface NodeRuntimeSettings {
   readonly authSecret: string;
   readonly adminDevOrigin?: URL;
   readonly databasePath: string;
+  /** Absent means the `none` provider. */
+  readonly email?: EmailSettings;
   readonly host: string;
   readonly minio: NodeMinioSettings;
   readonly port: number;
@@ -123,9 +132,19 @@ function positiveInteger(
   return parsed;
 }
 
+/** Node email rules, shared by the runtime and doctor; production follows `NODE_ENV`. */
+export function parseNodeEmailSettings(environment: NodeEnvironment): EmailSettingsResult {
+  return parseEmailSettings(environment, {
+    production: environment.NODE_ENV === "production",
+    runtime: "node",
+  });
+}
+
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
+  const email = parseNodeEmailSettings(environment);
+  issues.push(...email.issues);
   const configuredProxies = environment.LACE_TRUSTED_PROXY_CIDRS?.trim();
   const trustedProxyCidrs = configuredProxies
     ? configuredProxies.split(",").map((item) => item.trim())
@@ -203,7 +222,8 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     minioEndpoint === undefined ||
     minioRegion === undefined ||
     minioSecretAccessKey === undefined ||
-    minioTimeoutMs === undefined
+    minioTimeoutMs === undefined ||
+    email.settings === undefined
   ) {
     throw new NodeEnvironmentError(Object.freeze(issues));
   }
@@ -213,6 +233,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     ...(adminDevOrigin === undefined ? {} : { adminDevOrigin }),
     authSecret,
     databasePath,
+    email: email.settings,
     host,
     minio: {
       accessKeyId: minioAccessKeyId,
@@ -326,25 +347,12 @@ class NodeRequestRateLimiter implements RequestRateLimiter {
     readonly request: Request;
     readonly actor?: { readonly id: string };
   }): Promise<boolean | import("@lacecms/application").RateLimitDecision> {
-    const pathname = new URL(input.request.url).pathname;
-    const method = input.request.method;
-    const operation =
-      pathname.startsWith("/api/auth/") && method !== "GET"
-        ? "auth"
-        : pathname === "/api/v1/setup/admin"
-          ? "setup"
-          : pathname.startsWith("/api/v1/admin/api-tokens") && method !== "GET"
-            ? "token"
-            : pathname === "/api/v1/admin/media" && method === "POST"
-              ? "upload"
-              : undefined;
-    if (operation === undefined) return true;
-    if ((operation === "upload" || operation === "token") && input.actor === undefined) return true;
+    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
+    if (limit === undefined) return true;
+    if (limit.scope === "actor" && input.actor === undefined) return true;
     const subject =
-      operation === "upload" || operation === "token"
-        ? `actor:${input.actor!.id}`
-        : this.clients.get(input.request);
-    return this.limiter.check({ now: this.clock.now(), operation, subject });
+      limit.scope === "actor" ? `actor:${input.actor!.id}` : this.clients.get(input.request);
+    return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
   }
 }
 export const defaultNodeLogger: ServerLogger = Object.freeze({
@@ -365,6 +373,23 @@ export interface CreateNodeRuntimeInput {
   readonly settings: NodeRuntimeSettings;
   readonly storage?: ObjectStorage;
   readonly buildTrigger?: SiteBuildTrigger;
+  /** Overrides the sender composed from `settings.email`. */
+  readonly email?: EmailSender;
+}
+
+/** Composes the configured provider; SMTP is the only Node-specific one. */
+export function createNodeEmailSender(settings: EmailSettings = { provider: "none" }): EmailSender {
+  return createEmailSender(settings, {
+    runtimeSender: (configured) => {
+      if (configured.provider !== "smtp")
+        throw new Error(`Email provider ${configured.provider} is unavailable on Node.`);
+      return createSmtpEmailSender({
+        from: configured.from,
+        settings: configured.smtp,
+        timeoutMs: configured.timeoutMs,
+      });
+    },
+  });
 }
 
 export interface NodeRuntime {
@@ -422,13 +447,12 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   );
   const clock = new SystemNodeClock();
   const security = new NodeSecurityService(database.connection, () => clock.now());
+  const sensitiveLimiter = new NodeFixedWindowRateLimiter(
+    database.connection,
+    input.settings.authSecret,
+  );
   const rateLimiter =
-    input.rateLimiter ??
-    new NodeRequestRateLimiter(
-      new NodeFixedWindowRateLimiter(database.connection, input.settings.authSecret),
-      clock,
-      clients,
-    );
+    input.rateLimiter ?? new NodeRequestRateLimiter(sensitiveLimiter, clock, clients);
   const cache = new NoopNodeCache();
   const storage = input.storage ?? new NodeMinioObjectStorage(input.settings.minio);
   const deletionDispatcher = new NodeMediaDeletionDispatcher({
@@ -490,6 +514,14 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     buildSite: input.settings.buildSite ?? null,
     config: input.config,
     content,
+    defer: (task) => {
+      void task.catch(() =>
+        console.error(
+          JSON.stringify({ component: "deferred", level: "warn", reason: "task_failed" }),
+        ),
+      );
+    },
+    email: input.email ?? createNodeEmailSender(input.settings.email),
     environment: input.environment ?? { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultNodeLogger,
     maxBodyBytes: input.maxBodyBytes ?? 1_048_576,
@@ -500,6 +532,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     readiness,
     requestIds: input.requestIds ?? defaultNodeRequestIds,
     security,
+    ...(input.rateLimiter === undefined ? { sensitiveLimiter } : {}),
   });
   return Object.freeze({
     setRequestPeer: (request: Request, peer: string | undefined) =>

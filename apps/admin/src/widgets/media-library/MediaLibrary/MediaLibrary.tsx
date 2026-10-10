@@ -3,7 +3,7 @@ import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack
 import { Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { mediaConstraintsText } from "../../../entities/media/index.js";
-import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import {
   DropOverlay,
   UploadQueue,
@@ -53,7 +53,7 @@ export function MediaLibrary({
   };
   const client = useAdminClient();
   const session = useSession();
-  const canWrite = session.role !== "viewer";
+  const canWrite = can(session, "media:write");
   const [updates, setUpdates] = useState<Readonly<Record<string, MediaMetadataDto>>>({});
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const opener = useRef<HTMLElement | null>(null);

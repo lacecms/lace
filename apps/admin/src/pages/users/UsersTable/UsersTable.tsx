@@ -1,5 +1,7 @@
 import type { ManagedUserDto } from "@lacecms/contracts";
 import { roleLabel } from "../../../entities/session/index.js";
+import { SendPasswordResetDialog } from "../../../features/reset-user-password/index.js";
+import { SignOutUserDialog } from "../../../features/sign-out-user/index.js";
 import { ChangeRoleDialog, UserAccessDialog } from "../../../features/update-user/index.js";
 import { Badge } from "../../../shared/ui/Badge/index.js";
 import {
@@ -13,8 +15,8 @@ import {
 
 /**
  * Accounts with their confirmed role and status. Each row's actions open
- * confirmation dialogs; the signed-in administrator cannot disable their own
- * account from here.
+ * confirmation dialogs. Disabled accounts offer only Enable, and the
+ * signed-in administrator's own row offers only Change role.
  */
 export function UsersTable({
   currentUserId,
@@ -61,6 +63,12 @@ export function UsersTable({
                 <div className="flex justify-end gap-2">
                   {account.disabled ? undefined : (
                     <ChangeRoleDialog account={account} isSelf={isSelf} />
+                  )}
+                  {account.disabled || isSelf ? undefined : (
+                    <>
+                      <SendPasswordResetDialog account={account} />
+                      <SignOutUserDialog account={account} />
+                    </>
                   )}
                   {isSelf ? undefined : <UserAccessDialog account={account} />}
                 </div>

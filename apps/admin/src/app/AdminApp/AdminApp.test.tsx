@@ -1,12 +1,15 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { logOut, renderRoute, stubClient as client } from "../testing/index.js";
-import { AdminApp } from "./index.js";
 import {
-  createStaticSessionSource,
-  type AdminSessionSource,
-} from "../../entities/session/index.js";
+  logOut,
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+  sessionFor,
+} from "../testing/index.js";
+import { AdminApp } from "./index.js";
+import { type AdminSession, type AdminSessionSource } from "../../entities/session/index.js";
 import { AdminClientError } from "../../shared/api/index.js";
 import { safeReturnPath } from "../../shared/lib/index.js";
 
@@ -34,7 +37,7 @@ test("anonymous protected visits show only neutral loading before login redirect
 
 test("admin root redirects through the session guard and user-menu logout clears the session", async () => {
   const user = userEvent.setup();
-  let current: { id: string; role: "admin" } | null = { id: "admin-1", role: "admin" };
+  let current: AdminSession | null = sessionFor({ id: "admin-1", role: "admin" });
   const source: AdminSessionSource = { get: async () => current, invalidate: () => undefined };
   const signOut = vi.fn(async () => {
     current = null;
@@ -45,20 +48,17 @@ test("admin root redirects through the session guard and user-menu logout clears
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   expect(signOut).toHaveBeenCalledOnce();
   document.body.replaceChildren();
-  renderRoute("/", createStaticSessionSource(null));
+  renderRoute("/", staticSessionSource(null));
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Content" })).not.toBeInTheDocument();
 });
 
 test("typed route foundations render valid paths and reject malformed model keys", async () => {
-  renderRoute(
-    "/content/posts/entry-123",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
-  );
+  renderRoute("/content/posts/entry-123", staticSessionSource({ id: "admin-1", role: "admin" }));
   expect(await screen.findByRole("heading", { name: "Edit posts" })).toBeInTheDocument();
 
   document.body.replaceChildren();
-  renderRoute("/content/INVALID", createStaticSessionSource({ id: "admin-1", role: "admin" }));
+  renderRoute("/content/INVALID", staticSessionSource({ id: "admin-1", role: "admin" }));
   expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Go to Content" })).toHaveAttribute(
     "href",
@@ -71,7 +71,7 @@ test("unknown paths render not-found inside the shell for signed-in users", asyn
   const listUsers = vi.fn(client().listUsers);
   renderRoute(
     "/does-not-exist",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({ listModels, listUsers }),
   );
   const heading = await screen.findByRole("heading", { name: "Page not found" });
@@ -89,7 +89,7 @@ test("unknown paths render not-found inside the shell for signed-in users", asyn
 });
 
 test("anonymous visitors to unknown paths sign in and return there", async () => {
-  const router = renderRoute("/does-not-exist", createStaticSessionSource(null));
+  const router = renderRoute("/does-not-exist", staticSessionSource(null));
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   expect(router.state.location.search).toEqual({ redirect: "/does-not-exist" });
   expect(screen.queryByRole("heading", { name: "Page not found" })).not.toBeInTheDocument();
@@ -101,7 +101,7 @@ test("safe navigation helpers retain only local return paths", () => {
 });
 
 test("an expired-session response removes protected content during recovery", async () => {
-  let session: { id: string; role: "editor" } | null = { id: "editor-1", role: "editor" };
+  let session: AdminSession | null = sessionFor({ id: "editor-1", role: "editor" });
   const source: AdminSessionSource = {
     get: async () => session,
     invalidate: () => {
@@ -124,7 +124,7 @@ test("an expired-session response removes protected content during recovery", as
 
 test("the application component mounts providers and guards the admin entry", async () => {
   window.history.replaceState(null, "", "/admin/content");
-  render(<AdminApp client={client()} sessionSource={createStaticSessionSource(null)} />);
+  render(<AdminApp client={client()} sessionSource={staticSessionSource(null)} />);
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   expect(window.location.pathname).toBe("/admin/login");
   window.history.replaceState(null, "", "/");

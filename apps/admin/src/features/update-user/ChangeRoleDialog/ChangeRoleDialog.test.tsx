@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { renderInRouter, stubClient } from "../../../app/testing/index.js";
+import { renderInRouter, stubClient, sessionFor } from "../../../app/testing/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 import { ChangeRoleDialog } from "./index.js";
 
@@ -68,7 +68,7 @@ test("re-reads the session after a confirmed self-demotion", async () => {
   renderInRouter(<ChangeRoleDialog account={admin} isSelf />, {
     client: stubClient({ updateUser: async () => ({ ...admin, role: "editor" as const }) }),
     session: { id: "admin-1", role: "admin" },
-    sessionSource: { get: async () => ({ id: "admin-1", role: "editor" }), invalidate },
+    sessionSource: { get: async () => sessionFor({ id: "admin-1", role: "editor" }), invalidate },
   });
   const dialog = await pickRole(user, "admin@lace.test", "Editor");
   await user.click(within(dialog).getByRole("button", { name: "Save role" }));

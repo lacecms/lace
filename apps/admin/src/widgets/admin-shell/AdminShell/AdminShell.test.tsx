@@ -1,8 +1,11 @@
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { renderRoute, stubClient as client } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import {
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+} from "../../../app/testing/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -10,19 +13,19 @@ afterEach(() => {
 });
 
 test("role-aware navigation and direct admin-only route behavior follow the role matrix", async () => {
-  renderRoute("/users", createStaticSessionSource({ id: "viewer-1", role: "viewer" }));
+  renderRoute("/users", staticSessionSource({ id: "viewer-1", role: "viewer" }));
   expect(await screen.findByRole("heading", { name: "Access denied" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Users" })).not.toBeInTheDocument();
 
   document.body.replaceChildren();
-  renderRoute("/content", createStaticSessionSource({ id: "editor-1", role: "editor" }));
+  renderRoute("/content", staticSessionSource({ id: "editor-1", role: "editor" }));
   await screen.findByRole("heading", { name: "Content", level: 1 });
   const aside = screen.getByRole("complementary", { name: "Admin navigation" });
   expect(within(aside).queryByRole("link", { name: "Users" })).not.toBeInTheDocument();
   expect(within(aside).getByRole("link", { name: "Media" })).toBeInTheDocument();
 
   document.body.replaceChildren();
-  renderRoute("/settings", createStaticSessionSource({ id: "admin-1", role: "admin" }));
+  renderRoute("/settings", staticSessionSource({ id: "admin-1", role: "admin" }));
   const adminAside = await screen.findByRole("complementary", { name: "Admin navigation" });
   expect(within(adminAside).getByRole("link", { name: "Settings" })).toHaveAttribute(
     "aria-current",
@@ -30,9 +33,27 @@ test("role-aware navigation and direct admin-only route behavior follow the role
   );
 });
 
+test("navigation and route guards follow session permissions, not the role name", async () => {
+  const operator = staticSessionSource({
+    id: "ops-1",
+    permissions: ["content:read", "settings:manage"],
+    role: "viewer",
+  });
+  renderRoute("/users", operator);
+  expect(await screen.findByRole("heading", { name: "Access denied" })).toBeInTheDocument();
+  const aside = screen.getByRole("complementary", { name: "Admin navigation" });
+  expect(within(aside).getByRole("link", { name: "Settings" })).toBeInTheDocument();
+  expect(within(aside).queryByRole("link", { name: "Users" })).not.toBeInTheDocument();
+
+  document.body.replaceChildren();
+  renderRoute("/settings", operator);
+  expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Access denied" })).not.toBeInTheDocument();
+});
+
 test("the skip link comes first and moves focus to the main content", async () => {
   const user = userEvent.setup();
-  renderRoute("/content", createStaticSessionSource({ id: "editor-1", role: "editor" }));
+  renderRoute("/content", staticSessionSource({ id: "editor-1", role: "editor" }));
   await screen.findByRole("heading", { name: "Content", level: 1 });
   await user.tab();
   const skip = screen.getByRole("link", { name: "Skip to content" });
@@ -45,7 +66,7 @@ test("a failed logout reports the error and keeps the route rendered", async () 
   const user = userEvent.setup();
   renderRoute(
     "/content",
-    createStaticSessionSource({ displayName: "Ada Editor", id: "editor-1", role: "editor" }),
+    staticSessionSource({ displayName: "Ada Editor", id: "editor-1", role: "editor" }),
     client({ signOut: async () => Promise.reject(new AdminClientError({ message: "Auth down" })) }),
   );
   await screen.findByRole("heading", { name: "Content", level: 1 });
@@ -61,7 +82,7 @@ test.each(["admin", "editor", "viewer"] as const)(
   "%s can skip the invitation and replay from the account menu",
   async (role) => {
     const user = userEvent.setup();
-    renderRoute("/content", createStaticSessionSource({ id: `tour-${role}`, role }));
+    renderRoute("/content", staticSessionSource({ id: `tour-${role}`, role }));
     await screen.findByRole("heading", { name: "Content", level: 1 });
     await user.click(screen.getByRole("button", { name: "Skip" }));
     const aside = screen.getByRole("complementary", { name: "Admin navigation" });
@@ -82,7 +103,7 @@ test("tour preserves an unsaved draft and search state without mutation calls", 
   const publishEntry = vi.fn();
   const router = renderRoute(
     "/content/posts/entry-1?from=tour",
-    createStaticSessionSource({ id: "draft-tour", role: "editor" }),
+    staticSessionSource({ id: "draft-tour", role: "editor" }),
     client({ saveDraft, publishEntry }),
   );
   const title = await screen.findByRole("textbox", { name: "Title" });
@@ -114,7 +135,7 @@ test("model loading, failure and empty navigation do not block the common tour",
   });
   renderRoute(
     "/content",
-    createStaticSessionSource({ id: "pending-tour", role: "viewer" }),
+    staticSessionSource({ id: "pending-tour", role: "viewer" }),
     client({ listModels: () => pending }),
   );
   await screen.findByRole("heading", { name: "Content", level: 1 });

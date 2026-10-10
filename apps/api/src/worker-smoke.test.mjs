@@ -15,6 +15,7 @@ const hook = "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/s
 const secret = "smoke-test-auth-secret-that-is-long-enough-for-better-auth";
 const password = "correct horse battery staple";
 const hookCalls = [];
+const emailCalls = [];
 let built;
 let state;
 let miniflare;
@@ -108,13 +109,28 @@ beforeAll(async () => {
       bindings: {
         LACE_AUTH_SECRET: secret,
         LACE_DEPLOY_HOOK_URL: hook,
+        LACE_EMAIL_FROM: "Lace Smoke <cms@lace.test>",
+        LACE_EMAIL_PROVIDER: "resend",
         LACE_PUBLIC_BASE_URL: `${origin}/`,
+        LACE_RESEND_API_KEY: "re_smoke_key",
       },
       compatibilityDate: built.config.compatibility_date,
       compatibilityFlags: built.config.compatibility_flags,
       d1Databases: { DB: built.config.d1_databases[0].database_id },
       modules: true,
       outboundService: async (request) => {
+        if (new URL(request.url).hostname === "api.resend.com") {
+          const body = await request.json();
+          emailCalls.push({
+            authorization: request.headers.get("authorization"),
+            body,
+            url: request.url,
+          });
+          // Invitations exercise the copy-once link fallback of an undelivered email.
+          if (body.subject === "You are invited to Lace CMS")
+            return Response.json({ message: "unavailable" }, { status: 503 });
+          return Response.json({ id: "smoke-email-1" });
+        }
         hookCalls.push({
           authorization: request.headers.get("authorization"),
           body: await request.text(),
@@ -173,6 +189,88 @@ test("Worker bundle smoke: health, auth, R2 upload, publish, deploy hook, export
   });
   expect(session.response.status).toBe(200);
   cookie = session.response.headers.getSetCookie()[0].split(";")[0];
+
+  const summary = await call("/api/v1/admin/session");
+  expect(summary.response.status).toBe(200);
+  expect(summary.body).toMatchObject({
+    permissions: expect.arrayContaining(["content:publish", "settings:manage", "users:manage"]),
+    user: { email: "admin@lace.test", role: "admin" },
+  });
+  expect((await call("/api/v1/admin/settings/status")).body.email).toEqual({
+    from: "Lace Smoke <cms@lace.test>",
+    provider: "resend",
+  });
+  const emailTest = await call("/api/v1/admin/settings/email-test", { json: {}, method: "POST" });
+  expect(emailTest.body).toEqual({ status: "sent" });
+  expect(emailCalls).toHaveLength(1);
+  expect(emailCalls[0]).toMatchObject({
+    authorization: "Bearer re_smoke_key",
+    body: {
+      from: "Lace Smoke <cms@lace.test>",
+      subject: "Lace test email",
+      to: ["admin@lace.test"],
+    },
+    url: "https://api.resend.com/emails",
+  });
+
+  const invited = await call("/api/v1/admin/invitations", {
+    headers: { origin },
+    json: { email: "invitee@lace.test", role: "editor" },
+    method: "POST",
+  });
+  expect(invited.response.status).toBe(201);
+  expect(invited.body).toMatchObject({
+    delivery: { reason: "unavailable", status: "failed" },
+    invitation: { email: "invitee@lace.test", role: "editor", state: "pending" },
+  });
+  expect(invited.body.link).toMatch(/^https:\/\/cms\.lace\.test\/admin\/accept-invite#token=/u);
+  const inviteToken = invited.body.link.split("#token=")[1];
+  const adminCookie = cookie;
+  cookie = undefined;
+  expect(
+    (await call("/api/v1/invitations/inspect", { json: { token: inviteToken }, method: "POST" }))
+      .body,
+  ).toMatchObject({
+    email: "invitee@lace.test",
+    role: "editor",
+  });
+  const accepted = await call("/api/v1/invitations/accept", {
+    json: { displayName: "Invitee", password, token: inviteToken },
+    method: "POST",
+  });
+  expect(accepted.response.status).toBe(201);
+  expect(accepted.body).toEqual({ email: "invitee@lace.test" });
+  const invitee = await call("/api/auth/sign-in/email", {
+    headers: { origin },
+    json: { email: "invitee@lace.test", password },
+    method: "POST",
+  });
+  expect(invitee.response.status).toBe(200);
+  cookie = invitee.response.headers.getSetCookie()[0].split(";")[0];
+  const sessions = await call("/api/v1/account/sessions");
+  expect(sessions.response.status).toBe(200);
+  expect(sessions.body.items).toEqual([expect.objectContaining({ current: true })]);
+  expect(JSON.stringify(sessions.body)).not.toContain(cookie.split("=")[1]);
+  cookie = undefined;
+  const reset = await call("/api/v1/password-reset/request", {
+    json: { email: "invitee@lace.test" },
+    method: "POST",
+  });
+  expect(reset.response.status).toBe(202);
+  const unknownReset = await call("/api/v1/password-reset/request", {
+    json: { email: "nobody@lace.test" },
+    method: "POST",
+  });
+  expect(unknownReset.response.status).toBe(202);
+  cookie = adminCookie;
+  expect(
+    (
+      await call("/api/v1/admin/users", {
+        json: { email: "x@lace.test", password, role: "viewer" },
+        method: "POST",
+      })
+    ).response.status,
+  ).toBe(404);
 
   const form = new FormData();
   form.append("file", new Blob([png()], { type: "image/png" }), "cover.png");

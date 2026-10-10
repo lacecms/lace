@@ -20,6 +20,7 @@ export * from "./runtime.js";
 export * from "./client-address.js";
 export * from "./host-database-safety.js";
 export * from "./security.js";
+export * from "./smtp-email.js";
 
 export interface NodeDatabase {
   readonly connection: Database.Database;

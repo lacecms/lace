@@ -8,8 +8,8 @@ import {
   models,
   renderRoute,
   stubClient as client,
+  staticSessionSource,
 } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -65,7 +65,7 @@ test("entry editor authors ordered blocks, selects media, and adopts server posi
   const saveDraft = saveDraftMock as unknown as AdminClient["saveDraft"];
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listMedia: async () => ({
         items: [
@@ -159,7 +159,7 @@ test("server block validation stays on the nested editable block field", async (
   };
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, model] }) as never,
       loadEntry: async () => ({
@@ -244,7 +244,7 @@ function mountCards() {
   );
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, cardModel] }) as never,
       loadEntry: async () => ({
@@ -354,7 +354,7 @@ test("a block whose type the model no longer allows renders with its error and c
   );
   renderRoute(
     "/content/posts/entry-1",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listModels: async () => ({ items: [models.items[0]!, cardModel] }) as never,
       loadEntry: async () => ({

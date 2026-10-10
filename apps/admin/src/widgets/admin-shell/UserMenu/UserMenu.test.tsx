@@ -85,3 +85,20 @@ test("the theme choice is operable from the keyboard", async () => {
   expect(localStorage.getItem(themeStorageKey)).toBe("light");
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 });
+
+test("user menu offers Account when the shell provides it", async () => {
+  const user = userEvent.setup();
+  const onAccount = vi.fn();
+  render(
+    <UserMenu
+      displayName="Vera Viewer"
+      onAccount={onAccount}
+      onSignOut={() => undefined}
+      role="viewer"
+      signingOut={false}
+    />,
+  );
+  await openMenu(user);
+  await user.click(screen.getByRole("menuitem", { name: "Account" }));
+  expect(onAccount).toHaveBeenCalledOnce();
+});

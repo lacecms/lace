@@ -156,9 +156,12 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   };
   const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
     if (path.endsWith("/settings/status"))
-      return Response.json({ configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: true });
-    if (path.endsWith("/users") && init?.method === "POST")
-      return Response.json(account, { status: 201 });
+      return Response.json({
+        configuredModels: 2,
+        email: { provider: "none" as const },
+        engineVersion: "0.1.0-alpha.4",
+        ready: true,
+      });
     if (path.endsWith("/users")) return Response.json({ items: [account] });
     if (path.endsWith("/user-1")) return Response.json({ ...account, role: "admin" });
     if (path.endsWith("/api-tokens") && init?.method === "POST")
@@ -168,14 +171,12 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   });
   const client = createAdminClient(fetcher as typeof fetch);
   await expect(client.listUsers()).resolves.toEqual({ items: [account] });
-  await expect(
-    client.createUser({ email: account.email, password: "long-password", role: "editor" }),
-  ).resolves.toEqual(account);
   await expect(client.updateUser("user-1", { role: "admin" })).resolves.toMatchObject({
     role: "admin",
   });
   await expect(client.loadSettingsStatus()).resolves.toEqual({
     configuredModels: 2,
+    email: { provider: "none" as const },
     engineVersion: "0.1.0-alpha.4",
     ready: true,
   });
@@ -187,6 +188,199 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   expect(fetcher.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
   await expect(
     createAdminClient(async () => Response.json({ items: [{ token: "secret" }] })).listTokens(),
+  ).rejects.toBeInstanceOf(AdminClientError);
+});
+
+const invitation = {
+  createdAt: "2026-10-01T00:00:00.000Z",
+  email: "new@lace.test",
+  expiresAt: "2026-10-04T00:00:00.000Z",
+  id: "invitation-1",
+  invitedBy: "Ada Admin",
+  role: "editor" as const,
+  state: "pending" as const,
+};
+const accountToken = "A".repeat(43);
+const acceptLink = `https://lace.test/admin/accept-invite#token=${accountToken}`;
+
+test("sends credentialed invitation, reset, and sign-out commands for other users", async () => {
+  const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+    if (path === "/api/v1/admin/invitations" && init?.method === "POST")
+      return Response.json(
+        {
+          delivery: { reason: "not_configured", status: "failed" },
+          invitation,
+          link: acceptLink,
+        },
+        { status: 201 },
+      );
+    if (path === "/api/v1/admin/invitations") return Response.json({ items: [invitation] });
+    if (path.endsWith("/resend"))
+      return Response.json({ delivery: { status: "sent" }, invitation });
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (path.endsWith("/password-reset")) return Response.json({ delivery: { status: "sent" } });
+    return Response.json({ revoked: 3 });
+  });
+  const client = createAdminClient(fetcher as typeof fetch);
+  await expect(client.listInvitations()).resolves.toEqual({ items: [invitation] });
+  await expect(
+    client.createInvitation({ email: "new@lace.test", role: "editor" }),
+  ).resolves.toMatchObject({ link: acceptLink });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/invitations",
+    expect.objectContaining({
+      body: JSON.stringify({ email: "new@lace.test", role: "editor" }),
+      method: "POST",
+    }),
+  );
+  await expect(client.resendInvitation("invitation/1")).resolves.toEqual({
+    delivery: { status: "sent" },
+    invitation,
+  });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/invitations/invitation%2F1/resend",
+    expect.objectContaining({ body: "{}", method: "POST" }),
+  );
+  await expect(client.revokeInvitation("invitation-1")).resolves.toBeUndefined();
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/invitations/invitation-1",
+    expect.objectContaining({ method: "DELETE" }),
+  );
+  await expect(client.sendPasswordReset("user-1")).resolves.toEqual({
+    delivery: { status: "sent" },
+  });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/users/user-1/password-reset",
+    expect.objectContaining({ body: "{}", method: "POST" }),
+  );
+  await expect(client.signOutUser("user-1")).resolves.toEqual({ revoked: 3 });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/users/user-1/sessions/revoke",
+    expect.objectContaining({ body: "{}", method: "POST" }),
+  );
+  expect(fetcher.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
+  // A sent invitation never carries a link, and an unsent one always does.
+  await expect(
+    createAdminClient(async () =>
+      Response.json({ delivery: { status: "sent" }, invitation, link: acceptLink }),
+    ).createInvitation({ email: "new@lace.test", role: "editor" }),
+  ).rejects.toBeInstanceOf(AdminClientError);
+  await expect(
+    createAdminClient(async () =>
+      Response.json({ delivery: { reason: "rejected", status: "failed" } }),
+    ).sendPasswordReset("user-1"),
+  ).rejects.toBeInstanceOf(AdminClientError);
+});
+
+test("carries account tokens only in JSON bodies of public account requests", async () => {
+  const fetcher = vi.fn(async (path: string, _init?: RequestInit) => {
+    if (path.endsWith("/inspect"))
+      return Response.json({
+        email: "new@lace.test",
+        expiresAt: "2026-10-04T00:00:00.000Z",
+        role: "editor",
+      });
+    if (path.endsWith("/accept")) return Response.json({ email: "new@lace.test" }, { status: 201 });
+    if (path.endsWith("/request")) return new Response(null, { status: 202 });
+    return new Response(null, { status: 204 });
+  });
+  const client = createAdminClient(fetcher as typeof fetch);
+  await expect(client.inspectInvitation(accountToken)).resolves.toMatchObject({ role: "editor" });
+  await expect(
+    client.acceptInvitation({ password: "long-password-123", token: accountToken }),
+  ).resolves.toEqual({ email: "new@lace.test" });
+  await expect(client.requestPasswordReset("someone@lace.test")).resolves.toBeUndefined();
+  await expect(
+    client.confirmPasswordReset({ password: "long-password-123", token: accountToken }),
+  ).resolves.toBeUndefined();
+  expect(fetcher.mock.calls.map(([path]) => path)).toEqual([
+    "/api/v1/invitations/inspect",
+    "/api/v1/invitations/accept",
+    "/api/v1/password-reset/request",
+    "/api/v1/password-reset/confirm",
+  ]);
+  for (const [path, init] of fetcher.mock.calls) {
+    expect(path).not.toContain(accountToken);
+    expect(init).toMatchObject({ credentials: "same-origin", method: "POST" });
+  }
+  expect(fetcher.mock.calls[3]?.[1]?.body).toBe(
+    JSON.stringify({ password: "long-password-123", token: accountToken }),
+  );
+
+  const invalid = createAdminClient(async () =>
+    Response.json(
+      {
+        error: {
+          code: "INVITATION_INVALID",
+          details: { issues: [{ code: "invalid", message: "Bad token.", path: "/token" }] },
+          message: "The invitation is invalid or has expired.",
+        },
+      },
+      { status: 410 },
+    ),
+  );
+  const error = await invalid.acceptInvitation({ password: "x", token: accountToken }).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  expect(error).toBeInstanceOf(AdminClientError);
+  expect(error).toMatchObject({ code: "INVITATION_INVALID", issues: undefined, status: 410 });
+});
+
+test("reads and changes the signed-in user's own account", async () => {
+  const sessionItem = {
+    browser: "Firefox",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    current: true,
+    id: "session-1",
+    lastActiveAt: "2026-10-02T00:00:00.000Z",
+    os: "Linux",
+  };
+  const summary = {
+    permissions: ["content:read"],
+    user: { displayName: "Ada Lovelace", email: "ada@lace.test", id: "user-1", role: "viewer" },
+  };
+  const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+    if (path === "/api/v1/account") return Response.json(summary);
+    if (path === "/api/v1/account/sessions") return Response.json({ items: [sessionItem] });
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return Response.json({ revoked: 2 });
+  });
+  const client = createAdminClient(fetcher as typeof fetch);
+  await expect(client.updateProfile({ displayName: "Ada Lovelace" })).resolves.toEqual(summary);
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/account",
+    expect.objectContaining({
+      body: JSON.stringify({ displayName: "Ada Lovelace" }),
+      method: "PATCH",
+    }),
+  );
+  await expect(
+    client.changePassword({
+      currentPassword: "old-password",
+      newPassword: "new-password-123",
+      signOutOtherSessions: true,
+    }),
+  ).resolves.toEqual({ revoked: 2 });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/account/password",
+    expect.objectContaining({ method: "POST" }),
+  );
+  await expect(client.listSessions()).resolves.toEqual({ items: [sessionItem] });
+  await expect(client.deleteSession("session/2")).resolves.toBeUndefined();
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/account/sessions/session%2F2",
+    expect.objectContaining({ method: "DELETE" }),
+  );
+  await expect(client.revokeOtherSessions()).resolves.toEqual({ revoked: 2 });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/account/sessions/revoke-others",
+    expect.objectContaining({ body: "{}", method: "POST" }),
+  );
+  await expect(
+    createAdminClient(async () =>
+      Response.json({ items: [{ ...sessionItem, token: "secret" }] }),
+    ).listSessions(),
   ).rejects.toBeInstanceOf(AdminClientError);
 });
 

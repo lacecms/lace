@@ -91,6 +91,8 @@ export async function invalidSettings(
       LACE_MINIO_TIMEOUT_MS: values.LACE_MINIO_TIMEOUT_MS ?? "5000",
       LACE_MINIO_ENDPOINT: "http://minio:9000",
       LACE_BUILDER_URL: "http://builder:8788/",
+      // The published API image runs with NODE_ENV=production.
+      NODE_ENV: "production",
     };
     try {
       parseNodeRuntimeSettings(mapped);
@@ -113,4 +115,21 @@ export async function invalidSettings(
       invalid.add("LACE_DATABASE_PATH");
   }
   return [...invalid].sort();
+}
+
+/**
+ * The configured email provider for the `node` target, using the runtime's
+ * rules without contacting any mail server. Undefined when not applicable or
+ * when the settings are invalid (the settings check names them).
+ */
+export async function emailProvider(
+  options: DoctorOptions,
+  values: Values,
+): Promise<string | undefined> {
+  if (options.target !== "node") return undefined;
+  const { parseNodeEmailSettings } = await import("@lacecms/platform-node");
+  const result = parseNodeEmailSettings(
+    options.mode === "compose" ? { ...values, NODE_ENV: "production" } : values,
+  );
+  return result.settings?.provider;
 }

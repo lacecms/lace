@@ -1,18 +1,31 @@
 import {
+  AccountError,
+  AccountUseCases,
   ContentUseCases,
   ContentValidationError,
+  RateLimitExceededError,
   MAX_MEDIA_BYTES,
   MediaUseCases,
   opaqueCursor,
   requireUsersManager,
   requireContentReader,
+  requireSettingsManager,
+  actorPermissions,
+  sendTestEmail,
+  unconfiguredEmailSender,
   SiteBuildUseCases,
 } from "@lacecms/application";
 import type {
+  DeferTask,
+  EmailSender,
+  InvitationIssueResult,
+  InvitationView,
+  LinkIssueResult,
   MediaView,
   PublicContentReadPort,
   RateLimitDecision,
   SecurityService,
+  SensitiveRateLimiter,
 } from "@lacecms/application";
 import {
   buildExportSchema,
@@ -27,6 +40,9 @@ import {
   siteBuildRecordSchema,
   siteBuildListSchema,
   adminSettingsStatusSchema,
+  adminSessionSchema,
+  emailTestRequestSchema,
+  emailTestResultSchema,
   adminContentEntrySchema,
   classifyError,
   contentEntryListQuerySchema,
@@ -65,8 +81,24 @@ import {
   toMediaMetadataDto,
   toPublishContentEntryResultDto,
   transportError,
-  userCreateRequestSchema,
   userUpdateRequestSchema,
+  accountPasswordChangeRequestSchema,
+  accountProfileUpdateRequestSchema,
+  accountSessionListSchema,
+  adminPasswordResetRequestSchema,
+  adminPasswordResetResultSchema,
+  invitationAcceptRequestSchema,
+  invitationAcceptResultSchema,
+  invitationCreateRequestSchema,
+  invitationInspectRequestSchema,
+  invitationInspectResultSchema,
+  invitationIssueResultSchema,
+  invitationListSchema,
+  invitationResendRequestSchema,
+  passwordResetConfirmRequestSchema,
+  passwordResetRequestSchema,
+  sessionRevocationResultSchema,
+  sessionRevokeRequestSchema,
   validationError,
   versionFromEntityTag,
 } from "@lacecms/contracts";
@@ -81,6 +113,7 @@ import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
 import { describeRoute, loadVendor, openAPIRouteHandler, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import { emailDeliveryStatus } from "./email.js";
 
 loadVendor("valibot", { toJSONSchema: toJsonSchema as never });
 
@@ -88,6 +121,7 @@ declare module "hono" {
   interface ContextVariableMap {
     "lace.actor": Actor | undefined;
     "lace.requestId": string;
+    "lace.sessionId": string | null | undefined;
   }
 }
 
@@ -121,6 +155,8 @@ type Actor = Parameters<ContentUseCases["create"]>[0]["actor"];
 
 export interface ActorResolver {
   resolve(request: Request): Promise<Actor | null>;
+  /** The opaque id of the provider session authenticating the request, when there is one. */
+  sessionId?(request: Request): Promise<string | null>;
 }
 
 export interface AuthRouteHandler {
@@ -148,6 +184,46 @@ export interface ServerLogger {
     readonly requestId: string;
     readonly status: number;
   }): void;
+}
+
+export type SensitiveRequestOperation = "auth" | "email" | "invite" | "setup" | "token" | "upload";
+
+export interface SensitiveRequestLimit {
+  readonly operation: SensitiveRequestOperation;
+  /** `actor` limits count per resolved actor; `client` per trusted client address. */
+  readonly scope: "actor" | "client";
+}
+
+const INVITE_LIMITED_PATH =
+  /^\/api\/v1\/admin\/(?:invitations(?:\/[^/]+(?:\/resend)?)?|users\/[^/]+\/password-reset)$/u;
+
+/**
+ * Maps a request to its sensitive fixed-window limit, shared by both runtimes so
+ * Node and the Worker count the same routes under the same subjects.
+ */
+export function sensitiveRequestLimit(
+  method: string,
+  pathname: string,
+): SensitiveRequestLimit | undefined {
+  if (pathname.startsWith("/api/auth/") && method !== "GET")
+    return { operation: "auth", scope: "client" };
+  if (
+    method === "POST" &&
+    (pathname.startsWith("/api/v1/invitations/") || pathname.startsWith("/api/v1/password-reset/"))
+  )
+    return { operation: "auth", scope: "client" };
+  if (pathname === "/api/v1/account/password" && method === "POST")
+    return { operation: "auth", scope: "actor" };
+  if (pathname === "/api/v1/setup/admin") return { operation: "setup", scope: "client" };
+  if (pathname.startsWith("/api/v1/admin/api-tokens") && method !== "GET")
+    return { operation: "token", scope: "actor" };
+  if (pathname === "/api/v1/admin/media" && method === "POST")
+    return { operation: "upload", scope: "actor" };
+  if (pathname === "/api/v1/admin/settings/email-test" && method === "POST")
+    return { operation: "email", scope: "actor" };
+  if ((method === "POST" || method === "DELETE") && INVITE_LIMITED_PATH.test(pathname))
+    return { operation: "invite", scope: "actor" };
+  return undefined;
 }
 
 export interface ReadinessProbe {
@@ -181,6 +257,15 @@ export interface LaceAppInput {
   readonly requestIds: RequestIdGenerator;
   readonly security?: SecurityService;
   readonly builds?: SiteBuildUseCases;
+  /** Transactional email; absent means the `none` provider. */
+  readonly email?: EmailSender;
+  /** Durable fixed-window limiter for limits counted inside use cases (per-email resets). */
+  readonly sensitiveLimiter?: SensitiveRateLimiter;
+  /**
+   * Runs work after the response without delaying it. A Worker request uses its
+   * `executionCtx.waitUntil` first; this fallback must never throw or reject.
+   */
+  readonly defer?: (task: Promise<unknown>) => void;
 }
 
 class RequestValidationError extends Error {
@@ -448,7 +533,13 @@ export function createLaceApp(input: LaceAppInput): Hono {
         ? validationResponse(contentIssues(error))
         : error instanceof AuthorizationError
           ? errorResponse(transportError("AUTHORIZATION_DENIED"))
-          : errorResponse(classifyError(error)),
+          : error instanceof AccountError
+            ? errorResponse(transportError(error.code))
+            : error instanceof RateLimitExceededError
+              ? errorResponse(transportError("RATE_LIMITED"), {
+                  "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
+                })
+              : errorResponse(classifyError(error)),
   );
 
   app.use(async (context, next) => {
@@ -499,10 +590,8 @@ export function createLaceApp(input: LaceAppInput): Hono {
     return jsonBodyLimit(context, next);
   });
   app.use(async (context, next) => {
-    const path = context.req.path;
     const actorLimited =
-      (path.startsWith("/api/v1/admin/api-tokens") && context.req.method !== "GET") ||
-      (path === "/api/v1/admin/media" && context.req.method === "POST");
+      sensitiveRequestLimit(context.req.method, context.req.path)?.scope === "actor";
     const resolvedActor = actorLimited ? await actor(context) : undefined;
     const decision = await input.rateLimiter.check({
       ...(resolvedActor === undefined ? {} : { actor: resolvedActor }),
@@ -579,6 +668,104 @@ export function createLaceApp(input: LaceAppInput): Hono {
     });
   }
 
+  function settingsActor(context: Parameters<typeof actor>[0]): Promise<Actor> {
+    return actor(context).then((value) => {
+      requireSettingsManager(value);
+      return value;
+    });
+  }
+
+  const email = input.email ?? unconfiguredEmailSender;
+
+  async function sessionSummary(resolvedActor: Actor): Promise<Response> {
+    const profile = await security().readUserProfile(resolvedActor.id);
+    if (profile === null || profile.disabled) throw new AuthorizationError();
+    return response(
+      adminSessionSchema,
+      {
+        permissions: [...actorPermissions(resolvedActor)],
+        user: {
+          ...(profile.name === undefined ? {} : { displayName: profile.name }),
+          email: profile.email,
+          id: resolvedActor.id,
+          role: resolvedActor.role,
+        },
+      },
+      200,
+      { "cache-control": "no-store" },
+    );
+  }
+
+  let accountUseCases: AccountUseCases | undefined;
+  function accounts(): AccountUseCases {
+    if (input.publicBaseUrl === undefined) throw new Error("Account flows are unavailable.");
+    accountUseCases ??= new AccountUseCases({
+      clock: { now: () => Date.now() as never },
+      email,
+      ...(input.sensitiveLimiter === undefined ? {} : { limiter: input.sensitiveLimiter }),
+      publicBaseUrl: input.publicBaseUrl,
+      security: security(),
+    });
+    return accountUseCases;
+  }
+
+  /** The current session id is resolved once per request beside the actor. */
+  async function currentSessionId(context: Parameters<typeof actor>[0]): Promise<string | null> {
+    await actor(context);
+    const cached = context.get("lace.sessionId") as string | null | undefined;
+    if (cached !== undefined) return cached;
+    const resolved = (await input.actors.sessionId?.(context.req.raw)) ?? null;
+    context.set("lace.sessionId", resolved);
+    return resolved;
+  }
+
+  function deferTask(context: {
+    readonly executionCtx: { waitUntil(task: Promise<unknown>): void };
+  }): DeferTask {
+    return (task) => {
+      const settled = task.then(
+        () => undefined,
+        () => undefined,
+      );
+      try {
+        context.executionCtx.waitUntil(settled);
+        return;
+      } catch {
+        // Not a Worker request: use the runtime fallback.
+      }
+      if (input.defer === undefined) void settled;
+      else input.defer(settled);
+    };
+  }
+
+  function invitationDto(value: InvitationView) {
+    return {
+      createdAt: toIsoTimestamp(value.createdAt),
+      email: value.email,
+      expiresAt: toIsoTimestamp(value.expiresAt),
+      id: value.id,
+      invitedBy: value.invitedBy,
+      role: value.role,
+      state: value.state,
+    };
+  }
+
+  function linkIssueDto(value: LinkIssueResult) {
+    return {
+      delivery:
+        value.delivery.status === "sent"
+          ? { status: "sent" as const }
+          : { reason: value.delivery.reason, status: "failed" as const },
+      ...(value.link === undefined ? {} : { link: value.link }),
+    };
+  }
+
+  function invitationIssueDto(value: InvitationIssueResult) {
+    return { ...linkIssueDto(value), invitation: invitationDto(value.invitation) };
+  }
+
+  const noStore = { "cache-control": "no-store" };
+
   app.get(
     "/api/v1/setup/state",
     describeRoute({
@@ -641,21 +828,429 @@ export function createLaceApp(input: LaceAppInput): Hono {
       return response(buildSiteSelectionSchema, { site: input.buildSite ?? null });
     },
   );
+  app.get(
+    "/api/v1/admin/session",
+    describeRoute({
+      summary: "Read the signed-in user and server-derived permissions",
+      tags: ["admin"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(adminSessionSchema) } },
+          description: "Session summary without credential material",
+        },
+      },
+    }),
+    async (context) => sessionSummary(await actor(context)),
+  );
   app.get("/api/v1/admin/settings/status", async (context) => {
-    await usersActor(context);
+    await settingsActor(context);
     return response(adminSettingsStatusSchema, {
       configuredModels: input.config.content.length,
+      email: emailDeliveryStatus(email),
       engineVersion: input.environment.engineVersion,
       ready: await input.readiness.isReady(),
     });
   });
   app.post(
-    "/api/v1/admin/users",
-    validator("json", userCreateRequestSchema, validationHook),
+    "/api/v1/admin/settings/email-test",
+    describeRoute({
+      summary: "Send a test email to the signed-in administrator",
+      tags: ["admin"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(emailTestResultSchema) } },
+          description: "Closed delivery outcome; failed sends are reported, not raised",
+        },
+      },
+    }),
+    validator("json", emailTestRequestSchema, validationHook),
     async (context) => {
-      await usersActor(context);
-      const body = context.req.valid("json") as v.InferOutput<typeof userCreateRequestSchema>;
-      return response(managedUserSchema, await security().createUser(body), 201);
+      const resolvedActor = await settingsActor(context);
+      const outcome = await sendTestEmail({
+        actor: resolvedActor,
+        email,
+        installationUrl: input.publicBaseUrl ?? new URL(context.req.url).origin,
+        users: security(),
+      });
+      return response(emailTestResultSchema, outcome);
+    },
+  );
+  app.post(
+    "/api/v1/invitations/inspect",
+    describeRoute({
+      summary: "Inspect an invitation token",
+      tags: ["account"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(invitationInspectResultSchema) } },
+          description: "Invited email, role and expiry",
+        },
+        410: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "Unknown, expired, revoked or accepted invitation",
+        },
+      },
+    }),
+    validator("json", invitationInspectRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof invitationInspectRequestSchema
+      >;
+      const found = await accounts().inspectInvitation(body);
+      return response(
+        invitationInspectResultSchema,
+        { email: found.email, expiresAt: toIsoTimestamp(found.expiresAt), role: found.role },
+        200,
+        noStore,
+      );
+    },
+  );
+  app.post(
+    "/api/v1/invitations/accept",
+    describeRoute({
+      summary: "Accept an invitation by choosing a password",
+      tags: ["account"],
+      responses: {
+        201: {
+          content: { "application/json": { schema: resolver(invitationAcceptResultSchema) } },
+          description: "Account created; sign in with the returned email",
+        },
+        409: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "An account for the address already exists",
+        },
+        410: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "Unknown, expired, revoked or accepted invitation",
+        },
+      },
+    }),
+    validator("json", invitationAcceptRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<typeof invitationAcceptRequestSchema>;
+      return response(
+        invitationAcceptResultSchema,
+        await accounts().acceptInvitation({
+          ...(body.displayName === undefined ? {} : { displayName: body.displayName }),
+          password: body.password,
+          token: body.token,
+        }),
+        201,
+        noStore,
+      );
+    },
+  );
+  app.post(
+    "/api/v1/password-reset/request",
+    describeRoute({
+      summary: "Request a password reset link",
+      tags: ["account"],
+      responses: {
+        202: { description: "Accepted; identical whether or not the address has an account" },
+      },
+    }),
+    validator("json", passwordResetRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<typeof passwordResetRequestSchema>;
+      await accounts().requestPasswordReset({ defer: deferTask(context), email: body.email });
+      return new Response(null, { headers: noStore, status: 202 });
+    },
+  );
+  app.post(
+    "/api/v1/password-reset/confirm",
+    describeRoute({
+      summary: "Choose a new password with a reset token",
+      tags: ["account"],
+      responses: {
+        204: { description: "Password replaced and every session ended" },
+        410: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "Unknown, expired, consumed or superseded reset link",
+        },
+      },
+    }),
+    validator("json", passwordResetConfirmRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof passwordResetConfirmRequestSchema
+      >;
+      await accounts().confirmPasswordReset(body);
+      return new Response(null, { headers: noStore, status: 204 });
+    },
+  );
+
+  app.patch(
+    "/api/v1/account",
+    describeRoute({
+      summary: "Change the signed-in user's display name",
+      tags: ["account"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(adminSessionSchema) } },
+          description: "Updated session summary",
+        },
+      },
+    }),
+    validator("json", accountProfileUpdateRequestSchema, validationHook),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof accountProfileUpdateRequestSchema
+      >;
+      await accounts().updateDisplayName(resolvedActor, body.displayName);
+      return sessionSummary(resolvedActor);
+    },
+  );
+  app.post(
+    "/api/v1/account/password",
+    describeRoute({
+      summary: "Change the signed-in user's password",
+      tags: ["account"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
+          description: "Password changed; count of other sessions ended",
+        },
+        400: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "The current password is incorrect",
+        },
+      },
+    }),
+    validator("json", accountPasswordChangeRequestSchema, validationHook),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof accountPasswordChangeRequestSchema
+      >;
+      return response(
+        sessionRevocationResultSchema,
+        await accounts().changePassword(resolvedActor, await currentSessionId(context), {
+          currentPassword: body.currentPassword,
+          defer: deferTask(context),
+          newPassword: body.newPassword,
+          signOutOtherSessions: body.signOutOtherSessions,
+        }),
+      );
+    },
+  );
+  app.get(
+    "/api/v1/account/sessions",
+    describeRoute({
+      summary: "List the signed-in user's sessions",
+      tags: ["account"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(accountSessionListSchema) } },
+          description: "Sessions without tokens or IP addresses",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const items = await accounts().listSessions(resolvedActor, await currentSessionId(context));
+      return response(
+        accountSessionListSchema,
+        {
+          items: items.map((item) => ({
+            browser: item.browser,
+            createdAt: toIsoTimestamp(item.createdAt),
+            current: item.current,
+            id: item.id,
+            lastActiveAt: toIsoTimestamp(item.lastActiveAt),
+            os: item.os,
+          })),
+        },
+        200,
+        noStore,
+      );
+    },
+  );
+  app.delete(
+    "/api/v1/account/sessions/:sessionId",
+    describeRoute({
+      summary: "End another session of the signed-in user",
+      tags: ["account"],
+      responses: {
+        204: { description: "Session ended" },
+        404: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "No such session for this user",
+        },
+        409: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "The current session is ended by signing out instead",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const sessionId = parse(identifierSchemaPublic, context.req.param("sessionId"));
+      await accounts().deleteSession(resolvedActor, await currentSessionId(context), sessionId);
+      return new Response(null, { status: 204 });
+    },
+  );
+  app.post(
+    "/api/v1/account/sessions/revoke-others",
+    describeRoute({
+      summary: "End every other session of the signed-in user",
+      tags: ["account"],
+      requestBody: {
+        content: { "application/json": { schema: resolver(sessionRevokeRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
+          description: "Count of sessions ended",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      parse(sessionRevokeRequestSchema, await optionalJsonBody(context.req.raw));
+      return response(
+        sessionRevocationResultSchema,
+        await accounts().deleteOtherSessions(resolvedActor, await currentSessionId(context)),
+      );
+    },
+  );
+
+  app.get(
+    "/api/v1/admin/invitations",
+    describeRoute({
+      summary: "List pending and expired invitations",
+      tags: ["admin"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(invitationListSchema) } },
+          description: "Invitations without tokens or links",
+        },
+      },
+    }),
+    async (context) => {
+      const items = await accounts().listInvitations(await actor(context));
+      return response(invitationListSchema, { items: items.map(invitationDto) }, 200, noStore);
+    },
+  );
+  app.post(
+    "/api/v1/admin/invitations",
+    describeRoute({
+      summary: "Invite an email address with a role",
+      tags: ["admin"],
+      responses: {
+        201: {
+          content: { "application/json": { schema: resolver(invitationIssueResultSchema) } },
+          description: "Invitation created; the link is present only when email was not sent",
+        },
+        409: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "The address has an account or an active invitation",
+        },
+      },
+    }),
+    validator("json", invitationCreateRequestSchema, validationHook),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const body = context.req.valid("json") as v.InferOutput<typeof invitationCreateRequestSchema>;
+      return response(
+        invitationIssueResultSchema,
+        invitationIssueDto(await accounts().invite(resolvedActor, body)),
+        201,
+        noStore,
+      );
+    },
+  );
+  app.post(
+    "/api/v1/admin/invitations/:invitationId/resend",
+    describeRoute({
+      summary: "Resend an invitation with a new link",
+      tags: ["admin"],
+      requestBody: {
+        content: { "application/json": { schema: resolver(invitationResendRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(invitationIssueResultSchema) } },
+          description: "Invitation reissued; the link is present only when email was not sent",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      parse(invitationResendRequestSchema, await optionalJsonBody(context.req.raw));
+      const invitationId = parse(identifierSchemaPublic, context.req.param("invitationId"));
+      return response(
+        invitationIssueResultSchema,
+        invitationIssueDto(await accounts().resendInvitation(resolvedActor, invitationId)),
+        200,
+        noStore,
+      );
+    },
+  );
+  app.delete(
+    "/api/v1/admin/invitations/:invitationId",
+    describeRoute({
+      summary: "Revoke an invitation",
+      tags: ["admin"],
+      responses: { 204: { description: "Invitation revoked" } },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const invitationId = parse(identifierSchemaPublic, context.req.param("invitationId"));
+      await accounts().revokeInvitation(resolvedActor, invitationId);
+      return new Response(null, { status: 204 });
+    },
+  );
+  app.post(
+    "/api/v1/admin/users/:userId/password-reset",
+    describeRoute({
+      summary: "Send a password reset to a user",
+      tags: ["admin"],
+      requestBody: {
+        content: { "application/json": { schema: resolver(adminPasswordResetRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(adminPasswordResetResultSchema) } },
+          description: "Reset issued; the link is present only when email was not sent",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      parse(adminPasswordResetRequestSchema, await optionalJsonBody(context.req.raw));
+      const userId = parse(identifierSchemaPublic, context.req.param("userId"));
+      return response(
+        adminPasswordResetResultSchema,
+        linkIssueDto(await accounts().sendPasswordReset(resolvedActor, userId)),
+        200,
+        noStore,
+      );
+    },
+  );
+  app.post(
+    "/api/v1/admin/users/:userId/sessions/revoke",
+    describeRoute({
+      summary: "Sign a user out everywhere",
+      tags: ["admin"],
+      requestBody: {
+        content: { "application/json": { schema: resolver(sessionRevokeRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
+          description: "Count of sessions ended",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      parse(sessionRevokeRequestSchema, await optionalJsonBody(context.req.raw));
+      const userId = parse(identifierSchemaPublic, context.req.param("userId"));
+      return response(
+        sessionRevocationResultSchema,
+        await accounts().signOutUser(resolvedActor, userId),
+      );
     },
   );
   app.patch(
@@ -673,7 +1268,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     },
   );
   app.get("/api/v1/admin/api-tokens", async (context) => {
-    await usersActor(context);
+    await settingsActor(context);
     return response(buildTokenListSchema, {
       items: (await security().listBuildTokens()).map(buildTokenDto),
     });
@@ -682,7 +1277,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     "/api/v1/admin/api-tokens",
     validator("json", buildTokenCreateRequestSchema, validationHook),
     async (context) => {
-      await usersActor(context);
+      await settingsActor(context);
       const body = context.req.valid("json") as v.InferOutput<typeof buildTokenCreateRequestSchema>;
       const token = await security().createBuildToken({
         name: body.name,
@@ -696,7 +1291,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     },
   );
   app.delete("/api/v1/admin/api-tokens/:tokenId", async (context) => {
-    await usersActor(context);
+    await settingsActor(context);
     const token = await security().revokeBuildToken({
       now: Date.now() as never,
       tokenId: context.req.param("tokenId"),
@@ -759,7 +1354,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       tags: ["admin"],
     }),
     async (context) => {
-      const resolvedActor = await usersActor(context);
+      const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
       if (input.builds === undefined) throw new Error("Build commands are unavailable.");
       return response(buildQueueReceiptSchema, await input.builds.request(resolvedActor), 202);
@@ -779,7 +1374,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       tags: ["admin"],
     }),
     async (context) => {
-      const resolvedActor = await usersActor(context);
+      const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
       if (input.builds === undefined) throw new Error("Build commands are unavailable.");

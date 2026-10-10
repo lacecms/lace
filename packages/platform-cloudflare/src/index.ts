@@ -9,5 +9,6 @@ export * from "./image-inspector.js";
 export * from "./d1-security.js";
 export * from "./cache.js";
 export * from "./settings.js";
+export * from "./email.js";
 export * from "./admin-assets.js";
 export * from "./worker.js";

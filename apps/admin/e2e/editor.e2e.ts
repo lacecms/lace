@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { sessionPath, sessionSummary } from "./support/session.js";
 
 // Match API calls by pathname prefix; a glob such as `**/api/**` would also
 // intercept Vite module URLs like `/admin/src/shared/api/index.ts`.
@@ -74,8 +75,7 @@ async function mockEditor(page: Page, role: Role, onRequest?: (route: Route) => 
     if (onRequest !== undefined && (await onRequest(route))) return;
     const request = route.request();
     const url = new URL(request.url());
-    if (url.pathname === "/api/auth/get-session")
-      return json(route, { user: { id: `${role}-1`, role } });
+    if (url.pathname === sessionPath) return json(route, sessionSummary({ id: `${role}-1`, role }));
     if (url.pathname === "/api/v1/admin/content-models") return json(route, { items: [model] });
     if (url.pathname === "/api/v1/admin/entries/entry-1" && request.method() === "GET")
       return json(route, current);
@@ -367,17 +367,22 @@ test("admin routes distinguish empty and failure states at a narrow width", asyn
   });
   await empty.route(isApiRequest, async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/api/auth/get-session")
-      return json(route, { user: { id: "admin-1", role: "admin" } });
+    if (path === sessionPath) return json(route, sessionSummary({ id: "admin-1", role: "admin" }));
     if (path === "/api/v1/admin/content-models") {
       await modelsGate;
       return json(route, { items: [] });
     }
     if (path === "/api/v1/admin/media") return json(route, { items: [] });
     if (path === "/api/v1/admin/users") return json(route, { items: [] });
+    if (path === "/api/v1/admin/invitations") return json(route, { items: [] });
     if (path === "/api/v1/admin/site-builds") return json(route, { items: [] });
     if (path === "/api/v1/admin/settings/status")
-      return json(route, { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true });
+      return json(route, {
+        configuredModels: 0,
+        email: { provider: "none" as const },
+        engineVersion: "0.1.0-alpha.4",
+        ready: true,
+      });
     if (path === "/api/v1/admin/api-tokens") return json(route, { items: [] });
     return route.fallback();
   });
@@ -412,8 +417,8 @@ test("admin routes distinguish empty and failure states at a narrow width", asyn
   for (const route of ["content", "media", "users", "settings"]) {
     const failed = await browser.newPage();
     await failed.route(isApiRequest, async (requestRoute) => {
-      if (new URL(requestRoute.request().url()).pathname === "/api/auth/get-session")
-        return json(requestRoute, { user: { id: "admin-1", role: "admin" } });
+      if (new URL(requestRoute.request().url()).pathname === sessionPath)
+        return json(requestRoute, sessionSummary({ id: "admin-1", role: "admin" }));
       return requestRoute.abort();
     });
     await failed.goto(`/admin/${route}`);

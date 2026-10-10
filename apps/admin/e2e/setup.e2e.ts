@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
+import { sessionPath, sessionSummary } from "./support/session.js";
 
 const email = "admin@lace.test";
 const password = "correct horse battery staple";
@@ -25,8 +26,8 @@ async function installation(
           return json({ error: { code: "INTERNAL_ERROR", message: "Unavailable" } }, 500);
         return json({ setupComplete: complete });
       }
-      if (path === "/api/auth/get-session")
-        return json(signedIn ? { user: { id: "admin", role: "admin", email } } : null);
+      if (path === sessionPath)
+        return json(signedIn ? sessionSummary({ email, id: "admin", role: "admin" }) : null);
       if (path === "/api/v1/setup/admin") {
         submits += 1;
         expect(route.request().postDataJSON()).toEqual({ email, password, token });

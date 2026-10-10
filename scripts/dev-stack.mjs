@@ -45,7 +45,12 @@ function secret() {
   return randomBytes(32).toString("base64url");
 }
 
-async function createEnvironment(destination, apiPort, volumePrefix = localProject) {
+async function createEnvironment(
+  destination,
+  apiPort,
+  volumePrefix = localProject,
+  mailpitPort = 8025,
+) {
   const minioAccessKey = `lace-${randomBytes(8).toString("hex")}`;
   const minioSecretKey = secret();
   const values = {
@@ -55,6 +60,9 @@ async function createEnvironment(destination, apiPort, volumePrefix = localProje
     LACE_DATABASE_DIRECTORY: "/workspace/dev-data",
     LACE_DATABASE_PATH: "/workspace/dev-data/lace.sqlite",
     LACE_DATA_VOLUME_PREFIX: volumePrefix,
+    LACE_EMAIL_FROM: "Lace Dev <lace@localhost.test>",
+    LACE_EMAIL_PROVIDER: "smtp",
+    LACE_MAILPIT_PORT: String(mailpitPort),
     LACE_MINIO_ACCESS_KEY: minioAccessKey,
     LACE_MINIO_BUCKET: "lace-media",
     LACE_MINIO_ENDPOINT: "http://minio:9000",
@@ -67,6 +75,9 @@ async function createEnvironment(destination, apiPort, volumePrefix = localProje
     LACE_SITE_DATA_MODE: "fixture",
     LACE_BUILD_TOKEN: "",
     LACE_SITE_DEV_ORIGIN: "http://site:4321",
+    LACE_SMTP_HOST: "mailpit",
+    LACE_SMTP_PORT: "1025",
+    LACE_SMTP_SECURITY: "none",
   };
   await writeFile(
     destination,
@@ -118,7 +129,7 @@ async function smoke() {
   process.once("SIGINT", onInterrupt);
   process.once("SIGTERM", onTerminate);
   try {
-    await createEnvironment(environment, port, project);
+    await createEnvironment(environment, port, project, await freePort());
     if (
       run(
         "docker",
@@ -195,8 +206,12 @@ async function acceptance(command) {
     const project = `lace-acceptance-${randomBytes(5).toString("hex")}`;
     const port = await freePort();
     await mkdir(acceptanceDirectory, { mode: 0o700 });
-    await createEnvironment(acceptanceEnvironment, port, project);
-    await writeFile(acceptanceState, JSON.stringify({ project, port }), { mode: 0o600 });
+    // The browser acceptance reads invitation emails from this Mailpit port.
+    const mailpitPort = await freePort();
+    await createEnvironment(acceptanceEnvironment, port, project, mailpitPort);
+    await writeFile(acceptanceState, JSON.stringify({ project, port, mailpitPort }), {
+      mode: 0o600,
+    });
     if (
       run(
         "docker",
