@@ -44,6 +44,9 @@ The design should also be easy for coding agents to understand and modify. For t
 - Media upload to R2 or MinIO.
 - Email/password authentication through Better Auth.
 - Admin, editor, and viewer roles.
+- Optional transactional email through a provider port (`EmailSender`): SMTP on
+  Node, Resend on both runtimes, and the Cloudflare Email Service binding on the
+  Worker. An installation without a provider remains fully usable.
 - REST API with versioned endpoints and runtime validation.
 - Astro build-time SDK.
 - Reliable build-trigger dispatch through an outbox.
@@ -1192,11 +1195,14 @@ POST   /api/v1/admin/media/:mediaId/retry-deletion
 GET    /api/v1/admin/site-builds
 POST   /api/v1/admin/site-builds
 
+GET    /api/v1/admin/session
+
 GET    /api/v1/admin/users
 POST   /api/v1/admin/users
 PATCH  /api/v1/admin/users/:userId
 
 GET    /api/v1/admin/settings/status
+POST   /api/v1/admin/settings/email-test
 GET    /api/v1/admin/api-tokens
 POST   /api/v1/admin/api-tokens
 DELETE /api/v1/admin/api-tokens/:tokenId
@@ -1565,6 +1571,16 @@ Default matrix:
 
 Handlers must check permissions rather than comparing role strings throughout the codebase.
 
+The admin application follows the same rule. `GET /api/v1/admin/session` returns
+the signed-in user's identifier, email, display name, role, and the permission
+list computed on the server from the domain policy (`permissionsFor(role)`, the
+same function that backs `hasPermission`). The admin reads its session only from
+this contract-validated summary and decides every route guard, navigation item,
+tour step, and screen affordance through one `can(session, permission)` check.
+The role is used only for presentation. A repository test fails when admin
+source compares the session role with role names, so a later change to the role
+policy does not require editing admin screens.
+
 The first administrator should be created through a one-time bootstrap command or one-time setup token. There must be no hard-coded default password.
 
 The MVP uses a one-time setup token so the flow works identically against local
@@ -1672,6 +1688,12 @@ interface Cache {
 interface SiteBuildTrigger {
   trigger(input: SiteBuildRequest): Promise<BuildTriggerResult>;
 }
+
+interface EmailSender {
+  readonly provider: "none" | "log" | "smtp" | "resend" | "cloudflare";
+  readonly from?: string;
+  send(message: EmailMessage): Promise<EmailDeliveryOutcome>;
+}
 ```
 
 Implementations:
@@ -1685,6 +1707,18 @@ Implementations:
 | Build trigger | Cloudflare deploy hook | authenticated fixed-command builder |
 | Deployment tracking | optional Pages API reader (Pages Read token, Worker secret) | not needed (builder result is proof) |
 | Recovery dispatch | scheduled Worker | container timer/worker |
+| Email delivery | Resend over `fetch`, or the Email Service `send_email` binding (Workers Paid) | SMTP through nodemailer, or Resend over `fetch` |
+
+Email delivery is selected by `LACE_EMAIL_PROVIDER` (`none` by default, `log`,
+`smtp`, `resend`, or `cloudflare`) and requires a `LACE_EMAIL_FROM` sender for
+every provider except `none`. Each send resolves to `sent` or `failed` with a
+closed reason (`not_configured`, `invalid_message`, `rejected`, `rate_limited`,
+`unavailable`). Recipients and subjects are validated against header injection
+before any provider is contacted. `log` writes messages to standard output and
+is refused in production; production SMTP requires STARTTLS or implicit TLS.
+Startup names invalid email variables without repeating their values, and
+provider secrets never appear in logs, errors, status, or doctor output. Sends
+are synchronous with a bounded timeout; there is no email outbox or retry queue.
 
 R2 and MinIO use different concrete adapters even though both expose S3-compatible concepts. Cloudflare code should prefer the native R2 binding, while Node uses the S3 client against MinIO.
 
@@ -1756,15 +1790,15 @@ Primary routes:
 /content/:modelKey/:entryId
 /media
 /builds
-/users                 admin only
-/settings              admin only
+/users                 users:manage
+/settings              settings:manage
 ```
 
 The content-model response drives navigation and field forms. Pages open their singleton editor directly; collections open a paginated entry list.
 
-The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Library (Media and Builds, all roles), and Admin (Users and Settings, administrators only), shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL.
+The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL.
 
-The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, and errors inside the card. Users lists accounts with a "You" marker, role and status badges, and no raw IDs. Creating a user, changing a role, and disabling or enabling an account each happen in a confirmation dialog. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable for their own account and is warned before demoting it. Settings shows API readiness, configured models, and active build tokens as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
+The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, and errors inside the card. Users lists accounts with a "You" marker, role and status badges, and no raw IDs. Creating a user, changing a role, and disabling or enabling an account each happen in a confirmation dialog. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable for their own account and is warned before demoting it. Settings shows API readiness, configured models, active build tokens, and email delivery (provider and sender, with a rate-limited Send test email action addressed only to the signed-in administrator) as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
 
 The media library at `/media` follows the same URL-state rules for its filename search, type filter, sort, and grid/list view. Tiles and rows load their thumbnails lazily through the authenticated admin preview endpoint. Writers can drop files anywhere over the library or choose several at once. Each file is checked for type and size in the browser and then uploads with its own progress and server error. The default browser client sends uploads through `XMLHttpRequest` so it can report bytes sent; every other request uses `fetch`, and both paths share error mapping and response validation. A details side panel shows an item's facts, its usage from the media detail read, and its public URL. Deletion there requires confirmation and is unavailable while content uses the item.
 
@@ -1909,6 +1943,8 @@ pnpm dev:cloudflare
 - starts or connects to MinIO;
 - starts the admin Vite development server;
 - starts the Astro development server;
+- starts a pinned Mailpit service and points the API's `smtp` provider at it, so
+  outgoing email is captured in a local inbox and never leaves the machine;
 - proxies browser API requests so authentication remains same-origin where practical.
 
 ### `dev:cloudflare`
@@ -1916,6 +1952,7 @@ pnpm dev:cloudflare
 - starts the Worker through Wrangler/Miniflare or the Cloudflare Vite integration;
 - uses locally simulated D1, R2, and KV bindings;
 - persists local Cloudflare state in the configured development directory;
+- uses the `log` email provider, so messages appear in the Worker output;
 - starts admin and Astro development processes against the Worker.
 
 Generated Cloudflare consumers use their own local commands instead: `cf:dev`
@@ -2017,6 +2054,8 @@ REST DTOs remain independent from Drizzle-generated schemas. The Drizzle/Valibot
 
 - Wrangler and Cloudflare Workers types;
 - AWS S3 client package for MinIO on Node;
+- `nodemailer` for the SMTP email adapter, in `@lacecms/platform-node` only;
+  Resend and the Cloudflare Email Service are called without an SDK;
 - no AWS SDK in the Cloudflare R2 adapter.
 
 Automated dependency update tooling may open version-update pull requests, but framework major upgrades should not merge without test and migration review.

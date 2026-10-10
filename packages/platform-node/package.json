@@ -46,6 +46,7 @@
     "@types/node": "catalog:",
     "better-sqlite3": "catalog:",
     "drizzle-orm": "catalog:",
+    "nodemailer": "catalog:",
     "sharp": "catalog:",
     "ulid": "catalog:"
   },

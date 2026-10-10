@@ -290,6 +290,9 @@ catalogs:
     miniflare:
       specifier: 5.20260903.0-alpha
       version: 5.20260903.0-alpha
+    nodemailer:
+      specifier: 10.0.10
+      version: 10.0.10
     oxfmt:
       specifier: 0.66.0
       version: 0.66.0
@@ -975,6 +978,9 @@ importers:
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(kysely@0.29.5)
+      nodemailer:
+        specifier: 'catalog:'
+        version: 10.0.10
       sharp:
         specifier: 'catalog:'
         version: 0.35.5(@types/node@24.10.1)
@@ -4899,6 +4905,10 @@ packages:
 
   node-mock-http@1.0.5:
     resolution: {integrity: sha512-KQyt/wLjG3TAc7DOUhpqWzgd4ERxR80JOlTK5VE5R1S12IaPVN5qkj4klBce9HPG1Njuup4Sb5bljaT34lIyjw==}
+
+  nodemailer@10.0.10:
+    resolution: {integrity: sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A==}
+    engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -9004,6 +9014,8 @@ snapshots:
   node-fetch-native@1.6.7: {}
 
   node-mock-http@1.0.5: {}
+
+  nodemailer@10.0.10: {}
 
   normalize-path@3.0.0: {}
 

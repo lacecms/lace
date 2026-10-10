@@ -1,15 +1,19 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { mediaItem, renderRoute, stubClient as client } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import {
+  mediaItem,
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+} from "../../../app/testing/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const editor = () => createStaticSessionSource({ id: "editor-1", role: "editor" });
+const editor = () => staticSessionSource({ id: "editor-1", role: "editor" });
 
 test("a filtered library URL restores its controls, view, and API query", async () => {
   const listMedia = vi.fn(async () => ({ items: [mediaItem] }));

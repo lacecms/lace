@@ -77,7 +77,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
             <IntroductoryTour
               key={tourStorageKey(scope)}
               scope={scope}
-              steps={tourSteps(session.role, models.isError ? undefined : models.data?.items)}
+              steps={tourSteps(session, models.isError ? undefined : models.data?.items)}
               ref={tour}
               fallbackFocus={fallbackFocus}
             />

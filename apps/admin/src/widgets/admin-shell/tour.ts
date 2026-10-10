@@ -1,4 +1,4 @@
-import type { AdminRole } from "../../entities/session/index.js";
+import { can, type AdminSession } from "../../entities/session/index.js";
 import { buildStatusTourSummary } from "../../entities/site-build/index.js";
 import { publicationVisibilityModes } from "../../features/publish-entry/index.js";
 import { navigationGroups } from "./navigation.js";
@@ -9,13 +9,14 @@ export interface TourStep {
   readonly paragraphs: readonly string[];
 }
 
-/** Guidance follows the very same group projection and fixed MVP role policy as navigation. */
+/** Guidance follows the very same group projection and session permissions as navigation. */
 export function tourSteps(
-  role: AdminRole,
+  session: Pick<AdminSession, "permissions">,
   models?: Parameters<typeof navigationGroups>[1],
 ): readonly TourStep[] {
-  const groups = navigationGroups(role, models);
-  const writer = role !== "viewer";
+  const groups = navigationGroups(session, models);
+  const writer = can(session, "content:write");
+  const mediaWriter = can(session, "media:write");
   const steps: TourStep[] = [
     {
       id: "content",
@@ -25,7 +26,7 @@ export function tourSteps(
         writer
           ? "Edit an entry's fields and blocks, then Save to keep a draft. Saving a draft leaves the published snapshot unchanged."
           : "Inspect entry fields, blocks, and draft and published revisions in view-only mode.",
-        ...(role === "admin"
+        ...(can(session, "content:publish")
           ? [
               "Publish a saved revision through its confirmation dialog to make that snapshot available to published-content consumers.",
             ]
@@ -59,7 +60,7 @@ export function tourSteps(
             title: item.label,
             paragraphs: [
               "Browse the media library, search for files, and preview their details and usage. Public media URLs become available when published content uses the file.",
-              ...(writer
+              ...(mediaWriter
                 ? [
                     "Upload supported images, then reuse them through media fields in your editable drafts.",
                   ]
@@ -73,7 +74,7 @@ export function tourSteps(
             title: item.label,
             paragraphs: [
               buildStatusTourSummary(),
-              ...(role === "admin"
+              ...(can(session, "settings:manage")
                 ? [
                     "Request a build, or retry a failed, cancelled, unknown or accepted build here. Requests enter the queue and can coalesce; inspect their status rather than assuming the site is already updated.",
                   ]

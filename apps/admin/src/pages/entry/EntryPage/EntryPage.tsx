@@ -22,7 +22,7 @@ import {
   type DraftEditorValues,
   type FieldRendererRegistry,
 } from "../../../entities/content/index.js";
-import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { PublishEntryDialog } from "../../../features/publish-entry/index.js";
 import {
   AdminClientError,
@@ -224,7 +224,7 @@ export function EntryPage() {
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
     },
   });
-  const readOnly = session.role === "viewer";
+  const readOnly = !can(session, "content:write");
   const submitDraft = (event?: BaseSyntheticEvent) => {
     setUnmappedIssues([]);
     return form.handleSubmit(
@@ -271,7 +271,7 @@ export function EntryPage() {
   const blockErrors = form.formState.errors.blocks as
     | Record<string, Record<string, unknown>>
     | undefined;
-  const canPublish = session.role === "admin";
+  const canPublish = can(session, "content:publish");
   const dirty = form.formState.isDirty;
   const saveState: SaveState = readOnly
     ? { kind: "view-only" }

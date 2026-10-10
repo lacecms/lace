@@ -27,7 +27,7 @@ export function SidebarNav({
   const client = useAdminClient();
   const models = useQuery({ queryFn: client.listModels, queryKey: adminQueryKeys.models });
   useSessionRecovery(models.error);
-  const groups = navigationGroups(session.role, models.data?.items);
+  const groups = navigationGroups(session, models.data?.items);
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-3">
       <p className="m-0 flex items-center gap-2 px-2 py-1 text-base font-semibold text-sidebar-foreground">

@@ -12,6 +12,7 @@ import {
   contentSnapshotId,
   createContentEntry,
   defaultRolePermissions,
+  permissionsFor,
   normalizeBlockPositions,
   packageName,
   planBlockPosition,
@@ -86,6 +87,15 @@ test("uses the complete default role-to-permission matrix", () => {
   expectDomainError(() => requirePermission(editor, "content:publish"), "AUTHORIZATION_DENIED");
   expectDomainError(() => requirePermission(viewer, "media:write"), "AUTHORIZATION_DENIED");
   expect(() => requirePermission(admin, "settings:manage")).not.toThrow();
+});
+
+test("derives each role's permissions from the same frozen policy", () => {
+  for (const role of ["admin", "editor", "viewer"]) {
+    expect(permissionsFor(role)).toBe(defaultRolePermissions[role]);
+    expect(Object.isFrozen(permissionsFor(role))).toBe(true);
+  }
+  expect(permissionsFor("editor")).toEqual(["content:read", "content:write", "media:write"]);
+  expect(permissionsFor("viewer")).toEqual(["content:read"]);
 });
 
 test("enforces page cardinality and resolves public collection paths safely", () => {

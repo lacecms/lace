@@ -467,8 +467,57 @@ export const managedUserSchema = v.strictObject({
   role: roleSchema,
 });
 export const managedUserListSchema = v.strictObject({ items: v.array(managedUserSchema) });
+export const permissionSchema = v.picklist([
+  "content:read",
+  "content:write",
+  "content:publish",
+  "media:write",
+  "users:manage",
+  "settings:manage",
+]);
+export type PermissionDto = v.InferOutput<typeof permissionSchema>;
+/** The signed-in user's identity and server-derived permissions; no credential material. */
+export const adminSessionSchema = v.strictObject({
+  permissions: v.pipe(
+    v.array(permissionSchema),
+    v.check((items) => new Set(items).size === items.length, "Permissions must be unique."),
+  ),
+  user: v.strictObject({
+    displayName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(320))),
+    email: emailSchema,
+    id: identifierSchema,
+    role: roleSchema,
+  }),
+});
+export type AdminSessionDto = v.InferOutput<typeof adminSessionSchema>;
+export const emailProviderSchema = v.picklist(["none", "log", "smtp", "resend", "cloudflare"]);
+export type EmailProviderDto = v.InferOutput<typeof emailProviderSchema>;
+const emailSenderSchema = v.pipe(v.string(), v.minLength(3), v.maxLength(400));
+export const emailDeliveryStatusSchema = v.union([
+  v.strictObject({ provider: v.literal("none") }),
+  v.strictObject({
+    from: emailSenderSchema,
+    provider: v.picklist(["log", "smtp", "resend", "cloudflare"]),
+  }),
+]);
+export type EmailDeliveryStatusDto = v.InferOutput<typeof emailDeliveryStatusSchema>;
+export const emailFailureReasonSchema = v.picklist([
+  "not_configured",
+  "invalid_message",
+  "rejected",
+  "rate_limited",
+  "unavailable",
+]);
+export type EmailFailureReasonDto = v.InferOutput<typeof emailFailureReasonSchema>;
+export const emailTestRequestSchema = v.strictObject({});
+export const emailTestResultSchema = v.union([
+  v.strictObject({ status: v.literal("sent") }),
+  v.strictObject({ reason: emailFailureReasonSchema, status: v.literal("failed") }),
+]);
+export type EmailTestResultDto = v.InferOutput<typeof emailTestResultSchema>;
 export const adminSettingsStatusSchema = v.strictObject({
   configuredModels: nonNegativeIntegerSchema,
+  email: emailDeliveryStatusSchema,
   engineVersion: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
   ready: v.boolean(),
 });

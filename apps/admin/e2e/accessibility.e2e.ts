@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Locator, type Page, type Route } from "@playwright/test";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
+import { sessionPath, sessionSummary } from "./support/session.js";
 
 type Role = "admin" | "editor";
 
@@ -218,18 +219,15 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
     const path = url.pathname;
     const method = request.method();
     if (path === "/api/v1/setup/state") return json(route, { setupComplete: true });
-    if (path === "/api/auth/get-session")
+    if (path === sessionPath)
       return json(
         route,
         signedIn
-          ? {
-              user: {
-                email: `${role}@lace.test`,
-                id: `${role}-1`,
-                name: `Ada ${role === "admin" ? "Admin" : "Editor"}`,
-                role,
-              },
-            }
+          ? sessionSummary({
+              displayName: `Ada ${role === "admin" ? "Admin" : "Editor"}`,
+              id: `${role}-1`,
+              role,
+            })
           : null,
       );
     if (path === "/api/auth/sign-in/email" && method === "POST") {
@@ -332,8 +330,15 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
         ? json(route, { error: { code: "NOT_FOUND", message: "Not found." } }, 404)
         : json(route, found);
     }
+    if (path === "/api/v1/admin/settings/email-test" && method === "POST")
+      return json(route, { reason: "rejected", status: "failed" });
     if (path === "/api/v1/admin/settings/status")
-      return json(route, { configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: true });
+      return json(route, {
+        configuredModels: 2,
+        email: { from: "Lace <cms@lace.test>", provider: "smtp" as const },
+        engineVersion: "0.1.0-alpha.4",
+        ready: true,
+      });
     if (path === "/api/v1/admin/api-tokens" && method === "GET")
       return json(route, { items: tokens });
     if (path === "/api/v1/admin/api-tokens" && method === "POST") {
@@ -401,6 +406,19 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expectNoAccessibilityViolations(page, screen);
     });
+
+  test(`email delivery results pass the accessibility audit (${theme} theme)`, async ({ page }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page);
+    await openAdmin(page, "/settings", (current) =>
+      current.getByRole("button", { name: "Send test email" }),
+    );
+    await page.getByRole("button", { name: "Send test email" }).click();
+    await expect(
+      page.getByRole("group", { name: "Email delivery" }).getByRole("alert"),
+    ).toContainText("The provider rejected the sender or recipient");
+    await expectNoAccessibilityViolations(page, "email delivery failure");
+  });
 
   test(`access denied passes the accessibility audit (${theme} theme)`, async ({ page }) => {
     await seedTheme(page, theme);

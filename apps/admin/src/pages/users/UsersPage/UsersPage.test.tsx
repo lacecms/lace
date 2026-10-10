@@ -1,11 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { renderRoute, stubClient as client } from "../../../app/testing/index.js";
 import {
-  createStaticSessionSource,
-  type AdminSessionSource,
-} from "../../../entities/session/index.js";
+  renderRoute,
+  stubClient as client,
+  staticSessionSource,
+  sessionFor,
+} from "../../../app/testing/index.js";
+import { type AdminSession, type AdminSessionSource } from "../../../entities/session/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 
 afterEach(() => {
@@ -47,7 +49,7 @@ test("admin user screen lists accounts, creates users, and keeps confirmed state
   });
   renderRoute(
     "/users",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ createUser, listUsers, updateUser }),
   );
   const table = await screen.findByRole("table", { name: "Users" });
@@ -100,7 +102,7 @@ test("a failed user list offers Try again", async () => {
   });
   renderRoute(
     "/users",
-    createStaticSessionSource({ id: "admin-1", role: "admin" }),
+    staticSessionSource({ id: "admin-1", role: "admin" }),
     client({ listUsers }),
   );
   expect(await screen.findByRole("alert")).toHaveTextContent("Users unavailable.");
@@ -110,7 +112,7 @@ test("a failed user list offers Try again", async () => {
 });
 
 test("expired user request returns to login without stale management content", async () => {
-  let current: { id: string; role: "admin" } | null = { id: "admin-1", role: "admin" };
+  let current: AdminSession | null = sessionFor({ id: "admin-1", role: "admin" });
   const source: AdminSessionSource = { get: async () => current, invalidate: () => undefined };
   renderRoute(
     "/users",
@@ -133,7 +135,7 @@ test("non-admin management routes issue no protected requests", async () => {
   const listTokens = vi.fn(async () => ({ items: [] }));
   renderRoute(
     "/users",
-    createStaticSessionSource({ id: "editor-1", role: "editor" }),
+    staticSessionSource({ id: "editor-1", role: "editor" }),
     client({ listUsers }),
   );
   await screen.findByRole("heading", { name: "Access denied" });
@@ -141,7 +143,7 @@ test("non-admin management routes issue no protected requests", async () => {
   document.body.replaceChildren();
   renderRoute(
     "/settings",
-    createStaticSessionSource({ id: "viewer-1", role: "viewer" }),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
     client({ listTokens }),
   );
   await screen.findByRole("heading", { name: "Access denied" });

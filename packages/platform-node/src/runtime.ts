@@ -14,8 +14,12 @@ import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth"
 import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
+  createEmailSender,
   createLaceApp,
   parseBuildSiteIdentity,
+  parseEmailSettings,
+  type EmailSettings,
+  type EmailSettingsResult,
   type ActorResolver,
   type BuiltAdminResponder,
   type LaceAppInput,
@@ -33,6 +37,8 @@ import { NodeMinioObjectStorage, type NodeMinioSettings } from "./minio-storage.
 import { NodeMediaDeletionDispatcher } from "./media-deletion-dispatcher.js";
 import { NodeSiteBuildDispatcher } from "./site-build-dispatcher.js";
 import { NodeBuilderSiteBuildTrigger, type NodeBuilderTriggerSettings } from "./builder-trigger.js";
+import { createSmtpEmailSender } from "./smtp-email.js";
+import type { EmailSender } from "@lacecms/application";
 
 export type NodeEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -55,6 +61,8 @@ export interface NodeRuntimeSettings {
   readonly authSecret: string;
   readonly adminDevOrigin?: URL;
   readonly databasePath: string;
+  /** Absent means the `none` provider. */
+  readonly email?: EmailSettings;
   readonly host: string;
   readonly minio: NodeMinioSettings;
   readonly port: number;
@@ -123,9 +131,19 @@ function positiveInteger(
   return parsed;
 }
 
+/** Node email rules, shared by the runtime and doctor; production follows `NODE_ENV`. */
+export function parseNodeEmailSettings(environment: NodeEnvironment): EmailSettingsResult {
+  return parseEmailSettings(environment, {
+    production: environment.NODE_ENV === "production",
+    runtime: "node",
+  });
+}
+
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
+  const email = parseNodeEmailSettings(environment);
+  issues.push(...email.issues);
   const configuredProxies = environment.LACE_TRUSTED_PROXY_CIDRS?.trim();
   const trustedProxyCidrs = configuredProxies
     ? configuredProxies.split(",").map((item) => item.trim())
@@ -203,7 +221,8 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     minioEndpoint === undefined ||
     minioRegion === undefined ||
     minioSecretAccessKey === undefined ||
-    minioTimeoutMs === undefined
+    minioTimeoutMs === undefined ||
+    email.settings === undefined
   ) {
     throw new NodeEnvironmentError(Object.freeze(issues));
   }
@@ -213,6 +232,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     ...(adminDevOrigin === undefined ? {} : { adminDevOrigin }),
     authSecret,
     databasePath,
+    email: email.settings,
     host,
     minio: {
       accessKeyId: minioAccessKeyId,
@@ -337,13 +357,13 @@ class NodeRequestRateLimiter implements RequestRateLimiter {
             ? "token"
             : pathname === "/api/v1/admin/media" && method === "POST"
               ? "upload"
-              : undefined;
+              : pathname === "/api/v1/admin/settings/email-test" && method === "POST"
+                ? "email"
+                : undefined;
     if (operation === undefined) return true;
-    if ((operation === "upload" || operation === "token") && input.actor === undefined) return true;
-    const subject =
-      operation === "upload" || operation === "token"
-        ? `actor:${input.actor!.id}`
-        : this.clients.get(input.request);
+    const actorScoped = operation === "upload" || operation === "token" || operation === "email";
+    if (actorScoped && input.actor === undefined) return true;
+    const subject = actorScoped ? `actor:${input.actor!.id}` : this.clients.get(input.request);
     return this.limiter.check({ now: this.clock.now(), operation, subject });
   }
 }
@@ -365,6 +385,23 @@ export interface CreateNodeRuntimeInput {
   readonly settings: NodeRuntimeSettings;
   readonly storage?: ObjectStorage;
   readonly buildTrigger?: SiteBuildTrigger;
+  /** Overrides the sender composed from `settings.email`. */
+  readonly email?: EmailSender;
+}
+
+/** Composes the configured provider; SMTP is the only Node-specific one. */
+export function createNodeEmailSender(settings: EmailSettings = { provider: "none" }): EmailSender {
+  return createEmailSender(settings, {
+    runtimeSender: (configured) => {
+      if (configured.provider !== "smtp")
+        throw new Error(`Email provider ${configured.provider} is unavailable on Node.`);
+      return createSmtpEmailSender({
+        from: configured.from,
+        settings: configured.smtp,
+        timeoutMs: configured.timeoutMs,
+      });
+    },
+  });
 }
 
 export interface NodeRuntime {
@@ -490,6 +527,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     buildSite: input.settings.buildSite ?? null,
     config: input.config,
     content,
+    email: input.email ?? createNodeEmailSender(input.settings.email),
     environment: input.environment ?? { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultNodeLogger,
     maxBodyBytes: input.maxBodyBytes ?? 1_048_576,

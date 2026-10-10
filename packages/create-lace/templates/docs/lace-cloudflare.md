@@ -132,6 +132,10 @@ Expected result: the remote admin at your Worker origin with its own administrat
 
 <!-- lace-site: starter existing -->
 
+## Configure email (optional)
+
+Local `pnpm cf:dev` prints email to its output (`LACE_EMAIL_PROVIDER=log` in `worker/.dev.vars`). For your account, prefer `resend`: set the `LACE_EMAIL_PROVIDER` and `LACE_EMAIL_FROM` vars in `worker/wrangler.jsonc` and store the key with `pnpm exec wrangler secret put LACE_RESEND_API_KEY --config worker/wrangler.jsonc`. The `cloudflare` provider needs Workers Paid, an onboarded sending domain and the commented `send_email` binding. Redeploy, then send a test from Settings → Email delivery. See [Email delivery](lace-operations.md#email-delivery).
+
 ## Deploy the static site separately
 
 The site is built from the published export of the remote Worker with a read-only build token issued in the remote Admin. Choose one:

@@ -128,8 +128,13 @@ export const defaultRolePermissions: Readonly<Record<Role, readonly Permission[]
   viewer: ["content:read"],
 });
 
+/** Every permission the installation policy grants a role, in policy order. */
+export function permissionsFor(role: Role): readonly Permission[] {
+  return defaultRolePermissions[role];
+}
+
 export function hasPermission(actor: Actor, permission: Permission): boolean {
-  return defaultRolePermissions[actor.role].includes(permission);
+  return permissionsFor(actor.role).includes(permission);
 }
 
 /** Requires a permission without requiring callers to duplicate role policy. */

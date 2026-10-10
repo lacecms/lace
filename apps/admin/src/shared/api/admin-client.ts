@@ -5,6 +5,8 @@ import {
   setupAdminRequestSchema,
   type SetupStateDto,
   adminSettingsStatusSchema,
+  emailTestResultSchema,
+  type EmailTestResultDto,
   buildTokenCreatedSchema,
   buildTokenListSchema,
   buildTokenSchema,
@@ -125,6 +127,8 @@ export interface AdminClient {
   ): Promise<ManagedUserDto>;
   listUsers(): Promise<ManagedUserListDto>;
   loadSettingsStatus(): Promise<AdminSettingsStatusDto>;
+  /** Sends the fixed test message to the signed-in administrator's own address. */
+  sendTestEmail(): Promise<EmailTestResultDto>;
   listTokens(): Promise<BuildTokenListDto>;
   createToken(name: string): Promise<BuildTokenCreatedDto>;
   revokeToken(tokenId: string): Promise<BuildTokenDto>;
@@ -399,6 +403,15 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       parse(managedUserListSchema, await request(fetcher, "/api/v1/admin/users")),
     loadSettingsStatus: async () =>
       parse(adminSettingsStatusSchema, await request(fetcher, "/api/v1/admin/settings/status")),
+    sendTestEmail: async () =>
+      parse(
+        emailTestResultSchema,
+        await request(fetcher, "/api/v1/admin/settings/email-test", {
+          body: "{}",
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }),
+      ),
     listTokens: async () =>
       parse(buildTokenListSchema, await request(fetcher, "/api/v1/admin/api-tokens")),
     createToken: async (name: string) =>

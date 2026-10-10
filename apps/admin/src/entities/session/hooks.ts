@@ -2,7 +2,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, rootRouteId, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { isSessionExpiredError } from "../../shared/api/index.js";
-import type { AdminSession, AdminSessionSource } from "./session.js";
+import {
+  can,
+  type AdminPermission,
+  type AdminSession,
+  type AdminSessionSource,
+} from "./session.js";
 
 const rootRoute = getRouteApi(rootRouteId);
 const protectedRoute = getRouteApi("/_protected");
@@ -15,6 +20,11 @@ export function useSessionSource(): AdminSessionSource {
 /** The resolved session of the signed-in user; only available below the protected route. */
 export function useSession(): AdminSession {
   return protectedRoute.useRouteContext().session;
+}
+
+/** Whether the signed-in user holds a permission; only available below the protected route. */
+export function useCan(permission: AdminPermission): boolean {
+  return can(useSession(), permission);
 }
 
 /** Returns to login with cleared remote state when a request reports an expired session. */

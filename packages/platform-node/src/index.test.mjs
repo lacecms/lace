@@ -348,6 +348,60 @@ test("fixed-window buckets retain only HMAC identities and return a retry durati
   }
 });
 
+test("Node settings compose email providers with production restrictions", () => {
+  const base = {
+    ...minioEnvironment,
+    LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+    LACE_DATABASE_PATH: "/tmp/lace.sqlite",
+    LACE_PUBLIC_BASE_URL: "https://lace.test/",
+  };
+  expect(parseNodeRuntimeSettings(base).email).toEqual({ provider: "none" });
+  const mailpit = {
+    ...base,
+    LACE_EMAIL_FROM: "Lace Dev <lace@localhost.test>",
+    LACE_EMAIL_PROVIDER: "smtp",
+    LACE_SMTP_HOST: "mailpit",
+    LACE_SMTP_PORT: "1025",
+    LACE_SMTP_SECURITY: "none",
+  };
+  expect(parseNodeRuntimeSettings(mailpit).email).toMatchObject({
+    provider: "smtp",
+    smtp: { host: "mailpit", port: 1025, security: "none" },
+  });
+  expect(() => parseNodeRuntimeSettings({ ...mailpit, NODE_ENV: "production" })).toThrow(
+    "Invalid Node environment: LACE_SMTP_SECURITY.",
+  );
+  expect(() =>
+    parseNodeRuntimeSettings({
+      ...base,
+      LACE_EMAIL_FROM: "cms@lace.test",
+      LACE_EMAIL_PROVIDER: "log",
+      NODE_ENV: "production",
+    }),
+  ).toThrow("Invalid Node environment: LACE_EMAIL_PROVIDER.");
+  expect(() =>
+    parseNodeRuntimeSettings({
+      ...base,
+      LACE_EMAIL_FROM: "cms@lace.test",
+      LACE_EMAIL_PROVIDER: "cloudflare",
+    }),
+  ).toThrow("Invalid Node environment: LACE_EMAIL_PROVIDER.");
+  const password = "smtp-password-do-not-print";
+  try {
+    parseNodeRuntimeSettings({
+      ...mailpit,
+      LACE_SMTP_PASSWORD: password,
+      LACE_SMTP_PORT: password,
+    });
+    expect.unreachable();
+  } catch (error) {
+    expect(String(error)).toBe(
+      "NodeEnvironmentError: Invalid Node environment: LACE_SMTP_PORT, LACE_SMTP_USER.",
+    );
+    expect(JSON.stringify(error.issues)).not.toContain(password);
+  }
+});
+
 test("validates named Node settings without disclosing supplied values", () => {
   const secret = "https://user:opaque-secret@invalid.test/path?token=opaque-secret";
   expect(() =>

@@ -2,8 +2,14 @@ import type { MediaDetailDto, MediaMetadataDto } from "@lacecms/contracts";
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
-import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
-import type { AdminSession } from "../../../entities/session/index.js";
+import {
+  mediaItem,
+  renderInRouter,
+  sessionFor,
+  stubClient,
+  type SessionSeed,
+} from "../../../app/testing/index.js";
+import { can } from "../../../entities/session/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 import { MediaDetailsPanel } from "./index.js";
 
@@ -42,12 +48,12 @@ function mount({
   readonly item?: MediaMetadataDto;
   readonly onChanged?: (item: MediaMetadataDto) => void;
   readonly returnFocus?: () => void;
-  readonly session?: AdminSession;
+  readonly session?: SessionSeed;
 } = {}) {
   const onClose = vi.fn();
   renderInRouter(
     <MediaDetailsPanel
-      canWrite={session.role !== "viewer"}
+      canWrite={can(sessionFor(session), "media:write")}
       item={item}
       onChanged={onChanged}
       onClose={onClose}

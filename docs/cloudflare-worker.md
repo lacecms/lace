@@ -34,9 +34,21 @@ unconfigured Node deployment records.
 | `LACE_PAGES_TRACKING_TIMEOUT_MINUTES` | variable | no | Overall tracking deadline per build, 5–1440 minutes; defaults to 60. |
 | `LACE_PAGES_API_BASE_URL` | variable | no | Development only: HTTPS or loopback HTTP stub of the Cloudflare API, ending in `/`. Invalid in production. |
 | `LACE_R2_TIMEOUT_MS` | variable | no | Per-operation R2 timeout from 1 to 60000 ms; defaults to 10000. |
+| `EMAIL` | send_email binding | with `cloudflare` | Cloudflare Email Service binding; requires Workers Paid and an onboarded sending domain. |
+| `LACE_EMAIL_PROVIDER` | variable | no | `none` (default), `resend`, `cloudflare`, or `log` (development only). `smtp` is Node-only. |
+| `LACE_EMAIL_FROM` | variable | with a provider | Sender as `address` or `Display Name <address>`. |
+| `LACE_EMAIL_TIMEOUT_MS` | variable | no | Per-send timeout from 1 to 60000 ms; defaults to 10000. |
+| `LACE_RESEND_API_KEY` | secret | with `resend` | Resend API key; works on Workers Free. |
+| `LACE_RESEND_API_BASE_URL` | variable | no | Test-only endpoint override; HTTPS outside development. |
 
 ¹ Pages tracking is enabled only when all three are set; setting some of them is
 a validation error.
+
+Email is optional. Resend is the recommended Worker provider: it works on the
+Workers Free plan over HTTPS. The `cloudflare` provider uses the Email Service
+`send_email` binding, which can reach arbitrary recipients only on Workers Paid
+after the sending domain is onboarded; binding errors map to the same closed
+reasons as every other provider.
 
 Set secrets with `wrangler secret put`, never through `vars`. When bindings or
 variables are invalid, every request receives a sanitized `503` envelope. The
@@ -177,7 +189,9 @@ All three sit behind one gateway at `http://127.0.0.1:8787`:
 | everything else | Astro dev server (port 4321) |
 
 Admin, API, and auth therefore share one origin. The Worker runs in
-`development` mode, so session cookies are not `Secure`. Pass `-- --kv` to add a
+`development` mode, so session cookies are not `Secure`. Email uses the `log`
+provider: messages, including any account links, are printed in the Worker
+output and never sent. Pass `-- --kv` to add a
 local `CACHE` KV binding. Visit
 `http://127.0.0.1:8787/__scheduled?cron=*+*+*+*+*` to run a scheduled recovery
 pass immediately. The site uses fixture data unless you set

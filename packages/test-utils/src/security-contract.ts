@@ -101,6 +101,17 @@ export const securityContractCases: readonly SecurityContractCase[] = Object.fre
         harness.security.bootstrap({ email: "admin@lace.test", password, token: setup.token }),
       ).rejects.toThrow();
       expect(await harness.security.listUsers()).toEqual([user]);
+      expect(await harness.security.readUserProfile(user.id)).toEqual({
+        disabled: false,
+        email: "admin@lace.test",
+        name: "admin@lace.test",
+      });
+      expect(await harness.security.readUserProfile("missing-user")).toBeNull();
+      await harness.sql.run("update user set name = ?, disabled = 1 where id = ?", "  ", user.id);
+      expect(await harness.security.readUserProfile(user.id)).toEqual({
+        disabled: true,
+        email: "admin@lace.test",
+      });
     },
   },
   {

@@ -1,8 +1,7 @@
 import { screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { renderRoute, stubClient } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import { renderRoute, stubClient, staticSessionSource } from "../../../app/testing/index.js";
 
 test.each(["/setup", "/content/posts"])(
   "failed guard %s retries only state without exposing content",
@@ -12,7 +11,7 @@ test.each(["/setup", "/content/posts"])(
       .mockRejectedValueOnce(new Error("private detail"))
       .mockResolvedValue({ setupComplete: false });
     const setupAdmin = vi.fn();
-    renderRoute(path, createStaticSessionSource(null), stubClient({ loadSetupState, setupAdmin }));
+    renderRoute(path, staticSessionSource(null), stubClient({ loadSetupState, setupAdmin }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not check setup");
     expect(screen.queryByText("private detail")).not.toBeInTheDocument();
     expect(

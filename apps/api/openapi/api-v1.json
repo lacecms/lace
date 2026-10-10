@@ -2669,6 +2669,151 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/session": {
+      "get": {
+        "operationId": "getApiV1AdminSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "permissions": {
+                      "items": {
+                        "enum": [
+                          "content:read",
+                          "content:write",
+                          "content:publish",
+                          "media:write",
+                          "users:manage",
+                          "settings:manage"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "user": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "maxLength": 320,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "role": {
+                          "enum": ["admin", "editor", "viewer"]
+                        }
+                      },
+                      "required": ["email", "id", "role"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["permissions", "user"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session summary without credential material"
+          }
+        },
+        "summary": "Read the signed-in user and server-derived permissions",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/settings/email-test": {
+      "post": {
+        "operationId": "postApiV1AdminSettingsEmailTest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "const": "sent"
+                        }
+                      },
+                      "required": ["status"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "enum": [
+                            "not_configured",
+                            "invalid_message",
+                            "rejected",
+                            "rate_limited",
+                            "unavailable"
+                          ]
+                        },
+                        "status": {
+                          "const": "failed"
+                        }
+                      },
+                      "required": ["reason", "status"],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Closed delivery outcome; failed sends are reported, not raised"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send a test email to the signed-in administrator",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/site-builds": {
       "get": {
         "operationId": "getApiV1AdminSiteBuilds",

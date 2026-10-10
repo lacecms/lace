@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
+import { sessionPath, sessionSummary } from "./support/session.js";
 
 type Role = "admin" | "editor" | "viewer";
 const models = [
@@ -23,11 +24,11 @@ async function mock(page: Page, identity: { role: Role; id: string; signedIn?: b
       const url = new URL(request.url());
       if (request.method() !== "GET") mutations.push(url.pathname);
       let data: unknown;
-      if (url.pathname === "/api/auth/get-session")
+      if (url.pathname === sessionPath)
         data =
           identity.signedIn === false
             ? null
-            : { user: { id: identity.id, role: identity.role, name: "Tour User" } };
+            : sessionSummary({ displayName: "Tour User", id: identity.id, role: identity.role });
       else if (url.pathname === "/api/v1/setup/state") data = { setupComplete: true };
       else if (url.pathname === "/api/v1/admin/content-models") data = { items: models };
       else if (url.pathname === "/api/v1/admin/entries/entry-1")

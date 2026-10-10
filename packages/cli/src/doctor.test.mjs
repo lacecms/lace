@@ -229,6 +229,64 @@ test("native settings track runtime parser and Compose validates host mapping an
   expect(result.output).not.toContain(sentinel);
 });
 
+test("doctor validates email settings by name without contacting a mail server", async () => {
+  const root = await project();
+  const requests = [];
+  const unconfigured = await execute(root, settings, baseOptions, {
+    request: async (...args) => {
+      requests.push(args);
+      return offline();
+    },
+  });
+  expect(getCheck(unconfigured, "email")).toMatchObject({
+    code: "EMAIL_NOT_CONFIGURED",
+    status: "pass",
+  });
+  expect(unconfigured.exitCode).toBe(0);
+  const smtp = {
+    ...settings,
+    LACE_EMAIL_FROM: "Lace <cms@example.com>",
+    LACE_EMAIL_PROVIDER: "smtp",
+    LACE_SMTP_PASSWORD: sentinel,
+    LACE_SMTP_USER: "lace",
+  };
+  const missingHost = await execute(root, smtp);
+  expect(getCheck(missingHost, "settings")).toMatchObject({ status: "fail" });
+  expect(getCheck(missingHost, "settings").reason).toContain("LACE_SMTP_HOST");
+  expect(getCheck(missingHost, "email").status).toBe("skipped");
+  expect(missingHost.output).not.toContain(sentinel);
+  const configured = await execute(root, { ...smtp, LACE_SMTP_HOST: "smtp.example.com" });
+  expect(getCheck(configured, "email")).toMatchObject({ status: "pass" });
+  expect(getCheck(configured, "email").reason).toContain("smtp");
+  expect(getCheck(configured, "email").reason).toContain("no message was sent");
+  expect(
+    await invalidSettings(
+      baseOptions,
+      { ...settings, LACE_EMAIL_FROM: "cms@example.com", LACE_EMAIL_PROVIDER: "cloudflare" },
+      root,
+    ),
+  ).toEqual(["LACE_EMAIL_PROVIDER"]);
+  // Compose validates against the production image: plaintext SMTP is refused.
+  const compose = {
+    ...settings,
+    LACE_MINIO_ROOT_ACCESS_KEY: "root-access",
+    LACE_MINIO_ROOT_SECRET: "s".repeat(64),
+    LACE_BUILDER_SECRET: "b".repeat(64),
+    LACE_API_IMAGE: "api:tag",
+    LACE_BUILDER_IMAGE: "builder:tag",
+    LACE_EMAIL_FROM: "cms@example.com",
+    LACE_EMAIL_PROVIDER: "smtp",
+    LACE_SMTP_HOST: "smtp.example.com",
+    LACE_SMTP_SECURITY: "none",
+  };
+  expect(await invalidSettings({ ...baseOptions, mode: "compose" }, compose, root)).toEqual([
+    "LACE_SMTP_SECURITY",
+  ]);
+  expect(requests).toEqual(
+    requests.filter(([url]) => !String(url).includes("smtp") && !String(url).includes("resend")),
+  );
+});
+
 async function installWrangler(root) {
   await mkdir(join(root, "node_modules/wrangler/bin"), { recursive: true });
   await writeFile(

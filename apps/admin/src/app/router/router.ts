@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { readSetupState } from "../../entities/setup/index.js";
 import { SetupPage, SetupStateError } from "../../pages/setup/index.js";
-import type { AdminSessionSource } from "../../entities/session/index.js";
+import { can, type AdminSessionSource } from "../../entities/session/index.js";
 import { BuildsPage } from "../../pages/builds/index.js";
 import { ContentPage } from "../../pages/content/index.js";
 import { EntryPage } from "../../pages/entry/index.js";
@@ -137,13 +137,13 @@ const buildsRoute = createRoute({
   path: "/builds",
 });
 const usersRoute = createRoute({
-  beforeLoad: ({ context }) => ({ permitted: context.session.role === "admin" }),
+  beforeLoad: ({ context }) => ({ permitted: can(context.session, "users:manage") }),
   component: UsersPage,
   getParentRoute: () => protectedRoute,
   path: "/users",
 });
 const settingsRoute = createRoute({
-  beforeLoad: ({ context }) => ({ permitted: context.session.role === "admin" }),
+  beforeLoad: ({ context }) => ({ permitted: can(context.session, "settings:manage") }),
   component: SettingsPage,
   getParentRoute: () => protectedRoute,
   path: "/settings",

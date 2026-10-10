@@ -1,7 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
-import { renderRoute, stubClient } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import { renderRoute, stubClient, staticSessionSource } from "../../../app/testing/index.js";
 
 test.each(["/", "/content/posts/entry-123", "/does-not-exist", "/setup"])(
   "incomplete anonymous entry %s reaches setup without protected requests",
@@ -9,7 +8,7 @@ test.each(["/", "/content/posts/entry-123", "/does-not-exist", "/setup"])(
     const listModels = vi.fn();
     const router = renderRoute(
       path,
-      createStaticSessionSource(null),
+      staticSessionSource(null),
       stubClient({ listModels, loadSetupState: async () => ({ setupComplete: false }) }),
     );
     expect(
@@ -22,7 +21,7 @@ test.each(["/", "/content/posts/entry-123", "/does-not-exist", "/setup"])(
 );
 
 test("completed setup closes a direct setup visit with a safe return path", async () => {
-  const router = renderRoute("/setup?redirect=/content/posts", createStaticSessionSource(null));
+  const router = renderRoute("/setup?redirect=/content/posts", staticSessionSource(null));
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   await waitFor(() => expect(router.state.location.search.redirect).toBe("/content/posts"));
 });
@@ -31,7 +30,7 @@ test("authenticated setup visits use the existing session without reading public
   const loadSetupState = vi.fn();
   renderRoute(
     "/setup",
-    createStaticSessionSource({ id: "admin", role: "admin" }),
+    staticSessionSource({ id: "admin", role: "admin" }),
     stubClient({ loadSetupState }),
   );
   expect(await screen.findByRole("heading", { name: "Content" })).toBeInTheDocument();

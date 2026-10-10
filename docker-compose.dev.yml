@@ -14,6 +14,14 @@ services:
     volumes:
       - minio-data:/data
 
+  # Captures all outgoing email locally; nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    environment:
+      MP_MAX_MESSAGES: 500
+    ports:
+      - "127.0.0.1:${LACE_MAILPIT_PORT:-8025}:8025"
+
   minio-init:
     build:
       context: .
@@ -68,10 +76,18 @@ services:
         condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
     environment:
       LACE_ADMIN_DEV_ORIGIN: ${LACE_ADMIN_DEV_ORIGIN:?set LACE_ADMIN_DEV_ORIGIN}
       LACE_AUTH_SECRET: ${LACE_AUTH_SECRET:?set LACE_AUTH_SECRET}
       LACE_DATABASE_PATH: ${LACE_DATABASE_PATH:?set LACE_DATABASE_PATH}
+      # Development-only plaintext SMTP into the local Mailpit inbox.
+      LACE_EMAIL_FROM: ${LACE_EMAIL_FROM:-Lace Dev <lace@localhost.test>}
+      LACE_EMAIL_PROVIDER: ${LACE_EMAIL_PROVIDER:-smtp}
+      LACE_SMTP_HOST: ${LACE_SMTP_HOST:-mailpit}
+      LACE_SMTP_PORT: ${LACE_SMTP_PORT:-1025}
+      LACE_SMTP_SECURITY: ${LACE_SMTP_SECURITY:-none}
       LACE_HOST: 0.0.0.0
       LACE_MINIO_ACCESS_KEY: ${LACE_MINIO_ROOT_ACCESS_KEY:?set LACE_MINIO_ROOT_ACCESS_KEY}
       LACE_MINIO_BUCKET: ${LACE_MINIO_BUCKET:?set LACE_MINIO_BUCKET}

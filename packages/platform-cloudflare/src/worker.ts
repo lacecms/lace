@@ -15,13 +15,17 @@ import type {
   ImageInspector,
   RateLimitDecision,
   SiteBuildTrigger,
+  EmailSender,
 } from "@lacecms/application";
+import { createCloudflareEmailSender, type SendEmailBinding } from "./email.js";
 import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
 import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
 import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
 import {
+  createEmailSender,
   createLaceApp,
+  type EmailSettings,
   type ReadinessProbe,
   type RequestRateLimiter,
   type ServerLogger,
@@ -82,6 +86,8 @@ export interface CreateCloudflareWorkerInput {
   readonly buildTrigger?: (settings: CloudflareSettings) => SiteBuildTrigger;
   readonly clock?: Clock;
   readonly config: NormalizedConfig<readonly ContentModelDefinition[]>;
+  /** Overrides the sender composed from the Worker's email settings. */
+  readonly email?: (settings: CloudflareSettings) => EmailSender;
   readonly imageInspector?: ImageInspector;
   readonly logger?: ServerLogger;
   readonly operationalLogger?: WorkerOperationalLogger;
@@ -161,13 +167,13 @@ class CloudflareRequestRateLimiter implements RequestRateLimiter {
             ? "token"
             : pathname === "/api/v1/admin/media" && method === "POST"
               ? "upload"
-              : undefined;
+              : pathname === "/api/v1/admin/settings/email-test" && method === "POST"
+                ? "email"
+                : undefined;
     if (operation === undefined) return true;
-    if ((operation === "upload" || operation === "token") && input.actor === undefined) return true;
-    const subject =
-      operation === "upload" || operation === "token"
-        ? `actor:${input.actor!.id}`
-        : this.clients.get(input.request);
+    const actorScoped = operation === "upload" || operation === "token" || operation === "email";
+    if (actorScoped && input.actor === undefined) return true;
+    const subject = actorScoped ? `actor:${input.actor!.id}` : this.clients.get(input.request);
     return this.limiter.check({ now: this.clock.now(), operation, subject });
   }
 }
@@ -179,6 +185,24 @@ const defaultLogger: ServerLogger = Object.freeze({
 const defaultOperationalLogger: WorkerOperationalLogger = Object.freeze({
   error: (entry: Record<string, string>) => console.error(JSON.stringify(entry)),
 });
+
+/** Composes the configured provider; the binding is the only Worker-specific one. */
+export function createWorkerEmailSender(
+  settings: EmailSettings = { provider: "none" },
+  binding?: SendEmailBinding,
+): EmailSender {
+  return createEmailSender(settings, {
+    runtimeSender: (configured) => {
+      if (configured.provider !== "cloudflare" || binding === undefined)
+        throw new Error(`Email provider ${configured.provider} is unavailable on the Worker.`);
+      return createCloudflareEmailSender({
+        binding,
+        from: configured.from,
+        timeoutMs: configured.timeoutMs,
+      });
+    },
+  });
+}
 
 function unavailableResponse(): Response {
   return Response.json(
@@ -303,6 +327,8 @@ export function createCloudflareRuntime(
     config: input.config,
     buildSite: settings.buildSite ?? null,
     content,
+    email:
+      input.email?.(settings) ?? createWorkerEmailSender(settings.email, settings.emailBinding),
     environment: { engineVersion, openApiTitle: "Lace API" },
     logger: input.logger ?? defaultLogger,
     maxBodyBytes: 1_048_576,

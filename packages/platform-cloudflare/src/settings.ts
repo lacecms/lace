@@ -1,5 +1,11 @@
 import { siteBuildTrackingPolicy } from "@lacecms/domain";
-import { parseBuildSiteIdentity, type LaceAppInput } from "@lacecms/server";
+import {
+  parseBuildSiteIdentity,
+  parseEmailSettings,
+  type EmailSettings,
+  type LaceAppInput,
+} from "@lacecms/server";
+import type { SendEmailBinding } from "./email.js";
 import type { KVNamespace } from "./cache.js";
 import { DEFAULT_DEPLOY_HOOK_TIMEOUT_MS } from "./deploy-hook.js";
 import type { D1Database } from "./d1.js";
@@ -18,9 +24,13 @@ export interface CloudflareWorkerEnv {
   readonly ASSETS?: unknown;
   readonly CACHE?: unknown;
   readonly DB?: unknown;
+  readonly EMAIL?: unknown;
   readonly LACE_AUTH_SECRET?: unknown;
   readonly LACE_DEPLOY_HOOK_TIMEOUT_MS?: unknown;
   readonly LACE_DEPLOY_HOOK_URL?: unknown;
+  readonly LACE_EMAIL_FROM?: unknown;
+  readonly LACE_EMAIL_PROVIDER?: unknown;
+  readonly LACE_EMAIL_TIMEOUT_MS?: unknown;
   readonly LACE_ENVIRONMENT?: unknown;
   readonly LACE_PAGES_ACCOUNT_ID?: unknown;
   readonly LACE_PAGES_API_BASE_URL?: unknown;
@@ -29,6 +39,8 @@ export interface CloudflareWorkerEnv {
   readonly LACE_PAGES_TRACKING_TIMEOUT_MINUTES?: unknown;
   readonly LACE_PUBLIC_BASE_URL?: unknown;
   readonly LACE_R2_TIMEOUT_MS?: unknown;
+  readonly LACE_RESEND_API_BASE_URL?: unknown;
+  readonly LACE_RESEND_API_KEY?: unknown;
   readonly MEDIA?: unknown;
 }
 
@@ -62,6 +74,10 @@ export interface CloudflareSettings {
   readonly database: D1Database;
   readonly deployHookTimeoutMs: number;
   readonly deployHookUrl?: URL;
+  /** Absent means the `none` provider. */
+  readonly email?: EmailSettings;
+  /** Present exactly when the email provider is `cloudflare`. */
+  readonly emailBinding?: SendEmailBinding;
   readonly media: R2Bucket;
   readonly pagesTracking?: PagesTrackingSettings;
   readonly production: boolean;
@@ -313,6 +329,15 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
   if (mode !== "production" && mode !== "development")
     issues.push({ reason: "invalid", variable: "LACE_ENVIRONMENT" });
   const tracking = pagesTracking(env, mode !== "development", issues);
+  const email = parseEmailSettings(env, {
+    production: mode !== "development",
+    runtime: "cloudflare",
+  });
+  issues.push(...email.issues);
+  const emailBinding =
+    email.settings?.provider === "cloudflare"
+      ? binding<SendEmailBinding>(env.EMAIL, "EMAIL", ["send"], issues)
+      : undefined;
   const storageTimeoutMs = timeout(
     env.LACE_R2_TIMEOUT_MS,
     "LACE_R2_TIMEOUT_MS",
@@ -330,7 +355,8 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
     database === undefined ||
     media === undefined ||
     authSecret === undefined ||
-    publicBaseUrl === undefined
+    publicBaseUrl === undefined ||
+    email.settings === undefined
   ) {
     throw new CloudflareEnvironmentError(Object.freeze(issues));
   }
@@ -342,6 +368,8 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
     database,
     deployHookTimeoutMs,
     ...(deployHookUrl === undefined ? {} : { deployHookUrl }),
+    email: email.settings,
+    ...(emailBinding === undefined ? {} : { emailBinding }),
     media,
     ...(tracking === undefined ? {} : { pagesTracking: tracking }),
     production: mode !== "development",

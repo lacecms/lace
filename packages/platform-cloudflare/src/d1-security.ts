@@ -16,6 +16,7 @@ import type { D1Database, D1PreparedStatement } from "./d1.js";
 const setupExpiryMs = 60 * 60 * 1000;
 const limits = {
   auth: { limit: 10, windowMs: 15 * 60 * 1000 },
+  email: { limit: 5, windowMs: 60 * 60 * 1000 },
   setup: { limit: 5, windowMs: 60 * 60 * 1000 },
   token: { limit: 20, windowMs: 60 * 60 * 1000 },
   upload: { limit: 30, windowMs: 60 * 1000 },
@@ -72,6 +73,19 @@ function user(row: Record<string, unknown>): ManagedUser {
     email: String(row.email),
     id: String(row.id),
     role: role(row.role),
+  });
+}
+
+function profile(row: Record<string, unknown>): {
+  readonly disabled: boolean;
+  readonly email: string;
+  readonly name?: string;
+} {
+  const name = typeof row.name === "string" ? row.name.trim() : "";
+  return Object.freeze({
+    disabled: Number(row.disabled) === 1,
+    email: String(row.email),
+    ...(name.length === 0 ? {} : { name }),
   });
 }
 
@@ -165,6 +179,18 @@ export class D1SecurityService implements SecurityService {
     ]);
     if (completed?.meta.changes !== 1) throw new Error("Setup unavailable.");
     return Object.freeze({ user: account });
+  }
+
+  public async readUserProfile(userId: string): Promise<{
+    readonly disabled: boolean;
+    readonly email: string;
+    readonly name?: string;
+  } | null> {
+    const row = await this.statement(
+      "select email, name, disabled from user where id = ?",
+      userId,
+    ).first();
+    return row === null ? null : profile(row);
   }
 
   public async listUsers(): Promise<readonly ManagedUser[]> {
@@ -344,7 +370,7 @@ export class D1FixedWindowRateLimiter implements SensitiveRateLimiter {
   ) {}
 
   public async check(input: {
-    readonly operation: "auth" | "setup" | "token" | "upload";
+    readonly operation: "auth" | "email" | "setup" | "token" | "upload";
     readonly subject: string;
     readonly now: UnixMilliseconds;
   }): Promise<RateLimitDecision> {

@@ -6,9 +6,14 @@ import {
   opaqueCursor,
   requireUsersManager,
   requireContentReader,
+  requireSettingsManager,
+  actorPermissions,
+  sendTestEmail,
+  unconfiguredEmailSender,
   SiteBuildUseCases,
 } from "@lacecms/application";
 import type {
+  EmailSender,
   MediaView,
   PublicContentReadPort,
   RateLimitDecision,
@@ -27,6 +32,9 @@ import {
   siteBuildRecordSchema,
   siteBuildListSchema,
   adminSettingsStatusSchema,
+  adminSessionSchema,
+  emailTestRequestSchema,
+  emailTestResultSchema,
   adminContentEntrySchema,
   classifyError,
   contentEntryListQuerySchema,
@@ -81,6 +89,7 @@ import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
 import { describeRoute, loadVendor, openAPIRouteHandler, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
+import { emailDeliveryStatus } from "./email.js";
 
 loadVendor("valibot", { toJSONSchema: toJsonSchema as never });
 
@@ -181,6 +190,8 @@ export interface LaceAppInput {
   readonly requestIds: RequestIdGenerator;
   readonly security?: SecurityService;
   readonly builds?: SiteBuildUseCases;
+  /** Transactional email; absent means the `none` provider. */
+  readonly email?: EmailSender;
 }
 
 class RequestValidationError extends Error {
@@ -502,7 +513,8 @@ export function createLaceApp(input: LaceAppInput): Hono {
     const path = context.req.path;
     const actorLimited =
       (path.startsWith("/api/v1/admin/api-tokens") && context.req.method !== "GET") ||
-      (path === "/api/v1/admin/media" && context.req.method === "POST");
+      (path === "/api/v1/admin/media" && context.req.method === "POST") ||
+      (path === "/api/v1/admin/settings/email-test" && context.req.method === "POST");
     const resolvedActor = actorLimited ? await actor(context) : undefined;
     const decision = await input.rateLimiter.check({
       ...(resolvedActor === undefined ? {} : { actor: resolvedActor }),
@@ -579,6 +591,15 @@ export function createLaceApp(input: LaceAppInput): Hono {
     });
   }
 
+  function settingsActor(context: Parameters<typeof actor>[0]): Promise<Actor> {
+    return actor(context).then((value) => {
+      requireSettingsManager(value);
+      return value;
+    });
+  }
+
+  const email = input.email ?? unconfiguredEmailSender;
+
   app.get(
     "/api/v1/setup/state",
     describeRoute({
@@ -641,14 +662,71 @@ export function createLaceApp(input: LaceAppInput): Hono {
       return response(buildSiteSelectionSchema, { site: input.buildSite ?? null });
     },
   );
+  app.get(
+    "/api/v1/admin/session",
+    describeRoute({
+      summary: "Read the signed-in user and server-derived permissions",
+      tags: ["admin"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(adminSessionSchema) } },
+          description: "Session summary without credential material",
+        },
+      },
+    }),
+    async (context) => {
+      const resolvedActor = await actor(context);
+      const profile = await security().readUserProfile(resolvedActor.id);
+      if (profile === null || profile.disabled) throw new AuthorizationError();
+      return response(
+        adminSessionSchema,
+        {
+          permissions: [...actorPermissions(resolvedActor)],
+          user: {
+            ...(profile.name === undefined ? {} : { displayName: profile.name }),
+            email: profile.email,
+            id: resolvedActor.id,
+            role: resolvedActor.role,
+          },
+        },
+        200,
+        { "cache-control": "no-store" },
+      );
+    },
+  );
   app.get("/api/v1/admin/settings/status", async (context) => {
-    await usersActor(context);
+    await settingsActor(context);
     return response(adminSettingsStatusSchema, {
       configuredModels: input.config.content.length,
+      email: emailDeliveryStatus(email),
       engineVersion: input.environment.engineVersion,
       ready: await input.readiness.isReady(),
     });
   });
+  app.post(
+    "/api/v1/admin/settings/email-test",
+    describeRoute({
+      summary: "Send a test email to the signed-in administrator",
+      tags: ["admin"],
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(emailTestResultSchema) } },
+          description: "Closed delivery outcome; failed sends are reported, not raised",
+        },
+      },
+    }),
+    validator("json", emailTestRequestSchema, validationHook),
+    async (context) => {
+      const resolvedActor = await settingsActor(context);
+      const outcome = await sendTestEmail({
+        actor: resolvedActor,
+        email,
+        installationUrl: input.publicBaseUrl ?? new URL(context.req.url).origin,
+        users: security(),
+      });
+      return response(emailTestResultSchema, outcome);
+    },
+  );
   app.post(
     "/api/v1/admin/users",
     validator("json", userCreateRequestSchema, validationHook),
@@ -673,7 +751,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     },
   );
   app.get("/api/v1/admin/api-tokens", async (context) => {
-    await usersActor(context);
+    await settingsActor(context);
     return response(buildTokenListSchema, {
       items: (await security().listBuildTokens()).map(buildTokenDto),
     });
@@ -682,7 +760,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     "/api/v1/admin/api-tokens",
     validator("json", buildTokenCreateRequestSchema, validationHook),
     async (context) => {
-      await usersActor(context);
+      await settingsActor(context);
       const body = context.req.valid("json") as v.InferOutput<typeof buildTokenCreateRequestSchema>;
       const token = await security().createBuildToken({
         name: body.name,
@@ -696,7 +774,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     },
   );
   app.delete("/api/v1/admin/api-tokens/:tokenId", async (context) => {
-    await usersActor(context);
+    await settingsActor(context);
     const token = await security().revokeBuildToken({
       now: Date.now() as never,
       tokenId: context.req.param("tokenId"),
@@ -759,7 +837,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       tags: ["admin"],
     }),
     async (context) => {
-      const resolvedActor = await usersActor(context);
+      const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
       if (input.builds === undefined) throw new Error("Build commands are unavailable.");
       return response(buildQueueReceiptSchema, await input.builds.request(resolvedActor), 202);
@@ -779,7 +857,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       tags: ["admin"],
     }),
     async (context) => {
-      const resolvedActor = await usersActor(context);
+      const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
       if (input.builds === undefined) throw new Error("Build commands are unavailable.");

@@ -48,6 +48,7 @@ export const checkOrder = [
   "node",
   "pnpm",
   "settings",
+  "email",
   "site",
   "docker-compose",
   "docker-daemon",

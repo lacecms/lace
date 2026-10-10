@@ -15,6 +15,7 @@ const hook = "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/s
 const secret = "smoke-test-auth-secret-that-is-long-enough-for-better-auth";
 const password = "correct horse battery staple";
 const hookCalls = [];
+const emailCalls = [];
 let built;
 let state;
 let miniflare;
@@ -108,13 +109,24 @@ beforeAll(async () => {
       bindings: {
         LACE_AUTH_SECRET: secret,
         LACE_DEPLOY_HOOK_URL: hook,
+        LACE_EMAIL_FROM: "Lace Smoke <cms@lace.test>",
+        LACE_EMAIL_PROVIDER: "resend",
         LACE_PUBLIC_BASE_URL: `${origin}/`,
+        LACE_RESEND_API_KEY: "re_smoke_key",
       },
       compatibilityDate: built.config.compatibility_date,
       compatibilityFlags: built.config.compatibility_flags,
       d1Databases: { DB: built.config.d1_databases[0].database_id },
       modules: true,
       outboundService: async (request) => {
+        if (new URL(request.url).hostname === "api.resend.com") {
+          emailCalls.push({
+            authorization: request.headers.get("authorization"),
+            body: await request.json(),
+            url: request.url,
+          });
+          return Response.json({ id: "smoke-email-1" });
+        }
         hookCalls.push({
           authorization: request.headers.get("authorization"),
           body: await request.text(),
@@ -173,6 +185,29 @@ test("Worker bundle smoke: health, auth, R2 upload, publish, deploy hook, export
   });
   expect(session.response.status).toBe(200);
   cookie = session.response.headers.getSetCookie()[0].split(";")[0];
+
+  const summary = await call("/api/v1/admin/session");
+  expect(summary.response.status).toBe(200);
+  expect(summary.body).toMatchObject({
+    permissions: expect.arrayContaining(["content:publish", "settings:manage", "users:manage"]),
+    user: { email: "admin@lace.test", role: "admin" },
+  });
+  expect((await call("/api/v1/admin/settings/status")).body.email).toEqual({
+    from: "Lace Smoke <cms@lace.test>",
+    provider: "resend",
+  });
+  const emailTest = await call("/api/v1/admin/settings/email-test", { json: {}, method: "POST" });
+  expect(emailTest.body).toEqual({ status: "sent" });
+  expect(emailCalls).toHaveLength(1);
+  expect(emailCalls[0]).toMatchObject({
+    authorization: "Bearer re_smoke_key",
+    body: {
+      from: "Lace Smoke <cms@lace.test>",
+      subject: "Lace test email",
+      to: ["admin@lace.test"],
+    },
+    url: "https://api.resend.com/emails",
+  });
 
   const form = new FormData();
   form.append("file", new Blob([png()], { type: "image/png" }), "cover.png");

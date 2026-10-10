@@ -20,11 +20,13 @@ import type {
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
-import { requirePermission } from "@lacecms/domain";
+import { permissionsFor, requirePermission, type Permission } from "@lacecms/domain";
+import type { UserProfileReader } from "./email.js";
 
 export const packageName = "@lacecms/application";
 
 export * from "./configuration-sync.js";
+export * from "./email.js";
 export * from "./site-build-use-cases.js";
 export * from "./dispatchers.js";
 export * from "./site-build-tracker.js";
@@ -535,7 +537,7 @@ export interface IssuedBuildToken extends BuildTokenMetadata {
 }
 
 /** Security lifecycle boundary implemented by each runtime's durable adapter. */
-export interface SecurityService {
+export interface SecurityService extends UserProfileReader {
   /** Read-only durable completion marker; never infers completion from users. */
   isSetupComplete(): Promise<boolean>;
   bootstrap(input: {
@@ -581,7 +583,7 @@ export interface RateLimitDecision {
 
 export interface SensitiveRateLimiter {
   check(input: {
-    readonly operation: "auth" | "setup" | "token" | "upload";
+    readonly operation: "auth" | "email" | "setup" | "token" | "upload";
     readonly subject: string;
     readonly now: UnixMilliseconds;
   }): Promise<RateLimitDecision>;
@@ -590,6 +592,16 @@ export interface SensitiveRateLimiter {
 /** Keeps the role matrix in the domain policy rather than HTTP handlers. */
 export function requireUsersManager(actor: Actor): void {
   requirePermission(actor, "users:manage");
+}
+
+/** Authorizes installation settings: status, build tokens and email delivery checks. */
+export function requireSettingsManager(actor: Actor): void {
+  requirePermission(actor, "settings:manage");
+}
+
+/** The permissions the domain policy grants an actor, for session summaries. */
+export function actorPermissions(actor: Actor): readonly Permission[] {
+  return permissionsFor(actor.role);
 }
 
 export interface DispatcherEvent {

@@ -8,7 +8,7 @@ import {
   type Observation,
 } from "./doctor-report.js";
 import { doctorIO, ProbeError, probeLimit, reportLimit, type DoctorIO } from "./doctor-io.js";
-import { apiUrl, invalidSettings, type Values } from "./doctor-settings.js";
+import { apiUrl, emailProvider, invalidSettings, type Values } from "./doctor-settings.js";
 import {
   apiReadiness,
   bindingPrerequisite,
@@ -165,6 +165,26 @@ export async function runDoctor(options: DoctorOptions, runtime: DoctorRuntime =
             "Review selected-target configuration and installed runtime packages, then retry.",
           ),
         );
+      }
+    }
+    if (options.target === "node" && environmentValid) {
+      try {
+        const provider = await run(() => emailProvider(options, values));
+        observations.set(
+          "email",
+          provider === undefined
+            ? skipped("settings")
+            : provider === "none"
+              ? observation(
+                  "pass",
+                  "EMAIL_NOT_CONFIGURED",
+                  "Email delivery is not configured; account emails cannot be sent.",
+                  "Optionally set LACE_EMAIL_PROVIDER and LACE_EMAIL_FROM, then use Settings → Send test email.",
+                )
+              : pass(`Email settings for the ${provider} provider are valid; no message was sent.`),
+        );
+      } catch {
+        observations.set("email", skipped("settings"));
       }
     }
     const settingsOk = observations.get("settings")?.kind === "pass";

@@ -34,6 +34,11 @@
     "not_found_handling": "none",
     "run_worker_first": true,
   },
+  // Optional Cloudflare Email Service (Workers Paid, onboarded sending domain). Set the
+  // "LACE_EMAIL_PROVIDER": "cloudflare" and "LACE_EMAIL_FROM" vars, then add:
+  // "send_email": [{ "name": "EMAIL" }],
+  // Resend works on Workers Free instead: LACE_EMAIL_PROVIDER "resend" plus the
+  // LACE_RESEND_API_KEY secret.
   // Scheduled outbox recovery; post-commit dispatch only reduces latency.
   "triggers": { "crons": ["* * * * *"] },
   "vars": {

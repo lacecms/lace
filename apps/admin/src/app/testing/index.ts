@@ -15,7 +15,10 @@ import type { UserEvent } from "@testing-library/user-event";
 import type { ContentEntryListDto, ContentEntrySummaryDto } from "@lacecms/contracts";
 import { createElement, type ReactElement } from "react";
 import {
+  adminSessionFromDto,
   createStaticSessionSource,
+  type AdminPermission,
+  type AdminRole,
   type AdminSession,
   type AdminSessionSource,
 } from "../../entities/session/index.js";
@@ -23,6 +26,52 @@ import type { AdminClient } from "../../shared/api/index.js";
 import { Toaster } from "../../shared/ui/Toaster/index.js";
 import { TooltipProvider } from "../../shared/ui/Tooltip/index.js";
 import { createAdminRouter, type AdminRouterContext } from "../router/index.js";
+
+/** The server's default grants, as test data; production reads them from the session summary. */
+const defaultPermissions: Readonly<Record<AdminRole, readonly AdminPermission[]>> = {
+  admin: [
+    "content:read",
+    "content:write",
+    "content:publish",
+    "media:write",
+    "users:manage",
+    "settings:manage",
+  ],
+  editor: ["content:read", "content:write", "media:write"],
+  viewer: ["content:read"],
+};
+
+export interface SessionSeed {
+  readonly displayName?: string;
+  readonly email?: string;
+  readonly id: string;
+  /** Overrides the role's default grants, e.g. to test one administrative permission. */
+  readonly permissions?: readonly AdminPermission[];
+  readonly role: AdminRole;
+}
+
+/** Builds a session the way the browser source does, from a summary-shaped seed. */
+export function sessionFor(seed: SessionSeed): AdminSession {
+  const email = seed.email ?? `${seed.role}@lace.test`;
+  return adminSessionFromDto({
+    permissions: [...(seed.permissions ?? defaultPermissions[seed.role])],
+    user: { displayName: seed.displayName ?? email, email, id: seed.id, role: seed.role },
+  });
+}
+
+/** A static session source for a seed, or for an anonymous visitor. */
+export function staticSessionSource(seed: SessionSeed | null): AdminSessionSource {
+  return createStaticSessionSource(seed === null ? null : sessionFor(seed));
+}
+
+/** A session-summary response body for e2e and fetch-level tests. */
+export function sessionSummary(seed: SessionSeed) {
+  const session = sessionFor(seed);
+  return {
+    permissions: [...session.permissions],
+    user: { displayName: session.displayName, email: session.email, id: seed.id, role: seed.role },
+  };
+}
 
 export const models = {
   items: [
@@ -103,9 +152,11 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     listUsers: async () => ({ items: [] }),
     loadSettingsStatus: async () => ({
       configuredModels: 0,
+      email: { provider: "none" as const },
       engineVersion: "0.1.0-alpha.4",
       ready: true,
     }),
+    sendTestEmail: async () => ({ status: "sent" as const }),
     listTokens: async () => ({ items: [] }),
     createToken: async () => ({}) as never,
     revokeToken: async () => ({}) as never,
@@ -170,14 +221,16 @@ export function renderInRouter(
   element: ReactElement,
   {
     client = stubClient(),
-    session = { id: "editor-1", role: "editor" },
-    sessionSource = createStaticSessionSource(session),
+    session: seed = { id: "editor-1", role: "editor" },
+    sessionSource,
   }: {
     readonly client?: AdminClient;
-    readonly session?: AdminSession;
+    readonly session?: SessionSeed;
     readonly sessionSource?: AdminSessionSource;
   } = {},
 ) {
+  const session = sessionFor(seed);
+  sessionSource ??= createStaticSessionSource(session);
   const rootRoute = createRootRouteWithContext<AdminRouterContext>()({ component: Outlet });
   const protectedRoute = createRoute({
     beforeLoad: () => ({ session }),

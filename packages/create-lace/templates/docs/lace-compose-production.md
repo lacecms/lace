@@ -118,6 +118,10 @@ Wait until `docker compose ps` lists every service as running (`healthy` where a
 
 While the services run, `/health/ready` is the readiness authority: the API keeps SQLite in write-ahead-log mode, which doctor's `ready` stage refuses to inspect, so it reports the database as unavailable. To run it, stop the database users and switch the journal mode first as described in [doctor limits](lace-operations.md#read-only-environment-checks).
 
+## Configure email (optional)
+
+Account email is disabled until you set `LACE_EMAIL_PROVIDER` in `.env`. Use `smtp` with STARTTLS or implicit TLS, or `resend` with `LACE_RESEND_API_KEY`, plus `LACE_EMAIL_FROM`; see [Email delivery](lace-operations.md#email-delivery). Run `pnpm exec lace doctor --target node --mode compose`, recreate the API with `docker compose up -d --force-recreate api`, then send a test from Settings → Email delivery.
+
 ## Repeat operations
 
 After editing `lace.config.ts` or upgrading packages/images, stop the database users, run the explicit command and start again:

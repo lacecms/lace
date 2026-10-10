@@ -74,6 +74,8 @@ test("development configuration is local, same-origin, and leaves production con
   expect(generated).not.toHaveProperty("$schema");
   expect(generated).not.toHaveProperty("kv_namespaces");
   expect(generated.vars).toEqual({
+    LACE_EMAIL_FROM: "Lace Dev <lace@localhost.test>",
+    LACE_EMAIL_PROVIDER: "log",
     LACE_ENVIRONMENT: "development",
     LACE_PUBLIC_BASE_URL: "http://127.0.0.1:8787/",
   });

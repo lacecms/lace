@@ -43,7 +43,8 @@ export function ChangeRoleDialog({
   const update = useUpdateUser(account, async (updated) => {
     setOpen(false);
     toast.success(`${updated.email} is now ${roleLabel(updated.role)}.`);
-    if (isSelf && updated.role !== "admin") {
+    // A changed own role changes server-derived permissions: re-read them.
+    if (isSelf && updated.role !== account.role) {
       sessionSource.invalidate();
       await router.invalidate();
     }

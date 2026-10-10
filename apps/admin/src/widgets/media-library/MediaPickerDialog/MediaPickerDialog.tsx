@@ -3,7 +3,7 @@ import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack
 import { Upload } from "lucide-react";
 import { type ComponentProps, useState } from "react";
 import { mediaConstraintsText } from "../../../entities/media/index.js";
-import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import {
   DropOverlay,
   UploadQueue,
@@ -85,7 +85,7 @@ function PickerBody({
 }) {
   const client = useAdminClient();
   const session = useSession();
-  const canWrite = session.role !== "viewer";
+  const canWrite = can(session, "media:write");
   const [query, setQuery] = useState<CanonicalMediaQuery>({});
   const uploads = useMediaUploads();
   const dropzone = useMediaDropzone({ disabled: !canWrite, onFiles: uploads.add });

@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { sessionFor } from "../../app/testing/index.js";
 import { breadcrumbsFor, navigationGroups } from "./navigation.js";
 
 const models = [
@@ -10,19 +11,35 @@ const labels = (groups: ReturnType<typeof navigationGroups>) =>
   groups.map((group) => [group.label, group.items.map((item) => item.label)]);
 
 test("navigation groups follow configured models and the role matrix", () => {
-  expect(labels(navigationGroups("admin", models))).toEqual([
+  expect(labels(navigationGroups(sessionFor({ id: "user-1", role: "admin" }), models))).toEqual([
     ["Pages", ["Home"]],
     ["Collections", ["posts"]],
     ["Library", ["Media", "Builds"]],
     ["Admin", ["Users", "Settings"]],
   ]);
   for (const role of ["editor", "viewer"] as const)
-    expect(labels(navigationGroups(role, models))).toEqual([
+    expect(labels(navigationGroups(sessionFor({ id: "user-1", role: role }), models))).toEqual([
       ["Pages", ["Home"]],
       ["Collections", ["posts"]],
       ["Library", ["Media", "Builds"]],
     ]);
-  expect(labels(navigationGroups("editor"))).toEqual([["Library", ["Media", "Builds"]]]);
+  expect(labels(navigationGroups(sessionFor({ id: "user-1", role: "editor" })))).toEqual([
+    ["Library", ["Media", "Builds"]],
+  ]);
+});
+
+test("each administrative item follows its own permission", () => {
+  const groups = (permissions: NonNullable<Parameters<typeof sessionFor>[0]["permissions"]>) =>
+    labels(navigationGroups(sessionFor({ id: "u", permissions, role: "viewer" })));
+  expect(groups(["content:read", "settings:manage"])).toEqual([
+    ["Library", ["Media", "Builds"]],
+    ["Admin", ["Settings"]],
+  ]);
+  expect(groups(["content:read", "users:manage"])).toEqual([
+    ["Library", ["Media", "Builds"]],
+    ["Admin", ["Users"]],
+  ]);
+  expect(groups([])).toEqual([]);
 });
 
 test("breadcrumbs locate each screen without entry identifiers", () => {

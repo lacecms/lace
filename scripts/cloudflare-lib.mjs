@@ -132,6 +132,9 @@ export function developmentWranglerConfig(config, { kv = false } = {}) {
     ...(kv ? { kv_namespaces: [{ binding: "CACHE", id: "lace-dev-cache" }] } : {}),
     main: resolve(apiDirectory, config.main),
     vars: {
+      // Account emails are written to the Worker output; nothing is sent.
+      LACE_EMAIL_FROM: "Lace Dev <lace@localhost.test>",
+      LACE_EMAIL_PROVIDER: "log",
       ...config.vars,
       LACE_ENVIRONMENT: "development",
       LACE_PUBLIC_BASE_URL: `${developmentOrigin}/`,

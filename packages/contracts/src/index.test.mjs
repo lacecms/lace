@@ -14,6 +14,8 @@ import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
   adminSettingsStatusSchema,
+  adminSessionSchema,
+  emailTestResultSchema,
   setupStateSchema,
   blockMetadataSchema,
   classifyError,
@@ -59,12 +61,60 @@ import {
 } from "../dist/index.js";
 
 test("operational status requires a bounded engine release", () => {
-  const status = { configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: false };
+  const status = {
+    configuredModels: 2,
+    email: { provider: "none" },
+    engineVersion: "0.1.0-alpha.4",
+    ready: false,
+  };
   expect(v.parse(adminSettingsStatusSchema, status)).toEqual(status);
   for (const engineVersion of [undefined, "", "x".repeat(121), 4])
     expect(v.safeParse(adminSettingsStatusSchema, { ...status, engineVersion }).success).toBe(
       false,
     );
+});
+
+test("operational status reports email delivery without provider settings", () => {
+  const status = { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true };
+  const parse = (email) => v.safeParse(adminSettingsStatusSchema, { ...status, email }).success;
+  expect(parse({ provider: "none" })).toBe(true);
+  expect(parse({ from: "Lace <cms@example.com>", provider: "smtp" })).toBe(true);
+  expect(parse({ from: "cms@example.com", provider: "none" })).toBe(false);
+  expect(parse({ provider: "resend" })).toBe(false);
+  expect(parse({ from: "cms@example.com", host: "smtp.example.com", provider: "smtp" })).toBe(
+    false,
+  );
+  expect(parse({ from: "cms@example.com", provider: "sendgrid" })).toBe(false);
+  expect(parse(undefined)).toBe(false);
+});
+
+test("session summaries carry a closed, unique permission list", () => {
+  const session = {
+    permissions: ["content:read", "content:write", "media:write"],
+    user: { displayName: "Ed", email: "ed@example.com", id: "user-1", role: "editor" },
+  };
+  expect(v.parse(adminSessionSchema, session)).toEqual(session);
+  const parse = (value) => v.safeParse(adminSessionSchema, value).success;
+  expect(parse({ ...session, permissions: ["content:read", "content:delete"] })).toBe(false);
+  expect(parse({ ...session, permissions: ["content:read", "content:read"] })).toBe(false);
+  expect(parse({ ...session, token: "secret" })).toBe(false);
+  expect(parse({ ...session, user: { ...session.user, role: "owner" } })).toBe(false);
+  expect(parse({ ...session, user: { ...session.user, sessionToken: "secret" } })).toBe(false);
+});
+
+test("email test results use closed outcomes", () => {
+  const parse = (value) => v.safeParse(emailTestResultSchema, value).success;
+  expect(parse({ status: "sent" })).toBe(true);
+  for (const reason of [
+    "not_configured",
+    "invalid_message",
+    "rejected",
+    "rate_limited",
+    "unavailable",
+  ])
+    expect(parse({ reason, status: "failed" })).toBe(true);
+  expect(parse({ reason: "smtp 550 mailbox unavailable", status: "failed" })).toBe(false);
+  expect(parse({ detail: "provider text", status: "sent" })).toBe(false);
 });
 
 const timestamp = unixMilliseconds(1_735_689_600_000);

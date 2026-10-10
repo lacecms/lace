@@ -156,7 +156,12 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   };
   const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
     if (path.endsWith("/settings/status"))
-      return Response.json({ configuredModels: 2, engineVersion: "0.1.0-alpha.4", ready: true });
+      return Response.json({
+        configuredModels: 2,
+        email: { provider: "none" as const },
+        engineVersion: "0.1.0-alpha.4",
+        ready: true,
+      });
     if (path.endsWith("/users") && init?.method === "POST")
       return Response.json(account, { status: 201 });
     if (path.endsWith("/users")) return Response.json({ items: [account] });
@@ -176,6 +181,7 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   });
   await expect(client.loadSettingsStatus()).resolves.toEqual({
     configuredModels: 2,
+    email: { provider: "none" as const },
     engineVersion: "0.1.0-alpha.4",
     ready: true,
   });

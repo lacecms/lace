@@ -9,7 +9,7 @@ import type { SiteBuildRecordDto } from "@lacecms/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Hammer, RotateCw } from "lucide-react";
 import { useState } from "react";
-import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import {
   adminQueryKeys,
   errorDescription,
@@ -98,7 +98,7 @@ export function BuildsPage() {
         : 5_000,
   });
   useSessionRecovery(history.error ?? detail.error ?? actionError);
-  const isAdmin = session.role === "admin";
+  const isAdmin = can(session, "settings:manage");
 
   async function send(actionKind: "request" | "retry", buildId?: string) {
     setAction(actionKind);

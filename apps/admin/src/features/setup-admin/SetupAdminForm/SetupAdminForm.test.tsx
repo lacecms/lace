@@ -1,8 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { renderRoute, stubClient } from "../../../app/testing/index.js";
-import { createStaticSessionSource } from "../../../entities/session/index.js";
+import { renderRoute, stubClient, staticSessionSource } from "../../../app/testing/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 
 const password = "correct horse battery staple";
@@ -11,7 +10,7 @@ const email = "admin@lace.test";
 function open(overrides: Partial<AdminClient> = {}) {
   return renderRoute(
     "/setup?redirect=/content/posts",
-    createStaticSessionSource(null),
+    staticSessionSource(null),
     stubClient({ loadSetupState: async () => ({ setupComplete: false }), ...overrides }),
   );
 }
