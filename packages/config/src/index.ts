@@ -116,8 +116,23 @@ export type ContentModelDefinition<Fields extends FieldMap = FieldMap> =
   | CollectionModelDefinition<Fields>
   | PageModelDefinition<Fields>;
 
+/**
+ * Canonical structural definition of a model whose SHA-256 is `structureHash`.
+ * It is synchronization metadata: display properties, `listFields`, and
+ * `renamedFrom` are excluded, and allowed block definitions are embedded.
+ */
+export type ContentModelStructure = JsonObject;
+
 interface NormalizedModelHashes {
+  /**
+   * Structural hash produced by the pre-baseline algorithm that removed every
+   * `label` and `description` key at any depth. Present on runtime models only
+   * when it differs from `structureHash`; never part of the public projection.
+   */
+  readonly legacyStructureHash?: string;
   readonly projectionHash: string;
+  /** Runtime-only canonical structure; omitted from the public projection. */
+  readonly structure?: ContentModelStructure;
   readonly structureHash: string;
 }
 
@@ -520,12 +535,54 @@ function omitListFields(model: JsonValue): JsonValue {
   return structure;
 }
 
-function structureForHash(projection: JsonValue): MutableJsonValue {
+/** The pre-baseline structural value, kept only to recognise legacy stored hashes. */
+function legacyStructureForHash(projection: JsonValue): MutableJsonValue {
   return omitDisplayMetadata(omitListFields(projection));
 }
 
+function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
+  const { description: _description, label: _label, ...rest } = value as JsonObject;
+  return JSON.parse(JSON.stringify(rest)) as MutableJsonObject;
+}
+
+function fieldMapStructure(fields: JsonValue | undefined): MutableJsonObject {
+  const structure: MutableJsonObject = {};
+  for (const [key, definition] of Object.entries((fields ?? {}) as JsonObject)) {
+    structure[key] = withoutDisplayProperties(definition);
+  }
+  return structure;
+}
+
+/**
+ * Builds the canonical structure of a model. Display metadata is removed only
+ * from the model, field, block, and block-field definitions, so field keys and
+ * default values named `label` or `description` remain structural.
+ */
+export function contentModelStructure(
+  model: ContentModelDefinition,
+  registry: BlockRegistry,
+): ContentModelStructure {
+  const projection = modelForHash(model, registry) as JsonObject;
+  const structure = withoutDisplayProperties(omitListFields(projection));
+  structure.fields = fieldMapStructure(projection.fields);
+  structure.blockDefinitions = (projection.blockDefinitions as readonly JsonObject[]).map(
+    (definition) => ({
+      ...withoutDisplayProperties(definition),
+      fields: fieldMapStructure(definition.fields),
+    }),
+  );
+  return deepFreeze(structure) as ContentModelStructure;
+}
+
 function modelForHash(model: ContentModelDefinition, registry: BlockRegistry): JsonValue {
-  const { renamedFrom: _renamedFrom, ...identityModel } = model;
+  const {
+    legacyStructureHash: _legacyStructureHash,
+    projectionHash: _projectionHash,
+    renamedFrom: _renamedFrom,
+    structure: _structure,
+    structureHash: _structureHash,
+    ...identityModel
+  } = model as NormalizedContentModel;
   return asJsonValue({
     ...identityModel,
     blockDefinitions: model.blocks.map((type) => toBlockMetadata(registry.get(type)!)),
@@ -534,8 +591,10 @@ function modelForHash(model: ContentModelDefinition, registry: BlockRegistry): J
 
 function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
   const {
+    legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
     renamedFrom: _renamedFrom,
+    structure: _structure,
     structureHash: _structureHash,
     ...serializableModel
   } = model;
@@ -543,7 +602,12 @@ function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
 }
 
 function publicModel(model: NormalizedContentModel): NormalizedContentModel {
-  const { renamedFrom: _renamedFrom, ...projection } = model;
+  const {
+    legacyStructureHash: _legacyStructureHash,
+    renamedFrom: _renamedFrom,
+    structure: _structure,
+    ...projection
+  } = model;
   return deepFreeze(projection) as NormalizedContentModel;
 }
 
@@ -576,10 +640,15 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   const normalizedModels = await Promise.all(
     models.map(async (model) => {
       const projection = modelForHash(model, registry);
+      const structure = contentModelStructure(model, registry);
+      const structureHash = await sha256CanonicalJson(structure);
+      const legacyStructureHash = await sha256CanonicalJson(legacyStructureForHash(projection));
       const normalized: NormalizedContentModel = {
         ...model,
+        ...(legacyStructureHash === structureHash ? {} : { legacyStructureHash }),
         projectionHash: await sha256CanonicalJson(projection),
-        structureHash: await sha256CanonicalJson(structureForHash(projection)),
+        structure,
+        structureHash,
       };
       return deepFreeze(normalized);
     }),

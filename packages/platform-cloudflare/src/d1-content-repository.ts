@@ -6,6 +6,9 @@ import {
   dispatcherLeaseId,
   foldAscii,
   MAX_MEDIA_USAGE_ENTRIES,
+  configurationSyncAdvancesPublicState,
+  configurationSyncBackfills,
+  configurationSyncBaseline,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
   SITE_BUILD_DEBOUNCE_MS,
@@ -19,6 +22,8 @@ import type {
   ClaimDispatcherEventsInput,
   CompleteDispatcherLeaseInput,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncSnapshotPage,
+  ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
   ContentCommandResult,
   ContentEntryCommandPort,
@@ -77,7 +82,12 @@ import {
   PUBLIC_ROUTE_SQL,
   SNAPSHOT_COLUMNS_SQL,
   SQL_MAX_PAGE_SIZE,
+  STORED_MODEL_BASELINES_SQL,
   STORED_MODEL_STATE_JSON_SQL,
+  SYNC_BLOCKS_SQL,
+  SYNC_SNAPSHOTS_SQL,
+  backfillFieldSql,
+  syncSnapshotPage,
   assertDraftPersistenceBounds,
   assertNonNegativeInteger,
   assertPageSize,
@@ -136,6 +146,8 @@ import type {
   PublicRow,
   SiteBuildRow,
   SnapshotRow,
+  SyncBlockRow,
+  SyncSnapshotRow,
   StoredModelStateRow,
   StoredSnapshot,
   SummaryRow,
@@ -268,6 +280,31 @@ export class D1ContentRepository
 
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return (await this.readSyncState()).state;
+  }
+
+  public async readConfigurationSyncSnapshots(
+    input: ConfigurationSyncSnapshotScanInput,
+  ): Promise<ConfigurationSyncSnapshotPage> {
+    const limit = assertPageSize(input.limit);
+    const rows = await this.all<SyncSnapshotRow>(
+      SYNC_SNAPSHOTS_SQL,
+      input.modelKey,
+      input.after ?? "",
+      limit,
+    );
+    const blockRows: SyncBlockRow[] = [];
+    for (const group of chunks(
+      rows.map((row) => row.id),
+      D1_MAX_BOUND_PARAMETERS,
+    )) {
+      blockRows.push(
+        ...(await this.all<SyncBlockRow>(
+          `${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")})`,
+          ...group,
+        )),
+      );
+    }
+    return syncSnapshotPage(rows, blockRows, limit);
   }
 
   public async load(input: LoadContentEntryInput): Promise<ContentEntry | null> {
@@ -764,6 +801,7 @@ export class D1ContentRepository
   ): Promise<ApplyConfigurationSynchronizationResult> {
     const { json, state } = await this.readSyncState();
     const actualPlan = planConfigurationSynchronization({
+      evidence: input.evidence,
       models: input.models,
       storedModels: state,
     });
@@ -790,14 +828,17 @@ export class D1ContentRepository
         const configuration = configurationByKey.get(operation.model.key);
         if (configuration === undefined) failure("Synchronization model is unavailable.");
         batch.checkpoint("sync.model.create");
+        const baseline = configurationSyncBaseline(configuration);
         batch.add(
-          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
+          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
           operation.model.key,
           operation.model.kind,
           configuration.label ?? configuration.key,
           operation.model.version,
           operation.model.structureHash,
           operation.model.projectionHash,
+          baseline.json,
+          baseline.hash,
           input.appliedAt,
           input.appliedAt,
           token,
@@ -856,14 +897,17 @@ export class D1ContentRepository
       const expected = expectedByKey.get(previousKey);
       if (expected === undefined) failure("Synchronization update guard is missing.");
       batch.checkpoint(`sync.model.${operation.action}`);
+      const baseline = configurationSyncBaseline(configuration);
       batch.add(
-        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
+        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
         operation.model.key,
         operation.model.kind,
         configuration.label ?? configuration.key,
         operation.model.version,
         operation.model.structureHash,
         operation.model.projectionHash,
+        baseline.json,
+        baseline.hash,
         input.appliedAt,
         expected.key,
         expected.kind,
@@ -872,6 +916,21 @@ export class D1ContentRepository
         expected.projectionHash,
         token,
       );
+      for (const backfill of configurationSyncBackfills(operation, configuration)) {
+        batch.checkpoint("sync.model.backfill");
+        batch.add(
+          `${backfillFieldSql(backfill.fieldKey)} and ${GUARD_SQL}`,
+          backfill.json,
+          operation.model.key,
+          token,
+        );
+      }
+    }
+    if (!configurationSyncAdvancesPublicState(actualPlan)) {
+      this.releaseGuard(batch, token);
+      const results = await this.execute(batch, true);
+      if (results[0]!.meta.changes !== 1) failure("Configuration synchronization plan is stale.");
+      return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
     }
     const stateStatements = this.addPublicStateBump(
       batch,
@@ -1533,15 +1592,37 @@ export class D1ContentRepository
       number,
       number,
       number,
+      number,
+      string,
     ])[];
+    const baselines = new Map(
+      (
+        await this.all<{ readonly key: string; readonly structure_json: string | null }>(
+          STORED_MODEL_BASELINES_SQL,
+        )
+      ).map((row) => [row.key, row.structure_json]),
+    );
     const rows: StoredModelStateRow[] = tuples.map(
-      ([key, kind, version, structure, projection, entries, drafts, published]) => ({
+      ([
+        key,
+        kind,
+        version,
+        structure,
+        projection,
+        entries,
+        drafts,
+        published,
+        hasBaseline,
+        fingerprint,
+      ]) => ({
         draft_snapshot_count: drafts,
         entry_count: entries,
         key,
         kind,
         projection_hash: projection,
         published_snapshot_count: published,
+        snapshot_fingerprint: fingerprint,
+        structure_json: hasBaseline === 1 ? (baselines.get(key) ?? null) : null,
         structure_hash: structure,
         version,
       }),

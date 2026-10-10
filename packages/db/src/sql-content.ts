@@ -21,6 +21,8 @@ import type {
   MediaUsageEntry,
   MediaUsageLocation,
   MediaUsageState,
+  ConfigurationSyncSnapshot,
+  ConfigurationSyncSnapshotPage,
   SiteBuildRecord,
   StoredContentModelState,
   TrackedSiteBuildCheck,
@@ -291,8 +293,27 @@ export interface StoredModelStateRow {
   readonly kind: string;
   readonly projection_hash: string;
   readonly published_snapshot_count: number;
+  readonly snapshot_fingerprint: string;
+  /** Valid structure baseline only; `NULL` when absent or written for another hash. */
+  readonly structure_json: string | null;
   readonly structure_hash: string;
   readonly version: number;
+}
+
+export interface SyncSnapshotRow {
+  readonly entry_id: string;
+  readonly fields_json: string;
+  readonly id: string;
+  readonly revision: number;
+  readonly state: string;
+  readonly title: string;
+}
+
+export interface SyncBlockRow {
+  readonly block_key: string;
+  readonly block_type: string;
+  readonly schema_version: number;
+  readonly snapshot_id: string;
 }
 
 export interface DecodedCursor {
@@ -376,22 +397,95 @@ export const MEDIA_USAGE_SQL = `with used as (
    left join content_blocks b on b.snapshot_id = r.snapshot_id and b.block_key = r.source_key
   where r.media_id = ? and e.id in (select id from page)
   order by e.updated_at desc, e.id desc`;
+/** A baseline counts only while it was written for the row's current structural hash. */
+const VALID_BASELINE_SQL =
+  "case when m.structure_json_hash = m.structure_hash then m.structure_json end";
+/**
+ * Snapshot count, revision sum, update-time sum, and latest update time of a
+ * model's snapshots. Every save, publication, and deletion changes it.
+ */
+const SNAPSHOT_FINGERPRINT_SQL = `(select count(*) || ':' || coalesce(sum(s.revision), 0) || ':' ||
+          coalesce(sum(s.updated_at), 0) || ':' || coalesce(max(s.updated_at), 0)
+     from content_snapshots s join content_entries x on x.id = s.entry_id
+    where x.model_key = m.key)`;
 export const STORED_MODEL_STATE_SQL = `select m.key, m.kind, m.config_version as version, m.structure_hash, m.projection_hash,
+        ${VALID_BASELINE_SQL} as structure_json,
         count(e.id) as entry_count,
         sum(case when e.draft_snapshot_id is null then 0 else 1 end) as draft_snapshot_count,
-        sum(case when e.published_snapshot_id is null then 0 else 1 end) as published_snapshot_count
+        sum(case when e.published_snapshot_id is null then 0 else 1 end) as published_snapshot_count,
+        ${SNAPSHOT_FINGERPRINT_SQL} as snapshot_fingerprint
    from content_models m
    left join content_entries e on e.model_key = m.key
-  group by m.key, m.kind, m.config_version, m.structure_hash, m.projection_hash
+  group by m.key, m.kind, m.config_version, m.structure_hash, m.projection_hash,
+           m.structure_json, m.structure_json_hash
   order by m.key asc`;
 /**
  * Renders the stored synchronization state as one JSON text so a D1 batch can
- * compare it with the state its plan was derived from.
+ * compare it with the state its plan was derived from. Baselines are reduced to
+ * their presence; their content is fixed by the structural hash.
  */
 export const STORED_MODEL_STATE_JSON_SQL = `(select coalesce(json_group_array(json_array(
     state.key, state.kind, state.version, state.structure_hash, state.projection_hash,
-    state.entry_count, state.draft_snapshot_count, state.published_snapshot_count)), '[]')
+    state.entry_count, state.draft_snapshot_count, state.published_snapshot_count,
+    state.structure_json is not null, state.snapshot_fingerprint)), '[]')
    from (${STORED_MODEL_STATE_SQL}) state)`;
+/** Valid structure baselines by model key, read alongside the JSON state on D1. */
+export const STORED_MODEL_BASELINES_SQL = `select m.key, ${VALID_BASELINE_SQL} as structure_json
+   from content_models m order by m.key asc`;
+/** Binds model key, exclusive snapshot-ID cursor, and page limit. */
+export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title, s.fields_json,
+        case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
+   from content_snapshots s
+   join content_entries e on e.id = s.entry_id
+  where e.model_key = ? and (s.id = e.draft_snapshot_id or s.id = e.published_snapshot_id)
+    and s.id > ?
+  order by s.id asc
+  limit ?`;
+/** Block summaries for a list of snapshot IDs; append the placeholders. */
+export const SYNC_BLOCKS_SQL =
+  "select snapshot_id, block_key, block_type, schema_version from content_blocks where snapshot_id in";
+const BACKFILL_FIELD_KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
+
+/**
+ * Set-based default backfill for one field of one model. Binds the default as
+ * JSON text and the model key; rows that already hold the key are untouched.
+ */
+export function backfillFieldSql(fieldKey: string): string {
+  if (!BACKFILL_FIELD_KEY.test(fieldKey)) failure("Backfill field key is invalid.");
+  return `update content_snapshots set fields_json = json_set(fields_json, '$.${fieldKey}', json(?))
+   where entry_id in (select id from content_entries where model_key = ?)
+     and json_type(fields_json, '$.${fieldKey}') is null`;
+}
+
+/** Maps one scan page of snapshot and block rows to portable values. */
+export function syncSnapshotPage(
+  rows: readonly SyncSnapshotRow[],
+  blockRows: readonly SyncBlockRow[],
+  limit: number,
+): ConfigurationSyncSnapshotPage {
+  const blocks = new Map<string, { key: string; schemaVersion: number; type: string }[]>();
+  for (const row of blockRows) {
+    const list = blocks.get(row.snapshot_id) ?? [];
+    list.push({ key: row.block_key, schemaVersion: row.schema_version, type: row.block_type });
+    blocks.set(row.snapshot_id, list);
+  }
+  const items: ConfigurationSyncSnapshot[] = rows.map((row) =>
+    Object.freeze({
+      blocks: Object.freeze(blocks.get(row.id) ?? []),
+      entryId: row.entry_id,
+      fields: parseObject(row.fields_json, "Snapshot fields"),
+      revision: row.revision,
+      snapshotId: row.id,
+      state: row.state === "published" ? "published" : "draft",
+      title: row.title,
+    }),
+  );
+  const last = rows.at(-1);
+  return Object.freeze({
+    items: Object.freeze(items),
+    ...(rows.length === limit && last !== undefined ? { next: last.id } : {}),
+  });
+}
 export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version,
         s.created_at, s.updated_at, s.updated_by, u.role
    from content_snapshots s left join user u on u.id = s.updated_by`;
@@ -442,6 +536,8 @@ export function sameStoredModelStates(
       value.version === candidate.version &&
       value.structureHash === candidate.structureHash &&
       value.projectionHash === candidate.projectionHash &&
+      (value.structure === undefined) === (candidate.structure === undefined) &&
+      value.snapshotFingerprint === candidate.snapshotFingerprint &&
       value.entryCount === candidate.entryCount &&
       value.draftSnapshotCount === candidate.draftSnapshotCount &&
       value.publishedSnapshotCount === candidate.publishedSnapshotCount
@@ -463,6 +559,10 @@ export function storedModelStates(
         kind: row.kind,
         projectionHash: row.projection_hash,
         publishedSnapshotCount: row.published_snapshot_count,
+        snapshotFingerprint: row.snapshot_fingerprint,
+        ...(row.structure_json === null
+          ? {}
+          : { structure: parseObject(row.structure_json, "Model structure baseline") }),
         structureHash: row.structure_hash,
         version: row.version,
       });

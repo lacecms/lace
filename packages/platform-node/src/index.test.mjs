@@ -992,12 +992,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(5);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(6);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(5);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(6);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1075,7 +1075,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       );
 
       const insertModel = database.connection.prepare(
-        "insert into content_models values (?, ?, ?, ?, ?, ?, ?, ?)",
+        "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
       );
       insertModel.run("home", "page", "Home", 1, "structure", "projection", 1, 1);
       expect(() =>
@@ -1261,7 +1261,9 @@ test("bounds Node build-export queries and selects the entry-list index", async 
     const database = openNodeDatabase(databasePath);
     try {
       database.connection
-        .prepare("insert into content_models values (?, ?, ?, ?, ?, ?, ?, ?)")
+        .prepare(
+          "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
         .run("posts", "collection", "Posts", 1, "structure", "projection", 1, 1);
       database.connection
         .prepare(

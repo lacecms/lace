@@ -244,6 +244,65 @@ test("block labels and descriptions change only the projection hash", async () =
   expect(changed.content[0].structureHash).toBe(original.content[0].structureHash);
 });
 
+test("keeps fields named like display metadata in the canonical structure", async () => {
+  const described = (fields) =>
+    defineConfig({ blocks, content: [postModel({ fields: { title: field.text(), ...fields } })] });
+  const plain = await described({});
+  const withDescription = await described({ description: field.textarea({ label: "SEO" }) });
+  const longerDescription = await described({
+    description: field.textarea({ label: "SEO", maxLength: 160 }),
+  });
+  const runtime = withDescription.runtime.content[0];
+
+  expect(withDescription.content[0].structureHash).not.toBe(plain.content[0].structureHash);
+  expect(longerDescription.content[0].structureHash).not.toBe(
+    withDescription.content[0].structureHash,
+  );
+  expect(runtime.structure.fields.description).toEqual({ required: false, type: "textarea" });
+  expect(runtime.structure).not.toHaveProperty("label");
+  expect(runtime.structure).not.toHaveProperty("listFields");
+  expect(runtime.legacyStructureHash).toEqual(expect.any(String));
+  expect(runtime.legacyStructureHash).not.toBe(runtime.structureHash);
+  expect(plain.runtime.content[0]).not.toHaveProperty("legacyStructureHash");
+  expect(Object.isFrozen(runtime.structure.fields.description)).toBe(true);
+
+  const labelledBlock = defineBlock({
+    fields: { label: field.text({ label: "Button label" }) },
+    type: "button",
+    version: 1,
+  });
+  const relabelledBlock = defineBlock({
+    fields: { label: field.text({ label: "Button label", maxLength: 20 }) },
+    type: "button",
+    version: 1,
+  });
+  const withBlock = (block) =>
+    defineConfig({ blocks: [block], content: [homeModel({ blocks: ["button"] })] });
+  const first = await withBlock(labelledBlock);
+  const second = await withBlock(relabelledBlock);
+  expect(first.content[0].structureHash).not.toBe(second.content[0].structureHash);
+  expect(first.runtime.content[0].structure.blockDefinitions[0].fields.label).toEqual({
+    required: false,
+    type: "text",
+  });
+});
+
+test("omits canonical structures and legacy hashes from public projections", async () => {
+  const config = await defineConfig({
+    blocks,
+    content: [postModel({ fields: { description: field.textarea() } }), homeModel()],
+  });
+  const serialized = JSON.stringify(config.public);
+
+  for (const model of config.public.content) {
+    expect(model).not.toHaveProperty("structure");
+    expect(model).not.toHaveProperty("legacyStructureHash");
+  }
+  expect(serialized).not.toContain("blockDefinitions");
+  expect(config.runtime.content.every((model) => typeof model.structure === "object")).toBe(true);
+  expect(config.runtime.content[0].structureHash).toBe(config.content[0].structureHash);
+});
+
 test("rejects model blocks missing from the root registry and separates projections", async () => {
   await expect(defineConfig({ blocks: [], content: [homeModel()] })).rejects.toThrow(
     /unregistered/u,

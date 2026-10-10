@@ -8,6 +8,8 @@ import {
   dispatcherLeaseId,
   opaqueCursor,
   opaqueTokenVerifier,
+  configurationSyncAdvancesPublicState,
+  configurationSyncBackfills,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
 } from "@lacecms/application";
@@ -33,6 +35,9 @@ import type {
   CreateMediaMetadataInput,
   ConfigurationSyncApplyPort,
   ConfigurationSyncModel,
+  ConfigurationSyncSnapshot,
+  ConfigurationSyncSnapshotPage,
+  ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
   CreateContentEntryInput,
   CursorPage,
@@ -89,14 +94,17 @@ import {
 import type {
   ActorId,
   BlockKey,
+  ContentBlock,
   ContentEntry,
   DraftMediaReference,
+  DraftSnapshot,
   MediaMetadata,
   PublishedRoute,
   PublishedSnapshot,
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { NormalizedContentModel } from "@lacecms/config";
+import type { JsonValue } from "@lacecms/content";
 
 export const packageName = "@lacecms/test-utils";
 
@@ -176,6 +184,8 @@ function sameStoredModelStates(
       value.version === candidate.version &&
       value.structureHash === candidate.structureHash &&
       value.projectionHash === candidate.projectionHash &&
+      (value.structure === undefined) === (candidate.structure === undefined) &&
+      value.snapshotFingerprint === candidate.snapshotFingerprint &&
       value.entryCount === candidate.entryCount &&
       value.draftSnapshotCount === candidate.draftSnapshotCount &&
       value.publishedSnapshotCount === candidate.publishedSnapshotCount
@@ -183,7 +193,10 @@ function sameStoredModelStates(
   });
 }
 
-function stateForModel(model: ConfigurationSyncModel): StoredContentModelState {
+function stateForModel(
+  model: ConfigurationSyncModel,
+  configuration: NormalizedContentModel,
+): StoredContentModelState {
   return Object.freeze({
     draftSnapshotCount: 0,
     entryCount: 0,
@@ -191,9 +204,26 @@ function stateForModel(model: ConfigurationSyncModel): StoredContentModelState {
     kind: model.kind,
     projectionHash: model.projectionHash,
     publishedSnapshotCount: 0,
+    ...(configuration.structure === undefined ? {} : { structure: configuration.structure }),
     structureHash: model.structureHash,
     version: model.version,
   });
+}
+
+function entrySnapshots(entry: ContentEntry): readonly (DraftSnapshot | PublishedSnapshot)[] {
+  return entry.published === undefined ? [entry.draft] : [entry.draft, entry.published];
+}
+
+function withFieldDefault<Snapshot extends DraftSnapshot | PublishedSnapshot>(
+  snapshot: Snapshot,
+  fieldKey: string,
+  value: JsonValue,
+): Snapshot {
+  if (Object.hasOwn(snapshot.fields, fieldKey)) return snapshot;
+  return Object.freeze({
+    ...snapshot,
+    fields: Object.freeze({ ...snapshot.fields, [fieldKey]: value }),
+  }) as unknown as Snapshot;
 }
 
 function routeForModel(model: NormalizedContentModel) {
@@ -516,11 +546,19 @@ export class InMemoryContentStore
           const entries = [...this.entries.values()].filter(
             (entry) => entry.model.key === model.key,
           );
+          const snapshots = entries.flatMap(entrySnapshots);
+          const updatedAt = snapshots.map((snapshot) => snapshot.updatedAt);
           return Object.freeze({
             ...clone(model),
             draftSnapshotCount: entries.length,
             entryCount: entries.length,
             publishedSnapshotCount: entries.filter((entry) => entry.published !== undefined).length,
+            snapshotFingerprint: [
+              snapshots.length,
+              snapshots.reduce((sum, snapshot) => sum + snapshot.revision, 0),
+              updatedAt.reduce((sum, value) => sum + value, 0),
+              updatedAt.length === 0 ? 0 : Math.max(...updatedAt),
+            ].join(":"),
           });
         })
         .sort((left, right) => left.key.localeCompare(right.key)),
@@ -531,11 +569,42 @@ export class InMemoryContentStore
     return this.storedModelStates();
   }
 
+  public async readConfigurationSyncSnapshots(
+    input: ConfigurationSyncSnapshotScanInput,
+  ): Promise<ConfigurationSyncSnapshotPage> {
+    const all: ConfigurationSyncSnapshot[] = [...this.entries.values()]
+      .filter((entry) => entry.model.key === input.modelKey)
+      .flatMap((entry) =>
+        entrySnapshots(entry).map((snapshot) => ({
+          blocks: snapshot.blocks.map(({ key, schemaVersion, type }: ContentBlock) => ({
+            key,
+            schemaVersion,
+            type,
+          })),
+          entryId: entry.id,
+          fields: clone(snapshot.fields),
+          revision: snapshot.revision,
+          snapshotId: snapshot.id,
+          state: snapshot.state,
+          title: snapshot.title,
+        })),
+      )
+      .filter((snapshot) => snapshot.snapshotId > (input.after ?? ""))
+      .sort((left, right) => (left.snapshotId < right.snapshotId ? -1 : 1));
+    const items = all.slice(0, input.limit);
+    const last = items.at(-1);
+    return Object.freeze({
+      items: Object.freeze(items),
+      ...(all.length > input.limit && last !== undefined ? { next: last.snapshotId } : {}),
+    });
+  }
+
   public async applyConfigurationSynchronization(
     input: ApplyConfigurationSynchronizationInput,
   ): Promise<ApplyConfigurationSynchronizationResult> {
     const current = this.storedModelStates();
     const actualPlan = planConfigurationSynchronization({
+      evidence: input.evidence,
       models: input.models,
       storedModels: current,
     });
@@ -563,7 +632,7 @@ export class InMemoryContentStore
         if (currentModel === undefined) {
           throw new DomainError("CONTENT_INVALID_STATE", "Synchronization model is unavailable.");
         }
-        nextStates.set(operation.model.key, stateForModel(operation.model));
+        nextStates.set(operation.model.key, stateForModel(operation.model, currentModel));
         if (currentModel.kind === "page") {
           const entry = pageEntries.get(operation.model.key);
           if (
@@ -598,7 +667,7 @@ export class InMemoryContentStore
         );
       }
       nextStates.delete(previousKey);
-      nextStates.set(operation.model.key, stateForModel(operation.model));
+      nextStates.set(operation.model.key, stateForModel(operation.model, currentModel));
       if (operation.action === "rename") {
         for (const [entryId, entry] of nextEntries) {
           if (entry.model.key !== previousKey) continue;
@@ -608,9 +677,28 @@ export class InMemoryContentStore
           );
         }
       }
+      for (const backfill of configurationSyncBackfills(operation, currentModel)) {
+        const value = JSON.parse(backfill.json) as JsonValue;
+        for (const [entryId, entry] of nextEntries) {
+          if (entry.model.key !== operation.model.key) continue;
+          nextEntries.set(
+            entryId,
+            Object.freeze({
+              ...entry,
+              draft: withFieldDefault(entry.draft, backfill.fieldKey, value),
+              ...(entry.published === undefined
+                ? {}
+                : { published: withFieldDefault(entry.published, backfill.fieldKey, value) }),
+            }),
+          );
+        }
+      }
     }
     this.modelStates = nextStates;
     this.entries = nextEntries;
+    if (!configurationSyncAdvancesPublicState(actualPlan)) {
+      return Object.freeze({ operations: actualPlan.operations, status: "applied" });
+    }
     this.publicVersion += 1;
     this.configurationSyncBuildRequests.push(this.publicVersion);
     return Object.freeze({

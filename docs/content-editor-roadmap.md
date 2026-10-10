@@ -114,7 +114,7 @@ The findings that motivate this roadmap. File references are to the state of
 
 | Wave | Step | Topic | Backlog ID | Size | Status |
 | --- | --- | --- | --- | :---: | --- |
-| 1 | CE1 | Schema evolution and block migrations | A1 | L | planned |
+| 1 | CE1 | Schema evolution and block migrations | A1 | L | in progress |
 | 1 | CE2 | Entry lifecycle: unpublish, revert, duplicate, delete | A5 | M | planned |
 | 1 | CE3 | Media metadata and resolved public delivery | A4 | L | planned |
 | 2 | CE4 | SEO metadata and site defaults | A3 | — | backlog |
@@ -496,3 +496,4 @@ any decision that changed this document.
 | Date | Session | OpenSpec change | Outcome |
 | --- | --- | --- | --- |
 | 2026-10-10 | — | — | Roadmap created; wave 1 decisions recorded. |
+| 2026-10-10 | CE1A | `ce01a-structure-baseline-compatible-changes` | Structure baseline (migration `0005`), definition-scoped structural hash with one-time legacy-hash acceptance, change classification, bounded snapshot scans guarded by a per-model snapshot fingerprint, revision-neutral default backfill, baseline-only applies without a build ([ADR 0007](adr/0007-schema-evolution-during-sync.md)). Decisions added: media-field defaults are not backfilled; a path/route change is refused only while entries are published. |

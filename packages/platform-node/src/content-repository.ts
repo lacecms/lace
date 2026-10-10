@@ -7,6 +7,9 @@ import {
   ALLOWED_MEDIA_MIME_TYPES,
   MAX_MEDIA_USAGE_ENTRIES,
   dispatcherLeaseId,
+  configurationSyncAdvancesPublicState,
+  configurationSyncBackfills,
+  configurationSyncBaseline,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
 } from "@lacecms/application";
@@ -22,6 +25,8 @@ import type {
   ContentEntryListPage,
   ContentEntryReadPort,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncSnapshotPage,
+  ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
   CreateContentEntryInput,
   CreateMediaMetadataInput,
@@ -73,6 +78,10 @@ import {
   PUBLIC_ROUTE_SQL,
   SNAPSHOT_COLUMNS_SQL,
   STORED_MODEL_STATE_SQL,
+  SYNC_BLOCKS_SQL,
+  SYNC_SNAPSHOTS_SQL,
+  backfillFieldSql,
+  syncSnapshotPage,
   SQL_MAX_PAGE_SIZE,
   assertDraftPersistenceBounds,
   assertNonNegativeInteger,
@@ -129,6 +138,8 @@ import type {
   PublicRow,
   SiteBuildRow,
   SnapshotRow,
+  SyncBlockRow,
+  SyncSnapshotRow,
   StoredModelStateRow,
   StoredSnapshot,
   SummaryRow,
@@ -192,6 +203,27 @@ export class NodeContentRepository
     return this.readConfigurationSyncStateNow();
   }
 
+  public async readConfigurationSyncSnapshots(
+    input: ConfigurationSyncSnapshotScanInput,
+  ): Promise<ConfigurationSyncSnapshotPage> {
+    const limit = assertPageSize(input.limit);
+    const rows = this.connection
+      .prepare(SYNC_SNAPSHOTS_SQL)
+      .all(input.modelKey, input.after ?? "", limit) as readonly SyncSnapshotRow[];
+    const blockRows: SyncBlockRow[] = [];
+    for (const group of chunks(
+      rows.map((row) => row.id),
+      SQLITE_BIND_CHUNK,
+    )) {
+      blockRows.push(
+        ...(this.connection
+          .prepare(`${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")})`)
+          .all(...group) as readonly SyncBlockRow[]),
+      );
+    }
+    return syncSnapshotPage(rows, blockRows, limit);
+  }
+
   public async applyConfigurationSynchronization(
     input: ApplyConfigurationSynchronizationInput,
   ): Promise<ApplyConfigurationSynchronizationResult> {
@@ -199,6 +231,7 @@ export class NodeContentRepository
       return this.connection.transaction(() => {
         const current = this.readConfigurationSyncStateNow();
         const actualPlan = planConfigurationSynchronization({
+          evidence: input.evidence,
           models: input.models,
           storedModels: current,
         });
@@ -224,9 +257,10 @@ export class NodeContentRepository
             const configuration = configurationByKey.get(operation.model.key);
             if (configuration === undefined) failure("Synchronization model is unavailable.");
             this.checkpoint("sync.model.create");
+            const baseline = configurationSyncBaseline(configuration);
             this.connection
               .prepare(
-                "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+                "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
               )
               .run(
                 operation.model.key,
@@ -235,6 +269,8 @@ export class NodeContentRepository
                 operation.model.version,
                 operation.model.structureHash,
                 operation.model.projectionHash,
+                baseline.json,
+                baseline.hash,
                 input.appliedAt,
                 input.appliedAt,
               );
@@ -295,9 +331,10 @@ export class NodeContentRepository
           const expected = expectedByKey.get(previousKey);
           if (expected === undefined) failure("Synchronization update guard is missing.");
           this.checkpoint(`sync.model.${operation.action}`);
+          const baseline = configurationSyncBaseline(configuration);
           const updated = this.connection
             .prepare(
-              "update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ?",
+              "update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ?",
             )
             .run(
               operation.model.key,
@@ -306,6 +343,8 @@ export class NodeContentRepository
               operation.model.version,
               operation.model.structureHash,
               operation.model.projectionHash,
+              baseline.json,
+              baseline.hash,
               input.appliedAt,
               expected.key,
               expected.kind,
@@ -314,6 +353,15 @@ export class NodeContentRepository
               expected.projectionHash,
             );
           if (updated.changes !== 1) failure("Configuration synchronization plan is stale.");
+          for (const backfill of configurationSyncBackfills(operation, configuration)) {
+            this.checkpoint("sync.model.backfill");
+            this.connection
+              .prepare(backfillFieldSql(backfill.fieldKey))
+              .run(backfill.json, operation.model.key);
+          }
+        }
+        if (!configurationSyncAdvancesPublicState(actualPlan)) {
+          return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
         }
         const targetVersion = this.bumpPublicState(input.appliedAt, "system:content-sync", null);
         return Object.freeze({

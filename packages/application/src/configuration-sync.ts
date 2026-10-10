@@ -1,6 +1,6 @@
-import type { NormalizedContentModel } from "@lacecms/config";
-import { validateModelFields } from "@lacecms/content";
-import type { JsonObject } from "@lacecms/content";
+import type { ContentModelStructure, NormalizedContentModel } from "@lacecms/config";
+import { canonicalizeJson, validateModelFields } from "@lacecms/content";
+import type { JsonObject, JsonValue } from "@lacecms/content";
 import {
   DomainError,
   actorId,
@@ -18,7 +18,26 @@ import type {
   ContentSnapshotId,
   UnixMilliseconds,
 } from "@lacecms/domain";
+import {
+  CONFIGURATION_SYNC_SCAN_PAGE_SIZE,
+  changeNeedsEvidence,
+  createSnapshotEvidenceAccumulator,
+  diffContentModelStructures,
+} from "./configuration-evolution.js";
+import type {
+  ConfigurationSyncEvidence,
+  ConfigurationSyncScanRequest,
+  ConfigurationSyncSnapshotPage,
+  ConfigurationSyncSnapshotReference,
+  ModelSnapshotEvidence,
+  SnapshotStateCounts,
+  StructuralChange,
+  StructuralChangeClass,
+  StructuralChangeKind,
+} from "./configuration-evolution.js";
 import type { Clock, IdGenerator } from "./index.js";
+
+export * from "./configuration-evolution.js";
 
 export interface StoredContentModelState {
   readonly draftSnapshotCount: number;
@@ -27,11 +46,20 @@ export interface StoredContentModelState {
   readonly kind: ContentModelRoute["kind"];
   readonly projectionHash: string;
   readonly publishedSnapshotCount: number;
+  /**
+   * Snapshot count, revision sum, update-time sum, and latest update time of
+   * the model's snapshots; any content write changes it.
+   */
+  readonly snapshotFingerprint?: string;
+  /** Valid structure baseline of the last successful sync, when one exists. */
+  readonly structure?: ContentModelStructure;
   readonly structureHash: string;
   readonly version: number;
 }
 
 export interface ConfigurationSyncPlanInput {
+  /** Snapshot scan results for models whose changes depend on stored data. */
+  readonly evidence?: ConfigurationSyncEvidence;
   readonly models: readonly NormalizedContentModel[];
   readonly storedModels: readonly StoredContentModelState[];
 }
@@ -44,6 +72,29 @@ export interface ConfigurationSyncModel {
   readonly version: number;
 }
 
+/** One structural change as decided for a populated or empty model. */
+export interface ConfigurationSyncChange {
+  /** Snapshots holding the removed field, removed block type, or changed block. */
+  readonly affected?: SnapshotStateCounts;
+  /** Snapshots that receive the configured default. */
+  readonly backfill?: SnapshotStateCounts;
+  readonly class: StructuralChangeClass;
+  readonly kind: StructuralChangeKind;
+  readonly properties?: readonly string[];
+  readonly scope: StructuralChange["scope"];
+  readonly target: string;
+  /** Stored values that do not satisfy a validated change. */
+  readonly violations?: number;
+}
+
+/** Classified structural changes and planned content writes for one model. */
+export interface ConfigurationSyncEvolution {
+  /** Field keys whose configured defaults are written into snapshots lacking them. */
+  readonly backfills: readonly string[];
+  readonly changes: readonly ConfigurationSyncChange[];
+  readonly snapshots: SnapshotStateCounts;
+}
+
 interface ConfigurationSyncModelOperation {
   readonly model: ConfigurationSyncModel;
 }
@@ -51,10 +102,15 @@ interface ConfigurationSyncModelOperation {
 export type ConfigurationSyncOperation =
   | (ConfigurationSyncModelOperation & { readonly action: "create" })
   | (ConfigurationSyncModelOperation & { readonly action: "label-update" })
-  | (ConfigurationSyncModelOperation & { readonly action: "version-update" })
+  | (ConfigurationSyncModelOperation & { readonly action: "record-baseline" })
+  | (ConfigurationSyncModelOperation & {
+      readonly action: "version-update";
+      readonly evolution?: ConfigurationSyncEvolution;
+    })
   | (ConfigurationSyncModelOperation & { readonly action: "remove" })
   | (ConfigurationSyncModelOperation & {
       readonly action: "rename";
+      readonly evolution?: ConfigurationSyncEvolution;
       readonly renamedFrom: ContentModelKey;
     })
   | (ConfigurationSyncModelOperation & {
@@ -63,26 +119,44 @@ export type ConfigurationSyncOperation =
     })
   | (ConfigurationSyncModelOperation & {
       readonly action: "incompatible-change";
+      readonly evolution?: ConfigurationSyncEvolution;
       readonly stored: StoredContentModelState;
     });
 
 export type ConfigurationSyncDiagnosticCode =
+  | "BACKFILL_EXCEEDS_LIMIT"
+  | "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS"
+  | "BLOCK_TYPE_REMOVAL_HAS_BLOCKS"
+  | "CONSTRAINT_VIOLATED"
   | "DUPLICATE_CURRENT_MODEL"
   | "DUPLICATE_STORED_MODEL"
+  | "FIELD_CHANGE_UNSUPPORTED"
+  | "FIELD_REMOVAL_HAS_DATA"
+  | "FIELD_TYPE_CHANGED"
+  | "MEDIA_DEFAULT_BACKFILL_UNSUPPORTED"
   | "MODEL_KIND_CHANGED"
   | "RENAME_KIND_CHANGED"
   | "RENAME_SOURCE_MISSING"
   | "RENAME_SOURCE_STILL_CONFIGURED"
   | "REMOVAL_HAS_ENTRIES"
+  | "ROUTE_CHANGE_HAS_PUBLISHED"
+  | "SNAPSHOT_EVIDENCE_STALE"
+  | "STRUCTURE_BASELINE_MISSING"
   | "STRUCTURE_CHANGE_HAS_SNAPSHOTS"
   | "STRUCTURE_CHANGE_NEEDS_VERSION_BUMP"
   | "VERSION_REGRESSION";
 
 export interface ConfigurationSyncDiagnostic {
+  readonly affectedCount?: number;
+  readonly blockType?: string;
+  readonly changeClass?: StructuralChangeClass;
   readonly code: ConfigurationSyncDiagnosticCode;
+  readonly fieldKey?: string;
   readonly message: string;
   readonly modelKey: ContentModelKey;
   readonly relatedModelKey?: ContentModelKey;
+  /** Up to 20 affected snapshots, named by entry, state, and title. */
+  readonly snapshots?: readonly ConfigurationSyncSnapshotReference[];
 }
 
 export interface ConfigurationSyncPlan {
@@ -103,8 +177,19 @@ export interface ConfigurationSyncReport {
   readonly text: string;
 }
 
+/** Bounded scan of one model's current draft and published snapshots. */
+export interface ConfigurationSyncSnapshotScanInput {
+  /** Continuation cursor returned by the previous page. */
+  readonly after?: string;
+  readonly limit: number;
+  readonly modelKey: ContentModelKey;
+}
+
 /** Read-only persistence boundary used by dry-run and guarded apply coordination. */
 export interface ConfigurationSyncStateReadPort {
+  readConfigurationSyncSnapshots(
+    input: ConfigurationSyncSnapshotScanInput,
+  ): Promise<ConfigurationSyncSnapshotPage>;
   readConfigurationSyncState(): Promise<readonly StoredContentModelState[]>;
 }
 
@@ -117,6 +202,8 @@ export interface ConfigurationSyncPageEntry {
 /** Complete guarded input for one atomic synchronization mutation. */
 export interface ApplyConfigurationSynchronizationInput {
   readonly appliedAt: UnixMilliseconds;
+  /** The scan evidence the plan was derived from; repositories re-plan with it. */
+  readonly evidence: ConfigurationSyncEvidence;
   readonly expectedStoredModels: readonly StoredContentModelState[];
   readonly models: readonly NormalizedContentModel[];
   readonly pageEntries: readonly ConfigurationSyncPageEntry[];
@@ -139,6 +226,7 @@ export interface ConfigurationSyncApplyPort {
 
 /** A dry-run result that preserves the exact persisted snapshot later guarded by apply. */
 export interface PreparedConfigurationSynchronization {
+  readonly evidence: ConfigurationSyncEvidence;
   readonly plan: ConfigurationSyncPlan;
   readonly report: ConfigurationSyncReport;
   readonly storedModels: readonly StoredContentModelState[];
@@ -167,22 +255,49 @@ function copyStoredModel(model: StoredContentModelState): StoredContentModelStat
     kind: model.kind,
     projectionHash: model.projectionHash,
     publishedSnapshotCount: model.publishedSnapshotCount,
+    ...(model.snapshotFingerprint === undefined
+      ? {}
+      : { snapshotFingerprint: model.snapshotFingerprint }),
+    ...(model.structure === undefined ? {} : { structure: model.structure }),
     structureHash: model.structureHash,
     version: model.version,
   });
+}
+
+/** JSON-safe stored state for reports; the baseline itself is reduced to its presence. */
+function reportedStoredModel(model: StoredContentModelState): JsonObject {
+  const { structure, ...rest } = model;
+  return { ...rest, hasBaseline: structure !== undefined } as unknown as JsonObject;
+}
+
+interface DiagnosticDetails {
+  readonly affectedCount?: number | undefined;
+  readonly blockType?: string | undefined;
+  readonly changeClass?: StructuralChangeClass | undefined;
+  readonly fieldKey?: string | undefined;
+  readonly relatedModelKey?: string | undefined;
+  readonly snapshots?: readonly ConfigurationSyncSnapshotReference[] | undefined;
 }
 
 function diagnostic(
   code: ConfigurationSyncDiagnosticCode,
   modelKey: string,
   message: string,
-  relatedModelKey?: string,
+  details: DiagnosticDetails | string = {},
 ): ConfigurationSyncDiagnostic {
+  const values = typeof details === "string" ? { relatedModelKey: details } : details;
   return Object.freeze({
+    ...(values.affectedCount === undefined ? {} : { affectedCount: values.affectedCount }),
+    ...(values.blockType === undefined ? {} : { blockType: values.blockType }),
+    ...(values.changeClass === undefined ? {} : { changeClass: values.changeClass }),
     code,
+    ...(values.fieldKey === undefined ? {} : { fieldKey: values.fieldKey }),
     message,
     modelKey: contentModelKey(modelKey),
-    ...(relatedModelKey === undefined ? {} : { relatedModelKey: contentModelKey(relatedModelKey) }),
+    ...(values.relatedModelKey === undefined
+      ? {}
+      : { relatedModelKey: contentModelKey(values.relatedModelKey) }),
+    ...(values.snapshots === undefined ? {} : { snapshots: Object.freeze([...values.snapshots]) }),
   });
 }
 
@@ -197,7 +312,9 @@ function compareDiagnostics(
   return (
     left.modelKey.localeCompare(right.modelKey) ||
     left.code.localeCompare(right.code) ||
-    (left.relatedModelKey ?? "").localeCompare(right.relatedModelKey ?? "")
+    (left.relatedModelKey ?? "").localeCompare(right.relatedModelKey ?? "") ||
+    (left.fieldKey ?? "").localeCompare(right.fieldKey ?? "") ||
+    (left.blockType ?? "").localeCompare(right.blockType ?? "")
   );
 }
 
@@ -212,18 +329,232 @@ function snapshotDescription(model: StoredContentModelState): string {
   return states.join(", ");
 }
 
+function countsDescription(counts: SnapshotStateCounts): string {
+  return `draft=${counts.draft}, published=${counts.published}`;
+}
+
+function total(counts: SnapshotStateCounts | undefined): number {
+  return counts === undefined ? 0 : counts.draft + counts.published;
+}
+
 function incompatible(
   model: ConfigurationSyncModel,
   stored: StoredContentModelState,
+  evolution?: ConfigurationSyncEvolution,
 ): ConfigurationSyncOperation {
-  return Object.freeze({ action: "incompatible-change", model, stored });
+  return Object.freeze({
+    action: "incompatible-change",
+    ...(evolution === undefined ? {} : { evolution }),
+    model,
+    stored,
+  });
+}
+
+function undecidedChange(change: StructuralChange): ConfigurationSyncChange {
+  return Object.freeze({
+    class: change.class,
+    kind: change.kind,
+    ...(change.properties === undefined ? {} : { properties: change.properties }),
+    scope: change.scope,
+    target: change.target,
+  });
+}
+
+/** Mutable planning context shared by the planner and the scan-request collector. */
+interface PlanningContext {
+  readonly diagnostics: ConfigurationSyncDiagnostic[];
+  readonly evidence: ConfigurationSyncEvidence | undefined;
+  readonly scanRequests: ConfigurationSyncScanRequest[];
+}
+
+interface DecidedEvolution {
+  readonly evolution: ConfigurationSyncEvolution;
+  readonly refused: boolean;
+}
+
+/**
+ * Decides every structural change of a populated model from its stored
+ * evidence, records refusals as diagnostics, and lists the planned backfills.
+ */
+function decideEvolution(
+  current: NormalizedContentModel,
+  stored: StoredContentModelState,
+  changes: readonly StructuralChange[],
+  context: PlanningContext,
+): DecidedEvolution {
+  const modelKey = current.key;
+  const populated = hasSnapshots(stored);
+  const storedCounts = Object.freeze({
+    draft: stored.draftSnapshotCount,
+    published: stored.publishedSnapshotCount,
+  });
+  if (!populated) {
+    return {
+      evolution: Object.freeze({
+        backfills: Object.freeze([]),
+        changes: Object.freeze(changes.map(undecidedChange)),
+        snapshots: storedCounts,
+      }),
+      refused: false,
+    };
+  }
+
+  let evidence: ModelSnapshotEvidence | undefined;
+  if (changes.some(changeNeedsEvidence)) {
+    const fingerprint = stored.snapshotFingerprint ?? "";
+    context.scanRequests.push(
+      Object.freeze({ changes, fields: current.fields, fingerprint, modelKey: stored.key }),
+    );
+    const candidate = context.evidence?.[stored.key];
+    if (candidate === undefined || candidate.fingerprint !== fingerprint) {
+      context.diagnostics.push(
+        diagnostic(
+          "SNAPSHOT_EVIDENCE_STALE",
+          modelKey,
+          `Model ${modelKey} needs a fresh scan of its stored snapshots; rerun synchronization.`,
+        ),
+      );
+      return {
+        evolution: Object.freeze({
+          backfills: Object.freeze([]),
+          changes: Object.freeze(changes.map(undecidedChange)),
+          snapshots: storedCounts,
+        }),
+        refused: true,
+      };
+    }
+    evidence = candidate;
+  }
+
+  let refused = false;
+  const refuse = (
+    code: ConfigurationSyncDiagnosticCode,
+    message: string,
+    details: DiagnosticDetails,
+  ): void => {
+    refused = true;
+    context.diagnostics.push(diagnostic(code, modelKey, message, details));
+  };
+  const decided: ConfigurationSyncChange[] = [];
+  const backfills: string[] = [];
+  for (const change of changes) {
+    const fieldKey = change.scope === "field" ? change.target : undefined;
+    const blockType = change.scope === "block" ? change.target : undefined;
+    let affected: SnapshotStateCounts | undefined;
+    let backfill: SnapshotStateCounts | undefined;
+    let violations: number | undefined;
+
+    if (change.kind === "field-type-changed") {
+      refuse(
+        "FIELD_TYPE_CHANGED",
+        `Model ${modelKey} changes the type of field ${change.target} while snapshots exist (${snapshotDescription(stored)}).`,
+        { changeClass: change.class, fieldKey },
+      );
+    } else if (change.class === "breaking" && change.kind === "route-changed") {
+      if (stored.publishedSnapshotCount > 0) {
+        refuse(
+          "ROUTE_CHANGE_HAS_PUBLISHED",
+          `Model ${modelKey} changes its ${change.target} while ${stored.publishedSnapshotCount} entries are published.`,
+          { affectedCount: stored.publishedSnapshotCount, changeClass: change.class },
+        );
+      }
+    } else if (change.class === "breaking") {
+      refuse(
+        "FIELD_CHANGE_UNSUPPORTED",
+        `Model ${modelKey} changes ${change.scope} ${change.target}${
+          change.properties === undefined ? "" : ` (${change.properties.join(", ")})`
+        } in a way synchronization cannot apply while snapshots exist.`,
+        { changeClass: change.class, ...(fieldKey === undefined ? {} : { fieldKey }) },
+      );
+    } else if (change.kind === "field-removed") {
+      affected = evidence?.fieldHolders[change.target];
+      if (total(affected) > 0) {
+        refuse(
+          "FIELD_REMOVAL_HAS_DATA",
+          `Model ${modelKey} removes field ${change.target}, which holds data in ${total(affected)} snapshots (${countsDescription(affected!)}).`,
+          { affectedCount: total(affected), changeClass: change.class, fieldKey },
+        );
+      }
+    } else if (change.kind === "block-type-removed" || change.kind === "block-definition-changed") {
+      affected = evidence?.blockHolders[change.target];
+      if (total(affected) > 0) {
+        const removal = change.kind === "block-type-removed";
+        refuse(
+          removal ? "BLOCK_TYPE_REMOVAL_HAS_BLOCKS" : "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS",
+          removal
+            ? `Model ${modelKey} disallows block type ${change.target}, which ${total(affected)} snapshots use (${countsDescription(affected!)}).`
+            : `Block type ${change.target} changes its definition while ${total(affected)} snapshots of model ${modelKey} hold such blocks (${countsDescription(affected!)}); a block migration is required.`,
+          { affectedCount: total(affected), blockType, changeClass: change.class },
+        );
+      }
+    } else if (change.class === "validated") {
+      const findings = evidence?.violations[change.target];
+      violations = findings?.count ?? 0;
+      if (findings !== undefined && findings.count > 0) {
+        refuse(
+          "CONSTRAINT_VIOLATED",
+          `Model ${modelKey} tightens field ${change.target} (${(change.properties ?? []).join(", ")}), but ${findings.count} stored snapshots do not satisfy it.`,
+          {
+            affectedCount: findings.count,
+            changeClass: change.class,
+            fieldKey,
+            snapshots: findings.snapshots,
+          },
+        );
+      }
+    }
+
+    if (change.backfill === true) {
+      backfill = evidence?.backfills[change.target] ?? Object.freeze({ draft: 0, published: 0 });
+      if (total(backfill) > 0) {
+        if (current.fields[change.target]?.type === "media") {
+          refuse(
+            "MEDIA_DEFAULT_BACKFILL_UNSUPPORTED",
+            `Model ${modelKey} declares a default for media field ${change.target}, which cannot be backfilled into ${total(backfill)} snapshots; remove the default or add the field without one.`,
+            { affectedCount: total(backfill), changeClass: change.class, fieldKey },
+          );
+        } else {
+          backfills.push(change.target);
+        }
+      }
+    }
+    decided.push(
+      Object.freeze({
+        ...(affected === undefined ? {} : { affected }),
+        ...(backfill === undefined ? {} : { backfill }),
+        class: change.class,
+        kind: change.kind,
+        ...(change.properties === undefined ? {} : { properties: change.properties }),
+        scope: change.scope,
+        target: change.target,
+        ...(violations === undefined ? {} : { violations }),
+      }),
+    );
+  }
+  if (evidence !== undefined && evidence.oversized.count > 0) {
+    refuse(
+      "BACKFILL_EXCEEDS_LIMIT",
+      `Model ${modelKey} backfill would push ${evidence.oversized.count} snapshots above the content size limit.`,
+      { affectedCount: evidence.oversized.count, snapshots: evidence.oversized.snapshots },
+    );
+  }
+  return {
+    evolution: Object.freeze({
+      backfills: Object.freeze(backfills.sort()),
+      changes: Object.freeze(decided),
+      snapshots: evidence?.snapshots ?? storedCounts,
+    }),
+    refused,
+  };
 }
 
 function classifyMatchedModel(
-  model: ConfigurationSyncModel,
+  current: NormalizedContentModel,
   stored: StoredContentModelState,
-  diagnostics: ConfigurationSyncDiagnostic[],
+  context: PlanningContext,
 ): ConfigurationSyncOperation | undefined {
+  const { diagnostics } = context;
+  const model = copyModel(current);
   if (model.kind !== stored.kind) {
     diagnostics.push(
       diagnostic(
@@ -245,7 +576,12 @@ function classifyMatchedModel(
     return incompatible(model, stored);
   }
 
-  const structureChanged = model.structureHash !== stored.structureHash;
+  const hasBaseline = stored.structure !== undefined;
+  const legacyMatch =
+    !hasBaseline &&
+    current.legacyStructureHash !== undefined &&
+    current.legacyStructureHash === stored.structureHash;
+  const structureChanged = model.structureHash !== stored.structureHash && !legacyMatch;
   if (structureChanged && model.version === stored.version) {
     diagnostics.push(
       diagnostic(
@@ -256,21 +592,50 @@ function classifyMatchedModel(
     );
     return incompatible(model, stored);
   }
-  if (structureChanged && hasSnapshots(stored)) {
-    diagnostics.push(
-      diagnostic(
-        "STRUCTURE_CHANGE_HAS_SNAPSHOTS",
-        model.key,
-        `Model ${model.key} changes structure while snapshots exist (${snapshotDescription(stored)}).`,
-      ),
+
+  let evolution: ConfigurationSyncEvolution | undefined;
+  if (structureChanged && hasBaseline && current.structure !== undefined) {
+    const decided = decideEvolution(
+      current,
+      stored,
+      diffContentModelStructures(stored.structure!, current.structure),
+      context,
     );
+    if (decided.refused) return incompatible(model, stored, decided.evolution);
+    evolution = decided.evolution;
+  } else if (structureChanged && hasSnapshots(stored)) {
+    if (current.structure === undefined) {
+      diagnostics.push(
+        diagnostic(
+          "STRUCTURE_CHANGE_HAS_SNAPSHOTS",
+          model.key,
+          `Model ${model.key} changes structure while snapshots exist (${snapshotDescription(stored)}).`,
+        ),
+      );
+    } else {
+      diagnostics.push(
+        diagnostic(
+          "STRUCTURE_BASELINE_MISSING",
+          model.key,
+          `Model ${model.key} changes structure while snapshots exist (${snapshotDescription(stored)}) and no structure baseline is stored. Restore the previous definition, run content sync once to record a baseline, then apply the change.`,
+        ),
+      );
+    }
     return incompatible(model, stored);
   }
+
   if (structureChanged || model.version > stored.version) {
-    return Object.freeze({ action: "version-update", model });
+    return Object.freeze({
+      action: "version-update",
+      ...(evolution === undefined ? {} : { evolution }),
+      model,
+    });
   }
   if (model.projectionHash !== stored.projectionHash) {
     return Object.freeze({ action: "label-update", model });
+  }
+  if ((!hasBaseline || legacyMatch) && current.structure !== undefined) {
+    return Object.freeze({ action: "record-baseline", model });
   }
   return undefined;
 }
@@ -289,11 +654,11 @@ function operationKey(operation: ConfigurationSyncOperation): string {
   return operation.model.key;
 }
 
-/** Plans configuration identity reconciliation without reading or mutating a runtime adapter. */
-export function planConfigurationSynchronization(
+function planWithContext(
   input: ConfigurationSyncPlanInput,
+  context: PlanningContext,
 ): ConfigurationSyncPlan {
-  const diagnostics: ConfigurationSyncDiagnostic[] = [];
+  const { diagnostics } = context;
   const operations: ConfigurationSyncOperation[] = [];
   const currentModels = [...input.models].sort(compareByKey);
   const storedModels = [...input.storedModels].map(copyStoredModel).sort(compareByKey);
@@ -333,7 +698,7 @@ export function planConfigurationSynchronization(
     const stored = storedByKey.get(model.key);
     if (stored !== undefined && !duplicateStoredKeys.has(model.key)) {
       consumedStoredKeys.add(stored.key);
-      const operation = classifyMatchedModel(model, stored, diagnostics);
+      const operation = classifyMatchedModel(current, stored, context);
       if (operation !== undefined) operations.push(operation);
       continue;
     }
@@ -380,12 +745,20 @@ export function planConfigurationSynchronization(
       operations.push(incompatible(model, former));
       continue;
     }
-    const transition = classifyMatchedModel(model, former, diagnostics);
+    const transition = classifyMatchedModel(current, former, context);
     if (transition?.action === "incompatible-change") {
       operations.push(transition);
       continue;
     }
-    operations.push(Object.freeze({ action: "rename", model, renamedFrom: former.key }));
+    const evolution = transition?.action === "version-update" ? transition.evolution : undefined;
+    operations.push(
+      Object.freeze({
+        action: "rename",
+        ...(evolution === undefined ? {} : { evolution }),
+        model,
+        renamedFrom: former.key,
+      }),
+    );
   }
 
   for (const stored of storedModels) {
@@ -418,14 +791,87 @@ export function planConfigurationSynchronization(
   });
 }
 
+/** Plans configuration identity reconciliation without reading or mutating a runtime adapter. */
+export function planConfigurationSynchronization(
+  input: ConfigurationSyncPlanInput,
+): ConfigurationSyncPlan {
+  return planWithContext(input, { diagnostics: [], evidence: input.evidence, scanRequests: [] });
+}
+
+/** Lists the populated models whose structural changes must be decided from stored snapshots. */
+export function planConfigurationSyncScans(
+  input: Omit<ConfigurationSyncPlanInput, "evidence">,
+): readonly ConfigurationSyncScanRequest[] {
+  const context: PlanningContext = { diagnostics: [], evidence: undefined, scanRequests: [] };
+  planWithContext(input, context);
+  return Object.freeze(
+    [...context.scanRequests].sort((left, right) => left.modelKey.localeCompare(right.modelKey)),
+  );
+}
+
+/** Field defaults an applied operation writes into snapshots lacking the field. */
+export function configurationSyncBackfills(
+  operation: ConfigurationSyncOperation,
+  model: NormalizedContentModel,
+): readonly { readonly fieldKey: string; readonly json: string }[] {
+  if (operation.action !== "version-update" && operation.action !== "rename") return [];
+  return (operation.evolution?.backfills ?? []).map((fieldKey) => {
+    const definition = model.fields[fieldKey];
+    if (definition?.defaultValue === undefined) {
+      throw new DomainError(
+        "CONTENT_INVALID_STATE",
+        `Backfill field ${fieldKey} has no configured default.`,
+      );
+    }
+    return Object.freeze({
+      fieldKey,
+      json: canonicalizeJson(definition.defaultValue as JsonValue),
+    });
+  });
+}
+
+/** Canonical baseline JSON an applied model write stores, or null without a structure. */
+export function configurationSyncBaseline(model: NormalizedContentModel): {
+  readonly hash: string | null;
+  readonly json: string | null;
+} {
+  return model.structure === undefined
+    ? { hash: null, json: null }
+    : { hash: model.structureHash, json: canonicalizeJson(model.structure) };
+}
+
+/** Whether applying a plan changes public projections or published content. */
+export function configurationSyncAdvancesPublicState(plan: ConfigurationSyncPlan): boolean {
+  return plan.operations.some((operation) => operation.action !== "record-baseline");
+}
+
 export function checkConfigurationSynchronization(
   plan: ConfigurationSyncPlan,
 ): ConfigurationSyncCheckResult {
   return Object.freeze({ exitCode: plan.isValid && !plan.requiresApply ? 0 : 1, plan });
 }
 
+function reportedOperation(operation: ConfigurationSyncOperation): JsonObject {
+  if (operation.action !== "incompatible-change" && operation.action !== "blocked-removal") {
+    return operation as unknown as JsonObject;
+  }
+  return { ...operation, stored: reportedStoredModel(operation.stored) } as unknown as JsonObject;
+}
+
 export function renderConfigurationSyncPlanJson(plan: ConfigurationSyncPlan): string {
-  return JSON.stringify(plan);
+  return JSON.stringify({ ...plan, operations: plan.operations.map(reportedOperation) });
+}
+
+function changeLine(change: ConfigurationSyncChange): string {
+  const details: string[] = [];
+  if (change.properties !== undefined) details.push(change.properties.join(", "));
+  if (change.affected !== undefined)
+    details.push(`affected: ${countsDescription(change.affected)}`);
+  if (change.violations !== undefined) details.push(`violations: ${change.violations}`);
+  if (change.backfill !== undefined)
+    details.push(`backfill: ${countsDescription(change.backfill)}`);
+  const suffix = details.length === 0 ? "" : ` (${details.join("; ")})`;
+  return `    ${change.class} ${change.kind} ${change.scope} ${change.target}${suffix}`;
 }
 
 export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): string {
@@ -438,12 +884,34 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
   for (const operation of plan.operations) {
     const rename = operation.action === "rename" ? ` from ${operation.renamedFrom}` : "";
     lines.push(`- ${operation.action} ${operation.model.key}${rename}`);
+    const evolution =
+      operation.action === "version-update" ||
+      operation.action === "rename" ||
+      operation.action === "incompatible-change"
+        ? operation.evolution
+        : undefined;
+    if (evolution === undefined) continue;
+    lines.push(`  snapshots: ${countsDescription(evolution.snapshots)}`);
+    for (const change of evolution.changes) lines.push(changeLine(change));
+    if (evolution.backfills.length > 0) {
+      lines.push(`  planned backfills: ${evolution.backfills.join(", ")}`);
+    }
   }
   lines.push("Diagnostics:");
   if (plan.diagnostics.length === 0) lines.push("- none");
   for (const value of plan.diagnostics) {
     const related = value.relatedModelKey === undefined ? "" : ` (${value.relatedModelKey})`;
     lines.push(`- [${value.code}] ${value.modelKey}${related}: ${value.message}`);
+    for (const snapshot of value.snapshots ?? []) {
+      lines.push(`    ${snapshot.state} ${snapshot.entryId} "${snapshot.title}"`);
+    }
+    if (
+      value.snapshots !== undefined &&
+      value.affectedCount !== undefined &&
+      value.affectedCount > value.snapshots.length
+    ) {
+      lines.push(`    … and ${value.affectedCount - value.snapshots.length} more`);
+    }
   }
   return lines.join("\n");
 }
@@ -458,7 +926,26 @@ export function reportConfigurationSynchronization(
   });
 }
 
-/** Reads persistence once and produces the canonical non-mutating synchronization decision. */
+/** Scans one model's snapshots page by page through the read port. */
+async function scanModel(
+  state: ConfigurationSyncStateReadPort,
+  request: ConfigurationSyncScanRequest,
+): Promise<ModelSnapshotEvidence> {
+  const accumulator = createSnapshotEvidenceAccumulator(request);
+  let after: string | undefined;
+  do {
+    const page = await state.readConfigurationSyncSnapshots({
+      ...(after === undefined ? {} : { after }),
+      limit: CONFIGURATION_SYNC_SCAN_PAGE_SIZE,
+      modelKey: contentModelKey(request.modelKey),
+    });
+    accumulator.add(page.items);
+    after = page.next;
+  } while (after !== undefined);
+  return accumulator.result();
+}
+
+/** Reads persistence once, scans data-dependent models, and produces the non-mutating decision. */
 export async function prepareConfigurationSynchronization(input: {
   readonly models: readonly NormalizedContentModel[];
   readonly state: ConfigurationSyncStateReadPort;
@@ -466,8 +953,22 @@ export async function prepareConfigurationSynchronization(input: {
   const storedModels = Object.freeze(
     (await input.state.readConfigurationSyncState()).map(copyStoredModel).sort(compareByKey),
   );
-  const plan = planConfigurationSynchronization({ models: input.models, storedModels });
-  return Object.freeze({ plan, report: reportConfigurationSynchronization(plan), storedModels });
+  const evidence: Record<string, ModelSnapshotEvidence> = {};
+  for (const request of planConfigurationSyncScans({ models: input.models, storedModels })) {
+    evidence[request.modelKey] = await scanModel(input.state, request);
+  }
+  const frozenEvidence = Object.freeze(evidence);
+  const plan = planConfigurationSynchronization({
+    evidence: frozenEvidence,
+    models: input.models,
+    storedModels,
+  });
+  return Object.freeze({
+    evidence: frozenEvidence,
+    plan,
+    report: reportConfigurationSynchronization(plan),
+    storedModels,
+  });
 }
 
 /** Creates the one incomplete draft that a newly synchronized page must own. */
@@ -541,6 +1042,7 @@ export async function applyPreparedConfigurationSynchronization(input: {
   }
   return input.target.applyConfigurationSynchronization({
     appliedAt,
+    evidence: input.prepared.evidence,
     expectedStoredModels: input.prepared.storedModels,
     models: input.models,
     pageEntries,
