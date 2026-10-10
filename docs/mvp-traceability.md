@@ -1,6 +1,6 @@
 # MVP traceability
 
-This checklist maps every architecture §3 Included item and §14 security requirement. “Local covered” means named automated evidence exists; final candidate identities/results live in [34C](archive/step-34/step-34c-verification.md), [34B](archive/step-34/step-34b-verification.md) and [34A](archive/step-34/step-34a-verification.md). It is not a remote pass. Every row also requires the corresponding [owner-plan evidence](real-application-verification.md#post-roadmap-owner-evidence); all owner statuses below remain pending. Historical 34A/34B results retain their original artifact identities and are reused only for unaffected behavior.
+This checklist maps every architecture §3 Included item and §14 security requirement. “Local covered” means named automated evidence exists; final candidate identities/results live in [34C](archive/step-34/step-34c-verification.md), [34B](archive/step-34/step-34b-verification.md) and [34A](archive/step-34/step-34a-verification.md). It is not a remote pass. Every row also requires the corresponding [owner-plan evidence](real-application-verification.md#post-roadmap-owner-evidence); the owner confirmed completion of real application testing and recovery/upgrade checks on 2026-10-10 (see the current status below). Historical 34A/34B results retain their original artifact identities and are reused only for unaffected behavior.
 
 ## Included product scope
 
@@ -38,3 +38,13 @@ This checklist maps every architecture §3 Included item and §14 security requi
 ## Residual gates
 
 34B's bounded D1 query/payload observations are finite simulator measurements, not a production capacity claim. Its dependency/advisory dispositions remain visible in [34B dependency evidence](archive/step-34/step-34b-dependency-audit.md); the 34C documentation/template change does not erase them. Coordinated local restore proves neither remote D1 SQL export nor R2 cross-store consistency. The owner must retain target identity, release/source checksum, command timestamps, redacted outcomes, restored object checksums, served static output and failure/recovery observations for each real check. Publication and stable-release approval are separate explicit acts. No local row authorizes either.
+
+## Current owner status — 2026-10-10
+
+The owner confirmed published alpha.4 packages and completion of pre-beta real
+VPS/Cloudflare application testing and backup/restore, upgrade, credential
+rotation and failed-build recovery. The `pending` labels above preserve the
+historical local handoff; current completion and evidence limits are recorded in
+[the owner plan](real-application-verification.md#owner-confirmed-status--2026-10-10).
+This is an owner attestation, not new agent-run checks, attached per-scenario
+measurements, a new security audit, GHCR manifest verification or release approval.

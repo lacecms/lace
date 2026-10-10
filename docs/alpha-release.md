@@ -1,7 +1,17 @@
 # Preparing and publishing a Lace alpha
 
-This procedure prepares the current experimental candidate recorded in `release/alpha.json`: package/generator/image version `0.1.0-alpha.4`, ownership template `0.18.0` and npm channel `next`. Alpha.1, alpha.2 and alpha.3 npm packages are published and immutable; `publishedVersions` prevents reusing their versions. Alpha.3 publication is recorded in the owner's local `publication-npm.json` receipt dated 2026-10-07. Preparation and acceptance never publish. Step 34 completes local verification; real VPS and Cloudflare acceptance belongs to the owner's separate [verification plan](./real-application-verification.md).
+The owner confirmed publication of `0.1.0-alpha.4` packages on 2026-10-10
+(recording date, not an independently verified upload timestamp). The release
+uses ownership template `0.20.0` and npm channel `next`. Alpha.1 through alpha.4
+are recorded in `release/alpha.json` as published and immutable. GHCR manifests
+were not separately verified by this documentation update.
 
+The owner also confirmed completion of real VPS/Cloudflare application testing
+and recovery/upgrade checks; see the [owner status](./real-application-verification.md#owner-confirmed-status--2026-10-10).
+Preparation and acceptance never publish. The commands below describe the
+alpha.4 procedure historically; preparing another release requires selecting a
+new unpublished version first. With alpha.4 recorded as published,
+`release:check` and preparation intentionally reject reuse of that version.
 
 ## Coordinates and ownership
 
@@ -14,7 +24,7 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 | API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.4` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
 | Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.4` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
 
-Read-only registry checks on 2026-10-07 returned 404 for alpha.4 for all fifteen npm packages and both GHCR versioned image manifests. This is availability evidence, not a reservation; recheck before publishing.
+Read-only registry checks on 2026-10-07 returned 404 for alpha.4 for all fifteen npm packages and both GHCR versioned image manifests. This is historical availability evidence, superseded for npm packages by the owner publication confirmation above.
 
 
 ### Selecting the next version

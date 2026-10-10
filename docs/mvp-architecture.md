@@ -2194,7 +2194,9 @@ The implementation plan uses these resolved defaults:
   independent ownership template version: `0.1.0-alpha.1` (template `0.4.0`),
   `0.1.0-alpha.2` (template `0.14.0`) and `0.1.0-alpha.3` (template
   `0.17.0`, npm publication recorded 2026-10-07) are published and immutable;
-  `0.1.0-alpha.4` (template `0.19.0`, refreshing the verified 34A template `0.18.0`) is the current local candidate;
+  `0.1.0-alpha.4` (template `0.20.0`) package publication and real VPS/Cloudflare
+  application testing, restore, upgrade, credential rotation and build recovery
+  were owner-confirmed on 2026-10-10; beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
 

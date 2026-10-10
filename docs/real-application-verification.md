@@ -1,5 +1,24 @@
 # Real-application verification after the implementation roadmap
 
+## Owner-confirmed status — 2026-10-10
+
+The owner confirmed in the project chat that `0.1.0-alpha.4` packages are
+published and that the recommended pre-beta steps 2 and 3 are complete:
+real VPS and Cloudflare application testing (installation, configuration,
+content/media, publication and served-site output), plus backup/isolated
+restore, upgrade, credential rotation and failed-build recovery. The Cloudflare
+checks include real D1 limits and Pages deployment status behavior.
+
+These are owner-confirmed results, not a new agent execution or registry audit.
+Exact deployment IDs, image digests, command logs, measurements and backup
+checksums were not supplied in this confirmation; retain them privately with
+the release evidence. The detailed checklist below remains the scenario/evidence
+reference; unchecked items do not override the completion recorded here and do
+not assert that individual evidence files have been attached.
+
+This confirmation does not approve a beta or stable release, claim a new
+security audit, or separately verify GHCR publication and both image manifests.
+
 ## Purpose and ownership
 
 The release owner follows this plan after Step 34 against a real application
@@ -38,7 +57,8 @@ client identity, real D1 query/runtime capacity, remote retry/recovery and
 coordinated backups on the actual installation. Local export fixtures contain
 100/201/501 entries and impose no product export cap. Retain the documented
 restricted dependency risks and distribution notices when publishing. Session
-34C operations verification and registry publication are separate, pending work.
+34C local operations verification is complete. The current owner-confirmed
+publication and real-deployment status is recorded above.
 
 ## 1. Select the application and record the baseline
 
@@ -243,15 +263,15 @@ See [34C local operations verification](local-operations-verification.md) for co
 
 ## Post-roadmap owner evidence
 
-The implementation roadmap's local completion leaves these owner gates pending:
+Current owner-gate status (owner confirmation recorded 2026-10-10):
 
 | Gate | Required owner evidence | Status |
 | --- | --- | --- |
-| Real VPS | Exact artifact identity; TLS/secure cookies; trusted ingress/proxy rate limits; origin denials; editor/admin journey; MinIO media and failed/corrected build with previous release preserved | Pending |
-| Real Cloudflare | Selected account/Worker/D1/R2 IDs; credential preflight; deployment and sign-in; real query/row/payload/capacity observations; object access; provider tracking with served output | Pending |
-| Coordinated remote restore | Quiescence time; private D1 SQL/SQLite and object backup identities; separate restore targets; metadata/object checksums; fresh sign-in and static rebuild; original resumption | Pending |
-| Production rotations | Old credential denial and replacement recovery for auth/build token, storage, builder or hook/provider; retained data and last served release | Pending |
-| Publication/install | Reviewed source/inventory/checksums; explicit npm/image publication; independent clean install from published coordinates | Pending |
+| Real VPS | Exact artifact identity; TLS/secure cookies; trusted ingress/proxy rate limits; origin denials; editor/admin journey; MinIO media and failed/corrected build with previous release preserved | Complete — owner-confirmed 2026-10-10 |
+| Real Cloudflare | Selected account/Worker/D1/R2 IDs; credential preflight; deployment and sign-in; real query/row/payload/capacity observations; object access; provider tracking with served output | Complete — owner-confirmed 2026-10-10 |
+| Coordinated remote restore | Quiescence time; private D1 SQL/SQLite and object backup identities; separate restore targets; metadata/object checksums; fresh sign-in and static rebuild; original resumption | Complete — owner-confirmed 2026-10-10 |
+| Production rotations | Old credential denial and replacement recovery for auth/build token, storage, builder or hook/provider; retained data and last served release | Complete — owner-confirmed 2026-10-10 |
+| Publication/install | Reviewed source/inventory/checksums; explicit npm/image publication; independent clean install from published coordinates | Packages and real installation confirmed; GHCR manifests not separately verified |
 | Stable approval | Reviewed local and owner evidence, residual security/dependency risks, observability gaps and explicit release decision | Pending |
 
 Use [MVP traceability](mvp-traceability.md) and [local operations](local-operations-verification.md) as the local baseline. Simulator snapshots and controlled hook/Pages responses cannot mark any real-account gate passed.
