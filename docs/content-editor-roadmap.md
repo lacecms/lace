@@ -1,8 +1,9 @@
 # Lace Content and Editor Roadmap
 
 > Active roadmap. Started 2026-10-10 after the MVP roadmap was archived.
-> Wave 1 is detailed and ready for just-in-time OpenSpec proposals. Later
-> waves are an ordered backlog and are detailed only when they are selected.
+> Wave 1 is done. Wave 2 is detailed and ready for just-in-time OpenSpec
+> proposals. Later waves are an ordered backlog and are detailed only when
+> they are selected.
 
 ## 1. Purpose and source of truth
 
@@ -117,9 +118,9 @@ The findings that motivate this roadmap. File references are to the state of
 | 1 | CE1 | Schema evolution and block migrations | A1 | L | done |
 | 1 | CE2 | Entry lifecycle: unpublish, revert, duplicate, delete | A5 | M | done |
 | 1 | CE3 | Media metadata and resolved public delivery | A4 | L | done |
-| 2 | CE4 | SEO metadata and site defaults | A3 | — | backlog |
-| 2 | CE5 | Global singletons (settings, navigation) | A8 | — | backlog |
-| 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | — | backlog |
+| 2 | CE5 | Global singletons (settings, navigation, footer) | A8 | M | planned |
+| 2 | CE4 | SEO metadata and site defaults | A3 | L | planned |
+| 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | L | planned |
 | 3 | CE7 | Group and repeatable list fields | A6 | — | backlog |
 | 3 | CE8 | Rich-text editor expansion | B1 | — | backlog |
 | 3 | CE9 | Field layout and form UX | B2 | — | backlog |
@@ -130,6 +131,12 @@ The findings that motivate this roadmap. File references are to the state of
 Dependency order inside wave 1: **CE1 → CE2 → CE3**. CE2 does not depend on
 CE1 technically and may run in parallel. CE3 depends on CE1 because making
 the `image` block's `alt` optional is a structural block change.
+
+Dependency order inside wave 2: **CE5 → CE4 → CE6**. CE4 depends on CE5
+because site-level SEO defaults are read from a global. CE6 depends on
+neither technically; it runs last by owner choice, but it must land before
+beta because it changes the stored and public block contract. Database
+migration numbers are assigned when each session is proposed.
 
 ## 5. Wave 1 — detailed steps
 
@@ -454,25 +461,332 @@ dimensions and focal point; the build-export ETag still changes when
 metadata of published media changes; the generated-project acceptance
 passes.
 
-## 6. Later waves — backlog
+## 6. Wave 2 — detailed steps
+
+## Step CE5 — Global singletons
+
+**Goal:** site-wide content that belongs to no URL, such as site settings,
+navigation and the footer, is edited in the admin with the same draft and
+publish flow as pages and is delivered to the site build.
+
+**Size:** M (two sessions).
+
+### Owner decisions (2026-10-11)
+
+1. **A third model kind, `global`.** Globals are declared with
+   `defineGlobal({ key, version, label?, description?, fields?, blocks? })`.
+   A global has no path, route or slug and is never served by path. Exactly
+   one entry exists per global; configuration sync creates it the same way
+   it creates a page entry. The entry title is set from the model label and
+   is not editable.
+2. **Page lifecycle.** A global supports save, publish, revert to published
+   and unpublish. Delete and duplicate are refused with a stable singleton
+   error, as for pages. Like every publication, publishing a global bumps
+   `published_state.version` and requests a build, because any page may
+   render it.
+3. **No navigation global before CE7.** Repeatable link lists need
+   `field.list`, so the starter and reference site ship navigation as a
+   global only after CE7. A project may still model lists as blocks in a
+   global, but Lace does not document that as the recommended shape. Links
+   are plain URLs until CE10.
+4. **Separate public shape.** A published global is
+   `{id, modelKey, fields, blocks, publishedAt}`: no `path`, no `slug`.
+   `PublishedEntry.path` stays required. A site must tolerate a global that
+   has never been published (the SDK returns `undefined`).
+
+### Architecture changes
+
+- Section 8 *Content-model kinds* and *Configuration projection*: add
+  `global`, `defineGlobal` and its sync behavior. A kind change between
+  `page`, `collection` and `global` is breaking and refused.
+- Sections 9.1 and 9.2: widen the `content_models.kind` check; a global uses
+  `singleton_key = 1` like a page.
+- Section 9.6: globals never have a published route.
+- Section 10: the global lifecycle and its refusals.
+- Sections 12, 13.1 and 13.2: the global endpoint, the `globals` part of the
+  build export and the SDK accessors.
+- Section 17: the admin navigation group for globals.
+- A short ADR records the kind and the route-less read path.
+
+### Session CE5A — Global kind, storage and delivery
+
+- `defineGlobal` in `@lacecms/config`; keys stay unique across all kinds; the
+  structure hash covers the new kind. Every place that hard-codes
+  `"page" | "collection"` (content, domain, contracts, the database check,
+  the stored model states and the runtime mappers) accepts `global`.
+- A migration widens the `content_models.kind` check on Node SQLite and D1.
+  It is a table rebuild in SQLite, so it is verified with foreign keys and
+  existing data on both runtimes.
+- Configuration sync creates the singleton entry for a new global. Publish
+  skips the `published_routes` write; unpublish removes only the snapshot.
+- Public read by model key that does not join `published_routes`:
+  `GET /api/v1/public/globals/:modelKey` returns `{global, media}` with the
+  CE3C media dictionary; `404` when the global is unpublished.
+- The build export gains `globals` (additive; `entries` stays route-only).
+  The export ETag changes when a global is published or unpublished.
+- SDK: `client.getGlobal(modelKey)` and `site.global(modelKey)` with the
+  `media` and `image` helpers.
+- Admin REST: model DTOs carry `kind: "global"` without `path` or `route`;
+  delete and duplicate are refused.
+
+**Acceptance:** repository contract tests for create-on-sync, publish without
+a route, unpublish, revert and the delete/duplicate refusals on both
+runtimes; the public endpoint, the export and the SDK return the published
+global and its media; a global never appears in by-path lookup, collection
+lists or `entries`; a kind change is refused by sync; the migration test
+upgrades a database with existing pages and collections.
+
+### Session CE5B — Admin and starter
+
+- A *Site* sidebar group lists globals and opens their editor directly. The
+  editor shows no path, slug or "Open on site" link. The publish
+  confirmation states that the change affects every page after the next
+  build.
+- The content overview and model pages handle the new kind.
+- The starter and reference site ship a `settings` global (`siteName`,
+  `tagline`). The base layout reads it through `site.global(...)` and falls
+  back to static values when it is unpublished. Navigation stays static
+  until CE7.
+- Template version bump with upgrade notes (the migration, the new kind and
+  the optional starter globals); `compatibility.md` records the additive
+  contract change.
+
+**Acceptance:** browser tests for opening, editing, publishing and reverting a
+global with keyboard access; the starter and reference sites build with and
+without published globals; the generated-project acceptance passes.
+
+## Step CE4 — SEO metadata and site defaults
+
+**Goal:** every routable entry can carry search and social metadata with
+sensible fallbacks, and the site emits complete `<head>` metadata, a
+sitemap and `robots.txt` without hand-written code.
+
+**Size:** L (three sessions).
+
+**Depends on:** CE5 (site defaults live in a global).
+
+### Owner decisions (2026-10-11)
+
+1. **Per-entry SEO is a system group, opt-in per routable model.** A page or
+   collection declares `seo: true`, or `seo: { description, image }` to name
+   fallback fields (for example a post's `excerpt` and `cover`). The group
+   holds `title`, `description`, `image` (media), `canonical` (absolute
+   URL) and `noindex`. It is stored with the snapshot outside `fields`, so
+   project field keys never collide with it, and it follows the draft and
+   publish flow. Globals cannot declare `seo`.
+2. **Site defaults come from one global by field mapping.**
+   `defineGlobal({ seoDefaults: { siteName, titleTemplate?, description?,
+   image? } })` names fields of that global. At most one global declares
+   `seoDefaults`. No separate storage is added for defaults.
+3. **Fallbacks are resolved by the SDK, not stored.**
+   - Title: the SEO title verbatim, otherwise the entry title formatted by
+     the title template (`%s` placeholder; default `%s | {siteName}`).
+   - Description: SEO description, then the model's mapped field, then the
+     site default, otherwise omitted.
+   - Image: SEO image, then the model's mapped media field, then the site
+     default, otherwise omitted.
+   - Canonical: SEO canonical, otherwise site URL + path.
+   - `noindex` emits `noindex, follow` and excludes the entry from the
+     sitemap.
+4. **The site URL is operator configuration, not content.** It comes from
+   `LACE_BUILD_SITE_URL` (introduced in CE2B). The builder passes it to the
+   site build, which sets Astro `site`. Without it, canonical and `og:url`
+   are omitted and no sitemap is generated, with a build warning.
+5. **Delivery through user-owned files.** `@lacecms/astro` provides a
+   `<LaceSeo>` head component and helpers for `sitemap.xml` and `robots.txt`
+   endpoints. The starter installs them as user-owned pages; no Astro
+   integration is added. `robots.txt` allows everything and names the
+   sitemap.
+6. **Deployment-level indexing switch.** A new optional build setting,
+   `LACE_SITE_INDEXING` (`on` by default, `off` for staging and previews),
+   is operator configuration next to `LACE_BUILD_SITE_URL`, never part of
+   `lace.config.ts`. With `off`, `robots.txt` disallows everything and
+   `<LaceSeo>` emits `noindex` on every page.
+7. **Length limits are soft in the admin, hard in the API.** The admin warns
+   above 60 characters for the title and 160 for the description; the API
+   rejects values above fixed hard limits chosen in the CE4A proposal.
+
+### Architecture changes
+
+- Section 8: the `seo` model option, `seoDefaults` on globals and their sync
+  classification. Enabling `seo` is compatible; disabling it on a model with
+  stored SEO values is destructive and needs an explicit hint.
+- Sections 9.3 and 9.7: SEO storage on snapshots and the SEO image in the
+  media reference projection (deletion guard and media dictionary).
+- Sections 12, 13.2 and 13.4: the public `seo` shape, the SDK resolution and
+  the Astro head, sitemap and robots helpers.
+- Section 9.8 or the builder section: the site URL passed to the build.
+- A short ADR records the system group and the fallback chain.
+
+### Session CE4A — SEO data and contract
+
+- The `seo` model option and `seoDefaults` validated by `@lacecms/config`:
+  mapped fields must exist and have a compatible type (text-like for names,
+  templates and descriptions; `media` for images).
+- A migration adds nullable SEO storage to `content_snapshots` on both
+  runtimes. SEO text and URL rules live in `@lacecms/domain` and are shared
+  with the contracts.
+- Save, publish, revert and duplicate copy the SEO group; the SEO image is
+  part of `content_media_references`.
+- Configuration sync classifies enabling and disabling `seo` as above.
+- Admin draft DTOs and save requests carry `seo`; public entries, the build
+  export and the media dictionary include it for models with SEO enabled.
+  OpenAPI is updated.
+
+**Acceptance:** repository contract tests on both runtimes for save, publish,
+revert and duplicate with SEO values; the SEO image blocks media deletion
+and appears in the public media dictionary; validation rejects relative
+canonical URLs and over-long values; disabling `seo` with stored data
+without a hint is refused.
+
+### Session CE4B — Site output
+
+- SDK: `site.seo(entry)` resolves the fallback chain using the `seoDefaults`
+  global, and `site.url` exposes the site URL. The resolver is a pure,
+  unit-tested function.
+- Builder: passes the site URL and `LACE_SITE_INDEXING` to the site build;
+  both are documented in the starter `.env.example` and the deployment
+  guides.
+- `@lacecms/astro`: `<LaceSeo>` renders `<title>`, the description,
+  canonical, robots, Open Graph (`og:title`, `og:description`, `og:image`
+  with dimensions and alt, `og:url`, `og:site_name`, `og:type`) and
+  `twitter:card`. Sitemap and robots helpers build from the published site
+  (`lastmod` from `publishedAt`, `noindex` entries excluded).
+- Starter and reference site: the base layout uses `<LaceSeo>`, the
+  `settings` global gains the mapped fields, `sitemap.xml` and `robots.txt`
+  pages are added. Template version bump, upgrade notes and
+  `compatibility.md`.
+
+**Acceptance:** resolver unit tests for every fallback step; the starter and
+reference sites build with and without a site URL and produce the expected
+head tags, sitemap and robots output; the generated-project acceptance
+passes.
+
+### Session CE4C — Admin SEO editing
+
+- An *SEO* section in the entry editor for models with SEO enabled: inputs
+  with character counters and soft warnings, the media picker for the
+  image, inherited values shown as placeholders ("Uses entry title", "Uses
+  site description"), and a search-result preview.
+- The global that declares `seoDefaults` shows which fields act as site
+  defaults.
+
+**Acceptance:** browser tests for editing, the inherited placeholders, the
+counters and warnings, and keyboard access; the accessibility acceptance in
+architecture section 17 holds.
+
+## Step CE6 — Block envelope
+
+**Goal:** editors can give a block a stable in-page anchor, hide it without
+deleting it and choose presentational settings that the block definition
+declares, separately from the block content.
+
+**Size:** L (three sessions).
+
+### Owner decisions (2026-10-11)
+
+1. **Envelope fields.** A stored block becomes
+   `{key, type, schemaVersion, anchor?, hidden, settings, data}`.
+   - `anchor`: optional; lowercase letters, digits and hyphens, starting with
+     a letter, at most 64 characters, unique within the entry.
+   - `hidden`: boolean, default `false`.
+   - `settings`: an object declared by the block definition; `{}` when the
+     block declares none.
+2. **Hidden blocks stay stored but are never delivered.** They remain in the
+   draft and the published snapshot, so hiding and revert lose nothing. They
+   are omitted from public responses and the build export, and media used
+   only by hidden blocks are left out of the media dictionary while still
+   protected by the deletion guard. The render core also skips hidden blocks
+   defensively. At publication and during sync migrations a hidden block is
+   validated in draft mode, so an unfinished block can be published hidden.
+3. **Settings are declared, presentational and typed.**
+   `defineBlock({ settings })` uses the field builders limited to `select`,
+   `boolean`, `number` and `text`; every setting has a default. Settings are
+   part of the block definition, so changing them requires a block version
+   increase and a migration; migrations receive and return the envelope's
+   `data` and `settings`.
+4. **No wrapper element.** `LaceBlocks` does not wrap blocks. Block props
+   gain `anchor` and typed `settings`, and each block source places
+   `id={anchor}` on its root element when an anchor is set; without one the
+   markup is unchanged. Built-in blocks gain anchor support but no settings
+   in this step.
+5. **Open for the CE6A proposal: a custom CSS class.** The owner considers
+   an optional per-block CSS class useful as an escape hatch for site
+   styling. The proposal decides whether it becomes an envelope field
+   (validated class tokens, passed as a block prop and merged by block
+   sources into their root `class`) or stays a project-declared setting.
+6. **Breaking public block contract during alpha.** The SDK, the template
+   version and `compatibility.md` change together, with upgrade notes for
+   user-owned block sources.
+
+### Architecture changes
+
+- Sections 9.4 and 9.5: the envelope columns and the per-entry anchor
+  uniqueness.
+- Section 10: hidden blocks at publication and in public delivery.
+- Sections 11 and 13.3–13.5: `defineBlock` settings, block props, the render
+  core skip and the registry convention for anchors.
+- Section 12: the block shape in admin and public contracts.
+- A short ADR records the envelope and the hidden-block delivery rule.
+
+### Session CE6A — Envelope data contract
+
+- `defineBlock({ settings })` with defaults and validation; settings enter
+  the block metadata and the structure hash; CE1C migrations carry settings.
+- A migration adds `anchor`, `hidden` and `settings_json` to
+  `content_blocks` with additive statements and a partial unique index on
+  `(snapshot_id, anchor)`. Every block column list (save, publish copy,
+  revert, duplicate, sync migration, reads) is updated on both runtimes.
+- Entry validation accepts the envelope, checks anchor format and
+  uniqueness, validates settings and applies draft-mode validation to
+  hidden blocks at publication.
+- Admin contracts accept and return the envelope; omitted envelope fields
+  default for existing clients. Public responses and the build export drop
+  hidden blocks and their exclusive media.
+
+**Acceptance:** repository contract tests on both runtimes for envelope
+round-trips through save, publish, revert, duplicate and sync migration;
+duplicate anchors are rejected; a hidden invalid block publishes and is
+absent from public output; settings validation and a settings migration
+are covered.
+
+### Session CE6B — Rendering and site delivery
+
+- Render core: `RenderableBlock` and `BlockProps` gain `anchor` and typed
+  `settings`; `prepareBlocks` skips hidden blocks.
+- SDK `PublishedBlock` and the Astro adapter pass the envelope through.
+- Registry blocks get a new revision that renders `id={anchor}`; the
+  starter, reference site and guide fixtures are updated. Template version
+  bump, upgrade notes and `compatibility.md`.
+
+**Acceptance:** render-core unit tests for skipping and props; the starter and
+reference sites build and render anchors; an in-page `#anchor` link works;
+the generated-project acceptance passes.
+
+### Session CE6C — Admin block envelope
+
+- The block card gets *Content* and *Settings* tabs. *Settings* edits the
+  anchor (with live format and uniqueness validation and a copy-link
+  action), the hidden switch and the declared settings through the existing
+  field controls.
+- A hidden block is visibly muted with a *Hidden* badge and can be shown or
+  hidden from the card menu; the collapsed card shows its `#anchor`.
+- The validation summary marks errors in hidden blocks as not blocking
+  publication.
+
+**Acceptance:** browser tests for editing the anchor, hiding and showing,
+editing settings and keyboard access to the tabs; the accessibility
+acceptance in architecture section 17 holds.
+
+## 7. Later waves — backlog
 
 These items are ordered but not detailed. Each is expanded in this document,
 with owner decisions, when it is selected.
 
-- **CE4 SEO metadata and site defaults (A3):** an optional system SEO group
-  for routable models (meta title, description, Open Graph image, canonical
-  URL, noindex), fallbacks resolved by the SDK, an Astro `<LaceSeo>`
-  component, sitemap and robots output. Site-level defaults come from CE5.
-- **CE5 Global singletons (A8):** route-less singleton models for site
-  settings, navigation and footer, comparable to Strapi single types and
-  Payload globals.
-- **CE6 Block envelope (A2):** system `anchor` and `hidden` flags plus
-  definition-declared `settings` (variant, theme) in a separate block card
-  tab; the render core skips hidden blocks. Changes the stored block
-  contract, so it should land before beta.
 - **CE7 Group and repeatable list fields (A6):** `field.group` and
   `field.list` for FAQ, pricing, feature and gallery blocks; media reference
-  projection for nested paths.
+  projection for nested paths. The starter and reference site gain a
+  `navigation` global built on `field.list` (deferred from CE5).
 - **CE8 Rich-text expansion (B1):** heading levels 2–4 with configurable sets
   (an H1 in the body duplicates the page title), horizontal rule, code block,
   link `target` and `rel`, bubble menu, paste cleanup from Google Docs and
@@ -496,7 +810,7 @@ token-protected draft preview, trash for deleted entries, and an early
 decision on whether localized content will ever be supported, because locales
 would affect snapshot and route keys.
 
-## 7. Session log
+## 8. Session log
 
 Record each completed session here: date, OpenSpec change name, outcome and
 any decision that changed this document.
@@ -512,3 +826,4 @@ any decision that changed this document.
 | 2026-10-11 | CE3A | `ce03a-media-metadata-storage-api` | Migration `0006` adds nullable `alt`, `caption`, `focal_x`, `focal_y` to `media` with additive `ALTER … ADD … CHECK` statements (no table rebuild; `metadata_json` stays reserved). `MediaUseCases.updateMetadata` (`media:write`, active items only) validates plain text with shared domain rules, merges a partial patch, writes nothing for an unchanged submission, and guards on `updatedAt` (strong `If-Match` of its Unix milliseconds; each write sets `max(now, previous + 1)`; stale → `MEDIA_UPDATE_CONFLICT` 409). Editing media used by a current publication bumps the published version and coalesces a `media_metadata` build atomically on Node and D1. `PATCH /api/v1/admin/media/:mediaId` returns `{media, build}` and an `ETag`; the detail GET returns the `ETag`; admin media DTOs carry the optional values ([ADR 0009](adr/0009-media-metadata.md)). Decisions added: text and focal rules live in `@lacecms/domain` for contracts and the use case; the Worker post-commit pass also runs after media metadata updates and unpublication (closing a CE2A gap). |
 | 2026-10-11 | CE3B | `ce03b-admin-media-metadata-editing` | The media details panel edits alt text, caption and focal point with explicit Save/Discard through the CE3A `PATCH` (strong `If-Match` from `updatedAt`, only changed values sent), announces whether a site build was requested, recovers from `MEDIA_UPDATE_CONFLICT` by showing the newer values with *Discard my changes* or *Save mine anyway* (sends only the writer's own changes with the newer tag), and confirms closing with unsaved values; viewers and items pending deletion see it read-only, and missing alt text is warned about. The focal-point control is a `role="slider"` marker over the preview (click, drag, arrows ±1 %, Shift ±10 %, reset). Picker tiles and the selected media card show alt text. Blocks with one media field and a text field `alt` show "Uses media alt: …" as the alt placeholder and a non-blocking missing-alt warning. Built-in `image` is version 2 with optional `alt` and an identity migration; the repository models allowing it were bumped; registry `image` revision 2 renders `alt=""` when absent, copied to the starter, reference site and guide fixture ([ADR 0009](adr/0009-media-metadata.md)). Decisions added: the roadmap's "no data migration" was corrected (identity migration, model version bumps, sync before the site build; CE3C carries the upgrade note); contracts re-export the media text limits for the admin inputs. |
 | 2026-10-11 | CE3C | `ce03c-public-delivery-contract` | Public page, collection, slug, path and build-export responses return the published entry directly (`{id, modelKey, path, slug?, title, fields, blocks, publishedAt}`, no mirrored `draft`; single reads `{entry, media}`, lists `{items, media, nextCursor?}`, export `{entries, media, version}`) with a `media` dictionary resolving exactly the media referenced by the returned published snapshots (`{id, url, mimeType, width, height, alt, caption, focalPoint}`, `null` when unknown, keys sorted), read with one chunked reference-projection statement on Node, D1 and the fake; the public entry routes document 200 schemas in OpenAPI. The SDK client returns the new DTOs (`getAllCollection` merges media); `PublishedEntry` gains `publishedAt`, and entries and the site gain `media(id)` and `image(id, usageAlt?)` (effective alt: usage, media, `""`, via `effectiveAltText` in `@lacecms/content`). Block props gain `image()` (`src`, alt, `width`, `height`, `caption`, focal `objectPosition`; `missing_media` for an unresolved ID) while `mediaUrl` and `LaceBlocks` props stay. Registry `image` revision 3 and `hero` revision 2 render effective alt, dimensions and focal point (image caption falls back to the media caption). Template `0.23.0` upgrade notes cover migrations `0005`/`0006`, the contract break, `lace add block image hero` and the CE3B model-version + sync step; `compatibility.md` records the break ([ADR 0009](adr/0009-media-metadata.md)). Decisions added: media URLs come only from the configured API public base (no `Host` inference; an app without it serves no public content routes), and a site without `LACE_PUBLIC_BASE_URL` keeps the export URLs instead of the build's API base; the D1 export budget is now `8 + 5 × ⌈entries/100⌉` queries. Fixed CE3B leftovers: acceptance, cross-runtime and D1 budget scripts saved `image` blocks at version 1. CE3 complete. |
+| 2026-10-11 | — | — | Wave 2 detailed in the order CE5 → CE4 → CE6 with owner decisions: `global` model kind with page lifecycle (no delete or duplicate); no navigation global before CE7; SEO system group with SDK-resolved fallbacks and site defaults mapped from one global; site URL and `LACE_SITE_INDEXING` are deployment settings; block envelope with optional `anchor`, `hidden` and declared `settings` (none on built-in blocks); custom CSS class left open for CE6A. |
