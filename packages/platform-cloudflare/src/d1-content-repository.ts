@@ -64,6 +64,8 @@ import type {
   SaveCompleteDraftInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
+  UpdateMediaMetadataInput,
+  UpdateMediaMetadataResult,
   SiteBuildCommandPort,
   SiteBuildDispatchPort,
   SiteBuildReadPort,
@@ -80,6 +82,9 @@ import {
   ENTRY_SOURCE_SQL,
   ENTRY_STATUS_SQL,
   MEDIA_BY_ID_SQL,
+  MEDIA_METADATA_UPDATE_SQL,
+  MEDIA_PUBLISHED_REFERENCE_SQL,
+  mediaMetadataUpdateParams,
   MEDIA_CATALOG_SQL,
   MEDIA_SORT_SQL,
   MEDIA_USAGE_SQL,
@@ -888,6 +893,7 @@ export class D1ContentRepository
       ...exists.params,
     );
     const state = this.addPublicStateBump(batch, exists, {
+      reason: "publication",
       requestedAt: input.publishedAt,
       requestedBy: input.publishedBy.id,
       snapshotId: newId,
@@ -979,6 +985,7 @@ export class D1ContentRepository
       token,
     );
     const state = this.addPublicStateBump(batch, guarded, {
+      reason: "publication",
       requestedAt: input.unpublishedAt,
       requestedBy: input.unpublishedBy.id,
       snapshotId: input.expectedPublishedSnapshotId,
@@ -1105,6 +1112,7 @@ export class D1ContentRepository
         token,
       );
       this.addPublicStateBump(batch, guarded, {
+        reason: "publication",
         requestedAt: input.deletedAt,
         requestedBy: input.deletedBy.id,
         snapshotId: expectedPublished,
@@ -1261,7 +1269,12 @@ export class D1ContentRepository
     const stateStatements = this.addPublicStateBump(
       batch,
       { params: [token], sql: GUARD_SQL },
-      { requestedAt: input.appliedAt, requestedBy: "system:content-sync", snapshotId: null },
+      {
+        reason: "configuration_sync",
+        requestedAt: input.appliedAt,
+        requestedBy: "system:content-sync",
+        snapshotId: null,
+      },
     );
     this.releaseGuard(batch, token);
     const results = await this.execute(batch, true);
@@ -2046,6 +2059,7 @@ export class D1ContentRepository
     batch: MutationBatch,
     condition: Condition,
     input: {
+      readonly reason: "configuration_sync" | "media_metadata" | "publication";
       readonly requestedAt: number;
       readonly requestedBy: string;
       readonly snapshotId: string | null;
@@ -2060,7 +2074,7 @@ export class D1ContentRepository
     );
     batch.checkpoint("build-outbox");
     return this.addSiteBuildEnqueue(batch, condition, {
-      reason: input.requestedBy === "system:content-sync" ? "configuration_sync" : "publication",
+      reason: input.reason,
       requestedAt: input.requestedAt,
       requestedBy: input.requestedBy,
       retryOfBuildId: null,
@@ -2202,6 +2216,45 @@ export class D1ContentRepository
       outcome: "replayed",
       status: "unpublished",
     };
+  }
+
+  public async updateMediaMetadata(
+    input: UpdateMediaMetadataInput,
+  ): Promise<UpdateMediaMetadataResult> {
+    const params = mediaMetadataUpdateParams(input);
+    const batch = this.batch();
+    const token = this.guard(batch, input.updatedAt, {
+      params: [input.mediaId, input.expectedUpdatedAt],
+      sql: "exists (select 1 from media where id = ? and status = 'active' and updated_at = ?)",
+    });
+    batch.checkpoint("media.metadata");
+    batch.add(`${MEDIA_METADATA_UPDATE_SQL} and ${GUARD_SQL}`, ...params, token);
+    const published: Condition = {
+      params: [token, input.mediaId],
+      sql: `${GUARD_SQL} and ${MEDIA_PUBLISHED_REFERENCE_SQL}`,
+    };
+    const state = this.addPublicStateBump(batch, published, {
+      reason: "media_metadata",
+      requestedAt: input.updatedAt,
+      requestedBy: input.requestedBy.id,
+      snapshotId: null,
+    });
+    const outcome = batch.add(`select (${published.sql}) as bumped`, ...published.params);
+    this.releaseGuard(batch, token);
+    const results = await this.execute(batch, false);
+    if (results[0]!.meta.changes !== 1) {
+      const row = await this.first<{ readonly status: string }>(
+        "select status from media where id = ?",
+        input.mediaId,
+      );
+      if (row !== undefined && row.status !== "active") failure("Only active media can be edited.");
+      throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
+    }
+    const bumped = (results[outcome]!.results[0] as { readonly bumped: number } | undefined)
+      ?.bumped;
+    const media = await this.loadMedia(input.mediaId);
+    if (media === null) failure("Updated media could not be reloaded.");
+    return bumped === 1 ? { media, targetVersion: this.stateVersion(results, state) } : { media };
   }
 
   private async requestMediaDeletion(

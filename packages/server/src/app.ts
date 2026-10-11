@@ -53,8 +53,13 @@ import {
   mediaDetailSchema,
   mediaListQuerySchema,
   mediaListSchema,
+  mediaEntityTag,
   mediaMetadataSchema,
   mediaUrl,
+  resolveMediaPrecondition,
+  toUpdateMediaMetadataResultDto,
+  updateMediaMetadataRequestSchema,
+  updateMediaMetadataResultSchema,
   createContentEntryRequestSchema,
   deleteContentEntryRequestSchema,
   duplicateContentEntryRequestSchema,
@@ -1528,6 +1533,68 @@ export function createLaceApp(input: LaceAppInput): Hono {
         : response(
             mediaDetailSchema,
             toMediaDetailDto(detail, mediaUrl(input.publicBaseUrl!, detail.id)),
+            200,
+            { etag: mediaEntityTag(detail.updatedAt) },
+          );
+    },
+  );
+
+  app.patch(
+    "/api/v1/admin/media/:mediaId",
+    describeRoute({
+      description:
+        "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
+      parameters: [
+        {
+          description: "The item's current ETag: its updatedAt in quoted Unix milliseconds.",
+          in: "header",
+          name: "If-Match",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      requestBody: {
+        content: { "application/json": { schema: resolver(updateMediaMetadataRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: resolver(updateMediaMetadataResultSchema) },
+          },
+          description: "Updated media and build dispatch outcome",
+        },
+      },
+      summary: "Update media metadata",
+      tags: ["admin"],
+    }),
+    validator("param", mediaIdParams, validationHook),
+    validator("json", updateMediaMetadataRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof updateMediaMetadataRequestSchema
+      >;
+      let expectedUpdatedAt: ReturnType<typeof resolveMediaPrecondition>;
+      try {
+        expectedUpdatedAt = resolveMediaPrecondition(context.req.header("if-match") ?? undefined);
+      } catch {
+        return invalid("If-Match must carry the media item's current strong ETag.");
+      }
+      const updated = await media().updateMetadata({
+        actor: await actor(context),
+        expectedUpdatedAt,
+        mediaId: context.req.param("mediaId") as never,
+        patch: body,
+      });
+      return updated === null
+        ? notFound()
+        : response(
+            updateMediaMetadataResultSchema,
+            toUpdateMediaMetadataResultDto(
+              updated,
+              mediaUrl(input.publicBaseUrl!, updated.media.id),
+            ),
+            200,
+            { etag: mediaEntityTag(updated.media.updatedAt) },
           );
     },
   );

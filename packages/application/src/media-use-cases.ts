@@ -1,5 +1,19 @@
-import { DomainError, mediaId, requirePermission } from "@lacecms/domain";
-import type { Actor, MediaId, MediaMetadata, UnixMilliseconds } from "@lacecms/domain";
+import {
+  DomainError,
+  isMediaFocalCoordinate,
+  mediaId,
+  normalizeMediaText,
+  requirePermission,
+  unixMilliseconds,
+} from "@lacecms/domain";
+import type {
+  Actor,
+  MediaFocalPoint,
+  MediaId,
+  MediaMetadata,
+  MediaTextKind,
+  UnixMilliseconds,
+} from "@lacecms/domain";
 import {
   DEFAULT_MEDIA_SORT,
   MAX_MEDIA_SEARCH_LENGTH,
@@ -38,9 +52,12 @@ export const ALLOWED_MEDIA_MIME_TYPES = Object.freeze([
 ] as const);
 
 export interface MediaView {
+  readonly alt?: string;
+  readonly caption?: string;
   readonly createdAt: UnixMilliseconds;
   readonly createdBy: ActorSummary;
   readonly filename: string;
+  readonly focalPoint?: MediaFocalPoint;
   readonly height?: number;
   readonly id: MediaId;
   readonly mimeType: MediaMimeType;
@@ -77,6 +94,37 @@ export interface GetMediaUseCaseInput {
 }
 
 export interface DeleteMediaUseCaseInput extends GetMediaUseCaseInput {}
+
+/** An omitted value stays unchanged; `null` (or empty text) clears it. */
+export interface MediaMetadataPatch {
+  readonly alt?: string | null | undefined;
+  readonly caption?: string | null | undefined;
+  readonly focalPoint?: MediaFocalPoint | null | undefined;
+}
+
+export interface UpdateMediaMetadataUseCaseInput {
+  readonly actor: Actor;
+  /** The `updatedAt` of the version the writer edited. */
+  readonly expectedUpdatedAt: UnixMilliseconds;
+  readonly mediaId: MediaId;
+  readonly patch: MediaMetadataPatch;
+}
+
+export type MediaBuildOutcome =
+  | { readonly status: "not-dispatched" }
+  | { readonly status: "queued"; readonly targetVersion: number };
+
+export interface UpdateMediaMetadataUseCaseResult {
+  readonly build: MediaBuildOutcome;
+  readonly media: MediaView;
+}
+
+/** Normalized patch values; `undefined` keeps the stored value. */
+export interface NormalizedMediaMetadataPatch {
+  readonly alt?: string | null;
+  readonly caption?: string | null;
+  readonly focalPoint?: MediaFocalPoint | null;
+}
 
 export interface PublicMediaBinaryUseCaseInput {
   readonly mediaId: MediaId;
@@ -174,6 +222,69 @@ function streamBytes(bytes: Uint8Array): ByteStream {
   };
 }
 
+function normalizeText(value: unknown, kind: MediaTextKind): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const normalized = typeof value === "string" ? normalizeMediaText(value, kind) : undefined;
+  if (normalized === undefined) {
+    failure(
+      kind === "alt"
+        ? "Alt text must be single-line plain text of at most 1,000 characters."
+        : "A caption must be plain text of at most 2,000 characters.",
+    );
+  }
+  return normalized;
+}
+
+/**
+ * Validates a metadata patch with the shared domain rules: trims text, maps
+ * empty text to `null`, normalizes caption line breaks, and requires a focal
+ * point of two finite coordinates from 0 to 1.
+ */
+export function normalizeMediaMetadataPatch(
+  patch: MediaMetadataPatch,
+): NormalizedMediaMetadataPatch {
+  if (typeof patch !== "object" || patch === null) failure("Media metadata patch is invalid.");
+  const keys = Object.keys(patch);
+  if (keys.some((key) => key !== "alt" && key !== "caption" && key !== "focalPoint")) {
+    failure("Media metadata patch contains an unknown value.");
+  }
+  if (keys.every((key) => patch[key as keyof MediaMetadataPatch] === undefined)) {
+    failure("Supply at least one of alt, caption, or focalPoint.");
+  }
+  const alt = normalizeText(patch.alt, "alt");
+  const caption = normalizeText(patch.caption, "caption");
+  let focalPoint: MediaFocalPoint | null | undefined;
+  if (patch.focalPoint === null) focalPoint = null;
+  else if (patch.focalPoint !== undefined) {
+    const point = patch.focalPoint as unknown;
+    if (
+      typeof point !== "object" ||
+      point === null ||
+      Object.keys(point).length !== 2 ||
+      !isMediaFocalCoordinate((point as { x?: unknown }).x) ||
+      !isMediaFocalCoordinate((point as { y?: unknown }).y)
+    ) {
+      failure("A focal point must have x and y coordinates from 0 to 1.");
+    }
+    focalPoint = Object.freeze({
+      x: (point as MediaFocalPoint).x,
+      y: (point as MediaFocalPoint).y,
+    });
+  }
+  return Object.freeze({
+    ...(alt === undefined ? {} : { alt }),
+    ...(caption === undefined ? {} : { caption }),
+    ...(focalPoint === undefined ? {} : { focalPoint }),
+  });
+}
+
+function sameFocalPoint(left: MediaFocalPoint | null, right: MediaFocalPoint | null): boolean {
+  return left === null || right === null
+    ? left === right
+    : left.x === right.x && left.y === right.y;
+}
+
 function toMediaView(item: MediaCatalogItem): MediaView {
   const value = item.media;
   const mimeType = value.mimeType;
@@ -181,9 +292,14 @@ function toMediaView(item: MediaCatalogItem): MediaView {
     failure("Media metadata has an unsupported MIME type.");
   }
   return Object.freeze({
+    ...(value.alt === undefined ? {} : { alt: value.alt }),
+    ...(value.caption === undefined ? {} : { caption: value.caption }),
     createdAt: value.createdAt,
     createdBy: Object.freeze({ displayName: item.createdBy.displayName, id: item.createdBy.id }),
     filename: value.filename,
+    ...(value.focalPoint === undefined
+      ? {}
+      : { focalPoint: Object.freeze({ x: value.focalPoint.x, y: value.focalPoint.y }) }),
     ...(value.height === undefined ? {} : { height: value.height }),
     id: value.id,
     mimeType: mimeType as MediaMimeType,
@@ -315,6 +431,61 @@ export class MediaUseCases {
       requestedBy: input.actor,
     });
     return this.catalogView(result.media.id, "Media deletion retry could not be reloaded.");
+  }
+
+  /**
+   * Edits an active item's descriptive metadata at the expected version. A
+   * change to media used by a current publication advances the published
+   * version and requests a build atomically; a submission that changes
+   * nothing writes nothing. Returns `null` for an unknown item.
+   */
+  public async updateMetadata(
+    input: UpdateMediaMetadataUseCaseInput,
+  ): Promise<UpdateMediaMetadataUseCaseResult | null> {
+    requirePermission(input.actor, "media:write");
+    const patch = normalizeMediaMetadataPatch(input.patch);
+    const expectedUpdatedAt = unixMilliseconds(input.expectedUpdatedAt);
+    const current = await this.dependencies.media.loadMedia(input.mediaId);
+    if (current === null) return null;
+    if (current.status !== "active") failure("Only active media can be edited.");
+    if (current.updatedAt !== expectedUpdatedAt) {
+      throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
+    }
+    const stored = {
+      alt: current.alt ?? null,
+      caption: current.caption ?? null,
+      focalPoint: current.focalPoint ?? null,
+    };
+    const next = {
+      alt: patch.alt === undefined ? stored.alt : patch.alt,
+      caption: patch.caption === undefined ? stored.caption : patch.caption,
+      focalPoint: patch.focalPoint === undefined ? stored.focalPoint : patch.focalPoint,
+    };
+    if (
+      next.alt === stored.alt &&
+      next.caption === stored.caption &&
+      sameFocalPoint(next.focalPoint, stored.focalPoint)
+    ) {
+      return Object.freeze({
+        build: Object.freeze({ status: "not-dispatched" }),
+        media: await this.catalogView(current.id, "Media could not be reloaded."),
+      });
+    }
+    const result = await this.dependencies.media.updateMediaMetadata({
+      ...next,
+      expectedUpdatedAt,
+      mediaId: current.id,
+      requestedBy: input.actor,
+      updatedAt: unixMilliseconds(Math.max(this.dependencies.clock.now(), expectedUpdatedAt + 1)),
+    });
+    return Object.freeze({
+      build: Object.freeze(
+        result.targetVersion === undefined
+          ? { status: "not-dispatched" }
+          : { status: "queued", targetVersion: result.targetVersion },
+      ),
+      media: await this.catalogView(result.media.id, "Updated media could not be reloaded."),
+    });
   }
 
   public async preview(input: GetMediaUseCaseInput): Promise<MediaBinary | null> {

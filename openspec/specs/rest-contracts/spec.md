@@ -156,8 +156,8 @@ domain/application error SHALL map to exactly one stable status and code pair:
 `AUTHORIZATION_DENIED` to `403`, `CONTENT_INVALID_STATE` to `422`, and each of
 `CONTENT_MODEL_CARDINALITY_CONFLICT`, `CONTENT_NOT_PUBLISHED`,
 `CONTENT_PAGE_SINGLETON`, `CONTENT_PUBLISHED_IMMUTABLE`,
-`CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, and `MEDIA_IN_USE` to
-`409`, preserving the same code as its machine-readable error code. The
+`CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, `MEDIA_IN_USE`, and
+`MEDIA_UPDATE_CONFLICT` to `409`, preserving the same code as its machine-readable error code. The
 transport contract SHALL also represent a missing API resource as `NOT_FOUND`
 with `404`, an exhausted request limit as `RATE_LIMITED` with `429`, and an
 oversized request body as `PAYLOAD_TOO_LARGE` with `413`.
@@ -211,6 +211,12 @@ oversized request body as `PAYLOAD_TOO_LARGE` with `413`.
 #### Scenario: Unpublishing an unpublished entry is a conflict
 - **WHEN** an administrator unpublishes an entry without a current publication
 - **THEN** the API returns status `409` with code `CONTENT_NOT_PUBLISHED`
+
+#### Scenario: A stale media metadata edit is a conflict
+- **WHEN** a writer updates media metadata with an `If-Match` tag that no
+  longer identifies the stored version
+- **THEN** the API returns status `409` with code `MEDIA_UPDATE_CONFLICT` and a
+  sanitized message, and the item is unchanged
 
 ### Requirement: Security administration contracts reveal secrets only once
 The shared REST contracts SHALL validate setup-admin, user list/update,
@@ -615,3 +621,62 @@ SHALL respond `200` with the reverted admin entry. Duplicate SHALL respond
 #### Scenario: Viewer is denied every lifecycle endpoint
 - **WHEN** a viewer calls unpublish, revert, or duplicate
 - **THEN** each returns `403` with `AUTHORIZATION_DENIED` and nothing changes
+
+### Requirement: Admin media DTOs carry descriptive metadata
+Every admin media DTO (list items, detail, upload, deletion, retry-deletion and
+metadata update results) SHALL include the item's `alt` string, `caption`
+string and `focalPoint` object `{x, y}` when each is set, and SHALL omit each
+value that is not set. The values SHALL never be `null` in a response. The
+DTO's `updatedAt` SHALL keep millisecond precision, because it identifies the
+version a writer edits.
+
+#### Scenario: A described item is listed
+- **WHEN** a viewer lists media that include an item with alt text and a focal
+  point of `{x: 0.25, y: 0.75}` and no caption
+- **THEN** that item's DTO contains `alt`, `focalPoint` with those coordinates,
+  and no `caption` key
+
+### Requirement: Admin media metadata update contract is explicit
+The shared contract SHALL define the media metadata update request as a strict
+JSON object with the optional keys `alt` (string or `null`, at most 1,000 code
+points after trimming), `caption` (string or `null`, at most 2,000 code points
+after trimming) and `focalPoint` (`null` or a strict object with the finite
+numbers `x` and `y`, each from 0 to 1 inclusive). The request SHALL contain at
+least one key. Unknown keys, wrong types, out-of-range coordinates, over-long
+text, control characters in `alt`, control characters other than line breaks
+in `caption`, unpaired surrogates, and an empty object SHALL fail with `422` `VALIDATION_FAILED` and JSON Pointer issue paths
+such as `/alt` or `/focalPoint/x`.
+
+The update SHALL require an `If-Match` header with exactly one strong entity
+tag whose value is the item's `updatedAt` in Unix milliseconds, for example
+`"1791647444998"`. A missing header, a weak tag, `*`, a list of tags or a
+malformed tag SHALL fail with `422` `VALIDATION_FAILED` before the operation
+reaches application code. The media detail response and the update response
+SHALL carry the item's current tag in the `ETag` header.
+
+The update result SHALL be `{media, build}`, where `media` is the updated
+admin media DTO and `build` is the existing build dispatch outcome: `{status:
+"queued", targetVersion}` when the update requested a site build, or `{status:
+"not-dispatched"}` otherwise.
+
+#### Scenario: A metadata update succeeds
+- **WHEN** an editor sends `{"alt": "Red bicycle", "focalPoint": {"x": 0.5,
+  "y": 0.3}}` with the item's current tag in `If-Match`
+- **THEN** the API returns `200` with the updated media DTO, a build outcome,
+  and an `ETag` header that differs from the submitted tag
+
+#### Scenario: The precondition is missing or weak
+- **WHEN** an editor sends a valid update without `If-Match`, or with
+  `W/"1791647444998"`
+- **THEN** the request fails with `422` `VALIDATION_FAILED` and nothing is
+  updated
+
+#### Scenario: An invalid body is rejected with pointers
+- **WHEN** an editor sends `{"focalPoint": {"x": -0.1, "y": 0.5}, "title":
+  "x"}`
+- **THEN** the request fails with `422` `VALIDATION_FAILED` and issues at
+  `/focalPoint/x` and `/title`
+
+#### Scenario: An empty update is rejected
+- **WHEN** an editor sends `{}` with a valid `If-Match` tag
+- **THEN** the request fails with `422` `VALIDATION_FAILED`

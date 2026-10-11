@@ -251,6 +251,40 @@ the prior internal diagnostic, returns `202 Accepted`, and never performs object
 deletion in the HTTP request. A successful or already-absent object deletion is
 followed by an atomic removal of its still-unreferenced `deleting` metadata.
 
+## Media metadata
+
+Media carry optional `alt` text (at most 1,000 characters), a `caption` (at most
+2,000 characters, line breaks allowed) and a `focalPoint` `{x, y}` with both
+coordinates from 0 to 1. Admin media DTOs include the values that are set.
+`GET /api/v1/admin/media/:mediaId` returns an `ETag` holding the item's
+`updatedAt` in quoted Unix milliseconds, for example `"1791647444998"`. An
+actor with `media:write` edits an `active` item with:
+
+```text
+PATCH /api/v1/admin/media/:mediaId
+If-Match: "1791647444998"
+Content-Type: application/json
+
+{ "alt": "Red bicycle", "caption": null, "focalPoint": { "x": 0.5, "y": 0.3 } }
+```
+
+An omitted key stays unchanged; `null` or text that is empty after trimming
+clears the value. The body must contain at least one key and no others. Text
+is plain: control characters (other than caption line breaks) are refused.
+The response is `{ "media": {...}, "build": {...} }` with a new `ETag`. When a
+current publication uses the item, the same transaction advances the
+published version and queues a coalesced site build with the reason
+`media_metadata`, and `build` is `{ "status": "queued", "targetVersion": N }`;
+otherwise it is `{ "status": "not-dispatched" }`. A request that changes
+nothing writes nothing.
+
+Errors: a missing, weak (`W/"…"`), `*` or malformed `If-Match`, and an invalid
+body return `422 VALIDATION_FAILED`; a stale tag returns `409
+MEDIA_UPDATE_CONFLICT`; an item that is `deleting` or `delete_failed` returns
+`422 CONTENT_INVALID_STATE`; an unknown ID returns `404 NOT_FOUND`. The values
+are stored in migration `0006` columns (see
+[database migrations](database-migrations.md#media-metadata-migration)).
+
 ## Current boundaries
 
 The cache always misses. Publication writes a coalesced site-build event in the

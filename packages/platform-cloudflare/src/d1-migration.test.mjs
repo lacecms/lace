@@ -175,3 +175,56 @@ test("model-structure migration adds empty baselines and keeps content", async (
     await miniflare.dispose();
   }
 });
+
+test("media metadata migration adds empty constrained columns and keeps references", async () => {
+  const MEDIA_METADATA = "0006_media_descriptive_metadata.sql";
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < MEDIA_METADATA));
+    await apply([
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's1', 'p1', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('s1', 'e1', 1, 'Post', '{}', 1, 1, 1, 'admin')",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+      "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('s1', '$fields', 'cover', 'm1', 1)",
+    ]);
+    const statements = await migrationStatements((file) => file === MEDIA_METADATA);
+    expect(statements.some((statement) => /create table|drop table/iu.test(statement))).toBe(false);
+    await apply(statements);
+    expect(
+      await database
+        .prepare(
+          "select m.alt, m.caption, m.focal_x, m.focal_y, m.metadata_json, r.snapshot_id from media m join content_media_references r on r.media_id = m.id",
+        )
+        .first(),
+    ).toEqual({
+      alt: null,
+      caption: null,
+      focal_x: null,
+      focal_y: null,
+      metadata_json: "{}",
+      snapshot_id: "s1",
+    });
+    await expect(
+      database.prepare("update media set focal_y = 0.5 where id = 'm1'").run(),
+    ).rejects.toThrow(/CHECK constraint/u);
+    await expect(
+      database.prepare("update media set alt = ? where id = 'm1'").bind("x".repeat(1001)).run(),
+    ).rejects.toThrow(/CHECK constraint/u);
+    await database
+      .prepare("update media set caption = 'Hi', focal_x = 1, focal_y = 0 where id = 'm1'")
+      .run();
+  } finally {
+    await miniflare.dispose();
+  }
+});

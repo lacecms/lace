@@ -1751,3 +1751,124 @@ test("both runtimes share one sensitive-limit mapping for account routes", () =>
   for (const [method, path, expected] of cases)
     expect(sensitiveRequestLimit(method, path), `${method} ${path}`).toEqual(expected);
 });
+
+test("media metadata route updates with If-Match, returns ETags, and queues builds for published media", async () => {
+  let current = admin;
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const { app, store } = await fixture({ maxBodyBytes: 8192, resolveActor: async () => current });
+  const upload = async (filename) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]),
+      filename,
+    );
+    const created = await app.fetch(
+      new Request("https://lace.test/api/v1/admin/media", { body: form, method: "POST" }),
+    );
+    return created.json();
+  };
+  const patch = (id, body, ifMatch) =>
+    app.fetch(
+      new Request(`https://lace.test/api/v1/admin/media/${id}`, {
+        body: JSON.stringify(body),
+        headers: {
+          "content-type": "application/json",
+          ...(ifMatch === undefined ? {} : { "if-match": ifMatch }),
+        },
+        method: "PATCH",
+      }),
+    );
+  const cover = await upload("cover.png");
+  const unused = await upload("unused.png");
+  const entry = await json(app, "/api/v1/admin/models/posts/entries", {
+    body: JSON.stringify({
+      blocks: [],
+      fields: { image: cover.id },
+      slug: "cover",
+      title: "Cover",
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  await json(app, `/api/v1/admin/entries/${entry.body.id}/publish`, {
+    body: JSON.stringify({ expectedRevision: 1 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  const detail = await app.fetch(new Request(`https://lace.test/api/v1/admin/media/${cover.id}`));
+  const tag = detail.headers.get("etag");
+  expect(tag).toBe(`"${Date.parse((await detail.json()).updatedAt)}"`);
+
+  const version = await store.publishedContentVersion();
+  const updated = await patch(
+    cover.id,
+    { alt: "Red bicycle", focalPoint: { x: 0.5, y: 0.3 } },
+    tag,
+  );
+  expect(updated.status).toBe(200);
+  const updatedBody = await updated.json();
+  expect(updatedBody).toMatchObject({
+    build: { status: "queued", targetVersion: version + 1 },
+    media: { alt: "Red bicycle", focalPoint: { x: 0.5, y: 0.3 }, id: cover.id },
+  });
+  expect(JSON.stringify(updatedBody)).not.toContain("storageKey");
+  const nextTag = updated.headers.get("etag");
+  expect(nextTag).not.toBe(tag);
+  expect(nextTag).toBe(`"${Date.parse(updatedBody.media.updatedAt)}"`);
+  expect(store.mediaMetadataBuildRequests).toEqual([version + 1]);
+
+  const stale = await patch(cover.id, { alt: "Stale" }, tag);
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toEqual({
+    error: {
+      code: "MEDIA_UPDATE_CONFLICT",
+      message: "The media was modified by another request.",
+    },
+  });
+
+  const unusedTag = `"${Date.parse(unused.updatedAt)}"`;
+  const idle = await patch(unused.id, { caption: "Spare" }, unusedTag);
+  expect(idle.status).toBe(200);
+  expect((await idle.json()).build).toEqual({ status: "not-dispatched" });
+
+  for (const [body, ifMatch, pointer] of [
+    [{ alt: "x" }, undefined, ""],
+    [{ alt: "x" }, `W/${nextTag}`, ""],
+    [{ alt: "x" }, "*", ""],
+    [{ focalPoint: { x: -0.1, y: 0.5 } }, nextTag, "/focalPoint/x"],
+    [{ title: "x" }, nextTag, "/title"],
+    [{ alt: "a\nb" }, nextTag, "/alt"],
+    [{}, nextTag, ""],
+  ]) {
+    const refused = await patch(cover.id, body, ifMatch);
+    expect(refused.status, JSON.stringify(body)).toBe(422);
+    const envelope = await refused.json();
+    expect(envelope.error.code).toBe("VALIDATION_FAILED");
+    expect(envelope.error.details.issues.map((issue) => issue.path)).toContain(pointer);
+  }
+  expect((await patch("missing", { alt: "x" }, nextTag)).status).toBe(404);
+
+  current = viewer;
+  const denied = await patch(cover.id, { alt: "Viewer" }, nextTag);
+  expect(denied.status).toBe(403);
+  expect((await denied.json()).error.code).toBe("AUTHORIZATION_DENIED");
+  current = admin;
+
+  const deleting = await app.fetch(
+    new Request(`https://lace.test/api/v1/admin/media/${unused.id}`, { method: "DELETE" }),
+  );
+  const deletingBody = await deleting.json();
+  const refusedDeleting = await patch(
+    unused.id,
+    { alt: "Gone" },
+    `"${Date.parse(deletingBody.updatedAt)}"`,
+  );
+  expect(refusedDeleting.status).toBe(422);
+  expect((await refusedDeleting.json()).error.code).toBe("CONTENT_INVALID_STATE");
+  expect((await json(app, `/api/v1/admin/media/${cover.id}`)).body).toMatchObject({
+    alt: "Red bicycle",
+    focalPoint: { x: 0.5, y: 0.3 },
+  });
+});

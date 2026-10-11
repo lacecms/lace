@@ -842,3 +842,91 @@ test("site-build tracker enforces grace, backoff bounds and the overall deadline
     "Tracking timeout is invalid.",
   );
 });
+
+test("validates media metadata patches before any read and merges onto stored values", async () => {
+  const reads = [];
+  const writes = [];
+  let stored = mediaRecord({ alt: "Old alt", focalPoint: { x: 0.1, y: 0.2 }, updatedAt: 9 });
+  const port = {
+    async loadMedia(id) {
+      reads.push(id);
+      return id === "media-1" ? stored : null;
+    },
+    async loadMediaCatalogItem() {
+      return { ...catalogItem(), media: stored };
+    },
+    async updateMediaMetadata(input) {
+      writes.push(input);
+      const { alt, caption, focalPoint, updatedAt } = input;
+      stored = mediaRecord({
+        ...(alt === null ? {} : { alt }),
+        ...(caption === null ? {} : { caption }),
+        ...(focalPoint === null ? {} : { focalPoint }),
+        updatedAt,
+      });
+      return { media: stored, targetVersion: 4 };
+    },
+  };
+  const media = mediaUseCases(port);
+  const update = (patch, overrides = {}) =>
+    media.updateMetadata({
+      actor: mediaEditor,
+      expectedUpdatedAt: 9,
+      mediaId: "media-1",
+      patch,
+      ...overrides,
+    });
+
+  await expect(update({ alt: "x" }, { actor: mediaViewer })).rejects.toMatchObject({
+    code: "AUTHORIZATION_DENIED",
+  });
+  for (const patch of [
+    {},
+    { title: "x" },
+    { alt: "x".repeat(1001) },
+    { alt: "line\nbreak" },
+    { caption: "tab\there" },
+    { caption: "x".repeat(2001) },
+    { alt: "\ud800" },
+    { alt: 4 },
+    { focalPoint: { x: 1.2, y: 0.5 } },
+    { focalPoint: { x: 0.5 } },
+    { focalPoint: { x: 0.5, y: 0.5, z: 0 } },
+    { focalPoint: { x: Number.NaN, y: 0 } },
+  ]) {
+    await expect(update(patch)).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  }
+  expect(reads).toEqual([]);
+
+  await expect(update({ alt: "x" }, { mediaId: "missing" })).resolves.toBeNull();
+  await expect(update({ alt: "x" }, { expectedUpdatedAt: 8 })).rejects.toMatchObject({
+    code: "MEDIA_UPDATE_CONFLICT",
+  });
+  // An unchanged submission (after trimming) writes nothing.
+  await expect(update({ alt: "  Old alt ", focalPoint: { x: 0.1, y: 0.2 } })).resolves.toEqual({
+    build: { status: "not-dispatched" },
+    media: expect.objectContaining({ alt: "Old alt", updatedAt: 9 }),
+  });
+  expect(writes).toEqual([]);
+
+  // The clock (5) is behind the stored version, so the next version is expected + 1.
+  await expect(update({ caption: " Line\r\nTwo ", focalPoint: null })).resolves.toEqual({
+    build: { status: "queued", targetVersion: 4 },
+    media: expect.objectContaining({ alt: "Old alt", caption: "Line\nTwo", updatedAt: 10 }),
+  });
+  expect(writes).toEqual([
+    {
+      alt: "Old alt",
+      caption: "Line\nTwo",
+      expectedUpdatedAt: 9,
+      focalPoint: null,
+      mediaId: "media-1",
+      requestedBy: mediaEditor,
+      updatedAt: 10,
+    },
+  ]);
+
+  stored = mediaRecord({ status: "deleting", updatedAt: 9 });
+  await expect(update({ alt: "x" })).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(writes).toHaveLength(1);
+});

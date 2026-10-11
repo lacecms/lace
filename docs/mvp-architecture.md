@@ -886,7 +886,11 @@ media
 ├── size                INTEGER NOT NULL
 ├── width               INTEGER
 ├── height              INTEGER
-├── metadata_json       TEXT NOT NULL
+├── metadata_json       TEXT NOT NULL      -- reserved, always '{}'
+├── alt                 TEXT               -- at most 1,000 characters
+├── caption             TEXT               -- at most 2,000 characters
+├── focal_x             REAL               -- 0..1, set together with focal_y
+├── focal_y             REAL               -- 0..1, set together with focal_x
 ├── status              TEXT NOT NULL CHECK(status IN ('active', 'deleting', 'delete_failed'))
 ├── last_error          TEXT
 ├── created_by          TEXT NOT NULL
@@ -927,6 +931,30 @@ greater than zero.
 
 `width` and `height` are the displayed dimensions, measured after the image's
 EXIF orientation is applied. Every upload records both values.
+
+Media carry optional descriptive metadata that every usage of the item shares:
+`alt` text, a `caption`, and a `focalPoint` `{x, y}` whose coordinates run from
+0 to 1 across the displayed image, with `{0, 0}` at the top left. The database
+enforces the lengths, the coordinate range, and that both coordinates are set
+or both are `NULL`; `metadata_json` stays reserved. Uploads leave all three
+values unset. The metadata update command (`media:write`) edits only `active`
+items. Values are plain text: trimmed, cleared when empty, free of control
+characters (the caption may contain line breaks), and counted in Unicode code
+points. A writer edits the version identified by `updatedAt`: the strong
+`If-Match` tag is its Unix milliseconds, a stale tag fails with
+`MEDIA_UPDATE_CONFLICT` (HTTP `409`), and every committed update moves
+`updated_at` to the later of now and the previous value plus one millisecond.
+A submission that changes nothing writes nothing.
+
+Metadata is global and goes live on the next build: when a current published
+snapshot references the item, the same atomic mutation increments
+`published_state.version` and enqueues or coalesces a site build with the
+reason `media_metadata`. Published snapshots are not rewritten and no
+republication is needed. Metadata used only by drafts changes neither the
+version nor build work. The effective alt text of a usage is the usage-level
+alt (for example the `image` block's `alt`), then the media item's `alt`, then
+an empty string; missing alt text never blocks publication
+([ADR 0009](adr/0009-media-metadata.md)).
 
 Media deletion is asynchronous and recoverable. The delete use case refuses a
 referenced item with `MEDIA_IN_USE` (HTTP `409`), marks an unreferenced item
@@ -1322,6 +1350,7 @@ DELETE /api/v1/admin/entries/:entryId
 GET    /api/v1/admin/media
 POST   /api/v1/admin/media
 GET    /api/v1/admin/media/:mediaId
+PATCH  /api/v1/admin/media/:mediaId
 DELETE /api/v1/admin/media/:mediaId
 POST   /api/v1/admin/media/:mediaId/retry-deletion
 
@@ -1399,8 +1428,13 @@ preserve the same snapshot-revision invariant.
   image MIME type), and `sort` (`createdAt`, `filename`, or `size`, either
   direction; default newest first), with cursors bound to that query. Media
   DTOs name the uploader as `createdBy` with an `id` and `displayName`, and
-  carry `usageCount`. `GET /api/v1/admin/media/:mediaId` adds the bounded
-  `usage` list.
+  carry `usageCount` and the `alt`, `caption`, and `focalPoint` values that are
+  set. `GET /api/v1/admin/media/:mediaId` adds the bounded `usage` list and an
+  `ETag` of the item's `updatedAt` in Unix milliseconds.
+- `PATCH /api/v1/admin/media/:mediaId` (`media:write`) takes a strict body with
+  any of `alt`, `caption`, and `focalPoint` (`null` clears a value) and requires
+  that `ETag` as a strong `If-Match`. It returns `{media, build}` with the
+  existing build dispatch outcome and the new `ETag`.
 - Mutable operations use optimistic concurrency through a revision or `If-Match` value.
 - Publish operations are idempotent.
 - Dates in JSON use ISO 8601 UTC strings.
@@ -2437,6 +2471,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - `content_models.kind` distinguishes `page` from `collection`.
 - Pages and collection records share `content_entries`.
 - Content has draft and published snapshots only.
+- Media carry global descriptive metadata (alt text, caption, focal point);
+  editing published media advances the published version without
+  republication ([ADR 0009](adr/0009-media-metadata.md)).
 - Blocks are separate relational rows with type-specific JSON payloads.
 - Top-level blocks are flat and sparsely ordered.
 - Content models are defined in code and projected into the database.

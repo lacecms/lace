@@ -60,6 +60,8 @@ import type {
   RetryDispatcherLeaseInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
+  UpdateMediaMetadataInput,
+  UpdateMediaMetadataResult,
   BuildQueueReceipt,
   EnqueueSiteBuildInput,
   SiteBuildCommandPort,
@@ -78,6 +80,9 @@ import {
   ENTRY_STATUS_SQL,
   MEDIA_BY_ID_SQL,
   MEDIA_CATALOG_SQL,
+  MEDIA_METADATA_UPDATE_SQL,
+  MEDIA_PUBLISHED_REFERENCE_SQL,
+  mediaMetadataUpdateParams,
   MEDIA_SORT_SQL,
   MEDIA_USAGE_SQL,
   PUBLICATION_IDEMPOTENCY_TTL_MS,
@@ -468,7 +473,12 @@ export class NodeContentRepository
         if (!configurationSyncAdvancesPublicState(actualPlan)) {
           return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
         }
-        const targetVersion = this.bumpPublicState(input.appliedAt, "system:content-sync", null);
+        const targetVersion = this.bumpPublicState(
+          input.appliedAt,
+          "system:content-sync",
+          null,
+          "configuration_sync",
+        );
         return Object.freeze({
           operations: actualPlan.operations,
           status: "applied" as const,
@@ -655,6 +665,7 @@ export class NodeContentRepository
           input.publishedAt,
           input.publishedBy.id,
           input.publishedSnapshotId,
+          "publication",
         );
         const committed = this.loadEntry(input.entryId);
         if (committed === null) failure("Published content entry could not be reloaded.");
@@ -737,6 +748,7 @@ export class NodeContentRepository
           input.unpublishedAt,
           input.unpublishedBy.id,
           input.expectedPublishedSnapshotId,
+          "publication",
         );
         const committed = this.loadEntry(input.entryId);
         if (committed === null) failure("Unpublished content entry could not be reloaded.");
@@ -826,7 +838,12 @@ export class NodeContentRepository
           this.connection
             .prepare("delete from published_routes where entry_id = ?")
             .run(input.entryId);
-          this.bumpPublicState(input.deletedAt, input.deletedBy.id, entry.published_snapshot_id);
+          this.bumpPublicState(
+            input.deletedAt,
+            input.deletedBy.id,
+            entry.published_snapshot_id,
+            "publication",
+          );
         }
         this.checkpoint("delete.entry");
         const deleted = this.connection
@@ -913,6 +930,36 @@ export class NodeContentRepository
     const media = await this.loadMedia(input.mediaId);
     if (media === null) failure("Media deletion retry could not be reloaded.");
     return { media, status: "deleting" };
+  }
+
+  public async updateMediaMetadata(
+    input: UpdateMediaMetadataInput,
+  ): Promise<UpdateMediaMetadataResult> {
+    const params = mediaMetadataUpdateParams(input);
+    let targetVersion: number | undefined;
+    try {
+      this.connection.transaction(() => {
+        this.checkpoint("media.metadata");
+        const changed = this.connection.prepare(MEDIA_METADATA_UPDATE_SQL).run(...params);
+        if (changed.changes !== 1) this.refuseMetadataUpdate(input.mediaId);
+        const published = this.connection
+          .prepare(`select ${MEDIA_PUBLISHED_REFERENCE_SQL} as published`)
+          .get(input.mediaId) as { readonly published: number };
+        if (published.published === 1) {
+          targetVersion = this.bumpPublicState(
+            input.updatedAt,
+            input.requestedBy.id,
+            null,
+            "media_metadata",
+          );
+        }
+      })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+    const media = await this.loadMedia(input.mediaId);
+    if (media === null) failure("Updated media could not be reloaded.");
+    return targetVersion === undefined ? { media } : { media, targetVersion };
   }
 
   public async claim(input: ClaimDispatcherEventsInput): Promise<readonly DispatcherLease[]> {
@@ -1500,6 +1547,7 @@ export class NodeContentRepository
     timestamp: number,
     requestedBy: string,
     snapshotId: string | null,
+    reason: "configuration_sync" | "media_metadata" | "publication",
   ): number {
     this.checkpoint("public-state");
     this.connection
@@ -1512,7 +1560,7 @@ export class NodeContentRepository
       .get() as { readonly version: number };
     this.checkpoint("build-outbox");
     this.enqueueSiteBuild({
-      reason: requestedBy === "system:content-sync" ? "configuration_sync" : "publication",
+      reason,
       requestedAt: timestamp,
       requestedBy,
       snapshotId,
@@ -1959,6 +2007,14 @@ export class NodeContentRepository
       throw new DomainError("MEDIA_IN_USE", "Media is still referenced by content.");
     }
     failure(message);
+  }
+
+  private refuseMetadataUpdate(mediaId: string): never {
+    const row = this.connection.prepare("select status from media where id = ?").get(mediaId) as
+      | { readonly status: string }
+      | undefined;
+    if (row !== undefined && row.status !== "active") failure("Only active media can be edited.");
+    throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
   }
 
   private throwWriteError(error: unknown, pageCreation: boolean): never {

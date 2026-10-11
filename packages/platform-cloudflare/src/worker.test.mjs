@@ -139,6 +139,15 @@ test("only successful dispatch-producing admin mutations schedule post-commit wo
   expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/publish"), 409)).toBe(false);
   expect(producesDispatchWork(request("GET", "/api/v1/admin/entries/e"), 200)).toBe(false);
   expect(producesDispatchWork(request("PUT", "/api/v1/admin/entries/e/draft"), 200)).toBe(false);
+  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/unpublish"), 200)).toBe(
+    true,
+  );
+  expect(producesDispatchWork(request("PATCH", "/api/v1/admin/media/m"), 200)).toBe(true);
+  expect(producesDispatchWork(request("PATCH", "/api/v1/admin/media/m"), 409)).toBe(false);
+  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/unpublish"), 409)).toBe(
+    false,
+  );
+  expect(producesDispatchWork(request("GET", "/api/v1/admin/media/m"), 200)).toBe(false);
 });
 
 let fixtureAddress = 0;

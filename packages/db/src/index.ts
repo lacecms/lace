@@ -11,6 +11,7 @@ export const checkedInMigrations = Object.freeze([
   { createdAt: 1791238354782, name: "0003_site_build_outcomes.sql" },
   { createdAt: 1791633627420, name: "0004_account_tokens.sql" },
   { createdAt: 1791647444998, name: "0005_content_model_structure.sql" },
+  { createdAt: 1791731667455, name: "0006_media_descriptive_metadata.sql" },
 ]);
 
 export interface AppliedMigration {

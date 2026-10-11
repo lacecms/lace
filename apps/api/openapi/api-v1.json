@@ -179,6 +179,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -298,6 +299,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -346,6 +348,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -2989,6 +2992,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -3219,6 +3223,14 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "alt": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "caption": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "createdAt": {},
                           "createdBy": {
                             "additionalProperties": false,
@@ -3239,6 +3251,19 @@
                           },
                           "filename": {
                             "type": "string"
+                          },
+                          "focalPoint": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["x", "y"],
+                            "type": "object"
                           },
                           "height": {
                             "minimum": 1,
@@ -3336,6 +3361,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3356,6 +3389,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -3434,6 +3480,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3454,6 +3508,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -3552,6 +3619,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3572,6 +3647,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -3753,6 +3841,244 @@
         },
         "summary": "Get media details",
         "tags": ["admin"]
+      },
+      "patch": {
+        "description": "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
+        "operationId": "patchApiV1AdminMediaByMediaId",
+        "parameters": [
+          {
+            "description": "The item's current ETag: its updatedAt in quoted Unix milliseconds.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mediaId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "alt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "caption": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "focalPoint": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["x", "y"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "build": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "queued"
+                            },
+                            "targetVersion": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": ["status", "targetVersion"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "not-dispatched"
+                            }
+                          },
+                          "required": ["status"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "media": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alt": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "caption": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "createdAt": {},
+                        "createdBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "maxLength": 320,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": ["displayName", "id"],
+                          "type": "object"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "focalPoint": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": ["x", "y"],
+                          "type": "object"
+                        },
+                        "height": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "status": {
+                          "enum": ["active", "delete_failed", "deleting"]
+                        },
+                        "updatedAt": {},
+                        "url": {
+                          "type": "string"
+                        },
+                        "usageCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "width": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "createdAt",
+                        "createdBy",
+                        "filename",
+                        "id",
+                        "mimeType",
+                        "size",
+                        "status",
+                        "updatedAt",
+                        "url",
+                        "usageCount"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["build", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Updated media and build dispatch outcome"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update media metadata",
+        "tags": ["admin"]
       }
     },
     "/api/v1/admin/media/{mediaId}/preview": {
@@ -3820,6 +4146,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3840,6 +4174,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -5144,6 +5491,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5192,6 +5540,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5312,6 +5661,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5417,6 +5767,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",

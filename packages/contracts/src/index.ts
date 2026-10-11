@@ -3,6 +3,8 @@ import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacec
 import {
   BlockOrderError,
   DomainError,
+  isMediaFocalCoordinate,
+  normalizeMediaText,
   unixMilliseconds,
   siteBuildFailureReasons,
   siteBuildProviderStages,
@@ -19,6 +21,7 @@ import type {
   ContentModelRoute,
   ContentSnapshot,
   DomainErrorCode,
+  MediaFocalPoint,
   SiteBuildProviderStage,
   SiteBuildState,
   SiteBuildStatus,
@@ -718,10 +721,40 @@ export const mediaListQuerySchema = v.object({
   type: v.optional(mediaMimeTypeSchema),
 });
 
+const mediaAltSchema = v.pipe(
+  v.string(),
+  v.check(
+    (value) => normalizeMediaText(value, "alt") !== undefined,
+    "Alt text must be single-line plain text of at most 1,000 characters.",
+  ),
+);
+const mediaCaptionSchema = v.pipe(
+  v.string(),
+  v.check(
+    (value) => normalizeMediaText(value, "caption") !== undefined,
+    "A caption must be plain text of at most 2,000 characters.",
+  ),
+);
+const mediaFocalCoordinateSchema = v.pipe(
+  v.number(),
+  v.check(
+    (value: number) => isMediaFocalCoordinate(value),
+    "A focal coordinate must be a number from 0 to 1.",
+  ),
+);
+/** `{0, 0}` is the top-left corner of the displayed image. */
+export const mediaFocalPointSchema = v.strictObject({
+  x: mediaFocalCoordinateSchema,
+  y: mediaFocalCoordinateSchema,
+});
+
 export const mediaMetadataSchema = v.strictObject({
+  alt: v.optional(v.pipe(v.string(), v.minLength(1))),
+  caption: v.optional(v.pipe(v.string(), v.minLength(1))),
   createdAt: isoTimestampSchema,
   createdBy: actorSummarySchema,
   filename: v.string(),
+  focalPoint: v.optional(mediaFocalPointSchema),
   height: v.optional(positiveIntegerSchema),
   id: identifierSchema,
   mimeType: v.string(),
@@ -766,6 +799,26 @@ export const mediaUsageEntrySchema = v.strictObject({
 export const mediaDetailSchema = v.strictObject({
   ...mediaMetadataSchema.entries,
   usage: v.pipe(v.array(mediaUsageEntrySchema), v.maxLength(MAX_MEDIA_USAGE_ENTRIES)),
+});
+
+/**
+ * Descriptive metadata patch: an omitted key stays unchanged and `null` clears
+ * it. Text is trimmed by the use case; empty text also clears.
+ */
+export const updateMediaMetadataRequestSchema = v.pipe(
+  v.strictObject({
+    alt: v.optional(v.nullable(mediaAltSchema)),
+    caption: v.optional(v.nullable(mediaCaptionSchema)),
+    focalPoint: v.optional(v.nullable(mediaFocalPointSchema)),
+  }),
+  v.check(
+    (value) => Object.keys(value).length > 0,
+    "Supply at least one of alt, caption, or focalPoint.",
+  ),
+);
+export const updateMediaMetadataResultSchema = v.strictObject({
+  build: buildDispatchOutcomeSchema,
+  media: mediaMetadataSchema,
 });
 
 /** The closed site-build lifecycle; only `succeeded` proves publication. */
@@ -892,6 +945,7 @@ export const errorCodeSchema = v.picklist([
   "CONTENT_ROUTE_CONFLICT",
   "LAST_ADMIN_PROTECTED",
   "MEDIA_IN_USE",
+  "MEDIA_UPDATE_CONFLICT",
   "INTERNAL_ERROR",
   "INVALID_CREDENTIALS",
   "INVITATION_INVALID",
@@ -933,6 +987,9 @@ export type BuildExportDto = v.InferOutput<typeof buildExportSchema>;
 export type MediaMetadataDto = v.InferOutput<typeof mediaMetadataSchema>;
 export type MediaListDto = v.InferOutput<typeof mediaListSchema>;
 export type MediaDetailDto = v.InferOutput<typeof mediaDetailSchema>;
+export type MediaFocalPointDto = v.InferOutput<typeof mediaFocalPointSchema>;
+export type UpdateMediaMetadataRequestDto = v.InferOutput<typeof updateMediaMetadataRequestSchema>;
+export type UpdateMediaMetadataResultDto = v.InferOutput<typeof updateMediaMetadataResultSchema>;
 export type MediaUsageEntryDto = v.InferOutput<typeof mediaUsageEntrySchema>;
 export type MediaUsageLocationDto = v.InferOutput<typeof mediaUsageLocationSchema>;
 export type MediaSortDto = v.InferOutput<typeof mediaSortSchema>;
@@ -1042,9 +1099,12 @@ export function toUnpublishContentEntryResultDto(input: {
 
 /** Maps metadata without exposing the private storage key. */
 export interface MediaMetadataDtoSource {
+  readonly alt?: string;
+  readonly caption?: string;
   readonly createdAt: UnixMilliseconds;
   readonly createdBy: { readonly displayName: string; readonly id: string };
   readonly filename: string;
+  readonly focalPoint?: MediaFocalPoint;
   readonly height?: number;
   readonly id: string;
   readonly mimeType: string;
@@ -1057,9 +1117,14 @@ export interface MediaMetadataDtoSource {
 
 export function toMediaMetadataDto(media: MediaMetadataDtoSource, url: string): MediaMetadataDto {
   return {
+    ...(media.alt === undefined ? {} : { alt: media.alt }),
+    ...(media.caption === undefined ? {} : { caption: media.caption }),
     createdAt: toIsoTimestamp(media.createdAt),
     createdBy: { displayName: media.createdBy.displayName, id: media.createdBy.id },
     filename: media.filename,
+    ...(media.focalPoint === undefined
+      ? {}
+      : { focalPoint: { x: media.focalPoint.x, y: media.focalPoint.y } }),
     ...(media.height === undefined ? {} : { height: media.height }),
     id: media.id,
     mimeType: media.mimeType,
@@ -1120,6 +1185,45 @@ export function toMediaDetailDto(media: MediaDetailDtoSource, url: string): Medi
       title: entry.title,
     })),
   };
+}
+
+/** Maps a metadata update and its independent build outcome. */
+export function toUpdateMediaMetadataResultDto(
+  input: {
+    readonly build:
+      | Readonly<{ readonly status: "queued"; readonly targetVersion: number }>
+      | Readonly<{ readonly status: "not-dispatched" }>;
+    readonly media: MediaMetadataDtoSource;
+  },
+  url: string,
+): UpdateMediaMetadataResultDto {
+  return {
+    build:
+      input.build.status === "queued"
+        ? { status: "queued", targetVersion: input.build.targetVersion }
+        : { status: input.build.status },
+    media: toMediaMetadataDto(input.media, url),
+  };
+}
+
+/** The strong media version tag: `updatedAt` in quoted Unix milliseconds. */
+export function mediaEntityTag(updatedAt: UnixMilliseconds | number): EntityTag {
+  return entityTagForVersion(updatedAt);
+}
+
+/**
+ * Parses the required media `If-Match` precondition into the expected
+ * `updatedAt`. Only one strong tag is accepted: absent, weak, `*`, list and
+ * malformed values are refused.
+ */
+export function resolveMediaPrecondition(ifMatch: string | undefined): UnixMilliseconds {
+  if (ifMatch === undefined) throw new TypeError("If-Match is required.");
+  const value = ifMatch.trim();
+  if (value.startsWith("W/")) throw new TypeError("If-Match requires a strong media tag.");
+  if (!/^"[0-9]{1,16}"$/u.test(value)) {
+    throw new TypeError("If-Match must be one strong media tag.");
+  }
+  return unixMilliseconds(versionFromEntityTag(value));
 }
 
 /** Produces the stable Lace media URL from configured public origin data only. */
@@ -1265,6 +1369,7 @@ const domainErrorStatus: Readonly<Record<DomainErrorCode, 403 | 409 | 422>> = {
   CONTENT_ROUTE_CONFLICT: 409,
   LAST_ADMIN_PROTECTED: 409,
   MEDIA_IN_USE: 409,
+  MEDIA_UPDATE_CONFLICT: 409,
 };
 
 const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
@@ -1278,6 +1383,7 @@ const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
   CONTENT_ROUTE_CONFLICT: "The public route is already in use.",
   LAST_ADMIN_PROTECTED: "The final active administrator cannot be disabled or demoted.",
   MEDIA_IN_USE: "The media is still used by content.",
+  MEDIA_UPDATE_CONFLICT: "The media was modified by another request.",
 };
 
 export interface ClassifiedError {

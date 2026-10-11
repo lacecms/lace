@@ -5,6 +5,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -142,6 +143,10 @@ export const media = sqliteTable(
     width: integer("width"),
     height: integer("height"),
     metadataJson: text("metadata_json").notNull(),
+    alt: text("alt"),
+    caption: text("caption"),
+    focalX: real("focal_x"),
+    focalY: real("focal_y"),
     status: text("status").notNull(),
     lastError: text("last_error"),
     createdBy: text("created_by").notNull(),
@@ -151,6 +156,24 @@ export const media = sqliteTable(
   (table) => [
     check("media_status_check", sql`${table.status} in ('active', 'deleting', 'delete_failed')`),
     check("media_size_check", sql`${table.size} >= 0`),
+    // Migration 0006 adds these as column checks; SQLite enforces both forms identically.
+    check("media_alt_length_check", sql`${table.alt} is null or length(${table.alt}) <= 1000`),
+    check(
+      "media_caption_length_check",
+      sql`${table.caption} is null or length(${table.caption}) <= 2000`,
+    ),
+    check(
+      "media_focal_x_range_check",
+      sql`${table.focalX} is null or (${table.focalX} >= 0 and ${table.focalX} <= 1)`,
+    ),
+    check(
+      "media_focal_y_range_check",
+      sql`${table.focalY} is null or (${table.focalY} >= 0 and ${table.focalY} <= 1)`,
+    ),
+    check(
+      "media_focal_point_pair_check",
+      sql`(${table.focalX} is null) = (${table.focalY} is null)`,
+    ),
   ],
 );
 
