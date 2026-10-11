@@ -57,6 +57,13 @@
       "when": 1791750744187,
       "tag": "0007_content_model_global_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791756612246,
+      "tag": "0008_content_snapshot_seo",
+      "breakpoints": true
     }
   ]
 }

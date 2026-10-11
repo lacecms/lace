@@ -44,6 +44,7 @@ import {
   normalizeBuildFailure,
   actorId,
   blockKey,
+  cloneEntrySeo,
   contentEntryId,
   contentModelKey,
   contentSnapshotId,
@@ -52,6 +53,7 @@ import {
   MAX_MEDIA_ALT_LENGTH,
   MAX_MEDIA_CAPTION_LENGTH,
   isSiteBuildStatus,
+  normalizeEntrySeo,
   normalizeTrackedOutcomeReason,
   retryableSiteBuildStatuses,
   siteBuildId,
@@ -63,6 +65,7 @@ import type {
   ContentEntry,
   ContentModelRoute,
   DraftSnapshot,
+  EntrySeo,
   MediaMetadata,
   PublishedSnapshot,
   Role,
@@ -228,6 +231,7 @@ export interface SnapshotRow {
   readonly revision: number;
   readonly role: string | null;
   readonly schema_version: number;
+  readonly seo_json: string | null;
   readonly slug: string | null;
   readonly title: string;
   readonly updated_at: number;
@@ -252,6 +256,7 @@ export interface StoredSnapshot {
   readonly fields: JsonObject;
   readonly id: string;
   readonly revision: number;
+  readonly seo?: EntrySeo;
   readonly slug?: string;
   readonly title: string;
   readonly updatedAt: number;
@@ -320,6 +325,8 @@ export interface StoredModelStateRow {
 export interface SyncSnapshotRow {
   readonly entry_id: string;
   readonly fields_json: string;
+  /** 1 when the snapshot holds an SEO group. */
+  readonly has_seo: number;
   readonly id: string;
   readonly revision: number;
   readonly state: string;
@@ -495,6 +502,7 @@ export const STORED_MODEL_BASELINES_SQL = `select m.key, ${VALID_BASELINE_SQL} a
    from content_models m order by m.key asc`;
 /** Binds model key, exclusive snapshot-ID cursor, and page limit. */
 export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title, s.fields_json,
+        s.seo_json is not null as has_seo,
         case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
    from content_snapshots s
    join content_entries e on e.id = s.entry_id
@@ -596,6 +604,19 @@ export function configurationSyncWriteStatements(
       ];
     case "backfill-field":
       return [{ params: [write.json, modelKey], sql: backfillFieldSql(write.fieldKey) }];
+    case "remove-seo":
+      return [
+        {
+          params: [modelKey],
+          sql: `update content_snapshots set seo_json = null
+   where entry_id in (${MODEL_ENTRY_IDS_SQL}) and seo_json is not null`,
+        },
+        {
+          params: [modelKey],
+          sql: `delete from content_media_references
+   where source_key = '$seo' and snapshot_id in (${MODEL_SNAPSHOT_IDS_SQL})`,
+        },
+      ];
   }
 }
 
@@ -616,6 +637,7 @@ export function syncSnapshotPage(
       blocks: Object.freeze(blocks.get(row.id) ?? []),
       entryId: row.entry_id,
       fields: parseObject(row.fields_json, "Snapshot fields"),
+      hasSeo: row.has_seo === 1,
       revision: row.revision,
       snapshotId: row.id,
       state: row.state === "published" ? "published" : "draft",
@@ -902,7 +924,7 @@ export function configurationSyncMigrationStatements(
     writes: Object.freeze(writes),
   });
 }
-export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version,
+export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version,
         s.created_at, s.updated_at, s.updated_by, u.role
    from content_snapshots s left join user u on u.id = s.updated_by`;
 export const BLOCK_COLUMNS_SQL =
@@ -939,8 +961,8 @@ export const DUPLICATE_SOURCE_REVISION_SQL =
 export function revertDraftSnapshotSql(condition: string): string {
   return `update content_snapshots
      set revision = revision + 1, slug = p.slug, title = p.title, fields_json = p.fields_json,
-         schema_version = p.schema_version, updated_at = ?, updated_by = ?
-    from (select slug, title, fields_json, schema_version from content_snapshots where id = ?) as p
+         seo_json = p.seo_json, schema_version = p.schema_version, updated_at = ?, updated_by = ?
+    from (select slug, title, fields_json, seo_json, schema_version from content_snapshots where id = ?) as p
    where content_snapshots.id = ? and ${condition}`;
 }
 
@@ -1372,17 +1394,21 @@ interface MediaUsageLocationDraft {
   blockType?: string;
   readonly field: string;
   position: number;
+  readonly seo?: true;
   readonly states: Set<MediaUsageState>;
 }
 
-/** Orders usage locations: entry fields by name, then blocks by position and key. */
+function usageLocationRank(location: MediaUsageLocationDraft): number {
+  return location.blockKey !== undefined ? 2 : location.seo === true ? 1 : 0;
+}
+
+/** Orders usage locations: entry fields by name, the SEO image, then blocks by position and key. */
 function compareUsageLocations(
   left: MediaUsageLocationDraft,
   right: MediaUsageLocationDraft,
 ): number {
-  if ((left.blockKey === undefined) !== (right.blockKey === undefined)) {
-    return left.blockKey === undefined ? -1 : 1;
-  }
+  const rank = usageLocationRank(left) - usageLocationRank(right);
+  if (rank !== 0) return rank;
   if (left.position !== right.position) return left.position - right.position;
   const leftKey = `${left.blockKey ?? ""}\u0000${left.field}`;
   const rightKey = `${right.blockKey ?? ""}\u0000${right.field}`;
@@ -1405,7 +1431,8 @@ export function mediaUsageEntries(rows: readonly MediaUsageRow[]): readonly Medi
       entry = { locations: new Map(), row };
       entries.set(row.entry_id, entry);
     }
-    const isBlock = row.source_key !== "$fields";
+    const isSeo = row.source_key === "$seo";
+    const isBlock = !isSeo && row.source_key !== "$fields";
     if (isBlock && (row.block_type === null || row.position === null)) {
       throw new Error("A media reference names a block that does not exist.");
     }
@@ -1416,6 +1443,7 @@ export function mediaUsageEntries(rows: readonly MediaUsageRow[]): readonly Medi
         ...(isBlock ? { blockKey: row.source_key, blockType: row.block_type! } : {}),
         field: row.field_path,
         position: isBlock ? row.position! : 0,
+        ...(isSeo ? { seo: true as const } : {}),
         states: new Set(),
       };
       entry.locations.set(key, location);
@@ -1432,19 +1460,25 @@ export function mediaUsageEntries(rows: readonly MediaUsageRow[]): readonly Medi
         entryId: contentEntryId(row.entry_id),
         locations: Object.freeze(
           [...locations.values()].sort(compareUsageLocations).map((location): MediaUsageLocation =>
-            location.blockKey === undefined
+            location.seo === true
               ? Object.freeze({
-                  field: location.field,
-                  source: "field" as const,
+                  field: "image" as const,
+                  source: "seo" as const,
                   states: usageStates(location.states),
                 })
-              : Object.freeze({
-                  blockKey: blockKey(location.blockKey),
-                  blockType: location.blockType!,
-                  field: location.field,
-                  source: "block" as const,
-                  states: usageStates(location.states),
-                }),
+              : location.blockKey === undefined
+                ? Object.freeze({
+                    field: location.field,
+                    source: "field" as const,
+                    states: usageStates(location.states),
+                  })
+                : Object.freeze({
+                    blockKey: blockKey(location.blockKey),
+                    blockType: location.blockType!,
+                    field: location.field,
+                    source: "block" as const,
+                    states: usageStates(location.states),
+                  }),
           ),
         ),
         modelKey: contentModelKey(row.model_key),
@@ -1467,6 +1501,18 @@ export function chunks<Value>(
   return result;
 }
 
+/** Serializes a normalized SEO group for `content_snapshots.seo_json`; `NULL` when absent. */
+export function seoJson(seo: EntrySeo | undefined): string | null {
+  return seo === undefined ? null : JSON.stringify(cloneEntrySeo(seo));
+}
+
+/** Parses a stored SEO group, re-applying the shared rules to catch corrupt rows. */
+function storedSeo(value: string): EntrySeo {
+  const seo = normalizeEntrySeo(parseObject(value, "Snapshot SEO"), { enabled: true });
+  if (seo === undefined) failure("A stored SEO group must hold at least one value.");
+  return seo;
+}
+
 export function storedSnapshot(row: SnapshotRow): StoredSnapshot {
   return {
     blocks: [],
@@ -1475,6 +1521,7 @@ export function storedSnapshot(row: SnapshotRow): StoredSnapshot {
     fields: parseObject(row.fields_json, "Snapshot fields"),
     id: row.id,
     revision: row.revision,
+    ...(row.seo_json === null ? {} : { seo: storedSeo(row.seo_json) }),
     ...(row.slug === null ? {} : { slug: row.slug }),
     title: row.title,
     updatedAt: assertTimestamp(row.updated_at, "Snapshot update time"),
@@ -1529,6 +1576,7 @@ export function snapshotValue(
     fields: source.fields,
     id: contentSnapshotId(source.id),
     revision: source.revision,
+    ...(source.seo === undefined ? {} : { seo: source.seo }),
     ...(source.slug === undefined ? {} : { slug: source.slug }),
     state,
     title: source.title,

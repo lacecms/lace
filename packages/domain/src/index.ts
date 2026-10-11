@@ -1,6 +1,8 @@
 import { MAX_SLUG_LENGTH } from "@lacecms/content";
 import type { JsonObject, JsonValue } from "@lacecms/content";
 import type { SiteBuildStatus } from "./build-status.js";
+import { cloneEntrySeo } from "./seo.js";
+import type { EntrySeo } from "./seo.js";
 
 export const packageName = "@lacecms/domain";
 export const BLOCK_POSITION_STEP = 1_000;
@@ -256,6 +258,8 @@ interface SnapshotBase {
   readonly fields: JsonObject;
   readonly id: ContentSnapshotId;
   readonly revision: number;
+  /** The SEO system group, absent when no value is set. */
+  readonly seo?: EntrySeo;
   readonly slug?: string;
   readonly title: string;
   readonly updatedAt: UnixMilliseconds;
@@ -332,6 +336,7 @@ function cloneSnapshot<Snapshot extends ContentSnapshot>(snapshot: Snapshot): Sn
     fields: cloneJson(snapshot.fields) as JsonObject,
     id: snapshot.id,
     revision: snapshot.revision,
+    ...(snapshot.seo === undefined ? {} : { seo: cloneEntrySeo(snapshot.seo) }),
     ...(snapshot.slug === undefined ? {} : { slug: snapshot.slug }),
     state: snapshot.state,
     title: snapshot.title,
@@ -552,7 +557,7 @@ export function createContentEntry(input: {
 export interface DraftMediaReference {
   readonly fieldPath: string;
   readonly mediaId: MediaId;
-  readonly sourceKey: "$fields" | BlockKey;
+  readonly sourceKey: "$fields" | "$seo" | BlockKey;
 }
 
 export interface CompleteDraftMutation {
@@ -560,6 +565,7 @@ export interface CompleteDraftMutation {
   readonly expectedRevision: number;
   readonly fields: JsonObject;
   readonly mediaReferences: readonly DraftMediaReference[];
+  readonly seo?: EntrySeo;
   readonly slug?: string;
   readonly title: string;
   readonly updatedAt: UnixMilliseconds;
@@ -586,6 +592,7 @@ export function saveCompleteDraft(
     fields: cloneJson(mutation.fields) as JsonObject,
     id: entry.draft.id,
     revision: entry.draft.revision + 1,
+    ...(mutation.seo === undefined ? {} : { seo: cloneEntrySeo(mutation.seo) }),
     ...(mutation.slug === undefined ? {} : { slug: mutation.slug }),
     state: "draft",
     title: mutation.title,
@@ -717,6 +724,7 @@ export function revertContentDraft(
     fields: content.fields,
     id: entry.draft.id,
     revision,
+    ...(content.seo === undefined ? {} : { seo: content.seo }),
     ...(content.slug === undefined ? {} : { slug: content.slug }),
     state: "draft",
     title: content.title,
@@ -764,3 +772,13 @@ export type {
   SiteBuildStatus,
   TrackedSiteBuildOutcome,
 } from "./build-status.js";
+export {
+  MAX_SEO_CANONICAL_LENGTH,
+  MAX_SEO_DESCRIPTION_LENGTH,
+  MAX_SEO_TITLE_LENGTH,
+  cloneEntrySeo,
+  isCanonicalUrl,
+  normalizeEntrySeo,
+  normalizeSeoText,
+} from "./seo.js";
+export type { EntrySeo, SeoTextKind } from "./seo.js";

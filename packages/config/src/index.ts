@@ -36,6 +36,12 @@ export const LIST_FIELD_TYPES: ReadonlySet<FieldDefinition["type"]> = new Set([
   "url",
 ]);
 
+/** Field types that may supply SEO text: site names, title templates and descriptions. */
+export const SEO_TEXT_FIELD_TYPES: ReadonlySet<FieldDefinition["type"]> = new Set([
+  "text",
+  "textarea",
+]);
+
 /** Thrown when `lace.config.ts` contains an invalid or ambiguous definition. */
 export class ConfigurationError extends Error {
   public constructor(message: string) {
@@ -74,24 +80,66 @@ interface CommonModelInput<Fields extends FieldMap> {
   readonly version: number;
 }
 
+/** Fallback fields of the same model for SEO values the editor leaves unset. */
+export interface ModelSeoInput<Fields extends FieldMap = FieldMap> {
+  /** A `text` or `textarea` field used when the SEO description is unset. */
+  readonly description?: keyof Fields & string;
+  /** A `media` field used when the SEO image is unset. */
+  readonly image?: keyof Fields & string;
+}
+
+interface RoutableModelInput<Fields extends FieldMap> extends CommonModelInput<Fields> {
+  /** Temporary hint: sync may clear stored SEO values after `seo` is disabled. */
+  readonly removedSeo?: true;
+  /** Enables the per-entry SEO system group, optionally naming fallback fields. */
+  readonly seo?: boolean | ModelSeoInput<Fields>;
+}
+
 /** Input accepted by `definePage`. */
 export interface PageModelInput<
   Fields extends FieldMap = FieldMap,
-> extends CommonModelInput<Fields> {
+> extends RoutableModelInput<Fields> {
   readonly path: string;
 }
 
 /** Input accepted by `defineCollection`. */
 export interface CollectionModelInput<
   Fields extends FieldMap = FieldMap,
-> extends CommonModelInput<Fields> {
+> extends RoutableModelInput<Fields> {
   /** Ordered scalar field keys shown as columns in admin entry lists. */
   readonly listFields?: readonly (keyof Fields & string)[];
   readonly route: string;
 }
 
+/** Fields of the declaring global that supply site-wide SEO defaults. */
+export interface SeoDefaultsInput<Fields extends FieldMap = FieldMap> {
+  readonly description?: keyof Fields & string;
+  readonly image?: keyof Fields & string;
+  readonly siteName: keyof Fields & string;
+  readonly titleTemplate?: keyof Fields & string;
+}
+
 /** Input accepted by `defineGlobal`; a global has no path, route, or list fields. */
-export type GlobalModelInput<Fields extends FieldMap = FieldMap> = CommonModelInput<Fields>;
+export interface GlobalModelInput<
+  Fields extends FieldMap = FieldMap,
+> extends CommonModelInput<Fields> {
+  /** Maps fields of this global to site SEO defaults; at most one global declares it. */
+  readonly seoDefaults?: SeoDefaultsInput<Fields>;
+}
+
+/** A normalized SEO option; its presence means SEO is enabled. */
+export interface ModelSeoDefinition {
+  readonly description?: string;
+  readonly image?: string;
+}
+
+/** A normalized site SEO defaults mapping. */
+export interface SeoDefaultsDefinition {
+  readonly description?: string;
+  readonly image?: string;
+  readonly siteName: string;
+  readonly titleTemplate?: string;
+}
 
 interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly blocks: readonly string[];
@@ -109,25 +157,35 @@ interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly version: number;
 }
 
+/** SEO options of a normalized page or collection. */
+interface NormalizedRoutableModel {
+  /** Runtime-only synchronization hint: stored SEO values may be cleared. */
+  readonly removedSeo?: true;
+  readonly seo?: ModelSeoDefinition;
+}
+
 /** A normalized singleton page model. */
 export type PageModelDefinition<Fields extends FieldMap = FieldMap> =
-  NormalizedCommonModel<Fields> & {
-    readonly kind: "page";
-    readonly path: string;
-  };
+  NormalizedCommonModel<Fields> &
+    NormalizedRoutableModel & {
+      readonly kind: "page";
+      readonly path: string;
+    };
 
 /** A normalized multi-entry collection model. */
 export type CollectionModelDefinition<Fields extends FieldMap = FieldMap> =
-  NormalizedCommonModel<Fields> & {
-    readonly kind: "collection";
-    readonly listFields?: readonly (keyof Fields & string)[];
-    readonly route: string;
-  };
+  NormalizedCommonModel<Fields> &
+    NormalizedRoutableModel & {
+      readonly kind: "collection";
+      readonly listFields?: readonly (keyof Fields & string)[];
+      readonly route: string;
+    };
 
 /** A normalized route-less singleton model for site-wide content. */
 export type GlobalModelDefinition<Fields extends FieldMap = FieldMap> =
   NormalizedCommonModel<Fields> & {
     readonly kind: "global";
+    readonly seoDefaults?: SeoDefaultsDefinition;
   };
 
 /** Any model that can be included in a Lace configuration. */
@@ -472,6 +530,123 @@ function normalizeCommonModel<Fields extends FieldMap>(
   return deepFreeze(normalized);
 }
 
+function seoFieldReference(
+  modelKey: string,
+  option: string,
+  key: unknown,
+  fields: FieldMap,
+  media: boolean,
+): string {
+  if (typeof key !== "string") {
+    fail(`model "${modelKey}" ${option} must name a field.`);
+  }
+  const definition = Object.hasOwn(fields, key) ? fields[key] : undefined;
+  if (definition === undefined) {
+    fail(`model "${modelKey}" ${option} references undeclared field "${key}".`);
+  }
+  const allowed = media ? definition.type === "media" : SEO_TEXT_FIELD_TYPES.has(definition.type);
+  if (!allowed) {
+    fail(
+      `model "${modelKey}" ${option} field "${key}" must be ${media ? "a media field" : "a text or textarea field"}, not ${definition.type}.`,
+    );
+  }
+  return key;
+}
+
+function assertOnlyKeys(value: object, allowed: readonly string[], label: string): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) fail(`${label} must not declare "${key}".`);
+  }
+}
+
+/** Normalizes the routable-model SEO option and its temporary removal hint. */
+function normalizeRoutableSeo(
+  input: { readonly key: string; readonly removedSeo?: unknown; readonly seo?: unknown },
+  fields: FieldMap,
+): NormalizedRoutableModel {
+  if (Object.hasOwn(input, "seoDefaults")) {
+    fail(`model "${input.key}" must not declare seoDefaults; only a global can.`);
+  }
+  let seo: ModelSeoDefinition | undefined;
+  const option: unknown = input.seo;
+  if (option === true) {
+    seo = {};
+  } else if (option !== undefined && option !== false) {
+    if (
+      option === null ||
+      typeof option !== "object" ||
+      Array.isArray(option) ||
+      !isPlainObject(option)
+    ) {
+      fail(`model "${input.key}" seo must be a boolean or an object.`);
+    }
+    const mapping = option as Record<string, unknown>;
+    assertOnlyKeys(mapping, ["description", "image"], `model "${input.key}" seo`);
+    seo = {
+      ...(mapping.description === undefined
+        ? {}
+        : {
+            description: seoFieldReference(
+              input.key,
+              "seo.description",
+              mapping.description,
+              fields,
+              false,
+            ),
+          }),
+      ...(mapping.image === undefined
+        ? {}
+        : { image: seoFieldReference(input.key, "seo.image", mapping.image, fields, true) }),
+    };
+  }
+  const hint: unknown = input.removedSeo;
+  if (hint !== undefined && hint !== true) {
+    fail(`model "${input.key}" removedSeo must be true when declared.`);
+  }
+  if (hint === true && seo !== undefined) {
+    fail(`model "${input.key}" must not declare removedSeo while seo is enabled.`);
+  }
+  return {
+    ...(hint === true ? { removedSeo: true as const } : {}),
+    ...(seo === undefined ? {} : { seo }),
+  };
+}
+
+function normalizeSeoDefaults(
+  input: { readonly key: string; readonly seoDefaults?: unknown },
+  fields: FieldMap,
+): SeoDefaultsDefinition | undefined {
+  const option: unknown = input.seoDefaults;
+  if (option === undefined) return undefined;
+  if (
+    option === null ||
+    typeof option !== "object" ||
+    Array.isArray(option) ||
+    !isPlainObject(option)
+  ) {
+    fail(`global "${input.key}" seoDefaults must be an object.`);
+  }
+  const mapping = option as Record<string, unknown>;
+  assertOnlyKeys(
+    mapping,
+    ["description", "image", "siteName", "titleTemplate"],
+    `global "${input.key}" seoDefaults`,
+  );
+  if (mapping.siteName === undefined) {
+    fail(`global "${input.key}" seoDefaults must name a siteName field.`);
+  }
+  const text = (name: string): string =>
+    seoFieldReference(input.key, `seoDefaults.${name}`, mapping[name], fields, false);
+  return {
+    ...(mapping.description === undefined ? {} : { description: text("description") }),
+    ...(mapping.image === undefined
+      ? {}
+      : { image: seoFieldReference(input.key, "seoDefaults.image", mapping.image, fields, true) }),
+    siteName: text("siteName"),
+    ...(mapping.titleTemplate === undefined ? {} : { titleTemplate: text("titleTemplate") }),
+  };
+}
+
 /** Defines a detached singleton page model with inferred field values. */
 export function definePage<const Fields extends FieldMap = FieldMap>(
   input: PageModelInput<Fields>,
@@ -481,6 +656,7 @@ export function definePage<const Fields extends FieldMap = FieldMap>(
     ...common,
     kind: "page",
     path: normalizePagePath(input.path),
+    ...normalizeRoutableSeo(input, common.fields),
   };
   return deepFreeze(definition);
 }
@@ -490,12 +666,17 @@ export function defineGlobal<const Fields extends FieldMap = FieldMap>(
   input: GlobalModelInput<Fields>,
 ): GlobalModelDefinition<Fields> {
   const common = normalizeCommonModel(input);
-  for (const option of ["path", "route", "listFields"]) {
+  for (const option of ["path", "route", "listFields", "seo", "removedSeo"]) {
     if (Object.hasOwn(input, option)) {
       fail(`global "${input.key}" must not declare ${option}.`);
     }
   }
-  const definition: GlobalModelDefinition<Fields> = { ...common, kind: "global" };
+  const seoDefaults = normalizeSeoDefaults(input, common.fields);
+  const definition: GlobalModelDefinition<Fields> = {
+    ...common,
+    kind: "global",
+    ...(seoDefaults === undefined ? {} : { seoDefaults }),
+  };
   return deepFreeze(definition);
 }
 
@@ -542,6 +723,7 @@ export function defineCollection<const Fields extends FieldMap = FieldMap>(
       ? {}
       : { listFields: listFields as readonly (keyof Fields & string)[] }),
     route: normalizeCollectionRoute(input.route),
+    ...normalizeRoutableSeo(input, common.fields),
   };
   return deepFreeze(definition);
 }
@@ -562,6 +744,7 @@ function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
   const formerKeys = new Map<string, ContentModelDefinition>();
   const pagePaths = new Map<string, PageModelDefinition>();
   const collectionRoutes = new Map<string, CollectionModelDefinition>();
+  let seoDefaultsGlobal: GlobalModelDefinition | undefined;
 
   for (const model of models) {
     const duplicateCurrent = currentKeys.get(model.key);
@@ -606,6 +789,14 @@ function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
         break;
       }
       case "global":
+        if (model.seoDefaults !== undefined) {
+          if (seoDefaultsGlobal !== undefined) {
+            fail(
+              `globals "${seoDefaultsGlobal.key}" and "${model.key}" both declare seoDefaults; at most one global may.`,
+            );
+          }
+          seoDefaultsGlobal = model;
+        }
         break;
       default:
         model satisfies never;
@@ -661,13 +852,22 @@ function omitDisplayMetadata(value: JsonValue): MutableJsonValue {
   return projection;
 }
 
-/** Removes model-level presentation metadata that must not affect structural identity. */
+/**
+ * Removes model-level presentation metadata that must not affect structural
+ * identity: `listFields`, the SEO fallback mapping (only whether SEO is enabled
+ * is structural) and `seoDefaults`.
+ */
 function omitListFields(model: JsonValue): JsonValue {
   if (model === null || typeof model !== "object" || Array.isArray(model)) {
     return model;
   }
-  const { listFields: _listFields, ...structure } = model as JsonObject;
-  return structure;
+  const {
+    listFields: _listFields,
+    seo,
+    seoDefaults: _seoDefaults,
+    ...structure
+  } = model as JsonObject;
+  return seo === undefined ? structure : { ...structure, seo: true };
 }
 
 /** The pre-baseline structural value, kept only to recognise legacy stored hashes. */
@@ -715,12 +915,13 @@ function modelForHash(model: ContentModelDefinition, registry: BlockRegistry): J
     projectionHash: _projectionHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
+    removedSeo: _removedSeo,
     renamedFields: _renamedFields,
     renamedFrom: _renamedFrom,
     structure: _structure,
     structureHash: _structureHash,
     ...identityModel
-  } = model as NormalizedContentModel;
+  } = model as NormalizedContentModel & NormalizedRoutableModel;
   return asJsonValue({
     ...identityModel,
     blockDefinitions: model.blocks.map((type) => toBlockMetadata(registry.get(type)!)),
@@ -733,12 +934,13 @@ function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
     projectionHash: _projectionHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
+    removedSeo: _removedSeo,
     renamedFields: _renamedFields,
     renamedFrom: _renamedFrom,
     structure: _structure,
     structureHash: _structureHash,
     ...serializableModel
-  } = model;
+  } = model as NormalizedContentModel & NormalizedRoutableModel;
   return asJsonValue(serializableModel);
 }
 
@@ -747,11 +949,12 @@ function publicModel(model: NormalizedContentModel): NormalizedContentModel {
     legacyStructureHash: _legacyStructureHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
+    removedSeo: _removedSeo,
     renamedFields: _renamedFields,
     renamedFrom: _renamedFrom,
     structure: _structure,
     ...projection
-  } = model;
+  } = model as NormalizedContentModel & NormalizedRoutableModel;
   return deepFreeze(projection) as NormalizedContentModel;
 }
 

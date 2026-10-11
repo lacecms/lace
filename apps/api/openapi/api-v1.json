@@ -679,6 +679,85 @@
                           "route": {
                             "type": "string"
                           },
+                          "seo": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "description": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "image": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["description", "image"],
+                            "type": "object"
+                          },
+                          "seoDefaults": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "description": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "image": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "siteName": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "titleTemplate": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["description", "image", "siteName", "titleTemplate"],
+                            "type": "object"
+                          },
                           "version": {
                             "minimum": 1,
                             "type": "integer"
@@ -812,6 +891,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -964,6 +1097,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -1116,6 +1303,66 @@
                     "type": "integer"
                   },
                   "fields": {},
+                  "seo": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "canonical": {
+                            "anyOf": [
+                              {
+                                "maxLength": 2112,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "image": {
+                            "anyOf": [
+                              {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "noindex": {
+                            "type": "boolean"
+                          },
+                          "title": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "slug": {
                     "maxLength": 255,
                     "minLength": 1,
@@ -1188,6 +1435,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -1340,6 +1641,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -1525,6 +1880,60 @@
                           "minimum": 0,
                           "type": "integer"
                         },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
+                        },
                         "slug": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -1676,6 +2085,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -1892,6 +2355,60 @@
                               "minimum": 0,
                               "type": "integer"
                             },
+                            "seo": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "canonical": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "description": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "image": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "noindex": {
+                                  "type": "boolean"
+                                },
+                                "title": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["canonical", "description", "image", "noindex", "title"],
+                              "type": "object"
+                            },
                             "slug": {
                               "maxLength": 255,
                               "minLength": 1,
@@ -2043,6 +2560,60 @@
                             "revision": {
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "seo": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "canonical": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "description": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "image": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "noindex": {
+                                  "type": "boolean"
+                                },
+                                "title": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["canonical", "description", "image", "noindex", "title"],
+                              "type": "object"
                             },
                             "slug": {
                               "maxLength": 255,
@@ -2235,6 +2806,60 @@
                           "minimum": 0,
                           "type": "integer"
                         },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
+                        },
                         "slug": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -2386,6 +3011,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -2604,6 +3283,60 @@
                               "minimum": 0,
                               "type": "integer"
                             },
+                            "seo": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "canonical": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "description": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "image": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "noindex": {
+                                  "type": "boolean"
+                                },
+                                "title": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["canonical", "description", "image", "noindex", "title"],
+                              "type": "object"
+                            },
                             "slug": {
                               "maxLength": 255,
                               "minLength": 1,
@@ -2755,6 +3488,60 @@
                             "revision": {
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "seo": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "canonical": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "description": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "image": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "noindex": {
+                                  "type": "boolean"
+                                },
+                                "title": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["canonical", "description", "image", "noindex", "title"],
+                              "type": "object"
                             },
                             "slug": {
                               "maxLength": 255,
@@ -3812,6 +4599,27 @@
                                 {
                                   "additionalProperties": false,
                                   "properties": {
+                                    "field": {
+                                      "const": "image"
+                                    },
+                                    "source": {
+                                      "const": "seo"
+                                    },
+                                    "states": {
+                                      "items": {
+                                        "enum": ["draft", "published"]
+                                      },
+                                      "maxItems": 2,
+                                      "minItems": 1,
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": ["field", "source", "states"],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
                                     "blockKey": {
                                       "maxLength": 255,
                                       "minLength": 1,
@@ -4614,6 +5422,66 @@
                     "type": "array"
                   },
                   "fields": {},
+                  "seo": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "canonical": {
+                            "anyOf": [
+                              {
+                                "maxLength": 2112,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "image": {
+                            "anyOf": [
+                              {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "noindex": {
+                            "type": "boolean"
+                          },
+                          "title": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "slug": {
                     "maxLength": 255,
                     "minLength": 1,
@@ -4686,6 +5554,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -4838,6 +5760,60 @@
                         "revision": {
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
                         },
                         "slug": {
                           "maxLength": 255,
@@ -6015,6 +6991,60 @@
                             "type": "string"
                           },
                           "publishedAt": {},
+                          "seo": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "canonical": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "description": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "image": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "noindex": {
+                                "type": "boolean"
+                              },
+                              "title": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["canonical", "description", "image", "noindex", "title"],
+                            "type": "object"
+                          },
                           "slug": {
                             "maxLength": 255,
                             "minLength": 1,
@@ -6185,6 +7215,117 @@
                       },
                       "type": "object"
                     },
+                    "seo": {
+                      "additionalProperties": false,
+                      "default": {
+                        "defaults": null,
+                        "models": {}
+                      },
+                      "properties": {
+                        "defaults": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "description": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "image": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "modelKey": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "siteName": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "titleTemplate": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "description",
+                                "image",
+                                "siteName",
+                                "titleTemplate",
+                                "modelKey"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "models": {
+                          "additionalProperties": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "description": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "image": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["description", "image"],
+                            "type": "object"
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "required": ["defaults", "models"],
+                      "type": "object"
+                    },
                     "version": {
                       "minimum": 0,
                       "type": "integer"
@@ -6272,6 +7413,60 @@
                             "type": "string"
                           },
                           "publishedAt": {},
+                          "seo": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "canonical": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "description": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "image": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "noindex": {
+                                "type": "boolean"
+                              },
+                              "title": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["canonical", "description", "image", "noindex", "title"],
+                            "type": "object"
+                          },
                           "slug": {
                             "maxLength": 255,
                             "minLength": 1,
@@ -6509,6 +7704,60 @@
                           "type": "string"
                         },
                         "publishedAt": {},
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
+                        },
                         "slug": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -6717,6 +7966,60 @@
                           "type": "string"
                         },
                         "publishedAt": {},
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
+                        },
                         "slug": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -7157,6 +8460,60 @@
                           "type": "string"
                         },
                         "publishedAt": {},
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "canonical": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "noindex": {
+                              "type": "boolean"
+                            },
+                            "title": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["canonical", "description", "image", "noindex", "title"],
+                          "type": "object"
+                        },
                         "slug": {
                           "maxLength": 255,
                           "minLength": 1,

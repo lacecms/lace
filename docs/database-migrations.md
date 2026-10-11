@@ -107,6 +107,22 @@ Back up the database before migrating (copy the stopped SQLite file, or
 normally, but refuse a stored `global` model; rollback after creating a global
 means restoring the backup.
 
+### Snapshot SEO migration
+
+Migration `0008_content_snapshot_seo` adds the nullable
+`content_snapshots.seo_json` column, which holds a snapshot's SEO group
+([ADR 0011](adr/0011-seo-system-group.md)) as canonical JSON. It is one
+additive `ALTER TABLE … ADD` on Node SQLite and D1: no table is rebuilt, no
+foreign key or index changes, every existing snapshot starts with `NULL` and
+there is no backfill. Like `fields_json`, the column has no database check;
+the application stores only validated values.
+
+Back up before migrating, as for every migration. An older engine starts
+against the migrated database and ignores the column, but a save from it
+drops the SEO values of that draft and its media usage reads fail on SEO image
+references, so do not run an older engine once SEO values exist; roll back by
+restoring the backup.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

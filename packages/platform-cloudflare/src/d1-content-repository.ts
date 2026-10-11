@@ -143,6 +143,7 @@ import {
   publicContentEntry,
   publicGlobalContent,
   publicSnapshotMedia,
+  seoJson,
   publicSnapshotMediaSql,
   revisionConflict,
   sameStoredModelStates,
@@ -807,10 +808,11 @@ export class D1ContentRepository
       token,
     );
     batch.add(
-      `update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, updated_at = ?, updated_by = ? where id = ? and ${GUARD_SQL}`,
+      `update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, seo_json = ?, updated_at = ?, updated_by = ? where id = ? and ${GUARD_SQL}`,
       mutation.slug ?? null,
       mutation.title,
       JSON.stringify(mutation.fields),
+      seoJson(mutation.seo),
       mutation.updatedAt,
       mutation.updatedBy.id,
       draftId,
@@ -856,8 +858,8 @@ export class D1ContentRepository
     const batch = this.batch();
     batch.checkpoint("publish.snapshot");
     const snapshotIndex = batch.add(
-      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by)
-       select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version, ?, ?, ?
+      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by)
+       select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ?
          from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id
         where e.id = ? and s.id = ? and s.revision = ?
           ${idempotency === undefined ? "" : "and not exists (select 1 from idempotency_records where scope = ? and key = ?)"}`,
@@ -2014,13 +2016,14 @@ export class D1ContentRepository
     token?: string,
   ): void {
     batch.add(
-      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${token === undefined ? "" : `where ${GUARD_SQL}`}`,
+      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${token === undefined ? "" : `where ${GUARD_SQL}`}`,
       snapshot.id,
       snapshot.entryId,
       snapshot.revision,
       snapshot.slug ?? null,
       snapshot.title,
       JSON.stringify(snapshot.fields),
+      seoJson(snapshot.seo),
       schemaVersion,
       snapshot.createdAt,
       snapshot.updatedAt,

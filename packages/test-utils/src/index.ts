@@ -615,6 +615,7 @@ export class InMemoryContentStore
           })),
           entryId: entry.id,
           fields: clone(snapshot.fields),
+          hasSeo: snapshot.seo !== undefined,
           revision: snapshot.revision,
           snapshotId: snapshot.id,
           state: snapshot.state,
@@ -771,6 +772,7 @@ export class InMemoryContentStore
     );
     const nextStates = new Map(this.modelStates);
     const nextEntries = new Map(this.entries);
+    const nextReferences = new Map(this.references);
     for (const operation of actualPlan.operations) {
       if (operation.action === "create") {
         const currentModel = models.get(operation.model.key);
@@ -822,6 +824,36 @@ export class InMemoryContentStore
           );
         }
       }
+      const evolution =
+        operation.action === "version-update" || operation.action === "rename"
+          ? operation.evolution
+          : undefined;
+      if (evolution?.seoRemoval === true) {
+        for (const [entryId, entry] of nextEntries) {
+          if (entry.model.key !== operation.model.key) continue;
+          const withoutSeo = <Snapshot extends DraftSnapshot | PublishedSnapshot>(
+            snapshot: Snapshot,
+          ): Snapshot => {
+            const { seo: _seo, ...rest } = snapshot;
+            const references = nextReferences.get(snapshot.id);
+            if (references !== undefined) {
+              nextReferences.set(
+                snapshot.id,
+                Object.freeze(references.filter((reference) => reference.sourceKey !== "$seo")),
+              );
+            }
+            return Object.freeze(rest) as Snapshot;
+          };
+          nextEntries.set(
+            entryId,
+            Object.freeze({
+              ...entry,
+              draft: withoutSeo(entry.draft),
+              ...(entry.published === undefined ? {} : { published: withoutSeo(entry.published) }),
+            }),
+          );
+        }
+      }
       for (const backfill of configurationSyncBackfills(operation, currentModel)) {
         const value = JSON.parse(backfill.json) as JsonValue;
         for (const [entryId, entry] of nextEntries) {
@@ -841,6 +873,9 @@ export class InMemoryContentStore
     }
     this.modelStates = nextStates;
     this.entries = nextEntries;
+    this.references.clear();
+    for (const [snapshotId, references] of nextReferences)
+      this.references.set(snapshotId, references);
     if (!configurationSyncAdvancesPublicState(actualPlan)) {
       return Object.freeze({ operations: actualPlan.operations, status: "applied" });
     }
@@ -1347,6 +1382,7 @@ export class InMemoryContentStore
           blockType?: string;
           field: string;
           position: number;
+          seo?: true;
           states: Set<MediaUsageState>;
         }
       >();
@@ -1357,11 +1393,12 @@ export class InMemoryContentStore
       for (const [state, snapshot] of snapshots) {
         for (const reference of this.references.get(snapshot.id) ?? []) {
           if (reference.mediaId !== mediaIdValue) continue;
+          const seo = reference.sourceKey === "$seo";
           const block =
-            reference.sourceKey === "$fields"
+            reference.sourceKey === "$fields" || seo
               ? undefined
               : snapshot.blocks.find((candidate) => candidate.key === reference.sourceKey);
-          if (reference.sourceKey !== "$fields" && block === undefined) {
+          if (reference.sourceKey !== "$fields" && !seo && block === undefined) {
             throw new Error("A media reference names a block that does not exist.");
           }
           const key = `${reference.sourceKey}\u0000${reference.fieldPath}`;
@@ -1369,6 +1406,7 @@ export class InMemoryContentStore
             ...(block === undefined ? {} : { blockKey: block.key, blockType: block.type }),
             field: reference.fieldPath,
             position: block?.position ?? 0,
+            ...(seo ? { seo: true as const } : {}),
             states: new Set<MediaUsageState>(),
           };
           if (block !== undefined) {
@@ -1380,10 +1418,10 @@ export class InMemoryContentStore
         }
       }
       if (locations.size === 0) continue;
+      const rank = (location: { blockKey?: BlockKey; seo?: true }): number =>
+        location.blockKey !== undefined ? 2 : location.seo === true ? 1 : 0;
       const ordered = [...locations.values()].sort((left, right) => {
-        if ((left.blockKey === undefined) !== (right.blockKey === undefined)) {
-          return left.blockKey === undefined ? -1 : 1;
-        }
+        if (rank(left) !== rank(right)) return rank(left) - rank(right);
         if (left.position !== right.position) return left.position - right.position;
         const leftKey = `${left.blockKey ?? ""}\u0000${left.field}`;
         const rightKey = `${right.blockKey ?? ""}\u0000${right.field}`;
@@ -1396,19 +1434,25 @@ export class InMemoryContentStore
           entryId: entry.id,
           locations: Object.freeze(
             ordered.map((location): MediaUsageLocation =>
-              location.blockKey === undefined
+              location.seo === true
                 ? Object.freeze({
-                    field: location.field,
-                    source: "field" as const,
+                    field: "image" as const,
+                    source: "seo" as const,
                     states: states(location.states),
                   })
-                : Object.freeze({
-                    blockKey: location.blockKey,
-                    blockType: location.blockType!,
-                    field: location.field,
-                    source: "block" as const,
-                    states: states(location.states),
-                  }),
+                : location.blockKey === undefined
+                  ? Object.freeze({
+                      field: location.field,
+                      source: "field" as const,
+                      states: states(location.states),
+                    })
+                  : Object.freeze({
+                      blockKey: location.blockKey,
+                      blockType: location.blockType!,
+                      field: location.field,
+                      source: "block" as const,
+                      states: states(location.states),
+                    }),
             ),
           ),
           modelKey: entry.model.key,

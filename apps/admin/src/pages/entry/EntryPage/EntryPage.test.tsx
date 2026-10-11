@@ -113,6 +113,41 @@ test("entry editor renders metadata fields, preserves blocks, suggests a slug, a
   expect(await screen.findByText("Saved revision 3")).toBeInTheDocument();
 }, 15_000);
 
+test("saving sends loaded SEO values back unchanged and omits them when absent", async () => {
+  const user = userEvent.setup();
+  const seo = {
+    canonical: "https://example.com/first",
+    description: null,
+    image: null,
+    noindex: false,
+    title: "First SEO",
+  };
+  for (const withSeo of [true, false]) {
+    const loaded = withSeo ? { ...draftEntry.draft, seo } : draftEntry.draft;
+    const saveDraft = vi.fn(
+      async (_entryId: string, input: Parameters<AdminClient["saveDraft"]>[1]) => ({
+        ...draftEntry,
+        draft: { ...loaded, ...input, revision: 3 },
+      }),
+    ) as unknown as AdminClient["saveDraft"];
+    renderRoute(
+      "/content/posts/entry-1",
+      staticSessionSource({ id: "editor-1", role: "editor" }),
+      client({ loadEntry: async () => ({ ...draftEntry, draft: loaded }), saveDraft }),
+    );
+    await screen.findByRole("heading", { name: "Edit posts" });
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Changed");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
+    const input = vi.mocked(saveDraft).mock.calls[0]![1];
+    expect(input.title).toBe("Changed");
+    if (withSeo) expect(input.seo).toEqual(seo);
+    else expect(input).not.toHaveProperty("seo");
+    document.body.replaceChildren();
+  }
+}, 15_000);
+
 test("entry editor prevents invalid local submission and keeps manual slug edits", async () => {
   const user = userEvent.setup();
   const saveDraft = vi.fn(async () => draftEntry);

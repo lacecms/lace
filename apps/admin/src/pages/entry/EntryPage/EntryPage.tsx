@@ -173,6 +173,8 @@ export function EntryPage() {
         blocks: orderedDraftBlocks(values.blocks),
         expectedRevision: currentEntry.draft.revision,
         fields: values.fields,
+        // The editor has no SEO inputs yet; send the loaded values back unchanged.
+        ...(currentEntry.draft.seo === undefined ? {} : { seo: currentEntry.draft.seo }),
         // An empty slug input means the draft has no slug.
         ...(modelRef.current?.kind === "collection" &&
         values.slug !== undefined &&

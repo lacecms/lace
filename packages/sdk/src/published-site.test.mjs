@@ -549,3 +549,34 @@ test.each([
   expect(error.code).toBe("invalid_export");
   expect(error.message).toContain("settings");
 });
+
+test("published entries pass stored SEO values through without resolving fallbacks", async () => {
+  const seo = {
+    canonical: null,
+    description: null,
+    image: "share",
+    noindex: true,
+    title: "Hello",
+  };
+  const value = {
+    ...buildExport(
+      5,
+      [
+        { ...exportEntry({ id: "hello", path: "/blog/hello", slug: "hello" }), seo },
+        exportEntry({ id: "note", modelKey: "notes", path: "/notes/n", slug: "n" }),
+      ],
+      { share: mediaItem("share") },
+    ),
+    seo: {
+      defaults: null,
+      models: { posts: { description: "summary", image: null } },
+    },
+  };
+  const site = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([exportResponse(value)]).fetch,
+  })();
+  expect(site.byPath("/blog/hello").seo).toEqual(seo);
+  expect(Object.isFrozen(site.byPath("/blog/hello").seo)).toBe(true);
+  expect(site.byPath("/notes/n").seo).toBeUndefined();
+});

@@ -74,6 +74,7 @@ import type {
 } from "@lacecms/application";
 import {
   BLOCK_COLUMNS_SQL,
+  seoJson,
   ENTRY_COLUMNS_SQL,
   ENTRY_SEARCH_SQL,
   ENTRY_SORT_SQL,
@@ -556,12 +557,13 @@ export class NodeContentRepository
       this.connection.transaction(() => {
         const changed = this.connection
           .prepare(
-            "update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, updated_at = ?, updated_by = ? where id = ? and revision = ?",
+            "update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, seo_json = ?, updated_at = ?, updated_by = ? where id = ? and revision = ?",
           )
           .run(
             input.mutation.slug ?? null,
             input.mutation.title,
             JSON.stringify(input.mutation.fields),
+            seoJson(input.mutation.seo),
             input.mutation.updatedAt,
             input.mutation.updatedBy.id,
             draftSnapshotId,
@@ -630,7 +632,7 @@ export class NodeContentRepository
         this.checkpoint("publish.snapshot");
         const copied = this.connection
           .prepare(
-            "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?",
+            "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?",
           )
           .run(
             input.publishedSnapshotId,
@@ -1491,7 +1493,7 @@ export class NodeContentRepository
   private insertSnapshot(snapshot: DraftSnapshot, schemaVersion: number): void {
     this.connection
       .prepare(
-        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         snapshot.id,
@@ -1500,6 +1502,7 @@ export class NodeContentRepository
         snapshot.slug ?? null,
         snapshot.title,
         JSON.stringify(snapshot.fields),
+        seoJson(snapshot.seo),
         schemaVersion,
         snapshot.createdAt,
         snapshot.updatedAt,

@@ -65,6 +65,7 @@ import {
   type ManagedUserDto,
   type ManagedUserListDto,
   type PublishContentEntryResultDto,
+  type SeoInputDto,
   type UnpublishContentEntryResultDto,
   type UpdateMediaMetadataRequestDto,
   type UpdateMediaMetadataResultDto,
@@ -230,6 +231,8 @@ export interface AdminClient {
       readonly blocks: readonly ContentBlockDto[];
       readonly expectedRevision: number;
       readonly fields: Record<string, unknown>;
+      /** Sent back unchanged until the editor offers SEO inputs. */
+      readonly seo?: SeoInputDto;
       readonly slug?: string;
       readonly title: string;
     },
@@ -753,6 +756,7 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
         readonly blocks: readonly ContentBlockDto[];
         readonly expectedRevision: number;
         readonly fields: Record<string, unknown>;
+        readonly seo?: SeoInputDto;
         readonly slug?: string;
         readonly title: string;
       },

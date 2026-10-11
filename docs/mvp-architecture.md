@@ -585,6 +585,64 @@ validation, and publication behavior. Model keys are unique across all three
 kinds, and a model's kind is part of its structure: a kind change between any
 two kinds is breaking and refused by sync, also through `renamedFrom`.
 
+### SEO metadata
+
+Pages and collections may opt into a per-entry SEO system group
+([ADR 0011](adr/0011-seo-system-group.md)):
+
+```ts
+defineCollection({
+  key: "posts",
+  version: 4,
+  route: "/blog/:slug",
+  fields: { excerpt: field.textarea(), cover: field.media() },
+  seo: { description: "excerpt", image: "cover" }, // or `seo: true`
+});
+
+defineGlobal({
+  key: "settings",
+  version: 2,
+  fields: {
+    siteName: field.text({ required: true }),
+    titleTemplate: field.text(),
+    metaDescription: field.textarea(),
+    shareImage: field.media(),
+  },
+  seoDefaults: {
+    siteName: "siteName",
+    titleTemplate: "titleTemplate",
+    description: "metaDescription",
+    image: "shareImage",
+  },
+});
+```
+
+- The group holds `title`, `description`, `image` (a media ID), `canonical` (an
+  absolute URL) and `noindex`. It is stored with each snapshot outside
+  `fields`, so project field keys never collide with it, and it follows the
+  draft and publish flow.
+- `seo: { description?, image? }` names fallback fields of the same model: a
+  `text` or `textarea` field for the description and a `media` field for the
+  image. Globals cannot declare `seo`.
+- At most one global declares `seoDefaults`, whose values name its own fields
+  (`siteName`, `titleTemplate` and `description` are `text` or `textarea`,
+  `image` is `media`). Defaults have no storage of their own.
+- Whether SEO is enabled is structural; the fallback mapping and
+  `seoDefaults` are projection-only, like `listFields`. A model without the
+  option carries no `seo` property, so its hashes are unchanged.
+- Values are plain text: `title` (at most 200 code points) and `description`
+  (at most 500) are single-line, trimmed and cleared when empty; `canonical`
+  is an absolute `http`/`https` URL without credentials or fragment (at most
+  2,048 characters); `noindex` is stored only when `true`. The API rejects
+  values above these hard limits; the admin warns earlier (60 and 160
+  characters). Saving a non-null `seo` for a model without SEO fails with
+  `seo_not_allowed` at `/seo`.
+- Fallbacks are resolved by the SDK, never stored: title, then the entry title
+  formatted by the title template (`%s`, default `%s | {siteName}`);
+  description and image, then the model's mapped field, then the site
+  default; canonical, then site URL plus path. `noindex` emits
+  `noindex, follow` and excludes the entry from the sitemap.
+
 ### Initial field types
 
 The MVP field DSL should support:
@@ -696,6 +754,8 @@ baseline with the configured structure and classifies every difference
 | Remove a field or disallow a block type | destructive | without a hint: apply only when no snapshot holds that data, otherwise refuse; with a `removedFields` or `removedBlocks` hint: prune the field values or drop the blocks |
 | Rename a field (field-level `renamedFrom` hint) | destructive | move the stored values to the new key; refuse if the new key already holds data |
 | Change the definition of an allowed block type | migration | without a block version increase: apply only when no snapshot holds a block of that type, otherwise refuse; with a version increase: migrate every stale block through the declared block migrations, refusing when a step is missing, a migration throws, or a result is invalid |
+| Enable `seo` on a page or collection | compatible | apply; stored snapshots are unchanged |
+| Disable `seo` | destructive | without a hint: apply only when no snapshot holds an SEO group, otherwise refuse (`SEO_REMOVAL_HAS_DATA`); with `removedSeo: true`: clear the groups and their `$seo` media references |
 | Change a field type or an unrecognized field property | breaking | refuse |
 | Change a page path or collection route | breaking | refuse while the model has published snapshots |
 
@@ -712,7 +772,8 @@ rename or silently transforms content.
 
 Destructive changes to populated data need explicit, temporary hints: a model
 field may declare `renamedFrom: "<former key>"` in its field options, and a
-model may declare `removedFields` and `removedBlocks`. Hints are excluded from
+model may declare `removedFields` and `removedBlocks`; a page or collection
+that disables SEO may declare `removedSeo: true`. Hints are excluded from
 the canonical structure, both hashes and the public projection, so adding or
 removing one never needs a version bump; block fields cannot declare
 `renamedFrom` (block data changes use block versions). A hint takes effect only
@@ -836,13 +897,17 @@ content_snapshots
 ├── slug                TEXT
 ├── title               TEXT NOT NULL
 ├── fields_json         TEXT NOT NULL
+├── seo_json            TEXT NULL
 ├── schema_version      INTEGER NOT NULL
 ├── created_at          INTEGER NOT NULL
 ├── updated_at          INTEGER NOT NULL
 └── updated_by          TEXT NOT NULL
 ```
 
-`fields_json` contains model-specific structured fields. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
+`fields_json` contains model-specific structured fields. `seo_json` holds the
+normalized SEO group (section 8) as a JSON object, or `NULL` when the snapshot
+has none; an all-empty group is never stored. Save, publication, revert and
+duplication copy it with the rest of the snapshot. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
 The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case or removed through the unpublish use case (section 10); configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7). Reverting a draft sets the published snapshot's `revision` to the new draft revision without changing its content, so an entry whose draft equals its publication is derived as published ([ADR 0008](adr/0008-entry-lifecycle-commands.md)).
 
@@ -946,15 +1011,16 @@ content_media_references
 PRIMARY KEY(snapshot_id, source_key, field_path)
 ```
 
-`source_key` is `$fields` for snapshot fields or the stable block key for block
-data. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
+`source_key` is `$fields` for snapshot fields, `$seo` (with `field_path`
+`image`) for the SEO image, or the stable block key for block data. Block keys
+never start with `$`. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
 the draft snapshot's reference projection in the same atomic mutation;
 publication copies it with `INSERT ... SELECT`. A media item may be selected only
 while its status is `active`.
 
 The same projection is the only source of media usage. An entry uses an item
 when its current draft or current published snapshot references it in an entry
-field or a block field. Every admin media DTO carries `usageCount`, the number
+field, a block field or its SEO image. Every admin media DTO carries `usageCount`, the number
 of distinct using entries, and the media detail read lists up to 50 of them with
 each location and whether the draft, the published version, or both use it.
 Because only current snapshots keep references, usage and the deletion guard
@@ -1369,7 +1435,7 @@ generation; it requires a read-only build token.
 Public content responses return the published entry directly, never a draft:
 
 ```text
-PublicEntry = { id, modelKey, path, slug?, title, fields, blocks, publishedAt }
+PublicEntry = { id, modelKey, path, slug?, title, fields, blocks, publishedAt, seo? }
 PublicGlobal = { id, modelKey, fields, blocks, publishedAt }
 
 GET pages/:modelKey, collections/:modelKey/:slug, content/by-path
@@ -1379,7 +1445,13 @@ GET globals/:modelKey
 GET collections/:modelKey
   -> { items: PublicEntry[], media, nextCursor? }
 GET build-export
-  -> { entries: PublicEntry[], globals: PublicGlobal[], media, version }
+  -> { entries: PublicEntry[], globals: PublicGlobal[], media, seo, version }
+
+seo (entry) = { title, description, image, canonical, noindex }   // null when unset
+seo (export) = {
+  models: { [modelKey]: { description, image } },               // mapped field keys or null
+  defaults: { modelKey, siteName, titleTemplate, description, image } | null
+}
 
 media = { [mediaId]: { id, url, mimeType, width, height, alt, caption, focalPoint } }
 ```
@@ -1388,7 +1460,14 @@ media = { [mediaId]: { id, url, mimeType, width, height, alt, caption, focalPoin
 by position, and `publishedAt` is the creation time of the published snapshot.
 The globals read is anonymous like the page read, reads by model key without
 `published_routes`, and returns `404` for an unknown key, a page or collection
-key, or an unpublished global. The export's `entries` hold routed entries only,
+key, or an unpublished global. Public entries of models with SEO enabled carry `seo` with the stored values,
+even when none is set; entries of other models and globals never carry it.
+The export's `seo` section describes the fallback mappings and the defaults
+global for the SDK resolver; a missing section validates as
+`{models: {}, defaults: null}`, and the API always sends it. Changing it is a
+configuration projection change, so the published version and the export
+ETag advance with sync.
+The export's `entries` hold routed entries only,
 and `globals` holds every published global ordered by model key; contract
 validation treats a missing `globals` as empty so older exports stay valid,
 and the API always sends it.
@@ -1480,7 +1559,11 @@ tokens. `POST /api/v1/password-reset/request` always returns `202` with the same
 body and schedules delivery without awaiting it.
 
 The draft `PUT` accepts `expectedRevision` plus the complete editable draft:
-`title`, `slug`, `fields`, and the ordered block list. It validates and persists
+`title`, `slug`, `fields`, the ordered block list and, for models with SEO
+enabled, the optional `seo` group (absent or `null` stores none). Admin
+snapshot DTOs carry `seo` with `null` for unset values for those models, and
+content-model DTOs carry the fallback mapping (`seo`) or the defaults mapping
+(`seoDefaults`). It validates and persists
 that aggregate atomically and returns the incremented revision. The admin may
 edit individual blocks locally, but its Save command uses this aggregate
 endpoint. Granular block mutation endpoints may be added later only if they
@@ -1508,7 +1591,9 @@ preserve the same snapshot-revision invariant.
   direction; default newest first), with cursors bound to that query. Media
   DTOs name the uploader as `createdBy` with an `id` and `displayName`, and
   carry `usageCount` and the `alt`, `caption`, and `focalPoint` values that are
-  set. `GET /api/v1/admin/media/:mediaId` adds the bounded `usage` list and an
+  set. `GET /api/v1/admin/media/:mediaId` adds the bounded `usage` list (each
+  location is a model field, a block field, or `{source: "seo", field:
+  "image"}`) and an
   `ETag` of the item's `updatedAt` in Unix milliseconds.
 - `PATCH /api/v1/admin/media/:mediaId` (`media:write`) takes a strict body with
   any of `alt`, `caption`, and `focalPoint` (`null` clears a value) and requires
@@ -2114,6 +2199,10 @@ The architecture responds to those constraints by:
 
 JSON values are stored as SQLite `TEXT` and validated before persistence. Fields that later require indexed filtering may be promoted to generated columns or a dedicated index table through a future migration.
 
+Additive columns use a plain `ALTER TABLE … ADD` on both runtimes, as
+migration `0008` does for the nullable `content_snapshots.seo_json`; it
+rewrites no rows and needs no backfill.
+
 A migration that must rebuild a table referenced by foreign keys (for example
 `0007`, which widens the `content_models.kind` check) runs
 `PRAGMA defer_foreign_keys = on`, creates the replacement table, copies every
@@ -2582,6 +2671,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Media carry global descriptive metadata (alt text, caption, focal point);
   editing published media advances the published version without
   republication ([ADR 0009](adr/0009-media-metadata.md)).
+- Routable models may opt into an SEO system group stored with each snapshot;
+  one global maps site defaults, and the SDK resolves fallbacks
+  ([ADR 0011](adr/0011-seo-system-group.md)).
 - Blocks are separate relational rows with type-specific JSON payloads.
 - Top-level blocks are flat and sparsely ordered.
 - Content models are defined in code and projected into the database.

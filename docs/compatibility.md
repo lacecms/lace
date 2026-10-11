@@ -129,6 +129,27 @@ new starter layouts read it through `site.global("settings")` with static
 fallbacks. Existing projects adopt it by hand, because configuration and site
 files are user-owned.
 
+The same next alpha adds per-entry SEO data (CE4A,
+[ADR 0011](adr/0011-seo-system-group.md)). Pages and collections opt in with
+`seo` in `lace.config.ts` (a structural change: raise the model version and
+run configuration sync), one global may declare `seoDefaults`, and disabling
+SEO with stored values needs the temporary `removedSeo: true` hint (otherwise
+sync refuses with `SEO_REMOVAL_HAS_DATA`). Contract additions:
+
+- admin draft and published snapshot DTOs and public entries carry
+  `seo: {title, description, image, canonical, noindex}` for SEO-enabled
+  models; create and save requests accept an optional, nullable `seo`, and a
+  non-null `seo` for a model without SEO fails with `422 seo_not_allowed`;
+- admin model DTOs carry `seo` (fallback fields) or `seoDefaults`;
+- the build export gains a `seo` section (`{models, defaults}`); a missing
+  section validates as empty, and older SDKs reject the new key because the
+  export schema is strict;
+- admin media usage locations gain `{source: "seo", field: "image"}`.
+
+It requires migration `0008_content_snapshot_seo` (an additive column). The
+SDK passes stored values through as `PublishedEntry.seo`; resolving fallbacks,
+the `<head>` output, sitemap and robots arrive with CE4B.
+
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
 projects upgrading from `0.14.0`. Upgrading an alpha.2 installation also

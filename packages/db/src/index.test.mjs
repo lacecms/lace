@@ -14,6 +14,9 @@ import {
   configurationSyncWriteStatements,
   mediaMetadata,
   mediaMetadataUpdateParams,
+  mediaUsageEntries,
+  seoJson,
+  storedSnapshot,
   sqliteWriteError,
   syncMigrationPage,
 } from "../dist/index.js";
@@ -219,6 +222,93 @@ test("synchronization writes keep renamed media references and reject unsafe key
   expect(() =>
     configurationSyncWriteStatements({ action: "rename-field", from: "a", to: "b.c" }, "posts"),
   ).toThrow();
+});
+
+test("the SEO removal write clears groups and SEO references of one model only", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    create table content_entries (id text primary key, model_key text not null);
+    create table content_snapshots (id text primary key, entry_id text not null, seo_json text);
+    create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
+    insert into content_entries values ('e1', 'posts'), ('e2', 'pages');
+    insert into content_snapshots values
+      ('s1', 'e1', '{"image":"media-1","title":"A"}'), ('s2', 'e1', null),
+      ('s3', 'e2', '{"title":"B"}');
+    insert into content_media_references values
+      ('s1', '$seo', 'image', 'media-1'), ('s1', '$fields', 'cover', 'media-2'),
+      ('s3', '$seo', 'image', 'media-1');
+  `);
+  for (const statement of configurationSyncWriteStatements({ action: "remove-seo" }, "posts")) {
+    database.prepare(`${statement.sql} and ? = 1`).run(...statement.params, 1);
+  }
+  const rows = (sql) =>
+    database
+      .prepare(sql)
+      .all()
+      .map((row) => ({ ...row }));
+  expect(rows("select id, seo_json from content_snapshots order by id")).toEqual([
+    { id: "s1", seo_json: null },
+    { id: "s2", seo_json: null },
+    { id: "s3", seo_json: '{"title":"B"}' },
+  ]);
+  expect(
+    rows("select snapshot_id, source_key from content_media_references order by snapshot_id"),
+  ).toEqual([
+    { snapshot_id: "s1", source_key: "$fields" },
+    { snapshot_id: "s3", source_key: "$seo" },
+  ]);
+});
+
+test("SEO groups round-trip through snapshot rows", () => {
+  const row = {
+    created_at: 1,
+    entry_id: "e1",
+    fields_json: "{}",
+    id: "s1",
+    revision: 1,
+    role: "editor",
+    schema_version: 1,
+    seo_json: seoJson({ title: "Hello", noindex: true, image: "media-1" }),
+    slug: null,
+    title: "Hello",
+    updated_at: 1,
+    updated_by: "editor-1",
+  };
+  expect(row.seo_json).toBe('{"image":"media-1","noindex":true,"title":"Hello"}');
+  expect(storedSnapshot(row).seo).toEqual({ image: "media-1", noindex: true, title: "Hello" });
+  expect(storedSnapshot({ ...row, seo_json: null })).not.toHaveProperty("seo");
+  expect(seoJson(undefined)).toBeNull();
+  expect(() => storedSnapshot({ ...row, seo_json: '{"canonical":"/a"}' })).toThrow();
+});
+
+test("media usage maps SEO image references between fields and blocks", () => {
+  const base = {
+    block_type: null,
+    entry_id: "e1",
+    model_key: "posts",
+    position: null,
+    slug: "hello",
+    status: "published",
+    title: "Hello",
+  };
+  const [entry] = mediaUsageEntries([
+    {
+      ...base,
+      field_path: "media",
+      source_key: "b1",
+      block_type: "image",
+      position: 1000,
+      state: "draft",
+    },
+    { ...base, field_path: "image", source_key: "$seo", state: "published" },
+    { ...base, field_path: "image", source_key: "$seo", state: "draft" },
+    { ...base, field_path: "cover", source_key: "$fields", state: "draft" },
+  ]);
+  expect(entry.locations).toEqual([
+    { field: "cover", source: "field", states: ["draft"] },
+    { field: "image", source: "seo", states: ["draft", "published"] },
+    { blockKey: "b1", blockType: "image", field: "media", source: "block", states: ["draft"] },
+  ]);
 });
 
 function migrationDatabase(blockCount) {

@@ -992,12 +992,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(8);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(9);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(8);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(9);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1125,7 +1125,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       insertEntry.run("post-1", "posts", null, "admin", 1, 1);
       insertEntry.run("post-2", "posts", null, "admin", 1, 1);
       const insertSnapshot = database.connection.prepare(
-        "insert into content_snapshots values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
       insertSnapshot.run("post-1-draft", "post-1", 1, null, "First", "{}", 1, 1, 1, "admin");
       insertSnapshot.run("post-2-draft", "post-2", 1, null, "Second", "{}", 1, 1, 1, "admin");

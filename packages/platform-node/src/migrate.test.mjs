@@ -361,6 +361,14 @@ const CONTENT_TABLES = [
   "content_media_references",
 ];
 
+/** Later migrations add `content_snapshots.seo_json` (0008), empty for existing rows. */
+function withEmptySeo(tables) {
+  return {
+    ...tables,
+    content_snapshots: tables.content_snapshots.map((row) => ({ ...row, seo_json: null })),
+  };
+}
+
 function snapshotTables(connection) {
   return Object.fromEntries(
     CONTENT_TABLES.map((table) => [
@@ -385,7 +393,7 @@ test("global-kind migration rebuilds content models of a populated 0006 database
       const connection = migrated.connection;
       expect(connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(listAppliedMigrations(connection)).toHaveLength(checkedInMigrations.length);
-      expect(snapshotTables(connection)).toEqual(before);
+      expect(snapshotTables(connection)).toEqual(withEmptySeo(before));
       connection
         .prepare(
           "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('settings', 'global', 'Settings', 1, 's', 'p', 3, 3)",
@@ -412,6 +420,37 @@ test("global-kind migration rebuilds content models of a populated 0006 database
       expect(
         connection.prepare("select model_key from content_entries where id = 'e1'").get(),
       ).toEqual({ model_key: "articles" });
+      expect(connection.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      migrated.connection.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("SEO migration adds an empty nullable column to a populated 0007 database", async () => {
+  const { checkedInMigrations, listAppliedMigrations } = await import("../dist/index.js");
+  const root = await mkdtemp(join(tmpdir(), "lace-snapshot-seo-"));
+  try {
+    let before;
+    const path = await databaseAtMigration(root, 8, (connection) => {
+      for (const statement of POPULATED_0006) connection.prepare(statement).run();
+      before = snapshotTables(connection);
+    });
+    migrateNodeDatabase(path);
+    const migrated = openNodeDatabase(path);
+    try {
+      const connection = migrated.connection;
+      expect(listAppliedMigrations(connection)).toHaveLength(checkedInMigrations.length);
+      expect(snapshotTables(connection)).toEqual(withEmptySeo(before));
+      connection
+        .prepare("update content_snapshots set seo_json = ? where id = 'd1'")
+        .run('{"title":"Hello"}');
+      expect(
+        connection.prepare("select seo_json from content_snapshots where id = 'd1'").get(),
+      ).toEqual({ seo_json: '{"title":"Hello"}' });
+      expect(connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(connection.pragma("foreign_key_check")).toEqual([]);
     } finally {
       migrated.connection.close();

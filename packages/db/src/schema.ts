@@ -83,6 +83,8 @@ export const contentSnapshots = sqliteTable(
     slug: text("slug"),
     title: text("title").notNull(),
     fieldsJson: text("fields_json").notNull(),
+    /** The normalized SEO group as a JSON object, or NULL when the snapshot has none. */
+    seoJson: text("seo_json"),
     schemaVersion: integer("schema_version").notNull(),
     createdAt: timestamp("created_at"),
     updatedAt: timestamp("updated_at"),

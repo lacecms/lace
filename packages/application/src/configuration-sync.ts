@@ -121,6 +121,8 @@ export interface ConfigurationSyncEvolution {
   readonly migrations?: readonly ConfigurationSyncBlockMigration[];
   /** Hinted field renames whose stored values are moved; present when non-empty. */
   readonly renames?: readonly ConfigurationSyncFieldRename[];
+  /** Whether hinted SEO removal clears stored SEO groups; present when true. */
+  readonly seoRemoval?: true;
   readonly snapshots: SnapshotStateCounts;
 }
 
@@ -143,6 +145,7 @@ export type ConfigurationSyncContentWrite =
   | { readonly action: "backfill-field"; readonly fieldKey: string; readonly json: string }
   | { readonly action: "remove-block-type"; readonly blockType: string }
   | { readonly action: "remove-field"; readonly fieldKey: string }
+  | { readonly action: "remove-seo" }
   | { readonly action: "rename-field"; readonly from: string; readonly to: string };
 
 interface ConfigurationSyncModelOperation {
@@ -197,6 +200,7 @@ export type ConfigurationSyncDiagnosticCode =
   | "RENAME_SOURCE_STILL_CONFIGURED"
   | "REMOVAL_HAS_ENTRIES"
   | "ROUTE_CHANGE_HAS_PUBLISHED"
+  | "SEO_REMOVAL_HAS_DATA"
   | "SNAPSHOT_EVIDENCE_STALE"
   | "STRUCTURE_BASELINE_MISSING"
   | "STRUCTURE_CHANGE_HAS_SNAPSHOTS"
@@ -551,6 +555,7 @@ function decideEvolution(
   const fieldRemovals: string[] = [];
   const blockRemovals: string[] = [];
   const blockMigrations: ConfigurationSyncBlockMigration[] = [];
+  let seoRemoval = false;
   for (const change of changes) {
     const fieldKey = change.scope === "field" ? change.target : undefined;
     const blockType = change.scope === "block" ? change.target : undefined;
@@ -612,6 +617,24 @@ function decideEvolution(
               affectedCount: total(holders),
               changeClass: change.class,
               fieldKey,
+              snapshots: holders.snapshots,
+            },
+          );
+        }
+      }
+    } else if (change.kind === "seo-disabled") {
+      const holders = evidence?.seoHolders;
+      affected = holderCounts(holders);
+      if (holders !== undefined && total(holders) > 0) {
+        if (change.hinted === true) {
+          seoRemoval = true;
+        } else {
+          refuse(
+            "SEO_REMOVAL_HAS_DATA",
+            `Model ${modelKey} disables seo while ${total(holders)} snapshots hold SEO values (${countsDescription(holders)}). Declare removedSeo: true to prune them.`,
+            {
+              affectedCount: total(holders),
+              changeClass: change.class,
               snapshots: holders.snapshots,
             },
           );
@@ -752,6 +775,7 @@ function decideEvolution(
         : {
             renames: Object.freeze(renames.sort((left, right) => left.to.localeCompare(right.to))),
           }),
+      ...(seoRemoval ? { seoRemoval: true as const } : {}),
       snapshots: evidence?.snapshots ?? storedCounts,
     }),
     refused,
@@ -865,6 +889,7 @@ function classifyMatchedModel(
       ...(current.removedBlocks === undefined ? {} : { removedBlocks: current.removedBlocks }),
       ...(current.removedFields === undefined ? {} : { removedFields: current.removedFields }),
       ...(current.renamedFields === undefined ? {} : { renamedFields: current.renamedFields }),
+      ...(current.kind !== "global" && current.removedSeo === true ? { removedSeo: true } : {}),
     };
     const issues = validateStructureHints(stored.structure!, hints);
     for (const issue of issues) {
@@ -1122,7 +1147,7 @@ export function configurationSyncBackfills(
 
 /**
  * Ordered content writes of an applied operation: field renames, field
- * removals, block-type removals, then default backfills.
+ * removals, block-type removals, SEO removal, then default backfills.
  */
 export function configurationSyncContentWrites(
   operation: ConfigurationSyncOperation,
@@ -1141,6 +1166,7 @@ export function configurationSyncContentWrites(
     ...(evolution.blockRemovals ?? []).map((blockType) =>
       Object.freeze({ action: "remove-block-type" as const, blockType }),
     ),
+    ...(evolution.seoRemoval === true ? [Object.freeze({ action: "remove-seo" as const })] : []),
     ...configurationSyncBackfills(operation, model).map((backfill) =>
       Object.freeze({ action: "backfill-field" as const, ...backfill }),
     ),
@@ -1224,6 +1250,7 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
     if (evolution.blockRemovals !== undefined) {
       lines.push(`  planned block removals: ${evolution.blockRemovals.join(", ")}`);
     }
+    if (evolution.seoRemoval === true) lines.push("  planned SEO removal: all snapshots");
     if (evolution.migrations !== undefined) {
       const migrations = evolution.migrations.map(
         (migration) =>

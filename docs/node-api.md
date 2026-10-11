@@ -166,7 +166,11 @@ To add a model, register a `definePage`, `defineCollection` or `defineGlobal`
 call in `lace.config.ts`. A global is route-less site-wide content (for
 example site settings): sync creates its single draft, it is never served by
 path, and `GET /api/v1/public/globals/:modelKey` (or `getGlobal()` in
-`@lacecms/sdk`) returns `{global, media}` once it is published, `404` before. Start a new model at `version: 1`; choose a unique key and
+`@lacecms/sdk`) returns `{global, media}` once it is published, `404` before.
+A page or collection may declare `seo: true` (or name fallback fields with
+`seo: { description, image }`) to store per-entry SEO values; its public
+entries and export entries then carry `seo`, and the export's `seo` section
+lists the mappings and the `seoDefaults` global. Start a new model at `version: 1`; choose a unique key and
 path or route, then list its allowed blocks. `notes` demonstrates an optional
 text field with `fields: { summary: field.text() }`. Add further fields using
 typed `field` descriptors and render any field intended for public display in

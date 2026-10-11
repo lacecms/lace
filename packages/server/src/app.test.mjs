@@ -2101,3 +2101,151 @@ test("media metadata route updates with If-Match, returns ETags, and queues buil
     focalPoint: { x: 0.5, y: 0.3 },
   });
 });
+
+test("SEO values travel through admin, public and export contracts", async () => {
+  const models = [
+    definePage({ key: "home", path: "/", seo: true, version: 1 }),
+    defineCollection({
+      fields: { cover: field.media(), summary: field.textarea() },
+      key: "posts",
+      route: "/blog/:slug",
+      seo: { description: "summary", image: "cover" },
+      version: 1,
+    }),
+    defineCollection({ key: "notes", route: "/notes/:slug", version: 1 }),
+    defineGlobal({
+      fields: { siteName: field.text({ required: true }) },
+      key: "settings",
+      seoDefaults: { siteName: "siteName" },
+      version: 1,
+    }),
+  ];
+  const { app, store } = await fixture({ maxBodyBytes: 8192, models });
+  for (const id of ["share", "other"]) {
+    store.registerMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      status: "active",
+      storageKey: `private/${id}`,
+      updatedAt: unixMilliseconds(1),
+    });
+  }
+  const call = (path, { body, method = "POST" } = {}) =>
+    json(app, path, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { "content-type": "application/json" },
+    });
+
+  const listed = (await json(app, "/api/v1/admin/content-models")).body.items;
+  expect(listed.find((model) => model.key === "posts").seo).toEqual({
+    description: "summary",
+    image: "cover",
+  });
+  expect(listed.find((model) => model.key === "home").seo).toEqual({
+    description: null,
+    image: null,
+  });
+  expect(listed.find((model) => model.key === "notes")).not.toHaveProperty("seo");
+  expect(listed.find((model) => model.key === "settings").seoDefaults).toEqual({
+    description: null,
+    image: null,
+    siteName: "siteName",
+    titleTemplate: null,
+  });
+
+  const created = await call("/api/v1/admin/models/posts/entries", {
+    body: {
+      blocks: [],
+      fields: { summary: "Hello" },
+      seo: { canonical: "https://example.com/hello", image: "share", title: "Hello SEO" },
+      slug: "hello",
+      title: "Hello",
+    },
+  });
+  expect(created.response.status).toBe(201);
+  const fullSeo = {
+    canonical: "https://example.com/hello",
+    description: null,
+    image: "share",
+    noindex: false,
+    title: "Hello SEO",
+  };
+  expect(created.body.draft.seo).toEqual(fullSeo);
+  const entryPath = `/api/v1/admin/entries/${created.body.id}`;
+  expect((await json(app, entryPath)).body.draft.seo).toEqual(fullSeo);
+
+  for (const [seo, pointer] of [
+    [{ canonical: "/hello" }, "/seo/canonical"],
+    [{ title: "x".repeat(201) }, "/seo/title"],
+    [{ keywords: "x" }, "/seo"],
+  ]) {
+    const invalid = await call(`${entryPath}/draft`, {
+      body: { blocks: [], expectedRevision: 1, fields: {}, seo, slug: "hello", title: "Hello" },
+      method: "PUT",
+    });
+    expect(invalid.response.status).toBe(422);
+    expect(invalid.body.error.code).toBe("VALIDATION_FAILED");
+    expect(invalid.body.error.details.issues.some((issue) => issue.path.startsWith(pointer))).toBe(
+      true,
+    );
+  }
+  const refused = await call("/api/v1/admin/models/notes/entries", {
+    body: { blocks: [], fields: {}, seo: { title: "x" }, slug: "n", title: "Note" },
+  });
+  expect(refused.response.status).toBe(422);
+  expect(refused.body.error.details.issues).toEqual([
+    expect.objectContaining({ code: "seo_not_allowed", path: "/seo" }),
+  ]);
+  const note = await call("/api/v1/admin/models/notes/entries", {
+    body: { blocks: [], fields: {}, seo: null, slug: "n", title: "Note" },
+  });
+  expect(note.response.status).toBe(201);
+  expect(note.body.draft).not.toHaveProperty("seo");
+
+  const published = await call(`${entryPath}/publish`, { body: { expectedRevision: 1 } });
+  expect(published.body.entry.published.seo).toEqual(fullSeo);
+  await call(`/api/v1/admin/entries/${note.body.id}/publish`, { body: { expectedRevision: 1 } });
+
+  const page = await json(app, "/api/v1/public/collections/posts/hello");
+  expect(page.body.entry.seo).toEqual(fullSeo);
+  expect(Object.keys(page.body.media)).toEqual(["share"]);
+  expect(
+    (await json(app, "/api/v1/public/content/by-path?path=/blog/hello")).body.entry.seo,
+  ).toEqual(fullSeo);
+  expect((await json(app, "/api/v1/public/collections/posts")).body.items[0].seo).toEqual(fullSeo);
+  expect((await json(app, "/api/v1/public/collections/notes/n")).body.entry).not.toHaveProperty(
+    "seo",
+  );
+  expect(await store.loadPublicMedia(mediaId("share"))).toMatchObject({ id: "share" });
+  expect(await store.loadPublicMedia(mediaId("other"))).toBeNull();
+
+  const exported = (await json(app, "/api/v1/public/build-export")).body;
+  expect(exported.seo).toEqual({
+    defaults: {
+      description: null,
+      image: null,
+      modelKey: "settings",
+      siteName: "siteName",
+      titleTemplate: null,
+    },
+    models: {
+      home: { description: null, image: null },
+      posts: { description: "summary", image: "cover" },
+    },
+  });
+  expect(exported.entries.find((item) => item.modelKey === "posts").seo).toEqual(fullSeo);
+  expect(exported.entries.find((item) => item.modelKey === "notes")).not.toHaveProperty("seo");
+  expect(Object.keys(exported.media)).toEqual(["share"]);
+
+  const detail = (await json(app, "/api/v1/admin/media/share")).body;
+  expect(detail.usage).toEqual([
+    expect.objectContaining({
+      locations: [{ field: "image", source: "seo", states: ["draft", "published"] }],
+    }),
+  ]);
+});

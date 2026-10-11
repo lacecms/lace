@@ -17,6 +17,7 @@ import {
   contentSnapshotId,
   createContentEntry,
   mediaId,
+  normalizeEntrySeo,
   requirePermission,
   requirePublishedSnapshot,
   contentPublicPath,
@@ -31,6 +32,7 @@ import type {
   ContentSnapshotId,
   DraftMediaReference,
   DraftSnapshot,
+  EntrySeo,
   PublishedSnapshot,
 } from "@lacecms/domain";
 import {
@@ -68,6 +70,11 @@ export interface ContentUseCaseDependencies {
 export interface CompleteDraftInput {
   readonly blocks: readonly ContentBlock[];
   readonly fields: JsonObject;
+  /**
+   * The submitted SEO group; absent or `null` stores none. Validated against the
+   * shared rules, and refused for a model without SEO.
+   */
+  readonly seo?: unknown;
   readonly slug?: string;
   readonly title: string;
 }
@@ -167,10 +174,16 @@ export function duplicateTitle(title: string): string {
   return `${base}${DUPLICATE_TITLE_SUFFIX}`;
 }
 
-interface NormalizedDraft extends CompleteDraftInput {
+interface NormalizedDraft extends Omit<CompleteDraftInput, "seo"> {
   readonly blocks: readonly ContentBlock[];
   readonly fields: JsonObject;
   readonly mediaReferences: readonly DraftMediaReference[];
+  readonly seo?: EntrySeo;
+}
+
+/** Whether a configured model enables the per-entry SEO group. */
+function seoEnabled(model: NormalizedContentModel): boolean {
+  return model.kind !== "global" && model.seo !== undefined;
 }
 
 function detached<Value>(value: Value): Value {
@@ -425,6 +438,7 @@ export class ContentUseCases {
           key: blockKey(this.dependencies.idGenerator.next()),
         })),
         fields: source.draft.fields,
+        ...(source.draft.seo === undefined ? {} : { seo: source.draft.seo }),
         title: duplicateTitle(source.draft.title),
       },
       model,
@@ -537,13 +551,18 @@ export class ContentUseCases {
       schemaVersion: block.schemaVersion,
       type: block.type,
     }));
+    const seo = normalizeEntrySeo(input.seo ?? null, { enabled: seoEnabled(model) });
     const normalized = {
       blocks,
       fields: aggregate.fields as JsonObject,
+      ...(seo === undefined ? {} : { seo }),
       ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
       title: aggregate.title,
     };
     const mediaReferences = this.collectMedia(normalized.fields, model.fields, "$fields");
+    if (seo?.image !== undefined) {
+      mediaReferences.push({ fieldPath: "image", mediaId: mediaId(seo.image), sourceKey: "$seo" });
+    }
     for (const block of normalized.blocks) {
       mediaReferences.push(
         ...this.collectMedia(

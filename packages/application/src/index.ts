@@ -818,6 +818,11 @@ export type MediaUsageLocation =
       readonly states: readonly MediaUsageState[];
     }
   | {
+      readonly field: "image";
+      readonly source: "seo";
+      readonly states: readonly MediaUsageState[];
+    }
+  | {
       readonly blockKey: BlockKey;
       readonly blockType: string;
       readonly field: string;

@@ -544,3 +544,131 @@ test("rejects synchronization hints that contradict the model", () => {
   expect(() => postModel({ removedFields: ["title"] })).not.toThrow();
   expect(() => postModel({ fields: { title: field.text() } })).not.toThrow();
 });
+
+const seoFields = {
+  body: field.richText(),
+  cover: field.media(),
+  excerpt: field.textarea(),
+  heading: field.text(),
+};
+
+function seoCollection(overrides = {}) {
+  return defineCollection({
+    fields: seoFields,
+    key: "posts",
+    route: "/blog/:slug",
+    version: 1,
+    ...overrides,
+  });
+}
+
+function settingsGlobal(overrides = {}) {
+  return defineGlobal({
+    fields: {
+      metaDescription: field.textarea(),
+      shareImage: field.media(),
+      siteName: field.text({ required: true }),
+      titleTemplate: field.text(),
+    },
+    key: "settings",
+    version: 1,
+    ...overrides,
+  });
+}
+
+test("normalizes the SEO option of routable models", async () => {
+  expect(seoCollection({ seo: { description: "excerpt", image: "cover" } }).seo).toEqual({
+    description: "excerpt",
+    image: "cover",
+  });
+  expect(definePage({ key: "home", path: "/", seo: true, version: 1 }).seo).toEqual({});
+  expect(seoCollection({ seo: false })).not.toHaveProperty("seo");
+  expect(seoCollection()).not.toHaveProperty("seo");
+  const config = await defineConfig({
+    content: [seoCollection({ seo: { description: "heading" } })],
+  });
+  expect(config.public.content[0].seo).toEqual({ description: "heading" });
+});
+
+test.each([
+  [{ seo: { image: "heading" } }, /seo\.image field "heading" must be a media field/u],
+  [{ seo: { description: "cover" } }, /seo\.description field "cover" must be a text/u],
+  [{ seo: { description: "body" } }, /must be a text or textarea field, not richText/u],
+  [{ seo: { description: "missing" } }, /references undeclared field "missing"/u],
+  [{ seo: { keywords: "heading" } }, /seo must not declare "keywords"/u],
+  [{ seo: "yes" }, /seo must be a boolean or an object/u],
+  [{ seoDefaults: { siteName: "heading" } }, /must not declare seoDefaults/u],
+  [{ removedSeo: true, seo: true }, /must not declare removedSeo while seo is enabled/u],
+  [{ removedSeo: false }, /removedSeo must be true/u],
+])("rejects invalid SEO options %#", (overrides, message) => {
+  expect(() => seoCollection(overrides)).toThrow(message);
+});
+
+test("rejects SEO options on a global", () => {
+  expect(() => settingsGlobal({ seo: true })).toThrow(/must not declare seo/u);
+  expect(() => settingsGlobal({ removedSeo: true })).toThrow(/must not declare removedSeo/u);
+});
+
+test("normalizes site SEO defaults on one global", async () => {
+  const settings = settingsGlobal({
+    seoDefaults: {
+      description: "metaDescription",
+      image: "shareImage",
+      siteName: "siteName",
+      titleTemplate: "titleTemplate",
+    },
+  });
+  expect(settings.seoDefaults).toEqual({
+    description: "metaDescription",
+    image: "shareImage",
+    siteName: "siteName",
+    titleTemplate: "titleTemplate",
+  });
+  expect(() => settingsGlobal({ seoDefaults: {} })).toThrow(/must name a siteName field/u);
+  expect(() => settingsGlobal({ seoDefaults: { siteName: "shareImage" } })).toThrow(
+    /seoDefaults\.siteName field "shareImage" must be a text or textarea field/u,
+  );
+  expect(() =>
+    settingsGlobal({ seoDefaults: { image: "siteName", siteName: "siteName" } }),
+  ).toThrow(/seoDefaults\.image field "siteName" must be a media field/u);
+  expect(() => settingsGlobal({ seoDefaults: { siteName: "siteName", url: "x" } })).toThrow(
+    /seoDefaults must not declare "url"/u,
+  );
+  await expect(
+    defineConfig({
+      content: [settings, settingsGlobal({ key: "footer", seoDefaults: { siteName: "siteName" } })],
+    }),
+  ).rejects.toThrow(/globals "settings" and "footer" both declare seoDefaults/u);
+});
+
+test("enabling SEO is structural while mappings and defaults are projection-only", async () => {
+  const hashes = async (model) => {
+    const config = await defineConfig({ content: [model] });
+    return {
+      projection: config.runtime.content[0].projectionHash,
+      structure: config.runtime.content[0].structureHash,
+    };
+  };
+  const plain = await hashes(seoCollection());
+  const enabled = await hashes(seoCollection({ seo: true }));
+  const mapped = await hashes(seoCollection({ seo: { description: "excerpt", image: "cover" } }));
+  expect(enabled.structure).not.toBe(plain.structure);
+  expect(mapped.structure).toBe(enabled.structure);
+  expect(mapped.projection).not.toBe(enabled.projection);
+  expect(await hashes(seoCollection({ removedSeo: true }))).toEqual(plain);
+
+  const settings = await hashes(settingsGlobal());
+  const withDefaults = await hashes(settingsGlobal({ seoDefaults: { siteName: "siteName" } }));
+  expect(withDefaults.structure).toBe(settings.structure);
+  expect(withDefaults.projection).not.toBe(settings.projection);
+
+  const config = await defineConfig({ content: [seoCollection({ removedSeo: true })] });
+  expect(config.public.content[0]).not.toHaveProperty("removedSeo");
+  expect(config.runtime.content[0].removedSeo).toBe(true);
+  expect(config.runtime.content[0].structure).not.toHaveProperty("seo");
+  const enabledConfig = await defineConfig({
+    content: [seoCollection({ seo: { description: "excerpt" } })],
+  });
+  expect(enabledConfig.runtime.content[0].structure.seo).toBe(true);
+  // Models without the option keep the hashes pinned by config.projection.fixture.json.
+});

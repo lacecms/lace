@@ -4,6 +4,7 @@ import type {
   ContentBlockDto,
   EntityTag,
   PublicEntryDto,
+  SeoValueDto,
   PublicMediaDto,
 } from "@lacecms/contracts";
 import { createLaceClient, LaceHttpError, LaceSdkError, LaceTransportError } from "./client.js";
@@ -66,6 +67,11 @@ export interface PublishedEntry extends PublishedMediaLookup {
   readonly modelKey: string;
   readonly path: string;
   readonly publishedAt: string;
+  /**
+   * Stored SEO values of an entry of an SEO-enabled model, with `null` for
+   * unset values; fallbacks and site defaults are not applied.
+   */
+  readonly seo?: SeoValueDto;
   readonly slug?: string;
   readonly title: string;
 }
@@ -245,6 +251,7 @@ export function createPublishedSiteLoader(
         modelKey: entry.modelKey,
         path,
         publishedAt: entry.publishedAt,
+        ...(entry.seo === undefined ? {} : { seo: Object.freeze({ ...entry.seo }) }),
         ...(entry.slug === undefined ? {} : { slug: entry.slug }),
         title: entry.title,
       });
