@@ -13,6 +13,11 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
+  publicContentEntrySchema,
+  publicContentListSchema,
+  publicMediaDictionarySchema,
+  toPublicContentEntryDto,
+  toPublicContentListDto,
   buildSiteIdentitySchema,
   buildSiteUrlSchema,
   adminSettingsStatusSchema,
@@ -325,10 +330,10 @@ describe("shared REST contract DTOs", () => {
       }),
     ).toMatchObject({ items: [{ id: "entry-1" }], nextCursor: "opaque-next-page" });
 
-    const exportDto = toBuildExportDto({
-      entries: [{ entry, path: "/blog/welcome" }],
-      version: 7,
-    });
+    const exportDto = toBuildExportDto(
+      { entries: [{ entry, media: [], path: "/blog/welcome" }], version: 7 },
+      (id) => mediaUrl("https://lace.example/", id),
+    );
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
 
     const mediaDto = toMediaMetadataDto(
@@ -1195,5 +1200,114 @@ describe("media metadata contracts", async () => {
       },
       status: 409,
     });
+  });
+});
+
+describe("public delivery DTOs", () => {
+  const blocks = [
+    { data: { text: "Second" }, key: blockKey("b"), position: 1, schemaVersion: 1, type: "quote" },
+    {
+      data: { media: "media-b" },
+      key: blockKey("a"),
+      position: 0,
+      schemaVersion: 2,
+      type: "image",
+    },
+  ];
+  const publicEntry = {
+    ...entry,
+    draft: { ...draft, title: "DRAFT ONLY" },
+    published: { ...published, blocks },
+  };
+  const described = {
+    alt: "Office",
+    caption: "Our office",
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: 900,
+    id: mediaId("media-b"),
+    mimeType: "image/jpeg",
+    width: 1600,
+  };
+  const bare = { id: mediaId("media-a"), mimeType: "image/png" };
+  const urlFor = (id) => mediaUrl("https://lace.example/base/", id);
+
+  test("returns the published entry with ordered blocks and resolved media", () => {
+    const dto = toPublicContentEntryDto(
+      { entry: publicEntry, media: [described, bare, described], path: "/blog/welcome" },
+      urlFor,
+    );
+    expect(v.parse(publicContentEntrySchema, dto)).toEqual(dto);
+    expect(dto.entry).toEqual({
+      blocks: [blocks[1], blocks[0]],
+      fields: draft.fields,
+      id: "entry-1",
+      modelKey: "posts",
+      path: "/blog/welcome",
+      publishedAt: toIsoTimestamp(timestamp),
+      slug: "welcome",
+      title: "Welcome",
+    });
+    expect(JSON.stringify(dto)).not.toContain("DRAFT ONLY");
+    expect(Object.keys(dto.media)).toEqual(["media-a", "media-b"]);
+    expect(dto.media["media-a"]).toEqual({
+      alt: null,
+      caption: null,
+      focalPoint: null,
+      height: null,
+      id: "media-a",
+      mimeType: "image/png",
+      url: "https://lace.example/base/api/v1/public/media/media-a",
+      width: null,
+    });
+    expect(dto.media["media-b"]).toMatchObject({
+      alt: "Office",
+      caption: "Our office",
+      focalPoint: { x: 0.25, y: 0.4 },
+      height: 900,
+      width: 1600,
+    });
+  });
+
+  test("merges the media of a collection page", () => {
+    const dto = toPublicContentListDto(
+      {
+        items: [
+          { entry: publicEntry, media: [described], path: "/blog/welcome" },
+          { entry: publicEntry, media: [described, bare], path: "/blog/other" },
+        ],
+        nextCursor: "next",
+      },
+      urlFor,
+    );
+    expect(v.parse(publicContentListSchema, dto)).toEqual(dto);
+    expect(dto.items.map((item) => item.path)).toEqual(["/blog/welcome", "/blog/other"]);
+    expect(Object.keys(dto.media)).toEqual(["media-a", "media-b"]);
+  });
+
+  test("rejects legacy and malformed public payloads", () => {
+    const dto = toPublicContentEntryDto(
+      { entry: publicEntry, media: [described], path: "/blog/welcome" },
+      urlFor,
+    );
+    expect(() =>
+      v.parse(publicContentEntrySchema, { entry: toContentEntryDto(entry), path: "/blog/welcome" }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicContentEntrySchema, { ...dto, entry: { ...dto.entry, draft: {} } }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicContentEntrySchema, { ...dto, entry: { ...dto.entry, model: {} } }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicMediaDictionarySchema, { other: { ...dto.media["media-b"] } }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicMediaDictionarySchema, {
+        "media-b": { ...dto.media["media-b"], focalPoint: { x: 1.5, y: 0 } },
+      }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicMediaDictionarySchema, { "media-b": { ...dto.media["media-b"], alt: "" } }),
+    ).toThrow();
   });
 });

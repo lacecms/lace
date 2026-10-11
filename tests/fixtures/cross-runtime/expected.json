@@ -3,6 +3,17 @@
   "denied": { "status": 403, "code": "AUTHORIZATION_DENIED" },
   "conflict": { "status": 409, "code": "CONTENT_REVISION_CONFLICT" },
   "routes": ["/", "/about", "/blog/alpha", "/blog/beta"],
+  "media": {
+    "<cover>": {
+      "alt": null,
+      "caption": null,
+      "focalPoint": null,
+      "height": 1,
+      "mimeType": "image/png",
+      "url": "<public>/api/v1/public/media/<cover>",
+      "width": 1
+    }
+  },
   "site": [
     {
       "path": "/",
@@ -21,7 +32,7 @@
           "key": "image-one",
           "type": "image",
           "position": 2000,
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "data": { "media": "<cover>", "alt": "Published cover" }
         }
       ]

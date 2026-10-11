@@ -1452,6 +1452,19 @@ export function migrateBlockData(
   return current;
 }
 
+/**
+ * Resolves the alt text of one media usage: a non-blank usage alt (such as the
+ * `image` block's `alt`), then a non-blank media alt, then an empty string.
+ */
+export function effectiveAltText(
+  usageAlt: string | null | undefined,
+  mediaAlt: string | null | undefined,
+): string {
+  if (typeof usageAlt === "string" && usageAlt.trim().length > 0) return usageAlt;
+  if (typeof mediaAlt === "string" && mediaAlt.trim().length > 0) return mediaAlt;
+  return "";
+}
+
 /** Starter blocks implemented exclusively through the public block and field DSL. */
 export const builtInBlocks = deepFreeze({
   cta: defineBlock({

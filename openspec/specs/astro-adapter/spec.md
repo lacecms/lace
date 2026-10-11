@@ -25,7 +25,7 @@ The adapter SHALL provide a server-only loader factory that accepts an environme
 - **THEN** evaluation fails with a server-only diagnostic
 
 ### Requirement: Block lists render through the site's block map
-The adapter SHALL provide a block-list component that takes a published entry, a block map, and a media-URL builder, resolves and parses every block of the entry in order with the render core, and renders each mapped component with the block, its parsed data, its block context, and the media-URL builder as props. It SHALL add no wrapper markup of its own. A block whose type is absent from the map, whose schema version differs from its definition, or whose data fails publish validation SHALL fail rendering with the render core's coded error naming the model, entry, block key, and, when applicable, the field path.
+The adapter SHALL provide a block-list component that takes a published entry, a block map, and a media-URL builder, resolves and parses every block of the entry in order with the render core, and renders each mapped component with the block, its parsed data, its block context, the media-URL builder, and the render core's image describer bound to the entry's resolved media as props. It SHALL add no wrapper markup of its own. A block whose type is absent from the map, whose schema version differs from its definition, or whose data fails publish validation SHALL fail rendering with the render core's coded error naming the model, entry, block key, and, when applicable, the field path.
 
 #### Scenario: Ordered blocks
 - **WHEN** an entry has `hero`, `richText`, and `cta` blocks in that order and the map contains all three
@@ -38,6 +38,10 @@ The adapter SHALL provide a block-list component that takes a published entry, a
 #### Scenario: Invalid block data
 - **WHEN** a block's data violates its definition, such as an unsafe URL in a URL field or an unsafe link in a rich-text field
 - **THEN** rendering fails with a render error naming the field path and no partial block markup is accepted
+
+#### Scenario: A component describes an image
+- **WHEN** a published-site entry is rendered and a block component calls the image describer for media in the export
+- **THEN** it receives the resolved URL, effective alt text, dimensions and focal-point object position
 
 ### Requirement: Rich text renders only the validated element description
 The adapter SHALL provide a rich-text component that validates its `document` with the render core's rich-text description and renders only the described allowlisted elements, safe attributes, and escaped text, preserving node and mark order and nesting. It SHALL never render raw HTML. It SHALL accept optional override components keyed by originating node or mark name; an override SHALL receive only the validated element description and its already-rendered children, and nodes or marks without an override SHALL render with their described tag. An optional block context SHALL be included in rich-text failures.

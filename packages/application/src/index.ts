@@ -303,6 +303,8 @@ export interface ContentEntryCommandPort {
 
 export interface PublicContentEntry {
   readonly entry: ContentEntry;
+  /** Active media referenced by the entry's current published snapshot. */
+  readonly media: readonly MediaMetadata[];
   readonly path: string;
 }
 

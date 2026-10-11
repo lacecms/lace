@@ -12,15 +12,15 @@
       }
     },
     "hero": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/HeroBlock.astro": "a732de4a7a1f26adcd41a4dda8e056b1d1eac0a8ccec6f2493c13013d9dab84d"
+        "src/components/lace/HeroBlock.astro": "0b4794709eb7eceeda7fea01e11da7aa733772db5c184c0e02e31ab72150a22c"
       }
     },
     "image": {
-      "revision": 2,
+      "revision": 3,
       "files": {
-        "src/components/lace/ImageBlock.astro": "eb1f85aabff2dd99ffb44f33d94bd0a911141747c012ba3350b22b05ebac0aaf"
+        "src/components/lace/ImageBlock.astro": "5510cd3b724c0e1d0df060a384cd9d84b25975b771923fb38688bde7633d970c"
       }
     },
     "quote": {

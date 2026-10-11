@@ -57,8 +57,7 @@ export async function blockOrderJourney(context, session, operations) {
     if (!response.ok) throw new Error(`block-order-export: status ${response.status}`);
     return response.json();
   };
-  const exportedBlocks = (data) =>
-    data.entries.find((item) => item.entry.id === entryId)?.entry.published?.blocks ?? [];
+  const exportedBlocks = (data) => data.entries.find((item) => item.id === entryId)?.blocks ?? [];
 
   const browser = await loadBrowser(workspace);
   try {

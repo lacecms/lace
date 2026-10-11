@@ -9,6 +9,7 @@ import {
   contentModelKey,
   contentSnapshotId,
   createContentEntry,
+  mediaId,
   unixMilliseconds,
 } from "@lacecms/domain";
 import {
@@ -476,6 +477,114 @@ test("serves public content and short-circuits matching build exports", async ()
   ).toMatchObject({ body: { error: { code: "VALIDATION_FAILED" } }, response: { status: 422 } });
   const openApi = await json(app, "/api/v1/openapi.json");
   expect(openApi.body.paths).toHaveProperty("/api/v1/public/build-export");
+  for (const path of [
+    "/api/v1/public/pages/{modelKey}",
+    "/api/v1/public/collections/{modelKey}",
+    "/api/v1/public/collections/{modelKey}/{slug}",
+    "/api/v1/public/content/by-path",
+  ])
+    expect(openApi.body.paths[path].get.responses).toHaveProperty("200");
+});
+
+test("public responses return published entries with one resolved media dictionary", async () => {
+  const { app, store } = await fixture();
+  const media = (id, extra = {}) => ({
+    createdAt: unixMilliseconds(1),
+    createdBy: admin.id,
+    filename: "image.png",
+    id: mediaId(id),
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    storageKey: `private/${id}`,
+    updatedAt: unixMilliseconds(1),
+    ...extra,
+  });
+  store.registerMedia(media("shared", { alt: "Office", focalPoint: { x: 0.25, y: 0.4 } }));
+  store.registerMedia(media("only-a"));
+  store.registerMedia(media("draft-only"));
+  for (const [id, ids] of [
+    ["post-a", ["shared", "only-a"]],
+    ["post-b", ["shared"]],
+  ]) {
+    await store.create({
+      entry: createContentEntry({
+        draft: {
+          blocks: [],
+          createdAt: unixMilliseconds(1),
+          entryId: contentEntryId(id),
+          fields: {},
+          id: contentSnapshotId(`${id}-draft`),
+          revision: 1,
+          slug: id,
+          state: "draft",
+          title: id,
+          updatedAt: unixMilliseconds(1),
+          updatedBy: admin,
+        },
+        id: contentEntryId(id),
+        model: { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" },
+      }),
+      mediaReferences: ids.map((mediaValue, index) => ({
+        fieldPath: `image${index}`,
+        mediaId: mediaId(mediaValue),
+        sourceKey: "$fields",
+      })),
+    });
+    await store.publish({
+      entryId: contentEntryId(id),
+      expectedRevision: 1,
+      publishedAt: unixMilliseconds(2),
+      publishedBy: admin,
+      publishedSnapshotId: contentSnapshotId(`${id}-published`),
+    });
+  }
+  await store.saveCompleteDraft({
+    entryId: contentEntryId("post-a"),
+    mutation: {
+      blocks: [],
+      expectedRevision: 1,
+      fields: {},
+      mediaReferences: [
+        { fieldPath: "image", mediaId: mediaId("draft-only"), sourceKey: "$fields" },
+      ],
+      title: "DRAFT ONLY",
+      updatedAt: unixMilliseconds(3),
+      updatedBy: admin,
+    },
+  });
+  const list = await json(app, "/api/v1/public/collections/posts?limit=10");
+  expect(Object.keys(list.body.media)).toEqual(["only-a", "shared"]);
+  expect(list.body.media.shared).toEqual({
+    alt: "Office",
+    caption: null,
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: null,
+    id: "shared",
+    mimeType: "image/png",
+    url: "https://lace.test/api/v1/public/media/shared",
+    width: null,
+  });
+  const single = await json(app, "/api/v1/public/content/by-path?path=/blog/post-b");
+  expect(Object.keys(single.body)).toEqual(["entry", "media"]);
+  expect(single.body.entry).toEqual({
+    blocks: [],
+    fields: {},
+    id: "post-b",
+    modelKey: "posts",
+    path: "/blog/post-b",
+    publishedAt: new Date(2).toISOString(),
+    slug: "post-b",
+    title: "post-b",
+  });
+  expect(Object.keys(single.body.media)).toEqual(["shared"]);
+  const exported = await json(app, "/api/v1/public/build-export");
+  expect(Object.keys(exported.body.media)).toEqual(["only-a", "shared"]);
+  for (const body of [list.body, single.body, exported.body]) {
+    expect(JSON.stringify(body)).not.toContain("DRAFT ONLY");
+    expect(JSON.stringify(body)).not.toContain("draft-only");
+    expect(JSON.stringify(body)).not.toContain("private/");
+  }
 });
 
 test("validates admin requests, rejects anonymous actors, and protects fallbacks", async () => {
@@ -925,7 +1034,7 @@ test("lists entries with filters, totals, and query-bound cursors", async () => 
   expect((await json(app, "/api/v1/admin/models/missing/entries")).response.status).toBe(404);
 });
 
-test("admin entry responses name the last editor while public DTOs stay unchanged", async () => {
+test("admin entry responses name the last editor while public DTOs carry no editor names", async () => {
   const viewer = { id: actorId("viewer"), role: "viewer" };
   const { app, store } = await fixture();
   store.setActorDisplayNames({ admin: "admin@example.test" });
@@ -995,7 +1104,10 @@ test("admin entry responses name the last editor while public DTOs stay unchange
 
   const page = await json(app, "/api/v1/public/collections/posts/named");
   const exported = await json(app, "/api/v1/public/build-export");
-  expect(page).toMatchObject({ body: { path: "/blog/named" }, response: { status: 200 } });
+  expect(page).toMatchObject({
+    body: { entry: { path: "/blog/named" } },
+    response: { status: 200 },
+  });
   expect(exported).toMatchObject({ body: { entries: [{ path: "/blog/named" }] } });
   for (const body of [page.body, exported.body]) {
     expect(JSON.stringify(body)).not.toContain("displayName");

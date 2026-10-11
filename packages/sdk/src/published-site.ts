@@ -1,8 +1,10 @@
+import { effectiveAltText } from "@lacecms/contracts";
 import type {
   BuildExportDto,
   ContentBlockDto,
-  ContentSnapshotDto,
   EntityTag,
+  PublicEntryDto,
+  PublicMediaDto,
 } from "@lacecms/contracts";
 import { createLaceClient, LaceHttpError, LaceSdkError, LaceTransportError } from "./client.js";
 import type { LaceClient, LaceFetch } from "./client.js";
@@ -41,19 +43,35 @@ export interface PublishedSiteLoaderOptions {
 /** One published block, ordered by `position` within its entry. */
 export type PublishedBlock = ContentBlockDto;
 
+/** A media item referenced by published content, resolved from the export. */
+export type PublishedMedia = Readonly<PublicMediaDto>;
+
+/** A resolved media item whose `alt` is the effective alt text of one usage. */
+export interface PublishedImage extends PublishedMedia {
+  readonly alt: string;
+}
+
+/** Lookups over the export's resolved media. */
+export interface PublishedMediaLookup {
+  /** Returns the image with the usage alt text, else the media alt text, else `""`. */
+  image(mediaId: string, usageAlt?: string | null): PublishedImage | undefined;
+  media(mediaId: string): PublishedMedia | undefined;
+}
+
 /** The published content of one entry; no draft or editorial data is exposed. */
-export interface PublishedEntry {
+export interface PublishedEntry extends PublishedMediaLookup {
   readonly blocks: readonly PublishedBlock[];
-  readonly fields: ContentSnapshotDto["fields"];
+  readonly fields: PublicEntryDto["fields"];
   readonly id: string;
   readonly modelKey: string;
   readonly path: string;
+  readonly publishedAt: string;
   readonly slug?: string;
   readonly title: string;
 }
 
 /** An immutable view of one published build export. */
-export interface PublishedSite {
+export interface PublishedSite extends PublishedMediaLookup {
   byPath(path: string): PublishedEntry | undefined;
   bySlug(modelKey: string, slug: string): PublishedEntry | undefined;
   entries(modelKey: string): readonly PublishedEntry[];
@@ -77,6 +95,8 @@ interface ResolvedConfiguration {
   readonly client: LaceClient;
   readonly expectedVersion?: number;
   readonly mediaClient: LaceClient;
+  /** True when the site configures its own public media origin. */
+  readonly publicMediaOrigin: boolean;
 }
 
 type ExportRead =
@@ -168,31 +188,54 @@ export function createPublishedSiteLoader(
         publicBaseUrl === undefined
           ? client(baseUrl, "LACE_API_BASE_URL")
           : client(publicBaseUrl, "LACE_PUBLIC_BASE_URL"),
+      publicMediaOrigin: publicBaseUrl !== undefined,
     };
   }
 
-  function buildSite(exported: BuildExportDto, mediaClient: LaceClient): PublishedSite {
+  function buildSite(
+    exported: BuildExportDto,
+    configuration: ResolvedConfiguration,
+  ): PublishedSite {
+    const { mediaClient, publicMediaOrigin } = configuration;
+    const resolved = new Map<string, PublishedMedia>();
+    for (const item of Object.values(exported.media)) {
+      resolved.set(
+        item.id,
+        Object.freeze({
+          ...item,
+          focalPoint: item.focalPoint === null ? null : Object.freeze({ ...item.focalPoint }),
+          url: publicMediaOrigin ? mediaClient.getPublicMediaUrl(item.id) : item.url,
+        }),
+      );
+    }
+    const lookup: PublishedMediaLookup = Object.freeze({
+      image: (mediaId: string, usageAlt?: string | null) => {
+        const item = resolved.get(mediaId);
+        return item === undefined
+          ? undefined
+          : Object.freeze({ ...item, alt: effectiveAltText(usageAlt, item.alt) });
+      },
+      media: (mediaId: string) => resolved.get(mediaId),
+    });
     const byPath = new Map<string, PublishedEntry>();
     const byModel = new Map<string, PublishedEntry[]>();
     const bySlug = new Map<string, Map<string, PublishedEntry>>();
-    for (const { entry, path } of exported.entries) {
-      const snapshot = entry.published;
-      if (snapshot === undefined)
-        failure(
-          "invalid_export",
-          `The build export contains entry ${entry.id} without a published snapshot.`,
-        );
-      const blocks = [...snapshot.blocks]
+    for (const entry of exported.entries) {
+      const { path } = entry;
+      const blocks = [...entry.blocks]
         .sort((left, right) => left.position - right.position)
         .map((block) => Object.freeze(block));
       const published: PublishedEntry = Object.freeze({
         blocks: Object.freeze(blocks),
-        fields: snapshot.fields,
+        fields: entry.fields,
         id: entry.id,
-        modelKey: entry.model.key,
+        image: lookup.image,
+        media: lookup.media,
+        modelKey: entry.modelKey,
         path,
-        ...(snapshot.slug === undefined ? {} : { slug: snapshot.slug }),
-        title: snapshot.title,
+        publishedAt: entry.publishedAt,
+        ...(entry.slug === undefined ? {} : { slug: entry.slug }),
+        title: entry.title,
       });
       const samePath = byPath.get(path);
       if (samePath !== undefined)
@@ -227,7 +270,10 @@ export function createPublishedSiteLoader(
       byPath: (path: string) => byPath.get(path),
       bySlug: (modelKey: string, slug: string) => bySlug.get(modelKey)?.get(slug),
       entries: (modelKey: string) => listings.get(modelKey) ?? empty,
-      mediaUrl: (mediaId: string) => mediaClient.getPublicMediaUrl(mediaId),
+      image: lookup.image,
+      media: lookup.media,
+      mediaUrl: (mediaId: string) =>
+        resolved.get(mediaId)?.url ?? mediaClient.getPublicMediaUrl(mediaId),
       version: exported.version,
     });
   }
@@ -262,7 +308,7 @@ export function createPublishedSiteLoader(
     return {
       changed: true,
       etag: result.etag,
-      site: buildSite(result.export, configuration.mediaClient),
+      site: buildSite(result.export, configuration),
     };
   }
 

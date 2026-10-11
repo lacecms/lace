@@ -338,7 +338,7 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
   expect(fixture.pending).toHaveLength(1);
   const publicEntry = await fixture.call("/api/v1/public/collections/posts/first");
   expect(publicEntry).toMatchObject({
-    body: { entry: { draft: { title: "First" } } },
+    body: { entry: { title: "First" } },
     response: { status: 200 },
   });
   const unknown = await fixture.call("/api/v1/unknown");
@@ -617,9 +617,7 @@ test("Worker/D1 compares strong and weak export validators through publication",
   expect(changed.response.status).toBe(200);
   expect(changed.body.version).toBe(fresh.body.version + 1);
   expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
-  expect(
-    changed.body.entries.find(({ entry }) => entry.id === created.body.id).entry.published.title,
-  ).toBe("Second");
+  expect(changed.body.entries.find((entry) => entry.id === created.body.id).title).toBe("Second");
   await fixture.settle();
 });
 

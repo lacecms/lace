@@ -33,6 +33,22 @@ export function canonicalSite(site, cover) {
       })),
     }));
 }
+/** Resolved media of the published site with the runtime origin and media ID removed. */
+export function canonicalMedia(site, cover, publicBase) {
+  const item = site.media(cover);
+  assert.ok(item, "published cover is not resolved");
+  return {
+    "<cover>": {
+      alt: item.alt,
+      caption: item.caption,
+      focalPoint: item.focalPoint,
+      height: item.height,
+      mimeType: item.mimeType,
+      url: item.url.replace(publicBase, "<public>/").replace(cover, "<cover>"),
+      width: item.width,
+    },
+  };
+}
 export async function apiJourney(f) {
   const report = (name) => console.info(`34A ${f.kind} API: ${name}`);
   const json = async (path, options, status, schema) => {
@@ -138,7 +154,7 @@ export async function apiJourney(f) {
     {
       key: "image-one",
       type: "image",
-      schemaVersion: 1,
+      schemaVersion: 2,
       position: 2000,
       data: { media: cover.id, alt: "Published cover" },
     },
@@ -278,8 +294,13 @@ export async function apiJourney(f) {
     "/api/v1/public/content/by-path?path=/",
   ]) {
     const result = await json(path, {}, 200, contracts.publicContentEntrySchema);
-    assert.equal(result.entry.draft.title, result.entry.published.title);
+    assert.equal(Object.hasOwn(result.entry, "draft"), false);
+    assert.equal(Object.hasOwn(result.entry, "published"), false);
     assert.equal(result.entry.updatedBy, undefined);
+    assert.deepEqual(
+      Object.keys(result.media),
+      result.entry.blocks.flatMap((block) => (block.type === "image" ? [block.data.media] : [])),
+    );
   }
   const collection = await json(
     "/api/v1/public/collections/posts",
@@ -288,11 +309,10 @@ export async function apiJourney(f) {
     contracts.publicContentListSchema,
   );
   assert.equal(collection.items.length, 2);
-  for (const { entry } of exported.entries) {
-    assert.ok(entry.published);
-    for (const key of ["title", "slug", "fields", "blocks", "revision"])
-      assert.deepEqual(entry.draft[key], entry.published[key]);
-  }
+  for (const entry of exported.entries)
+    for (const key of ["draft", "published", "model", "revision", "updatedBy"])
+      assert.equal(Object.hasOwn(entry, key), false, `export entry exposes ${key}`);
+  assert.deepEqual(Object.keys(exported.media), [cover.id]);
   assert.doesNotMatch(JSON.stringify(exported), /DRAFT ONLY|UNPUBLISHED|displayName/u);
   const binary = await f.call(`/api/v1/public/media/${cover.id}`);
   assert.equal(binary.status, 200);
@@ -338,5 +358,6 @@ export async function apiJourney(f) {
     }
   const canonical = canonicalSite(site, cover.id);
   assert.deepEqual(canonical, expected.site);
+  assert.deepEqual(canonicalMedia(site, cover.id, "https://media.34a.test/"), expected.media);
   return { token: issued.token, cover: cover.id, homeId: home.id, canonical };
 }

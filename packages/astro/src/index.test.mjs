@@ -33,7 +33,7 @@ function exportServer() {
         return new Response(null, { headers: { etag }, status: 304 });
       const exported = structuredClone(fixture);
       exported.version = version;
-      exported.entries[0].entry.published.title = `Home v${version}`;
+      exported.entries[0].title = `Home v${version}`;
       return Response.json(exported, { headers: { etag } });
     },
   };
@@ -57,6 +57,13 @@ test("a static build reads one export shared by every route", async () => {
   expect(left.mediaUrl("post-media")).toBe(
     "https://media.example/lace/api/v1/public/media/post-media",
   );
+  expect(left.byPath("/")?.image("hero-media")).toMatchObject({
+    alt: "Lace starter illustration",
+    focalPoint: { x: 0.3, y: 0.2 },
+    height: 630,
+    url: "https://media.example/lace/api/v1/public/media/hero-media",
+    width: 1200,
+  });
 });
 
 test("dev mode revalidates with the entity tag on every call", async () => {
@@ -165,7 +172,7 @@ test.each([
     }
     const exported = structuredClone(fixture);
     exported.version = version;
-    exported.entries[0].entry.published.title = `Home v${version}`;
+    exported.entries[0].title = `Home v${version}`;
     response
       .writeHead(200, { "content-type": "application/json", etag })
       .end(JSON.stringify(exported));

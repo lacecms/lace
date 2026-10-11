@@ -22,6 +22,7 @@ import type {
   MediaUsageEntry,
   MediaUsageLocation,
   MediaUsageState,
+  PublicContentEntry,
   ConfigurationSyncMediaReference,
   ConfigurationSyncMigrationBlock,
   ConfigurationSyncMigrationPage,
@@ -411,6 +412,15 @@ export const PUBLIC_MEDIA_SQL = `select ${MEDIA_COLUMNS_SQL}
     join content_entries e on e.published_snapshot_id = r.snapshot_id
     where r.media_id = m.id
   ) limit 1`;
+/** Active media referenced by the given published snapshots, one row per pair. */
+export function publicSnapshotMediaSql(count: number): string {
+  return `select distinct r.snapshot_id as public_snapshot_id, ${MEDIA_COLUMNS_SQL}
+   from content_media_references r
+   join media m on m.id = r.media_id
+  where r.snapshot_id in (${Array.from({ length: count }, () => "?").join(", ")})
+    and m.status = 'active'
+  order by r.snapshot_id asc, m.id asc`;
+}
 export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL} from media m where m.id = ? limit 1`;
 /** Binds media ID, entry limit, and media ID. */
 export const MEDIA_USAGE_SQL = `with used as (
@@ -1547,6 +1557,36 @@ export function hydrateEntries(
     );
   }
   return result;
+}
+
+/** Groups `publicSnapshotMediaSql` rows by published snapshot ID. */
+export function publicSnapshotMedia(
+  rows: readonly Record<string, unknown>[],
+): Map<string, readonly MediaMetadata[]> {
+  const result = new Map<string, MediaMetadata[]>();
+  for (const row of rows) {
+    const snapshotId = row.public_snapshot_id;
+    if (typeof snapshotId !== "string") failure("Public media snapshot ID is invalid.");
+    const items = result.get(snapshotId) ?? [];
+    items.push(mediaMetadata(row));
+    result.set(snapshotId, items);
+  }
+  return result;
+}
+
+/** Projects a published route row into a public entry with its referenced media. */
+export function publicContentEntry(
+  row: PublicRow,
+  entries: ReadonlyMap<string, ContentEntry>,
+  media: ReadonlyMap<string, readonly MediaMetadata[]>,
+): PublicContentEntry {
+  const entry = entries.get(row.id);
+  if (entry === undefined) failure("Published route references an unreadable entry.");
+  return Object.freeze({
+    entry: publicEntry(entry),
+    media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
+    path: row.path,
+  });
 }
 
 /** Public projections cannot disclose the independently mutable draft snapshot. */

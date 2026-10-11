@@ -134,7 +134,9 @@ import {
   mediaMetadata,
   mediaUsageEntries,
   parseObject,
-  publicEntry,
+  publicContentEntry,
+  publicSnapshotMedia,
+  publicSnapshotMediaSql,
   sameStoredModelStates,
   sanitizeBuildReason,
   encodeBuildError,
@@ -1261,11 +1263,8 @@ export class NodeContentRepository
       ) as readonly PublicRow[];
     const pageRows = rows.slice(0, limit);
     const entries = this.hydrate(pageRows);
-    const items = pageRows.map((row) => {
-      const entry = entries.get(row.id);
-      if (entry === undefined) failure("Published route references an unreadable entry.");
-      return Object.freeze({ entry: publicEntry(entry), path: row.path });
-    });
+    const media = this.publicMedia(pageRows);
+    const items = pageRows.map((row) => publicContentEntry(row, entries, media));
     const last = pageRows.at(-1);
     return Object.freeze({
       items: Object.freeze(items),
@@ -1287,10 +1286,8 @@ export class NodeContentRepository
       .prepare(`${PUBLIC_ROUTE_SQL} where r.path = ? limit 1`)
       .get(path) as PublicRow | undefined;
     if (row === undefined) return null;
-    const entry = this.hydrate([row]).get(row.id);
-    return entry === undefined
-      ? null
-      : Object.freeze({ entry: publicEntry(entry), path: row.path });
+    const entries = this.hydrate([row]);
+    return entries.has(row.id) ? publicContentEntry(row, entries, this.publicMedia([row])) : null;
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
@@ -1399,14 +1396,9 @@ export class NodeContentRepository
       .prepare(`${PUBLIC_ROUTE_SQL} order by r.path asc`)
       .all() as readonly PublicRow[];
     const entries = this.hydrate(rows);
+    const media = this.publicMedia(rows);
     return Object.freeze({
-      entries: Object.freeze(
-        rows.map((row) => {
-          const entry = entries.get(row.id);
-          if (entry === undefined) failure("Build export contains an unreadable entry.");
-          return Object.freeze({ entry: publicEntry(entry), path: row.path });
-        }),
-      ),
+      entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
       version: await this.publishedContentVersion(),
     });
   }
@@ -1427,6 +1419,22 @@ export class NodeContentRepository
     const row = this.entryRow(id);
     if (row === undefined) return null;
     return this.hydrate([row]).get(row.id) ?? null;
+  }
+
+  private publicMedia(rows: readonly PublicRow[]): Map<string, readonly MediaMetadata[]> {
+    const ids = rows.flatMap((row) =>
+      row.published_snapshot_id === null ? [] : [row.published_snapshot_id],
+    );
+    const mediaRows: Record<string, unknown>[] = [];
+    for (const group of chunks(ids, SQLITE_BIND_CHUNK)) {
+      mediaRows.push(
+        ...(this.connection.prepare(publicSnapshotMediaSql(group.length)).all(...group) as Record<
+          string,
+          unknown
+        >[]),
+      );
+    }
+    return publicSnapshotMedia(mediaRows);
   }
 
   private hydrate(rows: readonly EntryRow[]): Map<string, ContentEntry> {

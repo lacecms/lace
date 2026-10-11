@@ -14,39 +14,16 @@ const environment = Object.freeze({
   LACE_BUILD_TOKEN: token,
 });
 
-function snapshot(id, state, overrides = {}) {
-  return {
-    blocks: [],
-    createdAt: timestamp,
-    entryId: id,
-    fields: {},
-    id: `${id}-${state}`,
-    revision: 1,
-    state,
-    title: `${id} ${state}`,
-    updatedAt: timestamp,
-    updatedBy: { id: "admin-1", role: "admin" },
-    ...overrides,
-  };
-}
-
 function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields = {} }) {
-  const published = snapshot(id, "published", {
+  return {
     blocks,
     fields,
-    ...(slug === undefined ? {} : { slug }),
-  });
-  return {
-    entry: {
-      draft: snapshot(id, "draft", { blocks: [{ ...block("draft-only", 0), type: "quote" }] }),
-      id,
-      model:
-        slug === undefined
-          ? { key: modelKey, kind: "page", path }
-          : { key: modelKey, kind: "collection", route: "/anything/:slug" },
-      published,
-    },
+    id,
+    modelKey,
     path,
+    publishedAt: timestamp,
+    ...(slug === undefined ? {} : { slug }),
+    title: `${id} published`,
   };
 }
 
@@ -54,8 +31,22 @@ function block(key, position, data = { heading: key }) {
   return { data, key, position, schemaVersion: 1, type: "hero" };
 }
 
-function buildExport(version, entries) {
-  return { entries, version };
+function mediaItem(id, overrides = {}) {
+  return {
+    alt: null,
+    caption: null,
+    focalPoint: null,
+    height: null,
+    id,
+    mimeType: "image/png",
+    url: `https://public.example.test/lace/api/v1/public/media/${id}`,
+    width: null,
+    ...overrides,
+  };
+}
+
+function buildExport(version, entries, media = {}) {
+  return { entries, media, version };
 }
 
 function exportResponse(value, etag = `"${value.version}"`) {
@@ -92,18 +83,31 @@ function deferred() {
   return { promise, resolve };
 }
 
-const homeExport = buildExport(3, [
-  exportEntry({
-    blocks: [block("second", 1), block("first", 0)],
-    fields: { summary: "Welcome" },
-    id: "home",
-    modelKey: "home",
-    path: "/",
-  }),
-  exportEntry({ id: "post-b", path: "/blog/b", slug: "b" }),
-  exportEntry({ id: "post-a", path: "/blog/a", slug: "a" }),
-  exportEntry({ id: "recipe", modelKey: "recipes", path: "/recipes/soup", slug: "soup" }),
-]);
+const homeExport = buildExport(
+  3,
+  [
+    exportEntry({
+      blocks: [block("second", 1), block("first", 0)],
+      fields: { summary: "Welcome" },
+      id: "home",
+      modelKey: "home",
+      path: "/",
+    }),
+    exportEntry({ id: "post-b", path: "/blog/b", slug: "b" }),
+    exportEntry({ id: "post-a", path: "/blog/a", slug: "a" }),
+    exportEntry({ id: "recipe", modelKey: "recipes", path: "/recipes/soup", slug: "soup" }),
+  ],
+  {
+    "hero-media": mediaItem("hero-media", {
+      alt: "Office",
+      caption: "Our office",
+      focalPoint: { x: 0.25, y: 0.4 },
+      height: 900,
+      width: 1600,
+    }),
+    plain: mediaItem("plain"),
+  },
+);
 
 async function captureError(promise) {
   try {
@@ -160,15 +164,60 @@ test("explicit values take precedence over the environment record", async () => 
   );
 });
 
-test("media URLs fall back to the API base URL and never carry the token", async () => {
+test("media URLs keep the export URL without a public origin and never carry the token", async () => {
   const transport = scriptedFetch([exportResponse(homeExport)]);
   const site = await createPublishedSiteLoader({
     environment: { ...environment, LACE_PUBLIC_BASE_URL: "" },
     fetch: transport.fetch,
   })();
   const url = site.mediaUrl("hero-media");
-  expect(url).toBe("https://api.example.test/lace/api/v1/public/media/hero-media");
+  expect(url).toBe("https://public.example.test/lace/api/v1/public/media/hero-media");
+  expect(site.media("hero-media").url).toBe(url);
+  expect(site.byPath("/").media("hero-media").url).toBe(url);
+  // An ID the export does not resolve falls back to the API base URL.
+  expect(site.mediaUrl("unknown")).toBe(
+    "https://api.example.test/lace/api/v1/public/media/unknown",
+  );
   expect(url).not.toContain(token);
+});
+
+test("a configured public origin rewrites resolved media URLs", async () => {
+  const site = await createPublishedSiteLoader({
+    environment: { ...environment, LACE_PUBLIC_BASE_URL: "https://media.example.test/base" },
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+  })();
+  const expected = "https://media.example.test/base/api/v1/public/media/hero-media";
+  expect(site.media("hero-media").url).toBe(expected);
+  expect(site.image("hero-media").url).toBe(expected);
+  expect(site.mediaUrl("hero-media")).toBe(expected);
+});
+
+test("image lookups resolve the effective alt text and keep the media description", async () => {
+  const site = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+  })();
+  const home = site.byPath("/");
+  expect(home.image("hero-media", "Team at work")).toEqual({
+    alt: "Team at work",
+    caption: "Our office",
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: 900,
+    id: "hero-media",
+    mimeType: "image/png",
+    url: "https://public.example.test/lace/api/v1/public/media/hero-media",
+    width: 1600,
+  });
+  expect(home.image("hero-media").alt).toBe("Office");
+  expect(home.image("hero-media", "  ").alt).toBe("Office");
+  expect(site.image("plain").alt).toBe("");
+  expect(site.media("plain").alt).toBeNull();
+  expect(site.media("unknown")).toBeUndefined();
+  expect(site.image("unknown")).toBeUndefined();
+  expect(site.media("__proto__")).toBeUndefined();
+  expect(site.media("constructor")).toBeUndefined();
+  expect(Object.isFrozen(site.media("hero-media"))).toBe(true);
+  expect(Object.isFrozen(site.media("hero-media").focalPoint)).toBe(true);
 });
 
 test("the site view exposes published content only, ordered and immutable", async () => {
@@ -180,8 +229,11 @@ test("the site view exposes published content only, ordered and immutable", asyn
     blocks: [block("first", 0), block("second", 1)],
     fields: { summary: "Welcome" },
     id: "home",
+    image: expect.any(Function),
+    media: expect.any(Function),
     modelKey: "home",
     path: "/",
+    publishedAt: timestamp,
     title: "home published",
   });
   expect(JSON.stringify(home)).not.toContain("draft");
@@ -388,17 +440,18 @@ test("the same slug in different models is allowed", async () => {
   expect(site.bySlug("notes", "hello")?.id).toBe("b");
 });
 
-test("rejects an entry without a published snapshot", async () => {
-  const entry = exportEntry({ id: "draft-only", modelKey: "home", path: "/" });
-  delete entry.entry.published;
+test("rejects a legacy-shaped export as a contract violation", async () => {
+  const legacy = {
+    entries: [{ entry: { draft: {}, id: "home", model: {}, published: {} }, path: "/" }],
+    version: 1,
+  };
   const error = await captureError(
     createPublishedSiteLoader({
       environment,
-      fetch: scriptedFetch([exportResponse(buildExport(1, [entry]))]).fetch,
+      fetch: scriptedFetch([exportResponse(legacy)]).fetch,
     })(),
   );
-  expect(error.code).toBe("invalid_export");
-  expect(error.message).toContain("draft-only");
+  expect(error).toBeInstanceOf(LaceContractError);
 });
 
 test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {

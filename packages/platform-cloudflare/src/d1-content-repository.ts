@@ -138,7 +138,9 @@ import {
   mediaMetadata,
   mediaUsageEntries,
   parseObject,
-  publicEntry,
+  publicContentEntry,
+  publicSnapshotMedia,
+  publicSnapshotMediaSql,
   revisionConflict,
   sameStoredModelStates,
   sanitizeBuildReason,
@@ -550,11 +552,8 @@ export class D1ContentRepository
     );
     const pageRows = rows.slice(0, limit);
     const entries = await this.hydrate(pageRows);
-    const items = pageRows.map((row) => {
-      const entry = entries.get(row.id);
-      if (entry === undefined) failure("Published route references an unreadable entry.");
-      return Object.freeze({ entry: publicEntry(entry), path: row.path });
-    });
+    const media = await this.publicMedia(pageRows);
+    const items = pageRows.map((row) => publicContentEntry(row, entries, media));
     const last = pageRows.at(-1);
     return Object.freeze({
       items: Object.freeze(items),
@@ -574,10 +573,10 @@ export class D1ContentRepository
   public async loadPublic(path: string): Promise<PublicContentEntry | null> {
     const row = await this.first<PublicRow>(`${PUBLIC_ROUTE_SQL} where r.path = ? limit 1`, path);
     if (row === undefined) return null;
-    const entry = (await this.hydrate([row])).get(row.id);
-    return entry === undefined
-      ? null
-      : Object.freeze({ entry: publicEntry(entry), path: row.path });
+    const entries = await this.hydrate([row]);
+    return entries.has(row.id)
+      ? publicContentEntry(row, entries, await this.publicMedia([row]))
+      : null;
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
@@ -682,14 +681,9 @@ export class D1ContentRepository
   public async exportBuildContent(): Promise<BuildContentExport> {
     const rows = await this.all<PublicRow>(`${PUBLIC_ROUTE_SQL} order by r.path asc`);
     const entries = await this.hydrate(rows);
+    const media = await this.publicMedia(rows);
     return Object.freeze({
-      entries: Object.freeze(
-        rows.map((row) => {
-          const entry = entries.get(row.id);
-          if (entry === undefined) failure("Build export contains an unreadable entry.");
-          return Object.freeze({ entry: publicEntry(entry), path: row.path });
-        }),
-      ),
+      entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
       version: await this.publishedContentVersion(),
     });
   }
@@ -1885,6 +1879,24 @@ export class D1ContentRepository
     const row = await this.entryRow(id);
     if (row === undefined) return null;
     return (await this.hydrate([row])).get(row.id) ?? null;
+  }
+
+  private async publicMedia(
+    rows: readonly PublicRow[],
+  ): Promise<Map<string, readonly MediaMetadata[]>> {
+    const ids = rows.flatMap((row) =>
+      row.published_snapshot_id === null ? [] : [row.published_snapshot_id],
+    );
+    const mediaRows: Record<string, unknown>[] = [];
+    for (const group of chunks(ids, D1_MAX_BOUND_PARAMETERS)) {
+      mediaRows.push(
+        ...(await this.all<Record<string, unknown>>(
+          publicSnapshotMediaSql(group.length),
+          ...group,
+        )),
+      );
+    }
+    return publicSnapshotMedia(mediaRows);
   }
 
   private async hydrate(rows: readonly EntryRow[]): Promise<Map<string, ContentEntry>> {

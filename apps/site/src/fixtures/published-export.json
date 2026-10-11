@@ -1,396 +1,279 @@
 {
   "entries": [
     {
-      "entry": {
-        "draft": {
-          "blocks": [
-            {
-              "data": {
-                "heading": "DRAFT ONLY HOME"
-              },
-              "key": "draft-home-hero",
-              "position": 0,
-              "schemaVersion": 1,
-              "type": "hero"
-            }
-          ],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "home-entry",
-          "fields": {},
-          "id": "home-draft",
-          "revision": 3,
-          "state": "draft",
-          "title": "DRAFT ONLY HOME",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
-        },
-        "id": "home-entry",
-        "model": {
-          "key": "home",
-          "kind": "page",
-          "path": "/"
-        },
-        "published": {
-          "blocks": [
-            {
-              "data": {
-                "body": {
+      "blocks": [
+        {
+          "data": {
+            "body": {
+              "content": [
+                {
                   "content": [
                     {
-                      "content": [
-                        {
-                          "text": "Build once from published content.",
-                          "type": "text"
-                        }
-                      ],
-                      "type": "paragraph"
+                      "text": "Build once from published content.",
+                      "type": "text"
                     }
                   ],
-                  "type": "doc"
-                },
-                "eyebrow": "Lace",
-                "heading": "The static Lace starter",
-                "image": "hero-media",
-                "primaryActionLabel": "Read the blog",
-                "primaryActionUrl": "/blog/first-post"
-              },
-              "key": "home-hero",
-              "position": 0,
-              "schemaVersion": 1,
-              "type": "hero"
+                  "type": "paragraph"
+                }
+              ],
+              "type": "doc"
             },
-            {
-              "data": {
-                "actionLabel": "Get started",
-                "actionUrl": "https://lace.example/docs",
-                "body": {
+            "eyebrow": "Lace",
+            "heading": "The static Lace starter",
+            "image": "hero-media",
+            "primaryActionLabel": "Read the blog",
+            "primaryActionUrl": "/blog/first-post"
+          },
+          "key": "home-hero",
+          "position": 0,
+          "schemaVersion": 1,
+          "type": "hero"
+        },
+        {
+          "data": {
+            "actionLabel": "Get started",
+            "actionUrl": "https://lace.example/docs",
+            "body": {
+              "content": [
+                {
                   "content": [
                     {
-                      "content": [
+                      "marks": [
                         {
-                          "marks": [
-                            {
-                              "type": "bold"
-                            }
-                          ],
-                          "text": "Everything ships as static HTML.",
-                          "type": "text"
+                          "type": "bold"
                         }
                       ],
-                      "type": "paragraph"
+                      "text": "Everything ships as static HTML.",
+                      "type": "text"
                     }
                   ],
-                  "type": "doc"
-                },
-                "heading": "Ready for your content"
-              },
-              "key": "home-cta",
-              "position": 1,
-              "schemaVersion": 1,
-              "type": "cta"
-            }
-          ],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "home-entry",
-          "fields": {},
-          "id": "home-published",
-          "revision": 2,
-          "state": "published",
-          "title": "Lace starter",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
+                  "type": "paragraph"
+                }
+              ],
+              "type": "doc"
+            },
+            "heading": "Ready for your content"
+          },
+          "key": "home-cta",
+          "position": 1,
+          "schemaVersion": 1,
+          "type": "cta"
         }
-      },
-      "path": "/"
+      ],
+      "fields": {},
+      "id": "home-entry",
+      "modelKey": "home",
+      "path": "/",
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "title": "Lace starter"
     },
     {
-      "entry": {
-        "draft": {
-          "blocks": [],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "first-post-entry",
-          "fields": {},
-          "id": "first-post-draft",
-          "revision": 2,
-          "slug": "first-post",
-          "state": "draft",
-          "title": "DRAFT ONLY POST",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
-        },
-        "id": "first-post-entry",
-        "model": {
-          "key": "posts",
-          "kind": "collection",
-          "route": "/blog/:slug"
-        },
-        "published": {
-          "blocks": [
-            {
-              "data": {
-                "content": {
+      "blocks": [
+        {
+          "data": {
+            "content": {
+              "content": [
+                {
+                  "attrs": {
+                    "level": 2
+                  },
                   "content": [
                     {
-                      "attrs": {
-                        "level": 2
-                      },
-                      "content": [
-                        {
-                          "text": "A safe rich-text heading",
-                          "type": "text"
-                        }
-                      ],
-                      "type": "heading"
-                    },
+                      "text": "A safe rich-text heading",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "heading"
+                },
+                {
+                  "content": [
                     {
-                      "content": [
+                      "marks": [
                         {
-                          "marks": [
-                            {
-                              "attrs": {
-                                "href": "https://lace.example"
-                              },
-                              "type": "link"
-                            },
-                            {
-                              "type": "italic"
-                            }
-                          ],
-                          "text": "Published only",
-                          "type": "text"
+                          "attrs": {
+                            "href": "https://lace.example"
+                          },
+                          "type": "link"
+                        },
+                        {
+                          "type": "italic"
                         }
                       ],
-                      "type": "paragraph"
-                    },
-                    {
-                      "content": [
-                        {
-                          "content": [
-                            {
-                              "content": [
-                                {
-                                  "text": "Ordered content",
-                                  "type": "text"
-                                }
-                              ],
-                              "type": "paragraph"
-                            }
-                          ],
-                          "type": "listItem"
-                        }
-                      ],
-                      "type": "bulletList"
-                    },
+                      "text": "Published only",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                },
+                {
+                  "content": [
                     {
                       "content": [
                         {
                           "content": [
                             {
-                              "text": "Quoted rich text",
-                              "type": "text"
-                            },
-                            {
-                              "type": "hardBreak"
-                            },
-                            {
-                              "text": "across two lines",
+                              "text": "Ordered content",
                               "type": "text"
                             }
                           ],
                           "type": "paragraph"
                         }
                       ],
-                      "type": "blockquote"
+                      "type": "listItem"
                     }
                   ],
-                  "type": "doc"
+                  "type": "bulletList"
+                },
+                {
+                  "content": [
+                    {
+                      "content": [
+                        {
+                          "text": "Quoted rich text",
+                          "type": "text"
+                        },
+                        {
+                          "type": "hardBreak"
+                        },
+                        {
+                          "text": "across two lines",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "blockquote"
                 }
-              },
-              "key": "post-rich-text",
-              "position": 0,
-              "schemaVersion": 1,
-              "type": "richText"
-            },
-            {
-              "data": {
-                "alt": "A durable media URL",
-                "caption": "Media is served by Lace.",
-                "media": "post-media"
-              },
-              "key": "post-image",
-              "position": 1,
-              "schemaVersion": 2,
-              "type": "image"
-            },
-            {
-              "data": {
-                "attribution": "Lace team",
-                "quote": "Content belongs in the CMS; presentation belongs in the site."
-              },
-              "key": "post-quote",
-              "position": 2,
-              "schemaVersion": 1,
-              "type": "quote"
+              ],
+              "type": "doc"
             }
-          ],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "first-post-entry",
-          "fields": {
-            "author": "Lace team",
-            "category": "engineering",
-            "publishedAt": "2026-09-20"
           },
-          "id": "first-post-published",
-          "revision": 1,
-          "slug": "first-post",
-          "state": "published",
-          "title": "First published post",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
+          "key": "post-rich-text",
+          "position": 0,
+          "schemaVersion": 1,
+          "type": "richText"
+        },
+        {
+          "data": {
+            "alt": "A durable media URL",
+            "caption": "Media is served by Lace.",
+            "media": "post-media"
+          },
+          "key": "post-image",
+          "position": 1,
+          "schemaVersion": 2,
+          "type": "image"
+        },
+        {
+          "data": {
+            "attribution": "Lace team",
+            "quote": "Content belongs in the CMS; presentation belongs in the site."
+          },
+          "key": "post-quote",
+          "position": 2,
+          "schemaVersion": 1,
+          "type": "quote"
         }
+      ],
+      "fields": {
+        "author": "Lace team",
+        "category": "engineering",
+        "publishedAt": "2026-09-20"
       },
-      "path": "/blog/first-post"
+      "id": "first-post-entry",
+      "modelKey": "posts",
+      "path": "/blog/first-post",
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "slug": "first-post",
+      "title": "First published post"
     },
     {
-      "entry": {
-        "draft": {
-          "blocks": [
-            {
-              "data": {
-                "heading": "DRAFT ONLY ABOUT"
-              },
-              "key": "about-draft-hero",
-              "position": 0,
-              "schemaVersion": 1,
-              "type": "hero"
-            }
-          ],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "about-entry",
-          "fields": {},
-          "id": "about-draft",
-          "revision": 3,
-          "state": "draft",
-          "title": "DRAFT ONLY ABOUT",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
-        },
-        "id": "about-entry",
-        "model": {
-          "key": "about",
-          "kind": "page",
-          "path": "/about"
-        },
-        "published": {
-          "blocks": [
-            {
-              "data": {
-                "heading": "Built with Lace"
-              },
-              "key": "about-hero",
-              "position": 0,
-              "schemaVersion": 1,
-              "type": "hero"
-            }
-          ],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "about-entry",
-          "fields": {},
-          "id": "about-published",
-          "revision": 2,
-          "state": "published",
-          "title": "About Lace",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
+      "blocks": [
+        {
+          "data": {
+            "heading": "Built with Lace"
+          },
+          "key": "about-hero",
+          "position": 0,
+          "schemaVersion": 1,
+          "type": "hero"
         }
-      },
-      "path": "/about"
+      ],
+      "fields": {},
+      "id": "about-entry",
+      "modelKey": "about",
+      "path": "/about",
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "title": "About Lace"
     },
     {
-      "entry": {
-        "draft": {
-          "blocks": [],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "first-note-entry",
-          "fields": {
-            "summary": "draft only"
+      "blocks": [
+        {
+          "data": {
+            "quote": "Notes render from the published export.",
+            "attribution": "Lace team"
           },
-          "id": "first-note-draft",
-          "revision": 2,
-          "slug": "draft-only-note",
-          "state": "draft",
-          "title": "DRAFT ONLY NOTE",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
+          "key": "note-quote",
+          "position": 0,
+          "schemaVersion": 1,
+          "type": "quote"
         },
-        "id": "first-note-entry",
-        "model": {
-          "key": "notes",
-          "kind": "collection",
-          "route": "/notes/:slug"
-        },
-        "published": {
-          "blocks": [
-            {
-              "data": {
-                "quote": "Notes render from the published export.",
-                "attribution": "Lace team"
-              },
-              "key": "note-quote",
-              "position": 0,
-              "schemaVersion": 1,
-              "type": "quote"
-            },
-            {
-              "data": {
-                "media": "note-media"
-              },
-              "key": "note-image",
-              "position": 1,
-              "schemaVersion": 2,
-              "type": "image"
-            }
-          ],
-          "createdAt": "2026-09-20T00:00:00.000Z",
-          "entryId": "first-note-entry",
-          "fields": {
-            "summary": "A short published note"
+        {
+          "data": {
+            "media": "note-media"
           },
-          "id": "first-note-published",
-          "revision": 1,
-          "slug": "first-note",
-          "state": "published",
-          "title": "First published note",
-          "updatedAt": "2026-09-20T00:00:00.000Z",
-          "updatedBy": {
-            "id": "admin-user",
-            "role": "admin"
-          }
+          "key": "note-image",
+          "position": 1,
+          "schemaVersion": 2,
+          "type": "image"
         }
+      ],
+      "fields": {
+        "summary": "A short published note"
       },
-      "path": "/notes/first-note"
+      "id": "first-note-entry",
+      "modelKey": "notes",
+      "path": "/notes/first-note",
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "slug": "first-note",
+      "title": "First published note"
     }
   ],
+  "media": {
+    "hero-media": {
+      "alt": "Lace starter illustration",
+      "caption": null,
+      "focalPoint": {
+        "x": 0.3,
+        "y": 0.2
+      },
+      "height": 630,
+      "id": "hero-media",
+      "mimeType": "image/png",
+      "url": "https://cms.example.test/lace/api/v1/public/media/hero-media",
+      "width": 1200
+    },
+    "note-media": {
+      "alt": null,
+      "caption": null,
+      "focalPoint": null,
+      "height": 480,
+      "id": "note-media",
+      "mimeType": "image/png",
+      "url": "https://cms.example.test/lace/api/v1/public/media/note-media",
+      "width": 640
+    },
+    "post-media": {
+      "alt": "Media library description",
+      "caption": "Media library caption",
+      "focalPoint": null,
+      "height": 600,
+      "id": "post-media",
+      "mimeType": "image/jpeg",
+      "url": "https://cms.example.test/lace/api/v1/public/media/post-media",
+      "width": 800
+    }
+  },
   "version": 7
 }

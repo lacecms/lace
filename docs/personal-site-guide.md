@@ -187,14 +187,16 @@ const publicBaseUrl = process.env.LACE_MEDIA_BASE_URL ??
 const mediaClient = createLaceClient({ baseUrl: publicBaseUrl });
 export const mediaUrl = (id: string) => mediaClient.getPublicMediaUrl(id);
 
+// Export entries are published only: { id, modelKey, path, slug?, title, fields, blocks, publishedAt }.
+export const media = result.export.media;
+
 export function page(key: string) {
-  const item = entries.find((item) => item.entry.model.key === key);
-  if (!item?.entry.published) throw new Error(`Publish page ${key} first`);
-  return { ...item.entry.published, path: item.path };
+  const item = entries.find((item) => item.modelKey === key);
+  if (!item) throw new Error(`Publish page ${key} first`);
+  return item;
 }
 export const works = entries
-  .filter((item) => item.entry.model.key === "works" && item.entry.published)
-  .map((item) => ({ ...item.entry.published!, path: item.path }))
+  .filter((item) => item.modelKey === "works")
   .sort((a, b) => Number(a.fields.order ?? 0) - Number(b.fields.order ?? 0)
     || a.title.localeCompare(b.title));
 ```
@@ -242,7 +244,7 @@ const profile = String(contacts.fields.profileUrl ?? "");
 
 ```astro
 ---
-import { works, mediaUrl } from "../../lib/cms";
+import { media, works, mediaUrl } from "../../lib/cms";
 ---
 <html lang="ru">
   <head><meta charset="utf-8" /><title>Мои работы</title></head>
@@ -250,8 +252,10 @@ import { works, mediaUrl } from "../../lib/cms";
     <a href="/">Главная</a><h1>Мои работы</h1>
     {works.map((work) => <article>
       <h2><a href={work.path}>{work.title}</a></h2>
-      {typeof work.fields.cover === "string" &&
-        <img src={mediaUrl(work.fields.cover)} alt={work.title} loading="lazy" />}
+      {typeof work.fields.cover === "string" && media[work.fields.cover] &&
+        <img src={mediaUrl(work.fields.cover)} alt={media[work.fields.cover].alt ?? work.title}
+          width={media[work.fields.cover].width ?? undefined}
+          height={media[work.fields.cover].height ?? undefined} loading="lazy" />}
       <p>{String(work.fields.summary ?? "")}</p>
     </article>)}
   </main></body>
@@ -287,7 +291,7 @@ const url = String(work.fields.projectUrl ?? "");
 
 Начиная с шаблона `0.9.0` (30C), generated starter загружает и рендерит контент через пакеты `@lacecms/sdk`, `@lacecms/render` и `@lacecms/astro`. Loader находится в `site/src/lib/lace.ts` (`getSite()` даёт `byPath`, `entries`, `bySlug` и `mediaUrl`), пять компонентов блоков — в `site/src/components/lace/`, карта блоков — в `site/src/lace/blocks.ts`, версии и хэши установленных блоков — в `site/lace.site.json`. Вместо своего `cms.ts` можно читать страницы так: `const site = await getSite(); const home = site.byPath("/");`, а работы — через `site.entries("works")` и `site.bySlug("works", slug)`.
 
-Блоки страницы выводи через `<LaceBlocks entry={entry} blocks={blocks} mediaUrl={site.mediaUrl} />` из `@lacecms/astro/LaceBlocks.astro`. Данные блоков проверяются правилами CMS до передачи в компонент, а rich text выводит `@lacecms/astro/RichText.astro` только через общий allowlist, без `set:html`. Custom block требует Astro-компонента и записи в `site/src/lace/blocks.ts`: экспортируй его `defineBlock` из модуля, который импортирует `lace.config.ts`, запиши путь к модулю (относительно `site/`) как `"definitions"` в `site/lace.site.json` и выполни `pnpm exec lace add block <type>` — команда создаст типизированный компонент-заготовку и добавит его в карту блоков. `pnpm exec lace add block --all` (с шаблона `0.10.0`, 30D) ставит и обновляет встроенные блоки; изменённые тобой файлы и карту она не перезаписывает, а показывает конфликт с diff. Админка даст generic-форму по metadata, но шаблон отображения остаётся твоим.
+Блоки страницы выводи через `<LaceBlocks entry={entry} blocks={blocks} mediaUrl={site.mediaUrl} />` из `@lacecms/astro/LaceBlocks.astro`. Данные блоков проверяются правилами CMS до передачи в компонент, а rich text выводит `@lacecms/astro/RichText.astro` только через общий allowlist, без `set:html`. Custom block требует Astro-компонента и записи в `site/src/lace/blocks.ts`: экспортируй его `defineBlock` из модуля, который импортирует `lace.config.ts`, запиши путь к модулю (относительно `site/`) как `"definitions"` в `site/lace.site.json` и выполни `pnpm exec lace add block <type>` — команда создаст типизированный компонент-заготовку и добавит его в карту блоков. `pnpm exec lace add block --all` (с шаблона `0.10.0`, 30D) ставит и обновляет встроенные блоки; изменённые тобой файлы и карту она не перезаписывает, а показывает конфликт с diff. Админка даст generic-форму по metadata, но шаблон отображения остаётся твоим. С шаблона `0.23.0` (CE3C) компоненты блоков получают ещё `image(mediaId, usageAlt?)`: он возвращает `src`, итоговый `alt` (alt блока, иначе alt из Media, иначе пустая строка), `width`, `height` и `objectPosition` из focal point; вне блоков то же дают `site.image(id)` и `site.media(id)`.
 
 ## 4. VPS: собери runtime images
 

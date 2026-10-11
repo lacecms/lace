@@ -35,7 +35,13 @@ import {
   mediaId,
   unixMilliseconds,
 } from "@lacecms/domain";
-import type { Actor, ContentBlock, ContentEntry, ContentModelRoute } from "@lacecms/domain";
+import type {
+  Actor,
+  ContentBlock,
+  ContentEntry,
+  ContentModelRoute,
+  MediaMetadata,
+} from "@lacecms/domain";
 import type { ExpectStatic } from "vitest";
 
 /** Every persistence port a SQL runtime adapter must implement identically. */
@@ -1417,11 +1423,7 @@ contract(
       41,
     );
     expect(await repository.loadPublic("/blog/post-a")).toMatchObject({
-      entry: {
-        draft: { id: "post-a-published", state: "draft" },
-        id: "post-a",
-        published: { id: "post-a-published" },
-      },
+      entry: { id: "post-a", published: { id: "post-a-published" } },
       path: "/blog/post-a",
     });
     const publicPage = await repository.listPublic({
@@ -3870,6 +3872,55 @@ contract(
       code: "MEDIA_UPDATE_CONFLICT",
     });
     expect(await repository.publishedContentVersion()).toBe(version + 4);
+  },
+);
+
+contract(
+  "returns the active media of published snapshots with public reads",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "home", "posts");
+    for (const id of ["media-1", "media-2", "media-3"]) await seedMedia(sql, id);
+    await sql.run(
+      "update media set width = 1600, height = 900, alt = 'Office', caption = 'Our office', focal_x = 0.25, focal_y = 0.4 where id = 'media-2'",
+    );
+    await repository.create({
+      entry: heroEntry("post", "posts", 1),
+      mediaReferences: [
+        { fieldPath: "image", mediaId: mediaId("media-1"), sourceKey: "$fields" },
+        { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: blockKey("post-block") },
+        { fieldPath: "media", mediaId: mediaId("media-2"), sourceKey: blockKey("other-block") },
+      ],
+    });
+    await repository.publish(publish("post", 1, 2, "post-published"));
+    await repository.saveCompleteDraft(
+      save("post", 1, 3, {
+        mediaReferences: [
+          { fieldPath: "image", mediaId: mediaId("media-3"), sourceKey: "$fields" },
+        ],
+        title: "DRAFT ONLY",
+      }),
+    );
+
+    const expectMedia = (media: readonly MediaMetadata[]) => {
+      expect(media.map((item) => item.id)).toEqual(["media-1", "media-2"]);
+      expect(media[1]).toMatchObject({
+        alt: "Office",
+        caption: "Our office",
+        focalPoint: { x: 0.25, y: 0.4 },
+        height: 900,
+        width: 1600,
+      });
+    };
+    const loaded = (await repository.loadPublic("/blog/post"))!;
+    expectMedia(loaded.media);
+    expect(loaded.entry.published!.title).toBe("post");
+    expect(JSON.stringify(loaded)).not.toContain("DRAFT ONLY");
+    const listed = await repository.listPublic({ limit: 10, modelKey: contentModelKey("posts") });
+    expectMedia(listed.items[0]!.media);
+    const exported = await repository.exportBuildContent();
+    expectMedia(exported.entries[0]!.media);
+    expect(JSON.stringify(exported)).not.toContain("DRAFT ONLY");
   },
 );
 

@@ -139,10 +139,10 @@ test("generated Astro builds all five blocks from one export and rejects unsuppo
     expect(output).not.toContain("javascript:");
 
     served = structuredClone(exported);
-    served.entries[0].entry.published.blocks[0].type = "unknownBlock";
+    served.entries[0].blocks[0].type = "unknownBlock";
     await expect(build()).rejects.toThrow(/no component for block type unknownBlock/u);
     served = structuredClone(exported);
-    served.entries[1].entry.published.blocks[0].data.content.content[1].content[0].marks = [
+    served.entries[1].blocks[0].data.content.content[1].content[0].marks = [
       { type: "link", attrs: { href: "javascript:alert(1)" } },
     ];
     await expect(build()).rejects.toThrow(
@@ -213,7 +213,7 @@ test("generated Astro dev revalidates the export so publications appear on reloa
     expect((await page("/")).text).toContain("The static Lace starter");
     served = structuredClone(exported);
     served.version = 8;
-    served.entries[0].entry.published.blocks[0].data.heading = "Published again";
+    served.entries[0].blocks[0].data.heading = "Published again";
     expect((await page("/")).text, JSON.stringify(server.requests)).toContain("Published again");
     expect((await page("/blog/first-post/")).text).toContain("First published post");
     expect(server.requests.slice(0, 3)).toEqual([null, '"7"', '"7"']);

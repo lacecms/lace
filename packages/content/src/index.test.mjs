@@ -14,6 +14,7 @@ import {
   compileFieldSchema,
   defineBlock,
   defineBlockRegistry,
+  effectiveAltText,
   field,
   isSafeUrl,
   migrateBlockData,
@@ -683,4 +684,12 @@ test("image version 2 makes alt text optional and migrates version 1 data unchan
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
   expect(metadata).toMatchObject({ type: "image", version: 2 });
   expect(metadata.fields.alt.required).toBe(false);
+});
+
+test("effective alt text prefers a non-blank usage alt, then the media alt", () => {
+  expect(effectiveAltText("Team at work", "Office")).toBe("Team at work");
+  expect(effectiveAltText("   ", "Office")).toBe("Office");
+  expect(effectiveAltText(undefined, "Office")).toBe("Office");
+  expect(effectiveAltText(undefined, null)).toBe("");
+  expect(effectiveAltText("", " ")).toBe("");
 });

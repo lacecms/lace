@@ -63,10 +63,20 @@ test("generates deterministic owned source and hashed managed files", async () =
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
   // Upgrading from the published alpha.2 engines needs the 33D build-outcome migration.
   expect(instructions.database.join("\n")).toContain("0003_site_build_outcomes");
+  // Schema evolution and media metadata need two additive migrations.
+  expect(instructions.database[0]).toContain(
+    "0005_content_model_structure and 0006_media_descriptive_metadata",
+  );
   // Invitations and password recovery need the additive account-token migration.
-  expect(instructions.database[0]).toContain("0004_account_tokens");
+  expect(instructions.database.join("\n")).toContain("0004_account_tokens");
   expect(instructions.configuration[0]).toMatch(
-    /^Template 0\.22\.0: .*invite people .*deploy the API and admin artifacts together.*shows its link once/u,
+    /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
+  );
+  expect(instructions.configuration[2]).toMatch(
+    /image block is version 2.*raise the version of every model that allows image.*refuses image blocks still stored at version 1/u,
+  );
+  expect(instructions.configuration.join("\n")).toMatch(
+    /Template 0\.22\.0: .*invite people .*deploy the API and admin artifacts together.*shows its link once/u,
   );
   expect(files).not.toContain("wrangler.jsonc");
   expect(files.every((file) => !file.startsWith("apps/") && !file.startsWith("packages/"))).toBe(
@@ -273,7 +283,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.4");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.4");
-  expect(TEMPLATE_VERSION).toBe("0.22.0");
+  expect(TEMPLATE_VERSION).toBe("0.23.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");

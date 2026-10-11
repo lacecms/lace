@@ -1073,7 +1073,7 @@ export class InMemoryContentStore
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {
     const entries = this.publicEntries()
       .filter(({ entry }) => entry.model.key === input.modelKey)
-      .map(({ entry, path }) => Object.freeze({ entry: copyEntry(entry), path }));
+      .map(({ entry, path }) => this.publicView(entry, path));
     return this.page(entries, input.after, input.limit, `public:${input.modelKey}`);
   }
 
@@ -1092,7 +1092,25 @@ export class InMemoryContentStore
     const route = this.routes.get(path);
     if (route === undefined) return null;
     const entry = this.entries.get(route.entryId);
-    return entry?.published === undefined ? null : Object.freeze({ entry: copyEntry(entry), path });
+    return entry?.published === undefined ? null : this.publicView(entry, path);
+  }
+
+  /** Mirrors the SQL public projection: no editorial draft, active published media only. */
+  private publicView(entry: ContentEntry, path: string): PublicContentEntry {
+    const copied = copyEntry(entry);
+    const published = copied.published!;
+    const ids = new Set(
+      (this.references.get(published.id) ?? []).map((reference) => reference.mediaId as string),
+    );
+    const media = [...ids].sort().flatMap((id) => {
+      const value = this.media.get(id);
+      return value === undefined || value.status !== "active" ? [] : [clone(value)];
+    });
+    return Object.freeze({
+      entry: Object.freeze({ ...copied, draft: Object.freeze({ ...published, state: "draft" }) }),
+      media: Object.freeze(media),
+      path,
+    });
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
@@ -1254,9 +1272,7 @@ export class InMemoryContentStore
   public async exportBuildContent(): Promise<BuildContentExport> {
     return Object.freeze({
       entries: Object.freeze(
-        this.publicEntries().map(({ entry, path }) =>
-          Object.freeze({ entry: copyEntry(entry), path }),
-        ),
+        this.publicEntries().map(({ entry, path }) => this.publicView(entry, path)),
       ),
       version: this.publicVersion,
     });

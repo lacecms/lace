@@ -93,8 +93,15 @@ outdated; it never edits your `package.json` or other source. Use `--dry-run`
 to review the plan without writing.
 
 The components are your source: change their markup and styles freely. Each
-receives `block`, validated `data`, `context` and `mediaUrl`; rich-text fields
-render through `@lacecms/astro/RichText.astro`. A block type that is missing
+receives `block`, validated `data`, `context`, `mediaUrl` and `image`; rich-text
+fields render through `@lacecms/astro/RichText.astro`. `image(mediaId,
+usageAlt?)` describes a media field for an `<img>`: `src`, the effective `alt`
+(the usage alt text such as the image block's `alt`, else the media item's alt
+text from the Media library, else `""`), `width` and `height` to prevent layout
+shift, `caption`, and `objectPosition` (for example `25% 40%`) from the focal
+point set in Media. A media ID missing from the build export fails the build
+with its block. Outside blocks, `site.media(id)` and `site.image(id, usageAlt?)`
+(also available on each entry) return the resolved media item. A block type that is missing
 from the map fails the build with its model, entry and block key. Running the
 command again after a CLI upgrade updates only files you have not changed; an
 edited component or block map is reported as a conflict with a diff and left

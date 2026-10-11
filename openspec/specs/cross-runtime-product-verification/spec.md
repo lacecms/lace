@@ -26,7 +26,7 @@ Shared API verification SHALL cover real session authentication, admin/editor/vi
 
 #### Scenario: A draft is changed after publication
 - **WHEN** both runtimes save a changed draft and an unpublished entry after an initial publication
-- **THEN** public page, collection, path and export reads contain only published snapshot values, successful public entries have a published snapshot and a matching mirrored draft, and unpublished entries are absent
+- **THEN** public page, collection, path and export reads contain only published values in the public entry shape without a `draft` key, their media dictionaries contain exactly the published media references, and unpublished entries are absent
 
 #### Scenario: Restricted users call privileged endpoints
 - **WHEN** an editor attempts publication or user/token administration or a viewer attempts content/media mutation
@@ -52,7 +52,7 @@ Local Playwright verification SHALL run required editorial scenarios against bot
 - **THEN** the admin distinguishes successful publication from failed build, offers the applicable recovery action and does not claim a deployment succeeded
 
 ### Requirement: Astro output is compared across runtime exports
-Verification SHALL build the same Astro fixture separately from each runtime's actual authenticated export and compare canonical published data, emitted route inventories and media references against common expected results. Canonicalization SHALL preserve content and block ordering and remove only documented runtime-specific origins and generated identities/times. The published-site view SHALL contain no draft-shaped property or editorial metadata. Rendered output SHALL exclude later draft sentinels, unpublished content and build credentials. The current v1 public DTO SHALL remain compatible; a dedicated published-only wire schema is not introduced by this verification change.
+Verification SHALL build the same Astro fixture separately from each runtime's actual authenticated export and compare canonical published data, emitted route inventories and media references against common expected results. Canonicalization SHALL preserve content and block ordering and remove only documented runtime-specific origins and generated identities/times. The published-site view SHALL contain no draft-shaped property or editorial metadata. Rendered output SHALL exclude later draft sentinels, unpublished content and build credentials. Exports SHALL use the published public entry shape with a resolved media dictionary, and canonical comparison SHALL include each referenced media item's dimensions and descriptive metadata with its runtime-specific origin removed.
 
 #### Scenario: Equivalent published sites build identically
 - **WHEN** the common seeded site is exported from Node and local Worker and built with the same Astro fixture

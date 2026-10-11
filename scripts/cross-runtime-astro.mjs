@@ -64,6 +64,12 @@ export async function astroJourney(f, seed) {
         assert.equal(match[1], seed.cover, "unexpected media reference");
         manifest.media.push("<cover>");
       }
+      for (const [tag] of html.matchAll(/<img\b[^>]*>/gu)) {
+        // The image block's own alt text and the resolved 1×1 dimensions.
+        assert.match(tag, /\salt="Published cover"/u, `${path} effective alt text`);
+        assert.match(tag, /\sheight="1"/u, `${path} image height`);
+        assert.match(tag, /\swidth="1"/u, `${path} image width`);
+      }
     }
     assert.deepEqual(manifest.routes.sort(), expected.routes);
     assert.deepEqual(manifest.media, ["<cover>"]);

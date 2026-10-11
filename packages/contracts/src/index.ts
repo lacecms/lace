@@ -449,16 +449,6 @@ export const contentModelSchema = v.pipe(
 );
 export const contentModelListSchema = v.strictObject({ items: v.array(contentModelSchema) });
 
-export const publicContentEntrySchema = v.strictObject({
-  entry: contentEntrySchema,
-  path: v.string(),
-});
-export const publicContentListSchema = cursorPageSchema(publicContentEntrySchema);
-export const buildExportSchema = v.strictObject({
-  entries: v.array(publicContentEntrySchema),
-  version: nonNegativeIntegerSchema,
-});
-
 const roleSchema = v.picklist(["admin", "editor", "viewer"]);
 const emailSchema = v.pipe(v.string(), v.email(), v.maxLength(320));
 const passwordSchema = v.pipe(v.string(), v.minLength(12), v.maxLength(1_024));
@@ -711,6 +701,7 @@ export const mediaSortSchema = v.picklist([
 ]);
 /** Descriptive text limits in code points, shared with clients that bound their inputs. */
 export { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_CAPTION_LENGTH } from "@lacecms/domain";
+export { effectiveAltText } from "@lacecms/content";
 export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 
@@ -748,6 +739,54 @@ const mediaFocalCoordinateSchema = v.pipe(
 export const mediaFocalPointSchema = v.strictObject({
   x: mediaFocalCoordinateSchema,
   y: mediaFocalCoordinateSchema,
+});
+
+/** One published entry as public consumers see it; no draft or editorial data. */
+export const publicEntrySchema = v.strictObject({
+  blocks: v.array(contentBlockSchema),
+  fields: jsonObjectSchema,
+  id: identifierSchema,
+  modelKey: identifierSchema,
+  path: v.string(),
+  publishedAt: isoTimestampSchema,
+  slug: v.optional(identifierSchema),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+});
+
+/** A media item referenced by public entries, resolved for rendering. */
+export const publicMediaSchema = v.strictObject({
+  alt: v.nullable(v.pipe(v.string(), v.minLength(1))),
+  caption: v.nullable(v.pipe(v.string(), v.minLength(1))),
+  focalPoint: v.nullable(mediaFocalPointSchema),
+  height: v.nullable(positiveIntegerSchema),
+  id: identifierSchema,
+  mimeType: v.string(),
+  url: v.string(),
+  width: v.nullable(positiveIntegerSchema),
+});
+
+/** Resolved media keyed by media ID; each item's `id` equals its key. */
+export const publicMediaDictionarySchema = v.pipe(
+  v.record(identifierSchema, publicMediaSchema),
+  v.check(
+    (media) => Object.entries(media).every(([id, item]) => item.id === id),
+    "Each media item must be keyed by its own ID.",
+  ),
+);
+
+export const publicContentEntrySchema = v.strictObject({
+  entry: publicEntrySchema,
+  media: publicMediaDictionarySchema,
+});
+export const publicContentListSchema = v.strictObject({
+  items: v.array(publicEntrySchema),
+  media: publicMediaDictionarySchema,
+  nextCursor: v.optional(opaqueCursorSchema),
+});
+export const buildExportSchema = v.strictObject({
+  entries: v.array(publicEntrySchema),
+  media: publicMediaDictionarySchema,
+  version: nonNegativeIntegerSchema,
 });
 
 export const mediaMetadataSchema = v.strictObject({
@@ -983,6 +1022,9 @@ export type ContentModelDto = v.InferOutput<typeof contentModelSchema>;
 export type ContentModelListDto = v.InferOutput<typeof contentModelListSchema>;
 export type ContentSnapshotDto = v.InferOutput<typeof contentSnapshotSchema>;
 export type ContentBlockDto = v.InferOutput<typeof contentBlockSchema>;
+export type PublicEntryDto = v.InferOutput<typeof publicEntrySchema>;
+export type PublicMediaDto = v.InferOutput<typeof publicMediaSchema>;
+export type PublicMediaDictionaryDto = v.InferOutput<typeof publicMediaDictionarySchema>;
 export type PublicContentEntryDto = v.InferOutput<typeof publicContentEntrySchema>;
 export type PublicContentListDto = v.InferOutput<typeof publicContentListSchema>;
 export type BuildExportDto = v.InferOutput<typeof buildExportSchema>;
@@ -1286,16 +1328,110 @@ export function toSiteBuildRecordDto(build: {
   };
 }
 
+/** A published entry with the media its published snapshot references. */
+export interface PublicEntrySource {
+  readonly entry: ContentEntry;
+  readonly media: readonly PublicMediaSource[];
+  readonly path: string;
+}
+
+/** The media values a public response may disclose. */
+export interface PublicMediaSource {
+  readonly alt?: string;
+  readonly caption?: string;
+  readonly focalPoint?: MediaFocalPoint;
+  readonly height?: number;
+  readonly id: string;
+  readonly mimeType: string;
+  readonly width?: number;
+}
+
+/** Builds the public media URL of one media ID. */
+export type PublicMediaUrl = (mediaId: string) => string;
+
+/** Maps the published snapshot of an entry; the draft is never read. */
+export function toPublicEntryDto(entry: ContentEntry, path: string): PublicEntryDto {
+  const snapshot = entry.published;
+  if (snapshot === undefined) throw new TypeError("A public entry requires a published snapshot.");
+  return {
+    blocks: [...snapshot.blocks]
+      .sort((left, right) => left.position - right.position)
+      .map(toContentBlockDto),
+    fields: snapshot.fields,
+    id: entry.id,
+    modelKey: entry.model.key,
+    path,
+    publishedAt: toIsoTimestamp(snapshot.createdAt),
+    ...(snapshot.slug === undefined ? {} : { slug: snapshot.slug }),
+    title: snapshot.title,
+  };
+}
+
+export function toPublicMediaDto(media: PublicMediaSource, url: string): PublicMediaDto {
+  return {
+    alt: media.alt ?? null,
+    caption: media.caption ?? null,
+    focalPoint:
+      media.focalPoint === undefined ? null : { x: media.focalPoint.x, y: media.focalPoint.y },
+    height: media.height ?? null,
+    id: media.id,
+    mimeType: media.mimeType,
+    url,
+    width: media.width ?? null,
+  };
+}
+
+/** Deduplicates media by ID into a dictionary whose keys are in code-unit order. */
+export function toPublicMediaDictionary(
+  media: readonly PublicMediaSource[],
+  urlFor: PublicMediaUrl,
+): PublicMediaDictionaryDto {
+  const byId = new Map<string, PublicMediaSource>();
+  for (const item of media) if (!byId.has(item.id)) byId.set(item.id, item);
+  const dictionary: Record<string, PublicMediaDto> = {};
+  for (const id of [...byId.keys()].sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  ))
+    dictionary[id] = toPublicMediaDto(byId.get(id)!, urlFor(id));
+  return dictionary;
+}
+
+export function toPublicContentEntryDto(
+  value: PublicEntrySource,
+  urlFor: PublicMediaUrl,
+): PublicContentEntryDto {
+  return {
+    entry: toPublicEntryDto(value.entry, value.path),
+    media: toPublicMediaDictionary(value.media, urlFor),
+  };
+}
+
+export function toPublicContentListDto(
+  value: { readonly items: readonly PublicEntrySource[]; readonly nextCursor?: string },
+  urlFor: PublicMediaUrl,
+): PublicContentListDto {
+  return {
+    items: value.items.map(({ entry, path }) => toPublicEntryDto(entry, path)),
+    media: toPublicMediaDictionary(
+      value.items.flatMap((item) => item.media),
+      urlFor,
+    ),
+    ...(value.nextCursor === undefined ? {} : { nextCursor: value.nextCursor as OpaqueCursorDto }),
+  };
+}
+
 export interface BuildExportSource {
-  readonly entries: readonly { readonly entry: ContentEntry; readonly path: string }[];
+  readonly entries: readonly PublicEntrySource[];
   readonly version: number;
 }
 
-export function toBuildExportDto(
-  value: BuildExportSource,
-): v.InferOutput<typeof buildExportSchema> {
+export function toBuildExportDto(value: BuildExportSource, urlFor: PublicMediaUrl): BuildExportDto {
   return {
-    entries: value.entries.map(({ entry, path }) => ({ entry: toContentEntryDto(entry), path })),
+    entries: value.entries.map(({ entry, path }) => toPublicEntryDto(entry, path)),
+    media: toPublicMediaDictionary(
+      value.entries.flatMap((item) => item.media),
+      urlFor,
+    ),
     version: value.version,
   };
 }

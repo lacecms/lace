@@ -148,7 +148,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       "/api/v1/public/collections/posts/first",
     );
     expect(publicBeforeDraftChange).toMatchObject({
-      body: { entry: { draft: { title: "Published title" } } },
+      body: { entry: { title: "Published title" } },
       response: { status: 200 },
     });
     await json(value.server, `/api/v1/admin/entries/${entryId}/draft`, {
@@ -163,7 +163,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       method: "PUT",
     });
     expect(
-      (await json(value.server, "/api/v1/public/collections/posts/first")).body.entry.draft.title,
+      (await json(value.server, "/api/v1/public/collections/posts/first")).body.entry.title,
     ).toBe("Published title");
     const buildToken = await value.runtime.security.createBuildToken({
       name: "integration-build",
@@ -221,10 +221,94 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
     expect(changed.response.status).toBe(200);
     expect(changed.body.version).toBe(buildExport.body.version + 1);
     expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
-    expect(
-      changed.body.entries.find(({ entry }) => entry.id === entryId).entry.published.title,
-    ).toBe("Draft-only title");
+    expect(changed.body.entries.find((entry) => entry.id === entryId).title).toBe(
+      "Draft-only title",
+    );
     expect((await json(value.server, "/health/ready")).response.status).toBe(200);
+  } finally {
+    await value.close();
+  }
+});
+
+test("media metadata edits of published media change the export ETag and dictionary", async () => {
+  const value = await fixture();
+  try {
+    await value.runtime.repository.createMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: "office.png",
+      height: 900,
+      id: "office-media",
+      mimeType: "image/png",
+      size: 1,
+      storageKey: "media/office-media",
+      width: 1600,
+    });
+    const created = await json(value.server, "/api/v1/admin/models/posts/entries", {
+      body: JSON.stringify({
+        blocks: [
+          {
+            data: { media: "office-media" },
+            key: "01J00000000000000000000001",
+            position: 1024,
+            schemaVersion: 2,
+            type: "image",
+          },
+        ],
+        fields: { publishedAt: "2026-09-24" },
+        slug: "described",
+        title: "Described",
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(created.response.status).toBe(201);
+    expect(
+      (
+        await json(value.server, `/api/v1/admin/entries/${created.body.id}/publish`, {
+          body: JSON.stringify({ expectedRevision: 1 }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        })
+      ).response.status,
+    ).toBe(200);
+    const buildToken = await value.runtime.security.createBuildToken({
+      name: "metadata-build",
+      now: unixMilliseconds(Date.now()),
+    });
+    const authorization = `Bearer ${buildToken.token}`;
+    const before = await json(value.server, "/api/v1/public/build-export", {
+      headers: { authorization },
+    });
+    expect(before.body.media["office-media"]).toEqual({
+      alt: null,
+      caption: null,
+      focalPoint: null,
+      height: 900,
+      id: "office-media",
+      mimeType: "image/png",
+      url: "https://public.lace.test/api/v1/public/media/office-media",
+      width: 1600,
+    });
+    const detail = await json(value.server, "/api/v1/admin/media/office-media");
+    const patched = await json(value.server, "/api/v1/admin/media/office-media", {
+      body: JSON.stringify({ alt: "Office", focalPoint: { x: 0.25, y: 0.4 } }),
+      headers: {
+        "content-type": "application/json",
+        "if-match": detail.response.headers.get("etag"),
+      },
+      method: "PATCH",
+    });
+    expect(patched.response.status).toBe(200);
+    const after = await json(value.server, "/api/v1/public/build-export", {
+      headers: { authorization, "if-none-match": before.response.headers.get("etag") },
+    });
+    expect(after.response.status).toBe(200);
+    expect(after.response.headers.get("etag")).not.toBe(before.response.headers.get("etag"));
+    expect(after.body.media["office-media"]).toMatchObject({
+      alt: "Office",
+      focalPoint: { x: 0.25, y: 0.4 },
+    });
   } finally {
     await value.close();
   }

@@ -5,7 +5,8 @@
 - Governing architecture: [section 9.7](../mvp-architecture.md#97-media) and
   [section 12](../mvp-architecture.md#12-rest-api)
 - Related: [content and editor roadmap](../content-editor-roadmap.md) step CE3,
-  OpenSpec change `ce03a-media-metadata-storage-api`
+  OpenSpec changes `ce03a-media-metadata-storage-api`,
+  `ce03b-admin-media-metadata-editing` and `ce03c-public-delivery-contract`
 
 ## Context
 
@@ -37,6 +38,25 @@ its subject. Nothing about a media item could be edited after upload.
 5. **Additive migration.** Migration `0006` adds the columns with
    `ALTER TABLE … ADD … CHECK`. It does not rebuild `media`, which other tables
    reference and which D1 cannot rebuild with foreign keys switched off.
+6. **Public delivery resolves media (CE3C).** Public content responses return
+   the published entry directly (`{id, modelKey, path, slug?, title, fields,
+   blocks, publishedAt}`, no mirrored `draft`) with a `media` dictionary keyed
+   by ID that resolves exactly the media referenced by the returned published
+   snapshots: `{id, url, mimeType, width, height, alt, caption, focalPoint}`,
+   unknown values `null`. Values keep storing IDs. The repository reads the
+   dictionary in the same pass as the entries from the reference projection.
+7. **One effective-alt rule.** `effectiveAltText` lives in `@lacecms/content`
+   and is re-exported by `@lacecms/contracts`, so the SDK `image()` lookup and
+   the render-core image describer agree without new package dependencies.
+8. **Media URL origin.** The API builds dictionary URLs from its configured
+   public base URL, never from the request. A site that configures
+   `LACE_PUBLIC_BASE_URL` rebuilds them on that origin; otherwise it keeps the
+   API's URLs instead of falling back to the build's API base, which is often
+   an internal address.
+9. **Pages keep working.** Block props gain `image(mediaId, usageAlt?)`
+   (source URL, effective alt, dimensions, focal-point `object-position`) while
+   `mediaUrl` and the `LaceBlocks` props stay, so only code that reads REST
+   responses or the raw export has to change.
 
 ## Alternatives considered
 
@@ -50,11 +70,16 @@ its subject. Nothing about a media item could be edited after upload.
   changes with every write, and forcing it to be monotonic avoids a backfill.
 - **Reuse `CONTENT_REVISION_CONFLICT`.** Rejected: its message speaks of
   drafts, and clients branch on the code.
+- **Embed resolved media inside block data in public responses.** Rejected:
+  values would change meaning and an item used twice would be duplicated.
+- **Replace the `LaceBlocks` `mediaUrl` prop with a site prop.** Rejected: it
+  would break every user page while the entry can carry its own resolver.
 
 ## Consequences
 
-- Until the public delivery contract exposes metadata (CE3C), a metadata edit
-  of published media rebuilds the site with identical output.
+- Since CE3C a metadata edit of published media changes the build-export body
+  and ETag, and the rebuilt site shows the new alt text, caption or focal point.
+- The public JSON shape changed during alpha (template 0.23.0 upgrade notes).
 - Repeated edits of a widely used image coalesce into one pending build per
   debounce window.
 - Media used only by drafts can be edited without any build.

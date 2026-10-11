@@ -2116,3 +2116,59 @@ test("updates media metadata in memory and requests a build only for published u
   const listed = await media.list({ actor: editor, limit: 10 });
   expect(listed.items.find((item) => item.id === "m-d").focalPoint).toEqual({ x: 0.2, y: 0.8 });
 });
+
+test("in-memory public reads expose published values and published media only", async () => {
+  const store = new InMemoryContentStore();
+  const media = (id, extra = {}) => ({
+    createdAt: unixMilliseconds(1),
+    createdBy: editor.id,
+    filename: "image.png",
+    id: mediaId(id),
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    storageKey: `media/${id}`,
+    updatedAt: unixMilliseconds(1),
+    ...extra,
+  });
+  store.registerMedia(media("media-2", { alt: "Office", height: 900, width: 1600 }));
+  store.registerMedia(media("media-1"));
+  store.registerMedia(media("media-3"));
+  const model = { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" };
+  await store.create({
+    entry: entry({ id: "post", model, slug: "post" }),
+    mediaReferences: [
+      { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: "$fields" },
+      { fieldPath: "image", mediaId: mediaId("media-1"), sourceKey: blockKey("post-block") },
+    ],
+  });
+  await store.publish({
+    entryId: contentEntryId("post"),
+    expectedRevision: 1,
+    publishedAt: unixMilliseconds(2),
+    publishedBy: editor,
+    publishedSnapshotId: contentSnapshotId("post-published"),
+  });
+  await store.saveCompleteDraft({
+    entryId: contentEntryId("post"),
+    mutation: {
+      blocks: [],
+      expectedRevision: 1,
+      fields: {},
+      mediaReferences: [{ fieldPath: "image", mediaId: mediaId("media-3"), sourceKey: "$fields" }],
+      title: "DRAFT ONLY",
+      updatedAt: unixMilliseconds(3),
+      updatedBy: editor,
+    },
+  });
+  for (const value of [
+    await store.loadPublic("/blog/post"),
+    (await store.listPublic({ limit: 10, modelKey: contentModelKey("posts") })).items[0],
+    (await store.exportBuildContent()).entries[0],
+  ]) {
+    expect(value.media.map((item) => item.id)).toEqual(["media-1", "media-2"]);
+    expect(value.media[1]).toMatchObject({ alt: "Office", height: 900, width: 1600 });
+    expect(value.entry.draft.title).toBe("Original");
+    expect(JSON.stringify(value)).not.toContain("DRAFT ONLY");
+  }
+});
