@@ -166,3 +166,104 @@ test("viewers see no deletion controls and Escape requests closing", async () =>
   await user.keyboard("{Escape}");
   expect(onClose).toHaveBeenCalled();
 });
+
+const describedItem: MediaMetadataDto = {
+  ...usedItem,
+  alt: "Red bicycle",
+  caption: "A bike\non a hill",
+  focalPoint: { x: 0.25, y: 0.75 },
+};
+
+test("writers edit the description of active media and the saved item is reported", async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const saved = { ...describedItem, alt: "Blue bicycle", updatedAt: "2026-09-20T00:00:09.000Z" };
+  const updateMediaMetadata = vi.fn(async () => ({
+    build: { status: "queued" as const, targetVersion: 3 },
+    media: saved,
+  }));
+  mount({
+    client: { getMedia: async () => ({ ...describedItem, usage }), updateMediaMetadata },
+    item: describedItem,
+    onChanged,
+  });
+  const panel = await screen.findByRole("dialog", { name: "cover.png" });
+  const alt = await within(panel).findByLabelText("Alt text");
+  expect(alt).toHaveValue("Red bicycle");
+  expect(within(panel).getByLabelText("Caption")).toHaveValue("A bike\non a hill");
+  expect(within(panel).getByRole("slider", { name: "Focal point" })).toHaveAttribute(
+    "aria-valuetext",
+    "25% from left, 75% from top",
+  );
+  await user.clear(alt);
+  await user.type(alt, "Blue bicycle");
+  await user.click(within(panel).getByRole("button", { name: "Save" }));
+  expect(
+    await within(panel).findByText(
+      "Metadata saved. A site build was requested so published pages use it.",
+    ),
+  ).toBeInTheDocument();
+  expect(updateMediaMetadata).toHaveBeenCalledWith(
+    describedItem.id,
+    { alt: "Blue bicycle" },
+    describedItem.updatedAt,
+  );
+  expect(onChanged).toHaveBeenCalledWith(saved);
+});
+
+test("viewers see the description read-only", async () => {
+  mount({ item: describedItem, session: { id: "viewer-1", role: "viewer" } });
+  const panel = await screen.findByRole("dialog", { name: "cover.png" });
+  expect(panel).toHaveTextContent("Alt textRed bicycle");
+  expect(panel).toHaveTextContent("Focal point: 25% from left, 75% from top");
+  expect(within(panel).queryByLabelText("Alt text")).toBeNull();
+  expect(within(panel).queryByLabelText("Caption")).toBeNull();
+  expect(within(panel).queryByRole("slider")).toBeNull();
+  expect(within(panel).queryByRole("button", { name: "Save" })).toBeNull();
+});
+
+test("an item pending deletion without alt text is read-only and warns", async () => {
+  const { alt: _alt, ...withoutAlt } = describedItem;
+  const deleting = { ...withoutAlt, status: "deleting" as const };
+  mount({ client: { getMedia: async () => ({ ...deleting, usage }) }, item: deleting });
+  const panel = await screen.findByRole("dialog", { name: "cover.png" });
+  expect(panel).toHaveTextContent("Alt textNone");
+  expect(within(panel).getByText(/has no alt text/)).toBeInTheDocument();
+  expect(within(panel).queryByLabelText("Alt text")).toBeNull();
+});
+
+test("closing with unsaved metadata asks first and keeping the edits leaves the panel open", async () => {
+  const user = userEvent.setup();
+  const { onClose } = mount({ item: describedItem });
+  const panel = await screen.findByRole("dialog", { name: "cover.png" });
+  await user.type(await within(panel).findByLabelText("Alt text"), "!");
+  await user.keyboard("{Escape}");
+  const confirm = await screen.findByRole("dialog", { name: "Discard unsaved changes?" });
+  await user.click(within(confirm).getByRole("button", { name: "Keep editing" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull(),
+  );
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Alt text")).toHaveValue("Red bicycle!");
+  await waitFor(() => expect(screen.getByRole("dialog", { name: "cover.png" })).toHaveFocus());
+
+  await user.keyboard("{Escape}");
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Discard unsaved changes?" })).getByRole(
+      "button",
+      { name: "Discard changes" },
+    ),
+  );
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+test("a clean panel closes without asking", async () => {
+  const user = userEvent.setup();
+  const { onClose } = mount({ item: describedItem });
+  await within(await screen.findByRole("dialog", { name: "cover.png" })).findByLabelText(
+    "Alt text",
+  );
+  await user.keyboard("{Escape}");
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+});

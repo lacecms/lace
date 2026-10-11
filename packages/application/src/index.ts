@@ -10,6 +10,7 @@ import type {
   ContentModelKey,
   ContentSnapshotId,
   DraftMediaReference,
+  MediaFocalPoint,
   MediaId,
   MediaMetadata,
   PublishedSnapshot,
@@ -302,6 +303,8 @@ export interface ContentEntryCommandPort {
 
 export interface PublicContentEntry {
   readonly entry: ContentEntry;
+  /** Active media referenced by the entry's current published snapshot. */
+  readonly media: readonly MediaMetadata[];
   readonly path: string;
 }
 
@@ -857,11 +860,33 @@ export interface MarkMediaForDeletionResult {
   readonly status: "deleting";
 }
 
+/**
+ * Replaces an active item's descriptive metadata with complete values, guarded
+ * by the `updatedAt` the values were merged from.
+ */
+export interface UpdateMediaMetadataInput {
+  readonly alt: string | null;
+  readonly caption: string | null;
+  readonly expectedUpdatedAt: UnixMilliseconds;
+  readonly focalPoint: MediaFocalPoint | null;
+  readonly mediaId: MediaId;
+  readonly requestedBy: Actor;
+  /** Strictly greater than `expectedUpdatedAt`, so every version has a distinct tag. */
+  readonly updatedAt: UnixMilliseconds;
+}
+
+export interface UpdateMediaMetadataResult {
+  readonly media: MediaMetadata;
+  /** Present only when a current publication uses the item and a build was requested. */
+  readonly targetVersion?: number;
+}
+
 /** Mutation remains separate from metadata reads and binary object storage. */
 export interface MediaCommandPort {
   createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata>;
   markForDeletion(input: MarkMediaForDeletionInput): Promise<MarkMediaForDeletionResult>;
   retryDeletion(input: MarkMediaForDeletionInput): Promise<MarkMediaForDeletionResult>;
+  updateMediaMetadata(input: UpdateMediaMetadataInput): Promise<UpdateMediaMetadataResult>;
 }
 
 /** Private worker-only boundary: transport never receives the storage key. */

@@ -526,6 +526,23 @@ async function nodeJourney(context) {
   const library = await request(base, "/api/v1/admin/media", { headers: { cookie } });
   const mediaId = library.body?.items?.find((item) => item.filename === "onboarding.png")?.id;
   if (typeof mediaId !== "string") throw new Error("media: browser upload missing from library");
+  // Describe the uploaded image once in Media; the hero inherits its alt text.
+  const mediaDetail = await request(base, `/api/v1/admin/media/${mediaId}`, {
+    headers: { cookie },
+  });
+  const described = await request(base, `/api/v1/admin/media/${mediaId}`, {
+    method: "PATCH",
+    headers: { cookie, "if-match": mediaDetail.response.headers.get("etag") ?? "" },
+    json: { alt: acceptanceMediaAlt, focalPoint: { x: 0.25, y: 0.75 } },
+  });
+  if (described.response.status !== 200 || described.body?.media?.alt !== acceptanceMediaAlt)
+    throw new Error(`media: metadata update failed with ${described.response.status}`);
+  // Blocks are saved at the versions the API reports for the posts model.
+  const blockVersions = new Map(
+    (models.body.items.find((item) => item.key === "posts")?.blockDefinitions ?? []).map(
+      (definition) => [definition.type, definition.version],
+    ),
+  );
   const richText = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Published rich text" }] }],
@@ -542,12 +559,16 @@ async function nodeJourney(context) {
       type: "cta",
       data: { heading: "Published call to action", actionLabel: "Home", actionUrl: "/" },
     },
-  ].map((block, index) => ({
-    ...block,
-    key: `01J${String(index).padStart(23, "0")}`,
-    schemaVersion: 1,
-    position: (index + 1) * 1024,
-  }));
+  ].map((block, index) => {
+    const schemaVersion = blockVersions.get(block.type);
+    if (schemaVersion === undefined) throw new Error(`edit: posts does not allow ${block.type}`);
+    return {
+      ...block,
+      key: `01J${String(index).padStart(23, "0")}`,
+      schemaVersion,
+      position: (index + 1) * 1024,
+    };
+  });
   await request(base, `/api/v1/admin/entries/${homeId}/publish`, {
     method: "POST",
     headers: { cookie },
@@ -623,16 +644,36 @@ async function nodeJourney(context) {
   return { base, cookie, png, entryId, mediaId, blocks, buildToken, token, password, email };
 }
 
+const acceptanceMediaAlt = "Onboarding media alt";
+
+/** Reads one attribute of a rendered tag; `null` when absent. */
+function attribute(tag, name) {
+  const match = new RegExp(`\\s${name}(?:="([^"]*)")?(?=[\\s>])`, "u").exec(tag);
+  return match === null ? null : (match[1] ?? "");
+}
+
 async function verifyRenderedMedia(html, base, bytes) {
-  const images = [...html.matchAll(/<img\b[^>]*src="([^"]+)"/gu)];
+  const images = [...html.matchAll(/<img\b[^>]*>/gu)].map(([tag]) => tag);
   if (images.length < 2) throw new Error("media: generated hero/image links missing");
-  for (const [, url] of images) {
+  for (const tag of images) {
+    const url = attribute(tag, "src") ?? "";
     if (!url.startsWith(`${base}api/v1/public/media/`))
       throw new Error("media: URL is not browser-facing");
+    // The uploaded PNG is 1×1 and was given a focal point at 25 % / 75 %.
+    if (attribute(tag, "width") !== "1" || attribute(tag, "height") !== "1")
+      throw new Error("media: rendered image dimensions are missing");
+    if (attribute(tag, "style") !== "object-position:25% 75%")
+      throw new Error("media: rendered image lacks the focal-point object position");
     const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
     if (!response.ok || !Buffer.from(await response.arrayBuffer()).equals(bytes))
       throw new Error("media: browser URL did not return uploaded image");
   }
+  const alts = images.map((tag) => attribute(tag, "alt"));
+  // The hero inherits the media alt text; the image block keeps its own.
+  if (!alts.includes(acceptanceMediaAlt) || !alts.includes("Onboarding image"))
+    throw new Error(
+      `media: rendered alt text is not the effective alt text: ${JSON.stringify(alts)}`,
+    );
 }
 
 async function productionSmoke(context, session) {
@@ -975,6 +1016,13 @@ async function starterJourney(project) {
   }
   if (!html.includes("https://public.example/lace/api/v1/public/media/post-media"))
     throw new Error("starter-build: public media origin missing");
+  if (
+    !html.includes(
+      '<img alt="Lace starter illustration" data-lace-part="media" height="630" src="https://public.example/lace/api/v1/public/media/hero-media" style="object-position:30% 20%" width="1200">',
+    ) ||
+    !html.includes('<img alt="A durable media URL" data-lace-part="media" height="600"')
+  )
+    throw new Error("starter-build: resolved media alt text, dimensions or focal point missing");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
   console.info("Packed starter installed, typechecked and built all five blocks");
 }

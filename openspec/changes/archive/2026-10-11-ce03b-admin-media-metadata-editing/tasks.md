@@ -1,0 +1,41 @@
+## 1. Architecture and roadmap first
+
+- [x] 1.1 Update architecture section 8 *Initial built-in blocks* (`image`: required media, optional alt text that overrides the media alt text, optional caption; version 2 with an identity migration) and add the block-version consequence to ADR 0009. In `docs/content-editor-roadmap.md` correct the CE3B "needs no data migration" wording (no data changes, but version 2 declares an identity migration, models allowing `image` raise their version, and sync runs before the site build) and add that upgrade instruction to the CE3C bullet on upgrade notes. Verify with `pnpm format:check` on the changed docs.
+
+## 2. Built-in `image` block version 2
+
+- [x] 2.1 In `@lacecms/content`, change `builtInBlocks.image` to `version: 2`, `alt: field.text()`, `migrations: { 2: (data) => data }` and the new description. Add content tests: publish-mode validation accepts media without alt and still rejects missing media; `migrateBlockData` from version 1 to 2 returns equal data; the definition metadata projection carries version 2 and the description. Verify with `pnpm --filter @lacecms/content test`.
+- [x] 2.2 Raise the version of every model that allows `image` in the root `lace.config.ts` (home 3, about 2, posts 3, notes 2), refresh `packages/config` projection fixtures, and fix configuration and repository tests that assumed the required alt or version 1 `image` (for example `configuration-evolution.test.mjs`, `repository-contract.ts`, `render` tests). Add a configuration-evolution case: a model with a published version 1 `image` block, `image` at version 2 and a raised model version plans a valid migration with unchanged data. Verify with `pnpm --filter @lacecms/config --filter @lacecms/application --filter @lacecms/render --filter @lacecms/test-utils test`.
+
+## 3. Registry block sources
+
+- [x] 3.1 Set `registry/astro/image/item.json` to `blockVersion: 2`, `revision: 2`, and render `alt={data.alt ?? ""}` in `ImageBlock.astro`. Copy the file byte-identically into `packages/create-lace/templates/site`, `apps/site` and `tests/fixtures/existing-astro-site`, and update the `image` revision and hash in their `lace.site.json`. Move the `image` blocks of `apps/site/src/fixtures/published-export.json` to `schemaVersion: 2`. Add a render-level check (render or site fixture test) that an `image` block without alt renders `alt=""`. Verify with `pnpm exec vitest run tests/block-sources.test.mjs`, `pnpm --filter @lacecms/cli test` (bundled registry copy) and the `apps/site` fixture build test.
+- [x] 3.2 Refresh the generated-project snapshot fixtures (`tests/fixtures/generated-project/*.json`) for the changed starter files without changing `TEMPLATE_VERSION`. Verify with `pnpm --filter create-lace test` and `pnpm exec vitest run tests/generated-project-acceptance.test.mjs tests/existing-astro-site.test.mjs`.
+
+## 4. Admin client and shared pieces
+
+- [x] 4.1 Add `updateMediaMetadata(mediaId, patch, expectedUpdatedAt)` to `AdminClient` (`PATCH`, JSON body, strong `If-Match` from `entityTagForVersion(Date.parse(updatedAt))`, parsed with `updateMediaMetadataResultSchema`). Add `admin-client.test.ts` cases for the request method, headers and body, the parsed result, and a `409 MEDIA_UPDATE_CONFLICT` surfacing as an `AdminClientError` with that code. Verify with `pnpm --filter @lacecms/app-admin test -- admin-client`.
+- [x] 4.2 Add `useMediaItem(mediaId)` and `useMediaPreview(mediaId)` to `entities/media` (the shared detail query and the preview load/retry state extracted from `MediaPreview`, which keeps its behaviour), and add `mediaAltPair(definition)` to `entities/content`. Unit-test `mediaAltPair` (built-in `image` shape, custom same shape, `hero`, two media fields, `alt` of another type) and keep `MediaPreview` tests green. Verify with `pnpm --filter @lacecms/app-admin test -- entities`.
+
+## 5. Metadata editing feature
+
+- [x] 5.1 Create `features/edit-media-metadata` with `metadata-form.ts` (`metadataValues`, `metadataPatch`, `stepFocalPoint`, `pointerFocalPoint`) and `useMediaMetadataUpdate` per design D3. Unit-test: only changed keys, empty text → `null`, unchanged focal point omitted, reset → `null`; keyboard steps from unset (centre), 1 and 10 point steps, clamping at 0 and 100, exact two-decimal results; pointer mapping, clamping and rounding; cache write keeps `usage` and lists are invalidated. Verify with `pnpm --filter @lacecms/app-admin test -- edit-media-metadata`.
+- [x] 5.2 Implement `FocalPointControl` per design D5 (image-sized overlay, pointer click and capture drag, `role="slider"` marker with `aria-valuenow`/`aria-valuetext`, arrow and Shift+arrow steps without scrolling, dashed unset marker, reset action, read-only mode). Component tests cover click, drag beyond the edge, keyboard steps and value text, reset, and read-only ignoring input. Verify with `pnpm --filter @lacecms/app-admin test -- FocalPointControl`.
+- [x] 5.3 Implement `MediaMetadataForm` per design D3–D4 (alt and caption inputs with limits, Save/Discard enabled only when dirty, disabled while saving, success announcements for `queued` and `not-dispatched`, error alert with `/alt` and `/caption` issues on the inputs, conflict alert with Discard my changes / Save mine anyway, clean-only background refresh, missing-alt warning, `onDirtyChange`). Component tests cover each spec scenario of the editing requirement, including that a conflict writes nothing until a choice and that "Save mine anyway" sends the tag of the newer item. Verify with `pnpm --filter @lacecms/app-admin test -- MediaMetadataForm`.
+
+## 6. Media library widgets
+
+- [x] 6.1 In `MediaDetailsPanel`, render the form for writers on active items and a read-only description list (alt, caption, focal point, missing-alt warning) otherwise; intercept closing while dirty with a Discard changes / Keep editing confirmation that returns focus to the panel; report saved items through `onChanged`. Extend `MediaDetailsPanel.test.tsx` for writer, viewer, `deleting` item and the close confirmation. Verify with `pnpm --filter @lacecms/app-admin test -- MediaDetailsPanel`.
+- [x] 6.2 Show alt text or "No alt text" on `MediaGrid` tiles in `choose` mode (truncated, full text in `title`) and in `SelectedMedia` for active items. Extend their tests and the picker dialog tests. Verify with `pnpm --filter @lacecms/app-admin test -- MediaGrid SelectedMedia MediaPickerDialog`.
+
+## 7. Block editor inheritance
+
+- [x] 7.1 Add optional `placeholder` to `FieldRendererProps` and optional `placeholder`/`notice` to `FieldRenderer` (notice and inherited text joined into `aria-describedby`; text and textarea controls apply the placeholder). In `BlockCard`, for blocks with a `mediaAltPair`, derive the placeholder and the writable-only missing-alt warning from the watched values and `useMediaItem` per design D6. Extend `FieldControls`, `FieldRenderer` and `BlockCard` tests for the placeholder, the accessible description, the warning appearing and clearing, no warning while loading or for `hero`, and no warning in a read-only editor. Verify with `pnpm --filter @lacecms/app-admin test -- FieldRenderer FieldControls BlockCard EntryPage`.
+
+## 8. Browser tests
+
+- [x] 8.1 Add `apps/admin/e2e/media-metadata.e2e.ts` with a mocked API that asserts PATCH bodies and `If-Match`: editing alt text and caption and saving (announcement and updated panel); a build-requested announcement; the conflict flow with both choices; the unsaved-close confirmation; a keyboard-only focal-point session (Tab to the marker, Right ×2, Shift+Up, value text "52% from left, 40% from top", reset, save carrying `{x: 0.52, y: 0.4}` then `null`); picker tiles showing alt text; and in the entry editor an `image` block showing "Uses media alt: …" and the missing-alt warning that clears when alt text is typed, with save still allowed. Add the details panel with the form open to `accessibility.e2e.ts`. Verify with `pnpm --filter @lacecms/app-admin test:e2e -- media-metadata accessibility`.
+
+## 9. Verification and log
+
+- [x] 9.1 Add the CE3B row to the roadmap log in `docs/content-editor-roadmap.md`. Run the narrowest affected tests, then root `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and `pnpm exec openspec validate ce03b-admin-media-metadata-editing --type change --strict`. Verify that all pass.

@@ -60,7 +60,6 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   );
   exported.entries = exported.entries.slice(0, 2);
   exported.entries[1].path = "/articles/first-post";
-  exported.entries[1].entry.model.route = "/articles/:slug";
   const token = "lace_build_existing-site-sentinel";
   let requests = 0;
   const server = createServer((request, response) => {

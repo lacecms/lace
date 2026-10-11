@@ -3,8 +3,8 @@
   "name": "image",
   "framework": "astro",
   "blockType": "image",
-  "blockVersion": 1,
-  "revision": 1,
+  "blockVersion": 2,
+  "revision": 3,
   "requires": {
     "@lacecms/astro": "0.1.0-alpha.4",
     "@lacecms/render": "0.1.0-alpha.4"

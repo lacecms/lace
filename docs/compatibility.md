@@ -103,6 +103,18 @@ version; mixing artifacts from different versions is unsupported.
 | `0.1.0-alpha.3` | `0.17.0` | Prepared and accepted locally (Step 33H); npm publication recorded on 2026-10-07 | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
 | `0.1.0-alpha.4` | `0.20.0` | Package publication and real VPS/Cloudflare application/recovery checks owner-confirmed 2026-10-10 | Includes completed 34A–34C local verification; see real-application-verification.md for confirmation scope and evidence limits |
 
+The next alpha after `0.1.0-alpha.4` (source template `0.23.0`, not yet
+released) changes the public delivery contract: every `/api/v1/public` content
+response and the build export return the published entry directly with a
+resolved `media` dictionary, without the former mirrored `draft`. The API, the
+site packages (`@lacecms/sdk`, `@lacecms/render`, `@lacecms/astro`,
+`@lacecms/content`) and the admin must come from the same release; sites built
+with `getSite()` and `LaceBlocks` keep working, while code that reads REST
+responses or the raw export must be updated. The same release requires
+migrations `0005_content_model_structure` and `0006_media_descriptive_metadata`
+and a configuration sync after raising the version of every model that allows
+the version 2 `image` block, as the `0.23.0` upgrade instructions state.
+
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
 projects upgrading from `0.14.0`. Upgrading an alpha.2 installation also

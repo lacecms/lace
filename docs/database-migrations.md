@@ -68,6 +68,19 @@ against the migrated database. After migrating, run `lace content sync` once to
 record structure baselines (the first `--check` reports them as pending). See
 [configuration synchronization](configuration-synchronization.md#schema-evolution-ce1a).
 
+### Media metadata migration
+
+Migration `0006_media_descriptive_metadata` adds the nullable `alt`,
+`caption`, `focal_x` and `focal_y` columns to `media` with database checks:
+`alt` at most 1,000 characters, `caption` at most 2,000, each focal coordinate
+from 0 to 1, and both coordinates set or both `NULL`. It uses additive
+`ALTER TABLE … ADD … CHECK` statements and does not rebuild `media`, which
+`content_media_references` references; `schema.ts` declares the same rules as
+table checks so the Drizzle snapshot matches. Every existing item starts with
+all four columns `NULL`, and there is no backfill. `metadata_json` stays
+reserved. Older engines keep starting against the migrated database and
+ignore the new columns, so a rollback leaves any stored values unused.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

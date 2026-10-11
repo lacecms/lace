@@ -179,6 +179,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -298,6 +299,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -346,6 +348,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -2989,6 +2992,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -3219,6 +3223,14 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "alt": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "caption": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "createdAt": {},
                           "createdBy": {
                             "additionalProperties": false,
@@ -3239,6 +3251,19 @@
                           },
                           "filename": {
                             "type": "string"
+                          },
+                          "focalPoint": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["x", "y"],
+                            "type": "object"
                           },
                           "height": {
                             "minimum": 1,
@@ -3336,6 +3361,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3356,6 +3389,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -3434,6 +3480,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3454,6 +3508,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -3552,6 +3619,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3572,6 +3647,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -3753,6 +3841,244 @@
         },
         "summary": "Get media details",
         "tags": ["admin"]
+      },
+      "patch": {
+        "description": "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
+        "operationId": "patchApiV1AdminMediaByMediaId",
+        "parameters": [
+          {
+            "description": "The item's current ETag: its updatedAt in quoted Unix milliseconds.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mediaId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "alt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "caption": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "focalPoint": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["x", "y"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "build": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "queued"
+                            },
+                            "targetVersion": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": ["status", "targetVersion"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "not-dispatched"
+                            }
+                          },
+                          "required": ["status"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "media": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "alt": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "caption": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "createdAt": {},
+                        "createdBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "maxLength": 320,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": ["displayName", "id"],
+                          "type": "object"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "focalPoint": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": ["x", "y"],
+                          "type": "object"
+                        },
+                        "height": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "status": {
+                          "enum": ["active", "delete_failed", "deleting"]
+                        },
+                        "updatedAt": {},
+                        "url": {
+                          "type": "string"
+                        },
+                        "usageCount": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "width": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "createdAt",
+                        "createdBy",
+                        "filename",
+                        "id",
+                        "mimeType",
+                        "size",
+                        "status",
+                        "updatedAt",
+                        "url",
+                        "usageCount"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["build", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Updated media and build dispatch outcome"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update media metadata",
+        "tags": ["admin"]
       }
     },
     "/api/v1/admin/media/{mediaId}/preview": {
@@ -3820,6 +4146,14 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "alt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "caption": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "createdAt": {},
                     "createdBy": {
                       "additionalProperties": false,
@@ -3840,6 +4174,19 @@
                     },
                     "filename": {
                       "type": "string"
+                    },
+                    "focalPoint": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y"],
+                      "type": "object"
                     },
                     "height": {
                       "minimum": 1,
@@ -5144,6 +5491,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5192,6 +5540,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5312,6 +5661,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5417,6 +5767,7 @@
                             "CONTENT_ROUTE_CONFLICT",
                             "LAST_ADMIN_PROTECTED",
                             "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
                             "INTERNAL_ERROR",
                             "INVALID_CREDENTIALS",
                             "INVITATION_INVALID",
@@ -5515,269 +5866,174 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
-                          "entry": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "draft": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "blocks": {
-                                    "items": {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "data": {},
-                                        "key": {
-                                          "maxLength": 255,
-                                          "minLength": 1,
-                                          "type": "string"
-                                        },
-                                        "position": {
-                                          "minimum": 0,
-                                          "type": "integer"
-                                        },
-                                        "schemaVersion": {
-                                          "minimum": 1,
-                                          "type": "integer"
-                                        },
-                                        "type": {
-                                          "maxLength": 255,
-                                          "minLength": 1,
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "data",
-                                        "key",
-                                        "position",
-                                        "schemaVersion",
-                                        "type"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "createdAt": {},
-                                  "entryId": {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "fields": {},
-                                  "id": {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "revision": {
-                                    "minimum": 0,
-                                    "type": "integer"
-                                  },
-                                  "slug": {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "const": "draft"
-                                  },
-                                  "title": {
-                                    "maxLength": 200,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "updatedAt": {},
-                                  "updatedBy": {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "id": {
-                                        "maxLength": 255,
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "role": {
-                                        "enum": ["admin", "editor", "viewer"]
-                                      }
-                                    },
-                                    "required": ["id", "role"],
-                                    "type": "object"
-                                  }
+                          "blocks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "data": {},
+                                "key": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
                                 },
-                                "required": [
-                                  "blocks",
-                                  "createdAt",
-                                  "entryId",
-                                  "fields",
-                                  "id",
-                                  "revision",
-                                  "title",
-                                  "updatedAt",
-                                  "updatedBy",
-                                  "state"
-                                ],
-                                "type": "object"
-                              },
-                              "id": {
-                                "maxLength": 255,
-                                "minLength": 1,
-                                "type": "string"
-                              },
-                              "model": {
-                                "anyOf": [
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "key": {
-                                        "maxLength": 255,
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "kind": {
-                                        "const": "page"
-                                      },
-                                      "path": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": ["kind", "key", "path"],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "key": {
-                                        "maxLength": 255,
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "kind": {
-                                        "const": "collection"
-                                      },
-                                      "route": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": ["kind", "key", "route"],
-                                    "type": "object"
-                                  }
-                                ]
-                              },
-                              "published": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "blocks": {
-                                    "items": {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "data": {},
-                                        "key": {
-                                          "maxLength": 255,
-                                          "minLength": 1,
-                                          "type": "string"
-                                        },
-                                        "position": {
-                                          "minimum": 0,
-                                          "type": "integer"
-                                        },
-                                        "schemaVersion": {
-                                          "minimum": 1,
-                                          "type": "integer"
-                                        },
-                                        "type": {
-                                          "maxLength": 255,
-                                          "minLength": 1,
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "data",
-                                        "key",
-                                        "position",
-                                        "schemaVersion",
-                                        "type"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "createdAt": {},
-                                  "entryId": {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "fields": {},
-                                  "id": {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "revision": {
-                                    "minimum": 0,
-                                    "type": "integer"
-                                  },
-                                  "slug": {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "const": "published"
-                                  },
-                                  "title": {
-                                    "maxLength": 200,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  "updatedAt": {},
-                                  "updatedBy": {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "id": {
-                                        "maxLength": 255,
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "role": {
-                                        "enum": ["admin", "editor", "viewer"]
-                                      }
-                                    },
-                                    "required": ["id", "role"],
-                                    "type": "object"
-                                  }
+                                "position": {
+                                  "minimum": 0,
+                                  "type": "integer"
                                 },
-                                "required": [
-                                  "blocks",
-                                  "createdAt",
-                                  "entryId",
-                                  "fields",
-                                  "id",
-                                  "revision",
-                                  "title",
-                                  "updatedAt",
-                                  "updatedBy",
-                                  "state"
-                                ],
-                                "type": "object"
-                              }
+                                "schemaVersion": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["data", "key", "position", "schemaVersion", "type"],
+                              "type": "object"
                             },
-                            "required": ["draft", "id", "model"],
-                            "type": "object"
+                            "type": "array"
+                          },
+                          "fields": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "modelKey": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
                           },
                           "path": {
                             "type": "string"
+                          },
+                          "publishedAt": {},
+                          "slug": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
                           }
                         },
-                        "required": ["entry", "path"],
+                        "required": [
+                          "blocks",
+                          "fields",
+                          "id",
+                          "modelKey",
+                          "path",
+                          "publishedAt",
+                          "title"
+                        ],
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "media": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "alt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "caption": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "focalPoint": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "y"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "alt",
+                          "caption",
+                          "focalPoint",
+                          "height",
+                          "id",
+                          "mimeType",
+                          "url",
+                          "width"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
                     },
                     "version": {
                       "minimum": 0,
                       "type": "integer"
                     }
                   },
-                  "required": ["entries", "version"],
+                  "required": ["entries", "media", "version"],
                   "type": "object"
                 }
               }
@@ -5805,6 +6061,191 @@
           }
         ],
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "blocks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "data": {},
+                                "key": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "schemaVersion": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["data", "key", "position", "schemaVersion", "type"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "fields": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "modelKey": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "publishedAt": {},
+                          "slug": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "blocks",
+                          "fields",
+                          "id",
+                          "modelKey",
+                          "path",
+                          "publishedAt",
+                          "title"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "media": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "alt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "caption": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "focalPoint": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "y"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "alt",
+                          "caption",
+                          "focalPoint",
+                          "height",
+                          "id",
+                          "mimeType",
+                          "url",
+                          "width"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Published collection page"
+          },
           "400": {
             "content": {
               "application/json": {
@@ -5858,6 +6299,183 @@
           }
         ],
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entry": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "modelKey": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "publishedAt": {},
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "fields",
+                        "id",
+                        "modelKey",
+                        "path",
+                        "publishedAt",
+                        "title"
+                      ],
+                      "type": "object"
+                    },
+                    "media": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "alt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "caption": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "focalPoint": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "y"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "alt",
+                          "caption",
+                          "focalPoint",
+                          "height",
+                          "id",
+                          "mimeType",
+                          "url",
+                          "width"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": ["entry", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Published collection entry"
+          },
           "400": {
             "content": {
               "application/json": {
@@ -5888,7 +6506,185 @@
     "/api/v1/public/content/by-path": {
       "get": {
         "operationId": "getApiV1PublicContentByPath",
-        "responses": {},
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entry": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "modelKey": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "publishedAt": {},
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "fields",
+                        "id",
+                        "modelKey",
+                        "path",
+                        "publishedAt",
+                        "title"
+                      ],
+                      "type": "object"
+                    },
+                    "media": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "alt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "caption": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "focalPoint": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "y"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "alt",
+                          "caption",
+                          "focalPoint",
+                          "height",
+                          "id",
+                          "mimeType",
+                          "url",
+                          "width"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": ["entry", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Published entry"
+          }
+        },
         "summary": "Read published content by path",
         "tags": ["public"]
       }
@@ -5952,6 +6748,183 @@
           }
         ],
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entry": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "modelKey": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "publishedAt": {},
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "fields",
+                        "id",
+                        "modelKey",
+                        "path",
+                        "publishedAt",
+                        "title"
+                      ],
+                      "type": "object"
+                    },
+                    "media": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "alt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "caption": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "focalPoint": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "y"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "alt",
+                          "caption",
+                          "focalPoint",
+                          "height",
+                          "id",
+                          "mimeType",
+                          "url",
+                          "width"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": ["entry", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Published page"
+          },
           "400": {
             "content": {
               "application/json": {

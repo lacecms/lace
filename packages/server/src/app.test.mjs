@@ -9,6 +9,7 @@ import {
   contentModelKey,
   contentSnapshotId,
   createContentEntry,
+  mediaId,
   unixMilliseconds,
 } from "@lacecms/domain";
 import {
@@ -476,6 +477,114 @@ test("serves public content and short-circuits matching build exports", async ()
   ).toMatchObject({ body: { error: { code: "VALIDATION_FAILED" } }, response: { status: 422 } });
   const openApi = await json(app, "/api/v1/openapi.json");
   expect(openApi.body.paths).toHaveProperty("/api/v1/public/build-export");
+  for (const path of [
+    "/api/v1/public/pages/{modelKey}",
+    "/api/v1/public/collections/{modelKey}",
+    "/api/v1/public/collections/{modelKey}/{slug}",
+    "/api/v1/public/content/by-path",
+  ])
+    expect(openApi.body.paths[path].get.responses).toHaveProperty("200");
+});
+
+test("public responses return published entries with one resolved media dictionary", async () => {
+  const { app, store } = await fixture();
+  const media = (id, extra = {}) => ({
+    createdAt: unixMilliseconds(1),
+    createdBy: admin.id,
+    filename: "image.png",
+    id: mediaId(id),
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    storageKey: `private/${id}`,
+    updatedAt: unixMilliseconds(1),
+    ...extra,
+  });
+  store.registerMedia(media("shared", { alt: "Office", focalPoint: { x: 0.25, y: 0.4 } }));
+  store.registerMedia(media("only-a"));
+  store.registerMedia(media("draft-only"));
+  for (const [id, ids] of [
+    ["post-a", ["shared", "only-a"]],
+    ["post-b", ["shared"]],
+  ]) {
+    await store.create({
+      entry: createContentEntry({
+        draft: {
+          blocks: [],
+          createdAt: unixMilliseconds(1),
+          entryId: contentEntryId(id),
+          fields: {},
+          id: contentSnapshotId(`${id}-draft`),
+          revision: 1,
+          slug: id,
+          state: "draft",
+          title: id,
+          updatedAt: unixMilliseconds(1),
+          updatedBy: admin,
+        },
+        id: contentEntryId(id),
+        model: { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" },
+      }),
+      mediaReferences: ids.map((mediaValue, index) => ({
+        fieldPath: `image${index}`,
+        mediaId: mediaId(mediaValue),
+        sourceKey: "$fields",
+      })),
+    });
+    await store.publish({
+      entryId: contentEntryId(id),
+      expectedRevision: 1,
+      publishedAt: unixMilliseconds(2),
+      publishedBy: admin,
+      publishedSnapshotId: contentSnapshotId(`${id}-published`),
+    });
+  }
+  await store.saveCompleteDraft({
+    entryId: contentEntryId("post-a"),
+    mutation: {
+      blocks: [],
+      expectedRevision: 1,
+      fields: {},
+      mediaReferences: [
+        { fieldPath: "image", mediaId: mediaId("draft-only"), sourceKey: "$fields" },
+      ],
+      title: "DRAFT ONLY",
+      updatedAt: unixMilliseconds(3),
+      updatedBy: admin,
+    },
+  });
+  const list = await json(app, "/api/v1/public/collections/posts?limit=10");
+  expect(Object.keys(list.body.media)).toEqual(["only-a", "shared"]);
+  expect(list.body.media.shared).toEqual({
+    alt: "Office",
+    caption: null,
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: null,
+    id: "shared",
+    mimeType: "image/png",
+    url: "https://lace.test/api/v1/public/media/shared",
+    width: null,
+  });
+  const single = await json(app, "/api/v1/public/content/by-path?path=/blog/post-b");
+  expect(Object.keys(single.body)).toEqual(["entry", "media"]);
+  expect(single.body.entry).toEqual({
+    blocks: [],
+    fields: {},
+    id: "post-b",
+    modelKey: "posts",
+    path: "/blog/post-b",
+    publishedAt: new Date(2).toISOString(),
+    slug: "post-b",
+    title: "post-b",
+  });
+  expect(Object.keys(single.body.media)).toEqual(["shared"]);
+  const exported = await json(app, "/api/v1/public/build-export");
+  expect(Object.keys(exported.body.media)).toEqual(["only-a", "shared"]);
+  for (const body of [list.body, single.body, exported.body]) {
+    expect(JSON.stringify(body)).not.toContain("DRAFT ONLY");
+    expect(JSON.stringify(body)).not.toContain("draft-only");
+    expect(JSON.stringify(body)).not.toContain("private/");
+  }
 });
 
 test("validates admin requests, rejects anonymous actors, and protects fallbacks", async () => {
@@ -925,7 +1034,7 @@ test("lists entries with filters, totals, and query-bound cursors", async () => 
   expect((await json(app, "/api/v1/admin/models/missing/entries")).response.status).toBe(404);
 });
 
-test("admin entry responses name the last editor while public DTOs stay unchanged", async () => {
+test("admin entry responses name the last editor while public DTOs carry no editor names", async () => {
   const viewer = { id: actorId("viewer"), role: "viewer" };
   const { app, store } = await fixture();
   store.setActorDisplayNames({ admin: "admin@example.test" });
@@ -995,7 +1104,10 @@ test("admin entry responses name the last editor while public DTOs stay unchange
 
   const page = await json(app, "/api/v1/public/collections/posts/named");
   const exported = await json(app, "/api/v1/public/build-export");
-  expect(page).toMatchObject({ body: { path: "/blog/named" }, response: { status: 200 } });
+  expect(page).toMatchObject({
+    body: { entry: { path: "/blog/named" } },
+    response: { status: 200 },
+  });
   expect(exported).toMatchObject({ body: { entries: [{ path: "/blog/named" }] } });
   for (const body of [page.body, exported.body]) {
     expect(JSON.stringify(body)).not.toContain("displayName");
@@ -1750,4 +1862,125 @@ test("both runtimes share one sensitive-limit mapping for account routes", () =>
   ];
   for (const [method, path, expected] of cases)
     expect(sensitiveRequestLimit(method, path), `${method} ${path}`).toEqual(expected);
+});
+
+test("media metadata route updates with If-Match, returns ETags, and queues builds for published media", async () => {
+  let current = admin;
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const { app, store } = await fixture({ maxBodyBytes: 8192, resolveActor: async () => current });
+  const upload = async (filename) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]),
+      filename,
+    );
+    const created = await app.fetch(
+      new Request("https://lace.test/api/v1/admin/media", { body: form, method: "POST" }),
+    );
+    return created.json();
+  };
+  const patch = (id, body, ifMatch) =>
+    app.fetch(
+      new Request(`https://lace.test/api/v1/admin/media/${id}`, {
+        body: JSON.stringify(body),
+        headers: {
+          "content-type": "application/json",
+          ...(ifMatch === undefined ? {} : { "if-match": ifMatch }),
+        },
+        method: "PATCH",
+      }),
+    );
+  const cover = await upload("cover.png");
+  const unused = await upload("unused.png");
+  const entry = await json(app, "/api/v1/admin/models/posts/entries", {
+    body: JSON.stringify({
+      blocks: [],
+      fields: { image: cover.id },
+      slug: "cover",
+      title: "Cover",
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  await json(app, `/api/v1/admin/entries/${entry.body.id}/publish`, {
+    body: JSON.stringify({ expectedRevision: 1 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  const detail = await app.fetch(new Request(`https://lace.test/api/v1/admin/media/${cover.id}`));
+  const tag = detail.headers.get("etag");
+  expect(tag).toBe(`"${Date.parse((await detail.json()).updatedAt)}"`);
+
+  const version = await store.publishedContentVersion();
+  const updated = await patch(
+    cover.id,
+    { alt: "Red bicycle", focalPoint: { x: 0.5, y: 0.3 } },
+    tag,
+  );
+  expect(updated.status).toBe(200);
+  const updatedBody = await updated.json();
+  expect(updatedBody).toMatchObject({
+    build: { status: "queued", targetVersion: version + 1 },
+    media: { alt: "Red bicycle", focalPoint: { x: 0.5, y: 0.3 }, id: cover.id },
+  });
+  expect(JSON.stringify(updatedBody)).not.toContain("storageKey");
+  const nextTag = updated.headers.get("etag");
+  expect(nextTag).not.toBe(tag);
+  expect(nextTag).toBe(`"${Date.parse(updatedBody.media.updatedAt)}"`);
+  expect(store.mediaMetadataBuildRequests).toEqual([version + 1]);
+
+  const stale = await patch(cover.id, { alt: "Stale" }, tag);
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toEqual({
+    error: {
+      code: "MEDIA_UPDATE_CONFLICT",
+      message: "The media was modified by another request.",
+    },
+  });
+
+  const unusedTag = `"${Date.parse(unused.updatedAt)}"`;
+  const idle = await patch(unused.id, { caption: "Spare" }, unusedTag);
+  expect(idle.status).toBe(200);
+  expect((await idle.json()).build).toEqual({ status: "not-dispatched" });
+
+  for (const [body, ifMatch, pointer] of [
+    [{ alt: "x" }, undefined, ""],
+    [{ alt: "x" }, `W/${nextTag}`, ""],
+    [{ alt: "x" }, "*", ""],
+    [{ focalPoint: { x: -0.1, y: 0.5 } }, nextTag, "/focalPoint/x"],
+    [{ title: "x" }, nextTag, "/title"],
+    [{ alt: "a\nb" }, nextTag, "/alt"],
+    [{}, nextTag, ""],
+  ]) {
+    const refused = await patch(cover.id, body, ifMatch);
+    expect(refused.status, JSON.stringify(body)).toBe(422);
+    const envelope = await refused.json();
+    expect(envelope.error.code).toBe("VALIDATION_FAILED");
+    expect(envelope.error.details.issues.map((issue) => issue.path)).toContain(pointer);
+  }
+  expect((await patch("missing", { alt: "x" }, nextTag)).status).toBe(404);
+
+  current = viewer;
+  const denied = await patch(cover.id, { alt: "Viewer" }, nextTag);
+  expect(denied.status).toBe(403);
+  expect((await denied.json()).error.code).toBe("AUTHORIZATION_DENIED");
+  current = admin;
+
+  const deleting = await app.fetch(
+    new Request(`https://lace.test/api/v1/admin/media/${unused.id}`, { method: "DELETE" }),
+  );
+  const deletingBody = await deleting.json();
+  const refusedDeleting = await patch(
+    unused.id,
+    { alt: "Gone" },
+    `"${Date.parse(deletingBody.updatedAt)}"`,
+  );
+  expect(refusedDeleting.status).toBe(422);
+  expect((await refusedDeleting.json()).error.code).toBe("CONTENT_INVALID_STATE");
+  expect((await json(app, `/api/v1/admin/media/${cover.id}`)).body).toMatchObject({
+    alt: "Red bicycle",
+    focalPoint: { x: 0.5, y: 0.3 },
+  });
 });

@@ -260,3 +260,59 @@ test("account-token migration upgrades a 0003 database and allows one active inv
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("media metadata migration upgrades a 0005 database with referenced media", async () => {
+  const { cp } = await import("node:fs/promises");
+  const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
+  const { checkedInMigrations, listAppliedMigrations } = await import("../dist/index.js");
+  const source = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), "lace-media-metadata-"));
+  const previous = join(root, "previous");
+  const path = join(root, "lace.sqlite");
+  try {
+    await cp(source, previous, { recursive: true });
+    const journalPath = join(previous, "meta", "_journal.json");
+    const journal = JSON.parse(await readFile(journalPath, "utf8"));
+    journal.entries = journal.entries.filter((entry) => entry.idx < 6);
+    await writeFile(journalPath, JSON.stringify(journal));
+    const database = openNodeDatabase(path);
+    try {
+      migrate(database.drizzle, { migrationsFolder: previous });
+      for (const statement of [
+        "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's1', 'p1', 1, 1)",
+        "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+        "insert into content_snapshots (id, entry_id, revision, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('s1', 'e1', 1, 'Post', '{}', 1, 1, 1, 'admin')",
+        "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+        "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('s1', '$fields', 'cover', 'm1', 1)",
+      ]) {
+        database.connection.prepare(statement).run();
+      }
+    } finally {
+      database.connection.close();
+    }
+    migrateNodeDatabase(path);
+    const migrated = openNodeDatabase(path);
+    try {
+      expect(
+        migrated.connection
+          .prepare("select alt, caption, focal_x, focal_y, metadata_json from media")
+          .all(),
+      ).toEqual([{ alt: null, caption: null, focal_x: null, focal_y: null, metadata_json: "{}" }]);
+      expect(
+        migrated.connection.prepare("select media_id from content_media_references").all(),
+      ).toEqual([{ media_id: "m1" }]);
+      const applied = listAppliedMigrations(migrated.connection);
+      expect(applied).toHaveLength(checkedInMigrations.length);
+      expect(() =>
+        migrated.connection.prepare("update media set focal_x = 0.5 where id = 'm1'").run(),
+      ).toThrow(/CHECK constraint/u);
+      migrated.connection
+        .prepare("update media set alt = 'Bike', focal_x = 0.5, focal_y = 0.5 where id = 'm1'")
+        .run();
+    } finally {
+      migrated.connection.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

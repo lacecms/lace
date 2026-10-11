@@ -43,3 +43,35 @@ test("choose mode marks the current tile and does not announce a details popup",
   await user.click(screen.getByRole("button", { name: "cover.png" }));
   expect(onOpen).toHaveBeenCalledWith(mediaItem, expect.any(HTMLButtonElement));
 });
+
+test("choose mode describes each tile with its alt text", () => {
+  render(
+    <MediaGrid
+      items={[
+        { ...mediaItem, alt: "Red bicycle" },
+        { ...mediaItem, id: "media-2" },
+      ]}
+      label="Media choices for Image"
+      mode="choose"
+      onOpen={vi.fn()}
+    />,
+  );
+  const [described, bare] = within(
+    screen.getByRole("list", { name: "Media choices for Image" }),
+  ).getAllByRole("button");
+  expect(described).toHaveAccessibleName("cover.png");
+  expect(described).toHaveAccessibleDescription("Red bicycle");
+  expect(within(described!).getByText("Red bicycle")).toHaveAttribute("title", "Red bicycle");
+  expect(bare).toHaveAccessibleDescription("No alt text");
+});
+
+test("open mode leaves the library tiles without alt text", () => {
+  render(
+    <MediaGrid
+      items={[{ ...mediaItem, alt: "Red bicycle" }]}
+      label="Media library"
+      onOpen={vi.fn()}
+    />,
+  );
+  expect(screen.queryByText("Red bicycle")).toBeNull();
+});

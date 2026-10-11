@@ -1452,6 +1452,19 @@ export function migrateBlockData(
   return current;
 }
 
+/**
+ * Resolves the alt text of one media usage: a non-blank usage alt (such as the
+ * `image` block's `alt`), then a non-blank media alt, then an empty string.
+ */
+export function effectiveAltText(
+  usageAlt: string | null | undefined,
+  mediaAlt: string | null | undefined,
+): string {
+  if (typeof usageAlt === "string" && usageAlt.trim().length > 0) return usageAlt;
+  if (typeof mediaAlt === "string" && mediaAlt.trim().length > 0) return mediaAlt;
+  return "";
+}
+
 /** Starter blocks implemented exclusively through the public block and field DSL. */
 export const builtInBlocks = deepFreeze({
   cta: defineBlock({
@@ -1481,15 +1494,18 @@ export const builtInBlocks = deepFreeze({
     version: 1,
   }),
   image: defineBlock({
-    description: "A single image with alt text and an optional caption.",
+    description:
+      "A single image with an optional caption and alt text that overrides the media alt.",
     fields: {
-      alt: field.text({ required: true }),
+      alt: field.text(),
       caption: field.text(),
       media: field.media({ required: true }),
     },
     label: "Image",
+    // Version 2 only made `alt` optional, so version 1 data is already valid.
+    migrations: { 2: (data) => data },
     type: "image",
-    version: 1,
+    version: 2,
   }),
   quote: defineBlock({
     description: "A quotation with optional attribution.",

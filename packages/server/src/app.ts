@@ -53,8 +53,13 @@ import {
   mediaDetailSchema,
   mediaListQuerySchema,
   mediaListSchema,
+  mediaEntityTag,
   mediaMetadataSchema,
   mediaUrl,
+  resolveMediaPrecondition,
+  toUpdateMediaMetadataResultDto,
+  updateMediaMetadataRequestSchema,
+  updateMediaMetadataResultSchema,
   createContentEntryRequestSchema,
   deleteContentEntryRequestSchema,
   duplicateContentEntryRequestSchema,
@@ -78,8 +83,9 @@ import {
   setupStateSchema,
   toAdminContentEntryDto,
   toBuildExportDto,
+  toPublicContentEntryDto,
+  toPublicContentListDto,
   toSiteBuildRecordDto,
-  toContentEntryDto,
   toContentModelDto,
   toIsoTimestamp,
   toMediaDetailDto,
@@ -671,6 +677,13 @@ export function createLaceApp(input: LaceAppInput): Hono {
       throw new Error("Media capability is unavailable.");
     }
     return input.media;
+  }
+
+  /** Public media URLs come only from configuration, never from the request. */
+  function publicMediaUrl(): (mediaId: string) => string {
+    const baseUrl = input.publicBaseUrl;
+    if (baseUrl === undefined) throw new Error("Public content capability is unavailable.");
+    return (mediaId) => mediaUrl(baseUrl, mediaId);
   }
 
   function mediaDto(value: MediaView) {
@@ -1528,6 +1541,68 @@ export function createLaceApp(input: LaceAppInput): Hono {
         : response(
             mediaDetailSchema,
             toMediaDetailDto(detail, mediaUrl(input.publicBaseUrl!, detail.id)),
+            200,
+            { etag: mediaEntityTag(detail.updatedAt) },
+          );
+    },
+  );
+
+  app.patch(
+    "/api/v1/admin/media/:mediaId",
+    describeRoute({
+      description:
+        "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
+      parameters: [
+        {
+          description: "The item's current ETag: its updatedAt in quoted Unix milliseconds.",
+          in: "header",
+          name: "If-Match",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      requestBody: {
+        content: { "application/json": { schema: resolver(updateMediaMetadataRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: resolver(updateMediaMetadataResultSchema) },
+          },
+          description: "Updated media and build dispatch outcome",
+        },
+      },
+      summary: "Update media metadata",
+      tags: ["admin"],
+    }),
+    validator("param", mediaIdParams, validationHook),
+    validator("json", updateMediaMetadataRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof updateMediaMetadataRequestSchema
+      >;
+      let expectedUpdatedAt: ReturnType<typeof resolveMediaPrecondition>;
+      try {
+        expectedUpdatedAt = resolveMediaPrecondition(context.req.header("if-match") ?? undefined);
+      } catch {
+        return invalid("If-Match must carry the media item's current strong ETag.");
+      }
+      const updated = await media().updateMetadata({
+        actor: await actor(context),
+        expectedUpdatedAt,
+        mediaId: context.req.param("mediaId") as never,
+        patch: body,
+      });
+      return updated === null
+        ? notFound()
+        : response(
+            updateMediaMetadataResultSchema,
+            toUpdateMediaMetadataResultDto(
+              updated,
+              mediaUrl(input.publicBaseUrl!, updated.media.id),
+            ),
+            200,
+            { etag: mediaEntityTag(updated.media.updatedAt) },
           );
     },
   );
@@ -1911,7 +1986,16 @@ export function createLaceApp(input: LaceAppInput): Hono {
 
   app.get(
     "/api/v1/public/pages/:modelKey",
-    describeRoute({ summary: "Read a published page", tags: ["public"] }),
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
+          description: "Published page",
+        },
+      },
+      summary: "Read a published page",
+      tags: ["public"],
+    }),
     validator("param", modelKeyParams, validationHook),
     async (context) => {
       const model = pageModel(input.config, context.req.param("modelKey"));
@@ -1919,16 +2003,22 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.publicContent.loadPublic(model.path);
       return entry === null
         ? notFound()
-        : response(publicContentEntrySchema, {
-            entry: toContentEntryDto(entry.entry),
-            path: entry.path,
-          });
+        : response(publicContentEntrySchema, toPublicContentEntryDto(entry, publicMediaUrl()));
     },
   );
 
   app.get(
     "/api/v1/public/collections/:modelKey",
-    describeRoute({ summary: "List published collection entries", tags: ["public"] }),
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicContentListSchema) } },
+          description: "Published collection page",
+        },
+      },
+      summary: "List published collection entries",
+      tags: ["public"],
+    }),
     validator("param", modelKeyParams, validationHook),
     async (context) => {
       const model = collectionModel(input.config, context.req.param("modelKey"));
@@ -1937,16 +2027,22 @@ export function createLaceApp(input: LaceAppInput): Hono {
         modelKey: model.key as never,
         ...pagination(context.req.raw),
       });
-      return response(publicContentListSchema, {
-        items: page.items.map(({ entry, path }) => ({ entry: toContentEntryDto(entry), path })),
-        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
-      });
+      return response(publicContentListSchema, toPublicContentListDto(page, publicMediaUrl()));
     },
   );
 
   app.get(
     "/api/v1/public/collections/:modelKey/:slug",
-    describeRoute({ summary: "Read a published collection entry", tags: ["public"] }),
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
+          description: "Published collection entry",
+        },
+      },
+      summary: "Read a published collection entry",
+      tags: ["public"],
+    }),
     validator("param", collectionItemParams, validationHook),
     async (context) => {
       const model = collectionModel(input.config, context.req.param("modelKey"));
@@ -1965,16 +2061,22 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.publicContent.loadPublic(path);
       return entry === null
         ? notFound()
-        : response(publicContentEntrySchema, {
-            entry: toContentEntryDto(entry.entry),
-            path: entry.path,
-          });
+        : response(publicContentEntrySchema, toPublicContentEntryDto(entry, publicMediaUrl()));
     },
   );
 
   app.get(
     "/api/v1/public/content/by-path",
-    describeRoute({ summary: "Read published content by path", tags: ["public"] }),
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
+          description: "Published entry",
+        },
+      },
+      summary: "Read published content by path",
+      tags: ["public"],
+    }),
     async (context) => {
       const suppliedPath = new URL(context.req.raw.url).searchParams.get("path");
       if (suppliedPath === null)
@@ -1992,10 +2094,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.publicContent.loadPublic(path);
       return entry === null
         ? notFound()
-        : response(publicContentEntrySchema, {
-            entry: toContentEntryDto(entry.entry),
-            path: entry.path,
-          });
+        : response(publicContentEntrySchema, toPublicContentEntryDto(entry, publicMediaUrl()));
     },
   );
 
@@ -2038,7 +2137,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
           return new Response(null, { headers: { etag }, status: 304 });
       }
       const buildExport = await input.publicContent.exportBuildContent();
-      return response(buildExportSchema, toBuildExportDto(buildExport), 200, {
+      return response(buildExportSchema, toBuildExportDto(buildExport, publicMediaUrl()), 200, {
         etag: entityTagForVersion(buildExport.version),
       });
     },

@@ -358,6 +358,7 @@ function TextareaField({
   invalid,
   onBlur,
   onChange,
+  placeholder,
   value,
 }: FieldRendererProps) {
   return (
@@ -369,6 +370,7 @@ function TextareaField({
       minLength={definition.type === "textarea" ? definition.minLength : undefined}
       onBlur={onBlur}
       onChange={(event) => onChange(event.currentTarget.value || undefined)}
+      placeholder={placeholder}
       rows={5}
       value={typeof value === "string" ? value : ""}
     />
@@ -382,6 +384,7 @@ function TextField({
   invalid,
   onBlur,
   onChange,
+  placeholder,
   value,
 }: FieldRendererProps) {
   return (
@@ -393,6 +396,7 @@ function TextField({
       minLength={definition.type === "text" ? definition.minLength : undefined}
       onBlur={onBlur}
       onChange={(event) => onChange(event.currentTarget.value || undefined)}
+      placeholder={placeholder}
       type="text"
       value={typeof value === "string" ? value : ""}
     />

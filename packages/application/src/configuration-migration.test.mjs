@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
-import { defineBlock, field } from "@lacecms/content";
+import { builtInBlocks, defineBlock, field } from "@lacecms/content";
 import {
   applyPreparedConfigurationSynchronization,
   planConfigurationSynchronization,
@@ -531,4 +531,66 @@ test("stops before the final mutation when the reviewed plan changed", async () 
     }),
   ).rejects.toThrow("stale after block migration");
   expect(state.finals).toEqual([]);
+});
+
+test("migrates version 1 built-in image blocks to version 2 without changing their data", async () => {
+  const imageV1 = defineBlock({
+    fields: {
+      alt: field.text({ required: true }),
+      caption: field.text(),
+      media: field.media({ required: true }),
+    },
+    type: "image",
+    version: 1,
+  });
+  const imageConfig = (definition, version) =>
+    defineConfig({
+      blocks: [definition],
+      content: [
+        defineCollection({ blocks: ["image"], key: "posts", route: "/blog/:slug", version }),
+      ],
+    });
+  const baseline = (await imageConfig(imageV1, 1)).runtime.content[0];
+  const target = await imageConfig(builtInBlocks.image, 2);
+  const model = target.runtime.content[0];
+  const data = { alt: "A lake", caption: "Morning", media: "m1" };
+  const image = () => ({
+    data: { ...data },
+    key: "b1",
+    position: 0,
+    schemaVersion: 1,
+    type: "image",
+  });
+  const references = [{ fieldPath: "media", mediaId: "m1", sourceKey: "b1" }];
+  const state = store(baseline, [
+    {
+      draft: snap("d1", "draft", 2, [image()], references),
+      entryId: "e1",
+      published: snap("p1", "published", 2, [image()], references),
+    },
+  ]);
+
+  const prepared = await prepareConfigurationSynchronization({
+    blocks: target.runtime.blocks,
+    models: [model],
+    state,
+  });
+  expect(prepared.plan.isValid).toBe(true);
+  expect(prepared.plan.operations[0].evolution.migrations).toEqual([
+    { blockType: "image", blocks: 2, draft: 1, fromVersions: [1], published: 1, toVersion: 2 },
+  ]);
+  await applyPreparedConfigurationSynchronization({
+    blocks: target.runtime.blocks,
+    clock: { now: () => 500 },
+    ids: { next: () => "id" },
+    models: [model],
+    prepared,
+    target: state,
+  });
+  for (const snapshot of [state.entries[0].draft, state.entries[0].published]) {
+    expect(snapshot.blocks).toEqual([{ ...image(), schemaVersion: 2 }]);
+    expect(snapshot.references).toEqual(references);
+  }
+  expect(state.entries[0].draft.revision).toBe(3);
+  expect(state.entries[0].published.revision).toBe(3);
 });

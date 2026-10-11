@@ -12,6 +12,7 @@ export type LaceRenderErrorCode =
   | "block_version_mismatch"
   | "invalid_block_data"
   | "invalid_rich_text"
+  | "missing_media"
   | "unknown_block_type";
 
 export interface LaceRenderErrorOptions extends ErrorOptions {

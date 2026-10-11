@@ -159,7 +159,7 @@ export async function publishedEntries() {
   });
   const result = await client.getBuildExport();
   if (!result.changed) throw new TypeError("Expected an export.");
-  return result.export.entries.filter((item) => item.entry.published !== undefined);
+  return result.export.entries;
 }
 `,
   );
@@ -170,8 +170,8 @@ import { publishedEntries } from "../export.js";
 const entries = await publishedEntries();
 const home = entries.find((item) => item.path === "/");
 ---
-<html><head><title>{home?.entry.published?.title}</title></head><body>
-<ul>{entries.map((item) => <li><a href={item.path}>{item.entry.published?.title}</a></li>)}</ul>
+<html><head><title>{home?.title}</title></head><body>
+<ul>{entries.map((item) => <li><a href={item.path}>{item.title}</a></li>)}</ul>
 </body></html>
 `,
   );
@@ -181,12 +181,12 @@ const home = entries.find((item) => item.path === "/");
 import { publishedEntries } from "../../export.js";
 export async function getStaticPaths() {
   return (await publishedEntries())
-    .filter((item) => item.entry.model.key === "posts")
-    .map((item) => ({ params: { slug: item.entry.published?.slug }, props: { item } }));
+    .filter((item) => item.modelKey === "posts")
+    .map((item) => ({ params: { slug: item.slug }, props: { item } }));
 }
 const { item } = Astro.props;
 ---
-<html><head><title>{item.entry.published?.title}</title></head><body></body></html>
+<html><head><title>{item.title}</title></head><body></body></html>
 `,
   );
   await run("independent-site-install", "pnpm", ["install", "--no-frozen-lockfile"], {

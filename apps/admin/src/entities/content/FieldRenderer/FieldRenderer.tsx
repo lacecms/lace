@@ -36,28 +36,41 @@ export function FieldRendererProvider({
   return <FieldRendererContext.Provider value={value}>{children}</FieldRendererContext.Provider>;
 }
 
-/** Renders one model or block field with its label, description, control, and error. */
+/**
+ * Renders one model or block field with its label, description, control, and
+ * error. A `placeholder` is also part of the control's accessible description,
+ * and a `notice` (guidance for writers) is shown below it unless view only.
+ */
 export function FieldRenderer({
   control,
   definition,
   error,
   fieldKey,
   name,
+  notice,
+  placeholder,
 }: {
   readonly control: Control<DraftEditorValues, unknown, DraftEditorValues>;
   readonly definition: FieldDefinition;
   readonly error: string | undefined;
   readonly fieldKey: string;
   readonly name: `blocks.${number}.data.${string}` | `fields.${string}`;
+  readonly notice?: ReactNode;
+  readonly placeholder?: string | undefined;
 }) {
   const { readOnly, renderers } = useContext(FieldRendererContext);
   const Renderer = renderers[definition.type] ?? builtInRenderers[definition.type];
   const id = fieldControlId(name);
   const errorId = `${id}-error`;
   const descriptionId = `${id}-description`;
+  const placeholderId = `${id}-placeholder`;
+  const noticeId = `${id}-notice`;
+  const shownNotice = readOnly || notice === undefined || notice === null ? undefined : notice;
   const describedBy =
     [
       definition.description === undefined ? undefined : descriptionId,
+      placeholder === undefined ? undefined : placeholderId,
+      shownNotice === undefined ? undefined : noticeId,
       error === undefined ? undefined : errorId,
     ]
       .filter((value): value is string => value !== undefined)
@@ -92,9 +105,16 @@ export function FieldRenderer({
             // React Hook Form shows the loaded default again for `undefined`, so a
             // cleared value is held as `null` and removed before saving.
             onChange={(next) => field.onChange(next === undefined ? null : next)}
+            placeholder={placeholder}
             readOnly={readOnly}
             value={field.value === null ? undefined : field.value}
           />
+          {placeholder === undefined ? undefined : (
+            <span className="sr-only" id={placeholderId}>
+              {placeholder}
+            </span>
+          )}
+          {shownNotice === undefined ? undefined : <div id={noticeId}>{shownNotice}</div>}
           {error === undefined ? undefined : (
             <p className={`${fieldErrorClass} text-xs`} id={errorId} role="alert">
               {error}

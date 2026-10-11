@@ -12,27 +12,24 @@ import {
 const timestamp = "2026-09-20T00:00:00.000Z";
 
 function publicEntry({ id = "entry-1", modelKey = "posts", path = "/blog/entry-1" } = {}) {
-  const snapshot = {
-    blocks: [],
-    createdAt: timestamp,
-    entryId: id,
-    fields: {},
-    id: `${id}-published`,
-    revision: 1,
-    state: "published",
-    title: id,
-    updatedAt: timestamp,
-    updatedBy: { id: "admin-1", role: "admin" },
-  };
+  return { blocks: [], fields: {}, id, modelKey, path, publishedAt: timestamp, title: id };
+}
+
+function mediaItem(id, alt = null) {
   return {
-    entry: {
-      draft: { ...snapshot, id: `${id}-draft`, state: "draft" },
-      id,
-      model: { key: modelKey, kind: "collection", route: "/blog/:slug" },
-      published: snapshot,
-    },
-    path,
+    alt,
+    caption: null,
+    focalPoint: null,
+    height: null,
+    id,
+    mimeType: "image/png",
+    url: `https://cms.example/api/v1/public/media/${id}`,
+    width: null,
   };
+}
+
+function single(options) {
+  return { entry: publicEntry(options), media: {} };
 }
 
 function json(value, init) {
@@ -66,10 +63,10 @@ test("exports its package identity", () => expect(packageName).toBe("@lacecms/sd
 
 test("reads public resources with normalized base paths and encoded inputs", async () => {
   const mock = queuedFetch([
-    json(publicEntry({ modelKey: "home", path: "/" })),
-    json({ items: [publicEntry()], nextCursor: "cursor-2" }),
-    json(publicEntry({ id: "entry-two", path: "/blog/second" })),
-    json(publicEntry({ id: "entry-three", path: "/blog/third" })),
+    json(single({ modelKey: "home", path: "/" })),
+    json({ items: [publicEntry()], media: {}, nextCursor: "cursor-2" }),
+    json(single({ id: "entry-two", path: "/blog/second" })),
+    json(single({ id: "entry-three", path: "/blog/third" })),
   ]);
   const client = createLaceClient({ baseUrl: "https://cms.example/lace", fetch: mock.fetch });
 
@@ -93,14 +90,20 @@ test("reads public resources with normalized base paths and encoded inputs", asy
 
 test("follows cursors only through getAllCollection", async () => {
   const mock = queuedFetch([
-    json({ items: [publicEntry({ id: "one" })], nextCursor: "opaque+cursor" }),
-    json({ items: [publicEntry({ id: "two" })] }),
+    json({
+      items: [publicEntry({ id: "one" })],
+      media: { b: mediaItem("b", "Old"), c: mediaItem("c") },
+      nextCursor: "opaque+cursor",
+    }),
+    json({ items: [publicEntry({ id: "two" })], media: { a: mediaItem("a"), b: mediaItem("b") } }),
   ]);
   const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
 
-  const entries = await client.getAllCollection("posts", { limit: 1 });
+  const all = await client.getAllCollection("posts", { limit: 1 });
 
-  expect(entries.map(({ entry }) => entry.id)).toEqual(["one", "two"]);
+  expect(all.items.map((entry) => entry.id)).toEqual(["one", "two"]);
+  expect(Object.keys(all.media)).toEqual(["a", "b", "c"]);
+  expect(all.media.b.alt).toBeNull();
   expect(mock.requests.map((request) => request.url)).toEqual([
     "https://cms.example/api/v1/public/collections/posts?limit=1",
     "https://cms.example/api/v1/public/collections/posts?after=opaque%2Bcursor&limit=1",
@@ -109,9 +112,9 @@ test("follows cursors only through getAllCollection", async () => {
 
 test("scopes the build token to exports and supports changed and unchanged exports", async () => {
   const mock = queuedFetch([
-    json({ entries: [publicEntry()], version: 7 }, { headers: { etag: '"7"' } }),
+    json({ entries: [publicEntry()], media: {}, version: 7 }, { headers: { etag: '"7"' } }),
     new Response(null, { headers: { etag: '"7"' }, status: 304 }),
-    json(publicEntry({ modelKey: "home", path: "/" })),
+    json(single({ modelKey: "home", path: "/" })),
   ]);
   const client = createLaceClient({
     baseUrl: "https://cms.example/lace/",
@@ -198,7 +201,7 @@ test("distinguishes timeout and caller abort transport failures", async () => {
 
 test.each(['"7"', 'W/"7"'])("preserves received and supplied build validators %s", async (etag) => {
   const mock = queuedFetch([
-    json({ entries: [publicEntry()], version: 7 }, { headers: { etag } }),
+    json({ entries: [publicEntry()], media: {}, version: 7 }, { headers: { etag } }),
     new Response(null, { headers: { etag: 'W/"7"' }, status: 304 }),
   ]);
   const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
@@ -247,7 +250,7 @@ test.each([200, 304])("diagnoses missing and invalid ETags on %i safely", async 
 
 test("rejects inconsistent response versions and malformed caller validators", async () => {
   for (const response of [
-    json({ entries: [publicEntry()], version: 8 }, { headers: { etag: 'W/"7"' } }),
+    json({ entries: [publicEntry()], media: {}, version: 8 }, { headers: { etag: 'W/"7"' } }),
     new Response(null, { headers: { etag: 'W/"8"' }, status: 304 }),
   ]) {
     const client = createLaceClient({

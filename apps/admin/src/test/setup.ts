@@ -26,6 +26,7 @@ globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObse
 Element.prototype.scrollIntoView ??= () => undefined;
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.releasePointerCapture ??= () => undefined;
+Element.prototype.setPointerCapture ??= () => undefined;
 
 // ProseMirror measures the selection to scroll it into view.
 const emptyRect = (): DOMRect => new DOMRect(0, 0, 0, 0);

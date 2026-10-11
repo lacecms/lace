@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { cn } from "../../../shared/lib/index.js";
 import { buttonVariants } from "../../../shared/ui/Button/index.js";
-import { mediaPreviewPath } from "../media-limits.js";
+import { useMediaPreview } from "../media-preview.js";
 
 export function MediaPreview({
   className,
@@ -12,21 +11,18 @@ export function MediaPreview({
   readonly filename: string;
   readonly mediaId: string;
 }) {
-  const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
-  const source = `${mediaPreviewPath(mediaId)}${attempt === 0 ? "" : `?attempt=${attempt}`}`;
+  const preview = useMediaPreview(mediaId);
   return (
     <div className="grid gap-2">
-      {state === "loading" ? <span role="status">Loading preview for {filename}…</span> : undefined}
-      {state === "failed" ? (
+      {preview.state === "loading" ? (
+        <span role="status">Loading preview for {filename}…</span>
+      ) : undefined}
+      {preview.state === "failed" ? (
         <div role="status">
           Preview unavailable for {filename}.{" "}
           <button
             className={buttonVariants({ size: "sm", variant: "outline" })}
-            onClick={() => {
-              setState("loading");
-              setAttempt((current) => current + 1);
-            }}
+            onClick={preview.retry}
             type="button"
           >
             Retry preview
@@ -36,9 +32,9 @@ export function MediaPreview({
         <img
           alt={`Preview of ${filename}`}
           className={cn("block h-auto max-h-64 max-w-full rounded-md object-contain", className)}
-          onError={() => setState("failed")}
-          onLoad={() => setState("ready")}
-          src={source}
+          onError={preview.onError}
+          onLoad={preview.onLoad}
+          src={preview.source}
         />
       )}
     </div>

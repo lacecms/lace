@@ -7,7 +7,7 @@ function maximalBlocks(label, count = 200) {
     key: `${label}-${i}`,
     type: "image",
     position: (i + 1) * 1000,
-    schemaVersion: 1,
+    schemaVersion: 2,
     data: { media: `budget-media-${i}`, alt: `${label} image ${i}` },
   }));
 }
@@ -94,7 +94,9 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
       {},
       200,
     );
-    expect(published.entry.published.blocks).toEqual(draft("saved").blocks);
+    expect(published.entry.blocks).toEqual(draft("saved").blocks);
+    // The public read resolves every one of the 200 referenced media items.
+    expect(Object.keys(published.media)).toHaveLength(200);
     const refs = await f.database
       .prepare(
         "select source_key, media_id from content_media_references where snapshot_id = (select published_snapshot_id from content_entries where id = ?) order by source_key",
@@ -262,24 +264,19 @@ test("34B D1 exports 100/201/501 complete published entries across hydration chu
         200,
       );
       expect(exported.entries).toHaveLength(size);
-      expect(f.count.stats.queries).toBeLessThanOrEqual(8 + 4 * Math.ceil(size / 100));
+      // Per 100 entries: two snapshot chunks, two block chunks and one referenced-media chunk.
+      expect(f.count.stats.queries).toBeLessThanOrEqual(8 + 5 * Math.ceil(size / 100));
       expect(JSON.stringify(exported)).not.toContain("PRIVATE DRAFT SENTINEL");
       expect(
-        exported.entries.map(({ path, entry }) => ({
-          id: entry.id,
+        exported.entries.map(({ id, path, title, fields, blocks }) => ({
+          id,
           path,
-          title: entry.published.title,
-          fields: entry.published.fields,
-          blocks: entry.published.blocks,
+          title,
+          fields,
+          blocks,
         })),
       ).toEqual(expected);
-      expect(
-        exported.entries.every(
-          ({ entry }) =>
-            JSON.stringify(entry.draft.fields) === JSON.stringify(entry.published.fields) &&
-            JSON.stringify(entry.draft.blocks) === JSON.stringify(entry.published.blocks),
-        ),
-      ).toBe(true);
+      expect(exported.entries.every((entry) => !Object.hasOwn(entry, "draft"))).toBe(true);
       console.info(
         `34B export fixture ${JSON.stringify({ entries: size, maximalEntries: 2, mediaReferences: 400, fieldsJsonBytes: Buffer.byteLength(JSON.stringify(expected[0].fields)), blockJsonBytes: Buffer.byteLength(JSON.stringify(expected[1].blocks[0].data)) })}`,
       );

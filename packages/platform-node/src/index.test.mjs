@@ -992,12 +992,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(6);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(7);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(6);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(7);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1294,10 +1294,24 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         return prepare(sql);
       };
       expect(await repository.exportBuildContent()).toMatchObject({
-        entries: [{ path: "/blog/post-a" }, { path: "/blog/post-b" }],
+        entries: [
+          { media: [{ id: "media-1" }], path: "/blog/post-a" },
+          { media: [{ id: "media-1" }], path: "/blog/post-b" },
+        ],
         version: 2,
       });
-      expect(statements.length).toBeLessThanOrEqual(4);
+      // Routes, snapshots, blocks, referenced media, and the version.
+      expect(statements.length).toBeLessThanOrEqual(5);
+      const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
+      expect(
+        database.connection
+          .prepare(`explain query plan ${mediaStatement}`)
+          .all("post-a-published", "post-b-published"),
+      ).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ detail: expect.stringMatching(/^SCAN r\b/u) }),
+        ]),
+      );
       statements.length = 0;
       await repository.list({
         limit: 100,

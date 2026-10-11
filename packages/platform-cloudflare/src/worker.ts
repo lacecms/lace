@@ -64,7 +64,9 @@ const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
 /** Admin mutations that enqueue outbox work and deserve a best-effort post-commit pass. */
 const DISPATCH_PRODUCING_REQUESTS: readonly (readonly [string, RegExp])[] = [
   ["POST", /^\/api\/v1\/admin\/entries\/[^/]+\/publish$/u],
+  ["POST", /^\/api\/v1\/admin\/entries\/[^/]+\/unpublish$/u],
   ["DELETE", /^\/api\/v1\/admin\/entries\/[^/]+$/u],
+  ["PATCH", /^\/api\/v1\/admin\/media\/[^/]+$/u],
   ["DELETE", /^\/api\/v1\/admin\/media\/[^/]+$/u],
   ["POST", /^\/api\/v1\/admin\/media\/[^/]+\/retry-deletion$/u],
   ["POST", /^\/api\/v1\/admin\/builds$/u],

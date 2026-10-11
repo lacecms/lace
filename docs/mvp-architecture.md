@@ -587,7 +587,9 @@ field DSL and do not receive special database treatment:
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
-- `image`: required media, required alt text, and optional caption;
+- `image` (version 2): required media, optional alt text that overrides the
+  media item's alt text, and optional caption. Version 1 required the alt
+  text; the version 2 migration returns the stored data unchanged;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL.
 
@@ -886,7 +888,11 @@ media
 ├── size                INTEGER NOT NULL
 ├── width               INTEGER
 ├── height              INTEGER
-├── metadata_json       TEXT NOT NULL
+├── metadata_json       TEXT NOT NULL      -- reserved, always '{}'
+├── alt                 TEXT               -- at most 1,000 characters
+├── caption             TEXT               -- at most 2,000 characters
+├── focal_x             REAL               -- 0..1, set together with focal_y
+├── focal_y             REAL               -- 0..1, set together with focal_x
 ├── status              TEXT NOT NULL CHECK(status IN ('active', 'deleting', 'delete_failed'))
 ├── last_error          TEXT
 ├── created_by          TEXT NOT NULL
@@ -927,6 +933,30 @@ greater than zero.
 
 `width` and `height` are the displayed dimensions, measured after the image's
 EXIF orientation is applied. Every upload records both values.
+
+Media carry optional descriptive metadata that every usage of the item shares:
+`alt` text, a `caption`, and a `focalPoint` `{x, y}` whose coordinates run from
+0 to 1 across the displayed image, with `{0, 0}` at the top left. The database
+enforces the lengths, the coordinate range, and that both coordinates are set
+or both are `NULL`; `metadata_json` stays reserved. Uploads leave all three
+values unset. The metadata update command (`media:write`) edits only `active`
+items. Values are plain text: trimmed, cleared when empty, free of control
+characters (the caption may contain line breaks), and counted in Unicode code
+points. A writer edits the version identified by `updatedAt`: the strong
+`If-Match` tag is its Unix milliseconds, a stale tag fails with
+`MEDIA_UPDATE_CONFLICT` (HTTP `409`), and every committed update moves
+`updated_at` to the later of now and the previous value plus one millisecond.
+A submission that changes nothing writes nothing.
+
+Metadata is global and goes live on the next build: when a current published
+snapshot references the item, the same atomic mutation increments
+`published_state.version` and enqueues or coalesces a site build with the
+reason `media_metadata`. Published snapshots are not rewritten and no
+republication is needed. Metadata used only by drafts changes neither the
+version nor build work. The effective alt text of a usage is the usage-level
+alt (for example the `image` block's `alt`), then the media item's `alt`, then
+an empty string; missing alt text never blocks publication
+([ADR 0009](adr/0009-media-metadata.md)).
 
 Media deletion is asynchronous and recoverable. The delete use case refuses a
 referenced item with `MEDIA_IN_USE` (HTTP `409`), marks an unreferenced item
@@ -1293,10 +1323,35 @@ models, entries, routes, blocks, and referenced media metadata in a
 build-efficient representation to avoid an N+1 request pattern during Astro
 generation; it requires a read-only build token.
 
+Public content responses return the published entry directly, never a draft:
+
+```text
+PublicEntry = { id, modelKey, path, slug?, title, fields, blocks, publishedAt }
+
+GET pages/:modelKey, collections/:modelKey/:slug, content/by-path
+  -> { entry: PublicEntry, media }
+GET collections/:modelKey
+  -> { items: PublicEntry[], media, nextCursor? }
+GET build-export
+  -> { entries: PublicEntry[], media, version }
+
+media = { [mediaId]: { id, url, mimeType, width, height, alt, caption, focalPoint } }
+```
+
+`blocks` keep `key`, `type`, `schemaVersion`, `position`, and `data`, ordered
+by position, and `publishedAt` is the creation time of the published snapshot.
+`media` resolves exactly the media items referenced by the returned entries'
+published snapshots (from `content_media_references`), keyed by ID in ascending
+order; unknown values are `null`. Field and block values keep storing media IDs.
+The dictionary never carries storage keys, filenames, uploaders, or lifecycle
+status. Media metadata edits reach the export through the published-state
+version bump of section 9.7, so the build-export ETag changes with them.
+
 Content DTOs expose a stable absolute media URL formed from the configured
 `LACE_PUBLIC_BASE_URL` plus `/api/v1/public/media/:mediaId`, never a short-lived
 signed URL. The base URL is validated at startup and is never inferred from an
-untrusted `Host` or forwarded header. The endpoint may
+untrusted `Host` or forwarded header; an API composed without it serves no public
+content routes. The endpoint may
 stream the object or redirect to a short-lived R2/MinIO URL. Static HTML therefore
 keeps a durable URL while storage credentials and object keys stay private.
 The public media endpoint returns an object only when the media ID is referenced
@@ -1322,6 +1377,7 @@ DELETE /api/v1/admin/entries/:entryId
 GET    /api/v1/admin/media
 POST   /api/v1/admin/media
 GET    /api/v1/admin/media/:mediaId
+PATCH  /api/v1/admin/media/:mediaId
 DELETE /api/v1/admin/media/:mediaId
 POST   /api/v1/admin/media/:mediaId/retry-deletion
 
@@ -1399,8 +1455,13 @@ preserve the same snapshot-revision invariant.
   image MIME type), and `sort` (`createdAt`, `filename`, or `size`, either
   direction; default newest first), with cursors bound to that query. Media
   DTOs name the uploader as `createdBy` with an `id` and `displayName`, and
-  carry `usageCount`. `GET /api/v1/admin/media/:mediaId` adds the bounded
-  `usage` list.
+  carry `usageCount` and the `alt`, `caption`, and `focalPoint` values that are
+  set. `GET /api/v1/admin/media/:mediaId` adds the bounded `usage` list and an
+  `ETag` of the item's `updatedAt` in Unix milliseconds.
+- `PATCH /api/v1/admin/media/:mediaId` (`media:write`) takes a strict body with
+  any of `alt`, `caption`, and `focalPoint` (`null` clears a value) and requires
+  that `ETag` as a strong `If-Match`. It returns `{media, build}` with the
+  existing build dispatch outcome and the new `ETag`.
 - Mutable operations use optimistic concurrency through a revision or `If-Match` value.
 - Publish operations are idempotent.
 - Dates in JSON use ISO 8601 UTC strings.
@@ -1437,15 +1498,11 @@ Sites consume Lace through three layers ([ADR 0006](./adr/0006-shared-rendering-
 
 This section fixes the public names, inputs, outputs, error behavior, and
 server-only constraints that Step 30 implements. Exact DTO fields and spec
-wording belong to the implementing OpenSpec changes. The public build-export DTO
-is unchanged: public entries still reuse the content-entry schema with an
-always-present `published` and a mirrored `draft` snapshot, and the loader hides
-that shape. Step 34A retains this v1 representation for compatibility before
-the stable contract freeze: `draft` in a public entry mirrors only its published
-snapshot, never the mutable editorial draft. The shared schema's optional
-`published` remains unchanged, while successful public entries must contain it.
-The published-site loader remains the published-only consumer view; a dedicated
-public wire schema would require a separately reviewed contract migration.
+wording belong to the implementing OpenSpec changes. Since CE3C the public wire
+schema is published-only (section 12): the former v1 representation, which
+reused the content-entry schema with a `draft` mirroring the publication, was
+replaced during alpha together with the SDK, the template version, and the
+upgrade notes ([ADR 0009](./adr/0009-media-metadata.md)).
 
 ### 13.1 SDK client
 
@@ -1486,12 +1543,18 @@ framework and never reads `process.env` or `import.meta.env` itself.
   different export version fails the build.
 - **Output:** `PublishedSite` with `version`, `byPath(path)`,
   `entries(modelKey)` (sorted by path; empty for an unknown model),
-  `bySlug(modelKey, slug)`, and `mediaUrl(mediaId)`. Lookups return
-  `undefined` when absent so routes choose between 404 and failure.
-  `PublishedEntry` exposes `id`, `modelKey`, `path`, optional `slug`, `title`,
-  `fields`, and ordered `blocks` (`PublishedBlock`: `type`, `key`, `position`,
-  `schemaVersion`, `data`), typed from contract DTOs. No draft-shaped property
-  exists on the view.
+  `bySlug(modelKey, slug)`, `mediaUrl(mediaId)`, `media(mediaId)`, and
+  `image(mediaId, usageAlt?)`. Lookups return `undefined` when absent so routes
+  choose between 404 and failure. `PublishedEntry` exposes `id`, `modelKey`,
+  `path`, optional `slug`, `title`, `publishedAt`, `fields`, ordered `blocks`
+  (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`), typed
+  from contract DTOs, and the same `media()` and `image()` lookups over the
+  export's media dictionary. `image()` returns the resolved item with the
+  effective alt text: the non-blank usage alt (such as the `image` block's
+  `alt`), then the media alt, then `""`. Resolved media URLs use
+  `LACE_PUBLIC_BASE_URL` when the site configures it and the export's URLs
+  otherwise; `mediaUrl()` returns the resolved URL of a known ID. No
+  draft-shaped property exists on the view.
 - The loader trusts the CMS-resolved `path`, never re-derives route patterns or
   names model keys, and rejects duplicate paths and duplicate slugs within a
   model.
@@ -1519,9 +1582,16 @@ framework and never reads `process.env` or `import.meta.env` itself.
   unknown block type, which preserves the build-failure behavior for blocks a
   site cannot render. `prepareBlocks(map, entry, mediaUrl)` resolves and parses
   an entry's blocks in order and returns each mapped component with its
-  `BlockProps`, so adapters only render the result.
+  `BlockProps`, so adapters only render the result. A `RenderableEntry` may
+  carry `media(mediaId)` resolving its media; `PublishedEntry` does.
 - `BlockProps<Definition>` is the prop contract every adapter passes to a block
-  component: `block`, parsed `data`, `context`, and `mediaUrl`.
+  component: `block`, parsed `data`, `context`, `mediaUrl`, and
+  `image(mediaId, usageAlt?)`. `image()` returns an `ImageDescription`
+  (`src`, effective `alt`, and when known `width`, `height`, `caption`, and an
+  `objectPosition` of `X% Y%` from the focal point) so blocks avoid layout
+  shift and honour the focal point. An entry without resolved media falls back
+  to `mediaUrl` and the usage alt; an unresolved ID on an entry with resolved
+  media fails with `missing_media`.
 - `describeRichText(value, context?)` validates with `validateRichTextDocument`
   and returns a neutral tree of text nodes (`{ kind: "text", text }`) and
   element nodes (`{ kind: "element", tag, attributes, source, children }`).
@@ -1529,7 +1599,8 @@ framework and never reads `process.env` or `import.meta.env` itself.
   (a link `href` has passed `isSafeUrl`), and `source` names the originating
   node or mark. No raw HTML string is produced.
 - **Errors:** `LaceRenderError` with codes `invalid_block_data`,
-  `block_version_mismatch`, `unknown_block_type`, and `invalid_rich_text`,
+  `block_version_mismatch`, `unknown_block_type`, `invalid_rich_text`, and
+  `missing_media`,
   carrying the context, the field path, and the underlying
   `ContentValidationError` as `cause`. Messages name model, entry, block key,
   and field path.
@@ -1551,7 +1622,8 @@ no client scripts, and requires no Astro integration. Override components for
   browser; `LACE_BUILD_TOKEN` must never reach a client bundle.
 - `@lacecms/astro/LaceBlocks.astro` takes `entry`, `blocks` (the block map), and
   `mediaUrl`, resolves and parses each block in order, and renders the mapped
-  component with `BlockProps`.
+  component with `BlockProps`, including the `image()` describer bound to the
+  entry's resolved media.
 - `@lacecms/astro/RichText.astro` takes `document`, optional `components` keyed
   by node or mark name, and optional `context`. It renders the
   `describeRichText` tree with Astro's escaping and never uses `set:html`;
@@ -1681,13 +1753,14 @@ import type { builtInBlocks } from "@lacecms/content";
 import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.hero>;
-const { block, data, mediaUrl } = Astro.props;
+const { block, data, image } = Astro.props;
+const media = data.image === undefined ? undefined : image(data.image);
 ---
 
 <section class="hero" data-lace-block={block.type} data-lace-block-key={block.key}>
   <h1 data-lace-part="heading">{data.heading}</h1>
   {data.body && <div data-lace-part="body"><RichText document={data.body} /></div>}
-  {data.image && <img alt="" data-lace-part="media" src={mediaUrl(data.image)} />}
+  {media && <img alt={media.alt} data-lace-part="media" height={media.height} src={media.src} width={media.width} />}
 </section>
 ```
 
@@ -2437,6 +2510,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - `content_models.kind` distinguishes `page` from `collection`.
 - Pages and collection records share `content_entries`.
 - Content has draft and published snapshots only.
+- Media carry global descriptive metadata (alt text, caption, focal point);
+  editing published media advances the published version without
+  republication ([ADR 0009](adr/0009-media-metadata.md)).
 - Blocks are separate relational rows with type-specific JSON payloads.
 - Top-level blocks are flat and sparsely ordered.
 - Content models are defined in code and projected into the database.

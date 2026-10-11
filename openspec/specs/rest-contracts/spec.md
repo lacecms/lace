@@ -156,8 +156,8 @@ domain/application error SHALL map to exactly one stable status and code pair:
 `AUTHORIZATION_DENIED` to `403`, `CONTENT_INVALID_STATE` to `422`, and each of
 `CONTENT_MODEL_CARDINALITY_CONFLICT`, `CONTENT_NOT_PUBLISHED`,
 `CONTENT_PAGE_SINGLETON`, `CONTENT_PUBLISHED_IMMUTABLE`,
-`CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, and `MEDIA_IN_USE` to
-`409`, preserving the same code as its machine-readable error code. The
+`CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, `MEDIA_IN_USE`, and
+`MEDIA_UPDATE_CONFLICT` to `409`, preserving the same code as its machine-readable error code. The
 transport contract SHALL also represent a missing API resource as `NOT_FOUND`
 with `404`, an exhausted request limit as `RATE_LIMITED` with `429`, and an
 oversized request body as `PAYLOAD_TOO_LARGE` with `413`.
@@ -211,6 +211,12 @@ oversized request body as `PAYLOAD_TOO_LARGE` with `413`.
 #### Scenario: Unpublishing an unpublished entry is a conflict
 - **WHEN** an administrator unpublishes an entry without a current publication
 - **THEN** the API returns status `409` with code `CONTENT_NOT_PUBLISHED`
+
+#### Scenario: A stale media metadata edit is a conflict
+- **WHEN** a writer updates media metadata with an `If-Match` tag that no
+  longer identifies the stored version
+- **THEN** the API returns status `409` with code `MEDIA_UPDATE_CONFLICT` and a
+  sanitized message, and the item is unchanged
 
 ### Requirement: Security administration contracts reveal secrets only once
 The shared REST contracts SHALL validate setup-admin, user list/update,
@@ -615,3 +621,129 @@ SHALL respond `200` with the reverted admin entry. Duplicate SHALL respond
 #### Scenario: Viewer is denied every lifecycle endpoint
 - **WHEN** a viewer calls unpublish, revert, or duplicate
 - **THEN** each returns `403` with `AUTHORIZATION_DENIED` and nothing changes
+
+### Requirement: Admin media DTOs carry descriptive metadata
+Every admin media DTO (list items, detail, upload, deletion, retry-deletion and
+metadata update results) SHALL include the item's `alt` string, `caption`
+string and `focalPoint` object `{x, y}` when each is set, and SHALL omit each
+value that is not set. The values SHALL never be `null` in a response. The
+DTO's `updatedAt` SHALL keep millisecond precision, because it identifies the
+version a writer edits.
+
+#### Scenario: A described item is listed
+- **WHEN** a viewer lists media that include an item with alt text and a focal
+  point of `{x: 0.25, y: 0.75}` and no caption
+- **THEN** that item's DTO contains `alt`, `focalPoint` with those coordinates,
+  and no `caption` key
+
+### Requirement: Admin media metadata update contract is explicit
+The shared contract SHALL define the media metadata update request as a strict
+JSON object with the optional keys `alt` (string or `null`, at most 1,000 code
+points after trimming), `caption` (string or `null`, at most 2,000 code points
+after trimming) and `focalPoint` (`null` or a strict object with the finite
+numbers `x` and `y`, each from 0 to 1 inclusive). The request SHALL contain at
+least one key. Unknown keys, wrong types, out-of-range coordinates, over-long
+text, control characters in `alt`, control characters other than line breaks
+in `caption`, unpaired surrogates, and an empty object SHALL fail with `422` `VALIDATION_FAILED` and JSON Pointer issue paths
+such as `/alt` or `/focalPoint/x`.
+
+The update SHALL require an `If-Match` header with exactly one strong entity
+tag whose value is the item's `updatedAt` in Unix milliseconds, for example
+`"1791647444998"`. A missing header, a weak tag, `*`, a list of tags or a
+malformed tag SHALL fail with `422` `VALIDATION_FAILED` before the operation
+reaches application code. The media detail response and the update response
+SHALL carry the item's current tag in the `ETag` header.
+
+The update result SHALL be `{media, build}`, where `media` is the updated
+admin media DTO and `build` is the existing build dispatch outcome: `{status:
+"queued", targetVersion}` when the update requested a site build, or `{status:
+"not-dispatched"}` otherwise.
+
+#### Scenario: A metadata update succeeds
+- **WHEN** an editor sends `{"alt": "Red bicycle", "focalPoint": {"x": 0.5,
+  "y": 0.3}}` with the item's current tag in `If-Match`
+- **THEN** the API returns `200` with the updated media DTO, a build outcome,
+  and an `ETag` header that differs from the submitted tag
+
+#### Scenario: The precondition is missing or weak
+- **WHEN** an editor sends a valid update without `If-Match`, or with
+  `W/"1791647444998"`
+- **THEN** the request fails with `422` `VALIDATION_FAILED` and nothing is
+  updated
+
+#### Scenario: An invalid body is rejected with pointers
+- **WHEN** an editor sends `{"focalPoint": {"x": -0.1, "y": 0.5}, "title":
+  "x"}`
+- **THEN** the request fails with `422` `VALIDATION_FAILED` and issues at
+  `/focalPoint/x` and `/title`
+
+#### Scenario: An empty update is rejected
+- **WHEN** an editor sends `{}` with a valid `If-Match` tag
+- **THEN** the request fails with `422` `VALIDATION_FAILED`
+
+### Requirement: Public content responses return published entries
+Public page, collection-slug and path reads SHALL return `{entry, media}`, the
+public collection read SHALL return `{items, media, nextCursor?}`, and the
+build export SHALL return `{entries, media, version}`. Each public entry SHALL
+be exactly `{id, modelKey, path, slug?, title, fields, blocks, publishedAt}`,
+taken only from the entry's current published snapshot: `slug` SHALL be absent
+when the snapshot has none, `publishedAt` SHALL be the ISO-8601 UTC creation
+time of the published snapshot, and `blocks` SHALL keep the block DTO shape
+(`key`, `type`, `schemaVersion`, `position`, `data`) ordered by position. Public
+responses SHALL NOT contain `draft`, `published`, `model`, revision, editor or
+other editorial keys, and contract validation SHALL reject unknown keys. Both
+runtimes SHALL return the same shape. Each public entry route SHALL document
+its 200 response schema in the generated OpenAPI document.
+
+#### Scenario: A published page is read
+- **WHEN** a client reads a published page whose draft was changed after
+  publication
+- **THEN** the response is `{entry, media}` whose entry carries the published
+  title, fields, ordered blocks, path and `publishedAt`, and no draft value or
+  `draft` key appears
+
+#### Scenario: A collection page is read
+- **WHEN** a client reads one page of a published collection that has more
+  entries
+- **THEN** the response lists public entries under `items` with an opaque
+  `nextCursor` and one `media` dictionary for the whole page
+
+#### Scenario: A legacy-shaped payload is validated
+- **WHEN** a client validates a payload that wraps an entry as
+  `{entry: {draft, published, id, model}, path}`
+- **THEN** contract validation rejects it
+
+### Requirement: Public content responses resolve referenced media
+Every public content response SHALL carry a `media` object keyed by media ID
+containing exactly one item for every media ID referenced by the returned
+entries' published snapshots, according to the content reference projection,
+and no other item. Each item SHALL be
+`{id, url, mimeType, width, height, alt, caption, focalPoint}` where `id`
+equals its key, `url` is the public media URL built from the API's public base
+URL, `width` and `height` are positive integers or `null`, `alt` and `caption`
+are the media item's descriptive text or `null`, and `focalPoint` is
+`{x, y}` with each value from 0 to 1 or `null`. Dictionary keys SHALL be
+serialized in ascending code-unit order. Field and block values SHALL keep
+storing media IDs. Responses SHALL never expose storage keys, filenames,
+uploader identity or media lifecycle status. Contract validation SHALL reject a
+dictionary item whose `id` differs from its key.
+
+#### Scenario: An entry references described media
+- **WHEN** a published entry's image block references media with alt text,
+  dimensions and a focal point
+- **THEN** the response's `media` dictionary contains that ID with its public
+  URL, MIME type, width, height, alt text, caption and focal point
+
+#### Scenario: Media metadata is absent
+- **WHEN** referenced media has no alt text, caption or focal point
+- **THEN** its dictionary item carries `null` for each absent value
+
+#### Scenario: Media used only by drafts
+- **WHEN** an item is referenced only by an unpublished draft
+- **THEN** no public response includes it in a `media` dictionary
+
+#### Scenario: Metadata of published media changes
+- **WHEN** a writer edits the alt text of media referenced by a current
+  publication and a build client revalidates the export with the former ETag
+- **THEN** the API returns 200 with a new ETag and the export's `media`
+  dictionary carries the new alt text

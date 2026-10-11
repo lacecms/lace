@@ -1,4 +1,4 @@
-import { ContentValidationError, validateBlockData } from "@lacecms/content";
+import { ContentValidationError, effectiveAltText, validateBlockData } from "@lacecms/content";
 import type { BlockDataValues, BlockDefinition, ModelFieldDefinitions } from "@lacecms/content";
 import { LaceRenderError } from "./errors.js";
 import type { BlockContext } from "./errors.js";
@@ -12,12 +12,39 @@ export interface RenderableBlock {
   readonly type: string;
 }
 
+/** The structural shape of one resolved media item; the SDK's published media satisfies it. */
+export interface RenderableMedia {
+  readonly alt: string | null;
+  readonly caption: string | null;
+  readonly focalPoint: { readonly x: number; readonly y: number } | null;
+  readonly height: number | null;
+  readonly url: string;
+  readonly width: number | null;
+}
+
 /** The structural entry shape whose blocks the render core prepares. */
 export interface RenderableEntry {
   readonly blocks: readonly RenderableBlock[];
   readonly id: string;
+  /** Resolves the entry's media; the published-site entries provide it. */
+  readonly media?: (mediaId: string) => RenderableMedia | undefined;
   readonly modelKey: string;
 }
+
+/** What a block component needs to render one image without layout shift. */
+export interface ImageDescription {
+  /** The effective alt text: usage alt, then media alt, then `""`. */
+  readonly alt: string;
+  readonly caption?: string;
+  readonly height?: number;
+  /** A CSS `object-position` derived from the focal point, such as `25% 40%`. */
+  readonly objectPosition?: string;
+  readonly src: string;
+  readonly width?: number;
+}
+
+/** Describes one media usage; the optional usage alt overrides the media alt. */
+export type ImageDescriber = (mediaId: string, usageAlt?: string | null) => ImageDescription;
 
 // oxlint-disable-next-line typescript/no-explicit-any -- definitions vary by field record.
 type AnyBlockDefinition = BlockDefinition<any>;
@@ -36,6 +63,7 @@ export interface BlockProps<Definition extends AnyBlockDefinition = BlockDefinit
   readonly block: RenderableBlock;
   readonly context: BlockContext;
   readonly data: BlockDataOf<Definition>;
+  readonly image: ImageDescriber;
   readonly mediaUrl: MediaUrlBuilder;
 }
 
@@ -136,6 +164,46 @@ export function resolveBlock<Component>(
   return entry;
 }
 
+function percentage(value: number): string {
+  return `${Math.round(value * 10_000) / 100}%`;
+}
+
+/**
+ * Creates the image describer of one block. With resolved media it uses their
+ * URL, dimensions, caption, and focal point; without them it falls back to the
+ * media URL builder and the usage alt text.
+ */
+export function createImageDescriber(
+  entry: RenderableEntry,
+  mediaUrl: MediaUrlBuilder,
+  context: BlockContext,
+): ImageDescriber {
+  return (mediaId, usageAlt) => {
+    if (entry.media === undefined)
+      return Object.freeze({ alt: effectiveAltText(usageAlt, undefined), src: mediaUrl(mediaId) });
+    const media = entry.media(mediaId);
+    if (media === undefined) {
+      throw new LaceRenderError(
+        "missing_media",
+        `media ${mediaId} is not among the entry's resolved media.`,
+        { context },
+      );
+    }
+    return Object.freeze({
+      alt: effectiveAltText(usageAlt, media.alt),
+      ...(media.caption === null ? {} : { caption: media.caption }),
+      ...(media.height === null ? {} : { height: media.height }),
+      ...(media.focalPoint === null
+        ? {}
+        : {
+            objectPosition: `${percentage(media.focalPoint.x)} ${percentage(media.focalPoint.y)}`,
+          }),
+      src: media.url,
+      ...(media.width === null ? {} : { width: media.width }),
+    });
+  };
+}
+
 /** Resolves and parses an entry's blocks in order, producing each component and its props. */
 export function prepareBlocks<Component>(
   map: BlockMap<Component>,
@@ -151,9 +219,10 @@ export function prepareBlocks<Component>(
       });
       const { component, definition } = resolveBlock(map, block, context);
       const data = parseBlock(definition, block, context);
+      const image = createImageDescriber(entry, mediaUrl, context);
       return Object.freeze({
         component,
-        props: Object.freeze({ block, context, data, mediaUrl }),
+        props: Object.freeze({ block, context, data, image, mediaUrl }),
       });
     }),
   );

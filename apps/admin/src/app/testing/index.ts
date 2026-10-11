@@ -186,6 +186,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     uploadMedia: async () => ({}) as never,
     deleteMedia: async () => ({}) as never,
     retryMediaDeletion: async () => ({}) as never,
+    updateMediaMetadata: async () => ({}) as never,
     listModels: async () => models,
     publishEntry: async () => ({}) as never,
     unpublishEntry: async () => ({}) as never,

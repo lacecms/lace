@@ -1,12 +1,13 @@
 import type { MediaMetadataDto } from "@lacecms/contracts";
 import { Check } from "lucide-react";
+import { useId } from "react";
 import { MediaStatusBadge, MediaThumbnail } from "../../../entities/media/index.js";
 import { cn } from "../../../shared/lib/index.js";
 
 /**
  * Media as square image tiles. In `open` mode activating a tile opens its
- * details; in `choose` mode it chooses the item, and `currentId` marks the
- * current choice.
+ * details; in `choose` mode it chooses the item, `currentId` marks the
+ * current choice, and each tile shows the item's alt text as its description.
  */
 export function MediaGrid({
   busy = false,
@@ -23,6 +24,7 @@ export function MediaGrid({
   readonly mode?: "choose" | "open";
   readonly onOpen: (item: MediaMetadataDto, opener: HTMLElement) => void;
 }) {
+  const id = useId();
   return (
     <ul
       aria-busy={busy || undefined}
@@ -32,12 +34,14 @@ export function MediaGrid({
         busy && "opacity-60",
       )}
     >
-      {items.map((item) => {
+      {items.map((item, index) => {
         const current = mode === "choose" && item.id === currentId;
+        const altId = `${id}-alt-${index}`;
         return (
           <li key={item.id}>
             <button
               {...(mode === "open" ? { "aria-haspopup": "dialog" as const } : {})}
+              {...(mode === "choose" ? { "aria-describedby": altId } : {})}
               {...(current ? { "aria-current": "true" as const } : {})}
               className={cn(
                 "group grid w-full cursor-pointer gap-1.5 rounded-lg border border-border bg-card p-1.5 text-left text-card-foreground shadow-xs transition-colors duration-(--duration-fast) ease-standard hover:border-ring focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-ring",
@@ -62,6 +66,20 @@ export function MediaGrid({
               <span className="truncate px-0.5 text-xs font-medium" title={item.filename}>
                 {item.filename}
               </span>
+              {mode === "choose" ? (
+                // Described rather than named, so the tile keeps the filename as its name.
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "truncate px-0.5 text-xs",
+                    item.alt === undefined ? "text-muted-foreground italic" : "text-foreground",
+                  )}
+                  id={altId}
+                  title={item.alt}
+                >
+                  {item.alt ?? "No alt text"}
+                </span>
+              ) : undefined}
             </button>
           </li>
         );

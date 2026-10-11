@@ -82,3 +82,47 @@ same database and injected failures at the unpublication checkpoints.
   read, or a duplicate creation guards on a stale source revision
 - **THEN** each fails with `CONTENT_REVISION_CONFLICT` and leaves every table
   unchanged on every runtime
+
+### Requirement: Repository contract fixtures cover media metadata updates
+The shared repository contract suite SHALL include identical cases, for every
+SQL runtime, for media metadata updates. The cases SHALL assert the stored
+values and `updatedAt` after an update, clearing values, and the round trip of
+every value through list, catalog, detail and public media reads. They SHALL
+assert that an item used by a current publication increments the
+published-content version once and leaves one pending build with the reason
+`media_metadata`, and that an item used only by a draft, or by nothing, leaves
+both unchanged. They SHALL assert that a stale `updatedAt`, including a write
+committed by an independent repository over the same database, fails with
+`MEDIA_UPDATE_CONFLICT`, that a `deleting` item fails with
+`CONTENT_INVALID_STATE`, and that each failure and an injected checkpoint
+failure leave the item, the version and build work unchanged. They SHALL
+assert that the database refuses an out-of-range or half-set focal point and
+over-long text.
+
+#### Scenario: Node and D1 conform for metadata updates
+- **WHEN** the metadata update cases run against migrated file-backed SQLite,
+  in-memory SQLite and local D1
+- **THEN** every case passes without a runtime-specific variant or skipped
+  assertion
+
+### Requirement: Public repository reads include referenced media
+The public content read port SHALL return, with each public entry and path,
+the active media items referenced by that entry's current published snapshot,
+read from the content reference projection, for page, path and collection reads
+and for the build export. The Node and D1 repositories and the in-memory
+repository fake SHALL satisfy the same repository contract fixtures: media
+referenced only by a draft SHALL be absent, media of every returned entry SHALL
+be present with its descriptive metadata and dimensions, and no public read SHALL
+expose the entry's independently mutable draft snapshot. Reading media SHALL use
+bounded, chunked statements and SHALL NOT read media per entry.
+
+#### Scenario: A published entry references media
+- **WHEN** the repository contract publishes an entry referencing two media
+  items, then saves a draft referencing a third
+- **THEN** public reads and the build export return the entry with exactly the
+  two published media items on both runtimes and in the fake
+
+#### Scenario: The fake hides the draft
+- **WHEN** an entry is published and its draft changes
+- **THEN** the in-memory fake's public reads expose only published values, like
+  the Node and D1 repositories

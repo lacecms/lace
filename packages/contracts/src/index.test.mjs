@@ -13,6 +13,11 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
+  publicContentEntrySchema,
+  publicContentListSchema,
+  publicMediaDictionarySchema,
+  toPublicContentEntryDto,
+  toPublicContentListDto,
   buildSiteIdentitySchema,
   buildSiteUrlSchema,
   adminSettingsStatusSchema,
@@ -325,10 +330,10 @@ describe("shared REST contract DTOs", () => {
       }),
     ).toMatchObject({ items: [{ id: "entry-1" }], nextCursor: "opaque-next-page" });
 
-    const exportDto = toBuildExportDto({
-      entries: [{ entry, path: "/blog/welcome" }],
-      version: 7,
-    });
+    const exportDto = toBuildExportDto(
+      { entries: [{ entry, media: [], path: "/blog/welcome" }], version: 7 },
+      (id) => mediaUrl("https://lace.example/", id),
+    );
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
 
     const mediaDto = toMediaMetadataDto(
@@ -1061,4 +1066,248 @@ test("build-site URLs are absolute HTTP(S) base URLs", () => {
       url: "https://example.com/",
     }),
   ).toEqual({ id: "main-site", label: "Main site", url: "https://example.com/" });
+});
+
+describe("media metadata contracts", async () => {
+  const {
+    mediaEntityTag,
+    resolveMediaPrecondition,
+    toUpdateMediaMetadataResultDto,
+    updateMediaMetadataRequestSchema,
+    updateMediaMetadataResultSchema,
+  } = await import("../dist/index.js");
+  const source = {
+    createdAt: unixMilliseconds(1_700_000_000_000),
+    createdBy: { displayName: "Ada", id: "user-1" },
+    filename: "bike.png",
+    height: 600,
+    id: "media-1",
+    mimeType: "image/png",
+    size: 12,
+    status: "active",
+    updatedAt: unixMilliseconds(1_791_647_444_998),
+    usageCount: 0,
+    width: 800,
+  };
+  const url = "https://cms.example/api/v1/public/media/media-1";
+  const issuePaths = (input) => {
+    const result = v.safeParse(updateMediaMetadataRequestSchema, input);
+    return result.success
+      ? []
+      : result.issues.map((issue) =>
+          (issue.path ?? []).map((segment) => `/${String(segment.key)}`).join(""),
+        );
+  };
+
+  test("media DTOs carry set descriptive values and omit unset ones", () => {
+    const bare = toMediaMetadataDto(source, url);
+    expect(bare).not.toHaveProperty("alt");
+    expect(bare).not.toHaveProperty("caption");
+    expect(bare).not.toHaveProperty("focalPoint");
+    expect(bare.updatedAt).toBe("2026-10-10T15:50:44.998Z");
+    const described = toMediaMetadataDto(
+      { ...source, alt: "Red bicycle", focalPoint: { x: 0.25, y: 0.75 } },
+      url,
+    );
+    expect(described).toMatchObject({ alt: "Red bicycle", focalPoint: { x: 0.25, y: 0.75 } });
+    expect(described).not.toHaveProperty("caption");
+    expect(v.parse(mediaMetadataSchema, described)).toEqual(described);
+    for (const invalid of [
+      { ...described, alt: null },
+      { ...described, alt: "" },
+      { ...described, focalPoint: { x: 2, y: 0 } },
+      { ...described, focalPoint: { x: 0.5 } },
+    ]) {
+      expect(v.safeParse(mediaMetadataSchema, invalid).success).toBe(false);
+    }
+  });
+
+  test("update requests accept partial patches and clearing nulls", () => {
+    for (const valid of [
+      { alt: "Red bicycle", focalPoint: { x: 0.5, y: 0.3 } },
+      { caption: "Line one\r\nLine two" },
+      { alt: null, caption: null, focalPoint: null },
+      { alt: "   " },
+      { alt: "x".repeat(1000), focalPoint: { x: 0, y: 1 } },
+      { caption: "😀".repeat(2000) },
+      { alt: "<b>bold</b>" },
+    ]) {
+      expect(v.safeParse(updateMediaMetadataRequestSchema, valid).success).toBe(true);
+    }
+  });
+
+  test("invalid update requests fail with JSON Pointer issues", () => {
+    expect(issuePaths({ focalPoint: { x: -0.1, y: 0.5 }, title: "x" }).sort()).toEqual([
+      "/focalPoint/x",
+      "/title",
+    ]);
+    expect(issuePaths({ alt: "x".repeat(1001) })).toEqual(["/alt"]);
+    expect(issuePaths({ alt: "line\nbreak" })).toEqual(["/alt"]);
+    expect(issuePaths({ caption: "tab\there" })).toEqual(["/caption"]);
+    expect(issuePaths({ caption: "x".repeat(2001) })).toEqual(["/caption"]);
+    expect(issuePaths({ alt: "\ud800" })).toEqual(["/alt"]);
+    expect(issuePaths({ alt: 3 })).toEqual(["/alt"]);
+    expect(issuePaths({ focalPoint: { x: 0.5, y: Number.NaN } })).toEqual(["/focalPoint/y"]);
+    expect(issuePaths({ focalPoint: { x: 0.5, y: 0.5, z: 1 } })).toEqual(["/focalPoint/z"]);
+    expect(v.safeParse(updateMediaMetadataRequestSchema, {}).success).toBe(false);
+  });
+
+  test("update results reuse the build dispatch outcome", () => {
+    const queued = toUpdateMediaMetadataResultDto(
+      { build: { status: "queued", targetVersion: 7 }, media: { ...source, caption: "Hi" } },
+      url,
+    );
+    expect(queued.build).toEqual({ status: "queued", targetVersion: 7 });
+    expect(queued.media.caption).toBe("Hi");
+    expect(v.parse(updateMediaMetadataResultSchema, queued)).toEqual(queued);
+    const idle = toUpdateMediaMetadataResultDto(
+      { build: { status: "not-dispatched" }, media: source },
+      url,
+    );
+    expect(idle.build).toEqual({ status: "not-dispatched" });
+  });
+
+  test("the media precondition is exactly one strong updatedAt tag", () => {
+    expect(mediaEntityTag(source.updatedAt)).toBe('"1791647444998"');
+    expect(resolveMediaPrecondition('"1791647444998"')).toBe(1_791_647_444_998);
+    expect(
+      resolveMediaPrecondition(
+        mediaEntityTag(fromIsoTimestamp(toMediaMetadataDto(source, url).updatedAt)),
+      ),
+    ).toBe(source.updatedAt);
+    for (const invalid of [
+      undefined,
+      'W/"1791647444998"',
+      "*",
+      '"1", "2"',
+      "1791647444998",
+      '"abc"',
+      '"99999999999999999"',
+    ]) {
+      expect(() => resolveMediaPrecondition(invalid)).toThrow(TypeError);
+    }
+  });
+
+  test("stale media edits classify as a sanitized conflict", () => {
+    expect(
+      classifyError(new DomainError("MEDIA_UPDATE_CONFLICT", "media-1 changed at 17:00")),
+    ).toEqual({
+      body: {
+        error: {
+          code: "MEDIA_UPDATE_CONFLICT",
+          message: "The media was modified by another request.",
+        },
+      },
+      status: 409,
+    });
+  });
+});
+
+describe("public delivery DTOs", () => {
+  const blocks = [
+    { data: { text: "Second" }, key: blockKey("b"), position: 1, schemaVersion: 1, type: "quote" },
+    {
+      data: { media: "media-b" },
+      key: blockKey("a"),
+      position: 0,
+      schemaVersion: 2,
+      type: "image",
+    },
+  ];
+  const publicEntry = {
+    ...entry,
+    draft: { ...draft, title: "DRAFT ONLY" },
+    published: { ...published, blocks },
+  };
+  const described = {
+    alt: "Office",
+    caption: "Our office",
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: 900,
+    id: mediaId("media-b"),
+    mimeType: "image/jpeg",
+    width: 1600,
+  };
+  const bare = { id: mediaId("media-a"), mimeType: "image/png" };
+  const urlFor = (id) => mediaUrl("https://lace.example/base/", id);
+
+  test("returns the published entry with ordered blocks and resolved media", () => {
+    const dto = toPublicContentEntryDto(
+      { entry: publicEntry, media: [described, bare, described], path: "/blog/welcome" },
+      urlFor,
+    );
+    expect(v.parse(publicContentEntrySchema, dto)).toEqual(dto);
+    expect(dto.entry).toEqual({
+      blocks: [blocks[1], blocks[0]],
+      fields: draft.fields,
+      id: "entry-1",
+      modelKey: "posts",
+      path: "/blog/welcome",
+      publishedAt: toIsoTimestamp(timestamp),
+      slug: "welcome",
+      title: "Welcome",
+    });
+    expect(JSON.stringify(dto)).not.toContain("DRAFT ONLY");
+    expect(Object.keys(dto.media)).toEqual(["media-a", "media-b"]);
+    expect(dto.media["media-a"]).toEqual({
+      alt: null,
+      caption: null,
+      focalPoint: null,
+      height: null,
+      id: "media-a",
+      mimeType: "image/png",
+      url: "https://lace.example/base/api/v1/public/media/media-a",
+      width: null,
+    });
+    expect(dto.media["media-b"]).toMatchObject({
+      alt: "Office",
+      caption: "Our office",
+      focalPoint: { x: 0.25, y: 0.4 },
+      height: 900,
+      width: 1600,
+    });
+  });
+
+  test("merges the media of a collection page", () => {
+    const dto = toPublicContentListDto(
+      {
+        items: [
+          { entry: publicEntry, media: [described], path: "/blog/welcome" },
+          { entry: publicEntry, media: [described, bare], path: "/blog/other" },
+        ],
+        nextCursor: "next",
+      },
+      urlFor,
+    );
+    expect(v.parse(publicContentListSchema, dto)).toEqual(dto);
+    expect(dto.items.map((item) => item.path)).toEqual(["/blog/welcome", "/blog/other"]);
+    expect(Object.keys(dto.media)).toEqual(["media-a", "media-b"]);
+  });
+
+  test("rejects legacy and malformed public payloads", () => {
+    const dto = toPublicContentEntryDto(
+      { entry: publicEntry, media: [described], path: "/blog/welcome" },
+      urlFor,
+    );
+    expect(() =>
+      v.parse(publicContentEntrySchema, { entry: toContentEntryDto(entry), path: "/blog/welcome" }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicContentEntrySchema, { ...dto, entry: { ...dto.entry, draft: {} } }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicContentEntrySchema, { ...dto, entry: { ...dto.entry, model: {} } }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicMediaDictionarySchema, { other: { ...dto.media["media-b"] } }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicMediaDictionarySchema, {
+        "media-b": { ...dto.media["media-b"], focalPoint: { x: 1.5, y: 0 } },
+      }),
+    ).toThrow();
+    expect(() =>
+      v.parse(publicMediaDictionarySchema, { "media-b": { ...dto.media["media-b"], alt: "" } }),
+    ).toThrow();
+  });
 });

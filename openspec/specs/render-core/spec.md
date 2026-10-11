@@ -25,7 +25,7 @@ The render core SHALL parse a block's data against a block definition using the 
 - **THEN** parsing fails with `block_version_mismatch` naming both versions
 
 ### Requirement: Block maps resolve every rendered block type
-The render core SHALL let a site define a block map keyed by block type whose values pair a block definition with an adapter-specific component. Defining a map SHALL fail when a key differs from its definition's type, and the defined map SHALL be immutable. Resolving a block SHALL return its map entry or fail with `unknown_block_type` naming the block type, model key, entry identifier, and block key. Inherited object properties SHALL never resolve as block types. The render core SHALL also prepare an entry's blocks in their given order, resolving and parsing each into the component and the props that adapters pass to it: the block, its parsed data, its context, and the media URL builder.
+The render core SHALL let a site define a block map keyed by block type whose values pair a block definition with an adapter-specific component. Defining a map SHALL fail when a key differs from its definition's type, and the defined map SHALL be immutable. Resolving a block SHALL return its map entry or fail with `unknown_block_type` naming the block type, model key, entry identifier, and block key. Inherited object properties SHALL never resolve as block types. The render core SHALL also prepare an entry's blocks in their given order, resolving and parsing each into the component and the props that adapters pass to it: the block, its parsed data, its context, the media URL builder, and the image describer.
 
 #### Scenario: A site cannot render a published block
 - **WHEN** an entry contains a `gallery` block and the site's map has no `gallery` key
@@ -37,7 +37,7 @@ The render core SHALL let a site define a block map keyed by block type whose va
 
 #### Scenario: An entry's blocks are prepared
 - **WHEN** an entry with hero, quote, and call-to-action blocks is prepared with a map covering all three
-- **THEN** three component-and-props pairs are returned in block order, each with parsed data and the block's context
+- **THEN** three component-and-props pairs are returned in block order, each with parsed data, the block's context, the media URL builder and the image describer
 
 ### Requirement: Rich text is described through the shared allowlist
 The render core SHALL describe a rich-text document only after validating it with the content package's rich-text validation, so it accepts and rejects exactly the documents the CMS accepts and rejects, including link URLs. The description SHALL be a tree of text nodes and element nodes; each element SHALL carry a tag from a fixed allowlist (`p`, `h1`–`h3`, `ul`, `ol`, `li`, `blockquote`, `br`, `strong`, `em`, `s`, `code`, `a`), only safe attributes (a link `href` that passed URL validation), the originating node or mark name, and its children. Marks SHALL wrap text in the order listed, first mark outermost. The description SHALL contain no raw HTML string. Invalid documents SHALL fail with `invalid_rich_text` carrying the optional block context and the field path.
@@ -60,3 +60,18 @@ The render core SHALL depend only on the content package. It SHALL import no UI 
 #### Scenario: A contract block is rendered
 - **WHEN** a published block from the public build-export contract is passed to the render core
 - **THEN** it type-checks as the render core's block input without mapping
+
+### Requirement: Images are described from resolved media
+The render core SHALL give block components an image describer that takes a media identifier and an optional usage alt text and returns an image description with `src`, `alt`, and, when known, `width`, `height`, `objectPosition` and `caption`. When the entry provides resolved media, the description SHALL use the resolved item's URL, dimensions and caption, the effective alt text (non-blank usage alt, then the media alt text, then an empty string), and an `objectPosition` of `X% Y%` derived from the focal point with at most two decimal places, omitted when the item has no focal point. When the entry provides resolved media but the identifier is not among them, describing SHALL fail with `missing_media` naming the media identifier, model key, entry identifier, and block key. When the entry provides no resolved media, the description SHALL use the media URL builder and the usage alt text or an empty string, without dimensions. Describing SHALL never fetch media or read image bytes.
+
+#### Scenario: A described image with a focal point
+- **WHEN** a block describes media of 1600 × 900 pixels with alt text `Office` and focal point `{x: 0.25, y: 0.4}` without usage alt text
+- **THEN** the description has the resolved URL, alt `Office`, width 1600, height 900 and object position `25% 40%`
+
+#### Scenario: Usage alt text wins
+- **WHEN** a block describes the same media with usage alt text `Team at work`
+- **THEN** the description's alt text is `Team at work`
+
+#### Scenario: Referenced media is missing
+- **WHEN** an entry with resolved media renders a block whose media identifier is not resolved
+- **THEN** rendering fails with `missing_media` naming the identifier, model, entry, and block key

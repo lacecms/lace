@@ -57,6 +57,8 @@ import type {
   LoadContentEntryInput,
   MarkMediaForDeletionInput,
   MarkMediaForDeletionResult,
+  UpdateMediaMetadataInput,
+  UpdateMediaMetadataResult,
   RetryDispatcherLeaseInput,
   LoadMediaUsageInput,
   MediaCatalogItem,
@@ -541,6 +543,8 @@ export class InMemoryContentStore
 {
   public readonly configurationSyncBuildRequests: number[] = [];
   public readonly mediaDeletionRequests: string[] = [];
+  /** Target versions of builds requested by `media_metadata` updates. */
+  public readonly mediaMetadataBuildRequests: number[] = [];
   private readonly actorNames = new Map<string, string>();
   private entries = new Map<string, ContentEntry>();
   private modelStates = new Map<string, StoredContentModelState>();
@@ -1069,7 +1073,7 @@ export class InMemoryContentStore
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {
     const entries = this.publicEntries()
       .filter(({ entry }) => entry.model.key === input.modelKey)
-      .map(({ entry, path }) => Object.freeze({ entry: copyEntry(entry), path }));
+      .map(({ entry, path }) => this.publicView(entry, path));
     return this.page(entries, input.after, input.limit, `public:${input.modelKey}`);
   }
 
@@ -1088,7 +1092,25 @@ export class InMemoryContentStore
     const route = this.routes.get(path);
     if (route === undefined) return null;
     const entry = this.entries.get(route.entryId);
-    return entry?.published === undefined ? null : Object.freeze({ entry: copyEntry(entry), path });
+    return entry?.published === undefined ? null : this.publicView(entry, path);
+  }
+
+  /** Mirrors the SQL public projection: no editorial draft, active published media only. */
+  private publicView(entry: ContentEntry, path: string): PublicContentEntry {
+    const copied = copyEntry(entry);
+    const published = copied.published!;
+    const ids = new Set(
+      (this.references.get(published.id) ?? []).map((reference) => reference.mediaId as string),
+    );
+    const media = [...ids].sort().flatMap((id) => {
+      const value = this.media.get(id);
+      return value === undefined || value.status !== "active" ? [] : [clone(value)];
+    });
+    return Object.freeze({
+      entry: Object.freeze({ ...copied, draft: Object.freeze({ ...published, state: "draft" }) }),
+      media: Object.freeze(media),
+      path,
+    });
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
@@ -1217,12 +1239,40 @@ export class InMemoryContentStore
     return Object.freeze({ media: clone(deleting), status: "deleting" });
   }
 
+  public async updateMediaMetadata(
+    input: UpdateMediaMetadataInput,
+  ): Promise<UpdateMediaMetadataResult> {
+    const media = this.media.get(input.mediaId);
+    if (media !== undefined && media.status !== "active") {
+      throw new DomainError("CONTENT_INVALID_STATE", "Only active media can be edited.");
+    }
+    if (media === undefined || media.updatedAt !== input.expectedUpdatedAt) {
+      throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
+    }
+    const { alt: _alt, caption: _caption, focalPoint: _focalPoint, ...technical } = media;
+    const updated: MediaMetadata = {
+      ...technical,
+      ...(input.alt === null ? {} : { alt: input.alt }),
+      ...(input.caption === null ? {} : { caption: input.caption }),
+      ...(input.focalPoint === null
+        ? {}
+        : { focalPoint: { x: input.focalPoint.x, y: input.focalPoint.y } }),
+      updatedAt: input.updatedAt,
+    };
+    const published = this.mediaUsage(input.mediaId).some((entry) =>
+      entry.locations.some((location) => location.states.includes("published")),
+    );
+    this.media.set(input.mediaId, clone(updated));
+    if (!published) return Object.freeze({ media: clone(updated) });
+    this.publicVersion += 1;
+    this.mediaMetadataBuildRequests.push(this.publicVersion);
+    return Object.freeze({ media: clone(updated), targetVersion: this.publicVersion });
+  }
+
   public async exportBuildContent(): Promise<BuildContentExport> {
     return Object.freeze({
       entries: Object.freeze(
-        this.publicEntries().map(({ entry, path }) =>
-          Object.freeze({ entry: copyEntry(entry), path }),
-        ),
+        this.publicEntries().map(({ entry, path }) => this.publicView(entry, path)),
       ),
       version: this.publicVersion,
     });

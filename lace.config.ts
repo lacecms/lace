@@ -12,21 +12,21 @@ export default await defineConfig({
   content: [
     definePage({
       key: "home",
-      version: 2,
+      version: 3,
       label: "Home",
       path: "/",
       blocks: ["hero", "richText", "image", "quote", "cta"],
     }),
     definePage({
       key: "about",
-      version: 1,
+      version: 2,
       label: "About",
       path: "/about",
       blocks: ["hero", "richText", "image", "quote", "cta"],
     }),
     defineCollection({
       key: "posts",
-      version: 2,
+      version: 3,
       label: "Posts",
       route: "/blog/:slug",
       fields: {
@@ -39,7 +39,7 @@ export default await defineConfig({
     }),
     defineCollection({
       key: "notes",
-      version: 1,
+      version: 2,
       label: "Notes",
       route: "/notes/:slug",
       fields: { summary: field.text() },

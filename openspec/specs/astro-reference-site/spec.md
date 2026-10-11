@@ -55,12 +55,17 @@ eligible for rendered output.
 The reference site SHALL render the `hero`, `richText`, `image`, `quote`, and
 `cta` built-in block types for the starter models through the Astro adapter's
 block-list component, its block map file, and the registry block components,
-preserving their exported order and the markup emitted before the adapter
-migration. It SHALL create media links only through the public-media URL helper
-so the emitted URL retains the configured API base path. An unsupported block
-type, a block schema-version mismatch, or block data that fails publish
-validation SHALL fail the build before static output is accepted, and the
-failure SHALL identify the model key, entry identifier, and block key.
+preserving their exported order and the entry scopes, block roots, part hooks
+and text emitted before the adapter migration. Its committed fixture export
+SHALL use the public entry shape with a resolved media dictionary. It SHALL
+create media links only through the published-site view so the emitted URL
+retains the configured public base path, and image elements SHALL carry the
+effective alt text, the media dimensions and, for media with a focal point, the
+focal-point `object-position`. An unsupported block type, a block
+schema-version mismatch, block data that fails publish validation, or a block
+media reference missing from the media dictionary SHALL fail the build before
+static output is accepted, and the failure SHALL identify the model key, entry
+identifier, and block key.
 
 #### Scenario: A starter entry contains each supported block type
 - **WHEN** an exported entry supplies valid built-in blocks in a defined order
@@ -75,6 +80,12 @@ failure SHALL identify the model key, entry identifier, and block key.
 - **WHEN** the committed fixture is built after the adapter migration
 - **THEN** the entry scopes, block roots, part hooks, text, and media URLs equal
   the output of the pre-migration renderers
+
+#### Scenario: Resolved media renders its description
+- **WHEN** the fixture export's media dictionary gives the hero media alt text,
+  dimensions and a focal point, and a post's image block overrides the alt text
+- **THEN** the hero image carries the media alt text, `width`, `height` and the
+  `object-position` style, and the post image carries the block's alt text
 
 ### Requirement: Published routes expose a stable entry styling scope
 Every static route emitted for a published `home`, `about`, `posts`, or `notes` entry SHALL have exactly one container around that entry's ordered blocks with `data-lace-model` equal to the stable model key and `data-lace-entry` equal to the stable entry identifier. These values SHALL come from the published build export and SHALL be HTML-attribute escaped. The styling scope SHALL NOT expose draft-only content or an automatically generated HTML `id`.

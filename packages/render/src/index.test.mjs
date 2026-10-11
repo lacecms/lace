@@ -61,7 +61,25 @@ test.each([
   ["quote", { attribution: "Ada", quote: "Make it simple." }],
   ["cta", { actionLabel: "Start", actionUrl: "https://lace.example/docs", body, heading: "Go" }],
 ])("parses the built-in %s block", (type, data) => {
-  expect(parseBlock(builtInBlocks[type], block(type, data), context)).toEqual(data);
+  const schemaVersion = builtInBlocks[type].version;
+  expect(parseBlock(builtInBlocks[type], block(type, data, { schemaVersion }), context)).toEqual(
+    data,
+  );
+});
+
+test("parses an image block without alt text and refuses version 1 image data", () => {
+  const data = { media: "lake-media" };
+  expect(
+    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 2 }), context),
+  ).toEqual(data);
+  const error = captureError(() =>
+    parseBlock(
+      builtInBlocks.image,
+      block("image", { alt: "A lake", media: "lake-media" }),
+      context,
+    ),
+  );
+  expect(error.code).toBe("block_version_mismatch");
 });
 
 test("parses a user-defined block and applies defaults", () => {
@@ -180,9 +198,92 @@ test("prepareBlocks returns components and props in block order", () => {
     block: blocks[1],
     context: { blockKey: "b", entryId: "entry-1", modelKey: "home" },
     data: { quote: "Middle" },
+    image: expect.any(Function),
     mediaUrl,
   });
   expect(Object.isFrozen(prepared)).toBe(true);
+});
+
+const resolvedMedia = {
+  office: {
+    alt: "Office",
+    caption: "Our office",
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: 900,
+    url: "https://public.example/api/v1/public/media/office",
+    width: 1600,
+  },
+  thirds: {
+    alt: null,
+    caption: null,
+    focalPoint: { x: 1 / 3, y: 0.66666 },
+    height: null,
+    url: "https://public.example/api/v1/public/media/thirds",
+    width: null,
+  },
+};
+
+function describedEntry(media = (id) => resolvedMedia[id]) {
+  const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
+  const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 2 })];
+  const [prepared] = prepareBlocks(
+    map,
+    { blocks, id: "entry-1", media, modelKey: "posts" },
+    (id) => `https://api.example/media/${id}`,
+  );
+  return prepared.props.image;
+}
+
+test("image descriptions carry resolved dimensions, caption, and focal position", () => {
+  const image = describedEntry();
+  expect(image("office")).toEqual({
+    alt: "Office",
+    caption: "Our office",
+    height: 900,
+    objectPosition: "25% 40%",
+    src: "https://public.example/api/v1/public/media/office",
+    width: 1600,
+  });
+  expect(image("office", "Team at work").alt).toBe("Team at work");
+  expect(image("office", " ").alt).toBe("Office");
+  expect(image("thirds")).toEqual({
+    alt: "",
+    objectPosition: "33.33% 66.67%",
+    src: "https://public.example/api/v1/public/media/thirds",
+  });
+  expect(Object.isFrozen(image("office"))).toBe(true);
+});
+
+test("image descriptions omit the object position without a focal point", () => {
+  const image = describedEntry(() => ({ ...resolvedMedia.office, focalPoint: null }));
+  expect(image("office")).not.toHaveProperty("objectPosition");
+});
+
+test("an unresolved media reference fails with missing_media", () => {
+  const image = describedEntry();
+  const error = captureError(() => image("gone"));
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("missing_media");
+  expect(error.message).toContain("gone");
+  expect(error.context).toEqual({ blockKey: "img", entryId: "entry-1", modelKey: "posts" });
+});
+
+test("entries without resolved media fall back to the media URL builder", () => {
+  const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
+  const [prepared] = prepareBlocks(
+    map,
+    {
+      blocks: [block("image", { media: "office" }, { schemaVersion: 2 })],
+      id: "entry-1",
+      modelKey: "posts",
+    },
+    (id) => `https://api.example/media/${id}`,
+  );
+  expect(prepared.props.image("office", "Lake")).toEqual({
+    alt: "Lake",
+    src: "https://api.example/media/office",
+  });
+  expect(prepared.props.image("office").alt).toBe("");
 });
 
 test("prepareBlocks fails on a block the site cannot render", () => {

@@ -72,10 +72,7 @@ export function existingSiteExport(exported, href = safeHref) {
   const result = structuredClone(exported);
   result.entries = result.entries.slice(0, 2);
   result.entries[1].path = "/articles/first-post";
-  result.entries[1].entry.model.route = "/articles/:slug";
-  const richText = result.entries[1].entry.published.blocks.find(
-    (block) => block.type === "richText",
-  );
+  const richText = result.entries[1].blocks.find((block) => block.type === "richText");
   richText.data.content.content.push(
     { type: "paragraph", content: [{ type: "text", text: hostileText }] },
     {

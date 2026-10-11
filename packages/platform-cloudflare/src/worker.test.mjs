@@ -139,6 +139,15 @@ test("only successful dispatch-producing admin mutations schedule post-commit wo
   expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/publish"), 409)).toBe(false);
   expect(producesDispatchWork(request("GET", "/api/v1/admin/entries/e"), 200)).toBe(false);
   expect(producesDispatchWork(request("PUT", "/api/v1/admin/entries/e/draft"), 200)).toBe(false);
+  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/unpublish"), 200)).toBe(
+    true,
+  );
+  expect(producesDispatchWork(request("PATCH", "/api/v1/admin/media/m"), 200)).toBe(true);
+  expect(producesDispatchWork(request("PATCH", "/api/v1/admin/media/m"), 409)).toBe(false);
+  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/unpublish"), 409)).toBe(
+    false,
+  );
+  expect(producesDispatchWork(request("GET", "/api/v1/admin/media/m"), 200)).toBe(false);
 });
 
 let fixtureAddress = 0;
@@ -329,7 +338,7 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
   expect(fixture.pending).toHaveLength(1);
   const publicEntry = await fixture.call("/api/v1/public/collections/posts/first");
   expect(publicEntry).toMatchObject({
-    body: { entry: { draft: { title: "First" } } },
+    body: { entry: { title: "First" } },
     response: { status: 200 },
   });
   const unknown = await fixture.call("/api/v1/unknown");
@@ -608,9 +617,7 @@ test("Worker/D1 compares strong and weak export validators through publication",
   expect(changed.response.status).toBe(200);
   expect(changed.body.version).toBe(fresh.body.version + 1);
   expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
-  expect(
-    changed.body.entries.find(({ entry }) => entry.id === created.body.id).entry.published.title,
-  ).toBe("Second");
+  expect(changed.body.entries.find((entry) => entry.id === created.body.id).title).toBe("Second");
   await fixture.settle();
 });
 

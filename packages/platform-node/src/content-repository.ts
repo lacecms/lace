@@ -60,6 +60,8 @@ import type {
   RetryDispatcherLeaseInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
+  UpdateMediaMetadataInput,
+  UpdateMediaMetadataResult,
   BuildQueueReceipt,
   EnqueueSiteBuildInput,
   SiteBuildCommandPort,
@@ -78,6 +80,9 @@ import {
   ENTRY_STATUS_SQL,
   MEDIA_BY_ID_SQL,
   MEDIA_CATALOG_SQL,
+  MEDIA_METADATA_UPDATE_SQL,
+  MEDIA_PUBLISHED_REFERENCE_SQL,
+  mediaMetadataUpdateParams,
   MEDIA_SORT_SQL,
   MEDIA_USAGE_SQL,
   PUBLICATION_IDEMPOTENCY_TTL_MS,
@@ -129,7 +134,9 @@ import {
   mediaMetadata,
   mediaUsageEntries,
   parseObject,
-  publicEntry,
+  publicContentEntry,
+  publicSnapshotMedia,
+  publicSnapshotMediaSql,
   sameStoredModelStates,
   sanitizeBuildReason,
   encodeBuildError,
@@ -468,7 +475,12 @@ export class NodeContentRepository
         if (!configurationSyncAdvancesPublicState(actualPlan)) {
           return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
         }
-        const targetVersion = this.bumpPublicState(input.appliedAt, "system:content-sync", null);
+        const targetVersion = this.bumpPublicState(
+          input.appliedAt,
+          "system:content-sync",
+          null,
+          "configuration_sync",
+        );
         return Object.freeze({
           operations: actualPlan.operations,
           status: "applied" as const,
@@ -655,6 +667,7 @@ export class NodeContentRepository
           input.publishedAt,
           input.publishedBy.id,
           input.publishedSnapshotId,
+          "publication",
         );
         const committed = this.loadEntry(input.entryId);
         if (committed === null) failure("Published content entry could not be reloaded.");
@@ -737,6 +750,7 @@ export class NodeContentRepository
           input.unpublishedAt,
           input.unpublishedBy.id,
           input.expectedPublishedSnapshotId,
+          "publication",
         );
         const committed = this.loadEntry(input.entryId);
         if (committed === null) failure("Unpublished content entry could not be reloaded.");
@@ -826,7 +840,12 @@ export class NodeContentRepository
           this.connection
             .prepare("delete from published_routes where entry_id = ?")
             .run(input.entryId);
-          this.bumpPublicState(input.deletedAt, input.deletedBy.id, entry.published_snapshot_id);
+          this.bumpPublicState(
+            input.deletedAt,
+            input.deletedBy.id,
+            entry.published_snapshot_id,
+            "publication",
+          );
         }
         this.checkpoint("delete.entry");
         const deleted = this.connection
@@ -913,6 +932,36 @@ export class NodeContentRepository
     const media = await this.loadMedia(input.mediaId);
     if (media === null) failure("Media deletion retry could not be reloaded.");
     return { media, status: "deleting" };
+  }
+
+  public async updateMediaMetadata(
+    input: UpdateMediaMetadataInput,
+  ): Promise<UpdateMediaMetadataResult> {
+    const params = mediaMetadataUpdateParams(input);
+    let targetVersion: number | undefined;
+    try {
+      this.connection.transaction(() => {
+        this.checkpoint("media.metadata");
+        const changed = this.connection.prepare(MEDIA_METADATA_UPDATE_SQL).run(...params);
+        if (changed.changes !== 1) this.refuseMetadataUpdate(input.mediaId);
+        const published = this.connection
+          .prepare(`select ${MEDIA_PUBLISHED_REFERENCE_SQL} as published`)
+          .get(input.mediaId) as { readonly published: number };
+        if (published.published === 1) {
+          targetVersion = this.bumpPublicState(
+            input.updatedAt,
+            input.requestedBy.id,
+            null,
+            "media_metadata",
+          );
+        }
+      })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+    const media = await this.loadMedia(input.mediaId);
+    if (media === null) failure("Updated media could not be reloaded.");
+    return targetVersion === undefined ? { media } : { media, targetVersion };
   }
 
   public async claim(input: ClaimDispatcherEventsInput): Promise<readonly DispatcherLease[]> {
@@ -1214,11 +1263,8 @@ export class NodeContentRepository
       ) as readonly PublicRow[];
     const pageRows = rows.slice(0, limit);
     const entries = this.hydrate(pageRows);
-    const items = pageRows.map((row) => {
-      const entry = entries.get(row.id);
-      if (entry === undefined) failure("Published route references an unreadable entry.");
-      return Object.freeze({ entry: publicEntry(entry), path: row.path });
-    });
+    const media = this.publicMedia(pageRows);
+    const items = pageRows.map((row) => publicContentEntry(row, entries, media));
     const last = pageRows.at(-1);
     return Object.freeze({
       items: Object.freeze(items),
@@ -1240,10 +1286,8 @@ export class NodeContentRepository
       .prepare(`${PUBLIC_ROUTE_SQL} where r.path = ? limit 1`)
       .get(path) as PublicRow | undefined;
     if (row === undefined) return null;
-    const entry = this.hydrate([row]).get(row.id);
-    return entry === undefined
-      ? null
-      : Object.freeze({ entry: publicEntry(entry), path: row.path });
+    const entries = this.hydrate([row]);
+    return entries.has(row.id) ? publicContentEntry(row, entries, this.publicMedia([row])) : null;
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
@@ -1352,14 +1396,9 @@ export class NodeContentRepository
       .prepare(`${PUBLIC_ROUTE_SQL} order by r.path asc`)
       .all() as readonly PublicRow[];
     const entries = this.hydrate(rows);
+    const media = this.publicMedia(rows);
     return Object.freeze({
-      entries: Object.freeze(
-        rows.map((row) => {
-          const entry = entries.get(row.id);
-          if (entry === undefined) failure("Build export contains an unreadable entry.");
-          return Object.freeze({ entry: publicEntry(entry), path: row.path });
-        }),
-      ),
+      entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
       version: await this.publishedContentVersion(),
     });
   }
@@ -1380,6 +1419,22 @@ export class NodeContentRepository
     const row = this.entryRow(id);
     if (row === undefined) return null;
     return this.hydrate([row]).get(row.id) ?? null;
+  }
+
+  private publicMedia(rows: readonly PublicRow[]): Map<string, readonly MediaMetadata[]> {
+    const ids = rows.flatMap((row) =>
+      row.published_snapshot_id === null ? [] : [row.published_snapshot_id],
+    );
+    const mediaRows: Record<string, unknown>[] = [];
+    for (const group of chunks(ids, SQLITE_BIND_CHUNK)) {
+      mediaRows.push(
+        ...(this.connection.prepare(publicSnapshotMediaSql(group.length)).all(...group) as Record<
+          string,
+          unknown
+        >[]),
+      );
+    }
+    return publicSnapshotMedia(mediaRows);
   }
 
   private hydrate(rows: readonly EntryRow[]): Map<string, ContentEntry> {
@@ -1500,6 +1555,7 @@ export class NodeContentRepository
     timestamp: number,
     requestedBy: string,
     snapshotId: string | null,
+    reason: "configuration_sync" | "media_metadata" | "publication",
   ): number {
     this.checkpoint("public-state");
     this.connection
@@ -1512,7 +1568,7 @@ export class NodeContentRepository
       .get() as { readonly version: number };
     this.checkpoint("build-outbox");
     this.enqueueSiteBuild({
-      reason: requestedBy === "system:content-sync" ? "configuration_sync" : "publication",
+      reason,
       requestedAt: timestamp,
       requestedBy,
       snapshotId,
@@ -1959,6 +2015,14 @@ export class NodeContentRepository
       throw new DomainError("MEDIA_IN_USE", "Media is still referenced by content.");
     }
     failure(message);
+  }
+
+  private refuseMetadataUpdate(mediaId: string): never {
+    const row = this.connection.prepare("select status from media where id = ?").get(mediaId) as
+      | { readonly status: string }
+      | undefined;
+    if (row !== undefined && row.status !== "active") failure("Only active media can be edited.");
+    throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
   }
 
   private throwWriteError(error: unknown, pageCreation: boolean): never {

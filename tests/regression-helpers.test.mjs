@@ -19,7 +19,7 @@ test("the existing-site export adds hostile text and a chosen link without chang
   const exported = existingSiteExport(source, "javascript:alert(1)");
   expect(JSON.stringify(source)).toBe(before);
   expect(exported.entries.map((item) => item.path)).toEqual(["/", "/articles/first-post"]);
-  const text = JSON.stringify(exported.entries[1].entry.published.blocks);
+  const text = JSON.stringify(exported.entries[1].blocks);
   expect(text).toContain(JSON.stringify(hostileText).slice(1, -1));
   expect(text).toContain("javascript:alert(1)");
   expect(JSON.stringify(existingSiteExport(source))).toContain(safeHref);

@@ -14,6 +14,9 @@ import type {
   ErrorEnvelope,
   PublicContentEntryDto,
   PublicContentListDto,
+  PublicEntryDto,
+  PublicMediaDictionaryDto,
+  PublicMediaDto,
   LaceErrorCode,
 } from "@lacecms/contracts";
 import * as v from "valibot";
@@ -45,6 +48,12 @@ export interface AllCollectionOptions extends LaceRequestOptions {
 
 export interface BuildExportOptions extends LaceRequestOptions {
   readonly etag?: EntityTag;
+}
+
+/** Every published item of a collection with the media all of them reference. */
+export interface AllCollectionResult {
+  readonly items: PublicEntryDto[];
+  readonly media: PublicMediaDictionaryDto;
 }
 
 export type BuildExportResult =
@@ -94,10 +103,7 @@ export class LaceContractError extends LaceSdkError {
 }
 
 export interface LaceClient {
-  getAllCollection(
-    modelKey: string,
-    options?: AllCollectionOptions,
-  ): Promise<PublicContentEntryDto[]>;
+  getAllCollection(modelKey: string, options?: AllCollectionOptions): Promise<AllCollectionResult>;
   getBuildExport(options?: BuildExportOptions): Promise<BuildExportResult>;
   getByPath(path: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getCollection(modelKey: string, options?: CollectionOptions): Promise<PublicContentListDto>;
@@ -311,7 +317,8 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
 
   return {
     async getAllCollection(modelKey, requestOptions = {}) {
-      const items: PublicContentEntryDto[] = [];
+      const items: PublicEntryDto[] = [];
+      const media = new Map<string, PublicMediaDto>();
       let after: string | undefined;
       do {
         const page = await read(
@@ -323,9 +330,15 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
           requestOptions,
         );
         items.push(...page.items);
+        for (const [id, item] of Object.entries(page.media)) media.set(id, item);
         after = page.nextCursor;
       } while (after !== undefined);
-      return items;
+      const merged: Record<string, PublicMediaDto> = {};
+      for (const id of [...media.keys()].sort((left, right) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      ))
+        merged[id] = media.get(id)!;
+      return { items, media: merged };
     },
 
     async getBuildExport(requestOptions = {}) {

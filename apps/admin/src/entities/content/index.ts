@@ -29,6 +29,7 @@ export {
   type FieldRendererProps,
   type FieldRendererRegistry,
 } from "./FieldRenderer/index.js";
+export { mediaAltPair } from "./media-alt.js";
 export { entryActions, hasEntryActions, type EntryActions } from "./entry-actions.js";
 export { RichTextEditor } from "./RichTextEditor/index.js";
 export { EntryStatusBadge } from "./EntryStatusBadge/index.js";

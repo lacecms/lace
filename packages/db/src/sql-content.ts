@@ -22,6 +22,7 @@ import type {
   MediaUsageEntry,
   MediaUsageLocation,
   MediaUsageState,
+  PublicContentEntry,
   ConfigurationSyncMediaReference,
   ConfigurationSyncMigrationBlock,
   ConfigurationSyncMigrationPage,
@@ -33,6 +34,7 @@ import type {
   SiteBuildRecord,
   StoredContentModelState,
   TrackedSiteBuildCheck,
+  UpdateMediaMetadataInput,
 } from "@lacecms/application";
 import { MAX_TOP_LEVEL_BLOCKS } from "@lacecms/content";
 import type { JsonObject } from "@lacecms/content";
@@ -44,7 +46,10 @@ import {
   contentEntryId,
   contentModelKey,
   contentSnapshotId,
+  isMediaFocalCoordinate,
   isSiteBuildProviderStage,
+  MAX_MEDIA_ALT_LENGTH,
+  MAX_MEDIA_CAPTION_LENGTH,
   isSiteBuildStatus,
   normalizeTrackedOutcomeReason,
   retryableSiteBuildStatuses,
@@ -353,7 +358,36 @@ export const ENTRY_SORT_SQL: Readonly<Record<string, SortSql>> = {
 export const ENTRY_COLUMNS_SQL =
   "select id, model_key, draft_snapshot_id, published_snapshot_id from content_entries";
 export const MEDIA_COLUMNS_SQL =
-  "m.id, m.storage_key, m.filename, m.mime_type, m.size, m.width, m.height, m.status, m.created_by, m.created_at, m.updated_at";
+  "m.id, m.storage_key, m.filename, m.mime_type, m.size, m.width, m.height, m.alt, m.caption, m.focal_x, m.focal_y, m.status, m.created_by, m.created_at, m.updated_at";
+/**
+ * Guarded descriptive-metadata write; binds `mediaMetadataUpdateParams`. It
+ * changes only an active row still at the expected `updated_at`.
+ */
+export const MEDIA_METADATA_UPDATE_SQL =
+  "update media set alt = ?, caption = ?, focal_x = ?, focal_y = ?, updated_at = ? where id = ? and status = 'active' and updated_at = ?";
+/** True while a current published snapshot references the media ID bound once. */
+export const MEDIA_PUBLISHED_REFERENCE_SQL = `exists (
+    select 1 from content_media_references r
+    join content_entries e on e.published_snapshot_id = r.snapshot_id
+    where r.media_id = ?
+  )`;
+
+export function mediaMetadataUpdateParams(
+  input: UpdateMediaMetadataInput,
+): readonly (number | string | null)[] {
+  if (input.updatedAt <= input.expectedUpdatedAt) {
+    failure("A media metadata update must advance updatedAt.");
+  }
+  return [
+    input.alt,
+    input.caption,
+    input.focalPoint?.x ?? null,
+    input.focalPoint?.y ?? null,
+    input.updatedAt,
+    input.mediaId,
+    input.expectedUpdatedAt,
+  ];
+}
 /** Distinct entries whose current draft or published snapshot references the media row `m`. */
 export const MEDIA_USAGE_COUNT_SQL = `(select count(distinct s.entry_id)
   from content_media_references r
@@ -378,6 +412,15 @@ export const PUBLIC_MEDIA_SQL = `select ${MEDIA_COLUMNS_SQL}
     join content_entries e on e.published_snapshot_id = r.snapshot_id
     where r.media_id = m.id
   ) limit 1`;
+/** Active media referenced by the given published snapshots, one row per pair. */
+export function publicSnapshotMediaSql(count: number): string {
+  return `select distinct r.snapshot_id as public_snapshot_id, ${MEDIA_COLUMNS_SQL}
+   from content_media_references r
+   join media m on m.id = r.media_id
+  where r.snapshot_id in (${Array.from({ length: count }, () => "?").join(", ")})
+    and m.status = 'active'
+  order by r.snapshot_id asc, m.id asc`;
+}
 export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL} from media m where m.id = ? limit 1`;
 /** Binds media ID, entry limit, and media ID. */
 export const MEDIA_USAGE_SQL = `with used as (
@@ -1263,10 +1306,32 @@ export function mediaMetadata(row: Record<string, unknown>): MediaMetadata {
   }
   const width = row.width;
   const height = row.height;
+  const text = (name: "alt" | "caption", limit: number): string | undefined => {
+    const value = row[name];
+    if (value === undefined || value === null) return undefined;
+    return typeof value === "string" && value.length > 0 && [...value].length <= limit
+      ? value
+      : failure(`Media ${name} is invalid.`);
+  };
+  const alt = text("alt", MAX_MEDIA_ALT_LENGTH);
+  const caption = text("caption", MAX_MEDIA_CAPTION_LENGTH);
+  const focalX = row.focal_x ?? null;
+  const focalY = row.focal_y ?? null;
+  if (
+    (focalX === null) !== (focalY === null) ||
+    (focalX !== null && (!isMediaFocalCoordinate(focalX) || !isMediaFocalCoordinate(focalY)))
+  ) {
+    failure("Media focal point is invalid.");
+  }
   return Object.freeze({
+    ...(alt === undefined ? {} : { alt }),
+    ...(caption === undefined ? {} : { caption }),
     createdAt: unixMilliseconds(integer("created_at")),
     createdBy: actorId(string("created_by")),
     filename: string("filename"),
+    ...(focalX === null
+      ? {}
+      : { focalPoint: Object.freeze({ x: focalX as number, y: focalY as number }) }),
     ...(typeof height === "number" ? { height } : {}),
     id: string("id") as MediaMetadata["id"],
     mimeType: string("mime_type"),
@@ -1492,6 +1557,36 @@ export function hydrateEntries(
     );
   }
   return result;
+}
+
+/** Groups `publicSnapshotMediaSql` rows by published snapshot ID. */
+export function publicSnapshotMedia(
+  rows: readonly Record<string, unknown>[],
+): Map<string, readonly MediaMetadata[]> {
+  const result = new Map<string, MediaMetadata[]>();
+  for (const row of rows) {
+    const snapshotId = row.public_snapshot_id;
+    if (typeof snapshotId !== "string") failure("Public media snapshot ID is invalid.");
+    const items = result.get(snapshotId) ?? [];
+    items.push(mediaMetadata(row));
+    result.set(snapshotId, items);
+  }
+  return result;
+}
+
+/** Projects a published route row into a public entry with its referenced media. */
+export function publicContentEntry(
+  row: PublicRow,
+  entries: ReadonlyMap<string, ContentEntry>,
+  media: ReadonlyMap<string, readonly MediaMetadata[]>,
+): PublicContentEntry {
+  const entry = entries.get(row.id);
+  if (entry === undefined) failure("Published route references an unreadable entry.");
+  return Object.freeze({
+    entry: publicEntry(entry),
+    media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
+    path: row.path,
+  });
 }
 
 /** Public projections cannot disclose the independently mutable draft snapshot. */
