@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createLaceApp, sensitiveRequestLimit } from "../dist/index.js";
 import { ContentUseCases, MediaUseCases, SiteBuildUseCases } from "@lacecms/application";
-import { defineCollection, defineConfig, definePage } from "@lacecms/config";
+import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 import {
   actorId,
@@ -111,6 +111,7 @@ async function fixture({
       },
       listPublic: store.listPublic.bind(store),
       loadPublic: store.loadPublic.bind(store),
+      loadPublicGlobal: store.loadPublicGlobal.bind(store),
       loadPublicMedia: store.loadPublicMedia.bind(store),
       publishedContentVersion: store.publishedContentVersion.bind(store),
     },
@@ -1427,6 +1428,122 @@ function send(app, path, method = "POST", body) {
     }),
   );
 }
+
+test("globals are read by model key and refused as routed or deletable entries", async () => {
+  const models = [
+    definePage({ key: "home", path: "/", version: 1 }),
+    defineCollection({ key: "posts", route: "/blog/:slug", version: 1 }),
+    defineGlobal({
+      fields: { logo: field.media(), siteName: field.text({ required: true }) },
+      key: "settings",
+      label: "Site settings",
+      version: 1,
+    }),
+  ];
+  const { app, store } = await fixture({ maxBodyBytes: 4096, models });
+  store.registerMedia({
+    createdAt: unixMilliseconds(1),
+    createdBy: admin.id,
+    filename: "logo.png",
+    id: mediaId("logo"),
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    storageKey: "private/logo",
+    updatedAt: unixMilliseconds(1),
+  });
+  const call = (path, { body, method = "POST" } = {}) =>
+    json(app, path, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { "content-type": "application/json" },
+    });
+
+  const listed = await json(app, "/api/v1/admin/content-models");
+  const settingsModel = listed.body.items.find((model) => model.key === "settings");
+  expect(settingsModel).toMatchObject({ key: "settings", kind: "global", label: "Site settings" });
+  expect(settingsModel).not.toHaveProperty("path");
+  expect(settingsModel).not.toHaveProperty("route");
+
+  const created = await call("/api/v1/admin/models/settings/entries", {
+    body: { blocks: [], fields: { logo: "logo", siteName: "Lace" }, title: "Ignored" },
+  });
+  expect(created.response.status).toBe(201);
+  expect(created.body).toMatchObject({
+    draft: { title: "Site settings" },
+    model: { key: "settings", kind: "global" },
+  });
+  expect(
+    await call("/api/v1/admin/models/settings/entries", {
+      body: { blocks: [], fields: { siteName: "Again" }, title: "Again" },
+    }),
+  ).toMatchObject({
+    body: { error: { code: "CONTENT_MODEL_CARDINALITY_CONFLICT" } },
+    response: { status: 409 },
+  });
+  const entryPath = `/api/v1/admin/entries/${created.body.id}`;
+  expect(await json(app, "/api/v1/public/globals/settings")).toMatchObject({
+    body: { error: { code: "NOT_FOUND" } },
+    response: { status: 404 },
+  });
+
+  const before = await json(app, "/api/v1/public/build-export");
+  const published = await call(`${entryPath}/publish`, { body: { expectedRevision: 1 } });
+  expect(published.response.status).toBe(200);
+  const read = await json(app, "/api/v1/public/globals/settings");
+  expect(read.response.status).toBe(200);
+  expect(Object.keys(read.body)).toEqual(["global", "media"]);
+  expect(read.body.global).toEqual({
+    blocks: [],
+    fields: { logo: "logo", siteName: "Lace" },
+    id: created.body.id,
+    modelKey: "settings",
+    publishedAt: new Date(1).toISOString(),
+  });
+  expect(read.body.media.logo).toMatchObject({
+    url: "https://lace.test/api/v1/public/media/logo",
+  });
+  for (const path of ["/api/v1/public/globals/home", "/api/v1/public/globals/missing"]) {
+    expect((await json(app, path)).response.status, path).toBe(404);
+  }
+  expect((await json(app, "/api/v1/public/globals/Not%20Valid")).response.status).not.toBe(200);
+  expect((await json(app, "/api/v1/public/pages/settings")).response.status).toBe(404);
+
+  const exported = await json(app, "/api/v1/public/build-export");
+  expect(exported.response.headers.get("etag")).not.toBe(before.response.headers.get("etag"));
+  expect(exported.body.entries).toEqual([]);
+  expect(exported.body.globals.map((item) => item.modelKey)).toEqual(["settings"]);
+  expect(Object.keys(exported.body.media)).toEqual(["logo"]);
+
+  for (const [path, init] of [
+    [entryPath, { headers: { "if-match": '"1"' }, method: "DELETE" }],
+    [
+      `${entryPath}/duplicate`,
+      { body: "{}", headers: { "content-type": "application/json" }, method: "POST" },
+    ],
+  ]) {
+    expect(await json(app, path, init), path).toMatchObject({
+      body: { error: { code: "CONTENT_PAGE_SINGLETON" } },
+      response: { status: 409 },
+    });
+  }
+
+  const unpublished = await call(`${entryPath}/unpublish`, {
+    body: { expectedPublishedSnapshotId: published.body.entry.published.id },
+  });
+  expect(unpublished.response.status).toBe(200);
+  expect((await json(app, "/api/v1/public/globals/settings")).response.status).toBe(404);
+  const afterUnpublish = await json(app, "/api/v1/public/build-export");
+  expect(afterUnpublish.response.headers.get("etag")).not.toBe(
+    exported.response.headers.get("etag"),
+  );
+  expect(afterUnpublish.body.globals).toEqual([]);
+
+  const openApi = await json(app, "/api/v1/openapi.json");
+  expect(openApi.body.paths["/api/v1/public/globals/{modelKey}"].get.responses).toHaveProperty(
+    "200",
+  );
+});
 
 test("entry lifecycle routes unpublish, revert, and duplicate with stable contracts", async () => {
   let current = admin;

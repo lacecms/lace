@@ -6,6 +6,7 @@ import {
   ConfigurationError,
   defineCollection,
   defineConfig,
+  defineGlobal,
   definePage,
   normalizeCollectionRoute,
   normalizePagePath,
@@ -122,6 +123,66 @@ test("rejects duplicate identity and configuration-detectable routes", async () 
       content: [homeModel({ renamedFrom: "landing" }), postModel({ renamedFrom: "landing" })],
     }),
   ).rejects.toThrow(/share renamedFrom/u);
+});
+
+test("defines a route-less global model", async () => {
+  const settings = defineGlobal({
+    fields: { siteName: field.text({ required: true }) },
+    key: "settings",
+    label: "Site settings",
+    version: 1,
+  });
+  expect(settings).toMatchObject({ blocks: [], key: "settings", kind: "global", version: 1 });
+  expect(settings).not.toHaveProperty("path");
+  expect(settings).not.toHaveProperty("route");
+  expect(Object.isFrozen(settings)).toBe(true);
+
+  const config = await defineConfig({ blocks, content: [homeModel(), postModel(), settings] });
+  const projected = config.public.content.find((model) => model.key === "settings");
+  expect(projected).toMatchObject({ key: "settings", kind: "global" });
+  expect(projected).not.toHaveProperty("path");
+  expect(projected).not.toHaveProperty("route");
+  expect(projected).not.toHaveProperty("listFields");
+});
+
+test.each([
+  ["path", "/settings"],
+  ["route", "/settings/:slug"],
+  ["listFields", []],
+])("rejects %s on a global", (option, value) => {
+  expect(() => defineGlobal({ key: "settings", version: 1, [option]: value })).toThrow(
+    new RegExp(`must not declare ${option}`, "u"),
+  );
+});
+
+test("keeps keys unique across kinds and hashes the kind", async () => {
+  await expect(
+    defineConfig({
+      blocks,
+      content: [
+        homeModel({ key: "settings", path: "/settings" }),
+        defineGlobal({ key: "settings", version: 1 }),
+      ],
+    }),
+  ).rejects.toThrow(/share key/u);
+  await expect(
+    defineConfig({
+      blocks,
+      content: [
+        defineGlobal({ key: "settings", version: 1 }),
+        defineGlobal({ key: "footer", renamedFrom: "settings", version: 1 }),
+      ],
+    }),
+  ).rejects.toThrow(/renamedFrom "settings" duplicates a model key/u);
+  const page = await defineConfig({
+    blocks,
+    content: [definePage({ key: "settings", path: "/settings", version: 1 })],
+  });
+  const global = await defineConfig({
+    blocks,
+    content: [defineGlobal({ key: "settings", version: 1 })],
+  });
+  expect(global.content[0].structureHash).not.toBe(page.content[0].structureHash);
 });
 
 test("normalizes only canonical page and collection routes", () => {

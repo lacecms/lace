@@ -43,7 +43,7 @@ import {
   MediaUseCases,
   sanitizeMediaFilename,
 } from "@lacecms/application";
-import { defineCollection, defineConfig, definePage } from "@lacecms/config";
+import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 test("exports its package identity", () => expect(packageName).toBe("@lacecms/test-utils"));
 
@@ -1157,10 +1157,17 @@ async function lifecycleFixture() {
         route: "/blog/:slug",
         version: 1,
       }),
+      defineGlobal({
+        blocks: ["asset"],
+        fields: { logo: field.media(), siteName: field.text({ required: true }) },
+        key: "settings",
+        label: "Site settings",
+        version: 1,
+      }),
     ],
   });
   const store = new InMemoryContentStore();
-  for (const id of ["media-1", "media-2"]) {
+  for (const id of ["media-1", "media-2", "media-3"]) {
     await store.createMedia({
       createdAt: unixMilliseconds(1),
       createdBy: admin.id,
@@ -1188,8 +1195,136 @@ async function lifecycleFixture() {
     slug,
     title,
   });
-  return { post, store, useCases };
+  return { config, post, store, useCases };
 }
+
+async function syncedGlobal(config, store) {
+  const prepared = await prepareConfigurationSynchronization({
+    models: config.content,
+    state: store,
+  });
+  await applyPreparedConfigurationSynchronization({
+    clock: new DeterministicClock(unixMilliseconds(5)),
+    ids: new DeterministicIdGenerator("sync"),
+    models: config.content,
+    prepared,
+    target: store,
+  });
+  const page = await store.list({
+    limit: 10,
+    listFields: [],
+    modelKey: contentModelKey("settings"),
+    sort: "-updatedAt",
+  });
+  return page.items[0].id;
+}
+
+test("runs the global lifecycle as a route-less singleton", async () => {
+  const { config, store, useCases } = await lifecycleFixture();
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const id = await syncedGlobal(config, store);
+  const synced = await useCases.load({ actor: admin, entryId: id });
+  expect(synced).toMatchObject({
+    draft: {
+      blocks: [],
+      revision: 1,
+      title: "Site settings",
+      updatedBy: { id: "system:content-sync" },
+    },
+    model: { key: "settings", kind: "global" },
+  });
+  expect(synced.draft).not.toHaveProperty("slug");
+
+  const values = (overrides = {}) => ({
+    blocks: [
+      {
+        data: { image: "media-2" },
+        key: blockKey("banner"),
+        position: 1000,
+        schemaVersion: 1,
+        type: "asset",
+      },
+    ],
+    fields: { logo: "media-1", siteName: "Lace" },
+    title: "Anything",
+    ...overrides,
+  });
+  await expect(
+    useCases.save({ actor: viewer, entryId: id, expectedRevision: 1, ...values() }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  await expect(
+    useCases.save({ actor: editor, entryId: id, expectedRevision: 1, ...values({ slug: "x" }) }),
+  ).rejects.toThrow(/slug/u);
+  const saved = await useCases.save({
+    actor: editor,
+    entryId: id,
+    expectedRevision: 1,
+    ...values(),
+  });
+  expect(saved.draft).toMatchObject({ revision: 2, title: "Site settings" });
+
+  await expect(
+    useCases.create({ actor: admin, modelKey: "settings", ...values() }),
+  ).rejects.toMatchObject({ code: "CONTENT_MODEL_CARDINALITY_CONFLICT" });
+  for (const operation of [
+    () => useCases.delete({ actor: admin, entryId: id, expectedRevision: 2 }),
+    () => useCases.duplicate({ actor: admin, entryId: id }),
+  ]) {
+    await expect(operation()).rejects.toMatchObject({ code: "CONTENT_PAGE_SINGLETON" });
+  }
+
+  await expect(
+    useCases.publish({ actor: editor, entryId: id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  const version = await store.publishedContentVersion();
+  const published = await useCases.publish({ actor: admin, entryId: id, expectedRevision: 2 });
+  expect(published.build).toEqual({ status: "queued", targetVersion: version + 1 });
+  expect(await store.publishedContentVersion()).toBe(version + 1);
+  const read = await store.loadPublicGlobal(contentModelKey("settings"));
+  expect(read.entry.published).toMatchObject({
+    fields: { siteName: "Lace" },
+    title: "Site settings",
+  });
+  expect(read.media.map((item) => item.id)).toEqual(["media-1", "media-2"]);
+  expect(await store.loadPublicGlobal(contentModelKey("home"))).toBeNull();
+  expect(await store.loadPublicGlobal(contentModelKey("posts"))).toBeNull();
+  expect(await store.loadPublicMedia("media-1")).toMatchObject({ id: "media-1" });
+  const exported = await store.exportBuildContent();
+  expect(exported.entries).toEqual([]);
+  expect(exported.globals.map((item) => item.entry.id)).toEqual([id]);
+  expect(await store.loadPublic("/")).toBeNull();
+  expect(
+    (await store.listPublic({ limit: 10, modelKey: contentModelKey("settings") })).items,
+  ).toEqual([]);
+
+  await useCases.save({
+    actor: editor,
+    entryId: id,
+    expectedRevision: 2,
+    ...values({ fields: { logo: "media-3", siteName: "Changed" } }),
+  });
+  const reverted = await useCases.revertDraft({ actor: editor, entryId: id, expectedRevision: 3 });
+  expect(reverted.draft).toMatchObject({ fields: { siteName: "Lace" }, revision: 4 });
+  expect(await store.publishedContentVersion()).toBe(version + 1);
+
+  await expect(
+    useCases.unpublish({
+      actor: editor,
+      entryId: id,
+      expectedPublishedSnapshotId: published.entry.published.id,
+    }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  const unpublished = await useCases.unpublish({
+    actor: admin,
+    entryId: id,
+    expectedPublishedSnapshotId: published.entry.published.id,
+  });
+  expect(unpublished.build).toEqual({ status: "queued", targetVersion: version + 2 });
+  expect(await store.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
+  expect((await store.exportBuildContent()).globals).toEqual([]);
+  expect(await store.loadPublicMedia("media-1")).toBeNull();
+  expect(unpublished.entry.draft.revision).toBe(4);
+});
 
 test("unpublishes guarded publications idempotently and keeps the draft", async () => {
   const { post, store, useCases } = await lifecycleFixture();

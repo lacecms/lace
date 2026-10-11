@@ -19,8 +19,9 @@ deletion requires `content:publish` when the entry has a current published
 snapshot and `content:write` otherwise. Listing and loading an entry or its
 snapshots SHALL require `content:read`. Authorization failure SHALL use the
 stable domain authorization error and SHALL not invoke a state-changing port.
-Deleting or duplicating a page entry SHALL fail with `CONTENT_PAGE_SINGLETON`
-after authorization and before any state-changing port is invoked.
+Deleting or duplicating a page or global entry SHALL fail with
+`CONTENT_PAGE_SINGLETON` after authorization and before any state-changing port
+is invoked.
 
 #### Scenario: Editor can manage an unpublished draft but cannot publish it
 - **WHEN** an editor creates or saves an unpublished entry and then requests
@@ -55,6 +56,12 @@ after authorization and before any state-changing port is invoked.
 - **WHEN** an administrator requests deletion of a page entry, published or not
 - **THEN** it fails with `CONTENT_PAGE_SINGLETON` and the entry, its snapshots,
   and its route remain unchanged
+
+#### Scenario: Global deletion is refused
+- **WHEN** an administrator requests deletion of a global entry, published or
+  not
+- **THEN** it fails with `CONTENT_PAGE_SINGLETON` and the entry and its
+  snapshots remain unchanged
 
 ### Requirement: Complete aggregate validation precedes each lifecycle write
 The system SHALL resolve the entry's normalized model and runtime block registry
@@ -256,7 +263,7 @@ a publication replaced or removed after it was read, SHALL fail with
 
 ### Requirement: Duplication creates an unpublished copy of a collection entry
 The duplicate use case SHALL accept a source entry identity and an optional
-expected draft revision. It SHALL refuse a page source with
+expected draft revision. It SHALL refuse a page or global source with
 `CONTENT_PAGE_SINGLETON` and an expected revision that differs from the source
 draft with `CONTENT_REVISION_CONFLICT`. It SHALL build a new entry of the same
 model whose draft copies the source draft's fields and blocks, with these
@@ -286,8 +293,49 @@ published by duplication, and the source SHALL be unchanged.
 - **WHEN** a caller duplicates a page entry
 - **THEN** it fails with `CONTENT_PAGE_SINGLETON` and no entry is created
 
+#### Scenario: Duplicating a global fails
+- **WHEN** a caller duplicates a global entry
+- **THEN** it fails with `CONTENT_PAGE_SINGLETON` and no entry is created
+
 #### Scenario: A source save races the duplication
 - **WHEN** the source draft is saved between the duplicate read and the guarded
   creation
 - **THEN** duplication fails with `CONTENT_REVISION_CONFLICT` and no entry is
   created
+
+### Requirement: Global entries follow the page lifecycle without a route
+The save, publish, unpublish and revert use cases SHALL apply to a global entry
+with the same authorization, validation, revision, idempotency and conflict
+rules as to a page entry. Saving a global draft SHALL store the model label, or
+the model key when no label is configured, as the title regardless of the
+submitted title, and SHALL reject a submitted slug. Publishing a global SHALL
+resolve no public path, SHALL create or replace no published route, and SHALL
+increment the published-state version and create or coalesce one site-build
+request in the same atomic mutation as for every publication. Unpublishing a
+global SHALL remove only its published snapshot and SHALL increment the
+published-state version and request a build. Creating an entry of a global
+model through the content commands SHALL fail with
+`CONTENT_MODEL_CARDINALITY_CONFLICT` because synchronization owns its singleton.
+
+#### Scenario: Save ignores a submitted global title
+- **WHEN** an editor saves the `settings` global labelled `Site settings` with
+  the title `Anything`
+- **THEN** the saved draft's title is `Site settings` and its revision
+  advances once
+
+#### Scenario: Publishing a global writes no route
+- **WHEN** an administrator publishes a valid global draft
+- **THEN** the global has a published snapshot, no published route exists for
+  it, the published-state version advances by one, and one pending build
+  request targets that version
+
+#### Scenario: Unpublishing a global
+- **WHEN** an administrator unpublishes a published global with the current
+  published snapshot ID
+- **THEN** the published snapshot is removed, the draft is unchanged, the
+  published-state version advances, and a build is requested
+
+#### Scenario: Reverting a global draft
+- **WHEN** an editor reverts a published global whose draft changed
+- **THEN** the draft holds the published fields and blocks and the published
+  state, version and build work are unchanged

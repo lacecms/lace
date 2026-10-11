@@ -1,4 +1,4 @@
-import type { UnpublishContentEntryResultDto } from "@lacecms/contracts";
+import type { ContentModelDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { type RefObject, useRef } from "react";
 import { ulid } from "ulid";
@@ -22,7 +22,9 @@ import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 
 const staleCodes = new Set(["CONTENT_NOT_PUBLISHED", "CONTENT_REVISION_CONFLICT"]);
 
-function consequence(kind: "collection" | "page", publicPath: string | undefined): string {
+function consequence(kind: ContentModelDto["kind"], publicPath: string | undefined): string {
+  if (kind === "global")
+    return "Pages that show this content fall back to their defaults after the next site build.";
   if (kind === "page")
     return publicPath === undefined
       ? "The page will return 404 after the next site build."
@@ -50,7 +52,7 @@ export function UnpublishEntryDialog({
 }: {
   readonly entryId: string;
   readonly expectedPublishedSnapshotId: string;
-  readonly kind: "collection" | "page";
+  readonly kind: ContentModelDto["kind"];
   readonly onOpenChange: (open: boolean) => void;
   readonly onReload: () => void;
   readonly onUnpublished: (result: UnpublishContentEntryResultDto) => void;

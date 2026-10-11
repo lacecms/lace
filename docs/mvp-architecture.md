@@ -479,6 +479,7 @@ import {
   builtInBlocks,
   defineCollection,
   defineConfig,
+  defineGlobal,
   definePage,
   field,
 } from "@lacecms/config";
@@ -515,6 +516,16 @@ export default defineConfig({
       listFields: ["category", "author"],
       blocks: ["richText", "image", "quote"],
     }),
+
+    defineGlobal({
+      key: "settings",
+      version: 1,
+      label: "Site settings",
+      fields: {
+        siteName: field.text({ required: true }),
+        tagline: field.text(),
+      },
+    }),
   ],
 });
 ```
@@ -526,9 +537,11 @@ created once during application startup.
 
 For the MVP, every snapshot has the following common system fields:
 
-- `title` is required for both pages and collection entries;
-- `slug` is `NULL` for pages; it may be absent from an incomplete collection
-  draft but is required for publication;
+- `title` is required for every entry; for a global it is system-owned: saving
+  a global always stores the model label (or key) as its title;
+- `slug` is `NULL` for pages and globals (a global rejects a submitted slug);
+  it may be absent from an incomplete collection draft but is required for
+  publication;
 - a collection route contains exactly one `:slug` segment;
 - slugs use lowercase ASCII letters, digits, and single hyphens
   (`^[a-z0-9]+(?:-[a-z0-9]+)*$`); the admin may suggest a normalized slug, but
@@ -550,13 +563,23 @@ are different.
 `content_models.kind` uses domain-language values:
 
 ```ts
-type ContentModelKind = "page" | "collection";
+type ContentModelKind = "page" | "collection" | "global";
 ```
 
-- `page` represents a singleton model and permits exactly one content entry.
-- `collection` permits any number of content entries.
+- `page` represents a singleton model with one fixed path and permits exactly
+  one content entry.
+- `collection` permits any number of content entries, each routed by its slug.
+- `global` represents a route-less singleton for site-wide content such as
+  site settings or a footer ([ADR 0010](adr/0010-global-models.md)). It is
+  declared with `defineGlobal({ key, version, label?, description?, fields?,
+  blocks? })` plus the same temporary synchronization hints as a page, and
+  never has a `path`, `route` or `listFields`. A global is never served by
+  path; it is read by model key.
 
-Pages and collection entries share storage, snapshot, block, validation, and publication behavior.
+Pages, collection entries and globals share storage, snapshot, block,
+validation, and publication behavior. Model keys are unique across all three
+kinds, and a model's kind is part of its structure: a kind change between any
+two kinds is breaking and refused by sync, also through `renamedFrom`.
 
 ### Initial field types
 
@@ -648,8 +671,8 @@ field keys and default values are structural even when named `label` or
 `description`. A changed structure hash without a version
 bump fails; a projection-only change is safe and does not require a bump.
 
-Renames are never guessed. `definePage` and `defineCollection` accept a temporary
-`renamedFrom` key. Sync performs the key migration only when the previous key
+Renames are never guessed. `definePage`, `defineCollection` and `defineGlobal`
+accept a temporary `renamedFrom` key. Sync performs the key migration only when the previous key
 exists, the new key does not, and kind/cardinality remain compatible; the option
 must be removed after all environments have applied the sync. Without that
 explicit hint, a key change is treated as one addition and one removal, and the
@@ -726,8 +749,8 @@ When a successful sync changes the serializable configuration visible to public
 consumers, it increments `published_state.version` and requests a build in the
 same atomic mutation.
 
-Sync also ensures that every page model has one singleton entry. A newly created
-page entry receives the model label as its draft title, `NULL` slug, configured
+Sync also ensures that every page and global model has one singleton entry. A
+newly created singleton entry receives the model label as its draft title, `NULL` slug, configured
 defaults, an empty block list, and the audit actor `system:content-sync`; missing
 required model fields remain valid in draft mode until publication. Collections
 are created only through the admin/API and require an initial title.
@@ -747,7 +770,7 @@ All primary IDs should be application-generated sortable string IDs, such as ULI
 ```text
 content_models
 ├── key                 TEXT PRIMARY KEY
-├── kind                TEXT NOT NULL CHECK(kind IN ('page', 'collection'))
+├── kind                TEXT NOT NULL CHECK(kind IN ('page', 'collection', 'global'))
 ├── label               TEXT NOT NULL
 ├── config_version      INTEGER NOT NULL
 ├── structure_hash      TEXT NOT NULL
@@ -782,7 +805,7 @@ content_entries
 
 `draft_snapshot_id` is nullable at the SQL level only to break the insertion cycle between a new entry and its first snapshot. Entry creation inserts the entry, inserts its draft snapshot, and assigns the pointer atomically. Application code treats a committed entry without a draft as invalid. `published_snapshot_id` remains nullable until the first publication.
 
-The API sets `singleton_key = 1` for pages and `NULL` for collection entries. SQLite permits multiple `NULL` values in a unique index, so this partial index enforces a single page entry per page model:
+The API sets `singleton_key = 1` for pages and globals and `NULL` for collection entries. SQLite permits multiple `NULL` values in a unique index, so this partial index enforces a single entry per page or global model:
 
 ```sql
 CREATE UNIQUE INDEX content_entries_singleton_idx
@@ -876,6 +899,9 @@ This table guarantees unique public paths and supports direct lookup by URL.
 - Page paths are fixed by their model definition.
 - Collection paths are produced from the model route and the published snapshot slug.
 - A draft slug change does not change the public path before publication.
+- Globals never own a route. Their publication writes no `published_routes`
+  row, so by-path reads, collection lists and the export's `entries` never
+  contain them; they are read by model key (section 12).
 
 ### 9.7 Media
 
@@ -1190,10 +1216,21 @@ build. Page entries cannot be deleted: a page singleton is defined by
 configuration and is removed by removing its model from `lace.config.ts`. A page
 delete request fails with `CONTENT_PAGE_SINGLETON` (HTTP `409`).
 
+Globals follow the page lifecycle without a route
+([ADR 0010](adr/0010-global-models.md)). Save, publish, unpublish and revert
+apply unchanged, except that publication resolves no path and writes no
+`published_routes` row, and unpublication removes only the publication. Like
+every publication, publishing or unpublishing a global increments
+`published_state.version` and requests a build, because any page may render
+it. Delete and duplicate of a global fail with `CONTENT_PAGE_SINGLETON`, whose
+message names configuration-defined singletons, and creating a second entry
+fails with `CONTENT_MODEL_CARDINALITY_CONFLICT`. Saving a global stores the
+model label as its title and rejects a slug.
+
 The entry lifecycle has three further commands
 ([ADR 0008](adr/0008-entry-lifecycle-commands.md)):
 
-- **Unpublish** (`content:publish`, pages and collection entries). Inputs: entry
+- **Unpublish** (`content:publish`, all model kinds). Inputs: entry
   ID, expected published snapshot ID, actor, optional idempotency key (scoped
   to the entry and actor, with the publication key rules). One guarded atomic
   mutation removes the entry's route, clears `published_snapshot_id`, deletes
@@ -1218,7 +1255,8 @@ The entry lifecycle has three further commands
   suffix within the title limit, no slug, new block keys, and a rebuilt media
   reference projection. The copy is validated in draft mode, created at
   revision 1, and never published. Creation is guarded on the source draft
-  revision that was read. A page duplicate fails with `CONTENT_PAGE_SINGLETON`.
+  revision that was read. A page or global duplicate fails with
+  `CONTENT_PAGE_SINGLETON`.
 
 ## 11. Block registry and rich text
 
@@ -1310,6 +1348,7 @@ Representative routes:
 
 ```text
 GET /api/v1/public/pages/:modelKey
+GET /api/v1/public/globals/:modelKey
 GET /api/v1/public/collections/:modelKey
 GET /api/v1/public/collections/:modelKey/:slug
 GET /api/v1/public/content/by-path?path=/blog/hello
@@ -1327,19 +1366,28 @@ Public content responses return the published entry directly, never a draft:
 
 ```text
 PublicEntry = { id, modelKey, path, slug?, title, fields, blocks, publishedAt }
+PublicGlobal = { id, modelKey, fields, blocks, publishedAt }
 
 GET pages/:modelKey, collections/:modelKey/:slug, content/by-path
   -> { entry: PublicEntry, media }
+GET globals/:modelKey
+  -> { global: PublicGlobal, media }
 GET collections/:modelKey
   -> { items: PublicEntry[], media, nextCursor? }
 GET build-export
-  -> { entries: PublicEntry[], media, version }
+  -> { entries: PublicEntry[], globals: PublicGlobal[], media, version }
 
 media = { [mediaId]: { id, url, mimeType, width, height, alt, caption, focalPoint } }
 ```
 
 `blocks` keep `key`, `type`, `schemaVersion`, `position`, and `data`, ordered
 by position, and `publishedAt` is the creation time of the published snapshot.
+The globals read is anonymous like the page read, reads by model key without
+`published_routes`, and returns `404` for an unknown key, a page or collection
+key, or an unpublished global. The export's `entries` hold routed entries only,
+and `globals` holds every published global ordered by model key; contract
+validation treats a missing `globals` as empty so older exports stay valid,
+and the API always sends it.
 `media` resolves exactly the media items referenced by the returned entries'
 published snapshots (from `content_media_references`), keyed by ID in ascending
 order; unknown values are `null`. Field and block values keep storing media IDs.
@@ -1516,6 +1564,7 @@ const lace = createLaceClient({
 });
 
 const home = await lace.getPage("home");
+const settings = await lace.getGlobal("settings");
 const posts = await lace.getCollection("posts");
 const exportData = await lace.getBuildExport();
 ```
@@ -1543,8 +1592,11 @@ framework and never reads `process.env` or `import.meta.env` itself.
   different export version fails the build.
 - **Output:** `PublishedSite` with `version`, `byPath(path)`,
   `entries(modelKey)` (sorted by path; empty for an unknown model),
-  `bySlug(modelKey, slug)`, `mediaUrl(mediaId)`, `media(mediaId)`, and
-  `image(mediaId, usageAlt?)`. Lookups return `undefined` when absent so routes
+  `bySlug(modelKey, slug)`, `global(modelKey)`, `mediaUrl(mediaId)`,
+  `media(mediaId)`, and `image(mediaId, usageAlt?)`. `global()` returns a
+  `PublishedGlobal` (`id`, `modelKey`, `publishedAt`, `fields`, ordered
+  `blocks`, and the same `media()` and `image()` lookups) or `undefined` when
+  the global is not published, so layouts can fall back to static values. Lookups return `undefined` when absent so routes
   choose between 404 and failure. `PublishedEntry` exposes `id`, `modelKey`,
   `path`, optional `slug`, `title`, `publishedAt`, `fields`, ordered `blocks`
   (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`), typed
@@ -1556,8 +1608,8 @@ framework and never reads `process.env` or `import.meta.env` itself.
   otherwise; `mediaUrl()` returns the resolved URL of a known ID. No
   draft-shaped property exists on the view.
 - The loader trusts the CMS-resolved `path`, never re-derives route patterns or
-  names model keys, and rejects duplicate paths and duplicate slugs within a
-  model.
+  names model keys, and rejects duplicate paths, duplicate slugs within a
+  model, duplicate global keys, and a global key shared with an entry.
 - **Errors:** `LacePublishedSiteError` (a `LaceSdkError`) with stable codes
   `missing_configuration`, `rejected_token` (HTTP 401/403), `api_unavailable`
   (transport failure), `version_mismatch`, and `invalid_export`. Other SDK
@@ -2058,6 +2110,18 @@ The architecture responds to those constraints by:
 
 JSON values are stored as SQLite `TEXT` and validated before persistence. Fields that later require indexed filtering may be promoted to generated columns or a dedicated index table through a future migration.
 
+A migration that must rebuild a table referenced by foreign keys (for example
+`0007`, which widens the `content_models.kind` check) runs
+`PRAGMA defer_foreign_keys = on`, creates the replacement table, copies every
+row, drops the old table and renames the replacement, all in one migration
+file. D1 applies the file as one batch and accepts the deferred drop and
+rename; D1 cannot switch foreign keys off. Node SQLite does not clear the
+deferred violation counted by the drop, so the explicit Node migrator follows
+SQLite's documented rebuild procedure instead: it suspends `foreign_keys` on
+its own connection while the migrations run, runs `PRAGMA foreign_key_check`,
+and fails unless the check is empty before restoring enforcement. Application
+connections always keep foreign keys on.
+
 ## 17. Admin application
 
 The admin is a client-rendered React SPA with no SSR requirement.
@@ -2507,8 +2571,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Authorization uses admin, editor, and viewer roles mapped to permissions.
 - Only admin has `content:publish` by default.
 - Tiptap is used for rich-text fields/blocks, not as the entire page document.
-- `content_models.kind` distinguishes `page` from `collection`.
-- Pages and collection records share `content_entries`.
+- `content_models.kind` distinguishes `page`, `collection` and the route-less
+  singleton `global` ([ADR 0010](adr/0010-global-models.md)).
+- Pages, collection records and globals share `content_entries`.
 - Content has draft and published snapshots only.
 - Media carry global descriptive metadata (alt text, caption, focal point);
   editing published media advances the published version without

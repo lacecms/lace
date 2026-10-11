@@ -8,6 +8,7 @@ import {
   contentModelKey,
   contentSnapshotId,
   createContentEntry,
+  isSingletonKind,
 } from "@lacecms/domain";
 import type {
   Actor,
@@ -261,8 +262,8 @@ export interface ConfigurationSyncStateReadPort {
   readConfigurationSyncState(): Promise<readonly StoredContentModelState[]>;
 }
 
-/** One pre-materialized singleton draft required by a page-model create operation. */
-export interface ConfigurationSyncPageEntry {
+/** One pre-materialized singleton draft required by a page or global create operation. */
+export interface ConfigurationSyncSingletonEntry {
   readonly entry: ContentEntry;
   readonly modelKey: ContentModelKey;
 }
@@ -274,7 +275,7 @@ export interface ApplyConfigurationSynchronizationInput {
   readonly evidence: ConfigurationSyncEvidence;
   readonly expectedStoredModels: readonly StoredContentModelState[];
   readonly models: readonly NormalizedContentModel[];
-  readonly pageEntries: readonly ConfigurationSyncPageEntry[];
+  readonly singletonEntries: readonly ConfigurationSyncSingletonEntry[];
   readonly plan: ConfigurationSyncPlan;
 }
 
@@ -1378,26 +1379,27 @@ export async function prepareConfigurationSynchronization(input: {
   });
 }
 
-/** Creates the one incomplete draft that a newly synchronized page must own. */
-export function createConfigurationSyncPageEntry(input: {
+/** Creates the one incomplete draft that a newly synchronized page or global must own. */
+export function createConfigurationSyncSingletonEntry(input: {
   readonly appliedAt: UnixMilliseconds;
   readonly entryId: ContentEntryId | string;
   readonly model: NormalizedContentModel;
   readonly snapshotId: ContentSnapshotId | string;
-}): ConfigurationSyncPageEntry {
-  if (input.model.kind !== "page") {
+}): ConfigurationSyncSingletonEntry {
+  if (input.model.kind === "collection") {
     throw new DomainError(
       "CONTENT_INVALID_STATE",
-      "Only page models receive synchronized entries.",
+      "Only page and global models receive synchronized entries.",
     );
   }
   const entryId = contentEntryId(input.entryId);
   const snapshotId = contentSnapshotId(input.snapshotId);
-  const model: ContentModelRoute = Object.freeze({
-    key: contentModelKey(input.model.key),
-    kind: "page",
-    path: input.model.path,
-  });
+  const key = contentModelKey(input.model.key);
+  const model: ContentModelRoute = Object.freeze(
+    input.model.kind === "page"
+      ? { key, kind: "page" as const, path: input.model.path }
+      : { key, kind: "global" as const },
+  );
   const entry = createContentEntry({
     id: entryId,
     model,
@@ -1417,7 +1419,7 @@ export function createConfigurationSyncPageEntry(input: {
   return Object.freeze({ entry, modelKey: model.key });
 }
 
-/** Applies a freshly prepared valid plan and allocates identities only for page creates. */
+/** Applies a freshly prepared valid plan and allocates identities only for singleton creates. */
 /** One operator line describing the stored blocks an apply migrated. */
 export function configurationSyncMigrationSummary(
   counts: ConfigurationSyncMigrationCounts,
@@ -1574,13 +1576,13 @@ async function applyFinalMutation(
 ): Promise<ApplyConfigurationSynchronizationResult> {
   const models = new Map(input.models.map((model) => [model.key, model]));
   const appliedAt = input.clock.now();
-  const pageEntries: ConfigurationSyncPageEntry[] = [];
+  const singletonEntries: ConfigurationSyncSingletonEntry[] = [];
   for (const operation of prepared.plan.operations) {
     if (operation.action !== "create") continue;
     const model = models.get(operation.model.key);
-    if (model?.kind !== "page") continue;
-    pageEntries.push(
-      createConfigurationSyncPageEntry({
+    if (model === undefined || !isSingletonKind(model.kind)) continue;
+    singletonEntries.push(
+      createConfigurationSyncSingletonEntry({
         appliedAt,
         entryId: input.ids.next(),
         model,
@@ -1593,7 +1595,7 @@ async function applyFinalMutation(
     evidence: prepared.evidence,
     expectedStoredModels: prepared.storedModels,
     models: input.models,
-    pageEntries,
+    singletonEntries,
     plan: prepared.plan,
   });
 }

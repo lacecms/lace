@@ -56,6 +56,7 @@ import type {
   MediaReadPort,
   MediaUsageEntry,
   PublicContentEntry,
+  PublicGlobalContent,
   PublicContentReadPort,
   PublishContentEntryCommand,
   PublishContentEntryResult,
@@ -91,6 +92,7 @@ import {
   PENDING_SITE_BUILD_SQL,
   PUBLICATION_IDEMPOTENCY_TTL_MS,
   PUBLIC_MEDIA_SQL,
+  PUBLIC_GLOBAL_SQL,
   PUBLIC_ROUTE_SQL,
   SNAPSHOT_COLUMNS_SQL,
   SQL_MAX_PAGE_SIZE,
@@ -139,6 +141,7 @@ import {
   mediaUsageEntries,
   parseObject,
   publicContentEntry,
+  publicGlobalContent,
   publicSnapshotMedia,
   publicSnapshotMediaSql,
   revisionConflict,
@@ -173,6 +176,7 @@ import type {
   EntryRow,
   MediaUsageRow,
   OutboxRow,
+  PublicGlobalRow,
   PublicRow,
   SiteBuildRow,
   SnapshotRow,
@@ -189,7 +193,8 @@ import type {
 } from "@lacecms/db";
 import {
   DomainError,
-  resolveContentPublicPath,
+  contentPublicPath,
+  isSingletonKind,
   siteBuildId,
   unixMilliseconds,
 } from "@lacecms/domain";
@@ -197,6 +202,7 @@ import type {
   ActorId,
   ContentBlock,
   ContentEntry,
+  ContentModelKey,
   DraftSnapshot,
   MediaMetadata,
   PublishedSnapshot,
@@ -579,6 +585,18 @@ export class D1ContentRepository
       : null;
   }
 
+  public async loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null> {
+    const row = await this.first<PublicGlobalRow>(
+      `${PUBLIC_GLOBAL_SQL} where e.model_key = ? limit 1`,
+      modelKey,
+    );
+    if (row === undefined) return null;
+    const entries = await this.hydrate([row]);
+    return entries.has(row.id)
+      ? publicGlobalContent(row, entries, await this.publicMedia([row]))
+      : null;
+  }
+
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
     const row = await this.first(PUBLIC_MEDIA_SQL, id);
     return row === undefined ? null : mediaMetadata(row);
@@ -680,10 +698,15 @@ export class D1ContentRepository
 
   public async exportBuildContent(): Promise<BuildContentExport> {
     const rows = await this.all<PublicRow>(`${PUBLIC_ROUTE_SQL} order by r.path asc`);
-    const entries = await this.hydrate(rows);
-    const media = await this.publicMedia(rows);
+    const globalRows = await this.all<PublicGlobalRow>(
+      `${PUBLIC_GLOBAL_SQL} order by e.model_key asc`,
+    );
+    // One hydration and media pass covers routed entries and globals.
+    const entries = await this.hydrate([...rows, ...globalRows]);
+    const media = await this.publicMedia([...rows, ...globalRows]);
     return Object.freeze({
       entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
+      globals: Object.freeze(globalRows.map((row) => publicGlobalContent(row, entries, media))),
       version: await this.publishedContentVersion(),
     });
   }
@@ -726,7 +749,7 @@ export class D1ContentRepository
       `insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) select ?, ?, ?, ?, ?, ? ${guarded}`,
       id,
       model.key,
-      model.kind === "page" ? 1 : null,
+      isSingletonKind(model.kind) ? 1 : null,
       draft.updatedBy.id,
       draft.createdAt,
       draft.updatedAt,
@@ -742,7 +765,7 @@ export class D1ContentRepository
       ...(token === undefined ? [] : [token]),
     );
     if (token !== undefined) this.releaseGuard(batch, token);
-    const results = await this.execute(batch, model.kind === "page");
+    const results = await this.execute(batch, isSingletonKind(model.kind));
     if (source !== undefined && results[0]!.meta.changes !== 1) {
       const current = await this.first<{ readonly revision: number }>(
         DUPLICATE_SOURCE_REVISION_SQL,
@@ -806,7 +829,7 @@ export class D1ContentRepository
   public async publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult> {
     const entry = await this.loadEntry(input.entryId);
     if (entry === null) failure("Content entry does not exist.");
-    const path = resolveContentPublicPath(entry.model, entry.draft.slug);
+    const path = contentPublicPath(entry.model, entry.draft.slug);
     const idempotency = input.idempotency;
     const scope =
       idempotency === undefined ? undefined : `publication:${input.entryId}:${idempotency.actorId}`;
@@ -865,20 +888,23 @@ export class D1ContentRepository
       draftId,
       ...exists.params,
     );
-    batch.checkpoint("publish.route");
-    batch.add(
-      `delete from published_routes where entry_id = ? and ${exists.sql}`,
-      input.entryId,
-      ...exists.params,
-    );
-    batch.add(
-      `insert into published_routes (path, entry_id, snapshot_id, updated_at) select ?, ?, ?, ? where ${exists.sql}`,
-      path,
-      input.entryId,
-      newId,
-      input.publishedAt,
-      ...exists.params,
-    );
+    // A global has no route; its publication only replaces the snapshot.
+    if (path !== undefined) {
+      batch.checkpoint("publish.route");
+      batch.add(
+        `delete from published_routes where entry_id = ? and ${exists.sql}`,
+        input.entryId,
+        ...exists.params,
+      );
+      batch.add(
+        `insert into published_routes (path, entry_id, snapshot_id, updated_at) select ?, ?, ?, ? where ${exists.sql}`,
+        path,
+        input.entryId,
+        newId,
+        input.publishedAt,
+        ...exists.params,
+      );
+    }
     batch.add(
       `update content_entries set published_snapshot_id = ?, updated_at = ? where id = ? and ${exists.sql}`,
       newId,
@@ -1148,7 +1174,7 @@ export class D1ContentRepository
     }
     const expectedByKey = new Map(input.expectedStoredModels.map((model) => [model.key, model]));
     const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
-    const pageEntries = new Map(input.pageEntries.map((page) => [page.modelKey, page]));
+    const singletonEntries = new Map(input.singletonEntries.map((page) => [page.modelKey, page]));
     const batch = this.batch();
     const token = this.guard(batch, input.appliedAt, {
       params: [json],
@@ -1174,10 +1200,10 @@ export class D1ContentRepository
           input.appliedAt,
           token,
         );
-        if (configuration.kind === "page") {
-          const page = pageEntries.get(operation.model.key);
+        if (isSingletonKind(configuration.kind)) {
+          const page = singletonEntries.get(operation.model.key);
           if (page === undefined || page.entry.model.key !== operation.model.key) {
-            failure("Page synchronization entry is missing or invalid.");
+            failure("Singleton synchronization entry is missing or invalid.");
           }
           const draft = page.entry.draft;
           assertDraftPersistenceBounds(draft.blocks, []);
@@ -1882,7 +1908,7 @@ export class D1ContentRepository
   }
 
   private async publicMedia(
-    rows: readonly PublicRow[],
+    rows: readonly EntryRow[],
   ): Promise<Map<string, readonly MediaMetadata[]>> {
     const ids = rows.flatMap((row) =>
       row.published_snapshot_id === null ? [] : [row.published_snapshot_id],

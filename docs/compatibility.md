@@ -115,6 +115,16 @@ migrations `0005_content_model_structure` and `0006_media_descriptive_metadata`
 and a configuration sync after raising the version of every model that allows
 the version 2 `image` block, as the `0.23.0` upgrade instructions state.
 
+The same next alpha adds route-less `global` models (CE5,
+[ADR 0010](adr/0010-global-models.md)): a new anonymous
+`GET /api/v1/public/globals/:modelKey` route, an additive `globals` key in the
+build export (the SDK treats a missing key as empty, so older exports stay
+valid; older SDKs reject the new key because the export schema is strict), and
+`kind: "global"` in admin model and entry DTOs. It requires migration
+`0007_content_model_global_kind`, a table rebuild of `content_models`; back up
+before migrating, because rolling back after a global exists means restoring
+that backup.
+
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
 projects upgrading from `0.14.0`. Upgrading an alpha.2 installation also

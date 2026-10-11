@@ -70,11 +70,22 @@ export interface PublishedEntry extends PublishedMediaLookup {
   readonly title: string;
 }
 
+/** The published content of one route-less global; no path, slug, or title. */
+export interface PublishedGlobal extends PublishedMediaLookup {
+  readonly blocks: readonly PublishedBlock[];
+  readonly fields: PublicEntryDto["fields"];
+  readonly id: string;
+  readonly modelKey: string;
+  readonly publishedAt: string;
+}
+
 /** An immutable view of one published build export. */
 export interface PublishedSite extends PublishedMediaLookup {
   byPath(path: string): PublishedEntry | undefined;
   bySlug(modelKey: string, slug: string): PublishedEntry | undefined;
   entries(modelKey: string): readonly PublishedEntry[];
+  /** The published global of a model, or `undefined` when it is not published. */
+  global(modelKey: string): PublishedGlobal | undefined;
   mediaUrl(mediaId: string): string;
   readonly version: number;
 }
@@ -258,6 +269,30 @@ export function createPublishedSiteLoader(
         bySlug.set(published.modelKey, slugs);
       }
     }
+    const globals = new Map<string, PublishedGlobal>();
+    for (const global of exported.globals) {
+      if (globals.has(global.modelKey) || byModel.has(global.modelKey))
+        failure(
+          "invalid_export",
+          `The build export contains global ${global.modelKey} more than once or also as entries.`,
+        );
+      globals.set(
+        global.modelKey,
+        Object.freeze({
+          blocks: Object.freeze(
+            [...global.blocks]
+              .sort((left, right) => left.position - right.position)
+              .map((block) => Object.freeze(block)),
+          ),
+          fields: global.fields,
+          id: global.id,
+          image: lookup.image,
+          media: lookup.media,
+          modelKey: global.modelKey,
+          publishedAt: global.publishedAt,
+        }),
+      );
+    }
     const listings = new Map<string, readonly PublishedEntry[]>();
     for (const [modelKey, modelEntries] of byModel) {
       listings.set(
@@ -270,6 +305,7 @@ export function createPublishedSiteLoader(
       byPath: (path: string) => byPath.get(path),
       bySlug: (modelKey: string, slug: string) => bySlug.get(modelKey)?.get(slug),
       entries: (modelKey: string) => listings.get(modelKey) ?? empty,
+      global: (modelKey: string) => globals.get(modelKey),
       image: lookup.image,
       media: lookup.media,
       mediaUrl: (mediaId: string) =>

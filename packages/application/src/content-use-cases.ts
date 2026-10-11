@@ -19,7 +19,7 @@ import {
   mediaId,
   requirePermission,
   requirePublishedSnapshot,
-  resolveContentPublicPath,
+  contentPublicPath,
 } from "@lacecms/domain";
 import type {
   Actor,
@@ -177,11 +177,24 @@ function detached<Value>(value: Value): Value {
   return JSON.parse(JSON.stringify(value)) as Value;
 }
 
-function modelRoute(model: NormalizedContentModel): ContentModelRoute {
+/** Maps a configured model to the route identity stored with its entries. */
+export function contentModelRoute(model: NormalizedContentModel): ContentModelRoute {
   const key = contentModelKey(model.key);
-  return model.kind === "page"
-    ? { key, kind: "page", path: model.path }
-    : { key, kind: "collection", route: model.route };
+  switch (model.kind) {
+    case "page":
+      return { key, kind: "page", path: model.path };
+    case "collection":
+      return { key, kind: "collection", route: model.route };
+    case "global":
+      return { key, kind: "global" };
+    default:
+      return model satisfies never;
+  }
+}
+
+/** A global's title is system-owned: always its model label, or its key. */
+function systemTitle(model: NormalizedContentModel, title: string): string {
+  return model.kind === "global" ? (model.label ?? model.key) : title;
 }
 
 function commandEntry(result: ContentCommandResult): ContentEntry {
@@ -201,7 +214,11 @@ export class ContentUseCases {
   public async create(input: CreateContentEntryUseCaseInput): Promise<ContentEntry> {
     requirePermission(input.actor, "content:write");
     const model = this.model(input.modelKey);
-    const draft = await this.validateDraft(input, model, "draft");
+    const draft = await this.validateDraft(
+      { ...input, title: systemTitle(model, input.title) },
+      model,
+      "draft",
+    );
     const now = this.dependencies.clock.now();
     const id = contentEntryId(this.dependencies.idGenerator.next());
     const entry = createContentEntry({
@@ -216,7 +233,7 @@ export class ContentUseCases {
         updatedBy: input.actor,
       },
       id,
-      model: modelRoute(model),
+      model: contentModelRoute(model),
     });
     return commandEntry(
       await this.dependencies.content.create({ entry, mediaReferences: draft.mediaReferences }),
@@ -288,7 +305,12 @@ export class ContentUseCases {
   public async save(input: SaveContentDraftUseCaseInput): Promise<ContentEntry> {
     requirePermission(input.actor, "content:write");
     const entry = await this.entry(input.entryId);
-    const draft = await this.validateDraft(input, this.model(entry.model.key), "draft");
+    const model = this.model(entry.model.key);
+    const draft = await this.validateDraft(
+      { ...input, title: systemTitle(model, input.title) },
+      model,
+      "draft",
+    );
     return commandEntry(
       await this.dependencies.content.saveCompleteDraft({
         entryId: entry.id,
@@ -308,7 +330,7 @@ export class ContentUseCases {
     requirePermission(input.actor, "content:publish");
     const entry = await this.entry(input.entryId);
     const draft = await this.validateDraft(entry.draft, this.model(entry.model.key), "publish");
-    resolveContentPublicPath(entry.model, draft.slug);
+    contentPublicPath(entry.model, draft.slug);
     const result = await this.dependencies.content.publish({
       entryId: entry.id,
       expectedRevision: input.expectedRevision,
@@ -422,7 +444,7 @@ export class ContentUseCases {
         updatedBy: input.actor,
       },
       id,
-      model: modelRoute(model),
+      model: contentModelRoute(model),
     });
     return commandEntry(
       await this.dependencies.content.create({

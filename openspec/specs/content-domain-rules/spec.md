@@ -66,12 +66,14 @@ stable authorization error code.
 - **THEN** only the read permission is granted
 
 ### Requirement: Content cardinality, paths, and block ordering
-The system SHALL permit exactly one entry for a `page` model and any number of
-entries for a `collection` model. A page's public path SHALL be its fixed
-canonical model path. A collection entry SHALL resolve its canonical route from
-the model's single `:slug` segment only when it has a valid lowercase ASCII
-slug of letters or digits separated by single hyphens. A resolved public path
-SHALL conflict when it is already owned by a different entry.
+The system SHALL permit exactly one entry for a `page` model and for a `global`
+model, and any number of entries for a `collection` model. A page's public path
+SHALL be its fixed canonical model path. A global SHALL have no public path and
+SHALL never own a published route. A collection entry SHALL resolve its
+canonical route from the model's single `:slug` segment only when it has a
+valid lowercase ASCII slug of letters or digits separated by single hyphens. A
+resolved public path SHALL conflict when it is already owned by a different
+entry.
 
 Blocks SHALL form one flat ordered list with unique stable keys and positive,
 strictly increasing safe-integer positions. New or normalized positions SHALL
@@ -92,6 +94,15 @@ The domain SHALL NOT sort or normalize invalid client input into acceptance.
   singleton entry
 - **THEN** the operation is rejected with the stable page-cardinality conflict
   code
+
+#### Scenario: Detect a global singleton race
+- **WHEN** a second entry is created for a `global` model that already has its
+  singleton entry
+- **THEN** the operation is rejected with the same cardinality conflict code
+
+#### Scenario: A global has no public path
+- **WHEN** the domain is asked for the public path of a global entry
+- **THEN** it reports that the entry has no route instead of resolving a path
 
 #### Scenario: Resolve a published collection path
 - **WHEN** a collection with route `/blog/:slug` publishes an entry with slug
@@ -124,15 +135,18 @@ snapshot from the current draft while retaining an independent mutable draft;
 later draft mutations SHALL not alter the published snapshot. A later
 publication SHALL replace the one current published snapshot without creating
 application-level revision history. Unpublication SHALL remove the current
-published snapshot and its route while leaving the draft, its revision, and its
-content unchanged; the removed snapshot SHALL not be recoverable, and a later
-publication SHALL publish the then-current draft. Reverting a draft SHALL
-replace the draft's title, slug, fields, blocks, and media references with the
-published snapshot's values, advance the draft revision by exactly one, and set
-the published snapshot's revision to the new draft revision without changing
-its content, so an entry whose draft equals its publication is derived as
-`published`. Page entries SHALL exist for as long as their page model is
-configured; they SHALL not be deleted or duplicated through content commands.
+published snapshot and its route, if any, while leaving the draft, its
+revision, and its content unchanged; the removed snapshot SHALL not be
+recoverable, and a later publication SHALL publish the then-current draft.
+Reverting a draft SHALL replace the draft's title, slug, fields, blocks, and
+media references with the published snapshot's values, advance the draft
+revision by exactly one, and set the published snapshot's revision to the new
+draft revision without changing its content, so an entry whose draft equals
+its publication is derived as `published`. Page and global entries SHALL exist
+for as long as their model is configured; they SHALL not be deleted or
+duplicated through content commands, and such a request SHALL fail with
+`CONTENT_PAGE_SINGLETON`, whose message names configuration-defined singleton
+entries rather than pages only.
 
 #### Scenario: Preserve published content after a later draft save
 - **WHEN** an entry is published and its draft is subsequently saved with a
@@ -162,3 +176,7 @@ configured; they SHALL not be deleted or duplicated through content commands.
 - **THEN** the draft holds the published title, slug, fields, and blocks at
   revision 6, the published snapshot keeps its content with revision 6, and the
   entry is derived as `published`
+
+#### Scenario: A global entry cannot be deleted or duplicated
+- **WHEN** a delete or duplicate operation targets a global entry
+- **THEN** it fails with `CONTENT_PAGE_SINGLETON` and the entry is unchanged

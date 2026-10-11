@@ -477,3 +477,75 @@ test("revalidation retains the latest weak 304 validator and recovers after malf
   expect((await getSite()).version).toBe(8);
   expect(conditions).toEqual([null, '"7"', 'W/"7"', 'W/"7"']);
 });
+
+function exportGlobal({
+  id = "settings-entry",
+  modelKey = "settings",
+  blocks = [],
+  fields = {},
+} = {}) {
+  return { blocks, fields, id, modelKey, publishedAt: timestamp };
+}
+
+test("the site view exposes published globals by model key", async () => {
+  const value = {
+    ...buildExport(4, [exportEntry({ id: "home", modelKey: "home", path: "/" })], {
+      logo: mediaItem("logo", { alt: "Lace logo" }),
+    }),
+    globals: [
+      exportGlobal({
+        blocks: [block("second", 2000), block("first", 1000)],
+        fields: { logo: "logo", siteName: "Lace" },
+      }),
+    ],
+  };
+  const site = await createPublishedSiteLoader({
+    environment: { ...environment, LACE_PUBLIC_BASE_URL: "https://media.example.test/base" },
+    fetch: scriptedFetch([exportResponse(value)]).fetch,
+  })();
+  const settings = site.global("settings");
+  expect(settings).toMatchObject({
+    fields: { logo: "logo", siteName: "Lace" },
+    id: "settings-entry",
+    modelKey: "settings",
+    publishedAt: timestamp,
+  });
+  expect(settings.blocks.map((item) => item.key)).toEqual(["first", "second"]);
+  for (const key of ["path", "slug", "title", "draft"]) expect(settings).not.toHaveProperty(key);
+  expect(Object.isFrozen(settings)).toBe(true);
+  expect(settings.image("logo")).toMatchObject({
+    alt: "Lace logo",
+    url: "https://media.example.test/base/api/v1/public/media/logo",
+  });
+  expect(settings.image("logo", "Brand")).toMatchObject({ alt: "Brand" });
+  expect(site.global("home")).toBeUndefined();
+  expect(site.global("footer")).toBeUndefined();
+  expect(site.entries("settings")).toEqual([]);
+  expect(site.byPath("/")).toMatchObject({ id: "home" });
+});
+
+test("an export without globals has no globals", async () => {
+  const site = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([exportResponse(buildExport(1, []))]).fetch,
+  })();
+  expect(site.global("settings")).toBeUndefined();
+});
+
+test.each([
+  ["a duplicate global key", [], [exportGlobal(), exportGlobal({ id: "other" })]],
+  [
+    "a global key shared with entries",
+    [exportEntry({ id: "page", modelKey: "settings", path: "/settings" })],
+    [exportGlobal()],
+  ],
+])("rejects %s", async (_name, entries, globals) => {
+  const error = await captureError(
+    createPublishedSiteLoader({
+      environment,
+      fetch: scriptedFetch([exportResponse({ ...buildExport(1, entries), globals })]).fetch,
+    })(),
+  );
+  expect(error.code).toBe("invalid_export");
+  expect(error.message).toContain("settings");
+});

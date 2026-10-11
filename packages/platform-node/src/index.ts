@@ -55,7 +55,19 @@ export function migrateNodeDatabase(databasePath: string): readonly AppliedMigra
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true });
   const database = openNodeDatabase(databasePath);
   try {
+    // SQLite's documented table-rebuild procedure: a rebuild of a referenced table
+    // (migration 0007) cannot commit under deferred enforcement on Node SQLite, so
+    // the migrator's own connection suspends foreign keys and verifies integrity
+    // before restoring them. Application connections always keep them on.
+    database.connection.pragma("foreign_keys = OFF");
     migrate(database.drizzle, { migrationsFolder: migrationFolder });
+    const violations = database.connection.pragma("foreign_key_check") as readonly unknown[];
+    if (violations.length > 0) {
+      throw new Error(
+        `Database migration left ${violations.length} foreign-key violation(s); restore the backup taken before migrating.`,
+      );
+    }
+    database.connection.pragma("foreign_keys = ON");
     return listAppliedMigrations(database.connection);
   } finally {
     database.connection.close();

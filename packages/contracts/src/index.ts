@@ -181,7 +181,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
 function hasValidListFields<
   Value extends {
     readonly fields: FieldMetadataMapDto;
-    readonly kind: "collection" | "page";
+    readonly kind: ContentModelKind;
     readonly listFields?: readonly string[] | undefined;
   },
 >(value: Value): boolean {
@@ -192,6 +192,17 @@ function hasValidListFields<
     new Set(value.listFields).size === value.listFields.length &&
     value.listFields.every((key) => Object.hasOwn(value.fields, key))
   );
+}
+
+/** A global is route-less: it carries neither a page path nor a collection route. */
+function hasGlobalRouting<
+  Value extends {
+    readonly kind: ContentModelKind;
+    readonly path?: string | undefined;
+    readonly route?: string | undefined;
+  },
+>(value: Value): boolean {
+  return value.kind !== "global" || (value.path === undefined && value.route === undefined);
 }
 
 function hasMatchingBlockDefinitions<
@@ -251,6 +262,7 @@ export function versionFromEntityTag(value: string): number {
 export const contentModelRouteSchema = v.union([
   v.strictObject({ kind: v.literal("page"), key: identifierSchema, path: v.string() }),
   v.strictObject({ kind: v.literal("collection"), key: identifierSchema, route: v.string() }),
+  v.strictObject({ kind: v.literal("global"), key: identifierSchema }),
 ]);
 
 export const actorSchema = v.strictObject({
@@ -437,7 +449,7 @@ export const contentModelSchema = v.pipe(
     description: v.optional(v.string()),
     fields: fieldMetadataMapSchema,
     key: identifierSchema,
-    kind: v.picklist(["collection", "page"]),
+    kind: v.picklist(["collection", "global", "page"]),
     label: v.optional(v.string()),
     listFields: v.optional(v.array(identifierSchema)),
     path: v.optional(v.string()),
@@ -446,6 +458,7 @@ export const contentModelSchema = v.pipe(
   }),
   v.check(hasMatchingBlockDefinitions, "Block definitions must match the model's allowed blocks."),
   v.check(hasValidListFields, "List fields must name distinct fields of a collection."),
+  v.check(hasGlobalRouting, "A global model carries no path or route."),
 );
 export const contentModelListSchema = v.strictObject({ items: v.array(contentModelSchema) });
 
@@ -774,6 +787,20 @@ export const publicMediaDictionarySchema = v.pipe(
   ),
 );
 
+/** One published route-less global; no path, slug, title, draft, or editorial data. */
+export const publicGlobalSchema = v.strictObject({
+  blocks: v.array(contentBlockSchema),
+  fields: jsonObjectSchema,
+  id: identifierSchema,
+  modelKey: identifierSchema,
+  publishedAt: isoTimestampSchema,
+});
+
+export const publicGlobalContentSchema = v.strictObject({
+  global: publicGlobalSchema,
+  media: publicMediaDictionarySchema,
+});
+
 export const publicContentEntrySchema = v.strictObject({
   entry: publicEntrySchema,
   media: publicMediaDictionarySchema,
@@ -785,6 +812,8 @@ export const publicContentListSchema = v.strictObject({
 });
 export const buildExportSchema = v.strictObject({
   entries: v.array(publicEntrySchema),
+  /** Always sent by the API; exports produced before globals existed omit it. */
+  globals: v.optional(v.array(publicGlobalSchema), []),
   media: publicMediaDictionarySchema,
   version: nonNegativeIntegerSchema,
 });
@@ -1026,6 +1055,8 @@ export type PublicEntryDto = v.InferOutput<typeof publicEntrySchema>;
 export type PublicMediaDto = v.InferOutput<typeof publicMediaSchema>;
 export type PublicMediaDictionaryDto = v.InferOutput<typeof publicMediaDictionarySchema>;
 export type PublicContentEntryDto = v.InferOutput<typeof publicContentEntrySchema>;
+export type PublicGlobalDto = v.InferOutput<typeof publicGlobalSchema>;
+export type PublicGlobalContentDto = v.InferOutput<typeof publicGlobalContentSchema>;
 export type PublicContentListDto = v.InferOutput<typeof publicContentListSchema>;
 export type BuildExportDto = v.InferOutput<typeof buildExportSchema>;
 export type MediaMetadataDto = v.InferOutput<typeof mediaMetadataSchema>;
@@ -1046,9 +1077,16 @@ export type ContractValidationIssue = v.InferOutput<typeof contractValidationIss
 
 /** Maps a portable route without importing configuration or persistence types. */
 export function toContentModelRouteDto(route: ContentModelRoute) {
-  return route.kind === "page"
-    ? { kind: "page" as const, key: route.key, path: route.path }
-    : { kind: "collection" as const, key: route.key, route: route.route };
+  switch (route.kind) {
+    case "page":
+      return { kind: "page" as const, key: route.key, path: route.path };
+    case "collection":
+      return { kind: "collection" as const, key: route.key, route: route.route };
+    case "global":
+      return { kind: "global" as const, key: route.key };
+    default:
+      return route satisfies never;
+  }
 }
 
 export function toContentBlockDto(block: ContentBlock): ContentBlockDto {
@@ -1367,6 +1405,21 @@ export function toPublicEntryDto(entry: ContentEntry, path: string): PublicEntry
   };
 }
 
+/** Maps the published snapshot of a global; the draft and its title are never read. */
+export function toPublicGlobalDto(entry: ContentEntry): PublicGlobalDto {
+  const snapshot = entry.published;
+  if (snapshot === undefined) throw new TypeError("A public global requires a published snapshot.");
+  return {
+    blocks: [...snapshot.blocks]
+      .sort((left, right) => left.position - right.position)
+      .map(toContentBlockDto),
+    fields: snapshot.fields,
+    id: entry.id,
+    modelKey: entry.model.key,
+    publishedAt: toIsoTimestamp(snapshot.createdAt),
+  };
+}
+
 export function toPublicMediaDto(media: PublicMediaSource, url: string): PublicMediaDto {
   return {
     alt: media.alt ?? null,
@@ -1420,16 +1473,35 @@ export function toPublicContentListDto(
   };
 }
 
+/** A published global and the media its publication references. */
+export interface PublicGlobalSource {
+  readonly entry: ContentEntry;
+  readonly media: readonly PublicMediaSource[];
+}
+
+export function toPublicGlobalContentDto(
+  value: PublicGlobalSource,
+  urlFor: PublicMediaUrl,
+): PublicGlobalContentDto {
+  return {
+    global: toPublicGlobalDto(value.entry),
+    media: toPublicMediaDictionary(value.media, urlFor),
+  };
+}
+
 export interface BuildExportSource {
   readonly entries: readonly PublicEntrySource[];
+  readonly globals?: readonly PublicGlobalSource[];
   readonly version: number;
 }
 
 export function toBuildExportDto(value: BuildExportSource, urlFor: PublicMediaUrl): BuildExportDto {
+  const globals = value.globals ?? [];
   return {
     entries: value.entries.map(({ entry, path }) => toPublicEntryDto(entry, path)),
+    globals: globals.map(({ entry }) => toPublicGlobalDto(entry)),
     media: toPublicMediaDictionary(
-      value.entries.flatMap((item) => item.media),
+      [...value.entries.flatMap((item) => item.media), ...globals.flatMap((item) => item.media)],
       urlFor,
     ),
     version: value.version,
@@ -1515,7 +1587,7 @@ const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
   CONTENT_INVALID_STATE: "The requested content operation is invalid.",
   CONTENT_MODEL_CARDINALITY_CONFLICT: "The content model cannot accept another entry.",
   CONTENT_NOT_PUBLISHED: "The entry is not published.",
-  CONTENT_PAGE_SINGLETON: "Page entries are defined by configuration.",
+  CONTENT_PAGE_SINGLETON: "Page and global entries are defined by configuration.",
   CONTENT_PUBLISHED_IMMUTABLE: "Published content cannot be modified.",
   CONTENT_REVISION_CONFLICT: "The draft was modified by another request.",
   CONTENT_ROUTE_CONFLICT: "The public route is already in use.",

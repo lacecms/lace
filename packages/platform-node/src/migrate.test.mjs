@@ -316,3 +316,124 @@ test("media metadata migration upgrades a 0005 database with referenced media", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+async function databaseAtMigration(root, before, seed) {
+  const { cp } = await import("node:fs/promises");
+  const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
+  const source = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
+  const previous = join(root, "previous");
+  const path = join(root, "lace.sqlite");
+  await cp(source, previous, { recursive: true });
+  const journalPath = join(previous, "meta", "_journal.json");
+  const journal = JSON.parse(await readFile(journalPath, "utf8"));
+  journal.entries = journal.entries.filter((entry) => entry.idx < before);
+  await writeFile(journalPath, JSON.stringify(journal));
+  const database = openNodeDatabase(path);
+  try {
+    migrate(database.drizzle, { migrationsFolder: previous });
+    seed(database.connection);
+  } finally {
+    database.connection.close();
+  }
+  return path;
+}
+
+const POPULATED_0006 = [
+  "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) values ('home', 'page', 'Home', 1, 's-home', 'p-home', '{}', 's-home', 1, 2)",
+  "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 2, 's-posts', 'p-posts', 1, 2)",
+  "insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) values ('home', 'home', 1, 'admin', 1, 1)",
+  "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+  "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('d1', 'e1', 1, 'post', 'Post', '{}', 2, 1, 1, 'admin')",
+  "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('p1', 'e1', 1, 'post', 'Post', '{}', 2, 1, 1, 'admin')",
+  "update content_entries set draft_snapshot_id = 'd1', published_snapshot_id = 'p1' where id = 'e1'",
+  "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values ('p1', 'b1', 'image', 1000, 2, '{\"image\":\"m1\"}', 1, 1)",
+  "insert into published_routes (path, entry_id, snapshot_id, updated_at) values ('/blog/post', 'e1', 'p1', 1)",
+  "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+  "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('p1', 'b1', 'image', 'm1', 1)",
+];
+
+const CONTENT_TABLES = [
+  "content_models",
+  "content_entries",
+  "content_snapshots",
+  "content_blocks",
+  "published_routes",
+  "content_media_references",
+];
+
+function snapshotTables(connection) {
+  return Object.fromEntries(
+    CONTENT_TABLES.map((table) => [
+      table,
+      connection.prepare(`select * from ${table} order by 1, 2`).all(),
+    ]),
+  );
+}
+
+test("global-kind migration rebuilds content models of a populated 0006 database", async () => {
+  const { checkedInMigrations, listAppliedMigrations } = await import("../dist/index.js");
+  const root = await mkdtemp(join(tmpdir(), "lace-global-kind-"));
+  try {
+    let before;
+    const path = await databaseAtMigration(root, 7, (connection) => {
+      for (const statement of POPULATED_0006) connection.prepare(statement).run();
+      before = snapshotTables(connection);
+    });
+    migrateNodeDatabase(path);
+    const migrated = openNodeDatabase(path);
+    try {
+      const connection = migrated.connection;
+      expect(connection.pragma("foreign_keys", { simple: true })).toBe(1);
+      expect(listAppliedMigrations(connection)).toHaveLength(checkedInMigrations.length);
+      expect(snapshotTables(connection)).toEqual(before);
+      connection
+        .prepare(
+          "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('settings', 'global', 'Settings', 1, 's', 'p', 3, 3)",
+        )
+        .run();
+      expect(() =>
+        connection
+          .prepare(
+            "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('bad', 'singleton', 'Bad', 1, 's', 'p', 3, 3)",
+          )
+          .run(),
+      ).toThrow(/CHECK constraint/u);
+      expect(() =>
+        connection.prepare("delete from content_models where key = 'posts'").run(),
+      ).toThrow(/FOREIGN KEY/u);
+      expect(() =>
+        connection
+          .prepare(
+            "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e2', 'missing', 'admin', 1, 1)",
+          )
+          .run(),
+      ).toThrow(/FOREIGN KEY/u);
+      connection.prepare("update content_models set key = 'articles' where key = 'posts'").run();
+      expect(
+        connection.prepare("select model_key from content_entries where id = 'e1'").get(),
+      ).toEqual({ model_key: "articles" });
+      expect(connection.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      migrated.connection.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Node migration refuses to report success over a foreign-key violation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lace-fk-violation-"));
+  try {
+    const path = await databaseAtMigration(root, 7, (connection) => {
+      connection.pragma("foreign_keys = OFF");
+      connection
+        .prepare(
+          "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('orphan', 'missing', 'admin', 1, 1)",
+        )
+        .run();
+    });
+    expect(() => migrateNodeDatabase(path)).toThrow(/foreign-key violation/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

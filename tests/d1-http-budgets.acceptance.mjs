@@ -264,8 +264,12 @@ test("34B D1 exports 100/201/501 complete published entries across hydration chu
         200,
       );
       expect(exported.entries).toHaveLength(size);
-      // Per 100 entries: two snapshot chunks, two block chunks and one referenced-media chunk.
-      expect(f.count.stats.queries).toBeLessThanOrEqual(8 + 5 * Math.ceil(size / 100));
+      expect(exported.globals).toEqual([]);
+      // One query lists published globals; then per 100 entries or globals: two snapshot
+      // chunks, two block chunks and one referenced-media chunk.
+      expect(f.count.stats.queries).toBeLessThanOrEqual(
+        9 + 5 * Math.ceil((size + exported.globals.length) / 100),
+      );
       expect(JSON.stringify(exported)).not.toContain("PRIVATE DRAFT SENTINEL");
       expect(
         exported.entries.map(({ id, path, title, fields, blocks }) => ({

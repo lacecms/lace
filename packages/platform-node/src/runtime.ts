@@ -1,5 +1,10 @@
 import { engineVersion } from "./release-version.js";
-import { ContentUseCases, MediaUseCases, SiteBuildUseCases } from "@lacecms/application";
+import {
+  ContentUseCases,
+  MediaUseCases,
+  SiteBuildUseCases,
+  contentModelRoute,
+} from "@lacecms/application";
 import type {
   Cache,
   Clock,
@@ -12,7 +17,7 @@ import { type ContentModelDefinition, type NormalizedConfig } from "@lacecms/con
 import { resolveNodeClientAddress, trustedProxyPolicy } from "./client-address.js";
 import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
 import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
-import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
+import { unixMilliseconds } from "@lacecms/domain";
 import {
   createEmailSender,
   createLaceApp,
@@ -438,10 +443,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     database.connection,
     (key) => {
       const model = input.config.runtime.content.find((candidate) => candidate.key === key);
-      if (model === undefined) return undefined;
-      return model.kind === "page"
-        ? { key: contentModelKey(model.key), kind: "page", path: model.path }
-        : { key: contentModelKey(model.key), kind: "collection", route: model.route };
+      return model === undefined ? undefined : contentModelRoute(model);
     },
     { nextId: () => ids.next() },
   );

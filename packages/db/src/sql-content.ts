@@ -23,6 +23,7 @@ import type {
   MediaUsageLocation,
   MediaUsageState,
   PublicContentEntry,
+  PublicGlobalContent,
   ConfigurationSyncMediaReference,
   ConfigurationSyncMigrationBlock,
   ConfigurationSyncMigrationPage,
@@ -298,6 +299,10 @@ export interface PublicRow extends EntryRow {
   readonly published_created_at: number;
 }
 
+export interface PublicGlobalRow extends EntryRow {
+  readonly published_created_at: number;
+}
+
 export interface StoredModelStateRow {
   readonly draft_snapshot_count: number;
   readonly entry_count: number;
@@ -405,6 +410,12 @@ export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, 
    from published_routes r
    join content_entries e on e.id = r.entry_id and e.published_snapshot_id = r.snapshot_id
    join content_snapshots s on s.id = r.snapshot_id`;
+/** Published route-less globals; never joins `published_routes`. */
+export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
+        s.created_at as published_created_at
+   from content_entries e
+   join content_models m on m.key = e.model_key and m.kind = 'global'
+   join content_snapshots s on s.id = e.published_snapshot_id`;
 export const PUBLIC_MEDIA_SQL = `select ${MEDIA_COLUMNS_SQL}
    from media m
   where m.id = ? and exists (
@@ -995,7 +1006,7 @@ export function storedModelStates(
 ): readonly StoredContentModelState[] {
   return Object.freeze(
     rows.map((row) => {
-      if (row.kind !== "collection" && row.kind !== "page")
+      if (row.kind !== "collection" && row.kind !== "global" && row.kind !== "page")
         failure("Stored model kind is invalid.");
       return Object.freeze({
         draftSnapshotCount: row.draft_snapshot_count,
@@ -1589,6 +1600,20 @@ export function publicContentEntry(
   });
 }
 
+/** Projects a published global row into a public global with its referenced media. */
+export function publicGlobalContent(
+  row: PublicGlobalRow,
+  entries: ReadonlyMap<string, ContentEntry>,
+  media: ReadonlyMap<string, readonly MediaMetadata[]>,
+): PublicGlobalContent {
+  const entry = entries.get(row.id);
+  if (entry === undefined) failure("Published global references an unreadable entry.");
+  return Object.freeze({
+    entry: publicEntry(entry),
+    media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
+  });
+}
+
 /** Public projections cannot disclose the independently mutable draft snapshot. */
 export function publicEntry(entry: ContentEntry): ContentEntry {
   if (entry.published === undefined) failure("Public entry is missing its published snapshot.");
@@ -1620,17 +1645,21 @@ export function siteBuildPayload(payloadJson: string): JsonObject | null {
 }
 
 /** Maps SQLite and D1 constraint failures to stable domain errors. */
-export function sqliteWriteError(error: unknown, pageCreation: boolean, runtime: string): never {
+export function sqliteWriteError(
+  error: unknown,
+  singletonCreation: boolean,
+  runtime: string,
+): never {
   if (error instanceof DomainError) throw error;
   const message = error instanceof Error ? error.message : "";
   if (
-    pageCreation &&
+    singletonCreation &&
     (message.includes("content_entries_singleton_idx") ||
       message.includes("UNIQUE constraint failed: content_entries.model_key"))
   ) {
     throw new DomainError(
       "CONTENT_MODEL_CARDINALITY_CONFLICT",
-      "A page model already has its singleton entry.",
+      "A page or global model already has its singleton entry.",
     );
   }
   if (message.includes("UNIQUE constraint failed: published_routes.path")) {

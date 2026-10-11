@@ -90,6 +90,9 @@ export interface CollectionModelInput<
   readonly route: string;
 }
 
+/** Input accepted by `defineGlobal`; a global has no path, route, or list fields. */
+export type GlobalModelInput<Fields extends FieldMap = FieldMap> = CommonModelInput<Fields>;
+
 interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly blocks: readonly string[];
   readonly description?: string;
@@ -121,9 +124,16 @@ export type CollectionModelDefinition<Fields extends FieldMap = FieldMap> =
     readonly route: string;
   };
 
+/** A normalized route-less singleton model for site-wide content. */
+export type GlobalModelDefinition<Fields extends FieldMap = FieldMap> =
+  NormalizedCommonModel<Fields> & {
+    readonly kind: "global";
+  };
+
 /** Any model that can be included in a Lace configuration. */
 export type ContentModelDefinition<Fields extends FieldMap = FieldMap> =
   | CollectionModelDefinition<Fields>
+  | GlobalModelDefinition<Fields>
   | PageModelDefinition<Fields>;
 
 /**
@@ -475,6 +485,20 @@ export function definePage<const Fields extends FieldMap = FieldMap>(
   return deepFreeze(definition);
 }
 
+/** Defines a detached route-less singleton model, such as site settings. */
+export function defineGlobal<const Fields extends FieldMap = FieldMap>(
+  input: GlobalModelInput<Fields>,
+): GlobalModelDefinition<Fields> {
+  const common = normalizeCommonModel(input);
+  for (const option of ["path", "route", "listFields"]) {
+    if (Object.hasOwn(input, option)) {
+      fail(`global "${input.key}" must not declare ${option}.`);
+    }
+  }
+  const definition: GlobalModelDefinition<Fields> = { ...common, kind: "global" };
+  return deepFreeze(definition);
+}
+
 function normalizeListFields(value: unknown, fields: FieldMap): readonly string[] {
   if (value === undefined) {
     return [];
@@ -562,20 +586,29 @@ function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
       formerKeys.set(model.renamedFrom, model);
     }
 
-    if (model.kind === "page") {
-      const duplicatePath = pagePaths.get(model.path);
-      if (duplicatePath !== undefined) {
-        fail(`pages "${duplicatePath.key}" and "${model.key}" share path "${model.path}".`);
+    switch (model.kind) {
+      case "page": {
+        const duplicatePath = pagePaths.get(model.path);
+        if (duplicatePath !== undefined) {
+          fail(`pages "${duplicatePath.key}" and "${model.key}" share path "${model.path}".`);
+        }
+        pagePaths.set(model.path, model);
+        break;
       }
-      pagePaths.set(model.path, model);
-    } else {
-      const duplicateRoute = collectionRoutes.get(model.route);
-      if (duplicateRoute !== undefined) {
-        fail(
-          `collections "${duplicateRoute.key}" and "${model.key}" share route "${model.route}".`,
-        );
+      case "collection": {
+        const duplicateRoute = collectionRoutes.get(model.route);
+        if (duplicateRoute !== undefined) {
+          fail(
+            `collections "${duplicateRoute.key}" and "${model.key}" share route "${model.route}".`,
+          );
+        }
+        collectionRoutes.set(model.route, model);
+        break;
       }
-      collectionRoutes.set(model.route, model);
+      case "global":
+        break;
+      default:
+        model satisfies never;
     }
   }
 

@@ -19,7 +19,7 @@ export type MediaId = Brand<string, "MediaId">;
 export type SiteBuildId = Brand<string, "SiteBuildId">;
 export type UnixMilliseconds = Brand<number, "UnixMilliseconds">;
 
-export type ContentModelKind = "collection" | "page";
+export type ContentModelKind = "collection" | "global" | "page";
 export type Role = "admin" | "editor" | "viewer";
 export type Permission =
   | "content:read"
@@ -226,7 +226,19 @@ export interface CollectionContentModelRoute {
   readonly route: string;
 }
 
-export type ContentModelRoute = CollectionContentModelRoute | PageContentModelRoute;
+/** A route-less singleton model, read by its key and never by path. */
+export interface GlobalContentModelRoute {
+  readonly key: ContentModelKey;
+  readonly kind: "global";
+}
+
+export type RoutableContentModelRoute = CollectionContentModelRoute | PageContentModelRoute;
+export type ContentModelRoute = GlobalContentModelRoute | RoutableContentModelRoute;
+
+/** Page and global models are configuration-defined singletons. */
+export function isSingletonKind(kind: ContentModelKind): boolean {
+  return kind !== "collection";
+}
 
 /** One block in a flat, fully ordered content snapshot. */
 export interface ContentBlock {
@@ -386,14 +398,19 @@ export function resolveCollectionPublicPath(route: string, slug: string): string
   return normalizePagePublicPath(normalizedRoute.replace(":slug", slug));
 }
 
-/** Resolves the public path for one model and, for collections, its publication slug. */
-export function resolveContentPublicPath(model: ContentModelRoute, slug?: string): string {
+/** Resolves the public path for one routable model and, for collections, its publication slug. */
+export function resolveContentPublicPath(model: RoutableContentModelRoute, slug?: string): string {
   return model.kind === "page"
     ? normalizePagePublicPath(model.path)
     : resolveCollectionPublicPath(model.route, slug ?? "");
 }
 
-/** Enforces page singleton cardinality before a specialized atomic store operation. */
+/** Resolves an entry's public path, or `undefined` for a route-less global. */
+export function contentPublicPath(model: ContentModelRoute, slug?: string): string | undefined {
+  return model.kind === "global" ? undefined : resolveContentPublicPath(model, slug);
+}
+
+/** Enforces singleton cardinality before a specialized atomic store operation. */
 export function assertEntryCreationAllowed(
   kind: ContentModelKind,
   existingEntryCount: number,
@@ -401,8 +418,8 @@ export function assertEntryCreationAllowed(
   if (!Number.isSafeInteger(existingEntryCount) || existingEntryCount < 0) {
     fail("CONTENT_INVALID_STATE", "existingEntryCount must be a non-negative safe integer.");
   }
-  if (kind === "page" && existingEntryCount > 0) {
-    fail("CONTENT_MODEL_CARDINALITY_CONFLICT", "A page model already has its singleton entry.");
+  if (isSingletonKind(kind) && existingEntryCount > 0) {
+    fail("CONTENT_MODEL_CARDINALITY_CONFLICT", `A ${kind} model already has its singleton entry.`);
   }
 }
 
@@ -646,15 +663,15 @@ export function requirePublishedSnapshot(
   return entry.published;
 }
 
-/** Refuses lifecycle operations that configuration-defined page singletons do not support. */
+/** Refuses lifecycle operations that configuration-defined singletons do not support. */
 export function assertCollectionEntryOperation(
   entry: Pick<ContentEntry, "model">,
   operation: "delete" | "duplicate",
 ): void {
-  if (entry.model.kind === "page") {
+  if (isSingletonKind(entry.model.kind)) {
     fail(
       "CONTENT_PAGE_SINGLETON",
-      `Page entries are defined by configuration and cannot be ${operation === "delete" ? "deleted" : "duplicated"}.`,
+      `Page and global entries are defined by configuration and cannot be ${operation === "delete" ? "deleted" : "duplicated"}.`,
     );
   }
 }

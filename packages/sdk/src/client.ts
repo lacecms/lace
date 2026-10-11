@@ -7,6 +7,7 @@ import {
   opaqueCursorSchema,
   publicContentEntrySchema,
   publicContentListSchema,
+  publicGlobalContentSchema,
 } from "@lacecms/contracts";
 import type {
   BuildExportDto,
@@ -15,6 +16,7 @@ import type {
   PublicContentEntryDto,
   PublicContentListDto,
   PublicEntryDto,
+  PublicGlobalContentDto,
   PublicMediaDictionaryDto,
   PublicMediaDto,
   LaceErrorCode,
@@ -112,6 +114,8 @@ export interface LaceClient {
     slug: string,
     options?: LaceRequestOptions,
   ): Promise<PublicContentEntryDto>;
+  /** Reads a published route-less global by model key. */
+  getGlobal(modelKey: string, options?: LaceRequestOptions): Promise<PublicGlobalContentDto>;
   getPage(modelKey: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getPublicMediaUrl(mediaId: string): string;
 }
@@ -386,6 +390,14 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
           assertIdentifier(slug, "slug"),
         ]),
         publicContentEntrySchema,
+        requestOptions,
+      );
+    },
+
+    getGlobal(modelKey, requestOptions = {}) {
+      return read(
+        publicUrl(baseUrl, ["globals", assertIdentifier(modelKey, "modelKey")]),
+        publicGlobalContentSchema,
         requestOptions,
       );
     },

@@ -228,3 +228,85 @@ test("media metadata migration adds empty constrained columns and keeps referenc
     await miniflare.dispose();
   }
 });
+
+test("global-kind migration rebuilds content models of a populated database in one batch", async () => {
+  const GLOBAL_KIND = "0007_content_model_global_kind.sql";
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < GLOBAL_KIND));
+    await apply([
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) values ('home', 'page', 'Home', 1, 's-home', 'p-home', '{}', 's-home', 1, 2)",
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 2, 's-posts', 'p-posts', 1, 2)",
+      "insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) values ('home', 'home', 1, 'admin', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('p1', 'e1', 1, 'post', 'Post', '{}', 2, 1, 1, 'admin')",
+      "update content_entries set draft_snapshot_id = 'p1', published_snapshot_id = 'p1' where id = 'e1'",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values ('p1', 'b1', 'image', 1000, 2, '{}', 1, 1)",
+      "insert into published_routes (path, entry_id, snapshot_id, updated_at) values ('/blog/post', 'e1', 'p1', 1)",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+      "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('p1', 'b1', 'image', 'm1', 1)",
+    ]);
+    const tables = [
+      "content_models",
+      "content_entries",
+      "content_snapshots",
+      "content_blocks",
+      "published_routes",
+      "content_media_references",
+    ];
+    const state = async () =>
+      Object.fromEntries(
+        await Promise.all(
+          tables.map(async (table) => [
+            table,
+            (await database.prepare(`select * from ${table} order by 1, 2`).all()).results,
+          ]),
+        ),
+      );
+    const before = await state();
+    const statements = await migrationStatements((file) => file === GLOBAL_KIND);
+    expect(statements.some((statement) => /drop table `content_models`/iu.test(statement))).toBe(
+      true,
+    );
+    await apply(statements);
+    expect(await state()).toEqual(before);
+    await database
+      .prepare(
+        "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('settings', 'global', 'Settings', 1, 's', 'p', 3, 3)",
+      )
+      .run();
+    await expect(
+      database
+        .prepare(
+          "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('bad', 'singleton', 'Bad', 1, 's', 'p', 3, 3)",
+        )
+        .run(),
+    ).rejects.toThrow(/CHECK constraint/u);
+    await expect(
+      database.prepare("delete from content_models where key = 'posts'").run(),
+    ).rejects.toThrow(/FOREIGN KEY/u);
+    await expect(
+      database
+        .prepare(
+          "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e2', 'missing', 'admin', 1, 1)",
+        )
+        .run(),
+    ).rejects.toThrow(/FOREIGN KEY/u);
+    await database.prepare("update content_models set key = 'articles' where key = 'posts'").run();
+    expect(
+      await database.prepare("select model_key from content_entries where id = 'e1'").first(),
+    ).toEqual({ model_key: "articles" });
+  } finally {
+    await miniflare.dispose();
+  }
+});

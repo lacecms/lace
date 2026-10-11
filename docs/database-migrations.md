@@ -81,6 +81,32 @@ all four columns `NULL`, and there is no backfill. `metadata_json` stays
 reserved. Older engines keep starting against the migrated database and
 ignore the new columns, so a rollback leaves any stored values unused.
 
+### Global model kind migration
+
+Migration `0007_content_model_global_kind` widens the `content_models.kind`
+check to accept `global` ([ADR 0010](adr/0010-global-models.md)). SQLite cannot
+alter a check, so the migration rebuilds `content_models`: it creates
+`__new_content_models` with the widened check, copies every row with an
+explicit column list, drops the old table and renames the new one. Every
+model, entry, snapshot, block, route and media reference is unchanged, and the
+`content_entries.model_key` foreign key keeps its key-update cascade and
+delete restriction. No backfill runs.
+
+`content_entries` references `content_models`, so the file starts with
+`PRAGMA defer_foreign_keys = on`. D1 cannot switch foreign keys off, but it
+accepts the deferred drop and rename when the file is applied as one batch
+(`wrangler d1 migrations apply`). Node SQLite rejects the same deferred drop at
+commit, so `migrateNodeDatabase` follows SQLite's documented rebuild
+procedure: its own connection runs the pending migrations with
+`foreign_keys = OFF`, then runs `PRAGMA foreign_key_check` and fails with a
+"foreign-key violation" error unless the check is empty, and restores
+enforcement. Application connections always keep foreign keys on.
+
+Back up the database before migrating (copy the stopped SQLite file, or
+`wrangler d1 export`). Older engines read a migrated database without globals
+normally, but refuse a stored `global` model; rollback after creating a global
+means restoring the backup.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

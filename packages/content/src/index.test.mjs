@@ -647,6 +647,20 @@ test("enforces entry system-field and JSON payload limits", () => {
   ).toThrow(/\$\.fields/u);
 });
 
+test("accepts a global payload without a slug and rejects other kinds", () => {
+  const global = { blocks: [], fields: {}, kind: "global", title: "Site settings" };
+  expect(validateEntryPayload(global, "draft")).toEqual(global);
+  expect(validateEntryPayload(global, "publish")).toEqual(global);
+  for (const mode of ["draft", "publish"]) {
+    expect(() => validateEntryPayload({ ...global, slug: "settings" }, mode)).toThrow(
+      /\$\.slug.*not allowed/u,
+    );
+  }
+  expect(() => validateEntryPayload({ ...global, kind: "singleton" }, "draft")).toThrow(
+    /\$\.kind/u,
+  );
+});
+
 test("keeps a valid renamedFrom hint on every field kind and rejects it in blocks", () => {
   const renamed = field.text({ maxLength: 20, renamedFrom: "headline" });
   expect(renamed).toEqual({

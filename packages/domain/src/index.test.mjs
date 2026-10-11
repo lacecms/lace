@@ -26,6 +26,8 @@ import {
   saveCompleteDraft,
   unixMilliseconds,
   unpublishContentEntry,
+  contentPublicPath,
+  isSingletonKind,
 } from "../dist/index.js";
 
 const admin = { id: actorId("admin-1"), role: "admin" };
@@ -110,6 +112,16 @@ test("enforces page cardinality and resolves public collection paths safely", ()
     "CONTENT_MODEL_CARDINALITY_CONFLICT",
   );
   expect(resolveCollectionPublicPath("/blog/:slug", "release-notes")).toBe("/blog/release-notes");
+  expect(() => assertEntryCreationAllowed("global", 0)).not.toThrow();
+  expectDomainError(
+    () => assertEntryCreationAllowed("global", 1),
+    "CONTENT_MODEL_CARDINALITY_CONFLICT",
+  );
+  expect([
+    isSingletonKind("page"),
+    isSingletonKind("global"),
+    isSingletonKind("collection"),
+  ]).toEqual([true, true, false]);
 
   for (const slug of ["Release", "release/notes", "release--notes", "", "release?x=1", "."]) {
     expectDomainError(
@@ -265,6 +277,24 @@ test("refuses page deletion and duplication", () => {
     "CONTENT_PAGE_SINGLETON",
   );
   expect(() => assertCollectionEntryOperation(entry(), "delete")).not.toThrow();
+});
+
+test("treats a global as a route-less singleton", () => {
+  const global = { model: { key: contentModelKey("settings"), kind: "global" } };
+  expect(contentPublicPath(global.model)).toBeUndefined();
+  expect(contentPublicPath({ key: contentModelKey("home"), kind: "page", path: "/" })).toBe("/");
+  expect(
+    contentPublicPath(
+      { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" },
+      "a",
+    ),
+  ).toBe("/blog/a");
+  for (const operation of ["delete", "duplicate"]) {
+    expectDomainError(
+      () => assertCollectionEntryOperation(global, operation),
+      "CONTENT_PAGE_SINGLETON",
+    );
+  }
 });
 
 test("rejects an invalid committed lifecycle", () => {

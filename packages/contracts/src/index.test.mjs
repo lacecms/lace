@@ -13,6 +13,8 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
+  publicGlobalContentSchema,
+  toPublicGlobalContentDto,
   publicContentEntrySchema,
   publicContentListSchema,
   publicMediaDictionarySchema,
@@ -603,7 +605,7 @@ describe("shared REST transport conventions", () => {
       body: {
         error: {
           code: "CONTENT_PAGE_SINGLETON",
-          message: "Page entries are defined by configuration.",
+          message: "Page and global entries are defined by configuration.",
         },
       },
       status: 409,
@@ -783,6 +785,77 @@ describe("admin entry list contracts", () => {
     ]) {
       expect(v.safeParse(contentModelListSchema, { items: [invalid] }).success).toBe(false);
     }
+  });
+
+  test("global models, entries, public globals, and exports have explicit contracts", () => {
+    const fields = { siteName: { required: true, type: "text" } };
+    const global = { blocks: [], fields, key: "settings", kind: "global", version: 1 };
+    const dto = toContentModelDto(global);
+    expect(dto).not.toHaveProperty("path");
+    expect(dto).not.toHaveProperty("route");
+    expect(v.parse(contentModelListSchema, { items: [dto] })).toEqual({ items: [dto] });
+    for (const invalid of [
+      { ...global, path: "/settings" },
+      { ...global, route: "/settings/:slug" },
+      { ...global, listFields: ["siteName"] },
+      { ...global, kind: "singleton" },
+    ]) {
+      expect(v.safeParse(contentModelListSchema, { items: [invalid] }).success).toBe(false);
+    }
+
+    const globalEntry = {
+      ...entry,
+      id: contentEntryId("settings"),
+      model: { key: "settings", kind: "global" },
+    };
+    const entryDto = toContentEntryDto(globalEntry);
+    expect(entryDto.model).toEqual({ key: "settings", kind: "global" });
+    expect(v.parse(contentEntrySchema, entryDto)).toEqual(entryDto);
+    expect(
+      v.safeParse(contentEntrySchema, {
+        ...entryDto,
+        model: { key: "settings", kind: "global", path: "/" },
+      }).success,
+    ).toBe(false);
+
+    const urlFor = (id) => mediaUrl("https://lace.example/", id);
+    const publicDto = toPublicGlobalContentDto(
+      { entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] },
+      urlFor,
+    );
+    expect(publicDto.global).toEqual({
+      blocks: published.blocks,
+      fields: published.fields,
+      id: "settings",
+      modelKey: "settings",
+      publishedAt: toIsoTimestamp(timestamp),
+    });
+    expect(Object.keys(publicDto.media)).toEqual(["media-1"]);
+    expect(v.parse(publicGlobalContentSchema, publicDto)).toEqual(publicDto);
+    for (const extra of [{ path: "/" }, { draft: {} }, { title: "Settings" }, { slug: "x" }]) {
+      expect(
+        v.safeParse(publicGlobalContentSchema, {
+          ...publicDto,
+          global: { ...publicDto.global, ...extra },
+        }).success,
+      ).toBe(false);
+    }
+
+    const exportDto = toBuildExportDto(
+      {
+        entries: [
+          { entry, media: [{ id: "media-2", mimeType: "image/png" }], path: "/blog/welcome" },
+        ],
+        globals: [{ entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] }],
+        version: 3,
+      },
+      urlFor,
+    );
+    expect(exportDto.globals.map((item) => item.modelKey)).toEqual(["settings"]);
+    expect(Object.keys(exportDto.media)).toEqual(["media-1", "media-2"]);
+    expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
+    const { globals: _globals, ...legacy } = exportDto;
+    expect(v.parse(buildExportSchema, legacy).globals).toEqual([]);
   });
 
   test("validates media list queries, uploader summaries, and bounded usage details", () => {

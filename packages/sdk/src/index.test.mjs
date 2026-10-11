@@ -264,3 +264,37 @@ test("rejects inconsistent response versions and malformed caller validators", a
   await expect(client.getBuildExport({ etag: 'W/"hash"' })).rejects.toBeInstanceOf(TypeError);
   expect(mock.requests).toHaveLength(0);
 });
+
+test("reads a published global by model key and validates its shape", async () => {
+  const global = {
+    blocks: [],
+    fields: { siteName: "Lace" },
+    id: "settings-entry",
+    modelKey: "settings",
+    publishedAt: "2026-09-20T00:00:00.000Z",
+  };
+  const mock = queuedFetch([
+    json({ global, media: { logo: mediaItem("logo") } }),
+    json({ global: { ...global, path: "/settings" }, media: {} }),
+    json({ error: { code: "NOT_FOUND", message: "Not found." } }, { status: 404 }),
+    json({ entries: [], media: {}, version: 3 }, { headers: { etag: '"3"' } }),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example/lace/", fetch: mock.fetch });
+
+  await expect(client.getGlobal("settings")).resolves.toEqual({
+    global,
+    media: { logo: mediaItem("logo") },
+  });
+  await expect(client.getGlobal("settings")).rejects.toBeInstanceOf(LaceContractError);
+  await expect(client.getGlobal("missing")).rejects.toMatchObject({ status: 404 });
+  expect(() => client.getGlobal("")).toThrow(TypeError);
+  await expect(client.getBuildExport()).resolves.toMatchObject({
+    export: { globals: [], version: 3 },
+  });
+  expect(mock.requests.map((request) => request.url)).toEqual([
+    "https://cms.example/lace/api/v1/public/globals/settings",
+    "https://cms.example/lace/api/v1/public/globals/settings",
+    "https://cms.example/lace/api/v1/public/globals/missing",
+    "https://cms.example/lace/api/v1/public/build-export",
+  ]);
+});

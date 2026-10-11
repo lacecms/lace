@@ -1535,8 +1535,8 @@ export const MAX_TOP_LEVEL_BLOCKS = 200;
 /** Maximum UTF-8 bytes in fields JSON or a single block data JSON value. */
 export const MAX_JSON_BYTES = 1_000_000;
 
-/** The only entry kinds required before model definitions are introduced. */
-export type ContentModelKind = "collection" | "page";
+/** Model kinds: routed singletons, routed lists, and route-less singletons. */
+export type ContentModelKind = "collection" | "global" | "page";
 
 /** A block-like value whose data can be limited before the Step 3 block registry exists. */
 export interface EntryBlockData {
@@ -1637,8 +1637,8 @@ export function validateEntryPayload(
   input: EntryPayloadInput,
   mode: ContentValidationMode,
 ): EntryPayloadInput {
-  if (input.kind !== "collection" && input.kind !== "page") {
-    invalid(["kind"], "invalid_model_kind", "must be page or collection.");
+  if (input.kind !== "collection" && input.kind !== "global" && input.kind !== "page") {
+    invalid(["kind"], "invalid_model_kind", "must be page, collection, or global.");
   }
   if (typeof input.title !== "string" || input.title.length === 0) {
     invalid(["title"], "missing_title", "is required.");
@@ -1651,6 +1651,9 @@ export function validateEntryPayload(
     (typeof input.slug !== "string" || input.slug.length > MAX_SLUG_LENGTH)
   ) {
     invalid(["slug"], "slug_too_long", `must not exceed ${MAX_SLUG_LENGTH} characters.`);
+  }
+  if (input.kind === "global" && input.slug !== undefined) {
+    invalid(["slug"], "slug_not_allowed", "is not allowed for a global.");
   }
   if (
     mode === "publish" &&

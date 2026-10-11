@@ -75,6 +75,7 @@ import {
   opaqueCursorSchema,
   publishContentEntryResultSchema,
   publicContentEntrySchema,
+  publicGlobalContentSchema,
   publicContentListSchema,
   publishContentEntryRequestSchema,
   resolveExpectedRevision,
@@ -84,6 +85,7 @@ import {
   toAdminContentEntryDto,
   toBuildExportDto,
   toPublicContentEntryDto,
+  toPublicGlobalContentDto,
   toPublicContentListDto,
   toSiteBuildRecordDto,
   toContentModelDto,
@@ -151,6 +153,7 @@ type ServerContentModel =
       readonly listFields?: readonly string[];
       readonly route: string;
     })
+  | (ServerModelBase & { readonly kind: "global" })
   | (ServerModelBase & { readonly kind: "page"; readonly path: string });
 
 interface ServerBlockMetadata {
@@ -376,6 +379,14 @@ function pageModel(
   return model?.kind === "page" ? model : undefined;
 }
 
+function globalModel(
+  config: ServerConfig,
+  key: string,
+): Extract<ServerContentModel, { readonly kind: "global" }> | undefined {
+  const model = contentModel(config, key);
+  return model?.kind === "global" ? model : undefined;
+}
+
 function collectionModel(
   config: ServerConfig,
   key: string,
@@ -459,7 +470,8 @@ function modelDto(config: ServerConfig, model: ServerContentModel) {
     ...(model.kind === "collection" && model.listFields !== undefined
       ? { listFields: model.listFields }
       : {}),
-    ...(model.kind === "page" ? { path: model.path } : { route: model.route }),
+    ...(model.kind === "page" ? { path: model.path } : {}),
+    ...(model.kind === "collection" ? { route: model.route } : {}),
     version: model.version,
   });
 }
@@ -1981,6 +1993,29 @@ export function createLaceApp(input: LaceAppInput): Hono {
         expectedRevision: revision(body, context.req.raw),
       });
       return new Response(null, { status: 204 });
+    },
+  );
+
+  app.get(
+    "/api/v1/public/globals/:modelKey",
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicGlobalContentSchema) } },
+          description: "Published global",
+        },
+      },
+      summary: "Read a published global",
+      tags: ["public"],
+    }),
+    validator("param", modelKeyParams, validationHook),
+    async (context) => {
+      const model = globalModel(input.config, context.req.param("modelKey"));
+      if (model === undefined) return notFound();
+      const global = await input.publicContent.loadPublicGlobal(model.key as never);
+      return global === null
+        ? notFound()
+        : response(publicGlobalContentSchema, toPublicGlobalContentDto(global, publicMediaUrl()));
     },
   );
 

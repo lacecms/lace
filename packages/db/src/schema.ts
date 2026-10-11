@@ -30,7 +30,7 @@ export const contentModels = sqliteTable(
     updatedAt: timestamp("updated_at"),
   },
   (table) => [
-    check("content_models_kind_check", sql`${table.kind} in ('page', 'collection')`),
+    check("content_models_kind_check", sql`${table.kind} in ('page', 'collection', 'global')`),
     check("content_models_config_version_check", sql`${table.configVersion} > 0`),
   ],
 );

@@ -314,14 +314,27 @@ export interface ListPublicContentInput {
   readonly modelKey: ContentModelKey;
 }
 
+/** A published route-less global with the media its publication references. */
+export interface PublicGlobalContent {
+  /** Published-only projection; never exposes the mutable draft. */
+  readonly entry: ContentEntry;
+  /** Active media referenced by the global's current published snapshot. */
+  readonly media: readonly MediaMetadata[];
+}
+
 export interface BuildContentExport {
+  /** Routed published entries ordered by path. */
   readonly entries: readonly PublicContentEntry[];
+  /** Published globals ordered by model key. */
+  readonly globals: readonly PublicGlobalContent[];
   readonly version: number;
 }
 
 export interface PublicContentReadPort {
   exportBuildContent(): Promise<BuildContentExport>;
   loadPublic(path: string): Promise<PublicContentEntry | null>;
+  /** Reads a published global by model key without consulting published routes. */
+  loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null>;
   loadPublicMedia(id: string): Promise<MediaMetadata | null>;
   listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>>;
   publishedContentVersion(): Promise<number>;

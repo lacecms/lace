@@ -992,12 +992,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(7);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(8);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(7);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(8);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1298,10 +1298,11 @@ test("bounds Node build-export queries and selects the entry-list index", async 
           { media: [{ id: "media-1" }], path: "/blog/post-a" },
           { media: [{ id: "media-1" }], path: "/blog/post-b" },
         ],
+        globals: [],
         version: 2,
       });
-      // Routes, snapshots, blocks, referenced media, and the version.
-      expect(statements.length).toBeLessThanOrEqual(5);
+      // Routes, globals, snapshots, blocks, referenced media, and the version.
+      expect(statements.length).toBeLessThanOrEqual(6);
       const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
       expect(
         database.connection

@@ -77,6 +77,7 @@ import type {
   OpaqueTokenSecret,
   OpaqueTokenVerifier,
   PublicContentEntry,
+  PublicGlobalContent,
   PublicContentReadPort,
   PublishContentEntryCommand,
   PublishContentEntryResult,
@@ -98,7 +99,8 @@ import {
   contentModelKey,
   createContentEntry,
   publishContentEntry,
-  resolveContentPublicPath,
+  contentPublicPath,
+  isSingletonKind,
   revertContentDraft,
   saveCompleteDraft,
   unixMilliseconds,
@@ -109,6 +111,8 @@ import type {
   BlockKey,
   ContentBlock,
   ContentEntry,
+  ContentModelKey,
+  ContentModelRoute,
   DraftMediaReference,
   DraftSnapshot,
   MediaMetadata,
@@ -246,12 +250,18 @@ function withFieldDefault<Snapshot extends DraftSnapshot | PublishedSnapshot>(
   }) as unknown as Snapshot;
 }
 
-function routeForModel(model: NormalizedContentModel) {
-  return Object.freeze(
-    model.kind === "page"
-      ? { key: contentModelKey(model.key), kind: "page" as const, path: model.path }
-      : { key: contentModelKey(model.key), kind: "collection" as const, route: model.route },
-  );
+function routeForModel(model: NormalizedContentModel): ContentModelRoute {
+  const key = contentModelKey(model.key);
+  switch (model.kind) {
+    case "page":
+      return Object.freeze({ key, kind: "page", path: model.path });
+    case "collection":
+      return Object.freeze({ key, kind: "collection", route: model.route });
+    case "global":
+      return Object.freeze({ key, kind: "global" });
+    default:
+      return model satisfies never;
+  }
 }
 
 async function collectBytes(stream: ByteStream): Promise<Uint8Array> {
@@ -756,7 +766,9 @@ export class InMemoryContentStore
     }
 
     const models = new Map(input.models.map((model) => [model.key, model]));
-    const pageEntries = new Map(input.pageEntries.map((page) => [page.modelKey, page.entry]));
+    const singletonEntries = new Map(
+      input.singletonEntries.map((page) => [page.modelKey, page.entry]),
+    );
     const nextStates = new Map(this.modelStates);
     const nextEntries = new Map(this.entries);
     for (const operation of actualPlan.operations) {
@@ -766,8 +778,8 @@ export class InMemoryContentStore
           throw new DomainError("CONTENT_INVALID_STATE", "Synchronization model is unavailable.");
         }
         nextStates.set(operation.model.key, stateForModel(operation.model, currentModel));
-        if (currentModel.kind === "page") {
-          const entry = pageEntries.get(operation.model.key);
+        if (isSingletonKind(currentModel.kind)) {
+          const entry = singletonEntries.get(operation.model.key);
           if (
             entry === undefined ||
             entry.model.key !== operation.model.key ||
@@ -775,7 +787,7 @@ export class InMemoryContentStore
           ) {
             throw new DomainError(
               "CONTENT_INVALID_STATE",
-              "Page synchronization entry is invalid.",
+              "Singleton synchronization entry is invalid.",
             );
           }
           nextEntries.set(entry.id, copyEntry(entry));
@@ -973,18 +985,21 @@ export class InMemoryContentStore
     if (entry === undefined)
       throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
     const published = publishContentEntry(entry, input);
-    const path = resolveContentPublicPath(published.model, published.published!.slug);
-    assertPublicPathAvailable(path, published.id, this.routes.get(path));
+    const path = contentPublicPath(published.model, published.published!.slug);
     const nextRoutes = new Map(this.routes);
-    for (const [existingPath, route] of nextRoutes) {
-      if (route.entryId === published.id) nextRoutes.delete(existingPath);
+    // A global has no route; its publication only replaces the snapshot.
+    if (path !== undefined) {
+      assertPublicPathAvailable(path, published.id, this.routes.get(path));
+      for (const [existingPath, route] of nextRoutes) {
+        if (route.entryId === published.id) nextRoutes.delete(existingPath);
+      }
+      nextRoutes.set(path, {
+        entryId: published.id,
+        path,
+        snapshotId: published.published!.id,
+        updatedAt: input.publishedAt,
+      });
     }
-    nextRoutes.set(path, {
-      entryId: published.id,
-      path,
-      snapshotId: published.published!.id,
-      updatedAt: input.publishedAt,
-    });
     this.entries.set(published.id, published);
     // Publication replaces the prior published snapshot, as SQLite cascades its references.
     if (entry.published !== undefined) this.references.delete(entry.published.id);
@@ -1095,6 +1110,23 @@ export class InMemoryContentStore
     return entry?.published === undefined ? null : this.publicView(entry, path);
   }
 
+  public async loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null> {
+    const entry = this.publicGlobals().find((candidate) => candidate.model.key === modelKey);
+    return entry === undefined ? null : this.publicGlobalView(entry);
+  }
+
+  /** Published globals ordered by model key, like the shared SQL projection. */
+  private publicGlobals(): readonly ContentEntry[] {
+    return [...this.entries.values()]
+      .filter((entry) => entry.model.kind === "global" && entry.published !== undefined)
+      .sort((left, right) => left.model.key.localeCompare(right.model.key));
+  }
+
+  private publicGlobalView(entry: ContentEntry): PublicGlobalContent {
+    const { entry: projected, media } = this.publicView(entry, "");
+    return Object.freeze({ entry: projected, media });
+  }
+
   /** Mirrors the SQL public projection: no editorial draft, active published media only. */
   private publicView(entry: ContentEntry, path: string): PublicContentEntry {
     const copied = copyEntry(entry);
@@ -1114,8 +1146,13 @@ export class InMemoryContentStore
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
-    const isPublished = [...this.routes.values()].some((route) =>
-      (this.references.get(route.snapshotId) ?? []).some((reference) => reference.mediaId === id),
+    // Like PUBLIC_MEDIA_SQL: any current published snapshot, routed or not.
+    const isPublished = [...this.entries.values()].some(
+      (entry) =>
+        entry.published !== undefined &&
+        (this.references.get(entry.published.id) ?? []).some(
+          (reference) => reference.mediaId === id,
+        ),
     );
     const value = this.media.get(id);
     return isPublished && value !== undefined ? clone(value) : null;
@@ -1274,6 +1311,7 @@ export class InMemoryContentStore
       entries: Object.freeze(
         this.publicEntries().map(({ entry, path }) => this.publicView(entry, path)),
       ),
+      globals: Object.freeze(this.publicGlobals().map((entry) => this.publicGlobalView(entry))),
       version: this.publicVersion,
     });
   }

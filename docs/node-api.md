@@ -155,14 +155,18 @@ The `about` route uses `getStaticPaths()` so it emits no static page before
 publication. Further pages and collections need matching Astro route files;
 collections use `getStaticPaths()`. The existing routes read entries from the
 published-site loader in [`src/lib/lace.ts`](../apps/site/src/lib/lace.ts)
-(`byPath`, `entries`, `bySlug`) and render ordered blocks with
+(`byPath`, `entries`, `bySlug`; `global(modelKey)` returns a published global
+or `undefined`) and render ordered blocks with
 `<LaceBlocks>` from `@lacecms/astro` and the block map
 [`src/lace/blocks.ts`](../apps/site/src/lace/blocks.ts). Lace validates route definitions; it does not create
 Astro files or choose a layout. The reference site reads the committed fixture
 until live mode is configured; live mode reads locally published content.
 
-To add a model, register a `definePage` or `defineCollection` call in
-`lace.config.ts`. Start a new model at `version: 1`; choose a unique key and
+To add a model, register a `definePage`, `defineCollection` or `defineGlobal`
+call in `lace.config.ts`. A global is route-less site-wide content (for
+example site settings): sync creates its single draft, it is never served by
+path, and `GET /api/v1/public/globals/:modelKey` (or `getGlobal()` in
+`@lacecms/sdk`) returns `{global, media}` once it is published, `404` before. Start a new model at `version: 1`; choose a unique key and
 path or route, then list its allowed blocks. `notes` demonstrates an optional
 text field with `fields: { summary: field.text() }`. Add further fields using
 typed `field` descriptors and render any field intended for public display in

@@ -1,5 +1,6 @@
 import {
   applyPreparedConfigurationSynchronization,
+  contentModelRoute,
   prepareConfigurationSynchronization,
   publicationIdempotencyKey,
   publicationRequestFingerprint,
@@ -120,7 +121,15 @@ const admin: Actor = Object.freeze({ id: actorId("admin"), role: "admin" });
 const routes = new Map<string, ContentModelRoute>([
   ["posts", { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" }],
   ["home", { key: contentModelKey("home"), kind: "page", path: "/" }],
+  ["settings", { key: contentModelKey("settings"), kind: "global" }],
 ]);
+
+type ContractModelKey = "home" | "posts" | "settings";
+const CONTRACT_MODELS: Readonly<Record<ContractModelKey, readonly [string, string]>> = {
+  home: ["page", "Home"],
+  posts: ["collection", "Posts"],
+  settings: ["global", "Site settings"],
+};
 const resolveRoute = (key: string): ContentModelRoute | undefined => routes.get(key);
 const noModels = (): undefined => undefined;
 
@@ -145,13 +154,13 @@ async function count(sql: ContractSql, statement: string, ...params: unknown[]):
   return row?.count ?? 0;
 }
 
-async function seedModels(sql: ContractSql, ...keys: readonly ("home" | "posts")[]): Promise<void> {
+async function seedModels(sql: ContractSql, ...keys: readonly ContractModelKey[]): Promise<void> {
   for (const key of keys) {
     await sql.run(
       "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
       key,
-      key === "home" ? "page" : "collection",
-      key === "home" ? "Home" : "Posts",
+      CONTRACT_MODELS[key][0],
+      CONTRACT_MODELS[key][1],
       1,
       "structure",
       "projection",
@@ -181,7 +190,7 @@ async function seedUser(sql: ContractSql, id: string, name: string, email: strin
 
 function entry(
   id: string,
-  modelKey: "home" | "posts",
+  modelKey: ContractModelKey,
   input: {
     readonly blocks?: readonly ContentBlock[];
     readonly fields?: JsonObject;
@@ -297,16 +306,24 @@ function syncCollection(overrides: Record<string, unknown> = {}): SyncModel {
   } as unknown as SyncModel;
 }
 
+function syncGlobal(overrides: Record<string, unknown> = {}): SyncModel {
+  return {
+    fields: {},
+    key: "settings",
+    kind: "global",
+    label: "Site settings",
+    projectionHash: "projection-settings",
+    structureHash: "structure-settings",
+    version: 1,
+    ...overrides,
+  } as unknown as SyncModel;
+}
+
 function syncResolver(models: readonly SyncModel[]) {
   const values = new Map(models.map((model) => [String(model.key), model]));
   return (key: string): ContentModelRoute | undefined => {
-    const model = values.get(key) as
-      | { readonly kind: string; readonly path?: string; readonly route?: string }
-      | undefined;
-    if (model === undefined) return undefined;
-    return model.kind === "page"
-      ? { key: contentModelKey(key), kind: "page", path: model.path! }
-      : { key: contentModelKey(key), kind: "collection", route: model.route! };
+    const model = values.get(key);
+    return model === undefined ? undefined : contentModelRoute(model);
   };
 }
 
@@ -3966,6 +3983,258 @@ contract(
         checkpoint,
       ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
       expect(await mediaMetadataState(sql), checkpoint).toEqual(before);
+    }
+  },
+);
+
+// ---------------------------------------------------------------- globals
+
+function globalEntry(id: string, updatedAt: number, image = "media-1") {
+  return entry(id, "settings", {
+    blocks: [heroBlock(`${id}-block`, image, "Banner")],
+    fields: { image, title: "Lace" },
+    title: "Site settings",
+    updatedAt,
+  });
+}
+
+async function seedPublishedGlobal(repository: ContractRepository, sql: ContractSql) {
+  await seedModels(sql, "home", "posts", "settings");
+  await seedMedia(sql, "media-1");
+  await seedMedia(sql, "media-2");
+  for (const [id, model] of [
+    ["home", "home"],
+    ["post", "posts"],
+  ] as const) {
+    await repository.create({
+      entry: heroEntry(id, model, 1),
+      mediaReferences: references(`${id}-block`),
+    });
+    await repository.publish(publish(id, 1, 2, `${id}-published`));
+  }
+  await repository.create({
+    entry: globalEntry("settings", 1, "media-2"),
+    mediaReferences: [
+      { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: "$fields" },
+      { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: blockKey("settings-block") },
+    ],
+  });
+  return repository.publish(publish("settings", 1, 3, "settings-published"));
+}
+
+contract("synchronizes a global singleton without a route", async (runtime, expect) => {
+  const models = [syncPage(), syncGlobal()];
+  const { repository, sql } = await runtime.open({
+    nextId: sequence("outbox"),
+    resolveModel: syncResolver(models),
+  });
+  await expect(applySync(repository, models, 10)).resolves.toMatchObject({ status: "applied" });
+  expect(await repository.readConfigurationSyncState()).toMatchObject([
+    { entryCount: 1, key: "home", kind: "page" },
+    { draftSnapshotCount: 1, entryCount: 1, key: "settings", kind: "global" },
+  ]);
+  const listed = await repository.list({
+    limit: 10,
+    listFields: [],
+    modelKey: contentModelKey("settings"),
+    sort: "-updatedAt",
+  });
+  expect(listed.items).toMatchObject([{ status: "draft", title: "Site settings" }]);
+  const loaded = await repository.load({ entryId: contentEntryId(listed.items[0]!.id) });
+  expect(loaded).toMatchObject({
+    draft: { blocks: [], revision: 1, updatedBy: { id: "system:content-sync" } },
+    model: { key: "settings", kind: "global" },
+  });
+  expect(loaded!.draft).not.toHaveProperty("slug");
+  expect(
+    await sql.get("select singleton_key from content_entries where model_key = 'settings'"),
+  ).toEqual({ singleton_key: 1 });
+  expect(await count(sql, "select count(*) as count from published_routes")).toBe(0);
+  await expect(
+    repository.create({ entry: globalEntry("second", 11), mediaReferences: [] }),
+  ).rejects.toMatchObject({ code: "CONTENT_MODEL_CARDINALITY_CONFLICT" });
+  expect(
+    await count(sql, "select count(*) as count from content_entries where model_key = 'settings'"),
+  ).toBe(1);
+});
+
+contract("rolls back a failed synchronized global singleton", async (runtime, expect) => {
+  const models = [syncGlobal()];
+  const { repository, sql } = await runtime.open({
+    beforeMutation: (checkpoint) => {
+      if (checkpoint === "sync.page.snapshot") throw new Error("injected failure");
+    },
+    resolveModel: syncResolver(models),
+  });
+  await expect(applySync(repository, models, 10)).rejects.toMatchObject({
+    code: "CONTENT_INVALID_STATE",
+  });
+  expect(await repository.readConfigurationSyncState()).toEqual([]);
+  expect(await count(sql, "select count(*) as count from content_entries")).toBe(0);
+});
+
+contract("publishes and reads a global by model key without a route", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({
+    nextId: sequence("outbox"),
+    resolveModel: resolveRoute,
+  });
+  await seedModels(sql, "settings");
+  await seedMedia(sql, "media-1");
+  await repository.create({
+    entry: globalEntry("settings", 1),
+    mediaReferences: references("settings-block"),
+  });
+  expect(await repository.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
+  expect(await repository.loadPublicMedia("media-1")).toBeNull();
+  const version = await repository.publishedContentVersion();
+  const published = await repository.publish(publish("settings", 1, 2, "settings-published"));
+  expect(published).toMatchObject({ outcome: "published", targetVersion: version + 1 });
+  expect(await count(sql, "select count(*) as count from published_routes")).toBe(0);
+  expect(await repository.publishedContentVersion()).toBe(version + 1);
+  const pending = await sql.all<{ payload_json: string }>(
+    "select payload_json from outbox_events where type = 'site.build.requested' and processed_at is null",
+  );
+  expect(pending).toHaveLength(1);
+
+  const read = await repository.loadPublicGlobal(contentModelKey("settings"));
+  expect(read).toMatchObject({
+    entry: {
+      id: "settings",
+      model: { key: "settings", kind: "global" },
+      published: { fields: { image: "media-1", title: "Lace" }, id: "settings-published" },
+    },
+    media: [{ id: "media-1" }],
+  });
+  expect(read).not.toHaveProperty("path");
+  expect(await repository.loadPublicMedia("media-1")).toMatchObject({ id: "media-1" });
+
+  await repository.saveCompleteDraft(
+    save("settings", 1, 3, { fields: { title: "Changed" }, title: "Site settings" }),
+  );
+  await repository.publish(publish("settings", 2, 4, "settings-republished"));
+  expect(await repository.loadPublicGlobal(contentModelKey("settings"))).toMatchObject({
+    entry: { published: { fields: { title: "Changed" }, id: "settings-republished" } },
+    media: [],
+  });
+  expect(await repository.publishedContentVersion()).toBe(version + 2);
+  expect(
+    await count(sql, "select count(*) as count from outbox_events where processed_at is null"),
+  ).toBe(1);
+  expect(
+    await count(sql, "select count(*) as count from content_snapshots where entry_id = 'settings'"),
+  ).toBe(2);
+});
+
+contract(
+  "keeps globals out of routed reads and lists them in the export",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedPublishedGlobal(repository, sql);
+    await seedMedia(sql, "media-3");
+    await repository.saveCompleteDraft(
+      save("settings", 1, 4, {
+        fields: { image: "media-3" },
+        mediaReferences: [
+          { fieldPath: "image", mediaId: mediaId("media-3"), sourceKey: "$fields" },
+        ],
+        title: "Site settings",
+      }),
+    );
+
+    expect(await repository.loadPublic("/")).toMatchObject({ entry: { id: "home" } });
+    for (const key of ["home", "posts", "missing"]) {
+      expect(await repository.loadPublicGlobal(contentModelKey(key)), key).toBeNull();
+    }
+    expect(
+      (await repository.listPublic({ limit: 10, modelKey: contentModelKey("settings") })).items,
+    ).toEqual([]);
+    expect(
+      (await repository.listPublic({ limit: 10, modelKey: contentModelKey("posts") })).items.map(
+        (item) => item.entry.id,
+      ),
+    ).toEqual(["post"]);
+
+    const exported = await repository.exportBuildContent();
+    expect(exported.entries.map((item) => item.path)).toEqual(["/", "/blog/post"]);
+    expect(exported.globals.map((item) => item.entry.id)).toEqual(["settings"]);
+    expect(exported.globals[0]).toMatchObject({
+      entry: { published: { fields: { image: "media-2" } } },
+      media: [{ id: "media-2" }],
+    });
+    expect(exported.globals[0]).not.toHaveProperty("path");
+    expect(
+      [...exported.entries, ...exported.globals].flatMap((item) => item.media.map((m) => m.id)),
+    ).toEqual(["media-1", "media-1", "media-2"]);
+    // Media referenced only by the global's draft stays private.
+    expect(await repository.loadPublicMedia("media-3")).toBeNull();
+    expect(await repository.loadPublicMedia("media-2")).toMatchObject({ id: "media-2" });
+  },
+);
+
+contract("unpublishes and reverts a global without touching routes", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+  await seedPublishedGlobal(repository, sql);
+  await repository.saveCompleteDraft(
+    save("settings", 1, 4, { fields: { title: "Changed" }, title: "Site settings" }),
+  );
+  const version = await repository.publishedContentVersion();
+  const reverted = await repository.revertDraft(revertCommand("settings", 2, "settings-published"));
+  expect(reverted.entry!.draft).toMatchObject({ fields: { image: "media-2" }, revision: 3 });
+  expect(await repository.publishedContentVersion()).toBe(version);
+
+  const routesBefore = await sql.all("select * from published_routes order by path");
+  const result = await repository.unpublish(unpublishCommand("settings", "settings-published", 5));
+  expect(result).toMatchObject({ outcome: "unpublished", targetVersion: version + 1 });
+  expect(result.entry.draft).toEqual(reverted.entry!.draft);
+  expect(await repository.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
+  expect((await repository.exportBuildContent()).globals).toEqual([]);
+  expect(await repository.loadPublicMedia("media-2")).toBeNull();
+  expect(await sql.all("select * from published_routes order by path")).toEqual(routesBefore);
+  expect(await repository.publishedContentVersion()).toBe(version + 1);
+});
+
+contract(
+  "rolls back global publication and unpublication at every checkpoint",
+  async (runtime, expect) => {
+    const publicationCheckpoints = PUBLICATION_CHECKPOINTS.filter(
+      (checkpoint) => checkpoint !== "publish.route",
+    );
+    for (const checkpoint of publicationCheckpoints) {
+      const { repository, sql } = await runtime.open({
+        beforeMutation: (name) => {
+          if (name === checkpoint) throw new Error(`injected ${checkpoint}`);
+        },
+        resolveModel: resolveRoute,
+      });
+      await seedModels(sql, "settings");
+      await seedMedia(sql, "media-1");
+      await repository.create({
+        entry: globalEntry("settings", 1),
+        mediaReferences: references("settings-block"),
+      });
+      const before = await lifecycleState(sql);
+      await expect(
+        repository.publish(publish("settings", 1, 2, "settings-published")),
+        checkpoint,
+      ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+      expect(await lifecycleState(sql), checkpoint).toEqual(before);
+    }
+    for (const checkpoint of UNPUBLICATION_CHECKPOINTS) {
+      let armed = false;
+      const { repository, sql } = await runtime.open({
+        beforeMutation: (name) => {
+          if (armed && name === checkpoint) throw new Error(`injected ${checkpoint}`);
+        },
+        resolveModel: resolveRoute,
+      });
+      await seedPublishedGlobal(repository, sql);
+      const before = await lifecycleState(sql);
+      armed = true;
+      await expect(
+        repository.unpublish(unpublishCommand("settings", "settings-published", 5)),
+        checkpoint,
+      ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+      expect(await lifecycleState(sql), checkpoint).toEqual(before);
     }
   },
 );
