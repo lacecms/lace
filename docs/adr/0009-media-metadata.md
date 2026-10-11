@@ -58,3 +58,10 @@ its subject. Nothing about a media item could be edited after upload.
 - Repeated edits of a widely used image coalesce into one pending build per
   debounce window.
 - Media used only by drafts can be edited without any build.
+- The built-in `image` block makes its alt text optional (CE3B). Under the
+  schema-evolution rules this is a block definition change, so `image` moves
+  to version 2 with an identity migration, models that allow it raise their
+  version, and configuration sync rewrites the stored schema version of
+  existing `image` blocks (drafts get a new revision by
+  `system:content-sync`). A site built with the new packages refuses
+  `image` blocks still stored at version 1, so sync runs before the build.

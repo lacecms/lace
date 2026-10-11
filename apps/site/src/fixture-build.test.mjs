@@ -64,7 +64,13 @@ test("the fixture build emits published static routes without CMS access", () =>
       ],
     ],
     [about, [["hero", "about-hero"]]],
-    [note, [["quote", "note-quote"]]],
+    [
+      note,
+      [
+        ["quote", "note-quote"],
+        ["image", "note-image"],
+      ],
+    ],
   ]) {
     const roots = [
       ...html.matchAll(
@@ -78,7 +84,7 @@ test("the fixture build emits published static routes without CMS access", () =>
     [home, ["eyebrow", "heading", "body", "media", "action", "heading", "body", "action"]],
     [post, ["content", "media", "caption", "text", "attribution"]],
     [about, ["heading"]],
-    [note, ["text", "attribution"]],
+    [note, ["text", "attribution", "media"]],
   ]) {
     expect([...html.matchAll(/data-lace-part="([^"]+)"/gu)].map((match) => match[1])).toEqual(
       expected,
@@ -101,6 +107,9 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(post).toContain("Content belongs in the CMS");
   expect(about).toContain("Built with Lace");
   expect(note).toContain("Notes render from the published export.");
+  // A version 2 image block without its own alt text still renders an empty alt
+  // attribute, which the minified output writes as a bare `alt`.
+  expect(note).toMatch(/<img alt(?:="")? data-lace-part="media" src="[^"]*\/note-media">/u);
   expect(`${home}${post}${about}${note}`).not.toContain("DRAFT ONLY");
   expect(`${home}${post}${about}${note}`).not.toContain("javascript:");
 }, 30_000);

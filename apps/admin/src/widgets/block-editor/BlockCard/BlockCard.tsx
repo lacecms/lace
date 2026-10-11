@@ -10,13 +10,16 @@ import {
   MoreHorizontalIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useId, useRef } from "react";
+import { type ComponentProps, useId, useRef } from "react";
 import { useWatch, type Control } from "react-hook-form";
 import {
   blockLevelProblems,
   FieldRenderer,
+  mediaAltPair,
   type DraftEditorValues,
 } from "../../../entities/content/index.js";
+import { useMediaItem } from "../../../entities/media/index.js";
+import { MissingAltWarning } from "../../../features/edit-media-metadata/index.js";
 import { cn } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import {
@@ -87,6 +90,7 @@ export function BlockCard({
   const hidden = collapsed && !hasError;
   // Problems that belong to no visible field are shown in the card itself.
   const problems = blockLevelProblems(error, definition.fields);
+  const mediaKey = mediaAltPair(definition.fields);
   return (
     <article
       aria-describedby={problems.length === 0 ? undefined : `${id}-problems`}
@@ -209,17 +213,63 @@ export function BlockCard({
         </div>
       )}
       <div className="grid gap-3" hidden={hidden} id={`${id}-fields`}>
-        {Object.entries(definition.fields).map(([fieldKey, fieldDefinition]) => (
-          <FieldRenderer
-            control={control}
-            definition={fieldDefinition}
-            error={fieldError(error, fieldKey)}
-            fieldKey={fieldKey}
-            key={fieldKey}
-            name={`blocks.${index}.data.${fieldKey}`}
-          />
-        ))}
+        {Object.entries(definition.fields).map(([fieldKey, fieldDefinition]) =>
+          fieldKey === "alt" && mediaKey !== undefined ? (
+            <InheritedAltField
+              alt={data?.alt}
+              control={control}
+              definition={fieldDefinition}
+              error={fieldError(error, fieldKey)}
+              key={fieldKey}
+              media={data?.[mediaKey]}
+              name={`blocks.${index}.data.${fieldKey}`}
+            />
+          ) : (
+            <FieldRenderer
+              control={control}
+              definition={fieldDefinition}
+              error={fieldError(error, fieldKey)}
+              fieldKey={fieldKey}
+              key={fieldKey}
+              name={`blocks.${index}.data.${fieldKey}`}
+            />
+          ),
+        )}
       </div>
     </article>
+  );
+}
+
+/**
+ * The `alt` field of a block whose alt text overrides its media item's: the
+ * inherited text as placeholder, or a warning when neither the block nor the
+ * media item has alt text. Neither is shown while the item is unresolved.
+ */
+function InheritedAltField({
+  alt,
+  media,
+  ...field
+}: Omit<ComponentProps<typeof FieldRenderer>, "fieldKey" | "notice" | "placeholder"> & {
+  readonly alt: unknown;
+  readonly media: unknown;
+}) {
+  const item = useMediaItem(typeof media === "string" ? media : undefined).data;
+  const inherited = item?.alt;
+  const missing =
+    item !== undefined && inherited === undefined && (typeof alt !== "string" || alt.trim() === "");
+  return (
+    <FieldRenderer
+      {...field}
+      fieldKey="alt"
+      notice={
+        missing ? (
+          <MissingAltWarning>
+            This image has no alt text and will be presented as decorative. Add alt text here or to
+            the media item.
+          </MissingAltWarning>
+        ) : undefined
+      }
+      placeholder={inherited === undefined ? undefined : `Uses media alt: ${inherited}`}
+    />
   );
 }

@@ -32,7 +32,7 @@ function facts(item: MediaMetadataDto): string {
 
 /**
  * A media field's value, resolved through the single-item media read: a
- * thumbnail with filename and facts, or an explicit pending-deletion, missing,
+ * thumbnail with filename, facts and alt text, or an explicit pending-deletion, missing,
  * or unreadable state. The stored identifier is never shown; Replace and
  * Remove stay available in every state unless the field is read-only.
  */
@@ -99,6 +99,14 @@ export function SelectedMedia({
               ? facts(item)
               : unavailableText[item.status]}
         </p>
+        {item?.status === "active" ? (
+          <p
+            className={`m-0 truncate text-xs ${item.alt === undefined ? "text-muted-foreground italic" : ""}`}
+            title={item.alt}
+          >
+            {item.alt === undefined ? "No alt text" : `Alt text: ${item.alt}`}
+          </p>
+        ) : undefined}
         {item === undefined && detail.error !== null && !missing ? (
           <p className="m-0 text-xs text-destructive">{errorDescription(detail.error)}</p>
         ) : undefined}

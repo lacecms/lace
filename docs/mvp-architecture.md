@@ -587,7 +587,9 @@ field DSL and do not receive special database treatment:
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
-- `image`: required media, required alt text, and optional caption;
+- `image` (version 2): required media, optional alt text that overrides the
+  media item's alt text, and optional caption. Version 1 required the alt
+  text; the version 2 migration returns the stored data unchanged;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL.
 

@@ -14,10 +14,14 @@ import {
 function Harness({
   definition,
   error,
+  notice,
+  placeholder,
   wrap = (children) => children,
 }: {
   readonly definition: FieldDefinition;
   readonly error?: string;
+  readonly notice?: ReactNode;
+  readonly placeholder?: string;
   readonly wrap?: (children: ReactNode) => ReactNode;
 }) {
   const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
@@ -31,6 +35,8 @@ function Harness({
         error={error}
         fieldKey="heroImage"
         name="fields.heroImage"
+        notice={notice}
+        placeholder={placeholder}
       />
       <output data-testid="value">{JSON.stringify(form.watch("fields.heroImage") ?? null)}</output>
     </>,
@@ -79,4 +85,47 @@ test("uses a registry-provided renderer for media and explains when none is prov
   document.body.replaceChildren();
   render(<Harness definition={{ required: false, type: "media" }} />);
   expect(screen.getByText("Media selection is not available here.")).toBeInTheDocument();
+});
+
+test("a placeholder is shown in text controls and is part of the description", () => {
+  render(
+    <Harness
+      definition={{ description: "Shown on cards.", required: false, type: "text" }}
+      placeholder="Uses media alt: Red bicycle"
+    />,
+  );
+  const input = screen.getByRole("textbox", { name: "Hero Image" });
+  expect(input).toHaveAttribute("placeholder", "Uses media alt: Red bicycle");
+  expect(input).toHaveAccessibleDescription("Shown on cards. Uses media alt: Red bicycle");
+});
+
+test("textarea controls apply the placeholder too", () => {
+  render(<Harness definition={{ required: false, type: "textarea" }} placeholder="Inherited" />);
+  expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAttribute(
+    "placeholder",
+    "Inherited",
+  );
+});
+
+test("a notice describes the control for writers and is hidden when view only", () => {
+  const { unmount } = render(
+    <Harness definition={{ required: false, type: "text" }} notice={<p>No alt text.</p>} />,
+  );
+  expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
+    "No alt text.",
+  );
+  unmount();
+  render(
+    <Harness
+      definition={{ required: false, type: "text" }}
+      notice={<p>No alt text.</p>}
+      wrap={(children) => (
+        <FieldRendererProvider readOnly renderers={{}}>
+          {children}
+        </FieldRendererProvider>
+      )}
+    />,
+  );
+  expect(screen.queryByText("No alt text.")).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Hero Image" })).not.toHaveAccessibleDescription();
 });

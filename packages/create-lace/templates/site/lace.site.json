@@ -18,9 +18,9 @@
       }
     },
     "image": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/ImageBlock.astro": "45e4188435b9cf0ea3d38af7864f2265773c81614640559a8e229f0f455acce7"
+        "src/components/lace/ImageBlock.astro": "eb1f85aabff2dd99ffb44f33d94bd0a911141747c012ba3350b22b05ebac0aaf"
       }
     },
     "quote": {

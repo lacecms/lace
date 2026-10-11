@@ -500,6 +500,58 @@ test("uploads and requests media deletion with validated credentialed responses"
   ).rejects.toBeInstanceOf(AdminClientError);
 });
 
+test("updates media metadata guarded by the edited item's updatedAt", async () => {
+  const media = {
+    alt: "Red bicycle",
+    createdAt: "2026-09-20T00:00:00.000Z",
+    createdBy: { displayName: "Admin", id: "admin-1" },
+    filename: "bike.png",
+    focalPoint: { x: 0.52, y: 0.4 },
+    id: "media-1",
+    mimeType: "image/png",
+    size: 12,
+    status: "active",
+    updatedAt: "2026-09-20T00:00:01.001Z",
+    url: "https://lace.test/api/v1/public/media/media-1",
+    usageCount: 1,
+  };
+  const result = { build: { status: "queued", targetVersion: 7 }, media };
+  const fetcher = vi.fn(async () => Response.json(result));
+  await expect(
+    createAdminClient(fetcher).updateMediaMetadata(
+      "media/1",
+      { alt: "Red bicycle", caption: null, focalPoint: { x: 0.52, y: 0.4 } },
+      "2026-09-20T00:00:00.123Z",
+    ),
+  ).resolves.toEqual(result);
+  expect(fetcher).toHaveBeenCalledWith("/api/v1/admin/media/media%2F1", {
+    body: JSON.stringify({ alt: "Red bicycle", caption: null, focalPoint: { x: 0.52, y: 0.4 } }),
+    credentials: "same-origin",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "if-match": `"${Date.parse("2026-09-20T00:00:00.123Z")}"`,
+    },
+    method: "PATCH",
+  });
+  const conflict = createAdminClient(async () =>
+    Response.json(
+      { error: { code: "MEDIA_UPDATE_CONFLICT", message: "The media item changed." } },
+      { status: 409 },
+    ),
+  );
+  await expect(
+    conflict.updateMediaMetadata("media-1", { alt: "x" }, media.updatedAt),
+  ).rejects.toMatchObject({ code: "MEDIA_UPDATE_CONFLICT", status: 409 });
+  await expect(
+    createAdminClient(async () => Response.json({ media })).updateMediaMetadata(
+      "media-1",
+      { alt: "x" },
+      media.updatedAt,
+    ),
+  ).rejects.toBeInstanceOf(AdminClientError);
+});
+
 test("media mutations preserve API failures and map transport failure safely", async () => {
   const denied = createAdminClient(async () =>
     Response.json({ error: { code: "FORBIDDEN", message: "Forbidden" } }, { status: 403 }),

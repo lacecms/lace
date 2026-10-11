@@ -91,3 +91,21 @@ test("an unreadable selection offers retry", async () => {
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(await screen.findByText("cover.png")).toBeInTheDocument();
 });
+
+test("an active selection shows its alt text or says it has none", async () => {
+  const { queryClient } = mount({
+    getMedia: async () => ({ ...mediaItem, alt: "Red bicycle", usage: [] }),
+  });
+  const alt = await screen.findByText("Alt text: Red bicycle");
+  expect(alt).toHaveAttribute("title", "Red bicycle");
+  queryClient.setQueryData(["admin", "media", "detail", "media-1"], { ...mediaItem, usage: [] });
+  expect(await screen.findByText("No alt text")).toBeInTheDocument();
+});
+
+test("a selection pending deletion shows no alt text line", async () => {
+  mount({
+    getMedia: async () => ({ ...mediaItem, alt: "Red bicycle", status: "deleting", usage: [] }),
+  });
+  expect(await screen.findByText(/being deleted/)).toBeInTheDocument();
+  expect(screen.queryByText(/Alt text/)).toBeNull();
+});

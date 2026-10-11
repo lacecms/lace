@@ -14,6 +14,8 @@ export interface FieldRendererProps {
   readonly label: string;
   readonly onBlur: () => void;
   readonly onChange: (value: unknown) => void;
+  /** Text shown while the field is empty, such as an inherited value; text controls apply it. */
+  readonly placeholder?: string | undefined;
   /** Whether the editor is view only; native controls are also disabled by a fieldset. */
   readonly readOnly: boolean;
   readonly value: unknown;

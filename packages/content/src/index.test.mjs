@@ -408,6 +408,8 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
   ]);
   expect(builtInBlocks.hero.fields.heading.required).toBe(true);
   expect(builtInBlocks.image.fields.media.required).toBe(true);
+  expect(builtInBlocks.image.version).toBe(2);
+  expect(builtInBlocks.image.fields.alt.required).toBe(false);
   expect(builtInBlocks.richText.fields.content.type).toBe("richText");
   expect(
     toBlockRegistryMetadata(registry).map(({ description, label, type }) => ({
@@ -427,7 +429,8 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
       type: "hero",
     },
     {
-      description: "A single image with alt text and an optional caption.",
+      description:
+        "A single image with an optional caption and alt text that overrides the media alt.",
       label: "Image",
       type: "image",
     },
@@ -666,4 +669,18 @@ test("keeps a valid renamedFrom hint on every field kind and rejects it in block
       version: 1,
     }),
   ).toThrow(/fields\.title must not declare renamedFrom/u);
+});
+
+test("image version 2 makes alt text optional and migrates version 1 data unchanged", () => {
+  expect(validateBlockData(builtInBlocks.image, { media: "media-1" }, "publish")).toEqual({
+    media: "media-1",
+  });
+  expect(() => validateBlockData(builtInBlocks.image, { alt: "A lake" }, "publish")).toThrow(
+    ContentValidationError,
+  );
+  const stored = { alt: "A lake", caption: "Morning", media: "media-1" };
+  expect(migrateBlockData(builtInBlocks.image, stored, 1)).toEqual(stored);
+  const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
+  expect(metadata).toMatchObject({ type: "image", version: 2 });
+  expect(metadata.fields.alt.required).toBe(false);
 });

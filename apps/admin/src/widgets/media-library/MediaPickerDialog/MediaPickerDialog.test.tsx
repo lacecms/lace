@@ -73,3 +73,20 @@ test("a viewer can browse the picker without upload controls", async () => {
   expect(within(dialog).queryByRole("button", { name: "Upload images" })).not.toBeInTheDocument();
   expect(within(dialog).queryByLabelText("Upload images")).not.toBeInTheDocument();
 });
+
+test("picker tiles show each item's alt text", async () => {
+  const { dialog } = await mount({
+    listMedia: async () => ({
+      items: [
+        { ...mediaItem, alt: "Red bicycle" },
+        { ...mediaItem, filename: "plain.png", id: "media-2" },
+      ],
+    }),
+  });
+  expect(
+    await within(dialog).findByRole("button", { name: "cover.png" }),
+  ).toHaveAccessibleDescription("Red bicycle");
+  expect(within(dialog).getByRole("button", { name: "plain.png" })).toHaveAccessibleDescription(
+    "No alt text",
+  );
+});

@@ -1,11 +1,13 @@
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
-import { render, screen } from "@testing-library/react";
+import type { MediaDetailDto } from "@lacecms/contracts";
+import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { expect, test, vi } from "vitest";
-import type { DraftEditorValues } from "../../../entities/content/index.js";
+import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
+import { FieldRendererProvider, type DraftEditorValues } from "../../../entities/content/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 import { BlockCard } from "./index.js";
 
@@ -161,4 +163,149 @@ test("exposes a keyboard reorder handle", () => {
   mount();
   const handle = screen.getByRole("button", { name: "Reorder Hero block" });
   expect(handle).toHaveAttribute("aria-roledescription", "sortable");
+});
+
+const image: BlockDefinitionDto = {
+  fields: {
+    alt: { required: false, type: "text" },
+    caption: { required: false, type: "text" },
+    media: { required: true, type: "media" },
+  },
+  label: "Image",
+  type: "image",
+  version: 2,
+};
+
+function ImageHarness({
+  data,
+  definition = image,
+  readOnly = false,
+}: {
+  readonly data: Record<string, unknown>;
+  readonly definition?: BlockDefinitionDto;
+  readonly readOnly?: boolean;
+}) {
+  const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
+    defaultValues: { blocks: [], fields: {}, title: "" },
+  });
+  useState(() =>
+    form.reset({
+      blocks: [
+        {
+          data: data as never,
+          key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          position: 100,
+          schemaVersion: 2,
+          type: definition.type,
+        },
+      ],
+      fields: {},
+      title: "Post",
+    }),
+  );
+  return (
+    <FieldRendererProvider readOnly={readOnly} renderers={{}}>
+      <DndContext>
+        <SortableContext items={["01ARZ3NDEKTSV4RRFFQ69G5FAV"]}>
+          <BlockCard
+            active={false}
+            blockKey="01ARZ3NDEKTSV4RRFFQ69G5FAV"
+            collapsed={false}
+            control={form.control}
+            definition={definition}
+            error={undefined}
+            index={0}
+            onActivate={vi.fn()}
+            onDuplicate={vi.fn()}
+            onMove={vi.fn()}
+            onRemove={vi.fn()}
+            onToggleCollapsed={vi.fn()}
+            total={1}
+          />
+        </SortableContext>
+      </DndContext>
+    </FieldRendererProvider>
+  );
+}
+
+function mountImage(
+  media: Partial<MediaDetailDto> | (() => Promise<MediaDetailDto>),
+  props: Omit<ComponentProps<typeof ImageHarness>, "data"> & {
+    readonly data?: Record<string, unknown>;
+  } = {},
+) {
+  const getMedia =
+    typeof media === "function" ? media : async () => ({ ...mediaItem, usage: [], ...media });
+  return renderInRouter(<ImageHarness data={{ media: mediaItem.id }} {...props} />, {
+    client: stubClient({ getMedia }),
+  });
+}
+
+test("an image block's empty alt field shows the inherited media alt", async () => {
+  mountImage({ alt: "Red bicycle" });
+  const alt = await screen.findByRole("textbox", { name: "Alt" });
+  await waitFor(() => expect(alt).toHaveAttribute("placeholder", "Uses media alt: Red bicycle"));
+  expect(alt).toHaveAccessibleDescription("Uses media alt: Red bicycle");
+  expect(screen.queryByText(/has no alt text/)).toBeNull();
+});
+
+test("a missing alt is warned about until alt text is typed", async () => {
+  const user = userEvent.setup();
+  mountImage({});
+  const alt = await screen.findByRole("textbox", { name: "Alt" });
+  expect(await screen.findByText(/This image has no alt text/)).toBeInTheDocument();
+  expect(alt).toHaveAccessibleDescription(/presented as decorative/);
+  await user.type(alt, "A red bike");
+  expect(screen.queryByText(/This image has no alt text/)).toBeNull();
+});
+
+test("media alt saved elsewhere replaces the warning with the placeholder", async () => {
+  const { queryClient } = mountImage({});
+  expect(await screen.findByText(/This image has no alt text/)).toBeInTheDocument();
+  queryClient.setQueryData(["admin", "media", "detail", mediaItem.id], {
+    ...mediaItem,
+    alt: "Saved later",
+    usage: [],
+  });
+  expect(await screen.findByRole("textbox", { name: "Alt" })).toHaveAttribute(
+    "placeholder",
+    "Uses media alt: Saved later",
+  );
+  expect(screen.queryByText(/This image has no alt text/)).toBeNull();
+});
+
+test("no placeholder or warning while the media is loading or not selected", async () => {
+  mountImage(() => new Promise(() => {}));
+  const alt = await screen.findByRole("textbox", { name: "Alt" });
+  expect(alt).not.toHaveAttribute("placeholder");
+  expect(screen.queryByText(/has no alt text/)).toBeNull();
+});
+
+test("view-only editors show no missing-alt warning", async () => {
+  const getMedia = vi.fn(async () => ({ ...mediaItem, usage: [] }));
+  mountImage(getMedia, { readOnly: true });
+  await screen.findByRole("textbox", { name: "Alt" });
+  await waitFor(() => expect(getMedia).toHaveBeenCalled());
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(screen.queryByText(/has no alt text/)).toBeNull();
+});
+
+test("a hero block with media never warns about alt text", async () => {
+  const heroWithImage: BlockDefinitionDto = {
+    fields: {
+      heading: { required: true, type: "text" },
+      image: { required: false, type: "media" },
+    },
+    label: "Hero",
+    type: "hero",
+    version: 1,
+  };
+  const getMedia = vi.fn(async () => ({ ...mediaItem, usage: [] }));
+  renderInRouter(
+    <ImageHarness data={{ heading: "Hi", image: mediaItem.id }} definition={heroWithImage} />,
+    { client: stubClient({ getMedia }) },
+  );
+  await screen.findByRole("textbox", { name: "Heading" });
+  expect(screen.queryByText(/has no alt text/)).toBeNull();
+  expect(getMedia).not.toHaveBeenCalled();
 });

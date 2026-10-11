@@ -41,6 +41,8 @@ import {
   managedUserSchema,
   publishContentEntryResultSchema,
   unpublishContentEntryResultSchema,
+  updateMediaMetadataResultSchema,
+  entityTagForVersion,
   type ContentBlockDto,
   type AdminSettingsStatusDto,
   type BuildTokenCreatedDto,
@@ -64,6 +66,8 @@ import {
   type ManagedUserListDto,
   type PublishContentEntryResultDto,
   type UnpublishContentEntryResultDto,
+  type UpdateMediaMetadataRequestDto,
+  type UpdateMediaMetadataResultDto,
 } from "@lacecms/contracts";
 import * as v from "valibot";
 
@@ -195,6 +199,15 @@ export interface AdminClient {
   uploadMedia(file: File, options?: MediaUploadOptions): Promise<MediaMetadataDto>;
   deleteMedia(mediaId: string): Promise<MediaMetadataDto>;
   retryMediaDeletion(mediaId: string): Promise<MediaMetadataDto>;
+  /**
+   * Changes descriptive metadata, guarded by the `updatedAt` of the item the
+   * caller edited; a newer version fails with `MEDIA_UPDATE_CONFLICT`.
+   */
+  updateMediaMetadata(
+    mediaId: string,
+    patch: UpdateMediaMetadataRequestDto,
+    expectedUpdatedAt: string,
+  ): Promise<UpdateMediaMetadataResultDto>;
   listModels(): Promise<ContentModelListDto>;
   publishEntry(
     entryId: string,
@@ -666,6 +679,22 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
             method: "POST",
           },
         ),
+      ),
+    updateMediaMetadata: async (
+      mediaId: string,
+      patch: UpdateMediaMetadataRequestDto,
+      expectedUpdatedAt: string,
+    ) =>
+      parse(
+        updateMediaMetadataResultSchema,
+        await request(fetcher, `/api/v1/admin/media/${encodeURIComponent(mediaId)}`, {
+          body: JSON.stringify(patch),
+          headers: {
+            "content-type": "application/json",
+            "if-match": entityTagForVersion(Date.parse(expectedUpdatedAt)),
+          },
+          method: "PATCH",
+        }),
       ),
     unpublishEntry: async (entryId: string, input: Parameters<AdminClient["unpublishEntry"]>[1]) =>
       parse(

@@ -1481,15 +1481,18 @@ export const builtInBlocks = deepFreeze({
     version: 1,
   }),
   image: defineBlock({
-    description: "A single image with alt text and an optional caption.",
+    description:
+      "A single image with an optional caption and alt text that overrides the media alt.",
     fields: {
-      alt: field.text({ required: true }),
+      alt: field.text(),
       caption: field.text(),
       media: field.media({ required: true }),
     },
     label: "Image",
+    // Version 2 only made `alt` optional, so version 1 data is already valid.
+    migrations: { 2: (data) => data },
     type: "image",
-    version: 1,
+    version: 2,
   }),
   quote: defineBlock({
     description: "A quotation with optional attribution.",

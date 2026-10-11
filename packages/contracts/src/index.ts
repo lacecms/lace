@@ -709,6 +709,8 @@ export const mediaSortSchema = v.picklist([
   "filename",
   "size",
 ]);
+/** Descriptive text limits in code points, shared with clients that bound their inputs. */
+export { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_CAPTION_LENGTH } from "@lacecms/domain";
 export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 

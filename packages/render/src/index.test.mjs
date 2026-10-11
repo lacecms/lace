@@ -61,7 +61,25 @@ test.each([
   ["quote", { attribution: "Ada", quote: "Make it simple." }],
   ["cta", { actionLabel: "Start", actionUrl: "https://lace.example/docs", body, heading: "Go" }],
 ])("parses the built-in %s block", (type, data) => {
-  expect(parseBlock(builtInBlocks[type], block(type, data), context)).toEqual(data);
+  const schemaVersion = builtInBlocks[type].version;
+  expect(parseBlock(builtInBlocks[type], block(type, data, { schemaVersion }), context)).toEqual(
+    data,
+  );
+});
+
+test("parses an image block without alt text and refuses version 1 image data", () => {
+  const data = { media: "lake-media" };
+  expect(
+    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 2 }), context),
+  ).toEqual(data);
+  const error = captureError(() =>
+    parseBlock(
+      builtInBlocks.image,
+      block("image", { alt: "A lake", media: "lake-media" }),
+      context,
+    ),
+  );
+  expect(error.code).toBe("block_version_mismatch");
 });
 
 test("parses a user-defined block and applies defaults", () => {

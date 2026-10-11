@@ -2,11 +2,10 @@ import type { MediaMetadataDto } from "@lacecms/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Copy, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { EntryStatusBadge } from "../../../entities/content/index.js";
 import {
   formatMediaDimensions,
-  MediaPreview,
   MediaStatusBadge,
   mediaTypeLabel,
 } from "../../../entities/media/index.js";
@@ -17,6 +16,11 @@ import {
   useMediaDeletion,
 } from "../../../features/delete-media/index.js";
 import {
+  FocalPointControl,
+  MediaMetadataForm,
+  MissingAltWarning,
+} from "../../../features/edit-media-metadata/index.js";
+import {
   adminQueryKeys,
   errorDescription,
   technicalDetails,
@@ -24,6 +28,15 @@ import {
 } from "../../../shared/api/index.js";
 import { formatAbsoluteTime, formatBytes } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../shared/ui/Dialog/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 import {
@@ -38,9 +51,10 @@ import { usageLocationLabel } from "./usage-labels.js";
 const sectionHeadingClass = "m-0 text-sm font-semibold";
 
 /**
- * The side panel describing one media item: preview, facts, where it is used,
- * the public URL, and (for writers) confirmed, usage-aware deletion. Focus
- * returns to `returnFocus` because the panel opens without a trigger.
+ * The side panel describing one media item: preview, descriptive metadata
+ * (editable for writers), facts, where it is used, the public URL, and (for
+ * writers) confirmed, usage-aware deletion. Closing with unsaved metadata asks
+ * first. Focus returns to `returnFocus` because the panel opens without a trigger.
  */
 export function MediaDetailsPanel({
   canWrite,
@@ -55,30 +69,74 @@ export function MediaDetailsPanel({
   readonly onClose: () => void;
   readonly returnFocus: () => void;
 }) {
+  const [dirty, setDirty] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const content = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setDirty(false);
+    setConfirming(false);
+    onClose();
+  };
   return (
-    <Sheet
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      open={item !== undefined}
-    >
-      {item === undefined ? undefined : (
-        <SheetContent
-          className="w-full gap-0 overflow-y-auto sm:max-w-md"
+    <>
+      <Sheet
+        onOpenChange={(open) => {
+          if (open) return;
+          if (dirty) setConfirming(true);
+          else close();
+        }}
+        open={item !== undefined}
+      >
+        {item === undefined ? undefined : (
+          <SheetContent
+            className="w-full gap-0 overflow-y-auto sm:max-w-md"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              returnFocus();
+            }}
+            // Focus the panel itself rather than its first control.
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              (event.currentTarget as HTMLElement | null)?.focus();
+            }}
+            ref={content}
+          >
+            <MediaDetails
+              canWrite={canWrite}
+              item={item}
+              key={item.id}
+              onChanged={onChanged}
+              onDirtyChange={setDirty}
+            />
+          </SheetContent>
+        )}
+      </Sheet>
+      <Dialog onOpenChange={setConfirming} open={confirming}>
+        <DialogContent
           onCloseAutoFocus={(event) => {
+            // Keeping the edits returns to the still-open panel.
+            if (item === undefined) return;
             event.preventDefault();
-            returnFocus();
-          }}
-          // Focus the panel itself rather than its first control (the URL field).
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            (event.currentTarget as HTMLElement | null)?.focus();
+            content.current?.focus();
           }}
         >
-          <MediaDetails canWrite={canWrite} item={item} key={item.id} onChanged={onChanged} />
-        </SheetContent>
-      )}
-    </Sheet>
+          <DialogHeader>
+            <DialogTitle>Discard unsaved changes?</DialogTitle>
+            <DialogDescription>
+              The alt text, caption, or focal point changes of this media are not saved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Keep editing</Button>
+            </DialogClose>
+            <Button onClick={close} variant="destructive">
+              Discard changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -86,10 +144,12 @@ function MediaDetails({
   canWrite,
   item,
   onChanged,
+  onDirtyChange,
 }: {
   readonly canWrite: boolean;
   readonly item: MediaMetadataDto;
   readonly onChanged: (item: MediaMetadataDto) => void;
+  readonly onDirtyChange: (dirty: boolean) => void;
 }) {
   const client = useAdminClient();
   const [copyStatus, setCopyStatus] = useState<string | undefined>();
@@ -99,6 +159,9 @@ function MediaDetails({
   });
   const retry = useMediaDeletion(onChanged);
   useSessionRecovery(detail.error ?? retry.error);
+  const latest = detail.data ?? item;
+  const { refetch } = detail;
+  const reload = useCallback(() => void refetch(), [refetch]);
   const usage = detail.data?.usage;
   const usageCount = detail.data?.usageCount ?? item.usageCount;
 
@@ -120,11 +183,16 @@ function MediaDetails({
         </SheetDescription>
       </SheetHeader>
       <div className="grid gap-5 px-4 pb-6">
-        <MediaPreview
-          className="max-h-80 w-full bg-muted"
-          filename={item.filename}
-          mediaId={item.id}
-        />
+        {canWrite && latest.status === "active" ? (
+          <MediaMetadataForm
+            latest={latest}
+            onDirtyChange={onDirtyChange}
+            onReload={reload}
+            onSaved={onChanged}
+          />
+        ) : (
+          <MediaDescription item={latest} />
+        )}
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm [&_dd]:m-0 [&_dt]:text-muted-foreground">
           <dt>Type</dt>
           <dd>{mediaTypeLabel(item.mimeType)}</dd>
@@ -263,5 +331,28 @@ function MediaDetails({
         ) : undefined}
       </div>
     </>
+  );
+}
+
+/** Descriptive metadata for readers who cannot change it, or items pending deletion. */
+function MediaDescription({ item }: { readonly item: MediaMetadataDto }) {
+  return (
+    <section aria-labelledby="media-description-heading" className="grid gap-3">
+      <h2 className={sectionHeadingClass} id="media-description-heading">
+        Description
+      </h2>
+      {item.alt === undefined ? <MissingAltWarning /> : undefined}
+      <FocalPointControl
+        filename={item.filename}
+        mediaId={item.id}
+        value={item.focalPoint ?? null}
+      />
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm [&_dd]:m-0 [&_dd]:break-words [&_dd]:whitespace-pre-line [&_dt]:text-muted-foreground">
+        <dt>Alt text</dt>
+        <dd>{item.alt ?? "None"}</dd>
+        <dt>Caption</dt>
+        <dd>{item.caption ?? "None"}</dd>
+      </dl>
+    </section>
   );
 }

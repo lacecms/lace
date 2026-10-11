@@ -658,6 +658,20 @@ for (const theme of ["light", "dark"] as const) {
     await tokenDialog.getByRole("button", { name: "Create build token" }).click();
     await expect(page.getByTestId("issued-token-value")).toBeVisible();
     await expectNoAccessibilityViolations(page, "once-shown token dialog");
+
+    await page.goto("/admin/media");
+    await page
+      .getByRole("list", { name: "Media library" })
+      .getByRole("button", { name: "team.png" })
+      .click();
+    const details = page.getByRole("dialog", { name: "team.png" });
+    await expect(details.getByRole("img", { name: "Preview of team.png" })).toBeVisible();
+    await expect(details.getByRole("slider", { name: "Focal point" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "media details with the metadata form");
+    await details.getByRole("textbox", { name: "Alt text" }).fill("Our team");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "discard metadata confirmation");
   });
 }
 
