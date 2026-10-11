@@ -649,6 +649,76 @@ test("publishes with one validated idempotency key and rejects malformed publish
   ).rejects.toBeInstanceOf(AdminClientError);
 });
 
+test("sends guarded lifecycle commands and validates their results", async () => {
+  const entry = {
+    draft: {
+      blocks: [],
+      createdAt: "2026-09-20T00:00:00.000Z",
+      entryId: "entry-1",
+      fields: {},
+      id: "snapshot-1",
+      revision: 4,
+      state: "draft",
+      title: "First post",
+      updatedAt: "2026-09-20T00:00:00.000Z",
+      updatedBy: { id: "admin-1", role: "admin" },
+    },
+    id: "entry-1",
+    model: { key: "posts", kind: "collection", route: "/posts/:slug" },
+    updatedBy: { displayName: "admin@lace.test", id: "admin-1" },
+  };
+  const calls: { body: unknown; headers: Record<string, string>; path: string }[] = [];
+  const fetcher = vi.fn(async (path: string | URL | Request, init?: RequestInit) => {
+    calls.push({
+      body: JSON.parse(String(init?.body)),
+      headers: init?.headers as Record<string, string>,
+      path: String(path),
+    });
+    return String(path).endsWith("/unpublish")
+      ? Response.json({
+          build: { status: "queued", targetVersion: 7 },
+          entry,
+          unpublication: "unpublished",
+        })
+      : Response.json(entry, { status: String(path).endsWith("/duplicate") ? 201 : 200 });
+  });
+  const client = createAdminClient(fetcher as typeof fetch);
+  await expect(
+    client.unpublishEntry("entry-1", {
+      expectedPublishedSnapshotId: "published-1",
+      idempotencyKey: "unpublish-attempt-1",
+    }),
+  ).resolves.toMatchObject({ build: { targetVersion: 7 }, unpublication: "unpublished" });
+  await expect(client.revertEntry("entry-1", 4)).resolves.toMatchObject({ id: "entry-1" });
+  await expect(client.duplicateEntry("entry-1", 4)).resolves.toMatchObject({ id: "entry-1" });
+  expect(calls).toEqual([
+    {
+      body: { expectedPublishedSnapshotId: "published-1" },
+      headers: expect.objectContaining({ "idempotency-key": "unpublish-attempt-1" }),
+      path: "/api/v1/admin/entries/entry-1/unpublish",
+    },
+    {
+      body: { expectedRevision: 4 },
+      headers: expect.objectContaining({ "content-type": "application/json" }),
+      path: "/api/v1/admin/entries/entry-1/revert",
+    },
+    {
+      body: { expectedRevision: 4 },
+      headers: expect.objectContaining({ "content-type": "application/json" }),
+      path: "/api/v1/admin/entries/entry-1/duplicate",
+    },
+  ]);
+  const malformed = createAdminClient(async () => Response.json({ entry }));
+  await expect(
+    malformed.unpublishEntry("entry-1", {
+      expectedPublishedSnapshotId: "published-1",
+      idempotencyKey: "unpublish-attempt-1",
+    }),
+  ).rejects.toBeInstanceOf(AdminClientError);
+  await expect(malformed.revertEntry("entry-1", 4)).rejects.toBeInstanceOf(AdminClientError);
+  await expect(malformed.duplicateEntry("entry-1", 4)).rejects.toBeInstanceOf(AdminClientError);
+});
+
 test("retains only validated field issues from an API error", async () => {
   await expect(
     createAdminClient(async () =>

@@ -40,6 +40,7 @@ import {
   managedUserListSchema,
   managedUserSchema,
   publishContentEntryResultSchema,
+  unpublishContentEntryResultSchema,
   type ContentBlockDto,
   type AdminSettingsStatusDto,
   type BuildTokenCreatedDto,
@@ -62,6 +63,7 @@ import {
   type ManagedUserDto,
   type ManagedUserListDto,
   type PublishContentEntryResultDto,
+  type UnpublishContentEntryResultDto,
 } from "@lacecms/contracts";
 import * as v from "valibot";
 
@@ -198,6 +200,15 @@ export interface AdminClient {
     entryId: string,
     input: { readonly expectedRevision: number; readonly idempotencyKey: string },
   ): Promise<PublishContentEntryResultDto>;
+  /** Removes the publication guarded by the snapshot the caller displays; keeps the draft. */
+  unpublishEntry(
+    entryId: string,
+    input: { readonly expectedPublishedSnapshotId: string; readonly idempotencyKey: string },
+  ): Promise<UnpublishContentEntryResultDto>;
+  /** Replaces the draft with the current publication. */
+  revertEntry(entryId: string, expectedRevision: number): Promise<AdminContentEntryDto>;
+  /** Creates an unpublished copy of a collection entry's saved draft. */
+  duplicateEntry(entryId: string, expectedRevision: number): Promise<AdminContentEntryDto>;
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
   saveDraft(
@@ -655,6 +666,32 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
             method: "POST",
           },
         ),
+      ),
+    unpublishEntry: async (entryId: string, input: Parameters<AdminClient["unpublishEntry"]>[1]) =>
+      parse(
+        unpublishContentEntryResultSchema,
+        await request(fetcher, `/api/v1/admin/entries/${encodeURIComponent(entryId)}/unpublish`, {
+          body: JSON.stringify({ expectedPublishedSnapshotId: input.expectedPublishedSnapshotId }),
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": input.idempotencyKey,
+          },
+          method: "POST",
+        }),
+      ),
+    revertEntry: async (entryId: string, expectedRevision: number) =>
+      parse(
+        adminContentEntrySchema,
+        await postJson(fetcher, `/api/v1/admin/entries/${encodeURIComponent(entryId)}/revert`, {
+          expectedRevision,
+        }),
+      ),
+    duplicateEntry: async (entryId: string, expectedRevision: number) =>
+      parse(
+        adminContentEntrySchema,
+        await postJson(fetcher, `/api/v1/admin/entries/${encodeURIComponent(entryId)}/duplicate`, {
+          expectedRevision,
+        }),
       ),
     signIn: async (email: string, password: string) => {
       await request(fetcher, "/api/auth/sign-in/email", {

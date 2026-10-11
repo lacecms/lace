@@ -28,7 +28,12 @@ export function draftValues(model: ContentModelDto, entry: ContentEntryDto): Dra
       };
     }),
     fields: initialModelFieldValues(model, entry.draft.fields),
-    ...(entry.draft.slug === undefined ? {} : { slug: entry.draft.slug }),
+    // The slug input holds "" for a slugless collection entry, so the baseline must match it.
+    ...(model.kind === "collection"
+      ? { slug: entry.draft.slug ?? "" }
+      : entry.draft.slug === undefined
+        ? {}
+        : { slug: entry.draft.slug }),
     title: entry.draft.title,
   };
 }
@@ -41,6 +46,11 @@ export function resolvedPublicPath(
   if (model.kind === "page") return model.path;
   const slug = (entry.published ?? entry.draft).slug;
   return slug === undefined ? undefined : model.route?.replace(":slug", slug);
+}
+
+/** The absolute site URL of a public path, resolved under the configured site base URL. */
+export function siteUrlFor(siteBaseUrl: string, publicPath: string): string {
+  return new URL(publicPath.replace(/^\/+/u, ""), siteBaseUrl).href;
 }
 
 /**
@@ -63,7 +73,7 @@ export function localDraftJson(draft: DraftEditorValues): string {
   return canonicalizeJson({
     blocks: orderedDraftBlocks(values.blocks),
     fields: values.fields,
-    ...(values.slug === undefined ? {} : { slug: values.slug }),
+    ...(values.slug === undefined || values.slug === "" ? {} : { slug: values.slug }),
     title: values.title,
   } as unknown as JsonValue);
 }

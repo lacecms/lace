@@ -1,1 +1,5 @@
-export { CollectionEntries, type CollectionListQuery } from "./CollectionEntries.js";
+export {
+  CollectionEntries,
+  collectionFocusTarget,
+  type CollectionListQuery,
+} from "./CollectionEntries.js";

@@ -62,7 +62,7 @@ function renderQueued(client = stubClient(), targetVersion = 4) {
   return renderInRouter(
     <EntryPublicationDetails
       entry={{ ...draftEntry, model: { key: "home", kind: "page", path: "/" } }}
-      latestBuild={{ status: "queued", targetVersion }}
+      latestBuild={{ build: { status: "queued", targetVersion }, change: "published" }}
       model={models.items[0]!}
     />,
     { client },
@@ -167,11 +167,104 @@ test("a publication that requested no build says so", async () => {
   renderInRouter(
     <EntryPublicationDetails
       entry={draftEntry}
-      latestBuild={{ status: "not-dispatched" }}
+      latestBuild={{ build: { status: "not-dispatched" }, change: "published" }}
       model={models.items[1]!}
     />,
   );
   expect(await screen.findByRole("status")).toHaveTextContent(
     "Publication was already accepted; no new build was requested.",
+  );
+});
+
+const publishedPost = {
+  ...draftEntry,
+  draft: { ...draftEntry.draft, slug: "first-post" },
+  published: {
+    ...draftEntry.draft,
+    id: "published-1",
+    slug: "first-post",
+    state: "published" as const,
+  },
+};
+
+test("a published entry links to its page under the configured site URL", async () => {
+  renderInRouter(
+    <EntryPublicationDetails
+      entry={publishedPost}
+      latestBuild={undefined}
+      model={models.items[1]!}
+    />,
+    {
+      client: stubClient({
+        loadBuildSite: async () => ({
+          site: { id: "main-site", label: "Main site", url: "https://example.com/blog/" },
+        }),
+      }),
+    },
+  );
+  const link = await screen.findByRole("link", {
+    name: "Open /posts/first-post on site (opens in a new tab)",
+  });
+  expect(link).toHaveAttribute("href", "https://example.com/blog/posts/first-post");
+  expect(link).toHaveAttribute("target", "_blank");
+  expect(link).toHaveAttribute("rel", "noopener noreferrer");
+});
+
+test.each([
+  ["no site URL is configured", async () => ({ site: { id: "main-site", label: "Main site" } })],
+  [
+    "the site identity cannot be read",
+    async () => {
+      throw new AdminClientError({ message: "The Lace API could not be reached." });
+    },
+  ],
+])("the public path stays text when %s", async (_name, loadBuildSite) => {
+  renderInRouter(
+    <EntryPublicationDetails
+      entry={publishedPost}
+      latestBuild={undefined}
+      model={models.items[1]!}
+    />,
+    { client: stubClient({ loadBuildSite }) },
+  );
+  const region = await screen.findByRole("region", { name: "Publication status" });
+  await waitFor(() => expect(region).toHaveTextContent("/posts/first-post"));
+  expect(within(region).queryByRole("link", { name: /on site/u })).not.toBeInTheDocument();
+});
+
+test("an unpublished entry's path is not linked even with a site URL", async () => {
+  renderInRouter(
+    <EntryPublicationDetails
+      entry={{ ...draftEntry, draft: { ...draftEntry.draft, slug: "first-post" } }}
+      latestBuild={undefined}
+      model={models.items[1]!}
+    />,
+    {
+      client: stubClient({
+        loadBuildSite: async () => ({
+          site: { id: "main-site", label: "Main site", url: "https://example.com/" },
+        }),
+      }),
+    },
+  );
+  const region = await screen.findByRole("region", { name: "Publication status" });
+  expect(region).toHaveTextContent("/posts/first-post Not public yet");
+  expect(within(region).queryByRole("link", { name: /on site/u })).not.toBeInTheDocument();
+});
+
+test("an unpublication's build uses its own wording", async () => {
+  renderInRouter(
+    <EntryPublicationDetails
+      entry={draftEntry}
+      latestBuild={{ build: { status: "queued", targetVersion: 5 }, change: "unpublished" }}
+      model={models.items[1]!}
+    />,
+    { client: stubClient({ listBuilds: async () => ({ items: [] }) }) },
+  );
+  const status = await screen.findByRole("status");
+  await waitFor(() =>
+    expect(status).toHaveTextContent(
+      "Unpublished. Build for version 5 is queued and not yet recorded.",
+    ),
   );
 });

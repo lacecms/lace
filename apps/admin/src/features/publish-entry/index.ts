@@ -5,5 +5,6 @@ export {
   publicationBuildDescription,
   publicationVisibilityModes,
   type PublicationBuildState,
+  type PublicationChange,
 } from "./build-dispatch.js";
 export { PublishEntryDialog } from "./PublishEntryDialog/index.js";

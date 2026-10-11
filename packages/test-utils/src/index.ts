@@ -80,10 +80,13 @@ import type {
   PublishContentEntryResult,
   PutObjectInput,
   ReadUrlOptions,
+  RevertContentDraftCommand,
   SaveCompleteDraftInput,
   SiteBuildRequest,
   SiteBuildTrigger,
   StoredObject,
+  UnpublishContentEntryCommand,
+  UnpublishContentEntryResult,
 } from "@lacecms/application";
 import {
   DomainError,
@@ -94,8 +97,10 @@ import {
   createContentEntry,
   publishContentEntry,
   resolveContentPublicPath,
+  revertContentDraft,
   saveCompleteDraft,
   unixMilliseconds,
+  unpublishContentEntry,
 } from "@lacecms/domain";
 import type {
   ActorId,
@@ -841,6 +846,17 @@ export class InMemoryContentStore
       (candidate) => candidate.model.key === entry.model.key,
     ).length;
     assertEntryCreationAllowed(entry.model.kind, existingEntryCount);
+    if (input.duplicateOf !== undefined) {
+      const source = this.entries.get(input.duplicateOf.entryId);
+      if (source === undefined)
+        throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
+      if (source.draft.revision !== input.duplicateOf.expectedRevision) {
+        throw new DomainError(
+          "CONTENT_REVISION_CONFLICT",
+          "The source draft revision no longer matches the duplicate guard.",
+        );
+      }
+    }
     this.assertActiveReferences(input.mediaReferences ?? []);
     this.entries.set(entry.id, entry);
     this.references.set(entry.draft.id, clone(input.mediaReferences ?? []));
@@ -984,6 +1000,70 @@ export class InMemoryContentStore
       status: "published",
       targetVersion: this.publicVersion,
     });
+  }
+
+  public async unpublish(
+    input: UnpublishContentEntryCommand,
+  ): Promise<UnpublishContentEntryResult> {
+    let idempotencyMapKey: string | undefined;
+    if (input.idempotency !== undefined) {
+      if (input.idempotency.actorId !== input.unpublishedBy.id) {
+        throw new DomainError(
+          "CONTENT_INVALID_STATE",
+          "Unpublication idempotency actor must match the unpublishing actor.",
+        );
+      }
+      idempotencyMapKey = `unpublication:${input.entryId}:${input.idempotency.actorId}:${input.idempotency.key}`;
+      const prior = this.publicationIdempotency.get(idempotencyMapKey);
+      if (prior !== undefined) {
+        if (prior.fingerprint !== input.idempotency.fingerprint) {
+          throw new DomainError(
+            "CONTENT_INVALID_STATE",
+            "Unpublication idempotency key was reused with different input.",
+          );
+        }
+        return Object.freeze({
+          entry: copyEntry(prior.entry),
+          outcome: "replayed",
+          status: "unpublished",
+        });
+      }
+    }
+    const entry = this.entries.get(input.entryId);
+    if (entry === undefined)
+      throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
+    const unpublished = unpublishContentEntry(entry, input.expectedPublishedSnapshotId);
+    for (const [path, route] of this.routes) {
+      if (route.entryId === entry.id) this.routes.delete(path);
+    }
+    this.entries.set(unpublished.id, unpublished);
+    this.references.delete(input.expectedPublishedSnapshotId);
+    this.publicVersion += 1;
+    if (idempotencyMapKey !== undefined) {
+      this.publicationIdempotency.set(idempotencyMapKey, {
+        entry: copyEntry(unpublished),
+        fingerprint: input.idempotency!.fingerprint,
+      });
+    }
+    return Object.freeze({
+      entry: copyEntry(unpublished),
+      outcome: "unpublished",
+      status: "unpublished",
+      targetVersion: this.publicVersion,
+    });
+  }
+
+  public async revertDraft(input: RevertContentDraftCommand): Promise<ContentCommandResult> {
+    const entry = this.entries.get(input.entryId);
+    if (entry === undefined)
+      throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
+    const reverted = revertContentDraft(entry, input);
+    this.entries.set(reverted.id, reverted);
+    this.references.set(
+      reverted.draft.id,
+      clone(this.references.get(input.expectedPublishedSnapshotId) ?? []),
+    );
+    return Object.freeze({ entry: copyEntry(reverted), status: "reverted" });
   }
 
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {

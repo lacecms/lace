@@ -50,6 +50,7 @@ services:
     environment: &api-environment
       LACE_BUILD_SITE_ID: ${LACE_BUILD_SITE_ID:-main-site}
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
+      LACE_BUILD_SITE_URL: ${LACE_BUILD_SITE_URL:-}
       LACE_AUTH_SECRET: ${LACE_AUTH_SECRET:?set LACE_AUTH_SECRET}
       LACE_DATABASE_PATH: /data/lace.sqlite
       LACE_HOST: 0.0.0.0

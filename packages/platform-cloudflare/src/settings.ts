@@ -21,6 +21,7 @@ export interface AssetsFetcher {
 export interface CloudflareWorkerEnv {
   readonly LACE_BUILD_SITE_ID?: unknown;
   readonly LACE_BUILD_SITE_LABEL?: unknown;
+  readonly LACE_BUILD_SITE_URL?: unknown;
   readonly ASSETS?: unknown;
   readonly CACHE?: unknown;
   readonly DB?: unknown;

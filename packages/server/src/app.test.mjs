@@ -23,6 +23,7 @@ const editor = { id: actorId("editor"), role: "editor" };
 
 async function fixture({
   actor = admin,
+  resolveActor,
   auth,
   ready = true,
   allowed = true,
@@ -85,7 +86,7 @@ async function fixture({
   const app = createLaceApp({
     ...(auth === undefined ? {} : { auth }),
     actors: {
-      resolve: async () => actor,
+      resolve: resolveActor ?? (async () => actor),
       ...(sessionId === undefined ? {} : { sessionId: async () => sessionId }),
     },
     ...(sensitiveLimiter === undefined ? {} : { sensitiveLimiter }),
@@ -1314,6 +1315,134 @@ function send(app, path, method = "POST", body) {
     }),
   );
 }
+
+test("entry lifecycle routes unpublish, revert, and duplicate with stable contracts", async () => {
+  let current = admin;
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const { app, store } = await fixture({ maxBodyBytes: 4096, resolveActor: async () => current });
+  const call = (path, { body, headers = {}, method = "POST" } = {}) =>
+    json(app, path, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { "content-type": "application/json", ...headers },
+    });
+  const post = await call("/api/v1/admin/models/posts/entries", {
+    body: { blocks: [], fields: { author: "Ada" }, slug: "launch", title: "Launch" },
+  });
+  const page = await call("/api/v1/admin/models/home/entries", {
+    body: { blocks: [], fields: {}, title: "Home" },
+  });
+  const entryPath = `/api/v1/admin/entries/${post.body.id}`;
+  const published = await call(`${entryPath}/publish`, { body: { expectedRevision: 1 } });
+  const publishedId = published.body.entry.published.id;
+  await call(`${entryPath}/draft`, {
+    body: { blocks: [], expectedRevision: 1, fields: {}, slug: "changed", title: "Changed" },
+    method: "PUT",
+  });
+
+  for (const actor of [viewer, editor]) {
+    current = actor;
+    expect(
+      await call(`${entryPath}/unpublish`, { body: { expectedPublishedSnapshotId: publishedId } }),
+    ).toMatchObject({
+      body: { error: { code: "AUTHORIZATION_DENIED" } },
+      response: { status: 403 },
+    });
+  }
+  current = viewer;
+  for (const action of ["revert", "duplicate"]) {
+    expect(await call(`${entryPath}/${action}`, { body: { expectedRevision: 2 } })).toMatchObject({
+      response: { status: 403 },
+    });
+  }
+
+  current = editor;
+  expect(
+    await call(`${entryPath}/revert`, {
+      body: { expectedRevision: 2 },
+      headers: { "if-match": '"3"' },
+    }),
+  ).toMatchObject({ body: { error: { code: "VALIDATION_FAILED" } }, response: { status: 422 } });
+  expect(await call(`${entryPath}/revert`, { headers: { "if-match": 'W/"2"' } })).toMatchObject({
+    response: { status: 422 },
+  });
+  expect(await call(`${entryPath}/revert`, { body: {} })).toMatchObject({
+    response: { status: 422 },
+  });
+  const reverted = await call(`${entryPath}/revert`, { headers: { "if-match": '"2"' } });
+  expect(reverted).toMatchObject({
+    body: {
+      draft: { revision: 3, slug: "launch", title: "Launch" },
+      published: { id: publishedId, revision: 3 },
+      updatedBy: { id: "editor" },
+    },
+    response: { status: 200 },
+  });
+
+  const copy = await call(`${entryPath}/duplicate`);
+  expect(copy).toMatchObject({
+    body: { draft: { fields: { author: "Ada" }, revision: 1, title: "Launch (copy)" } },
+    response: { status: 201 },
+  });
+  expect(copy.body.draft).not.toHaveProperty("slug");
+  expect(copy.body).not.toHaveProperty("published");
+  expect(await call(`${entryPath}/duplicate`, { body: { expectedRevision: 1 } })).toMatchObject({
+    body: { error: { code: "CONTENT_REVISION_CONFLICT" } },
+    response: { status: 409 },
+  });
+  expect(await call(`${entryPath}/duplicate`, { body: { title: "Other" } })).toMatchObject({
+    response: { status: 422 },
+  });
+
+  current = admin;
+  const pagePath = `/api/v1/admin/entries/${page.body.id}`;
+  expect(await call(`${pagePath}/duplicate`)).toMatchObject({
+    body: { error: { code: "CONTENT_PAGE_SINGLETON" } },
+    response: { status: 409 },
+  });
+  expect(await call(pagePath, { body: { expectedRevision: 1 }, method: "DELETE" })).toMatchObject({
+    body: { error: { code: "CONTENT_PAGE_SINGLETON" } },
+    response: { status: 409 },
+  });
+  expect(
+    await call(`${pagePath}/unpublish`, { body: { expectedPublishedSnapshotId: "none" } }),
+  ).toMatchObject({
+    body: { error: { code: "CONTENT_NOT_PUBLISHED" } },
+    response: { status: 409 },
+  });
+  expect(await call(`${entryPath}/unpublish`, { body: {} })).toMatchObject({
+    body: { error: { code: "VALIDATION_FAILED" } },
+    response: { status: 422 },
+  });
+  const publicPath = "/api/v1/public/collections/posts/launch";
+  expect((await json(app, publicPath)).response.status).toBe(200);
+  const unpublishRequest = {
+    body: { expectedPublishedSnapshotId: publishedId },
+    headers: { "idempotency-key": "unpublish-key" },
+  };
+  const unpublished = await call(`${entryPath}/unpublish`, unpublishRequest);
+  expect(unpublished).toMatchObject({
+    body: {
+      build: { status: "queued", targetVersion: 2 },
+      entry: { draft: { revision: 3 } },
+      unpublication: "unpublished",
+    },
+    response: { status: 200 },
+  });
+  expect(unpublished.body.entry).not.toHaveProperty("published");
+  expect(await store.loadPublic("/blog/launch")).toBeNull();
+  expect((await json(app, publicPath)).response.status).toBe(404);
+  expect(await call(`${entryPath}/unpublish`, unpublishRequest)).toMatchObject({
+    body: { build: { status: "not-dispatched" }, unpublication: "replayed" },
+    response: { status: 200 },
+  });
+  expect(
+    await call(`${entryPath}/unpublish`, { body: { expectedPublishedSnapshotId: publishedId } }),
+  ).toMatchObject({
+    body: { error: { code: "CONTENT_NOT_PUBLISHED" } },
+    response: { status: 409 },
+  });
+});
 
 test("the password-based user creation route no longer exists", async () => {
   const { security, calls } = accountSecurity();

@@ -172,6 +172,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -289,6 +291,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -335,6 +339,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -484,6 +490,10 @@
                               "maxLength": 80,
                               "minLength": 1,
                               "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9 _-]*[A-Za-z0-9])?$",
+                              "type": "string"
+                            },
+                            "url": {
+                              "maxLength": 2048,
                               "type": "string"
                             }
                           },
@@ -1394,6 +1404,327 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/entries/{entryId}/duplicate": {
+      "post": {
+        "description": "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
+        "operationId": "postApiV1AdminEntriesByEntryIdDuplicate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedRevision": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "draft": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "createdAt": {},
+                        "entryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "draft"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "updatedAt": {},
+                        "updatedBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": ["admin", "editor", "viewer"]
+                            }
+                          },
+                          "required": ["id", "role"],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "createdAt",
+                        "entryId",
+                        "fields",
+                        "id",
+                        "revision",
+                        "title",
+                        "updatedAt",
+                        "updatedBy",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "id": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "model": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "page"
+                            },
+                            "path": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "key", "path"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "collection"
+                            },
+                            "route": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "key", "route"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "published": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "createdAt": {},
+                        "entryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "published"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "updatedAt": {},
+                        "updatedBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": ["admin", "editor", "viewer"]
+                            }
+                          },
+                          "required": ["id", "role"],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "createdAt",
+                        "entryId",
+                        "fields",
+                        "id",
+                        "revision",
+                        "title",
+                        "updatedAt",
+                        "updatedBy",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "updatedBy": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["displayName", "id"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["draft", "id", "model", "updatedBy"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Created copy"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duplicate content entry",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/entries/{entryId}/publish": {
       "post": {
         "operationId": "postApiV1AdminEntriesByEntryIdPublish",
@@ -1753,6 +2084,688 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/entries/{entryId}/revert": {
+      "post": {
+        "description": "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
+        "operationId": "postApiV1AdminEntriesByEntryIdRevert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedRevision": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "draft": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "createdAt": {},
+                        "entryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "draft"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "updatedAt": {},
+                        "updatedBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": ["admin", "editor", "viewer"]
+                            }
+                          },
+                          "required": ["id", "role"],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "createdAt",
+                        "entryId",
+                        "fields",
+                        "id",
+                        "revision",
+                        "title",
+                        "updatedAt",
+                        "updatedBy",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "id": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "model": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "page"
+                            },
+                            "path": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "key", "path"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "collection"
+                            },
+                            "route": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "key", "route"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "published": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blocks": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {},
+                              "key": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "position": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "schemaVersion": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "type": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["data", "key", "position", "schemaVersion", "type"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "createdAt": {},
+                        "entryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "fields": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "slug": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "published"
+                        },
+                        "title": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "updatedAt": {},
+                        "updatedBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": ["admin", "editor", "viewer"]
+                            }
+                          },
+                          "required": ["id", "role"],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "blocks",
+                        "createdAt",
+                        "entryId",
+                        "fields",
+                        "id",
+                        "revision",
+                        "title",
+                        "updatedAt",
+                        "updatedBy",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "updatedBy": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["displayName", "id"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["draft", "id", "model", "updatedBy"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Reverted entry"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revert draft to published",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/entries/{entryId}/unpublish": {
+      "post": {
+        "description": "Removes the entry's publication and public route, keeps the draft, and queues a site build. Requires content:publish.",
+        "operationId": "postApiV1AdminEntriesByEntryIdUnpublish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedPublishedSnapshotId": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["expectedPublishedSnapshotId"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "build": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "queued"
+                            },
+                            "targetVersion": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": ["status", "targetVersion"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "not-dispatched"
+                            }
+                          },
+                          "required": ["status"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "entry": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "draft": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "blocks": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "data": {},
+                                  "key": {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "position": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "schemaVersion": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "type": {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["data", "key", "position", "schemaVersion", "type"],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "createdAt": {},
+                            "entryId": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "fields": {},
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "slug": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "draft"
+                            },
+                            "title": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "updatedAt": {},
+                            "updatedBy": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "enum": ["admin", "editor", "viewer"]
+                                }
+                              },
+                              "required": ["id", "role"],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "blocks",
+                            "createdAt",
+                            "entryId",
+                            "fields",
+                            "id",
+                            "revision",
+                            "title",
+                            "updatedAt",
+                            "updatedBy",
+                            "state"
+                          ],
+                          "type": "object"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "model": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "key": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "page"
+                                },
+                                "path": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "key", "path"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "key": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "collection"
+                                },
+                                "route": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "key", "route"],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "published": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "blocks": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "data": {},
+                                  "key": {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "position": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "schemaVersion": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "type": {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["data", "key", "position", "schemaVersion", "type"],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "createdAt": {},
+                            "entryId": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "fields": {},
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "slug": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "published"
+                            },
+                            "title": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "updatedAt": {},
+                            "updatedBy": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "enum": ["admin", "editor", "viewer"]
+                                }
+                              },
+                              "required": ["id", "role"],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "blocks",
+                            "createdAt",
+                            "entryId",
+                            "fields",
+                            "id",
+                            "revision",
+                            "title",
+                            "updatedAt",
+                            "updatedBy",
+                            "state"
+                          ],
+                          "type": "object"
+                        },
+                        "updatedBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "maxLength": 320,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": ["displayName", "id"],
+                          "type": "object"
+                        }
+                      },
+                      "required": ["draft", "id", "model", "updatedBy"],
+                      "type": "object"
+                    },
+                    "unpublication": {
+                      "enum": ["unpublished", "replayed"]
+                    }
+                  },
+                  "required": ["build", "entry", "unpublication"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unpublication and build dispatch outcome"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unpublish content entry",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/invitations": {
       "get": {
         "operationId": "getApiV1AdminInvitations",
@@ -1969,6 +2982,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -4122,6 +5137,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -4168,6 +5185,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -4286,6 +5305,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",
@@ -4389,6 +5410,8 @@
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
                             "CONTENT_PUBLISHED_IMMUTABLE",
                             "CONTENT_REVISION_CONFLICT",
                             "CONTENT_ROUTE_CONFLICT",

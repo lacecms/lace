@@ -192,8 +192,16 @@ export interface ContentEntryReadPort {
 }
 
 export interface CreateContentEntryInput {
+  /** Commits the new entry only while the duplicated source draft is still at this revision. */
+  readonly duplicateOf?: DuplicateSourceGuard;
   readonly entry: ContentEntry;
   readonly mediaReferences: readonly DraftMediaReference[];
+}
+
+/** The source draft revision on which a duplicate creation depends. */
+export interface DuplicateSourceGuard {
+  readonly entryId: ContentEntryId;
+  readonly expectedRevision: number;
 }
 
 export interface SaveCompleteDraftInput {
@@ -225,7 +233,23 @@ export interface DeleteContentEntryInput {
   readonly expectedRevision: number;
 }
 
-export type ContentCommandStatus = "created" | "deleted" | "published" | "saved";
+export interface UnpublishContentEntryCommand {
+  readonly entryId: ContentEntryId;
+  readonly expectedPublishedSnapshotId: ContentSnapshotId;
+  readonly idempotency?: PublicationIdempotency;
+  readonly unpublishedAt: UnixMilliseconds;
+  readonly unpublishedBy: Actor;
+}
+
+export interface RevertContentDraftCommand {
+  readonly entryId: ContentEntryId;
+  readonly expectedPublishedSnapshotId: ContentSnapshotId;
+  readonly expectedRevision: number;
+  readonly revertedAt: UnixMilliseconds;
+  readonly revertedBy: Actor;
+}
+
+export type ContentCommandStatus = "created" | "deleted" | "published" | "reverted" | "saved";
 
 /** A complete state change returned by a specialized atomic command. */
 export interface ContentCommandResult {
@@ -247,6 +271,20 @@ export type PublishContentEntryResult =
       readonly status: "published";
     }>;
 
+/** An unpublication result distinguishes a fresh commit from an idempotent replay. */
+export type UnpublishContentEntryResult =
+  | Readonly<{
+      readonly entry: ContentEntry;
+      readonly outcome: "unpublished";
+      readonly status: "unpublished";
+      readonly targetVersion: number;
+    }>
+  | Readonly<{
+      readonly entry: ContentEntry;
+      readonly outcome: "replayed";
+      readonly status: "unpublished";
+    }>;
+
 /**
  * Specialized state-changing operations. These deliberately replace a generic
  * transaction callback so D1 and SQLite can preserve identical semantics.
@@ -255,7 +293,11 @@ export interface ContentEntryCommandPort {
   create(input: CreateContentEntryInput): Promise<ContentCommandResult>;
   delete(input: DeleteContentEntryInput): Promise<ContentCommandResult>;
   publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult>;
+  /** Copies the current publication into the draft and aligns both revisions. */
+  revertDraft(input: RevertContentDraftCommand): Promise<ContentCommandResult>;
   saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult>;
+  /** Removes the current publication and its route while keeping the draft. */
+  unpublish(input: UnpublishContentEntryCommand): Promise<UnpublishContentEntryResult>;
 }
 
 export interface PublicContentEntry {

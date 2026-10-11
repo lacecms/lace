@@ -1,13 +1,24 @@
 import type { SiteBuildRecordDto } from "@lacecms/contracts";
 import { isTerminalBuildStatus } from "../../entities/site-build/index.js";
 
+/** The public-output change whose build is described: a publication or its removal. */
+export type PublicationChange = "published" | "unpublished";
+
+const changeLabel: Readonly<Record<PublicationChange, { done: string; noun: string }>> = {
+  published: { done: "Published.", noun: "Publication" },
+  unpublished: { done: "Unpublished.", noun: "Unpublication" },
+};
+
 /** Describes publication success separately from the build it may have requested. */
-export function buildDispatchDescription(status: "queued" | "not-dispatched") {
+export function buildDispatchDescription(
+  status: "queued" | "not-dispatched",
+  change: PublicationChange = "published",
+) {
   switch (status) {
     case "queued":
-      return "Published. Build pending.";
+      return `${changeLabel[change].done} Build pending.`;
     case "not-dispatched":
-      return "Publication was already accepted; no new build was requested.";
+      return `${changeLabel[change].noun} was already accepted; no new build was requested.`;
   }
 }
 
@@ -48,25 +59,30 @@ export function publicationBuildDescription(
   state: PublicationBuildState,
   version: number,
   siteLabel?: string,
+  change: PublicationChange = "published",
 ) {
   const build = `Build for version ${version}${siteLabel === undefined ? "" : ` of ${siteLabel}`}`;
+  return `${changeLabel[change].done} ${buildStateSentence(state, build)}`;
+}
+
+function buildStateSentence(state: PublicationBuildState, build: string) {
   switch (state) {
     case "waiting":
-      return `Published. ${build} is queued and not yet recorded.`;
+      return `${build} is queued and not yet recorded.`;
     case "pending":
-      return `Published. ${build} is pending (queued or waiting for a retry).`;
+      return `${build} is pending (queued or waiting for a retry).`;
     case "running":
-      return `Published. ${build} is running.`;
+      return `${build} is running.`;
     case "accepted":
-      return `Published. ${build} was accepted by the provider; Lace has not confirmed the site changed.`;
+      return `${build} was accepted by the provider; Lace has not confirmed the site changed.`;
     case "succeeded":
-      return `Published. ${build} succeeded.`;
+      return `${build} succeeded.`;
     case "failed":
-      return `Published. ${build} failed; the previous release stays served.`;
+      return `${build} failed; the previous release stays served.`;
     case "cancelled":
-      return `Published. ${build} was cancelled by the provider; the site was not updated by it.`;
+      return `${build} was cancelled by the provider; the site was not updated by it.`;
     case "unknown":
-      return `Published. ${build} has an unknown outcome; check the provider.`;
+      return `${build} has an unknown outcome; check the provider.`;
   }
 }
 

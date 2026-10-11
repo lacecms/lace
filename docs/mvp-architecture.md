@@ -815,7 +815,7 @@ content_snapshots
 
 `fields_json` contains model-specific structured fields. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
-The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case; configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7).
+The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case or removed through the unpublish use case (section 10); configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7). Reverting a draft sets the published snapshot's `revision` to the new draft revision without changing its content, so an entry whose draft equals its publication is derived as published ([ADR 0008](adr/0008-entry-lifecycle-commands.md)).
 
 The database temporarily contains both snapshots, so text content is duplicated. This is intentional and acceptable for the D1 free-plan database limit because binary assets are excluded. Individual page payloads are split into block rows rather than constrained by one whole-page row.
 
@@ -1034,6 +1034,9 @@ published_state
 Every operation that changes public output increments `version` in the same
 atomic mutation. The version supplies the build-export ETag and the target
 version for build requests without hashing the full export on every request.
+Aligning a published snapshot's `revision` during a draft revert is not a
+public-output change: no renderer, SDK helper, or build step reads the
+revision, and the public entry shape planned for CE3C drops it.
 
 Outbox rows also contain `locked_at` and `locked_by` nullable columns. A
 dispatcher claims only an available, unprocessed row whose lease is absent or
@@ -1153,8 +1156,39 @@ Content publication success and site deployment success are distinct states. The
 Deleting a draft-only entry requires `content:write`. Deleting an entry that has
 a published snapshot also requires `content:publish`; the same atomic mutation
 removes its public route, increments `published_state.version`, and enqueues a
-build. The MVP has no separate unpublish command. Deleting a page does not delete
-its model and a later edit recreates the singleton entry.
+build. Page entries cannot be deleted: a page singleton is defined by
+configuration and is removed by removing its model from `lace.config.ts`. A page
+delete request fails with `CONTENT_PAGE_SINGLETON` (HTTP `409`).
+
+The entry lifecycle has three further commands
+([ADR 0008](adr/0008-entry-lifecycle-commands.md)):
+
+- **Unpublish** (`content:publish`, pages and collection entries). Inputs: entry
+  ID, expected published snapshot ID, actor, optional idempotency key (scoped
+  to the entry and actor, with the publication key rules). One guarded atomic
+  mutation removes the entry's route, clears `published_snapshot_id`, deletes
+  the published snapshot (its blocks and media references cascade), increments
+  `published_state.version`, creates or coalesces the build request, and stores
+  the idempotency result. The draft and its revision are unchanged. An entry
+  without a publication fails with `CONTENT_NOT_PUBLISHED`; a stale snapshot ID
+  fails with `CONTENT_REVISION_CONFLICT`. The removed snapshot cannot be
+  restored: republishing publishes the current draft under a new snapshot ID,
+  and fails with `CONTENT_ROUTE_CONFLICT` if another entry has claimed the
+  path meanwhile.
+- **Revert draft** (`content:write`). Inputs: entry ID, expected draft revision,
+  actor. One guarded atomic mutation, conditional on the expected draft
+  revision and the publication read by the use case, copies the published
+  title, slug, fields, schema version, blocks, and media references into the
+  draft with set-based statements, increments the draft revision once, and sets
+  the published snapshot's revision to the new draft revision. Public output,
+  `published_state.version`, and build work are unchanged. An entry without a
+  publication fails with `CONTENT_NOT_PUBLISHED`.
+- **Duplicate** (`content:write`, collection entries only). Creates a new entry
+  whose draft copies the source draft's fields and blocks with a ` (copy)` title
+  suffix within the title limit, no slug, new block keys, and a rebuilt media
+  reference projection. The copy is validated in draft mode, created at
+  revision 1, and never published. Creation is guarded on the source draft
+  revision that was read. A page duplicate fails with `CONTENT_PAGE_SINGLETON`.
 
 ## 11. Block registry and rich text
 
@@ -1280,6 +1314,9 @@ POST   /api/v1/admin/models/:modelKey/entries
 GET    /api/v1/admin/entries/:entryId
 PUT    /api/v1/admin/entries/:entryId/draft
 POST   /api/v1/admin/entries/:entryId/publish
+POST   /api/v1/admin/entries/:entryId/unpublish
+POST   /api/v1/admin/entries/:entryId/revert
+POST   /api/v1/admin/entries/:entryId/duplicate
 DELETE /api/v1/admin/entries/:entryId
 
 GET    /api/v1/admin/media
@@ -1991,7 +2028,7 @@ Primary routes:
 
 The content-model response drives navigation and field forms. Pages open their singleton editor directly; collections open a paginated entry list.
 
-The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL.
+The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL. Writers get a labeled "Actions for {title}" menu in each row with Open, Duplicate and Delete. Delete appears for draft-only entries, and for published ones only with `content:publish`. Creating or duplicating an entry opens it in the editor.
 
 The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, errors inside the card, and a "Forgot password?" link. The accept-invite, forgot-password, and reset-password screens are the same kind of public card. Accept and reset read the token from the URL fragment, remove it from the address bar, and keep it only in component state, never in the query string, router state, query cache, or browser storage. Forgot-password shows the same confirmation whether or not the address has an account. `/account` is available to every signed-in user from the user menu: it changes the display name, changes the password (signing out other sessions by default), and lists sessions with a "This device" marker and confirmed Sign out actions. Users lists accounts with a "You" marker, role and status badges, and no raw IDs, and below them the pending invitations with Resend and a confirmed Revoke. Inviting a user, changing a role, disabling or enabling an account, sending a password reset, and signing a user out everywhere each happen in a dialog; no admin screen collects another person's password. When an invitation or reset email is not sent, its dialog shows the link once, like a new build token. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable, Send password reset, or Sign out everywhere for their own account and is warned before demoting it. Settings shows API readiness, configured models, active build tokens, and email delivery (provider and sender, with a rate-limited Send test email action addressed only to the signed-in administrator) as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
 
@@ -2001,9 +2038,16 @@ Model and block media fields choose through a picker dialog built from the same 
 
 The editor must make draft/published/build status visible and must surface optimistic-concurrency conflicts rather than overwriting a newer draft.
 
-The shell header stays pinned while a screen scrolls. It gives the screen an actions slot beside the breadcrumbs. The entry editor fills that slot with a save-state indicator (unsaved, saving, not saved, saved revision, or view only), one Save button, and Publish for administrators. Save is bound to the draft form and to `⌘S`/`Ctrl+S`, and the shortcut always suppresses the browser's page save. The title is a large input at the top of the main column, and the blocks follow it. A right-hand column, which stacks after the blocks on narrow screens, holds two cards:
+The shell header stays pinned while a screen scrolls. It gives the screen an actions slot beside the breadcrumbs. The entry editor fills that slot with a save-state indicator (unsaved, saving, not saved, saved revision, or view only), one Save button, Publish for administrators, and an "Entry actions" menu for writers. Publish reads "Save and publish" while the form has unsaved changes: after confirmation it validates, saves, and publishes the saved revision with one idempotency key, and a failed validation or save publishes nothing. The entry actions menu offers only what the permissions and entry state allow (see [ADR 0008](adr/0008-entry-lifecycle-commands.md)):
 
-- Publication: the derived status, the live and draft revisions, the last editor's display name, relative times with the absolute time on hover, the public path, and the latest build state. Raw IDs and ISO timestamps never appear.
+- Duplicate (collections) opens the copy of the last saved draft.
+- Revert to published lists what is lost: the saved draft changes since the publication, and unsaved changes. When only unsaved changes differ, it discards them locally.
+- Unpublish says that the path stops working after the next build, or for a page that its fixed path returns 404. The draft and unsaved changes are kept, and the card follows the queued build.
+- Delete (collections; published entries need `content:publish`) asks a published entry's title to be typed and says the page leaves the site after the next build. It returns to the collection list without the discard prompt.
+
+Both menus are non-modal Radix menus whose confirmations open after the menu closes and return focus to the menu button. Save is bound to the draft form and to `⌘S`/`Ctrl+S`, and the shortcut always suppresses the browser's page save. The title is a large input at the top of the main column, and the blocks follow it. A right-hand column, which stacks after the blocks on narrow screens, holds two cards:
+
+- Publication: the derived status, the live and draft revisions, the last editor's display name, relative times with the absolute time on hover, the public path, and the latest build state. Raw IDs and ISO timestamps never appear. When the entry is published and the operator sets the optional `LACE_BUILD_SITE_URL` (returned by `GET /api/v1/admin/build-site` beside the site ID and label), the path is an "Open on site" link to that base URL; otherwise it stays text.
 - Fields: the entry's slug and model fields.
 
 Until the Builds screen reads persisted builds in Step 21, the latest build state is the dispatch result of the most recent publish from the editor. The field controls are built on the shared primitives:

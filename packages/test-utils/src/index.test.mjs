@@ -36,6 +36,7 @@ import {
   collectMediaBytes,
   ContentUseCases,
   detectMediaMimeType,
+  duplicateTitle,
   MAX_IMAGE_DIMENSION,
   MAX_IMAGE_PIXELS,
   MAX_MEDIA_BYTES,
@@ -1076,8 +1077,12 @@ test("runs the authorized in-memory content lifecycle with validation and isolat
   });
   expect((await useCases.loadPublished({ actor: admin, entryId: created.id })).title).toBe("Home");
   await expect(useCases.delete({ actor: editor, entryId: created.id })).rejects.toMatchObject({
-    code: "AUTHORIZATION_DENIED",
+    code: "CONTENT_PAGE_SINGLETON",
   });
+  await expect(
+    useCases.delete({ actor: admin, entryId: created.id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({ code: "CONTENT_PAGE_SINGLETON" });
+  expect(await store.loadPublic("/")).toMatchObject({ entry: { id: created.id } });
 
   const firstPost = await useCases.create({
     actor: editor,
@@ -1132,6 +1137,298 @@ test("runs the authorized in-memory content lifecycle with validation and isolat
     useCases.delete({ actor: editor, entryId: racedPost.id, expectedRevision: 1 }),
   ).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
   expect(await store.loadPublic("/blog/raced")).toMatchObject({ entry: { id: racedPost.id } });
+});
+
+async function lifecycleFixture() {
+  const config = await defineConfig({
+    blocks: [
+      defineBlock({
+        fields: { image: field.media({ required: true }) },
+        type: "asset",
+        version: 1,
+      }),
+    ],
+    content: [
+      definePage({ blocks: [], fields: {}, key: "home", path: "/", version: 1 }),
+      defineCollection({
+        blocks: ["asset"],
+        fields: { cover: field.media(), summary: field.text() },
+        key: "posts",
+        route: "/blog/:slug",
+        version: 1,
+      }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  for (const id of ["media-1", "media-2"]) {
+    await store.createMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      height: 1,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      storageKey: `media/${id}.png`,
+      width: 1,
+    });
+  }
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(10)),
+    config: config.runtime,
+    content: store,
+    idGenerator: new DeterministicIdGenerator("lifecycle"),
+    media: store,
+  });
+  const post = (title, slug, image = "media-1") => ({
+    blocks: [
+      { data: { image }, key: blockKey("hero"), position: 1000, schemaVersion: 1, type: "asset" },
+    ],
+    fields: { cover: image, summary: title },
+    slug,
+    title,
+  });
+  return { post, store, useCases };
+}
+
+test("unpublishes guarded publications idempotently and keeps the draft", async () => {
+  const { post, store, useCases } = await lifecycleFixture();
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const created = await useCases.create({ actor: editor, modelKey: "posts", ...post("A", "a") });
+  await expect(
+    useCases.unpublish({
+      actor: admin,
+      entryId: created.id,
+      expectedPublishedSnapshotId: contentSnapshotId("none"),
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_NOT_PUBLISHED" });
+  const { entry: published } = await useCases.publish({
+    actor: admin,
+    entryId: created.id,
+    expectedRevision: 1,
+  });
+  const changed = await useCases.save({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+    ...post("Changed", "a", "media-2"),
+  });
+  const version = await store.publishedContentVersion();
+  const unpublish = (actor, overrides = {}) =>
+    useCases.unpublish({
+      actor,
+      entryId: created.id,
+      expectedPublishedSnapshotId: published.published.id,
+      ...overrides,
+    });
+  for (const actor of [editor, viewer]) {
+    await expect(unpublish(actor)).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  }
+  await expect(
+    unpublish(admin, { expectedPublishedSnapshotId: contentSnapshotId("stale") }),
+  ).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
+  expect(await store.publishedContentVersion()).toBe(version);
+  expect(await store.loadPublic("/blog/a")).not.toBeNull();
+
+  const result = await unpublish(admin, { idempotencyKey: "unpublish-a" });
+  expect(result).toMatchObject({
+    build: { status: "queued", targetVersion: version + 1 },
+    unpublication: "unpublished",
+  });
+  expect(result.entry).not.toHaveProperty("published");
+  expect(result.entry.draft).toEqual(changed.draft);
+  expect(await store.loadPublic("/blog/a")).toBeNull();
+  expect((await store.exportBuildContent()).entries).toEqual([]);
+  expect(
+    (await useCases.list({ actor: admin, limit: 10, modelKey: "posts" })).items[0],
+  ).toMatchObject({ status: "draft" });
+  await expect(unpublish(admin, { idempotencyKey: "unpublish-a" })).resolves.toMatchObject({
+    build: { status: "not-dispatched" },
+    unpublication: "replayed",
+  });
+  await expect(
+    unpublish(admin, {
+      expectedPublishedSnapshotId: contentSnapshotId("other"),
+      idempotencyKey: "unpublish-a",
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  await expect(unpublish(admin)).rejects.toMatchObject({ code: "CONTENT_NOT_PUBLISHED" });
+  expect(await store.publishedContentVersion()).toBe(version + 1);
+
+  const republished = await useCases.publish({
+    actor: admin,
+    entryId: created.id,
+    expectedRevision: 2,
+  });
+  expect(republished.entry.published).toMatchObject({ revision: 2, title: "Changed" });
+  expect(republished.entry.published.id).not.toBe(published.published.id);
+  expect(await store.loadPublic("/blog/a")).not.toBeNull();
+
+  const page = await useCases.create({
+    actor: editor,
+    blocks: [],
+    fields: {},
+    modelKey: "home",
+    title: "Home",
+  });
+  const { entry: publishedPage } = await useCases.publish({
+    actor: admin,
+    entryId: page.id,
+    expectedRevision: 1,
+  });
+  await useCases.unpublish({
+    actor: admin,
+    entryId: page.id,
+    expectedPublishedSnapshotId: publishedPage.published.id,
+  });
+  expect(await store.loadPublic("/")).toBeNull();
+  expect(await useCases.load({ actor: admin, entryId: page.id })).toMatchObject({
+    draft: { title: "Home" },
+  });
+});
+
+test("reverts a changed draft to its publication without changing public content", async () => {
+  const { post, store, useCases } = await lifecycleFixture();
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const created = await useCases.create({ actor: editor, modelKey: "posts", ...post("A", "a") });
+  await expect(
+    useCases.revertDraft({ actor: editor, entryId: created.id, expectedRevision: 1 }),
+  ).rejects.toMatchObject({ code: "CONTENT_NOT_PUBLISHED" });
+  const { entry: published } = await useCases.publish({
+    actor: admin,
+    entryId: created.id,
+    expectedRevision: 1,
+  });
+  await useCases.save({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+    ...post("Changed", "changed", "media-2"),
+  });
+  const version = await store.publishedContentVersion();
+  await expect(
+    useCases.revertDraft({ actor: viewer, entryId: created.id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  await expect(
+    useCases.revertDraft({ actor: editor, entryId: created.id, expectedRevision: 1 }),
+  ).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
+
+  const reverted = await useCases.revertDraft({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 2,
+  });
+  expect(reverted.draft).toMatchObject({
+    blocks: published.published.blocks,
+    fields: published.published.fields,
+    revision: 3,
+    slug: "a",
+    title: "A",
+    updatedBy: editor,
+  });
+  expect(reverted.published).toMatchObject({ id: published.published.id, revision: 3 });
+  expect(await store.publishedContentVersion()).toBe(version);
+  expect(
+    (await useCases.list({ actor: admin, limit: 10, modelKey: "posts" })).items[0],
+  ).toMatchObject({ status: "published" });
+  const usage = await store.loadMediaUsage({ limit: 50, mediaId: mediaId("media-2") });
+  expect(usage).toEqual([]);
+});
+
+test("duplicates collection entries as unpublished copies with new block keys", async () => {
+  const { post, store, useCases } = await lifecycleFixture();
+  const created = await useCases.create({
+    actor: editor,
+    modelKey: "posts",
+    ...post("Launch", "launch"),
+  });
+  await useCases.publish({ actor: admin, entryId: created.id, expectedRevision: 1 });
+  const source = await useCases.load({ actor: admin, entryId: created.id });
+  const receivedCreateInputs = [];
+  const create = store.create.bind(store);
+  store.create = async (input) => {
+    receivedCreateInputs.push(input);
+    return create(input);
+  };
+  await expect(
+    useCases.duplicate({ actor: editor, entryId: created.id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
+  const copy = await useCases.duplicate({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+  });
+  expect(copy.id).not.toBe(created.id);
+  expect(copy).not.toHaveProperty("published");
+  expect(copy.draft).toMatchObject({
+    fields: source.draft.fields,
+    revision: 1,
+    title: "Launch (copy)",
+    updatedBy: editor,
+  });
+  expect(copy.draft).not.toHaveProperty("slug");
+  expect(copy.draft.blocks).toHaveLength(1);
+  expect(copy.draft.blocks[0]).toMatchObject({
+    data: { image: "media-1" },
+    position: 1000,
+    schemaVersion: 1,
+    type: "asset",
+  });
+  expect(copy.draft.blocks[0].key).not.toBe("hero");
+  expect(receivedCreateInputs[0]).toMatchObject({
+    duplicateOf: { entryId: created.id, expectedRevision: 1 },
+    mediaReferences: [
+      { fieldPath: "cover", mediaId: "media-1", sourceKey: "$fields" },
+      { fieldPath: "image", mediaId: "media-1", sourceKey: copy.draft.blocks[0].key },
+    ],
+  });
+  expect(await useCases.load({ actor: admin, entryId: created.id })).toEqual(source);
+
+  const raced = store.create;
+  store.create = async (input) => {
+    await store.saveCompleteDraft({
+      entryId: created.id,
+      mutation: {
+        ...post("Raced", "launch"),
+        expectedRevision: 1,
+        mediaReferences: [],
+        updatedAt: unixMilliseconds(11),
+        updatedBy: editor,
+      },
+    });
+    return raced(input);
+  };
+  const before = (await useCases.list({ actor: admin, limit: 10, modelKey: "posts" })).totals.all;
+  await expect(useCases.duplicate({ actor: editor, entryId: created.id })).rejects.toMatchObject({
+    code: "CONTENT_REVISION_CONFLICT",
+  });
+  expect((await useCases.list({ actor: admin, limit: 10, modelKey: "posts" })).totals.all).toBe(
+    before,
+  );
+  store.create = create;
+
+  const page = await useCases.create({
+    actor: editor,
+    blocks: [],
+    fields: {},
+    modelKey: "home",
+    title: "Home",
+  });
+  await expect(useCases.duplicate({ actor: admin, entryId: page.id })).rejects.toMatchObject({
+    code: "CONTENT_PAGE_SINGLETON",
+  });
+  await expect(
+    useCases.duplicate({ actor: { id: actorId("viewer"), role: "viewer" }, entryId: created.id }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+});
+
+test("shortens duplicate titles to the title limit at a whole character", () => {
+  expect(duplicateTitle("Post")).toBe("Post (copy)");
+  const long = duplicateTitle("x".repeat(200));
+  expect(long).toHaveLength(200);
+  expect(long.endsWith(" (copy)")).toBe(true);
+  const surrogate = duplicateTitle(`${"x".repeat(192)}😀${"y".repeat(10)}`);
+  expect(surrogate).toBe(`${"x".repeat(192)} (copy)`);
 });
 
 test("reports rejected and unavailable builds without undoing a publication", async () => {

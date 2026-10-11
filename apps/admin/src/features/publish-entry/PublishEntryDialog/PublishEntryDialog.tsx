@@ -11,7 +11,11 @@ import {
   DialogTrigger,
 } from "../../../shared/ui/Dialog/index.js";
 
-/** Asks the administrator to confirm publishing the current validated draft. */
+/**
+ * Asks the administrator to confirm publishing the current draft. With unsaved
+ * changes the action becomes "Save and publish": the caller saves first and
+ * publishes the saved revision.
+ */
 export function PublishEntryDialog({
   disabled,
   onConfirm,
@@ -20,6 +24,7 @@ export function PublishEntryDialog({
   pending,
   publicPath,
   revision,
+  unsavedChanges = false,
 }: {
   readonly disabled: boolean;
   readonly onConfirm: () => void;
@@ -28,23 +33,26 @@ export function PublishEntryDialog({
   readonly pending: boolean;
   readonly publicPath?: string | undefined;
   readonly revision?: number | undefined;
+  readonly unsavedChanges?: boolean;
 }) {
+  const target = publicPath === undefined ? "" : ` at ${publicPath}`;
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogTrigger asChild>
         <Button disabled={disabled}>
           <Send aria-hidden="true" />
-          Publish
+          {unsavedChanges ? "Save and publish" : "Publish"}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Publish this entry?</DialogTitle>
+          <DialogTitle>
+            {unsavedChanges ? "Save and publish this entry?" : "Publish this entry?"}
+          </DialogTitle>
           <DialogDescription>
-            {revision === undefined ? "The current draft" : `Draft revision ${revision}`} becomes
-            the public version
-            {publicPath === undefined ? "" : ` at ${publicPath}`}. A later draft save will not
-            change it.
+            {unsavedChanges
+              ? `Your unsaved changes are saved as a new draft revision, which then becomes the public version${target}. If the draft cannot be saved, nothing is published.`
+              : `${revision === undefined ? "The current draft" : `Draft revision ${revision}`} becomes the public version${target}. A later draft save will not change it.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -52,7 +60,7 @@ export function PublishEntryDialog({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button disabled={pending} onClick={onConfirm}>
-            {pending ? "Publishing…" : "Confirm publication"}
+            {pending ? "Publishing…" : unsavedChanges ? "Save and publish" : "Confirm publication"}
           </Button>
         </DialogFooter>
       </DialogContent>

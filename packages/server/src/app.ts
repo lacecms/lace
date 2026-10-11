@@ -57,6 +57,11 @@ import {
   mediaUrl,
   createContentEntryRequestSchema,
   deleteContentEntryRequestSchema,
+  duplicateContentEntryRequestSchema,
+  revertContentEntryRequestSchema,
+  toUnpublishContentEntryResultDto,
+  unpublishContentEntryRequestSchema,
+  unpublishContentEntryResultSchema,
   entityTagForVersion,
   entityTagSchema,
   errorEnvelopeSchema,
@@ -411,6 +416,17 @@ function revision(
   } catch {
     return invalid("expectedRevision and If-Match must supply one matching revision.");
   }
+}
+
+/** Like `revision`, but absent when neither the body nor `If-Match` supplies one. */
+function optionalRevision(
+  body: { readonly expectedRevision?: number | undefined },
+  request: Request,
+): number | undefined {
+  if (body.expectedRevision === undefined && request.headers.get("if-match") === null) {
+    return undefined;
+  }
+  return revision(body, request);
 }
 
 function optionalIdempotencyKey(request: Request): string | undefined {
@@ -1765,6 +1781,116 @@ export function createLaceApp(input: LaceAppInput): Hono {
           }),
         }),
       );
+    },
+  );
+
+  app.post(
+    "/api/v1/admin/entries/:entryId/unpublish",
+    describeRoute({
+      description:
+        "Removes the entry's publication and public route, keeps the draft, and queues a site build. Requires content:publish.",
+      requestBody: {
+        content: { "application/json": { schema: resolver(unpublishContentEntryRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: resolver(unpublishContentEntryResultSchema) },
+          },
+          description: "Unpublication and build dispatch outcome",
+        },
+      },
+      summary: "Unpublish content entry",
+      tags: ["admin"],
+    }),
+    validator("param", entryIdParams, validationHook),
+    validator("json", unpublishContentEntryRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof unpublishContentEntryRequestSchema
+      >;
+      const idempotencyKey = optionalIdempotencyKey(context.req.raw);
+      const resolvedActor = await actor(context);
+      const unpublished = await input.content.unpublish({
+        actor: resolvedActor,
+        entryId: context.req.param("entryId") as never,
+        expectedPublishedSnapshotId: body.expectedPublishedSnapshotId as never,
+        ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+      });
+      return response(
+        unpublishContentEntryResultSchema,
+        toUnpublishContentEntryResultDto({
+          ...unpublished,
+          updatedBy: await input.content.describeActor({
+            actor: resolvedActor,
+            actorId: unpublished.entry.draft.updatedBy.id,
+          }),
+        }),
+      );
+    },
+  );
+
+  app.post(
+    "/api/v1/admin/entries/:entryId/revert",
+    describeRoute({
+      description:
+        "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
+      requestBody: {
+        content: { "application/json": { schema: resolver(revertContentEntryRequestSchema) } },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(adminContentEntrySchema) } },
+          description: "Reverted entry",
+        },
+      },
+      summary: "Revert draft to published",
+      tags: ["admin"],
+    }),
+    validator("param", entryIdParams, validationHook),
+    async (context) => {
+      const body = parse(revertContentEntryRequestSchema, await optionalJsonBody(context.req.raw));
+      const resolvedActor = await actor(context);
+      const entry = await input.content.revertDraft({
+        actor: resolvedActor,
+        entryId: context.req.param("entryId") as never,
+        expectedRevision: revision(body, context.req.raw),
+      });
+      return response(adminContentEntrySchema, await adminEntryDto(resolvedActor, entry));
+    },
+  );
+
+  app.post(
+    "/api/v1/admin/entries/:entryId/duplicate",
+    describeRoute({
+      description:
+        "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
+      requestBody: {
+        content: { "application/json": { schema: resolver(duplicateContentEntryRequestSchema) } },
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: resolver(adminContentEntrySchema) } },
+          description: "Created copy",
+        },
+      },
+      summary: "Duplicate content entry",
+      tags: ["admin"],
+    }),
+    validator("param", entryIdParams, validationHook),
+    async (context) => {
+      const body = parse(
+        duplicateContentEntryRequestSchema,
+        await optionalJsonBody(context.req.raw),
+      );
+      const expectedRevision = optionalRevision(body, context.req.raw);
+      const resolvedActor = await actor(context);
+      const entry = await input.content.duplicate({
+        actor: resolvedActor,
+        entryId: context.req.param("entryId") as never,
+        ...(expectedRevision === undefined ? {} : { expectedRevision }),
+      });
+      return response(adminContentEntrySchema, await adminEntryDto(resolvedActor, entry), 201);
     },
   );
 

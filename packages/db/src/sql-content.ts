@@ -864,6 +864,46 @@ export function revisionConflict(message: string): never {
   throw new DomainError("CONTENT_REVISION_CONFLICT", message);
 }
 
+export function notPublished(): never {
+  throw new DomainError("CONTENT_NOT_PUBLISHED", "The entry is not published.");
+}
+
+/** Idempotency scope of one actor's unpublications of one entry. */
+export function unpublicationScope(entryId: string, actorId: string): string {
+  return `unpublication:${entryId}:${actorId}`;
+}
+
+/** Reads a duplicate source's current draft revision. */
+export const DUPLICATE_SOURCE_REVISION_SQL =
+  "select d.revision from content_entries e join content_snapshots d on d.id = e.draft_snapshot_id where e.id = ?";
+
+/**
+ * Replaces a draft's scalar content with its publication and advances the
+ * draft revision. Parameters: updated_at, updated_by, published ID, draft ID,
+ * then those of `condition`.
+ */
+export function revertDraftSnapshotSql(condition: string): string {
+  return `update content_snapshots
+     set revision = revision + 1, slug = p.slug, title = p.title, fields_json = p.fields_json,
+         schema_version = p.schema_version, updated_at = ?, updated_by = ?
+    from (select slug, title, fields_json, schema_version from content_snapshots where id = ?) as p
+   where content_snapshots.id = ? and ${condition}`;
+}
+
+/** Copies one snapshot's blocks into another. Parameters: target, source, then `condition`'s. */
+export function copySnapshotBlocksSql(condition = "1 = 1"): string {
+  return `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
+  select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at
+    from content_blocks where snapshot_id = ? and ${condition}`;
+}
+
+/** Copies one snapshot's media references into another. Parameters: target, source, then `condition`'s. */
+export function copySnapshotReferencesSql(condition = "1 = 1"): string {
+  return `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
+  select ?, source_key, field_path, media_id, created_at
+    from content_media_references where snapshot_id = ? and ${condition}`;
+}
+
 export function siteBuildRecord(row: SiteBuildRow): SiteBuildRecord {
   if (!isSiteBuildStatus(row.status)) failure("Stored build status is invalid.");
   return {

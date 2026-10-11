@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   BLOCK_POSITION_STEP,
   DomainError,
+  assertCollectionEntryOperation,
   assertEntryCreationAllowed,
   assertOrderedBlockPositions,
   assertPublicPathAvailable,
@@ -19,9 +20,12 @@ import {
   publishContentEntry,
   requireMutableDraft,
   requirePermission,
+  requirePublishedSnapshot,
   resolveCollectionPublicPath,
+  revertContentDraft,
   saveCompleteDraft,
   unixMilliseconds,
+  unpublishContentEntry,
 } from "../dist/index.js";
 
 const admin = { id: actorId("admin-1"), role: "admin" };
@@ -194,6 +198,73 @@ test("keeps published data immutable and isolated from later complete draft save
   });
   expect(republished.published).toMatchObject({ id: "published-2", revision: 2, title: "Edited" });
   expect(republished).not.toHaveProperty("published.previousPublished");
+});
+
+test("unpublishes and reverts against the current publication", () => {
+  const initial = entry();
+  expectDomainError(() => requirePublishedSnapshot(initial), "CONTENT_NOT_PUBLISHED");
+  expectDomainError(
+    () => unpublishContentEntry(initial, contentSnapshotId("published-1")),
+    "CONTENT_NOT_PUBLISHED",
+  );
+  const published = publishContentEntry(initial, {
+    expectedRevision: 1,
+    publishedAt: unixMilliseconds(2),
+    publishedBy: admin,
+    publishedSnapshotId: contentSnapshotId("published-1"),
+  });
+  const changed = saveCompleteDraft(published, {
+    blocks: [block("block-2", 1000)],
+    expectedRevision: 1,
+    fields: { nested: { value: "Edited" } },
+    slug: "edited",
+    title: "Edited",
+    updatedAt: unixMilliseconds(3),
+    updatedBy: editor,
+  });
+  expectDomainError(
+    () => requirePublishedSnapshot(changed, contentSnapshotId("stale")),
+    "CONTENT_REVISION_CONFLICT",
+  );
+
+  const unpublished = unpublishContentEntry(changed, contentSnapshotId("published-1"));
+  expect(unpublished).not.toHaveProperty("published");
+  expect(unpublished.draft).toEqual(changed.draft);
+
+  const revert = {
+    expectedPublishedSnapshotId: contentSnapshotId("published-1"),
+    expectedRevision: 2,
+    revertedAt: unixMilliseconds(4),
+    revertedBy: editor,
+  };
+  expectDomainError(
+    () => revertContentDraft(changed, { ...revert, expectedRevision: 1 }),
+    "CONTENT_REVISION_CONFLICT",
+  );
+  expectDomainError(() => revertContentDraft(unpublished, revert), "CONTENT_NOT_PUBLISHED");
+  const reverted = revertContentDraft(changed, revert);
+  expect(reverted.draft).toMatchObject({
+    blocks: changed.published.blocks,
+    fields: { nested: { value: "Original" } },
+    id: "draft-1",
+    revision: 3,
+    title: "Original",
+    updatedAt: 4,
+    updatedBy: editor,
+  });
+  expect(reverted.draft).not.toHaveProperty("slug");
+  expect(reverted.published).toEqual({ ...changed.published, revision: 3 });
+  expect(Object.isFrozen(reverted.draft.fields.nested)).toBe(true);
+});
+
+test("refuses page deletion and duplication", () => {
+  const page = { model: { key: contentModelKey("home"), kind: "page", path: "/" } };
+  expectDomainError(() => assertCollectionEntryOperation(page, "delete"), "CONTENT_PAGE_SINGLETON");
+  expectDomainError(
+    () => assertCollectionEntryOperation(page, "duplicate"),
+    "CONTENT_PAGE_SINGLETON",
+  );
+  expect(() => assertCollectionEntryOperation(entry(), "delete")).not.toThrow();
 });
 
 test("rejects an invalid committed lifecycle", () => {

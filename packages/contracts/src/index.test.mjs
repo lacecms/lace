@@ -13,6 +13,8 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
+  buildSiteIdentitySchema,
+  buildSiteUrlSchema,
   adminSettingsStatusSchema,
   adminSessionSchema,
   emailTestResultSchema,
@@ -39,6 +41,11 @@ import {
   contentModelListSchema,
   createContentEntryRequestSchema,
   deleteContentEntryRequestSchema,
+  duplicateContentEntryRequestSchema,
+  revertContentEntryRequestSchema,
+  toUnpublishContentEntryResultDto,
+  unpublishContentEntryRequestSchema,
+  unpublishContentEntryResultSchema,
   entityTagForVersion,
   entityTagSchema,
   fieldMetadataMapSchema,
@@ -383,6 +390,30 @@ describe("shared REST contract DTOs", () => {
         publication: "replayed",
       }),
     ).toMatchObject({ publication: "replayed" });
+    const { published: _published, ...draftOnlyEntry } = entry;
+    const unpublishedResult = toUnpublishContentEntryResultDto({
+      build: { status: "queued", targetVersion: 8 },
+      entry: draftOnlyEntry,
+      unpublication: "unpublished",
+      updatedBy: { displayName: "Editor", id: actor.id },
+    });
+    expect(unpublishedResult.entry).not.toHaveProperty("published");
+    expect(v.parse(unpublishContentEntryResultSchema, unpublishedResult)).toEqual(
+      unpublishedResult,
+    );
+    expect(
+      v.parse(unpublishContentEntryResultSchema, {
+        build: { status: "not-dispatched" },
+        entry: unpublishedResult.entry,
+        unpublication: "replayed",
+      }),
+    ).toMatchObject({ unpublication: "replayed" });
+    expect(() =>
+      v.parse(unpublishContentEntryResultSchema, {
+        ...unpublishedResult,
+        publication: "published",
+      }),
+    ).toThrow();
 
     const modelDto = toContentModelDto({
       blocks: ["hero"],
@@ -424,6 +455,18 @@ describe("shared REST contract DTOs", () => {
     expect(v.parse(deleteContentEntryRequestSchema, { expectedRevision: 4 })).toEqual({
       expectedRevision: 4,
     });
+    expect(
+      v.parse(unpublishContentEntryRequestSchema, { expectedPublishedSnapshotId: "snapshot-1" }),
+    ).toEqual({ expectedPublishedSnapshotId: "snapshot-1" });
+    for (const invalid of [{}, { expectedPublishedSnapshotId: "" }, { expectedRevision: 4 }]) {
+      expect(v.safeParse(unpublishContentEntryRequestSchema, invalid).success).toBe(false);
+    }
+    for (const schema of [revertContentEntryRequestSchema, duplicateContentEntryRequestSchema]) {
+      expect(v.parse(schema, { expectedRevision: 4 })).toEqual({ expectedRevision: 4 });
+      expect(v.parse(schema, {})).toEqual({});
+      expect(v.safeParse(schema, { expectedRevision: -1 }).success).toBe(false);
+      expect(v.safeParse(schema, { title: "x" }).success).toBe(false);
+    }
   });
 
   test("validates portable allowed block metadata against each model", () => {
@@ -543,6 +586,19 @@ describe("shared REST transport conventions", () => {
         error: {
           code: "LAST_ADMIN_PROTECTED",
           message: "The final active administrator cannot be disabled or demoted.",
+        },
+      },
+      status: 409,
+    });
+    expect(classifyError(new DomainError("CONTENT_NOT_PUBLISHED", "entry post-1"))).toEqual({
+      body: { error: { code: "CONTENT_NOT_PUBLISHED", message: "The entry is not published." } },
+      status: 409,
+    });
+    expect(classifyError(new DomainError("CONTENT_PAGE_SINGLETON", "page home"))).toEqual({
+      body: {
+        error: {
+          code: "CONTENT_PAGE_SINGLETON",
+          message: "Page entries are defined by configuration.",
         },
       },
       status: 409,
@@ -983,4 +1039,26 @@ test("admin build DTOs carry tracking stage, last check and tracking reasons", a
       v.safeParse(siteBuildRecordSchema, { ...base, error, errorPath: "src/page.astro" }).success,
     ).toBe(false);
   }
+});
+
+test("build-site URLs are absolute HTTP(S) base URLs", () => {
+  for (const url of ["https://example.com/", "http://127.0.0.1:4321/blog/"])
+    expect(v.safeParse(buildSiteUrlSchema, url).success).toBe(true);
+  for (const url of [
+    "https://user:secret@example.com/",
+    "https://example.com/?preview=1",
+    "https://example.com/#top",
+    "ftp://example.com/",
+    "https://example.com/blog",
+    "/blog/",
+    `https://example.com/${"a".repeat(2048)}/`,
+  ])
+    expect(v.safeParse(buildSiteUrlSchema, url).success).toBe(false);
+  expect(
+    v.parse(buildSiteIdentitySchema, {
+      id: "main-site",
+      label: "Main site",
+      url: "https://example.com/",
+    }),
+  ).toEqual({ id: "main-site", label: "Main site", url: "https://example.com/" });
 });

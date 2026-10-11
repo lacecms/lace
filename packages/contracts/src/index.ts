@@ -313,6 +313,13 @@ export const publishContentEntryResultSchema = v.strictObject({
   publication: publicationOutcomeSchema,
 });
 
+export const unpublicationOutcomeSchema = v.picklist(["unpublished", "replayed"]);
+export const unpublishContentEntryResultSchema = v.strictObject({
+  build: buildDispatchOutcomeSchema,
+  entry: adminContentEntrySchema,
+  unpublication: unpublicationOutcomeSchema,
+});
+
 export const contentEntryStatusSchema = v.picklist(["changed", "draft", "published"]);
 export const contentEntrySortSchema = v.picklist([
   "-publishedAt",
@@ -408,6 +415,15 @@ export const publishContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
 });
 export const deleteContentEntryRequestSchema = v.strictObject({
+  expectedRevision: v.optional(expectedRevisionSchema),
+});
+export const unpublishContentEntryRequestSchema = v.strictObject({
+  expectedPublishedSnapshotId: identifierSchema,
+});
+export const revertContentEntryRequestSchema = v.strictObject({
+  expectedRevision: v.optional(expectedRevisionSchema),
+});
+export const duplicateContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
 });
 
@@ -804,6 +820,41 @@ export const siteBuildRecordSchema = v.pipe(
 export const siteBuildListSchema = v.strictObject({
   items: v.pipe(v.array(siteBuildRecordSchema), v.maxLength(100)),
 });
+export const MAX_BUILD_SITE_URL_LENGTH = 2048;
+
+interface ParsedUrl {
+  readonly href: string;
+  readonly password: string;
+  readonly protocol: string;
+  readonly username: string;
+}
+
+// The package compiles without DOM or Node types; every supported runtime provides WHATWG URL.
+const ParsedUrl = (globalThis as unknown as { URL: new (input: string) => ParsedUrl }).URL;
+
+function isSiteBaseUrl(value: string): boolean {
+  if (!value.endsWith("/") || value.includes("?") || value.includes("#")) return false;
+  let url: ParsedUrl;
+  try {
+    url = new ParsedUrl(value);
+  } catch {
+    return false;
+  }
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.href === value
+  );
+}
+
+/** The public site's absolute HTTP(S) base URL: no credentials, query or fragment, trailing slash. */
+export const buildSiteUrlSchema = v.pipe(
+  v.string(),
+  v.maxLength(MAX_BUILD_SITE_URL_LENGTH),
+  v.check(isSiteBaseUrl, "Site URL must be an absolute HTTP(S) base URL ending with a slash."),
+);
+
 /** Operator-authored current configuration; never a filesystem path or historical attribution. */
 export const buildSiteIdentitySchema = v.strictObject({
   id: v.pipe(v.string(), v.minLength(1), v.maxLength(64), v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)),
@@ -813,6 +864,7 @@ export const buildSiteIdentitySchema = v.strictObject({
     v.maxLength(80),
     v.regex(/^[A-Za-z0-9](?:[A-Za-z0-9 _-]*[A-Za-z0-9])?$/u),
   ),
+  url: v.optional(buildSiteUrlSchema),
 });
 export const buildSiteSelectionSchema = v.strictObject({
   site: v.nullable(buildSiteIdentitySchema),
@@ -833,6 +885,8 @@ export const errorCodeSchema = v.picklist([
   "CONFLICT",
   "CONTENT_INVALID_STATE",
   "CONTENT_MODEL_CARDINALITY_CONFLICT",
+  "CONTENT_NOT_PUBLISHED",
+  "CONTENT_PAGE_SINGLETON",
   "CONTENT_PUBLISHED_IMMUTABLE",
   "CONTENT_REVISION_CONFLICT",
   "CONTENT_ROUTE_CONFLICT",
@@ -864,6 +918,9 @@ export type ContentEntrySortDto = v.InferOutput<typeof contentEntrySortSchema>;
 export type ContentEntryStatusTotalsDto = v.InferOutput<typeof contentEntryStatusTotalsSchema>;
 export type ContentEntryListQueryDto = v.InferOutput<typeof contentEntryListQuerySchema>;
 export type PublishContentEntryResultDto = v.InferOutput<typeof publishContentEntryResultSchema>;
+export type UnpublishContentEntryResultDto = v.InferOutput<
+  typeof unpublishContentEntryResultSchema
+>;
 export type ContentEntryListDto = v.InferOutput<typeof contentEntryListSchema>;
 export type ContentEntrySummaryDto = v.InferOutput<typeof contentEntrySummarySchema>;
 export type ContentModelDto = v.InferOutput<typeof contentModelSchema>;
@@ -961,6 +1018,25 @@ export function toPublishContentEntryResultDto(input: {
         : { status: input.build.status },
     entry: toAdminContentEntryDto(input.entry, input.updatedBy),
     publication: input.publication,
+  };
+}
+
+/** Maps the portable unpublication outcome without exposing application internals. */
+export function toUnpublishContentEntryResultDto(input: {
+  readonly build:
+    | Readonly<{ readonly status: "queued"; readonly targetVersion: number }>
+    | Readonly<{ readonly status: "not-dispatched" }>;
+  readonly entry: ContentEntry;
+  readonly unpublication: "replayed" | "unpublished";
+  readonly updatedBy: { readonly displayName: string; readonly id: string };
+}): UnpublishContentEntryResultDto {
+  return {
+    build:
+      input.build.status === "queued"
+        ? { status: "queued", targetVersion: input.build.targetVersion }
+        : { status: input.build.status },
+    entry: toAdminContentEntryDto(input.entry, input.updatedBy),
+    unpublication: input.unpublication,
   };
 }
 
@@ -1182,6 +1258,8 @@ const domainErrorStatus: Readonly<Record<DomainErrorCode, 403 | 409 | 422>> = {
   AUTHORIZATION_DENIED: 403,
   CONTENT_INVALID_STATE: 422,
   CONTENT_MODEL_CARDINALITY_CONFLICT: 409,
+  CONTENT_NOT_PUBLISHED: 409,
+  CONTENT_PAGE_SINGLETON: 409,
   CONTENT_PUBLISHED_IMMUTABLE: 409,
   CONTENT_REVISION_CONFLICT: 409,
   CONTENT_ROUTE_CONFLICT: 409,
@@ -1193,6 +1271,8 @@ const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
   AUTHORIZATION_DENIED: "The actor is not permitted to perform this operation.",
   CONTENT_INVALID_STATE: "The requested content operation is invalid.",
   CONTENT_MODEL_CARDINALITY_CONFLICT: "The content model cannot accept another entry.",
+  CONTENT_NOT_PUBLISHED: "The entry is not published.",
+  CONTENT_PAGE_SINGLETON: "Page entries are defined by configuration.",
   CONTENT_PUBLISHED_IMMUTABLE: "Published content cannot be modified.",
   CONTENT_REVISION_CONFLICT: "The draft was modified by another request.",
   CONTENT_ROUTE_CONFLICT: "The public route is already in use.",

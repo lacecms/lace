@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
+import { userEvent, type UserEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  draftEntry,
   entry,
   entryList,
   models,
@@ -10,6 +11,8 @@ import {
   staticSessionSource,
 } from "../../../app/testing/index.js";
 import { AdminClientError, type EntryListQuery } from "../../../shared/api/index.js";
+import { requestFocus } from "../../../shared/lib/index.js";
+import { collectionFocusTarget } from "./CollectionEntries.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -45,6 +48,22 @@ const changedEntry = {
   updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
   updatedBy: { displayName: "Ada Editor", id: "user-ada" },
 };
+
+const admin = staticSessionSource({ id: "admin-1", role: "admin" });
+
+async function openRowMenu(user: UserEvent, title: string) {
+  // Radix opens menus on pointer down; the keyboard path is deterministic in jsdom.
+  (await screen.findByRole("button", { name: `Actions for ${title}` })).focus();
+  await user.keyboard("{Enter}");
+  return within(await screen.findByRole("menu"))
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent);
+}
+
+async function openRowAction(user: UserEvent, title: string, action: string) {
+  await openRowMenu(user, title);
+  await user.click(screen.getByRole("menuitem", { name: action }));
+}
 
 type ListCall = [string, string | undefined, EntryListQuery | undefined];
 
@@ -90,7 +109,7 @@ test("rows show entry state and list fields without internal identifiers", async
     changedEntry.updatedAt,
   );
   expect(within(launch!).getByText("by Ada Editor")).toBeInTheDocument();
-  expect(within(launch!).getByRole("button", { name: "Delete Launch" })).toBeInTheDocument();
+  expect(within(launch!).getByRole("button", { name: "Actions for Launch" })).toBeInTheDocument();
 
   expect(within(draft!).getByText("No slug")).toBeInTheDocument();
   expect(within(draft!).getByText("Draft")).toBeInTheDocument();
@@ -115,7 +134,7 @@ test("viewers see the same rows and filters without mutation controls", async ()
   expect(screen.getByRole("searchbox", { name: "Search entries" })).toBeInTheDocument();
   expect(screen.getByRole("group", { name: "Filter by status" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Create entry" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /^Delete/u })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^Actions for/u })).not.toBeInTheDocument();
 });
 
 test("cursor pages stay opaque, report progress, and keep rows when the next page fails", async () => {
@@ -273,8 +292,14 @@ test("column headers sort on the server and expose the direction", async () => {
 test("search updates the URL after a pause and deletion returns focus to the heading", async () => {
   const user = userEvent.setup();
   const deleteEntry = vi.fn(async () => undefined);
+  const draftLaunch = {
+    ...changedEntry,
+    publishedAt: undefined,
+    publishedSnapshotId: undefined,
+    status: "draft" as const,
+  };
   const listEntries = vi.fn(async (_modelKey: string, _cursor?: string, _query?: EntryListQuery) =>
-    entryList([changedEntry]),
+    entryList([draftLaunch]),
   );
   const router = renderRoute(
     "/content/posts",
@@ -288,9 +313,9 @@ test("search updates the URL after a pause and deletion returns focus to the hea
   expect(listCalls(listEntries).some(([, , query]) => query?.q === "lau")).toBe(false);
   await waitFor(() => expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ q: "launch" }));
 
-  await user.click(screen.getByRole("button", { name: "Delete Launch" }));
+  await openRowAction(user, "Launch", "Delete");
   await user.click(
-    within(screen.getByRole("dialog", { name: "Delete entry?" })).getByRole("button", {
+    within(await screen.findByRole("dialog", { name: "Delete entry?" })).getByRole("button", {
       name: "Delete entry",
     }),
   );
@@ -298,4 +323,96 @@ test("search updates the URL after a pause and deletion returns focus to the hea
   await waitFor(() =>
     expect(screen.getByRole("heading", { level: 1, name: "Posts" })).toHaveFocus(),
   );
+});
+
+test("a pending focus request moves focus to the heading once the list mounts", async () => {
+  requestFocus(collectionFocusTarget("posts"));
+  renderRoute(
+    "/content/posts",
+    editor,
+    client({ listEntries: async () => entryList([]), listModels }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 1, name: "Posts" })).toHaveFocus(),
+  );
+});
+
+test("row menus offer only permitted actions", async () => {
+  const user = userEvent.setup();
+  renderRoute(
+    "/content/posts",
+    editor,
+    client({ listEntries: async () => entryList([changedEntry, entry]), listModels }),
+  );
+  expect(await openRowMenu(user, "Launch")).toEqual(["Open", "Duplicate"]);
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+  expect(await openRowMenu(user, "First post")).toEqual(["Open", "Duplicate", "Delete"]);
+});
+
+test("an admin deletes a published row only after typing its title and cancel returns focus", async () => {
+  const user = userEvent.setup();
+  const deleteEntry = vi.fn(async () => undefined);
+  renderRoute(
+    "/content/posts",
+    admin,
+    client({ deleteEntry, listEntries: async () => entryList([changedEntry]), listModels }),
+  );
+  expect(await openRowMenu(user, "Launch")).toEqual(["Open", "Duplicate", "Delete"]);
+  await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+  let dialog = await screen.findByRole("dialog", { name: "Delete entry?" });
+  expect(dialog).toHaveAccessibleDescription(/disappears from the site after the next build/u);
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "Actions for Launch" })).toHaveFocus();
+
+  await openRowAction(user, "Launch", "Delete");
+  dialog = await screen.findByRole("dialog", { name: "Delete entry?" });
+  const confirm = within(dialog).getByRole("button", { name: "Delete entry" });
+  expect(confirm).toBeDisabled();
+  await user.type(
+    within(dialog).getByRole("textbox", { name: "Type “Launch” to confirm" }),
+    "Launch",
+  );
+  await user.click(confirm);
+  await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith("entry-launch", 2));
+});
+
+test("duplicating a row opens the copy", async () => {
+  const user = userEvent.setup();
+  const copy = {
+    ...draftEntry,
+    draft: {
+      ...draftEntry.draft,
+      entryId: "entry-copy",
+      id: "snapshot-copy",
+      title: "Launch (copy)",
+    },
+    id: "entry-copy",
+  };
+  const duplicateEntry = vi.fn(async () => copy);
+  const router = renderRoute(
+    "/content/posts",
+    editor,
+    client({
+      duplicateEntry,
+      listEntries: async () => entryList([changedEntry]),
+      listModels,
+      loadEntry: async () => copy,
+    }),
+  );
+  await openRowAction(user, "Launch", "Duplicate");
+  await waitFor(() => expect(router.state.location.pathname).toBe("/content/posts/entry-copy"));
+  expect(duplicateEntry).toHaveBeenCalledWith("entry-launch", 2);
+});
+
+test("Open in the row menu opens the editor", async () => {
+  const user = userEvent.setup();
+  const router = renderRoute(
+    "/content/posts",
+    editor,
+    client({ listEntries: async () => entryList([entry]), listModels }),
+  );
+  await openRowAction(user, "First post", "Open");
+  await waitFor(() => expect(router.state.location.pathname).toBe("/content/posts/entry-1"));
 });

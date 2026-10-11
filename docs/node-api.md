@@ -28,6 +28,8 @@ operation, not a readiness side effect.
 | `LACE_PORT` | no | Listener port from `1` to `65535`; defaults to `3000`. |
 | `LACE_ADMIN_DEV_ORIGIN` | no | Absolute origin for the Admin development server. The Docker topology uses `http://admin:5173`. |
 | `LACE_SITE_DEV_ORIGIN` | no | Absolute origin for the Astro development server. The Docker topology uses `http://site:4321`. |
+| `LACE_BUILD_SITE_ID`, `LACE_BUILD_SITE_LABEL` | no | Safe build-site identity shown in Admin; set both or neither. |
+| `LACE_BUILD_SITE_URL` | no | Public site base URL (absolute HTTP(S), no credentials, query or fragment) that the editor links published entries to. Requires the identity; empty means unset. |
 
 Startup errors identify invalid variable names, never their values. The runtime
 does not derive public URLs from `Host`, `Forwarded`, or `X-Forwarded-*`

@@ -1,4 +1,8 @@
-import type { AdminContentEntryDto, ContentModelDto } from "@lacecms/contracts";
+import type {
+  AdminContentEntryDto,
+  ContentModelDto,
+  UnpublishContentEntryResultDto,
+} from "@lacecms/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useBlocker } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
@@ -23,6 +27,7 @@ import {
   type FieldRendererRegistry,
 } from "../../../entities/content/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { useDuplicateEntry } from "../../../features/duplicate-entry/index.js";
 import { PublishEntryDialog } from "../../../features/publish-entry/index.js";
 import {
   AdminClientError,
@@ -30,21 +35,24 @@ import {
   errorDescription,
   useAdminClient,
 } from "../../../shared/api/index.js";
-import { useSaveShortcut } from "../../../shared/lib/index.js";
+import { requestFocus, useSaveShortcut } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { PageError, PageLoading, PagePlaceholder } from "../../../shared/ui/PageState/index.js";
+import { toast } from "../../../shared/ui/Toaster/index.js";
 import { ShellHeaderActions } from "../../../widgets/admin-shell/index.js";
 import { BlockEditor } from "../../../widgets/block-editor/index.js";
+import { collectionFocusTarget } from "../../../widgets/collection-entries/index.js";
 import { MediaPicker } from "../../../widgets/media-library/index.js";
 import { DiscardChangesDialog } from "../DiscardChangesDialog/index.js";
+import { EntryActionsMenu } from "../EntryActionsMenu/index.js";
 import { EntryConflictAlert } from "../EntryConflictAlert/index.js";
 import { EntryEditorActions, type SaveState } from "../EntryEditorActions/index.js";
 import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
 import {
   EntryPublicationDetails,
-  type BuildDispatchResult,
+  type LatestBuildChange,
 } from "../EntryPublicationDetails/index.js";
 
 const entryRoute = getRouteApi("/_protected/content/$modelKey/$entryId");
@@ -53,6 +61,7 @@ const formId = "entry-draft-form";
 
 export function EntryPage() {
   const { entryId, modelKey } = entryRoute.useParams();
+  const navigate = entryRoute.useNavigate();
   const client = useAdminClient();
   const session = useSession();
   const queryClient = useQueryClient();
@@ -68,7 +77,9 @@ export function EntryPage() {
     { readonly idempotencyKey: string; readonly revision: number } | undefined
   >(undefined);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
-  const [latestBuild, setLatestBuild] = useState<BuildDispatchResult | undefined>(undefined);
+  const [latestBuild, setLatestBuild] = useState<LatestBuildChange | undefined>(undefined);
+  /** Set once the entry is deleted, so leaving for the list needs no discard prompt. */
+  const leaving = useRef(false);
   const currentEntry = savedEntry ?? entry.data;
   const model = models.data?.items.find((item) => item.key === modelKey);
   const modelRef = useRef<ContentModelDto | undefined>(undefined);
@@ -150,8 +161,8 @@ export function EntryPage() {
       form.setValue("slug", suggested, { shouldDirty: true });
   }, [form, slugManuallyEdited, suggestingSlug, titleValue]);
   const blocker = useBlocker({
-    enableBeforeUnload: () => form.formState.isDirty,
-    shouldBlockFn: () => form.formState.isDirty,
+    enableBeforeUnload: () => !leaving.current && form.formState.isDirty,
+    shouldBlockFn: () => !leaving.current && form.formState.isDirty,
     withResolver: true,
   });
   const save = useMutation({
@@ -162,7 +173,10 @@ export function EntryPage() {
         blocks: orderedDraftBlocks(values.blocks),
         expectedRevision: currentEntry.draft.revision,
         fields: values.fields,
-        ...(modelRef.current?.kind === "collection" && values.slug !== undefined
+        // An empty slug input means the draft has no slug.
+        ...(modelRef.current?.kind === "collection" &&
+        values.slug !== undefined &&
+        values.slug !== ""
           ? { slug: values.slug }
           : {}),
         title: values.title,
@@ -220,7 +234,7 @@ export function EntryPage() {
       form.reset(values);
       setConflict(undefined);
       setPublishAttempt(undefined);
-      setLatestBuild(result.build);
+      setLatestBuild({ build: result.build, change: "published" });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
     },
   });
@@ -236,24 +250,28 @@ export function EntryPage() {
     if (readOnly || save.isPending || !form.formState.isDirty) return;
     void submitDraft();
   });
+  /** Replaces the form with a server draft the user chose to adopt. */
+  const adoptServerDraft = (adopted: AdminContentEntryDto) => {
+    const adoptedModel = modelRef.current;
+    if (adoptedModel === undefined) return;
+    queryClient.setQueryData(adminQueryKeys.entry(entryId), adopted);
+    setSavedEntry(adopted);
+    loaded.current = `${adopted.id}:${adopted.draft.revision}`;
+    form.reset(draftValues(adoptedModel, adopted));
+    hideSummary();
+    setConflict(undefined);
+    setPublishAttempt(undefined);
+  };
   const reloadServerDraft = useMutation({
     mutationFn: () => client.loadEntry(entryId),
-    onSuccess: (reloaded) => {
-      const reloadedModel = modelRef.current;
-      if (reloadedModel === undefined) return;
-      queryClient.setQueryData(adminQueryKeys.entry(entryId), reloaded);
-      setSavedEntry(reloaded);
-      loaded.current = `${reloaded.id}:${reloaded.draft.revision}`;
-      form.reset(draftValues(reloadedModel, reloaded));
-      hideSummary();
-      setConflict(undefined);
-      setPublishAttempt(undefined);
-    },
+    onSuccess: adoptServerDraft,
   });
+  const duplicate = useDuplicateEntry(modelKey);
   useSessionRecovery(models.error ?? entry.error);
   useSessionRecovery(save.error);
   useSessionRecovery(publish.error);
   useSessionRecovery(reloadServerDraft.error);
+  const [savingToPublish, setSavingToPublish] = useState(false);
   if (models.isPending || entry.isPending) return <PageLoading label="Loading draft" />;
   if (models.error !== null) return <PageError error={models.error} />;
   if (entry.error !== null) return <PageError error={entry.error} />;
@@ -284,6 +302,44 @@ export function EntryPage() {
           : { kind: "saved", revision: currentEntry.draft.revision };
   const retryPublish = () => {
     if (publishAttempt !== undefined) publish.mutate(publishAttempt);
+  };
+  const startPublish = (revision: number) => {
+    const attempt = { idempotencyKey: ulid(), revision };
+    setPublishAttempt(attempt);
+    publish.mutate(attempt);
+  };
+  /** Saves unsaved changes first; any validation or save failure stops before publishing. */
+  const saveAndPublish = () => {
+    setUnmappedIssues([]);
+    // The submit handler returns before the save settles, so the form resets after submission.
+    void form.handleSubmit(
+      (values) => {
+        setSavingToPublish(true);
+        save.mutate(values, {
+          // The save mutation itself presents any failure.
+          onSettled: () => setSavingToPublish(false),
+          onSuccess: (saved) => startPublish(saved.draft.revision),
+        });
+      },
+      () => showSummary(),
+    )();
+  };
+  const busy = save.isPending || publish.isPending || savingToPublish || duplicate.isPending;
+  const adoptUnpublished = (result: UnpublishContentEntryResultDto) => {
+    // The draft revision is unchanged, so the form keeps any unsaved values.
+    queryClient.setQueryData(adminQueryKeys.entry(entryId), result.entry);
+    setSavedEntry(result.entry);
+    setPublishAttempt(undefined);
+    setLatestBuild({ build: result.build, change: "unpublished" });
+    toast.success("Unpublished. The draft is kept.");
+    void queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
+  };
+  const leaveAfterDelete = () => {
+    leaving.current = true;
+    requestFocus(collectionFocusTarget(modelKey));
+    void navigate({ params: { modelKey }, to: "/content/$modelKey" }).then(() =>
+      queryClient.removeQueries({ queryKey: adminQueryKeys.entry(entryId) }),
+    );
   };
   const copyLocalDraft = async () => {
     try {
@@ -316,26 +372,49 @@ export function EntryPage() {
           publish={
             canPublish ? (
               <PublishEntryDialog
-                disabled={publish.isPending || dirty}
+                disabled={busy}
                 onConfirm={() => {
-                  const attempt = {
-                    idempotencyKey: ulid(),
-                    revision: currentEntry.draft.revision,
-                  };
-                  setPublishAttempt(attempt);
                   setPublishDialogOpen(false);
-                  publish.mutate(attempt);
+                  if (dirty) saveAndPublish();
+                  else startPublish(currentEntry.draft.revision);
                 }}
                 onOpenChange={setPublishDialogOpen}
                 open={publishDialogOpen}
-                pending={publish.isPending}
+                pending={publish.isPending || savingToPublish}
                 publicPath={resolvedPublicPath(model, currentEntry)}
                 revision={currentEntry.draft.revision}
+                unsavedChanges={dirty}
               />
             ) : undefined
           }
-          saveDisabled={save.isPending || !dirty}
+          saveDisabled={busy || !dirty}
           state={saveState}
+        />
+        <EntryActionsMenu
+          busy={busy}
+          canPublish={canPublish}
+          canWrite={!readOnly}
+          entry={currentEntry}
+          model={model}
+          onDeleted={leaveAfterDelete}
+          onDiscardUnsaved={() => {
+            form.reset(draftValues(model, currentEntry));
+            hideSummary();
+          }}
+          onDuplicate={() =>
+            duplicate.mutate({ entryId, expectedRevision: currentEntry.draft.revision })
+          }
+          onReload={() => {
+            // Refresh the publication without discarding unsaved values of an unchanged draft.
+            void entry.refetch().then(() => setSavedEntry(undefined));
+          }}
+          onReverted={(reverted) => {
+            adoptServerDraft(reverted);
+            toast.success("Reverted to the published version.");
+            void queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
+          }}
+          onUnpublished={adoptUnpublished}
+          unsavedChanges={dirty}
         />
       </ShellHeaderActions>
       <FieldRendererProvider readOnly={readOnly} renderers={mediaRenderers}>

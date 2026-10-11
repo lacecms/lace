@@ -33,6 +33,8 @@ export type DomainErrorCode =
   | "AUTHORIZATION_DENIED"
   | "CONTENT_INVALID_STATE"
   | "CONTENT_MODEL_CARDINALITY_CONFLICT"
+  | "CONTENT_NOT_PUBLISHED"
+  | "CONTENT_PAGE_SINGLETON"
   | "CONTENT_PUBLISHED_IMMUTABLE"
   | "CONTENT_REVISION_CONFLICT"
   | "CONTENT_ROUTE_CONFLICT"
@@ -582,6 +584,97 @@ export function publishContentEntry(
     id: entry.id,
     model: { ...entry.model },
     published: cloneSnapshot(published),
+  });
+}
+
+/**
+ * Returns the entry's current publication, failing when it has none or when
+ * a supplied expected identity no longer names it.
+ */
+export function requirePublishedSnapshot(
+  entry: ContentEntry,
+  expectedPublishedSnapshotId?: ContentSnapshotId,
+): PublishedSnapshot {
+  if (entry.published === undefined) {
+    fail("CONTENT_NOT_PUBLISHED", "The entry is not published.");
+  }
+  if (
+    expectedPublishedSnapshotId !== undefined &&
+    entry.published.id !== expectedPublishedSnapshotId
+  ) {
+    fail(
+      "CONTENT_REVISION_CONFLICT",
+      "The published snapshot no longer matches the expected publication.",
+    );
+  }
+  return entry.published;
+}
+
+/** Refuses lifecycle operations that configuration-defined page singletons do not support. */
+export function assertCollectionEntryOperation(
+  entry: Pick<ContentEntry, "model">,
+  operation: "delete" | "duplicate",
+): void {
+  if (entry.model.kind === "page") {
+    fail(
+      "CONTENT_PAGE_SINGLETON",
+      `Page entries are defined by configuration and cannot be ${operation === "delete" ? "deleted" : "duplicated"}.`,
+    );
+  }
+}
+
+/** Removes the current publication while keeping the draft unchanged. */
+export function unpublishContentEntry(
+  entry: ContentEntry,
+  expectedPublishedSnapshotId: ContentSnapshotId,
+): ContentEntry {
+  requirePublishedSnapshot(entry, expectedPublishedSnapshotId);
+  return deepFreeze({ draft: cloneSnapshot(entry.draft), id: entry.id, model: { ...entry.model } });
+}
+
+export interface RevertContentDraftInput {
+  readonly expectedPublishedSnapshotId: ContentSnapshotId;
+  readonly expectedRevision: number;
+  readonly revertedAt: UnixMilliseconds;
+  readonly revertedBy: Actor;
+}
+
+/**
+ * Replaces the draft with the published content, advances the draft revision
+ * once, and aligns the publication's revision so the entry reads as in sync.
+ */
+export function revertContentDraft(
+  entry: ContentEntry,
+  input: RevertContentDraftInput,
+): ContentEntry {
+  assertDraft(entry.draft);
+  const published = requirePublishedSnapshot(entry, input.expectedPublishedSnapshotId);
+  if (input.expectedRevision !== entry.draft.revision) {
+    fail(
+      "CONTENT_REVISION_CONFLICT",
+      "The draft revision no longer matches the expected revision.",
+    );
+  }
+  const revision = entry.draft.revision + 1;
+  const content = cloneSnapshot(published);
+  const draft: DraftSnapshot = {
+    blocks: content.blocks,
+    createdAt: entry.draft.createdAt,
+    entryId: entry.id,
+    fields: content.fields,
+    id: entry.draft.id,
+    revision,
+    ...(content.slug === undefined ? {} : { slug: content.slug }),
+    state: "draft",
+    title: content.title,
+    updatedAt: input.revertedAt,
+    updatedBy: input.revertedBy,
+  };
+  return deepFreeze({
+    draft,
+    id: entry.id,
+    model: { ...entry.model },
+    published: { ...cloneSnapshot(published), revision },
   });
 }
 

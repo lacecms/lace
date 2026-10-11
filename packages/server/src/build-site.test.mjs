@@ -27,3 +27,49 @@ test.each([
     "Invalid build site configuration: LACE_BUILD_SITE_ID, LACE_BUILD_SITE_LABEL.",
   );
 });
+
+test("a configured site URL is normalized with a trailing slash", () => {
+  const identity = { LACE_BUILD_SITE_ID: "main-site", LACE_BUILD_SITE_LABEL: "Main site" };
+  expect(
+    parseBuildSiteIdentity({ ...identity, LACE_BUILD_SITE_URL: "https://Example.com/blog" }),
+  ).toEqual({ id: "main-site", label: "Main site", url: "https://example.com/blog/" });
+  expect(
+    parseBuildSiteIdentity({ ...identity, LACE_BUILD_SITE_URL: "http://127.0.0.1:4321" }),
+  ).toEqual({
+    id: "main-site",
+    label: "Main site",
+    url: "http://127.0.0.1:4321/",
+  });
+  expect(parseBuildSiteIdentity({ ...identity, LACE_BUILD_SITE_URL: "" })).toEqual({
+    id: "main-site",
+    label: "Main site",
+  });
+  expect(parseBuildSiteIdentity({ LACE_BUILD_SITE_URL: "" })).toBe(null);
+});
+test.each([
+  "https://user:secret@example.com/",
+  "https://example.com/?",
+  "https://example.com/?preview=1",
+  "https://example.com/#",
+  "javascript:alert(1)",
+  "ftp://example.com/",
+  "example.com",
+  `https://example.com/${"a".repeat(2048)}`,
+])("startup rejects a malformed site URL without its value: %s", (url) => {
+  let message = "";
+  try {
+    parseBuildSiteIdentity({
+      LACE_BUILD_SITE_ID: "main-site",
+      LACE_BUILD_SITE_LABEL: "Main site",
+      LACE_BUILD_SITE_URL: url,
+    });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  expect(message).toBe("Invalid build site configuration: LACE_BUILD_SITE_URL.");
+});
+test("a site URL without an identity fails startup", () => {
+  expect(() => parseBuildSiteIdentity({ LACE_BUILD_SITE_URL: "https://example.com/" })).toThrow(
+    "Invalid build site configuration: LACE_BUILD_SITE_ID, LACE_BUILD_SITE_LABEL, LACE_BUILD_SITE_URL.",
+  );
+});
