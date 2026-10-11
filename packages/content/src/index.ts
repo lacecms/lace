@@ -29,6 +29,12 @@ export interface CommonFieldOptions<Value> {
   readonly defaultValue?: Value;
   readonly description?: string;
   readonly label?: string;
+  /**
+   * Temporary synchronization hint naming the field's former key in a content
+   * model. Configuration moves it out of the field definition; block fields
+   * reject it.
+   */
+  readonly renamedFrom?: string;
   readonly required?: boolean;
 }
 
@@ -317,6 +323,8 @@ function deepFreeze<Value>(value: Value): Value {
   return value;
 }
 
+const RENAMED_FROM_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
+
 function readOptionalString(options: MutableJsonObject, name: string): string | undefined {
   const value = options[name];
   if (value === undefined) {
@@ -379,12 +387,21 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
     definition.description = description;
   }
 
+  const renamedFrom = readOptionalString(options, "renamedFrom");
+  if (renamedFrom !== undefined) {
+    if (!RENAMED_FROM_PATTERN.test(renamedFrom)) {
+      fail("options.renamedFrom", "must be a valid field key.");
+    }
+    definition.renamedFrom = renamedFrom;
+  }
+
   definition.required = readOptionalBoolean(options, "required") ?? false;
 }
 
 function assertAllowedOptions(options: MutableJsonObject, allowed: readonly string[]): void {
   for (const key of Object.keys(options)) {
-    if (!allowed.includes(key)) {
+    // Every field kind accepts the temporary `renamedFrom` hint.
+    if (!allowed.includes(key) && key !== "renamedFrom") {
       fail(`options.${key}`, "is not supported by this field type.");
     }
   }
@@ -1062,6 +1079,15 @@ export class BlockConfigurationError extends Error {
   }
 }
 
+/**
+ * A pure, synchronous step that turns the stored data of the previous block
+ * version into the data of its target version.
+ */
+export type BlockMigration = (data: JsonObject) => JsonObject;
+
+/** Migrations keyed by target version; the keys form one range ending at the block version. */
+export type BlockMigrations = Readonly<Record<number, BlockMigration>>;
+
 /** Input accepted by the portable block-definition DSL. */
 export interface BlockDefinitionInput<
   Fields extends ModelFieldDefinitions = ModelFieldDefinitions,
@@ -1070,6 +1096,8 @@ export interface BlockDefinitionInput<
   readonly description?: string;
   readonly fields: Fields;
   readonly label?: string;
+  /** Data migrations from earlier versions, keyed by target version. */
+  readonly migrations?: BlockMigrations;
   readonly type: string;
   readonly version: number;
 }
@@ -1101,6 +1129,8 @@ export interface BlockMetadata<Fields extends ModelFieldDefinitions = ModelField
 export interface BlockDefinition<
   Fields extends ModelFieldDefinitions = ModelFieldDefinitions,
 > extends BlockMetadata<Fields> {
+  /** Runtime-only data migrations keyed by target version; never part of metadata. */
+  readonly migrations?: BlockMigrations;
   readonly validate: (value: unknown, mode: ContentValidationMode) => BlockDataValues<Fields>;
 }
 
@@ -1117,6 +1147,11 @@ function normalizeBlockFields(value: unknown): ModelFieldDefinitions {
     if (!FIELD_KEY_PATTERN.test(key)) {
       blockFail(`fields.${key} must be a valid field key.`);
     }
+    if (isRecord(definition) && Object.hasOwn(definition, "renamedFrom")) {
+      blockFail(
+        `fields.${key} must not declare renamedFrom; block data changes use block versions.`,
+      );
+    }
     try {
       fields[key] = toFieldMetadata(definition as FieldDefinition);
     } catch (error) {
@@ -1129,6 +1164,43 @@ function normalizeBlockFields(value: unknown): ModelFieldDefinitions {
   return deepFreeze(fields);
 }
 
+const MIGRATION_KEY_PATTERN = /^[1-9][0-9]*$/u;
+
+function normalizeBlockMigrations(value: unknown, version: number): BlockMigrations | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    blockFail("migrations must be a plain object keyed by target version.");
+  }
+  const keys = Object.keys(value);
+  if (keys.length === 0) return undefined;
+  const targets: number[] = [];
+  for (const key of keys) {
+    const target = Number(key);
+    if (!MIGRATION_KEY_PATTERN.test(key) || !Number.isSafeInteger(target)) {
+      blockFail(`migrations.${key} must be keyed by an integer target version.`);
+    }
+    if (target < 2 || target > version) {
+      blockFail(`migrations.${key} must target a version from 2 to ${version}.`);
+    }
+    if (typeof value[key] !== "function") {
+      blockFail(`migrations.${key} must be a function.`);
+    }
+    targets.push(target);
+  }
+  targets.sort((left, right) => left - right);
+  if (targets.at(-1) !== version) {
+    blockFail(`migrations must include the current version ${version}.`);
+  }
+  for (let index = 1; index < targets.length; index += 1) {
+    if (targets[index] !== targets[index - 1]! + 1) {
+      blockFail(`migrations.${targets[index - 1]! + 1} is missing; migrations must be contiguous.`);
+    }
+  }
+  return Object.freeze(
+    Object.fromEntries(targets.map((target) => [target, value[String(target)] as BlockMigration])),
+  );
+}
+
 /** Defines a versioned block using only portable field descriptors. */
 export function defineBlock<const Fields extends ModelFieldDefinitions>(
   input: BlockDefinitionInput<Fields>,
@@ -1137,7 +1209,17 @@ export function defineBlock<const Fields extends ModelFieldDefinitions>(
     blockFail("block must be a plain object.");
   }
   for (const key of Object.keys(input)) {
-    if (!new Set(["defaultValue", "description", "fields", "label", "type", "version"]).has(key)) {
+    if (
+      !new Set([
+        "defaultValue",
+        "description",
+        "fields",
+        "label",
+        "migrations",
+        "type",
+        "version",
+      ]).has(key)
+    ) {
       blockFail(`block.${key} is not permitted.`);
     }
   }
@@ -1161,6 +1243,7 @@ export function defineBlock<const Fields extends ModelFieldDefinitions>(
   }
 
   const fields = normalizeBlockFields(input.fields) as Fields;
+  const migrations = normalizeBlockMigrations(input.migrations, input.version);
   let defaultValue: BlockDataValues<Fields> | undefined;
   if (input.defaultValue !== undefined) {
     try {
@@ -1187,6 +1270,7 @@ export function defineBlock<const Fields extends ModelFieldDefinitions>(
     ...(input.description === undefined ? {} : { description: input.description }),
     fields,
     ...(input.label === undefined ? {} : { label: input.label }),
+    ...(migrations === undefined ? {} : { migrations }),
     type: input.type,
     validate: (value, mode) => {
       if (!isRecord(value)) {
@@ -1258,6 +1342,114 @@ export function validateBlockData<Fields extends ModelFieldDefinitions>(
   const withDefault =
     definition.defaultValue === undefined ? value : { ...definition.defaultValue, ...value };
   return validateModelFields(definition.fields, withDefault, mode, path) as BlockDataValues<Fields>;
+}
+
+/** Why stored block data could not be migrated to the current block version. */
+export type BlockMigrationErrorCode =
+  | "invalid_result"
+  | "migration_failed"
+  | "missing_step"
+  | "version_ahead";
+
+/** Thrown when stored block data cannot be migrated to its definition's version. */
+export class BlockMigrationError extends Error {
+  public constructor(
+    public readonly code: BlockMigrationErrorCode,
+    public readonly blockType: string,
+    public readonly fromVersion: number,
+    public readonly toVersion: number,
+    message: string,
+    /** Target version of the failing step, for failed or invalid steps. */
+    public readonly step?: number,
+    options?: { readonly cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "BlockMigrationError";
+  }
+}
+
+function migrationResult(value: unknown): JsonObject {
+  if (value instanceof Promise || !isRecord(value)) {
+    throw new FieldConfigurationError("result must be a plain JSON object.");
+  }
+  return deepFreeze(normalizeJsonValue(value, "result", new WeakSet<object>())) as JsonObject;
+}
+
+/**
+ * Migrates stored block data from `fromVersion` to the definition's version by
+ * composing its declared migrations in ascending order. Each step receives a
+ * detached, frozen copy. The result is not validated against the definition.
+ */
+export function migrateBlockData(
+  definition: BlockDefinition,
+  data: JsonObject,
+  fromVersion: number,
+): JsonObject {
+  const toVersion = definition.version;
+  function fail(
+    code: BlockMigrationErrorCode,
+    message: string,
+    step?: number,
+    cause?: unknown,
+  ): never {
+    throw new BlockMigrationError(
+      code,
+      definition.type,
+      fromVersion,
+      toVersion,
+      message,
+      step,
+      cause === undefined ? undefined : { cause },
+    );
+  }
+  if (fromVersion > toVersion) {
+    fail(
+      "version_ahead",
+      `Block ${definition.type} version ${fromVersion} is newer than ${toVersion}.`,
+    );
+  }
+  let current: JsonObject;
+  try {
+    current = migrationResult(data);
+  } catch (error) {
+    fail(
+      "invalid_result",
+      `Block ${definition.type} data is not a JSON object.`,
+      fromVersion,
+      error,
+    );
+  }
+  for (let step = fromVersion + 1; step <= toVersion; step += 1) {
+    const migration = definition.migrations?.[step];
+    if (migration === undefined) {
+      fail(
+        "missing_step",
+        `Block ${definition.type} has no migration from version ${fromVersion} to ${toVersion}.`,
+      );
+    }
+    let output: unknown;
+    try {
+      output = migration(current);
+    } catch (error) {
+      fail(
+        "migration_failed",
+        `Block ${definition.type} migration to version ${step} threw.`,
+        step,
+        error,
+      );
+    }
+    try {
+      current = migrationResult(output);
+    } catch (error) {
+      fail(
+        "invalid_result",
+        `Block ${definition.type} migration to version ${step} did not return a JSON object.`,
+        step,
+        error,
+      );
+    }
+  }
+  return current;
 }
 
 /** Starter blocks implemented exclusively through the public block and field DSL. */

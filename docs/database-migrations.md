@@ -59,6 +59,15 @@ starting an engine with invitations, and deploy the API and admin together.
 Older engines check only their own migrations, so they still start against a
 migrated database.
 
+### Content-model structure migration
+
+Migration `0005_content_model_structure` adds the nullable `structure_json` and
+`structure_json_hash` columns to `content_models`. It is additive and leaves
+every existing row with both columns `NULL`; older engines keep starting
+against the migrated database. After migrating, run `lace content sync` once to
+record structure baselines (the first `--check` reports them as pending). See
+[configuration synchronization](configuration-synchronization.md#schema-evolution-ce1a).
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

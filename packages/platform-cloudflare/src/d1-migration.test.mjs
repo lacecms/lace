@@ -4,6 +4,7 @@ import { migrationStatements } from "./d1-test-harness.mjs";
 
 const OUTCOMES = "0003_site_build_outcomes.sql";
 const ACCOUNT_TOKENS = "0004_account_tokens.sql";
+const MODEL_STRUCTURE = "0005_content_model_structure.sql";
 
 test("site-build outcome migration reclassifies unproven D1 hook outcomes as accepted", async () => {
   const miniflare = new Miniflare(
@@ -129,6 +130,47 @@ test("account-token migration applies additively and allows one active invitatio
     expect(
       (await database.prepare("select count(*) as n from password_reset_tokens").first()).n,
     ).toBe(0);
+  } finally {
+    await miniflare.dispose();
+  }
+});
+
+test("model-structure migration adds empty baselines and keeps content", async () => {
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < MODEL_STRUCTURE));
+    await database.batch([
+      database.prepare(
+        "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's1', 'p1', 1, 1)",
+      ),
+      database.prepare(
+        "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      ),
+    ]);
+    await apply(await migrationStatements((file) => file === MODEL_STRUCTURE));
+    expect(
+      await database
+        .prepare(
+          "select m.key, m.structure_hash, m.structure_json, m.structure_json_hash, count(e.id) as entries from content_models m join content_entries e on e.model_key = m.key group by m.key",
+        )
+        .first(),
+    ).toEqual({
+      entries: 1,
+      key: "posts",
+      structure_hash: "s1",
+      structure_json: null,
+      structure_json_hash: null,
+    });
   } finally {
     await miniflare.dispose();
   }

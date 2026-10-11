@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   BlockConfigurationError,
+  BlockMigrationError,
   ContentValidationError,
   FieldConfigurationError,
   MAX_JSON_BYTES,
@@ -15,6 +16,7 @@ import {
   defineBlockRegistry,
   field,
   isSafeUrl,
+  migrateBlockData,
   sha256CanonicalJson,
   toBlockMetadata,
   toBlockRegistryMetadata,
@@ -300,6 +302,100 @@ test("defines detached versioned blocks with defaults and metadata", () => {
   ).toThrow(BlockConfigurationError);
 });
 
+function quoteV3(migrations) {
+  return defineBlock({
+    fields: { attribution: field.text(), text: field.text({ required: true }) },
+    migrations,
+    type: "quote",
+    version: 3,
+  });
+}
+
+test("defines runtime-only block migrations outside metadata", () => {
+  const plain = defineBlock({
+    fields: { attribution: field.text(), text: field.text({ required: true }) },
+    type: "quote",
+    version: 3,
+  });
+  const migrated = quoteV3({
+    2: ({ body, ...rest }) => ({ ...rest, quote: body }),
+    3: ({ quote, ...rest }) => ({ ...rest, text: quote }),
+  });
+  expect(toBlockMetadata(migrated)).toEqual(toBlockMetadata(plain));
+  expect(Object.keys(migrated.migrations)).toEqual(["2", "3"]);
+  expect(Object.isFrozen(migrated.migrations)).toBe(true);
+  expect(JSON.stringify(toBlockMetadata(migrated))).not.toContain("migrations");
+  expect(plain).not.toHaveProperty("migrations");
+
+  const v1 = { attribution: "Ada", body: "Hello" };
+  expect(migrateBlockData(migrated, v1, 1)).toEqual({ attribution: "Ada", text: "Hello" });
+  expect(migrateBlockData(migrated, { quote: "Hi" }, 2)).toEqual({ text: "Hi" });
+  expect(migrateBlockData(migrated, { text: "Same" }, 3)).toEqual({ text: "Same" });
+  expect(v1).toEqual({ attribution: "Ada", body: "Hello" });
+
+  for (const [migrations, key] of [
+    [{ 4: () => ({}) }, "migrations.4"],
+    [{ 1: () => ({}), 2: () => ({}), 3: () => ({}) }, "migrations.1"],
+    [{ 2: () => ({}) }, "current version 3"],
+    [{ "02": () => ({}), 3: () => ({}) }, "migrations.02"],
+    [{ 3: "nope" }, "migrations.3"],
+  ]) {
+    expect(() => quoteV3(migrations)).toThrow(BlockConfigurationError);
+    expect(() => quoteV3(migrations)).toThrow(key);
+  }
+  expect(() =>
+    defineBlock({
+      fields: {},
+      migrations: { 2: () => ({}), 4: () => ({}) },
+      type: "gap",
+      version: 4,
+    }),
+  ).toThrow("migrations.3 is missing");
+  expect(() =>
+    defineBlock({ fields: {}, migrations: { 2: () => ({}) }, type: "one", version: 1 }),
+  ).toThrow(BlockConfigurationError);
+});
+
+test("fails block migration composition with stable codes", () => {
+  const onlyThree = quoteV3({ 3: (data) => data });
+  const missing = (() => {
+    try {
+      migrateBlockData(onlyThree, { text: "x" }, 1);
+    } catch (error) {
+      return error;
+    }
+  })();
+  expect(missing).toBeInstanceOf(BlockMigrationError);
+  expect(missing).toMatchObject({
+    blockType: "quote",
+    code: "missing_step",
+    fromVersion: 1,
+    toVersion: 3,
+  });
+  expect(() => migrateBlockData(onlyThree, { text: "x" }, 4)).toThrow(
+    expect.objectContaining({ code: "version_ahead" }),
+  );
+  const input = { text: "x" };
+  expect(() =>
+    migrateBlockData(
+      quoteV3({
+        3: (data) => {
+          data.text = "mutated";
+          return data;
+        },
+      }),
+      input,
+      2,
+    ),
+  ).toThrow(expect.objectContaining({ code: "migration_failed", step: 3 }));
+  expect(input).toEqual({ text: "x" });
+  for (const result of [[], Promise.resolve({}), { fn: () => 1 }, { n: Number.NaN }, null]) {
+    expect(() => migrateBlockData(quoteV3({ 3: () => result }), { text: "x" }, 2)).toThrow(
+      expect.objectContaining({ code: "invalid_result", step: 3 }),
+    );
+  }
+});
+
 test("registers public-DSL built-ins and validates ordered entry aggregates", () => {
   const registry = defineBlockRegistry(Object.values(builtInBlocks));
   expect(registry.get("hero")).toBe(builtInBlocks.hero);
@@ -545,4 +641,29 @@ test("enforces entry system-field and JSON payload limits", () => {
   expect(() =>
     validateEntryPayload({ ...base, fields: { text: "x".repeat(MAX_JSON_BYTES) } }, "draft"),
   ).toThrow(/\$\.fields/u);
+});
+
+test("keeps a valid renamedFrom hint on every field kind and rejects it in blocks", () => {
+  const renamed = field.text({ maxLength: 20, renamedFrom: "headline" });
+  expect(renamed).toEqual({
+    maxLength: 20,
+    renamedFrom: "headline",
+    required: false,
+    type: "text",
+  });
+  expect(validateFieldValue(renamed, "Hello")).toBe("Hello");
+  expect(field.media({ renamedFrom: "cover" }).renamedFrom).toBe("cover");
+  expect(field.select({ options: ["a"], renamedFrom: "kind" }).renamedFrom).toBe("kind");
+  expect(field.number({ renamedFrom: "count2" }).renamedFrom).toBe("count2");
+
+  for (const value of ["", "1abc", "has-hyphen", 3]) {
+    expect(() => field.text({ renamedFrom: value })).toThrow(FieldConfigurationError);
+  }
+  expect(() =>
+    defineBlock({
+      fields: { title: field.text({ renamedFrom: "heading" }) },
+      type: "hero",
+      version: 1,
+    }),
+  ).toThrow(/fields\.title must not declare renamedFrom/u);
 });

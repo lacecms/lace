@@ -8,6 +8,9 @@ import {
   dispatcherLeaseId,
   opaqueCursor,
   opaqueTokenVerifier,
+  configurationSyncAdvancesPublicState,
+  configurationSyncBackfills,
+  contentSyncActor,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
 } from "@lacecms/application";
@@ -31,8 +34,16 @@ import type {
   ContentEntryStatus,
   ContentEntrySummary,
   CreateMediaMetadataInput,
+  ApplyConfigurationSyncBlockMigrationsInput,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncMigrationCounts,
+  ConfigurationSyncMigrationEntry,
+  ConfigurationSyncMigrationPage,
+  ConfigurationSyncMigrationScanInput,
   ConfigurationSyncModel,
+  ConfigurationSyncSnapshot,
+  ConfigurationSyncSnapshotPage,
+  ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
   CreateContentEntryInput,
   CursorPage,
@@ -89,14 +100,17 @@ import {
 import type {
   ActorId,
   BlockKey,
+  ContentBlock,
   ContentEntry,
   DraftMediaReference,
+  DraftSnapshot,
   MediaMetadata,
   PublishedRoute,
   PublishedSnapshot,
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { NormalizedContentModel } from "@lacecms/config";
+import type { JsonValue } from "@lacecms/content";
 
 export const packageName = "@lacecms/test-utils";
 
@@ -176,6 +190,8 @@ function sameStoredModelStates(
       value.version === candidate.version &&
       value.structureHash === candidate.structureHash &&
       value.projectionHash === candidate.projectionHash &&
+      (value.structure === undefined) === (candidate.structure === undefined) &&
+      value.snapshotFingerprint === candidate.snapshotFingerprint &&
       value.entryCount === candidate.entryCount &&
       value.draftSnapshotCount === candidate.draftSnapshotCount &&
       value.publishedSnapshotCount === candidate.publishedSnapshotCount
@@ -183,7 +199,10 @@ function sameStoredModelStates(
   });
 }
 
-function stateForModel(model: ConfigurationSyncModel): StoredContentModelState {
+function stateForModel(
+  model: ConfigurationSyncModel,
+  configuration: NormalizedContentModel,
+): StoredContentModelState {
   return Object.freeze({
     draftSnapshotCount: 0,
     entryCount: 0,
@@ -191,9 +210,33 @@ function stateForModel(model: ConfigurationSyncModel): StoredContentModelState {
     kind: model.kind,
     projectionHash: model.projectionHash,
     publishedSnapshotCount: 0,
+    ...(configuration.structure === undefined ? {} : { structure: configuration.structure }),
     structureHash: model.structureHash,
     version: model.version,
   });
+}
+
+function staleMigration(): DomainError {
+  return new DomainError(
+    "CONTENT_INVALID_STATE",
+    "Block migration guard failed; the synchronization plan is stale.",
+  );
+}
+
+function entrySnapshots(entry: ContentEntry): readonly (DraftSnapshot | PublishedSnapshot)[] {
+  return entry.published === undefined ? [entry.draft] : [entry.draft, entry.published];
+}
+
+function withFieldDefault<Snapshot extends DraftSnapshot | PublishedSnapshot>(
+  snapshot: Snapshot,
+  fieldKey: string,
+  value: JsonValue,
+): Snapshot {
+  if (Object.hasOwn(snapshot.fields, fieldKey)) return snapshot;
+  return Object.freeze({
+    ...snapshot,
+    fields: Object.freeze({ ...snapshot.fields, [fieldKey]: value }),
+  }) as unknown as Snapshot;
 }
 
 function routeForModel(model: NormalizedContentModel) {
@@ -516,11 +559,19 @@ export class InMemoryContentStore
           const entries = [...this.entries.values()].filter(
             (entry) => entry.model.key === model.key,
           );
+          const snapshots = entries.flatMap(entrySnapshots);
+          const updatedAt = snapshots.map((snapshot) => snapshot.updatedAt);
           return Object.freeze({
             ...clone(model),
             draftSnapshotCount: entries.length,
             entryCount: entries.length,
             publishedSnapshotCount: entries.filter((entry) => entry.published !== undefined).length,
+            snapshotFingerprint: [
+              snapshots.length,
+              snapshots.reduce((sum, snapshot) => sum + snapshot.revision, 0),
+              updatedAt.reduce((sum, value) => sum + value, 0),
+              updatedAt.length === 0 ? 0 : Math.max(...updatedAt),
+            ].join(":"),
           });
         })
         .sort((left, right) => left.key.localeCompare(right.key)),
@@ -531,11 +582,153 @@ export class InMemoryContentStore
     return this.storedModelStates();
   }
 
+  public async readConfigurationSyncSnapshots(
+    input: ConfigurationSyncSnapshotScanInput,
+  ): Promise<ConfigurationSyncSnapshotPage> {
+    const all: ConfigurationSyncSnapshot[] = [...this.entries.values()]
+      .filter((entry) => entry.model.key === input.modelKey)
+      .flatMap((entry) =>
+        entrySnapshots(entry).map((snapshot) => ({
+          blocks: snapshot.blocks.map(({ key, schemaVersion, type }: ContentBlock) => ({
+            key,
+            schemaVersion,
+            type,
+          })),
+          entryId: entry.id,
+          fields: clone(snapshot.fields),
+          revision: snapshot.revision,
+          snapshotId: snapshot.id,
+          state: snapshot.state,
+          title: snapshot.title,
+        })),
+      )
+      .filter((snapshot) => snapshot.snapshotId > (input.after ?? ""))
+      .sort((left, right) => (left.snapshotId < right.snapshotId ? -1 : 1));
+    const items = all.slice(0, input.limit);
+    const last = items.at(-1);
+    return Object.freeze({
+      items: Object.freeze(items),
+      ...(all.length > input.limit && last !== undefined ? { next: last.snapshotId } : {}),
+    });
+  }
+
+  public async readConfigurationSyncMigrationEntries(
+    input: ConfigurationSyncMigrationScanInput,
+  ): Promise<ConfigurationSyncMigrationPage> {
+    const types = new Map(input.targets.map((target) => [target.type, target.version]));
+    const stale = (snapshot: DraftSnapshot | PublishedSnapshot | undefined): boolean =>
+      snapshot?.blocks.some(
+        (block) => types.has(block.type) && types.get(block.type) !== block.schemaVersion,
+      ) === true;
+    const matching = [...this.entries.values()]
+      .filter(
+        (entry) =>
+          entry.model.key === input.modelKey &&
+          entry.id > (input.after ?? "") &&
+          (stale(entry.draft) || stale(entry.published)),
+      )
+      .sort((left, right) => (left.id < right.id ? -1 : 1));
+    const view = (snapshot: DraftSnapshot | PublishedSnapshot) =>
+      Object.freeze({
+        blocks: snapshot.blocks.map((block) => ({
+          ...(types.has(block.type) ? { data: clone(block.data) } : {}),
+          key: block.key,
+          position: block.position,
+          schemaVersion: block.schemaVersion,
+          type: block.type,
+        })),
+        references: clone(this.references.get(snapshot.id) ?? []),
+        revision: snapshot.revision,
+        snapshotId: snapshot.id,
+        state: snapshot.state,
+        title: snapshot.title,
+      });
+    const items: ConfigurationSyncMigrationEntry[] = matching.slice(0, input.limit).map((entry) =>
+      Object.freeze({
+        draft: view(entry.draft),
+        entryId: entry.id,
+        ...(entry.published === undefined ? {} : { published: view(entry.published) }),
+      }),
+    );
+    const last = items.at(-1);
+    return Object.freeze({
+      items: Object.freeze(items),
+      ...(matching.length > input.limit && last !== undefined ? { next: last.entryId } : {}),
+    });
+  }
+
+  public async applyConfigurationSyncBlockMigrations(
+    input: ApplyConfigurationSyncBlockMigrationsInput,
+  ): Promise<ConfigurationSyncMigrationCounts> {
+    const counts = { blocks: 0, drafts: 0, published: 0 };
+    for (const unit of input.units) {
+      const entry = this.entries.get(unit.entryId);
+      if (entry === undefined) throw staleMigration();
+      let next: ContentEntry = entry;
+      const references = new Map<string, readonly DraftMediaReference[]>();
+      for (const migration of unit.snapshots) {
+        const snapshot = migration.state === "draft" ? next.draft : next.published;
+        if (
+          snapshot === undefined ||
+          snapshot.id !== migration.snapshotId ||
+          snapshot.revision !== migration.expectedRevision ||
+          (migration.draftGuard !== undefined &&
+            (next.draft.id !== migration.draftGuard.snapshotId ||
+              next.draft.revision !== migration.draftGuard.revision)) ||
+          migration.blocks.some(
+            (block) =>
+              snapshot.blocks.find((stored) => stored.key === block.key)?.schemaVersion !==
+              block.expectedSchemaVersion,
+          )
+        ) {
+          throw staleMigration();
+        }
+        this.assertActiveReferences(migration.references as readonly DraftMediaReference[]);
+        const migrated = new Map(migration.blocks.map((block) => [block.key, block]));
+        const rewritten = Object.freeze({
+          ...snapshot,
+          blocks: Object.freeze(
+            snapshot.blocks.map((block) => {
+              const value = migrated.get(block.key);
+              return value === undefined
+                ? block
+                : Object.freeze({
+                    ...block,
+                    data: clone(value.data),
+                    schemaVersion: value.schemaVersion,
+                  });
+            }),
+          ),
+          revision: migration.revision,
+          updatedAt: input.migratedAt,
+          ...(migration.updatedBy === undefined ? {} : { updatedBy: contentSyncActor }),
+        });
+        references.set(snapshot.id, [
+          ...(this.references.get(snapshot.id) ?? []).filter(
+            (reference) => !migrated.has(reference.sourceKey),
+          ),
+          ...(clone(migration.references) as readonly DraftMediaReference[]),
+        ]);
+        next = Object.freeze(
+          migration.state === "draft"
+            ? { ...next, draft: rewritten as DraftSnapshot }
+            : { ...next, published: rewritten as PublishedSnapshot },
+        );
+        counts.blocks += migration.blocks.length;
+        counts[migration.state === "draft" ? "drafts" : "published"] += 1;
+      }
+      this.entries.set(next.id, next);
+      for (const [snapshotId, values] of references) this.references.set(snapshotId, values);
+    }
+    return Object.freeze(counts);
+  }
+
   public async applyConfigurationSynchronization(
     input: ApplyConfigurationSynchronizationInput,
   ): Promise<ApplyConfigurationSynchronizationResult> {
     const current = this.storedModelStates();
     const actualPlan = planConfigurationSynchronization({
+      evidence: input.evidence,
       models: input.models,
       storedModels: current,
     });
@@ -563,7 +756,7 @@ export class InMemoryContentStore
         if (currentModel === undefined) {
           throw new DomainError("CONTENT_INVALID_STATE", "Synchronization model is unavailable.");
         }
-        nextStates.set(operation.model.key, stateForModel(operation.model));
+        nextStates.set(operation.model.key, stateForModel(operation.model, currentModel));
         if (currentModel.kind === "page") {
           const entry = pageEntries.get(operation.model.key);
           if (
@@ -598,7 +791,7 @@ export class InMemoryContentStore
         );
       }
       nextStates.delete(previousKey);
-      nextStates.set(operation.model.key, stateForModel(operation.model));
+      nextStates.set(operation.model.key, stateForModel(operation.model, currentModel));
       if (operation.action === "rename") {
         for (const [entryId, entry] of nextEntries) {
           if (entry.model.key !== previousKey) continue;
@@ -608,9 +801,28 @@ export class InMemoryContentStore
           );
         }
       }
+      for (const backfill of configurationSyncBackfills(operation, currentModel)) {
+        const value = JSON.parse(backfill.json) as JsonValue;
+        for (const [entryId, entry] of nextEntries) {
+          if (entry.model.key !== operation.model.key) continue;
+          nextEntries.set(
+            entryId,
+            Object.freeze({
+              ...entry,
+              draft: withFieldDefault(entry.draft, backfill.fieldKey, value),
+              ...(entry.published === undefined
+                ? {}
+                : { published: withFieldDefault(entry.published, backfill.fieldKey, value) }),
+            }),
+          );
+        }
+      }
     }
     this.modelStates = nextStates;
     this.entries = nextEntries;
+    if (!configurationSyncAdvancesPublicState(actualPlan)) {
+      return Object.freeze({ operations: actualPlan.operations, status: "applied" });
+    }
     this.publicVersion += 1;
     this.configurationSyncBuildRequests.push(this.publicVersion);
     return Object.freeze({

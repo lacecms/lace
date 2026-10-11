@@ -313,11 +313,25 @@ Invitations and resets need migration `0004_account_tokens`; see `.lace/upgrade-
 
 ## Configuration, routes, renderers and styling
 
-`lace.config.ts` defines models. `pnpm content:sync --check` reports pending/incompatible changes without writing (pending changes exit with code 2). Normal sync applies valid plans atomically and refuses incompatible changes without partial application. Changes to kind, fields, routes or allowed blocks on populated models can be blocked even with a version increment. This alpha has no general content migration tool; plan a deliberate migration instead of deleting production data. Stop `api` and `dispatcher` before syncing (see host database commands above) and start them again afterwards; the restart also reloads the mounted configuration.
+`lace.config.ts` defines models. `pnpm content:sync --check` reports pending/incompatible changes without writing (pending changes exit with code 2). Normal sync applies valid plans atomically and refuses incompatible changes without partial application. Every structural change needs a model version increment. On populated models sync adds fields, backfills defaults and relaxes or checks tightened constraints itself; renaming or removing populated fields or block types needs a temporary `renamedFrom`, `removedFields` or `removedBlocks` hint, and kind, field-type and published-route changes are refused. Stop `api` and `dispatcher` before syncing (see host database commands above) and start them again afterwards; the restart also reloads the mounted configuration.
+
+To change a block that stored content already uses, increase the block's `version` and declare `migrations` keyed by each target version, then bump the version of every model that allows the block:
+
+```ts
+const quote = defineBlock({
+  type: "quote",
+  version: 2,
+  fields: { text: field.text({ required: true }), attribution: field.text() },
+  // Pure and synchronous: version 1 data in, version 2 data out.
+  migrations: { 2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }) },
+});
+```
+
+`pnpm content:sync --check` runs every migration in memory and refuses a missing step, a throwing migration or a result the new definition rejects (published blocks in publish mode). Sync then rewrites the stored blocks, gives migrated drafts a new revision (an editor with the entry open gets a conflict and reloads), and requests one site build. If it stops, run it again; it continues with the blocks still on the old version. Update the block's site component in the same change, and keep migrations while any environment may still hold older blocks.
 
 <!-- lace-site: starter -->
 
-Adding a model does not create an Astro route. Add the route in `site/src/pages/` and read its entries from `getSite()` in `site/src/lib/lace.ts`: `byPath(path)` for a page, `entries(model)` in `getStaticPaths` and `bySlug(model, slug)` on each render for a collection. A custom block needs a component in `site/src/components/lace/` and an entry in the `site/src/lace/blocks.ts` map whose definition is imported from the same module `lace.config.ts` uses: export the `defineBlock` value from a module, record its path relative to `site/` as `"definitions"` in `site/lace.site.json`, and run `pnpm exec lace add block <type>` to scaffold the component and register it. `pnpm exec lace add block --all` installs or updates the built-in block components for every configured block type; it updates only files you have not changed, reports edited components or an edited block map as conflicts with a diff, and never edits `package.json` (it prints the `pnpm add` command instead). Unknown blocks fail with model, entry and block identifiers. Block data is validated with the CMS rules before your component receives it, and `@lacecms/astro/RichText.astro` renders rich text only through the shared allowlist. These source files belong to you and upgrades never silently overwrite them.
+Adding a model does not create an Astro route. Add the route in `site/src/pages/` and read its entries from `getSite()` in `site/src/lib/lace.ts`: `byPath(path)` for a page, `entries(model)` in `getStaticPaths` and `bySlug(model, slug)` on each render for a collection. A custom block needs a component in `site/src/components/lace/` and an entry in the `site/src/lace/blocks.ts` map whose definition is imported from the same module `lace.config.ts` uses: export the `defineBlock` value from a module, record its path relative to `site/` as `"definitions"` in `site/lace.site.json`, and run `pnpm exec lace add block <type>` to scaffold the component and register it. `pnpm exec lace add block --all` installs or updates the built-in block components for every configured block type (a registry component targets one block version; after you version a block yourself, that component is yours to update); it updates only files you have not changed, reports edited components or an edited block map as conflicts with a diff, and never edits `package.json` (it prints the `pnpm add` command instead). Unknown blocks fail with model, entry and block identifiers. Block data is validated with the CMS rules before your component receives it, and `@lacecms/astro/RichText.astro` renders rich text only through the shared allowlist. These source files belong to you and upgrades never silently overwrite them.
 
 <!-- lace-site: end -->
 <!-- lace-site: existing -->

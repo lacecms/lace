@@ -9,6 +9,7 @@ import {
   opaqueCursor,
 } from "@lacecms/application";
 import type {
+  ConfigurationSyncContentWrite,
   ContentEntryListValues,
   ContentEntrySort,
   ContentEntryStatus,
@@ -21,6 +22,14 @@ import type {
   MediaUsageEntry,
   MediaUsageLocation,
   MediaUsageState,
+  ConfigurationSyncMediaReference,
+  ConfigurationSyncMigrationBlock,
+  ConfigurationSyncMigrationPage,
+  ConfigurationSyncMigrationSnapshot,
+  ConfigurationSyncMigrationTarget,
+  ConfigurationSyncSnapshot,
+  ConfigurationSyncSnapshotMigration,
+  ConfigurationSyncSnapshotPage,
   SiteBuildRecord,
   StoredContentModelState,
   TrackedSiteBuildCheck,
@@ -291,8 +300,27 @@ export interface StoredModelStateRow {
   readonly kind: string;
   readonly projection_hash: string;
   readonly published_snapshot_count: number;
+  readonly snapshot_fingerprint: string;
+  /** Valid structure baseline only; `NULL` when absent or written for another hash. */
+  readonly structure_json: string | null;
   readonly structure_hash: string;
   readonly version: number;
+}
+
+export interface SyncSnapshotRow {
+  readonly entry_id: string;
+  readonly fields_json: string;
+  readonly id: string;
+  readonly revision: number;
+  readonly state: string;
+  readonly title: string;
+}
+
+export interface SyncBlockRow {
+  readonly block_key: string;
+  readonly block_type: string;
+  readonly schema_version: number;
+  readonly snapshot_id: string;
 }
 
 export interface DecodedCursor {
@@ -376,22 +404,450 @@ export const MEDIA_USAGE_SQL = `with used as (
    left join content_blocks b on b.snapshot_id = r.snapshot_id and b.block_key = r.source_key
   where r.media_id = ? and e.id in (select id from page)
   order by e.updated_at desc, e.id desc`;
+/** A baseline counts only while it was written for the row's current structural hash. */
+const VALID_BASELINE_SQL =
+  "case when m.structure_json_hash = m.structure_hash then m.structure_json end";
+/**
+ * Snapshot count, revision sum, update-time sum, and latest update time of a
+ * model's snapshots. Every save, publication, and deletion changes it.
+ */
+const SNAPSHOT_FINGERPRINT_SQL = `(select count(*) || ':' || coalesce(sum(s.revision), 0) || ':' ||
+          coalesce(sum(s.updated_at), 0) || ':' || coalesce(max(s.updated_at), 0)
+     from content_snapshots s join content_entries x on x.id = s.entry_id
+    where x.model_key = m.key)`;
 export const STORED_MODEL_STATE_SQL = `select m.key, m.kind, m.config_version as version, m.structure_hash, m.projection_hash,
+        ${VALID_BASELINE_SQL} as structure_json,
         count(e.id) as entry_count,
         sum(case when e.draft_snapshot_id is null then 0 else 1 end) as draft_snapshot_count,
-        sum(case when e.published_snapshot_id is null then 0 else 1 end) as published_snapshot_count
+        sum(case when e.published_snapshot_id is null then 0 else 1 end) as published_snapshot_count,
+        ${SNAPSHOT_FINGERPRINT_SQL} as snapshot_fingerprint
    from content_models m
    left join content_entries e on e.model_key = m.key
-  group by m.key, m.kind, m.config_version, m.structure_hash, m.projection_hash
+  group by m.key, m.kind, m.config_version, m.structure_hash, m.projection_hash,
+           m.structure_json, m.structure_json_hash
   order by m.key asc`;
 /**
  * Renders the stored synchronization state as one JSON text so a D1 batch can
- * compare it with the state its plan was derived from.
+ * compare it with the state its plan was derived from. Baselines are reduced to
+ * their presence; their content is fixed by the structural hash.
  */
 export const STORED_MODEL_STATE_JSON_SQL = `(select coalesce(json_group_array(json_array(
     state.key, state.kind, state.version, state.structure_hash, state.projection_hash,
-    state.entry_count, state.draft_snapshot_count, state.published_snapshot_count)), '[]')
+    state.entry_count, state.draft_snapshot_count, state.published_snapshot_count,
+    state.structure_json is not null, state.snapshot_fingerprint)), '[]')
    from (${STORED_MODEL_STATE_SQL}) state)`;
+/** Valid structure baselines by model key, read alongside the JSON state on D1. */
+export const STORED_MODEL_BASELINES_SQL = `select m.key, ${VALID_BASELINE_SQL} as structure_json
+   from content_models m order by m.key asc`;
+/** Binds model key, exclusive snapshot-ID cursor, and page limit. */
+export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title, s.fields_json,
+        case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
+   from content_snapshots s
+   join content_entries e on e.id = s.entry_id
+  where e.model_key = ? and (s.id = e.draft_snapshot_id or s.id = e.published_snapshot_id)
+    and s.id > ?
+  order by s.id asc
+  limit ?`;
+/** Block summaries for a list of snapshot IDs; append the placeholders. */
+export const SYNC_BLOCKS_SQL =
+  "select snapshot_id, block_key, block_type, schema_version from content_blocks where snapshot_id in";
+const BACKFILL_FIELD_KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
+
+/**
+ * Set-based default backfill for one field of one model. Binds the default as
+ * JSON text and the model key; rows that already hold the key are untouched.
+ */
+export function backfillFieldSql(fieldKey: string): string {
+  if (!BACKFILL_FIELD_KEY.test(fieldKey)) failure("Backfill field key is invalid.");
+  return `update content_snapshots set fields_json = json_set(fields_json, '$.${fieldKey}', json(?))
+   where entry_id in (select id from content_entries where model_key = ?)
+     and json_type(fields_json, '$.${fieldKey}') is null`;
+}
+
+function syncFieldPath(fieldKey: string): string {
+  if (!BACKFILL_FIELD_KEY.test(fieldKey)) failure("Synchronization field key is invalid.");
+  return `'$.${fieldKey}'`;
+}
+
+/** One parameterized statement of a synchronization content write. */
+export interface ConfigurationSyncWriteStatement {
+  readonly params: readonly (number | string)[];
+  readonly sql: string;
+}
+
+const MODEL_ENTRY_IDS_SQL = "select id from content_entries where model_key = ?";
+const MODEL_SNAPSHOT_IDS_SQL = `select s.id from content_snapshots s
+     join content_entries e on e.id = s.entry_id where e.model_key = ?`;
+
+/**
+ * Set-based statements for one synchronization content write of one model.
+ * Every statement ends in a `where` clause so a D1 batch can append its guard.
+ * Field keys are checked before they are interpolated into JSON paths; block
+ * types, field keys used as values and the model key are bound.
+ */
+export function configurationSyncWriteStatements(
+  write: ConfigurationSyncContentWrite,
+  modelKey: string,
+): readonly ConfigurationSyncWriteStatement[] {
+  switch (write.action) {
+    case "rename-field": {
+      const from = syncFieldPath(write.from);
+      const to = syncFieldPath(write.to);
+      return [
+        {
+          // `->` keeps the JSON representation of every value type.
+          params: [modelKey],
+          sql: `update content_snapshots
+     set fields_json = json_remove(json_set(fields_json, ${to}, json(fields_json -> ${from})), ${from})
+   where entry_id in (${MODEL_ENTRY_IDS_SQL}) and json_type(fields_json, ${from}) is not null`,
+        },
+        {
+          params: [write.to, write.from, modelKey],
+          sql: `update content_media_references set field_path = ?
+   where source_key = '$fields' and field_path = ? and snapshot_id in (${MODEL_SNAPSHOT_IDS_SQL})`,
+        },
+      ];
+    }
+    case "remove-field": {
+      const path = syncFieldPath(write.fieldKey);
+      return [
+        {
+          params: [modelKey],
+          sql: `update content_snapshots set fields_json = json_remove(fields_json, ${path})
+   where entry_id in (${MODEL_ENTRY_IDS_SQL}) and json_type(fields_json, ${path}) is not null`,
+        },
+        {
+          params: [write.fieldKey, modelKey],
+          sql: `delete from content_media_references
+   where source_key = '$fields' and field_path = ? and snapshot_id in (${MODEL_SNAPSHOT_IDS_SQL})`,
+        },
+      ];
+    }
+    case "remove-block-type":
+      return [
+        {
+          params: [modelKey, write.blockType],
+          sql: `delete from content_media_references
+   where snapshot_id in (${MODEL_SNAPSHOT_IDS_SQL})
+     and exists (select 1 from content_blocks b
+                  where b.snapshot_id = content_media_references.snapshot_id
+                    and b.block_key = content_media_references.source_key
+                    and b.block_type = ?)`,
+        },
+        {
+          params: [write.blockType, modelKey],
+          sql: `delete from content_blocks
+   where block_type = ? and snapshot_id in (${MODEL_SNAPSHOT_IDS_SQL})`,
+        },
+      ];
+    case "backfill-field":
+      return [{ params: [write.json, modelKey], sql: backfillFieldSql(write.fieldKey) }];
+  }
+}
+
+/** Maps one scan page of snapshot and block rows to portable values. */
+export function syncSnapshotPage(
+  rows: readonly SyncSnapshotRow[],
+  blockRows: readonly SyncBlockRow[],
+  limit: number,
+): ConfigurationSyncSnapshotPage {
+  const blocks = new Map<string, { key: string; schemaVersion: number; type: string }[]>();
+  for (const row of blockRows) {
+    const list = blocks.get(row.snapshot_id) ?? [];
+    list.push({ key: row.block_key, schemaVersion: row.schema_version, type: row.block_type });
+    blocks.set(row.snapshot_id, list);
+  }
+  const items: ConfigurationSyncSnapshot[] = rows.map((row) =>
+    Object.freeze({
+      blocks: Object.freeze(blocks.get(row.id) ?? []),
+      entryId: row.entry_id,
+      fields: parseObject(row.fields_json, "Snapshot fields"),
+      revision: row.revision,
+      snapshotId: row.id,
+      state: row.state === "published" ? "published" : "draft",
+      title: row.title,
+    }),
+  );
+  const last = rows.at(-1);
+  return Object.freeze({
+    items: Object.freeze(items),
+    ...(rows.length === limit && last !== undefined ? { next: last.id } : {}),
+  });
+}
+/**
+ * Entries of one model holding a block of a target type at another schema
+ * version. Binds model key, target JSON (`[[type, version], …]`), exclusive
+ * entry-ID cursor and page limit.
+ */
+export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.published_snapshot_id
+   from content_entries e
+  where e.model_key = ?
+    and exists (select 1 from content_blocks b, json_each(?) t
+                 where b.snapshot_id in (e.draft_snapshot_id, e.published_snapshot_id)
+                   and b.block_type = t.value ->> 0 and b.schema_version <> t.value ->> 1)
+    and e.id > ?
+  order by e.id asc
+  limit ?`;
+/** Snapshot heads for a list of snapshot IDs; append the placeholders. */
+export const SYNC_MIGRATION_SNAPSHOTS_SQL =
+  "select id, revision, title from content_snapshots where id in";
+/**
+ * Blocks of a list of snapshot IDs with data only for target types. Binds the
+ * target type JSON array first; append the snapshot placeholders and the order.
+ */
+export const SYNC_MIGRATION_BLOCKS_SQL = `select snapshot_id, block_key, block_type, position, schema_version,
+        case when block_type in (select value from json_each(?)) then data_json end as data_json
+   from content_blocks where snapshot_id in`;
+/** Media references of a list of snapshot IDs; append the placeholders. */
+export const SYNC_MIGRATION_REFERENCES_SQL =
+  "select snapshot_id, source_key, field_path, media_id from content_media_references where snapshot_id in";
+
+export interface SyncMigrationEntryRow {
+  readonly draft_snapshot_id: string | null;
+  readonly id: string;
+  readonly published_snapshot_id: string | null;
+}
+
+export interface SyncMigrationSnapshotRow {
+  readonly id: string;
+  readonly revision: number;
+  readonly title: string;
+}
+
+export interface SyncMigrationBlockRow {
+  readonly block_key: string;
+  readonly block_type: string;
+  readonly data_json: string | null;
+  readonly position: number;
+  readonly schema_version: number;
+  readonly snapshot_id: string;
+}
+
+export interface SyncMigrationReferenceRow {
+  readonly field_path: string;
+  readonly media_id: string;
+  readonly snapshot_id: string;
+  readonly source_key: string;
+}
+
+/** Largest migration scan page either adapter serves. */
+export const SQL_MAX_MIGRATION_PAGE_SIZE = 50;
+
+export function assertMigrationPageSize(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1 || value > SQL_MAX_MIGRATION_PAGE_SIZE) {
+    failure(`Migration page size must be between 1 and ${SQL_MAX_MIGRATION_PAGE_SIZE}.`);
+  }
+  return value;
+}
+
+/** The stale-plan failure raised when a block-migration guard no longer holds. */
+export function staleBlockMigration(): never {
+  failure("Block migration guard failed; the synchronization plan is stale.");
+}
+
+/** Bound JSON of migration targets for {@link SYNC_MIGRATION_ENTRIES_SQL}. */
+export function syncMigrationTargetsJson(
+  targets: readonly ConfigurationSyncMigrationTarget[],
+): string {
+  return JSON.stringify(targets.map((target) => [target.type, target.version]));
+}
+
+/** Snapshot IDs referenced by migration entry rows, in row order. */
+export function syncMigrationSnapshotIds(rows: readonly SyncMigrationEntryRow[]): string[] {
+  return rows.flatMap((row) =>
+    [row.draft_snapshot_id, row.published_snapshot_id].filter((id): id is string => id !== null),
+  );
+}
+
+/** Maps one migration scan page of entry, snapshot, block and reference rows. */
+export function syncMigrationPage(
+  rows: readonly SyncMigrationEntryRow[],
+  snapshotRows: readonly SyncMigrationSnapshotRow[],
+  blockRows: readonly SyncMigrationBlockRow[],
+  referenceRows: readonly SyncMigrationReferenceRow[],
+  limit: number,
+): ConfigurationSyncMigrationPage {
+  const blocks = new Map<string, ConfigurationSyncMigrationBlock[]>();
+  for (const row of [...blockRows].sort(
+    (left, right) =>
+      left.snapshot_id.localeCompare(right.snapshot_id) || left.position - right.position,
+  )) {
+    const list = blocks.get(row.snapshot_id) ?? [];
+    list.push(
+      Object.freeze({
+        ...(row.data_json === null ? {} : { data: parseObject(row.data_json, "Block data") }),
+        key: row.block_key,
+        position: row.position,
+        schemaVersion: row.schema_version,
+        type: row.block_type,
+      }),
+    );
+    blocks.set(row.snapshot_id, list);
+  }
+  const references = new Map<string, ConfigurationSyncMediaReference[]>();
+  for (const row of [...referenceRows].sort(
+    (left, right) =>
+      left.snapshot_id.localeCompare(right.snapshot_id) ||
+      left.source_key.localeCompare(right.source_key) ||
+      left.field_path.localeCompare(right.field_path),
+  )) {
+    const list = references.get(row.snapshot_id) ?? [];
+    list.push(
+      Object.freeze({
+        fieldPath: row.field_path,
+        mediaId: row.media_id,
+        sourceKey: row.source_key,
+      }),
+    );
+    references.set(row.snapshot_id, list);
+  }
+  const snapshots = new Map(snapshotRows.map((row) => [row.id, row]));
+  const snapshot = (
+    id: string | null,
+    state: "draft" | "published",
+  ): ConfigurationSyncMigrationSnapshot | undefined => {
+    const row = id === null ? undefined : snapshots.get(id);
+    if (row === undefined) return undefined;
+    return Object.freeze({
+      blocks: Object.freeze(blocks.get(row.id) ?? []),
+      references: Object.freeze(references.get(row.id) ?? []),
+      revision: row.revision,
+      snapshotId: row.id,
+      state,
+      title: row.title,
+    });
+  };
+  const items = rows.map((row) => {
+    const draft = snapshot(row.draft_snapshot_id, "draft");
+    const published = snapshot(row.published_snapshot_id, "published");
+    return Object.freeze({
+      ...(draft === undefined ? {} : { draft }),
+      entryId: row.id,
+      ...(published === undefined ? {} : { published }),
+    });
+  });
+  const last = rows.at(-1);
+  return Object.freeze({
+    items: Object.freeze(items),
+    ...(rows.length === limit && last !== undefined ? { next: last.id } : {}),
+  });
+}
+
+/** Guard condition and ordered writes of one migrated snapshot. */
+export interface ConfigurationSyncMigrationStatements {
+  /** A boolean SQL expression that holds only while the snapshot is unchanged since the scan. */
+  readonly guard: ConfigurationSyncWriteStatement;
+  /** Writes that each end in a `where` clause, so a D1 batch can append its guard. */
+  readonly writes: readonly ConfigurationSyncWriteStatement[];
+}
+
+const MIGRATED_BLOCK_VALUES = 4;
+const MIGRATED_REFERENCE_VALUES = 3;
+
+function valueRows(rows: number, width: number): string {
+  const tuple = `(${Array.from({ length: width }, () => "?").join(", ")})`;
+  return Array.from({ length: rows }, () => tuple).join(", ");
+}
+
+/**
+ * Guard and in-place writes for one snapshot of a block-migration unit. Each
+ * write binds at most `maxParameters` anonymous values in textual order, so a
+ * D1 batch can append its guard parameters after them.
+ */
+export function configurationSyncMigrationStatements(
+  migration: ConfigurationSyncSnapshotMigration,
+  migratedAt: number,
+  maxParameters: number,
+): ConfigurationSyncMigrationStatements {
+  const current =
+    migration.state === "draft" ? "e.draft_snapshot_id = s.id" : "e.published_snapshot_id = s.id";
+  const expectedBlocks = JSON.stringify(
+    migration.blocks.map((block) => [block.key, block.expectedSchemaVersion]),
+  );
+  const guardParams: (number | string)[] = [
+    migration.snapshotId,
+    migration.expectedRevision,
+    expectedBlocks,
+    migration.snapshotId,
+    migration.blocks.length,
+  ];
+  let guardSql = `(exists (select 1 from content_snapshots s join content_entries e on e.id = s.entry_id
+              where s.id = ? and s.revision = ? and ${current})
+   and (select count(*) from content_blocks b, json_each(?) j
+         where b.snapshot_id = ? and b.block_key = j.value ->> 0
+           and b.schema_version = j.value ->> 1) = ?`;
+  if (migration.draftGuard !== undefined) {
+    guardSql += `
+   and exists (select 1 from content_snapshots d join content_entries e on e.draft_snapshot_id = d.id
+                where d.id = ? and d.revision = ?)`;
+    guardParams.push(migration.draftGuard.snapshotId, migration.draftGuard.revision);
+  }
+  guardSql += ")";
+
+  const writes: ConfigurationSyncWriteStatement[] = [];
+  // Each write also binds the migration time and the snapshot ID.
+  const shared = 2;
+  const blockRows = Math.floor((maxParameters - shared) / MIGRATED_BLOCK_VALUES);
+  for (const group of chunks(migration.blocks, blockRows)) {
+    writes.push({
+      params: [
+        migratedAt,
+        ...group.flatMap((block) => [
+          block.key,
+          block.schemaVersion,
+          JSON.stringify(block.data),
+          block.expectedSchemaVersion,
+        ]),
+        migration.snapshotId,
+      ],
+      sql: `update content_blocks
+     set schema_version = v.column2, data_json = v.column3, updated_at = ?
+    from (values ${valueRows(group.length, MIGRATED_BLOCK_VALUES)}) as v
+   where content_blocks.snapshot_id = ? and content_blocks.block_key = v.column1
+     and content_blocks.schema_version = v.column4`,
+    });
+  }
+  writes.push({
+    params: [migration.snapshotId, JSON.stringify(migration.blocks.map((block) => block.key))],
+    sql: `delete from content_media_references
+   where snapshot_id = ? and source_key in (select value from json_each(?))`,
+  });
+  const referenceRows = Math.floor((maxParameters - shared) / MIGRATED_REFERENCE_VALUES);
+  for (const group of chunks(migration.references, referenceRows)) {
+    writes.push({
+      params: [
+        migration.snapshotId,
+        migratedAt,
+        ...group.flatMap((reference) => [
+          reference.sourceKey,
+          reference.fieldPath,
+          reference.mediaId,
+        ]),
+      ],
+      // A missing or inactive media ID yields NULL and fails the NOT NULL constraint.
+      sql: `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
+   select ?, v.column1, v.column2,
+          (select m.id from media m where m.id = v.column3 and m.status = 'active'), ?
+     from (values ${valueRows(group.length, MIGRATED_REFERENCE_VALUES)}) as v
+    where 1 = 1`,
+    });
+  }
+  writes.push(
+    migration.updatedBy === undefined
+      ? {
+          params: [migration.revision, migratedAt, migration.snapshotId],
+          sql: "update content_snapshots set revision = ?, updated_at = ? where id = ?",
+        }
+      : {
+          params: [migration.revision, migratedAt, migration.updatedBy, migration.snapshotId],
+          sql: "update content_snapshots set revision = ?, updated_at = ?, updated_by = ? where id = ?",
+        },
+  );
+  return Object.freeze({
+    guard: { params: guardParams, sql: guardSql },
+    writes: Object.freeze(writes),
+  });
+}
 export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version,
         s.created_at, s.updated_at, s.updated_by, u.role
    from content_snapshots s left join user u on u.id = s.updated_by`;
@@ -442,6 +898,8 @@ export function sameStoredModelStates(
       value.version === candidate.version &&
       value.structureHash === candidate.structureHash &&
       value.projectionHash === candidate.projectionHash &&
+      (value.structure === undefined) === (candidate.structure === undefined) &&
+      value.snapshotFingerprint === candidate.snapshotFingerprint &&
       value.entryCount === candidate.entryCount &&
       value.draftSnapshotCount === candidate.draftSnapshotCount &&
       value.publishedSnapshotCount === candidate.publishedSnapshotCount
@@ -463,6 +921,10 @@ export function storedModelStates(
         kind: row.kind,
         projectionHash: row.projection_hash,
         publishedSnapshotCount: row.published_snapshot_count,
+        snapshotFingerprint: row.snapshot_fingerprint,
+        ...(row.structure_json === null
+          ? {}
+          : { structure: parseObject(row.structure_json, "Model structure baseline") }),
         structureHash: row.structure_hash,
         version: row.version,
       });

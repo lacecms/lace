@@ -127,13 +127,19 @@ The Node persistence adapter SHALL atomically publish guarded drafts, replace ro
 
 ### Requirement: Node configuration synchronization applies fresh plans atomically
 The Node persistence adapter SHALL provide the portable configuration
-synchronization read and guarded apply operations over SQLite. Its apply
-operation SHALL re-check the supplied plan against stored model identity and
-content cardinality within one SQLite transaction, perform all allowed model
-identity changes and page-singleton creation, and roll back all effects on any
-failed statement, stale guard, or concurrent conflict. It SHALL reuse the
-schema's cascading model-key update for an explicit rename and the pending
-site-build uniqueness rule for build coalescing.
+synchronization read, bounded snapshot scan, and guarded apply operations over
+SQLite. Its apply operation SHALL re-check the supplied plan against stored
+model identity, baseline presence, content cardinality and snapshot
+fingerprints within one SQLite transaction, perform all allowed model identity
+changes, structure baseline writes, hinted field renames, field removals,
+block-type removals with their media-reference maintenance, default backfills
+and page-singleton creation, and roll back all effects on any failed
+statement, stale guard, or concurrent conflict. It SHALL reuse the schema's
+cascading model-key update for an explicit rename and the pending site-build
+uniqueness rule for build coalescing. Content rewrites SHALL run after the
+model identity update, renames before removals and removals before backfills.
+Each rename, removal and backfill SHALL be a set-based update of the model's
+snapshots and SHALL NOT change revisions, audit columns, or timestamps.
 
 #### Scenario: Atomic rename retains attached content
 - **WHEN** a fresh valid synchronization plan explicitly renames a populated
@@ -150,8 +156,23 @@ site-build uniqueness rule for build coalescing.
 #### Scenario: Statement failure preserves all synchronization state
 - **WHEN** a SQLite statement fails after the adapter has started a
   synchronization transaction
-- **THEN** content models, singleton entries, published-state version, and
-  pending build outbox rows retain their pre-apply values
+- **THEN** content models, baselines, snapshots, blocks, media references,
+  singleton entries, published-state version, and pending build outbox rows
+  retain their pre-apply values
+
+#### Scenario: Backfill and baseline commit together
+- **WHEN** a fresh plan adds a defaulted field to a populated model
+- **THEN** one transaction stores the new identity and baseline, writes the
+  default into every draft and published snapshot lacking it, advances the
+  published-state version once, and coalesces one build request
+
+#### Scenario: Hinted rewrites commit together
+- **WHEN** a fresh plan renames one populated field, removes one populated
+  media field and disallows one used block type through hints
+- **THEN** one transaction stores the new identity and baseline, moves and
+  prunes the field values, deletes the blocks, moves or deletes the affected
+  media references, advances the published-state version once, and coalesces
+  one build request
 
 ### Requirement: Node persistence atomically protects media deletion races
 The Node SQLite adapter SHALL atomically claim and complete media-deletion
@@ -278,3 +299,38 @@ The Node SQLite adapter SHALL implement tracking check claims, check records, an
 #### Scenario: Lease expiry makes a check due again
 - **WHEN** a claimed tracking check is not recorded before its lease expires
 - **THEN** a later claim returns the same build with its unchanged provider ID and tracking start
+
+### Requirement: Node block migrations read bounded entry pages and write guarded units
+The Node persistence adapter SHALL provide the portable block-migration entry
+scan over SQLite with read-only statements. It SHALL also provide the portable
+block-migration write. The write SHALL apply each supplied entry unit in one
+SQLite transaction and SHALL:
+
+- verify the unit's guards (snapshot revisions, current draft and published
+  snapshot identity, stored block schema versions, and the draft revision when
+  the published revision follows it);
+- update each migrated block's schema version, data and update time in place;
+- delete and reinsert the migrated blocks' media references, accepting only
+  active media;
+- update the snapshot revisions, audit actor and update times as the
+  schema-evolution capability defines.
+
+A failed guard or statement SHALL roll back that unit and SHALL report a stale
+migration without attempting later units. Units committed earlier SHALL remain
+committed. The write SHALL NOT change content models, baselines, entries,
+published routes, published state or outbox rows.
+
+#### Scenario: Unit commits blocks, references and revisions together
+- **WHEN** a unit migrates two blocks of a draft and the same blocks of its
+  in-sync published snapshot, one block moving a media ID to a new field
+- **THEN** one transaction stores both snapshots' migrated blocks and
+  revisions and the moved media references, and every other row is unchanged
+
+#### Scenario: Guard failure rolls back the unit
+- **WHEN** a draft's revision changed after the migration scan read it
+- **THEN** the unit's transaction writes nothing and the adapter reports a
+  stale migration
+
+#### Scenario: Repeated write is a no-op
+- **WHEN** the same unit is supplied again after it committed
+- **THEN** its guard fails on the changed revision and no row changes

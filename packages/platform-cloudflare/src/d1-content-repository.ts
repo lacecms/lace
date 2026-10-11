@@ -6,6 +6,9 @@ import {
   dispatcherLeaseId,
   foldAscii,
   MAX_MEDIA_USAGE_ENTRIES,
+  configurationSyncAdvancesPublicState,
+  configurationSyncContentWrites,
+  configurationSyncBaseline,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
   SITE_BUILD_DEBOUNCE_MS,
@@ -18,7 +21,13 @@ import type {
   BuildQueueReceipt,
   ClaimDispatcherEventsInput,
   CompleteDispatcherLeaseInput,
+  ApplyConfigurationSyncBlockMigrationsInput,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncMigrationCounts,
+  ConfigurationSyncMigrationPage,
+  ConfigurationSyncMigrationScanInput,
+  ConfigurationSyncSnapshotPage,
+  ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
   ContentCommandResult,
   ContentEntryCommandPort,
@@ -77,7 +86,22 @@ import {
   PUBLIC_ROUTE_SQL,
   SNAPSHOT_COLUMNS_SQL,
   SQL_MAX_PAGE_SIZE,
+  STORED_MODEL_BASELINES_SQL,
   STORED_MODEL_STATE_JSON_SQL,
+  SYNC_BLOCKS_SQL,
+  SYNC_MIGRATION_BLOCKS_SQL,
+  SYNC_MIGRATION_ENTRIES_SQL,
+  SYNC_MIGRATION_REFERENCES_SQL,
+  SYNC_MIGRATION_SNAPSHOTS_SQL,
+  SYNC_SNAPSHOTS_SQL,
+  assertMigrationPageSize,
+  configurationSyncMigrationStatements,
+  configurationSyncWriteStatements,
+  staleBlockMigration,
+  syncMigrationPage,
+  syncMigrationSnapshotIds,
+  syncMigrationTargetsJson,
+  syncSnapshotPage,
   assertDraftPersistenceBounds,
   assertNonNegativeInteger,
   assertPageSize,
@@ -136,6 +160,12 @@ import type {
   PublicRow,
   SiteBuildRow,
   SnapshotRow,
+  SyncBlockRow,
+  SyncMigrationBlockRow,
+  SyncMigrationEntryRow,
+  SyncMigrationReferenceRow,
+  SyncMigrationSnapshotRow,
+  SyncSnapshotRow,
   StoredModelStateRow,
   StoredSnapshot,
   SummaryRow,
@@ -268,6 +298,152 @@ export class D1ContentRepository
 
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return (await this.readSyncState()).state;
+  }
+
+  public async readConfigurationSyncSnapshots(
+    input: ConfigurationSyncSnapshotScanInput,
+  ): Promise<ConfigurationSyncSnapshotPage> {
+    const limit = assertPageSize(input.limit);
+    const rows = await this.all<SyncSnapshotRow>(
+      SYNC_SNAPSHOTS_SQL,
+      input.modelKey,
+      input.after ?? "",
+      limit,
+    );
+    const blockRows: SyncBlockRow[] = [];
+    for (const group of chunks(
+      rows.map((row) => row.id),
+      D1_MAX_BOUND_PARAMETERS,
+    )) {
+      blockRows.push(
+        ...(await this.all<SyncBlockRow>(
+          `${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")})`,
+          ...group,
+        )),
+      );
+    }
+    return syncSnapshotPage(rows, blockRows, limit);
+  }
+
+  public async readConfigurationSyncMigrationEntries(
+    input: ConfigurationSyncMigrationScanInput,
+  ): Promise<ConfigurationSyncMigrationPage> {
+    const limit = assertMigrationPageSize(input.limit);
+    const rows = await this.all<SyncMigrationEntryRow>(
+      SYNC_MIGRATION_ENTRIES_SQL,
+      input.modelKey,
+      syncMigrationTargetsJson(input.targets),
+      input.after ?? "",
+      limit,
+    );
+    const types = JSON.stringify(input.targets.map((target) => target.type));
+    const snapshotRows: SyncMigrationSnapshotRow[] = [];
+    const blockRows: SyncMigrationBlockRow[] = [];
+    const referenceRows: SyncMigrationReferenceRow[] = [];
+    // One bound value is reserved for the target types of the block query.
+    for (const group of chunks(syncMigrationSnapshotIds(rows), D1_MAX_BOUND_PARAMETERS - 1)) {
+      const bindings = `(${group.map(() => "?").join(", ")})`;
+      snapshotRows.push(
+        ...(await this.all<SyncMigrationSnapshotRow>(
+          `${SYNC_MIGRATION_SNAPSHOTS_SQL} ${bindings}`,
+          ...group,
+        )),
+      );
+      blockRows.push(
+        ...(await this.all<SyncMigrationBlockRow>(
+          `${SYNC_MIGRATION_BLOCKS_SQL} ${bindings}`,
+          types,
+          ...group,
+        )),
+      );
+      referenceRows.push(
+        ...(await this.all<SyncMigrationReferenceRow>(
+          `${SYNC_MIGRATION_REFERENCES_SQL} ${bindings}`,
+          ...group,
+        )),
+      );
+    }
+    return syncMigrationPage(rows, snapshotRows, blockRows, referenceRows, limit);
+  }
+
+  /**
+   * Packs whole entry units into guarded batches within the statement budget.
+   * Every write requires all of its batch's guards, so one stale unit leaves
+   * the batch unchanged and stops later batches. A unit too large for one
+   * batch is split into its published snapshot, then its draft.
+   */
+  public async applyConfigurationSyncBlockMigrations(
+    input: ApplyConfigurationSyncBlockMigrationsInput,
+  ): Promise<ConfigurationSyncMigrationCounts> {
+    type Part = {
+      readonly state: "draft" | "published";
+      readonly statements: ReturnType<typeof configurationSyncMigrationStatements>;
+    };
+    // Guard insert and release surround each part's writes.
+    const cost = (part: Part): number => part.statements.writes.length + 2;
+    const batches: Part[][] = [];
+    let current: Part[] = [];
+    let size = 0;
+    const flush = (): void => {
+      if (current.length > 0) batches.push(current);
+      current = [];
+      size = 0;
+    };
+    for (const unit of input.units) {
+      const parts = unit.snapshots.map((migration) => ({
+        state: migration.state,
+        // One bound value is reserved for the batch guard tokens.
+        statements: configurationSyncMigrationStatements(
+          migration,
+          input.migratedAt,
+          D1_MAX_BOUND_PARAMETERS - 1,
+        ),
+      }));
+      const unitCost = parts.reduce((sum, part) => sum + cost(part), 0);
+      if (unitCost <= D1_MAX_BATCH_STATEMENTS) {
+        if (size + unitCost > D1_MAX_BATCH_STATEMENTS) flush();
+        current.push(...parts);
+        size += unitCost;
+        continue;
+      }
+      flush();
+      for (const part of parts) {
+        if (size + cost(part) > D1_MAX_BATCH_STATEMENTS) flush();
+        current.push(part);
+        size += cost(part);
+      }
+      flush();
+    }
+    flush();
+
+    for (const parts of batches) {
+      const batch = this.batch();
+      const tokens = parts.map((part) =>
+        this.guard(batch, input.migratedAt, part.statements.guard),
+      );
+      const guarded = `(select count(*) from mutation_guards where token in (select value from json_each(?))) = ${tokens.length}`;
+      const tokenJson = JSON.stringify(tokens);
+      for (const part of parts) {
+        batch.checkpoint(`sync.migration.${part.state}`);
+        for (const write of part.statements.writes) {
+          batch.add(`${write.sql} and ${guarded}`, ...write.params, tokenJson);
+        }
+      }
+      for (const token of tokens) this.releaseGuard(batch, token);
+      const results = await this.execute(batch, false);
+      if (tokens.some((_, index) => results[index]!.meta.changes !== 1)) staleBlockMigration();
+    }
+    let blocks = 0;
+    let drafts = 0;
+    let published = 0;
+    for (const unit of input.units) {
+      for (const migration of unit.snapshots) {
+        blocks += migration.blocks.length;
+        if (migration.state === "draft") drafts += 1;
+        else published += 1;
+      }
+    }
+    return Object.freeze({ blocks, drafts, published });
   }
 
   public async load(input: LoadContentEntryInput): Promise<ContentEntry | null> {
@@ -764,6 +940,7 @@ export class D1ContentRepository
   ): Promise<ApplyConfigurationSynchronizationResult> {
     const { json, state } = await this.readSyncState();
     const actualPlan = planConfigurationSynchronization({
+      evidence: input.evidence,
       models: input.models,
       storedModels: state,
     });
@@ -790,14 +967,17 @@ export class D1ContentRepository
         const configuration = configurationByKey.get(operation.model.key);
         if (configuration === undefined) failure("Synchronization model is unavailable.");
         batch.checkpoint("sync.model.create");
+        const baseline = configurationSyncBaseline(configuration);
         batch.add(
-          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
+          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
           operation.model.key,
           operation.model.kind,
           configuration.label ?? configuration.key,
           operation.model.version,
           operation.model.structureHash,
           operation.model.projectionHash,
+          baseline.json,
+          baseline.hash,
           input.appliedAt,
           input.appliedAt,
           token,
@@ -856,14 +1036,17 @@ export class D1ContentRepository
       const expected = expectedByKey.get(previousKey);
       if (expected === undefined) failure("Synchronization update guard is missing.");
       batch.checkpoint(`sync.model.${operation.action}`);
+      const baseline = configurationSyncBaseline(configuration);
       batch.add(
-        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
+        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
         operation.model.key,
         operation.model.kind,
         configuration.label ?? configuration.key,
         operation.model.version,
         operation.model.structureHash,
         operation.model.projectionHash,
+        baseline.json,
+        baseline.hash,
         input.appliedAt,
         expected.key,
         expected.kind,
@@ -872,6 +1055,18 @@ export class D1ContentRepository
         expected.projectionHash,
         token,
       );
+      for (const write of configurationSyncContentWrites(operation, configuration)) {
+        batch.checkpoint(`sync.model.${write.action}`);
+        for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {
+          batch.add(`${statement.sql} and ${GUARD_SQL}`, ...statement.params, token);
+        }
+      }
+    }
+    if (!configurationSyncAdvancesPublicState(actualPlan)) {
+      this.releaseGuard(batch, token);
+      const results = await this.execute(batch, true);
+      if (results[0]!.meta.changes !== 1) failure("Configuration synchronization plan is stale.");
+      return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
     }
     const stateStatements = this.addPublicStateBump(
       batch,
@@ -1533,15 +1728,37 @@ export class D1ContentRepository
       number,
       number,
       number,
+      number,
+      string,
     ])[];
+    const baselines = new Map(
+      (
+        await this.all<{ readonly key: string; readonly structure_json: string | null }>(
+          STORED_MODEL_BASELINES_SQL,
+        )
+      ).map((row) => [row.key, row.structure_json]),
+    );
     const rows: StoredModelStateRow[] = tuples.map(
-      ([key, kind, version, structure, projection, entries, drafts, published]) => ({
+      ([
+        key,
+        kind,
+        version,
+        structure,
+        projection,
+        entries,
+        drafts,
+        published,
+        hasBaseline,
+        fingerprint,
+      ]) => ({
         draft_snapshot_count: drafts,
         entry_count: entries,
         key,
         kind,
         projection_hash: projection,
         published_snapshot_count: published,
+        snapshot_fingerprint: fingerprint,
+        structure_json: hasBaseline === 1 ? (baselines.get(key) ?? null) : null,
         structure_hash: structure,
         version,
       }),

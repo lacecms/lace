@@ -244,6 +244,90 @@ test("block labels and descriptions change only the projection hash", async () =
   expect(changed.content[0].structureHash).toBe(original.content[0].structureHash);
 });
 
+test("carries block migrations at runtime without changing identity or projections", async () => {
+  const hero = (migrations) =>
+    defineBlock({
+      fields: builtInBlocks.hero.fields,
+      ...(migrations === undefined ? {} : { migrations }),
+      type: "hero",
+      version: 2,
+    });
+  const migrate = (data) => ({ ...data });
+  const withBlocks = (definition) =>
+    defineConfig({
+      blocks: [...blocks.filter((block) => block.type !== "hero"), definition],
+      content: [homeModel()],
+    });
+  const plain = await withBlocks(hero());
+  const migrated = await withBlocks(hero({ 2: migrate }));
+
+  expect(migrated.runtime.blocks.get("hero").migrations[2]).toBe(migrate);
+  expect(migrated.structureHash).toBe(plain.structureHash);
+  expect(migrated.projectionHash).toBe(plain.projectionHash);
+  expect(migrated.content[0].structureHash).toBe(plain.content[0].structureHash);
+  expect(migrated.runtime.content[0].structure).toEqual(plain.runtime.content[0].structure);
+  expect(JSON.stringify(migrated.blocks)).not.toContain("migrations");
+});
+
+test("keeps fields named like display metadata in the canonical structure", async () => {
+  const described = (fields) =>
+    defineConfig({ blocks, content: [postModel({ fields: { title: field.text(), ...fields } })] });
+  const plain = await described({});
+  const withDescription = await described({ description: field.textarea({ label: "SEO" }) });
+  const longerDescription = await described({
+    description: field.textarea({ label: "SEO", maxLength: 160 }),
+  });
+  const runtime = withDescription.runtime.content[0];
+
+  expect(withDescription.content[0].structureHash).not.toBe(plain.content[0].structureHash);
+  expect(longerDescription.content[0].structureHash).not.toBe(
+    withDescription.content[0].structureHash,
+  );
+  expect(runtime.structure.fields.description).toEqual({ required: false, type: "textarea" });
+  expect(runtime.structure).not.toHaveProperty("label");
+  expect(runtime.structure).not.toHaveProperty("listFields");
+  expect(runtime.legacyStructureHash).toEqual(expect.any(String));
+  expect(runtime.legacyStructureHash).not.toBe(runtime.structureHash);
+  expect(plain.runtime.content[0]).not.toHaveProperty("legacyStructureHash");
+  expect(Object.isFrozen(runtime.structure.fields.description)).toBe(true);
+
+  const labelledBlock = defineBlock({
+    fields: { label: field.text({ label: "Button label" }) },
+    type: "button",
+    version: 1,
+  });
+  const relabelledBlock = defineBlock({
+    fields: { label: field.text({ label: "Button label", maxLength: 20 }) },
+    type: "button",
+    version: 1,
+  });
+  const withBlock = (block) =>
+    defineConfig({ blocks: [block], content: [homeModel({ blocks: ["button"] })] });
+  const first = await withBlock(labelledBlock);
+  const second = await withBlock(relabelledBlock);
+  expect(first.content[0].structureHash).not.toBe(second.content[0].structureHash);
+  expect(first.runtime.content[0].structure.blockDefinitions[0].fields.label).toEqual({
+    required: false,
+    type: "text",
+  });
+});
+
+test("omits canonical structures and legacy hashes from public projections", async () => {
+  const config = await defineConfig({
+    blocks,
+    content: [postModel({ fields: { description: field.textarea() } }), homeModel()],
+  });
+  const serialized = JSON.stringify(config.public);
+
+  for (const model of config.public.content) {
+    expect(model).not.toHaveProperty("structure");
+    expect(model).not.toHaveProperty("legacyStructureHash");
+  }
+  expect(serialized).not.toContain("blockDefinitions");
+  expect(config.runtime.content.every((model) => typeof model.structure === "object")).toBe(true);
+  expect(config.runtime.content[0].structureHash).toBe(config.content[0].structureHash);
+});
+
 test("rejects model blocks missing from the root registry and separates projections", async () => {
   await expect(defineConfig({ blocks: [], content: [homeModel()] })).rejects.toThrow(
     /unregistered/u,
@@ -330,4 +414,72 @@ test("treats list fields as projection-only identity", async () => {
   expect(listed.content[0].projectionHash).not.toBe(plain.content[0].projectionHash);
   expect(relisted.content[0].projectionHash).not.toBe(listed.content[0].projectionHash);
   expect(listed.projectionHash).not.toBe(plain.projectionHash);
+});
+
+test("keeps field rename and removal hints out of identity and projections", async () => {
+  const plain = await defineConfig({
+    blocks,
+    content: [postModel({ fields: { author: field.text(), title: field.text() } })],
+  });
+  const hinted = await defineConfig({
+    blocks,
+    content: [
+      postModel({
+        fields: { author: field.text(), title: field.text({ renamedFrom: "headline" }) },
+        removedBlocks: ["retired-block", "quote"],
+        removedFields: ["legacy"],
+      }),
+    ],
+  });
+  const [plainModel] = plain.runtime.content;
+  const [hintedModel] = hinted.runtime.content;
+
+  expect(hintedModel.structureHash).toBe(plainModel.structureHash);
+  expect(hintedModel.projectionHash).toBe(plainModel.projectionHash);
+  expect(hinted.structureHash).toBe(plain.structureHash);
+  expect(hinted.projectionHash).toBe(plain.projectionHash);
+  expect(hinted.public).toEqual(plain.public);
+  expect(JSON.stringify(hinted.public)).not.toMatch(/renamed|removed/u);
+  expect(hintedModel.structure).toEqual(plainModel.structure);
+  expect(hintedModel.fields.title).toEqual({ required: false, type: "text" });
+  expect(hintedModel.renamedFields).toEqual({ title: "headline" });
+  expect(hintedModel.removedFields).toEqual(["legacy"]);
+  expect(hintedModel.removedBlocks).toEqual(["quote", "retired-block"]);
+  expect(Object.isFrozen(hintedModel.renamedFields)).toBe(true);
+  expect(plainModel).not.toHaveProperty("renamedFields");
+  expect(plainModel).not.toHaveProperty("removedFields");
+});
+
+test("rejects synchronization hints that contradict the model", () => {
+  const cases = [
+    [{ fields: { title: field.text({ renamedFrom: "title" }) } }, /renamed from its own key/u],
+    [
+      { fields: { author: field.text(), title: field.text({ renamedFrom: "author" }) } },
+      /renamed from configured field "author"/u,
+    ],
+    [
+      {
+        fields: {
+          title: field.text({ renamedFrom: "headline" }),
+          name: field.text({ renamedFrom: "headline" }),
+        },
+      },
+      /share renamedFrom "headline"/u,
+    ],
+    [{ fields: { title: field.text() }, removedFields: ["title"] }, /configured field "title"/u],
+    [
+      { fields: { title: field.text({ renamedFrom: "headline" }) }, removedFields: ["headline"] },
+      /rename source "headline"/u,
+    ],
+    [{ removedFields: ["a", "a"] }, /duplicate key "a"/u],
+    [{ removedFields: ["bad-key"] }, /removedFields must contain valid keys/u],
+    [{ removedBlocks: ["image"] }, /allowed block type "image"/u],
+    [{ removedBlocks: "quote" }, /removedBlocks must be an array/u],
+  ];
+  for (const [overrides, message] of cases) {
+    expect(() => postModel(overrides)).toThrow(ConfigurationError);
+    expect(() => postModel(overrides)).toThrow(message);
+  }
+  expect(() => postModel({ removedFields: ["title"] })).not.toThrow();
+  expect(() => postModel({ fields: { title: field.text() } })).not.toThrow();
 });

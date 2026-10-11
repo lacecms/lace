@@ -32,6 +32,7 @@ async function main(): Promise<number> {
       check: args[0] === "--check",
       clock: new SystemNodeClock(),
       ids: new UlidGenerator(),
+      blocks: config.runtime.blocks,
       models: config.runtime.content,
       target: repository,
       write: (message) => console.info(message),

@@ -127,7 +127,7 @@ test("local flow syncs migrated SQLite once, changes safely, and preserves block
 
       const unsafe = await defineConfig({
         content: [
-          definePage({ key: "home", path: "/changed", version: 2 }),
+          defineCollection({ key: "home", route: "/home/:slug", version: 2 }),
           defineCollection({ key: "posts", label: "Articles", route: "/blog/:slug", version: 1 }),
         ],
       });

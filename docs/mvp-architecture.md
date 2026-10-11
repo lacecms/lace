@@ -121,6 +121,8 @@ D1 and SQLite store media metadata and object keys only. Binary content is store
 
 An editor may continue changing the draft immediately after publication without changing what public API consumers see.
 
+Published snapshots are immutable to editorial changes. Configuration synchronization may rewrite their stored representation when a schema change requires it (for example, backfilling a new field's default value). Such a rewrite increments `published_state.version` and requests a site build in the same atomic mutation, so public consumers observe it only through a new published version. Block migrations are the one exception: sync rewrites stale blocks in guarded, resumable per-entry units before its final mutation, which then advances the version and requests the build. Between the two, public reads may return migrated blocks under the previous published version; the window ends with the final mutation of the same run, or of the rerun after an interruption. See [ADR 0007](adr/0007-schema-evolution-during-sync.md).
+
 ### 4.8 Spec-driven delivery
 
 Implementation uses the repository-local OpenSpec `spec-driven` workflow. Each
@@ -638,7 +640,10 @@ Every model definition has an integer `version` starting at `1`. Any structural
 change to fields, allowed blocks, path, or route must increment it; display-only
 label, description, and `listFields` changes do not. Sync compares two canonical
 hashes: `structure_hash` excludes display metadata and `projection_hash`
-includes the complete serializable projection. A changed structure hash without a version
+includes the complete serializable projection. Display metadata means the
+`label` and `description` properties of model, field, and block definitions;
+field keys and default values are structural even when named `label` or
+`description`. A changed structure hash without a version
 bump fails; a projection-only change is safe and does not require a bump.
 
 Renames are never guessed. `definePage` and `defineCollection` accept a temporary
@@ -648,12 +653,72 @@ must be removed after all environments have applied the sync. Without that
 explicit hint, a key change is treated as one addition and one removal, and the
 removal is refused while entries exist.
 
-The MVP sync command refuses an incompatible schema change while entries exist.
-The report names the affected models, fields, and snapshots; the operator must
-restore the old definition or run a separately reviewed content-migration tool.
-Designing that general migration runner is post-MVP. Block-local migration
-functions may still upgrade a known block payload as described in section 22,
-but sync never silently transforms arbitrary content.
+Sync keeps the canonical structure of each model from its last successful
+run as non-authoritative synchronization metadata (section 9.1). When a model
+with draft or published snapshots changes structure, sync compares that
+baseline with the configured structure and classifies every difference
+([ADR 0007](adr/0007-schema-evolution-during-sync.md)):
+
+| Change | Class | Behavior with existing snapshots |
+| --- | --- | --- |
+| Add a field; relax a constraint (`minLength`/`maxLength`/`min`/`max`, `required` → optional, new `select` option); add, change or remove a `defaultValue`; allow a new block type | compatible | apply; a declared default is backfilled into drafts and published snapshots lacking the field |
+| Reorder `select` options or the block allowlist | display | apply |
+| Tighten a constraint on an existing field (including optional → required and a removed `select` option) | validated | apply only if every stored value satisfies it; otherwise refuse and name the snapshots |
+| Remove a field or disallow a block type | destructive | without a hint: apply only when no snapshot holds that data, otherwise refuse; with a `removedFields` or `removedBlocks` hint: prune the field values or drop the blocks |
+| Rename a field (field-level `renamedFrom` hint) | destructive | move the stored values to the new key; refuse if the new key already holds data |
+| Change the definition of an allowed block type | migration | without a block version increase: apply only when no snapshot holds a block of that type, otherwise refuse; with a version increase: migrate every stale block through the declared block migrations, refusing when a step is missing, a migration throws, or a result is invalid |
+| Change a field type or an unrecognized field property | breaking | refuse |
+| Change a page path or collection route | breaking | refuse while the model has published snapshots |
+
+A required field added without a default is accepted: existing published
+snapshots stay valid as published, and the next publication of each entry
+enforces it. Data-dependent decisions read stored snapshots through the
+repository in bounded pages; apply rejects the plan when any snapshot of a
+model changed after planning. Backfill does not change snapshot revisions,
+audit actors, or timestamps, and media-field defaults are never backfilled.
+When a model has snapshots but no valid baseline, sync refuses a structural
+change and tells the operator to restore the previous definition, synchronize
+once to record a baseline, and then apply the change. Sync never guesses a
+rename or silently transforms content.
+
+Destructive changes to populated data need explicit, temporary hints: a model
+field may declare `renamedFrom: "<former key>"` in its field options, and a
+model may declare `removedFields` and `removedBlocks`. Hints are excluded from
+the canonical structure, both hashes and the public projection, so adding or
+removing one never needs a version bump; block fields cannot declare
+`renamedFrom` (block data changes use block versions). A hint takes effect only
+when the model's structure changed and is checked against the baseline: a
+rename applies when the former key is in the baseline and the new key is not,
+is inert once applied, and is refused when both or neither key are in the
+baseline; a removal hint for a key or block type absent from the baseline is
+inert. In the same guarded mutation that records the model, sync moves
+renamed values, prunes removed fields, drops blocks of removed types, and
+moves or deletes the matching `content_media_references` rows, so media usage
+and the deletion guard stay correct. These rewrites are set-based and do not
+change revisions, audit actors or timestamps; renames run before backfills.
+Hints are removed from configuration after every environment has synchronized.
+
+Block data changes through block versions. A changed block definition bumps
+its `version` and declares `migrations` (section 11); every model that allows
+the block also bumps its own version. Sync composes the migrations from each
+stored block's `schemaVersion` to the configured version and runs them in
+memory during planning, so `--check` is a full dry run: each result is
+validated against the new definition in publish mode for published snapshots
+and draft mode for drafts, must stay within the block size and media-reference
+limits, and may reference only media the snapshot already referenced. Any
+missing step, failure, invalid result, or stored version newer than the
+configuration refuses the plan without writing. Apply then rewrites the stale
+blocks in place in guarded units of one entry — guarded on snapshot revision,
+current snapshot identity and each block's stored `schema_version` — and
+rebuilds their `content_media_references`. A migrated draft's revision is
+incremented with the actor `system:content-sync`, so an open editor gets a
+revision conflict; a published snapshot that was in sync with its draft takes
+the same new revision, otherwise it keeps its revision, so entry status never
+changes. Sync then prepares the plan again and runs the usual guarded final
+mutation, which records the baseline, advances the published version and
+coalesces one build. A stale guard stops sync before that mutation; committed
+units stay, and a rerun migrates only the blocks still stale. The render core
+never migrates data.
 
 When a successful sync changes the serializable configuration visible to public
 consumers, it increments `published_state.version` and requests a build in the
@@ -685,9 +750,17 @@ content_models
 ├── config_version      INTEGER NOT NULL
 ├── structure_hash      TEXT NOT NULL
 ├── projection_hash     TEXT NOT NULL
+├── structure_json      TEXT NULL
+├── structure_json_hash TEXT NULL
 ├── created_at          INTEGER NOT NULL
 └── updated_at          INTEGER NOT NULL
 ```
+
+`structure_json` holds the canonical structure of the model as of the last
+successful sync and `structure_json_hash` the structural hash it was written
+for. The baseline is valid only while `structure_json_hash` equals
+`structure_hash`; it is synchronization metadata, never an authoritative copy
+of the configuration.
 
 `key` is a stable programmatic identifier. Labels may change freely. Renaming a key is a migration, not a display-name edit.
 
@@ -742,7 +815,7 @@ content_snapshots
 
 `fields_json` contains model-specific structured fields. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
-The draft snapshot is mutable. A published snapshot is immutable and can only be replaced through the publish use case.
+The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case; configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7).
 
 The database temporarily contains both snapshots, so text content is duplicated. This is intentional and acceptable for the D1 free-plan database limit because binary assets are excluded. Individual page payloads are split into block rows rather than constrained by one whole-page row.
 
@@ -1094,6 +1167,29 @@ The block registry maps each `block_type` to:
 - serializable form metadata;
 - optional default data;
 - optional data migration functions.
+
+`defineBlock({ version, migrations })` keys each migration by its target
+version. The keys form one contiguous range ending at the block's version
+(a version 1 block declares none), and each value is a pure, synchronous
+function from the previous version's data to the target version's data.
+Migrations are runtime-only: like the validator they never enter the metadata
+projection, the canonical structure or any hash. Only configuration
+synchronization runs them (section 8); keep a migration for as long as any
+environment may still hold blocks of an older version.
+
+```ts
+defineBlock({
+  type: "quote",
+  version: 2,
+  fields: {
+    text: field.text({ required: true }),
+    attribution: field.text(),
+  },
+  migrations: {
+    2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }),
+  },
+});
+```
 
 Runtime schemas are implemented with Valibot. The public field DSL must not expose raw Valibot schemas as its serialized admin contract. A field definition produces serializable form metadata, a Valibot runtime schema, an inferred TypeScript type, and, where needed, JSON Schema.
 
@@ -2258,7 +2354,7 @@ Compatibility exists at three boundaries:
 
 Database changes use forward migrations. The MVP does not promise automatic downgrade support.
 
-Content blocks and field objects carry `schema_version`. A block registry may migrate old JSON data when loaded or through an explicit content migration. Silent destructive conversion is forbidden.
+Content blocks and field objects carry `schema_version`. Stored block data is migrated only by configuration synchronization through the block's declared migrations (sections 8 and 11), never when loaded or rendered. Silent destructive conversion is forbidden.
 
 Public REST endpoints remain under `/api/v1` until a breaking contract requires `/api/v2`. Internal TypeScript types alone are not a compatibility contract.
 
@@ -2300,6 +2396,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Blocks are separate relational rows with type-specific JSON payloads.
 - Top-level blocks are flat and sparsely ordered.
 - Content models are defined in code and projected into the database.
+- Configuration sync classifies structural changes against a stored baseline
+  and applies compatible and validated ones to existing content
+  ([ADR 0007](adr/0007-schema-evolution-during-sync.md)).
 - Node uses SQLite and MinIO; Cloudflare uses D1 and R2.
 - Infrastructure-specific behavior is implemented through narrow capability adapters.
 - Publishing writes an outbox event and triggers a static rebuild.

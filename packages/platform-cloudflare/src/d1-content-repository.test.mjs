@@ -27,7 +27,7 @@ async function open(options = {}) {
   disposals.push(dispose);
   await database
     .prepare(
-      "insert into content_models values ('posts', 'collection', 'Posts', 1, 'structure', 'projection', 1, 1)",
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 'structure', 'projection', 1, 1)",
     )
     .run();
   const counting = countingD1(database);
