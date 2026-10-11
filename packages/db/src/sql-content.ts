@@ -22,7 +22,13 @@ import type {
   MediaUsageEntry,
   MediaUsageLocation,
   MediaUsageState,
+  ConfigurationSyncMediaReference,
+  ConfigurationSyncMigrationBlock,
+  ConfigurationSyncMigrationPage,
+  ConfigurationSyncMigrationSnapshot,
+  ConfigurationSyncMigrationTarget,
   ConfigurationSyncSnapshot,
+  ConfigurationSyncSnapshotMigration,
   ConfigurationSyncSnapshotPage,
   SiteBuildRecord,
   StoredContentModelState,
@@ -566,6 +572,280 @@ export function syncSnapshotPage(
   return Object.freeze({
     items: Object.freeze(items),
     ...(rows.length === limit && last !== undefined ? { next: last.id } : {}),
+  });
+}
+/**
+ * Entries of one model holding a block of a target type at another schema
+ * version. Binds model key, target JSON (`[[type, version], …]`), exclusive
+ * entry-ID cursor and page limit.
+ */
+export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.published_snapshot_id
+   from content_entries e
+  where e.model_key = ?
+    and exists (select 1 from content_blocks b, json_each(?) t
+                 where b.snapshot_id in (e.draft_snapshot_id, e.published_snapshot_id)
+                   and b.block_type = t.value ->> 0 and b.schema_version <> t.value ->> 1)
+    and e.id > ?
+  order by e.id asc
+  limit ?`;
+/** Snapshot heads for a list of snapshot IDs; append the placeholders. */
+export const SYNC_MIGRATION_SNAPSHOTS_SQL =
+  "select id, revision, title from content_snapshots where id in";
+/**
+ * Blocks of a list of snapshot IDs with data only for target types. Binds the
+ * target type JSON array first; append the snapshot placeholders and the order.
+ */
+export const SYNC_MIGRATION_BLOCKS_SQL = `select snapshot_id, block_key, block_type, position, schema_version,
+        case when block_type in (select value from json_each(?)) then data_json end as data_json
+   from content_blocks where snapshot_id in`;
+/** Media references of a list of snapshot IDs; append the placeholders. */
+export const SYNC_MIGRATION_REFERENCES_SQL =
+  "select snapshot_id, source_key, field_path, media_id from content_media_references where snapshot_id in";
+
+export interface SyncMigrationEntryRow {
+  readonly draft_snapshot_id: string | null;
+  readonly id: string;
+  readonly published_snapshot_id: string | null;
+}
+
+export interface SyncMigrationSnapshotRow {
+  readonly id: string;
+  readonly revision: number;
+  readonly title: string;
+}
+
+export interface SyncMigrationBlockRow {
+  readonly block_key: string;
+  readonly block_type: string;
+  readonly data_json: string | null;
+  readonly position: number;
+  readonly schema_version: number;
+  readonly snapshot_id: string;
+}
+
+export interface SyncMigrationReferenceRow {
+  readonly field_path: string;
+  readonly media_id: string;
+  readonly snapshot_id: string;
+  readonly source_key: string;
+}
+
+/** Largest migration scan page either adapter serves. */
+export const SQL_MAX_MIGRATION_PAGE_SIZE = 50;
+
+export function assertMigrationPageSize(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1 || value > SQL_MAX_MIGRATION_PAGE_SIZE) {
+    failure(`Migration page size must be between 1 and ${SQL_MAX_MIGRATION_PAGE_SIZE}.`);
+  }
+  return value;
+}
+
+/** The stale-plan failure raised when a block-migration guard no longer holds. */
+export function staleBlockMigration(): never {
+  failure("Block migration guard failed; the synchronization plan is stale.");
+}
+
+/** Bound JSON of migration targets for {@link SYNC_MIGRATION_ENTRIES_SQL}. */
+export function syncMigrationTargetsJson(
+  targets: readonly ConfigurationSyncMigrationTarget[],
+): string {
+  return JSON.stringify(targets.map((target) => [target.type, target.version]));
+}
+
+/** Snapshot IDs referenced by migration entry rows, in row order. */
+export function syncMigrationSnapshotIds(rows: readonly SyncMigrationEntryRow[]): string[] {
+  return rows.flatMap((row) =>
+    [row.draft_snapshot_id, row.published_snapshot_id].filter((id): id is string => id !== null),
+  );
+}
+
+/** Maps one migration scan page of entry, snapshot, block and reference rows. */
+export function syncMigrationPage(
+  rows: readonly SyncMigrationEntryRow[],
+  snapshotRows: readonly SyncMigrationSnapshotRow[],
+  blockRows: readonly SyncMigrationBlockRow[],
+  referenceRows: readonly SyncMigrationReferenceRow[],
+  limit: number,
+): ConfigurationSyncMigrationPage {
+  const blocks = new Map<string, ConfigurationSyncMigrationBlock[]>();
+  for (const row of [...blockRows].sort(
+    (left, right) =>
+      left.snapshot_id.localeCompare(right.snapshot_id) || left.position - right.position,
+  )) {
+    const list = blocks.get(row.snapshot_id) ?? [];
+    list.push(
+      Object.freeze({
+        ...(row.data_json === null ? {} : { data: parseObject(row.data_json, "Block data") }),
+        key: row.block_key,
+        position: row.position,
+        schemaVersion: row.schema_version,
+        type: row.block_type,
+      }),
+    );
+    blocks.set(row.snapshot_id, list);
+  }
+  const references = new Map<string, ConfigurationSyncMediaReference[]>();
+  for (const row of [...referenceRows].sort(
+    (left, right) =>
+      left.snapshot_id.localeCompare(right.snapshot_id) ||
+      left.source_key.localeCompare(right.source_key) ||
+      left.field_path.localeCompare(right.field_path),
+  )) {
+    const list = references.get(row.snapshot_id) ?? [];
+    list.push(
+      Object.freeze({
+        fieldPath: row.field_path,
+        mediaId: row.media_id,
+        sourceKey: row.source_key,
+      }),
+    );
+    references.set(row.snapshot_id, list);
+  }
+  const snapshots = new Map(snapshotRows.map((row) => [row.id, row]));
+  const snapshot = (
+    id: string | null,
+    state: "draft" | "published",
+  ): ConfigurationSyncMigrationSnapshot | undefined => {
+    const row = id === null ? undefined : snapshots.get(id);
+    if (row === undefined) return undefined;
+    return Object.freeze({
+      blocks: Object.freeze(blocks.get(row.id) ?? []),
+      references: Object.freeze(references.get(row.id) ?? []),
+      revision: row.revision,
+      snapshotId: row.id,
+      state,
+      title: row.title,
+    });
+  };
+  const items = rows.map((row) => {
+    const draft = snapshot(row.draft_snapshot_id, "draft");
+    const published = snapshot(row.published_snapshot_id, "published");
+    return Object.freeze({
+      ...(draft === undefined ? {} : { draft }),
+      entryId: row.id,
+      ...(published === undefined ? {} : { published }),
+    });
+  });
+  const last = rows.at(-1);
+  return Object.freeze({
+    items: Object.freeze(items),
+    ...(rows.length === limit && last !== undefined ? { next: last.id } : {}),
+  });
+}
+
+/** Guard condition and ordered writes of one migrated snapshot. */
+export interface ConfigurationSyncMigrationStatements {
+  /** A boolean SQL expression that holds only while the snapshot is unchanged since the scan. */
+  readonly guard: ConfigurationSyncWriteStatement;
+  /** Writes that each end in a `where` clause, so a D1 batch can append its guard. */
+  readonly writes: readonly ConfigurationSyncWriteStatement[];
+}
+
+const MIGRATED_BLOCK_VALUES = 4;
+const MIGRATED_REFERENCE_VALUES = 3;
+
+function valueRows(rows: number, width: number): string {
+  const tuple = `(${Array.from({ length: width }, () => "?").join(", ")})`;
+  return Array.from({ length: rows }, () => tuple).join(", ");
+}
+
+/**
+ * Guard and in-place writes for one snapshot of a block-migration unit. Each
+ * write binds at most `maxParameters` anonymous values in textual order, so a
+ * D1 batch can append its guard parameters after them.
+ */
+export function configurationSyncMigrationStatements(
+  migration: ConfigurationSyncSnapshotMigration,
+  migratedAt: number,
+  maxParameters: number,
+): ConfigurationSyncMigrationStatements {
+  const current =
+    migration.state === "draft" ? "e.draft_snapshot_id = s.id" : "e.published_snapshot_id = s.id";
+  const expectedBlocks = JSON.stringify(
+    migration.blocks.map((block) => [block.key, block.expectedSchemaVersion]),
+  );
+  const guardParams: (number | string)[] = [
+    migration.snapshotId,
+    migration.expectedRevision,
+    expectedBlocks,
+    migration.snapshotId,
+    migration.blocks.length,
+  ];
+  let guardSql = `(exists (select 1 from content_snapshots s join content_entries e on e.id = s.entry_id
+              where s.id = ? and s.revision = ? and ${current})
+   and (select count(*) from content_blocks b, json_each(?) j
+         where b.snapshot_id = ? and b.block_key = j.value ->> 0
+           and b.schema_version = j.value ->> 1) = ?`;
+  if (migration.draftGuard !== undefined) {
+    guardSql += `
+   and exists (select 1 from content_snapshots d join content_entries e on e.draft_snapshot_id = d.id
+                where d.id = ? and d.revision = ?)`;
+    guardParams.push(migration.draftGuard.snapshotId, migration.draftGuard.revision);
+  }
+  guardSql += ")";
+
+  const writes: ConfigurationSyncWriteStatement[] = [];
+  // Each write also binds the migration time and the snapshot ID.
+  const shared = 2;
+  const blockRows = Math.floor((maxParameters - shared) / MIGRATED_BLOCK_VALUES);
+  for (const group of chunks(migration.blocks, blockRows)) {
+    writes.push({
+      params: [
+        migratedAt,
+        ...group.flatMap((block) => [
+          block.key,
+          block.schemaVersion,
+          JSON.stringify(block.data),
+          block.expectedSchemaVersion,
+        ]),
+        migration.snapshotId,
+      ],
+      sql: `update content_blocks
+     set schema_version = v.column2, data_json = v.column3, updated_at = ?
+    from (values ${valueRows(group.length, MIGRATED_BLOCK_VALUES)}) as v
+   where content_blocks.snapshot_id = ? and content_blocks.block_key = v.column1
+     and content_blocks.schema_version = v.column4`,
+    });
+  }
+  writes.push({
+    params: [migration.snapshotId, JSON.stringify(migration.blocks.map((block) => block.key))],
+    sql: `delete from content_media_references
+   where snapshot_id = ? and source_key in (select value from json_each(?))`,
+  });
+  const referenceRows = Math.floor((maxParameters - shared) / MIGRATED_REFERENCE_VALUES);
+  for (const group of chunks(migration.references, referenceRows)) {
+    writes.push({
+      params: [
+        migration.snapshotId,
+        migratedAt,
+        ...group.flatMap((reference) => [
+          reference.sourceKey,
+          reference.fieldPath,
+          reference.mediaId,
+        ]),
+      ],
+      // A missing or inactive media ID yields NULL and fails the NOT NULL constraint.
+      sql: `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
+   select ?, v.column1, v.column2,
+          (select m.id from media m where m.id = v.column3 and m.status = 'active'), ?
+     from (values ${valueRows(group.length, MIGRATED_REFERENCE_VALUES)}) as v
+    where 1 = 1`,
+    });
+  }
+  writes.push(
+    migration.updatedBy === undefined
+      ? {
+          params: [migration.revision, migratedAt, migration.snapshotId],
+          sql: "update content_snapshots set revision = ?, updated_at = ? where id = ?",
+        }
+      : {
+          params: [migration.revision, migratedAt, migration.updatedBy, migration.snapshotId],
+          sql: "update content_snapshots set revision = ?, updated_at = ?, updated_by = ? where id = ?",
+        },
+  );
+  return Object.freeze({
+    guard: { params: guardParams, sql: guardSql },
+    writes: Object.freeze(writes),
   });
 }
 export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version,

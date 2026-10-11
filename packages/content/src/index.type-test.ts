@@ -1,6 +1,8 @@
 import { defineBlock, field } from "./index.js";
 import type {
   BlockDataValues,
+  BlockMigration,
+  JsonObject,
   FieldDefinition,
   FieldDefinitionVisitor,
   FieldIsRequired,
@@ -36,6 +38,22 @@ const hero = defineBlock({
   type: "hero",
   version: 1,
 });
+
+const versionedHero = defineBlock({
+  fields: { heading: field.text({ required: true }) },
+  migrations: {
+    2: ({ title, ...rest }) => ({ ...rest, heading: title ?? "" }),
+  },
+  type: "hero",
+  version: 2,
+});
+type _migration = Expect<
+  Equal<NonNullable<typeof versionedHero.migrations>[number], BlockMigration>
+>;
+type _migrationInput = Expect<Equal<Parameters<BlockMigration>[0], JsonObject>>;
+
+// @ts-expect-error migrations must return JSON object data synchronously.
+defineBlock({ fields: {}, migrations: { 2: async () => ({}) }, type: "async", version: 2 });
 
 type _text = Expect<Equal<FieldValue<typeof text>, string>>;
 type _textarea = Expect<Equal<FieldValue<typeof textarea>, string>>;

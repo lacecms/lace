@@ -21,7 +21,11 @@ import type {
   BuildQueueReceipt,
   ClaimDispatcherEventsInput,
   CompleteDispatcherLeaseInput,
+  ApplyConfigurationSyncBlockMigrationsInput,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncMigrationCounts,
+  ConfigurationSyncMigrationPage,
+  ConfigurationSyncMigrationScanInput,
   ConfigurationSyncSnapshotPage,
   ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
@@ -85,8 +89,18 @@ import {
   STORED_MODEL_BASELINES_SQL,
   STORED_MODEL_STATE_JSON_SQL,
   SYNC_BLOCKS_SQL,
+  SYNC_MIGRATION_BLOCKS_SQL,
+  SYNC_MIGRATION_ENTRIES_SQL,
+  SYNC_MIGRATION_REFERENCES_SQL,
+  SYNC_MIGRATION_SNAPSHOTS_SQL,
   SYNC_SNAPSHOTS_SQL,
+  assertMigrationPageSize,
+  configurationSyncMigrationStatements,
   configurationSyncWriteStatements,
+  staleBlockMigration,
+  syncMigrationPage,
+  syncMigrationSnapshotIds,
+  syncMigrationTargetsJson,
   syncSnapshotPage,
   assertDraftPersistenceBounds,
   assertNonNegativeInteger,
@@ -147,6 +161,10 @@ import type {
   SiteBuildRow,
   SnapshotRow,
   SyncBlockRow,
+  SyncMigrationBlockRow,
+  SyncMigrationEntryRow,
+  SyncMigrationReferenceRow,
+  SyncMigrationSnapshotRow,
   SyncSnapshotRow,
   StoredModelStateRow,
   StoredSnapshot,
@@ -305,6 +323,127 @@ export class D1ContentRepository
       );
     }
     return syncSnapshotPage(rows, blockRows, limit);
+  }
+
+  public async readConfigurationSyncMigrationEntries(
+    input: ConfigurationSyncMigrationScanInput,
+  ): Promise<ConfigurationSyncMigrationPage> {
+    const limit = assertMigrationPageSize(input.limit);
+    const rows = await this.all<SyncMigrationEntryRow>(
+      SYNC_MIGRATION_ENTRIES_SQL,
+      input.modelKey,
+      syncMigrationTargetsJson(input.targets),
+      input.after ?? "",
+      limit,
+    );
+    const types = JSON.stringify(input.targets.map((target) => target.type));
+    const snapshotRows: SyncMigrationSnapshotRow[] = [];
+    const blockRows: SyncMigrationBlockRow[] = [];
+    const referenceRows: SyncMigrationReferenceRow[] = [];
+    // One bound value is reserved for the target types of the block query.
+    for (const group of chunks(syncMigrationSnapshotIds(rows), D1_MAX_BOUND_PARAMETERS - 1)) {
+      const bindings = `(${group.map(() => "?").join(", ")})`;
+      snapshotRows.push(
+        ...(await this.all<SyncMigrationSnapshotRow>(
+          `${SYNC_MIGRATION_SNAPSHOTS_SQL} ${bindings}`,
+          ...group,
+        )),
+      );
+      blockRows.push(
+        ...(await this.all<SyncMigrationBlockRow>(
+          `${SYNC_MIGRATION_BLOCKS_SQL} ${bindings}`,
+          types,
+          ...group,
+        )),
+      );
+      referenceRows.push(
+        ...(await this.all<SyncMigrationReferenceRow>(
+          `${SYNC_MIGRATION_REFERENCES_SQL} ${bindings}`,
+          ...group,
+        )),
+      );
+    }
+    return syncMigrationPage(rows, snapshotRows, blockRows, referenceRows, limit);
+  }
+
+  /**
+   * Packs whole entry units into guarded batches within the statement budget.
+   * Every write requires all of its batch's guards, so one stale unit leaves
+   * the batch unchanged and stops later batches. A unit too large for one
+   * batch is split into its published snapshot, then its draft.
+   */
+  public async applyConfigurationSyncBlockMigrations(
+    input: ApplyConfigurationSyncBlockMigrationsInput,
+  ): Promise<ConfigurationSyncMigrationCounts> {
+    type Part = {
+      readonly state: "draft" | "published";
+      readonly statements: ReturnType<typeof configurationSyncMigrationStatements>;
+    };
+    // Guard insert and release surround each part's writes.
+    const cost = (part: Part): number => part.statements.writes.length + 2;
+    const batches: Part[][] = [];
+    let current: Part[] = [];
+    let size = 0;
+    const flush = (): void => {
+      if (current.length > 0) batches.push(current);
+      current = [];
+      size = 0;
+    };
+    for (const unit of input.units) {
+      const parts = unit.snapshots.map((migration) => ({
+        state: migration.state,
+        // One bound value is reserved for the batch guard tokens.
+        statements: configurationSyncMigrationStatements(
+          migration,
+          input.migratedAt,
+          D1_MAX_BOUND_PARAMETERS - 1,
+        ),
+      }));
+      const unitCost = parts.reduce((sum, part) => sum + cost(part), 0);
+      if (unitCost <= D1_MAX_BATCH_STATEMENTS) {
+        if (size + unitCost > D1_MAX_BATCH_STATEMENTS) flush();
+        current.push(...parts);
+        size += unitCost;
+        continue;
+      }
+      flush();
+      for (const part of parts) {
+        if (size + cost(part) > D1_MAX_BATCH_STATEMENTS) flush();
+        current.push(part);
+        size += cost(part);
+      }
+      flush();
+    }
+    flush();
+
+    for (const parts of batches) {
+      const batch = this.batch();
+      const tokens = parts.map((part) =>
+        this.guard(batch, input.migratedAt, part.statements.guard),
+      );
+      const guarded = `(select count(*) from mutation_guards where token in (select value from json_each(?))) = ${tokens.length}`;
+      const tokenJson = JSON.stringify(tokens);
+      for (const part of parts) {
+        batch.checkpoint(`sync.migration.${part.state}`);
+        for (const write of part.statements.writes) {
+          batch.add(`${write.sql} and ${guarded}`, ...write.params, tokenJson);
+        }
+      }
+      for (const token of tokens) this.releaseGuard(batch, token);
+      const results = await this.execute(batch, false);
+      if (tokens.some((_, index) => results[index]!.meta.changes !== 1)) staleBlockMigration();
+    }
+    let blocks = 0;
+    let drafts = 0;
+    let published = 0;
+    for (const unit of input.units) {
+      for (const migration of unit.snapshots) {
+        blocks += migration.blocks.length;
+        if (migration.state === "draft") drafts += 1;
+        else published += 1;
+      }
+    }
+    return Object.freeze({ blocks, drafts, published });
   }
 
   public async load(input: LoadContentEntryInput): Promise<ContentEntry | null> {

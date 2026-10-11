@@ -7,6 +7,10 @@ import {
   validateFieldValue,
 } from "@lacecms/content";
 import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
+import type {
+  BlockMigrationEvidence,
+  ConfigurationSyncMigrationTarget,
+} from "./configuration-migration.js";
 
 /** How a structural difference affects existing content. */
 export type StructuralChangeClass =
@@ -46,6 +50,8 @@ export interface StructuralChange {
   readonly properties?: readonly string[];
   readonly scope: "block" | "field" | "model";
   readonly target: string;
+  /** Baseline and configured block versions of a `block-definition-changed` change. */
+  readonly version?: { readonly from: number; readonly to: number };
 }
 
 /** Temporary synchronization hints of a configured model. */
@@ -71,7 +77,15 @@ export interface SnapshotStateCounts {
 
 /** A stored snapshot named by a synchronization report. */
 export interface ConfigurationSyncSnapshotReference {
+  /** Key of the affected block, for block-migration findings. */
+  readonly blockKey?: string;
   readonly entryId: string;
+  /** Validation path of an invalid migration result. */
+  readonly path?: string;
+  /** Short cause of a failed or invalid migration. */
+  readonly reason?: string;
+  /** Stored schema version of the affected block. */
+  readonly schemaVersion?: number;
   readonly state: "draft" | "published";
   readonly title: string;
 }
@@ -117,6 +131,8 @@ export interface ModelSnapshotEvidence {
   /** Snapshots holding removed fields, rename sources, and rename targets. */
   readonly fieldHolders: Readonly<Record<string, SnapshotHolders>>;
   readonly fingerprint: string;
+  /** Block-migration facts per block type whose version changed; present when scanned. */
+  readonly migrations?: Readonly<Record<string, BlockMigrationEvidence>>;
   readonly oversized: ConfigurationSyncSnapshotFindings;
   readonly snapshots: SnapshotStateCounts;
   readonly violations: Readonly<Record<string, ConfigurationSyncSnapshotFindings>>;
@@ -130,6 +146,8 @@ export interface ConfigurationSyncScanRequest {
   readonly changes: readonly StructuralChange[];
   readonly fields: Readonly<Record<string, FieldDefinition>>;
   readonly fingerprint: string;
+  /** Block types whose stale blocks are migrated in memory; present when non-empty. */
+  readonly migrations?: readonly ConfigurationSyncMigrationTarget[];
   readonly modelKey: string;
 }
 
@@ -380,12 +398,19 @@ export function diffContentModelStructures(
   const beforeDefinitions = definitionsByType(baseline);
   const afterDefinitions = definitionsByType(target);
   for (const type of shared) {
-    if (!same(beforeDefinitions.get(type), afterDefinitions.get(type))) {
+    const before = beforeDefinitions.get(type);
+    const after = afterDefinitions.get(type);
+    if (!same(before, after)) {
+      const from = record(before).version;
+      const to = record(after).version;
       changes.push({
         class: "migration",
         kind: "block-definition-changed",
         scope: "block",
         target: type,
+        ...(typeof from === "number" && typeof to === "number"
+          ? { version: Object.freeze({ from, to }) }
+          : {}),
       });
     }
   }

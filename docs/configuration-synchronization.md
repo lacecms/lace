@@ -67,7 +67,7 @@ neither. Any failed statement rolls
 back model identities, generated page drafts, public state, and outbox work
 together.
 
-## Schema evolution (CE1A, CE1B)
+## Schema evolution (CE1A, CE1B, CE1C)
 
 Sync can now evolve a model that already has draft or published content.
 Decisions follow [ADR 0007](adr/0007-schema-evolution-during-sync.md) and the
@@ -187,20 +187,88 @@ configuration with hints: an editor whose admin already uses the new
 configuration but whose open draft predates sync could otherwise save an empty
 renamed field over the moved value.
 
+### Block migrations (CE1C)
+
+Stored block data changes through block versions. To change a block that
+stored content uses:
+
+```ts
+export const quote = defineBlock({
+  type: "quote",
+  version: 3,
+  fields: { text: field.text({ required: true }), source: field.text() },
+  migrations: {
+    // Each key is a target version; each function receives the previous version's data.
+    2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }),
+    3: ({ attribution, ...rest }) =>
+      attribution === undefined ? rest : { ...rest, source: attribution },
+  },
+});
+```
+
+- **Rules.** Migration keys form one contiguous range that ends at the block's
+  `version` (a version 1 block declares none). Each function is pure and
+  synchronous, receives a frozen copy and returns plain JSON object data.
+  Migrations never affect hashes, so adding or removing them alone needs no
+  version bump. Every model that allows the block bumps its own version,
+  because its structure embeds the block definition.
+- **Dry run.** Planning reads the model's entries that hold a block of the type
+  at another version (pages of 50 entries) and composes the chain from each
+  stored `schemaVersion`. Each result is validated against the new definition:
+  publish mode for published snapshots, draft mode for drafts, the per-block
+  size limit, the per-entry limit of 200 media references, and no media the
+  snapshot did not already reference. `--check` therefore runs every
+  migration. Refusals: `BLOCK_MIGRATION_MISSING` (no step reaches the stored
+  version), `BLOCK_VERSION_AHEAD` (stored version newer than the
+  configuration), `BLOCK_MIGRATION_FAILED` (a step threw) and
+  `BLOCK_MIGRATION_INVALID` (non-JSON, invalid or media-introducing result).
+  Each names the model, entry, state, title, block key, stored version and,
+  for an invalid result, the validation path and code. A definition change
+  without a version increase on a used block keeps
+  `BLOCK_DEFINITION_CHANGE_HAS_BLOCKS`.
+- **Apply.** Sync first rewrites stale blocks in place, one entry per guarded
+  unit, re-running the same migrations. Each snapshot write is guarded on its
+  revision, on still being the entry's current draft or published snapshot,
+  and on every migrated block's stored `schema_version`; the migrated blocks'
+  media references are rebuilt. A draft gets `revision + 1` and the actor
+  `system:content-sync`, so an editor with the entry open receives a revision
+  conflict. A published snapshot that was in sync with its draft takes the same
+  new revision; otherwise it keeps its revision, so entry status never changes.
+  Node commits each unit in one transaction; D1 packs whole units into guarded
+  batches of at most 40 statements and writes an oversized unit's published
+  snapshot before its draft.
+- **Final mutation.** Sync then prepares the plan again and applies it only
+  when it equals the reviewed plan apart from the migrations. The final
+  mutation records the baseline, advances the published version and coalesces
+  one build. The report ends with `Migrated blocks: N (drafts=…, published=…).`
+- **Interruptions.** A failed guard (for example, a draft saved meanwhile) or a
+  crash stops sync before the final mutation. Committed units stay; rerun
+  `lace content sync` and it migrates only the blocks still stale. Until the
+  final mutation, public reads may already return migrated published blocks
+  under the previous published version.
+
+Workflow: bump the block version, add migrations, update the site component,
+bump every allowing model's version, review `lace content sync --check`, then
+deploy and run `lace content sync` immediately in every environment. Keep
+migrations while any environment may still hold older blocks.
+
 ### Reports and diagnostics
 
 Text and JSON reports list, per evolved model, the snapshot counts, each change
 as `<class> <kind> <scope> <target>` with the former key of a rename, a
 `hinted` marker, changed properties, affected counts, violations and backfill
-counts, and the planned renames, field removals, block removals and backfills. Refusals use stable
+counts, the stored and configured versions of a planned block migration, and
+the planned renames, field removals, block removals, block migrations and
+backfills. Refusals use stable
 codes: `STRUCTURE_BASELINE_MISSING`, `FIELD_TYPE_CHANGED`,
 `FIELD_CHANGE_UNSUPPORTED`, `CONSTRAINT_VIOLATED`, `FIELD_REMOVAL_HAS_DATA`,
 `BLOCK_TYPE_REMOVAL_HAS_BLOCKS`, `BLOCK_DEFINITION_CHANGE_HAS_BLOCKS`,
 `ROUTE_CHANGE_HAS_PUBLISHED`, `MEDIA_DEFAULT_BACKFILL_UNSUPPORTED`,
 `BACKFILL_EXCEEDS_LIMIT` (any field rewrite above the content size limit),
 `FIELD_RENAME_SOURCE_MISSING`, `FIELD_RENAME_TARGET_EXISTS`,
-`FIELD_RENAME_TARGET_HAS_DATA` and `SNAPSHOT_EVIDENCE_STALE`. Diagnostics that
+`FIELD_RENAME_TARGET_HAS_DATA`, `BLOCK_MIGRATION_MISSING`,
+`BLOCK_VERSION_AHEAD`, `BLOCK_MIGRATION_FAILED`, `BLOCK_MIGRATION_INVALID` and
+`SNAPSHOT_EVIDENCE_STALE`. Diagnostics that
 concern stored values name up to 20 snapshots (entry ID, state, title) and the
-total; unhinted removal refusals name the hint to declare. Block migrations
-are not available yet; see the
-[content and editor roadmap](content-editor-roadmap.md) step CE1C.
+total; block-migration refusals also name the block key and stored version;
+unhinted removal refusals name the hint to declare.

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   applyPreparedConfigurationSynchronization,
+  configurationSyncMigrationSummary,
   prepareConfigurationSynchronization,
 } from "@lacecms/application";
 import type { NormalizedContentModel } from "@lacecms/config";
@@ -32,7 +33,24 @@ export interface CommandOutcome {
   readonly ok: boolean;
 }
 
-async function projectModels(cwd: string): Promise<readonly NormalizedContentModel[]> {
+type BlockRegistry = NonNullable<
+  Parameters<typeof prepareConfigurationSynchronization>[0]["blocks"]
+>;
+
+interface ProjectConfiguration {
+  readonly blocks?: BlockRegistry;
+  readonly models: readonly NormalizedContentModel[];
+}
+
+function isBlockRegistry(value: unknown): value is BlockRegistry {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as { get?: unknown }).get === "function"
+  );
+}
+
+async function projectConfiguration(cwd: string): Promise<ProjectConfiguration> {
   let module: unknown;
   try {
     module = await import(pathToFileURL(resolve(cwd, "lace.config.ts")).href);
@@ -44,10 +62,15 @@ async function projectModels(cwd: string): Promise<readonly NormalizedContentMod
       "project-config",
     );
   }
-  const config = (module as { default?: { runtime?: { content?: unknown } } }).default;
+  const config = (module as { default?: { runtime?: { blocks?: unknown; content?: unknown } } })
+    .default;
   if (!Array.isArray(config?.runtime?.content))
     throw new CliError("CONFIG", "Invalid root lace.config.ts.", EXIT.CONFIG, "project-config");
-  return config.runtime.content as readonly NormalizedContentModel[];
+  const blocks = config.runtime.blocks;
+  return {
+    ...(isBlockRegistry(blocks) ? { blocks } : {}),
+    models: config.runtime.content as readonly NormalizedContentModel[],
+  };
 }
 
 function assertNodeSchema(connection: Parameters<typeof listAppliedMigrations>[0]): void {
@@ -80,11 +103,15 @@ async function assertD1Schema(database: D1Database): Promise<void> {
 }
 
 async function sync(
-  models: readonly NormalizedContentModel[],
+  { blocks, models }: ProjectConfiguration,
   target: NodeContentRepository | D1ContentRepository,
   check: boolean,
 ): Promise<CommandOutcome> {
-  const prepared = await prepareConfigurationSynchronization({ models, state: target });
+  const prepared = await prepareConfigurationSynchronization({
+    ...(blocks === undefined ? {} : { blocks }),
+    models,
+    state: target,
+  });
   const data = JSON.parse(prepared.report.json) as unknown;
   if (check)
     return prepared.report.check.exitCode === 0
@@ -104,19 +131,38 @@ async function sync(
       message: prepared.report.text,
       data,
     };
-  const result = await applyPreparedConfigurationSynchronization({
-    clock: new SystemNodeClock(),
-    ids: new UlidGenerator(),
-    models,
-    prepared,
-    target,
-  });
+  let result: Awaited<ReturnType<typeof applyPreparedConfigurationSynchronization>>;
+  try {
+    result = await applyPreparedConfigurationSynchronization({
+      ...(blocks === undefined ? {} : { blocks }),
+      clock: new SystemNodeClock(),
+      ids: new UlidGenerator(),
+      models,
+      prepared,
+      target,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("stale"))
+      throw new CliError(
+        "OPERATION_FAILED",
+        "Synchronization stopped because stored content changed; rerun `lace content sync` to complete it.",
+        EXIT.OPERATION,
+      );
+    throw error;
+  }
+  const migrated =
+    result.migrated !== undefined && result.migrated.blocks > 0
+      ? `\n${configurationSyncMigrationSummary(result.migrated)}`
+      : "";
   return {
     ok: true,
     code: result.status === "noop" ? "SYNC_CURRENT" : "SYNC_APPLIED",
     exitCode: EXIT.OK,
-    message: `${prepared.report.text}\n${result.status === "noop" ? "No synchronization needed." : "Synchronization applied."}`,
-    data,
+    message: `${prepared.report.text}${migrated}\n${result.status === "noop" ? "No synchronization needed." : "Synchronization applied."}`,
+    data:
+      result.migrated === undefined
+        ? data
+        : { ...(data as Record<string, unknown>), migrated: result.migrated },
   };
 }
 
@@ -180,7 +226,7 @@ export async function runCommand(
       assertNodeSchema(opened.connection);
       if (options.command === "content sync")
         return await sync(
-          await projectModels(cwd),
+          await projectConfiguration(cwd),
           new NodeContentRepository(opened.connection, () => undefined),
           options.check,
         );
@@ -258,7 +304,7 @@ export async function runCommand(
     await assertD1Schema(database);
     if (options.command === "content sync")
       return await sync(
-        await projectModels(cwd),
+        await projectConfiguration(cwd),
         new D1ContentRepository(database, () => undefined),
         options.check,
       );

@@ -77,3 +77,37 @@ revision one below its draft could then equal the draft revision and show the
 entry as unchanged. Rebuilding media references from recomputed values was
 rejected because it needs per-snapshot statements; references are keyed by
 source and field, so targeted updates produce the same rows.
+
+## Addendum: block migrations (CE1C)
+
+A changed block definition with a version increase is applied through the
+block's declared `migrations`, composed from each stored `schemaVersion` to
+the configured version. Planning executes them in memory over bounded entry
+pages and validates every result (publish mode for published snapshots, draft
+mode for drafts, size and media-reference limits, no newly introduced media),
+so `--check` is a complete dry run and any finding refuses the plan without a
+write.
+
+Apply rewrites stale blocks before the final mutation, in independent units
+of one entry guarded on snapshot revision, current snapshot identity and each
+block's stored `schema_version`; Node commits a unit per transaction and D1
+packs whole units into guarded batches within its statement budget, writing
+an oversized unit's published snapshot before its draft. Drafts take a new
+revision with the actor `system:content-sync`; a published snapshot in sync
+with its draft takes the same revision, otherwise it keeps its own, so entry
+status never changes. After the units, sync prepares the plan again, requires
+it to equal the reviewed plan apart from the migrations, and runs the usual
+guarded final mutation, which advances `published_state.version` and requests
+one build.
+
+This departs from decision 4's single atomic mutation: a D1 batch cannot
+rewrite an unbounded number of snapshots, and the roadmap requires resumable
+writes. Between the units and the final mutation, public reads may see
+migrated published blocks under the previous version; a rerun after an
+interruption migrates only the blocks still stale and completes the final
+mutation. Rejected alternatives: migrating inside the final mutation on Node
+only (runtime divergence in failure behavior and tests), migrating lazily at
+read or render time (the render core stays strict), keeping historical block
+definitions to validate intermediate versions (users would carry every old
+schema), and a media read port for migrations (migrations may only move media
+the snapshot already references).

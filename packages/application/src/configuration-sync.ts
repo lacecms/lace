@@ -1,6 +1,6 @@
 import type { ContentModelStructure, NormalizedContentModel } from "@lacecms/config";
 import { canonicalizeJson, validateModelFields } from "@lacecms/content";
-import type { JsonObject, JsonValue } from "@lacecms/content";
+import type { BlockDefinition, BlockRegistry, JsonObject, JsonValue } from "@lacecms/content";
 import {
   DomainError,
   actorId,
@@ -37,9 +37,21 @@ import type {
   StructuralChangeClass,
   StructuralChangeKind,
 } from "./configuration-evolution.js";
+import {
+  CONFIGURATION_SYNC_MIGRATION_PAGE_SIZE,
+  createMigrationEvidenceAccumulator,
+  planEntryMigration,
+} from "./configuration-migration.js";
+import type {
+  BlockMigrationEvidence,
+  ConfigurationSyncEntryMigration,
+  ConfigurationSyncMigrationPage,
+  ConfigurationSyncMigrationTarget,
+} from "./configuration-migration.js";
 import type { Clock, IdGenerator } from "./index.js";
 
 export * from "./configuration-evolution.js";
+export * from "./configuration-migration.js";
 
 export interface StoredContentModelState {
   readonly draftSnapshotCount: number;
@@ -86,6 +98,8 @@ export interface ConfigurationSyncChange {
   /** Whether a destructive removal is declared by a hint. */
   readonly hinted?: true;
   readonly kind: StructuralChangeKind;
+  /** Stored block versions migrated to the configured version, for a planned block migration. */
+  readonly migration?: { readonly from: readonly number[]; readonly to: number };
   readonly properties?: readonly string[];
   readonly scope: StructuralChange["scope"];
   readonly target: string;
@@ -102,9 +116,19 @@ export interface ConfigurationSyncEvolution {
   readonly changes: readonly ConfigurationSyncChange[];
   /** Hinted field keys whose stored values are pruned; present when non-empty. */
   readonly fieldRemovals?: readonly string[];
+  /** Block types whose stale stored blocks are migrated; present when non-empty. */
+  readonly migrations?: readonly ConfigurationSyncBlockMigration[];
   /** Hinted field renames whose stored values are moved; present when non-empty. */
   readonly renames?: readonly ConfigurationSyncFieldRename[];
   readonly snapshots: SnapshotStateCounts;
+}
+
+/** Stale blocks of one type that apply migrates to the configured block version. */
+export interface ConfigurationSyncBlockMigration extends SnapshotStateCounts {
+  readonly blockType: string;
+  readonly blocks: number;
+  readonly fromVersions: readonly number[];
+  readonly toVersion: number;
 }
 
 /** One field whose stored values move from a former key to the configured key. */
@@ -151,7 +175,11 @@ export type ConfigurationSyncOperation =
 export type ConfigurationSyncDiagnosticCode =
   | "BACKFILL_EXCEEDS_LIMIT"
   | "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS"
+  | "BLOCK_MIGRATION_FAILED"
+  | "BLOCK_MIGRATION_INVALID"
+  | "BLOCK_MIGRATION_MISSING"
   | "BLOCK_TYPE_REMOVAL_HAS_BLOCKS"
+  | "BLOCK_VERSION_AHEAD"
   | "CONSTRAINT_VIOLATED"
   | "DUPLICATE_CURRENT_MODEL"
   | "DUPLICATE_STORED_MODEL"
@@ -213,8 +241,20 @@ export interface ConfigurationSyncSnapshotScanInput {
   readonly modelKey: ContentModelKey;
 }
 
+/** Bounded scan of one model's entries holding stale blocks of the target types. */
+export interface ConfigurationSyncMigrationScanInput {
+  /** Continuation cursor returned by the previous page. */
+  readonly after?: string;
+  readonly limit: number;
+  readonly modelKey: ContentModelKey;
+  readonly targets: readonly ConfigurationSyncMigrationTarget[];
+}
+
 /** Read-only persistence boundary used by dry-run and guarded apply coordination. */
 export interface ConfigurationSyncStateReadPort {
+  readConfigurationSyncMigrationEntries(
+    input: ConfigurationSyncMigrationScanInput,
+  ): Promise<ConfigurationSyncMigrationPage>;
   readConfigurationSyncSnapshots(
     input: ConfigurationSyncSnapshotScanInput,
   ): Promise<ConfigurationSyncSnapshotPage>;
@@ -238,15 +278,38 @@ export interface ApplyConfigurationSynchronizationInput {
   readonly plan: ConfigurationSyncPlan;
 }
 
+/** Drafts, published snapshots and blocks rewritten by block migrations. */
+export interface ConfigurationSyncMigrationCounts {
+  readonly blocks: number;
+  readonly drafts: number;
+  readonly published: number;
+}
+
 /** Portable result that distinguishes a committed apply from an unchanged no-op. */
 export interface ApplyConfigurationSynchronizationResult {
+  /** Present when the apply migrated stored blocks before its final mutation. */
+  readonly migrated?: ConfigurationSyncMigrationCounts;
   readonly operations: readonly ConfigurationSyncOperation[];
   readonly status: "applied" | "noop";
   readonly targetVersion?: number;
 }
 
+/** Guarded per-entry block-migration writes of one model. */
+export interface ApplyConfigurationSyncBlockMigrationsInput {
+  readonly migratedAt: UnixMilliseconds;
+  readonly modelKey: ContentModelKey;
+  readonly units: readonly ConfigurationSyncEntryMigration[];
+}
+
 /** Specialized mutation boundary; it intentionally does not expose a transaction callback. */
 export interface ConfigurationSyncApplyPort {
+  /**
+   * Writes each unit atomically per snapshot, published before draft, and
+   * throws a stale-plan error on the first failed guard; earlier units stay.
+   */
+  applyConfigurationSyncBlockMigrations(
+    input: ApplyConfigurationSyncBlockMigrationsInput,
+  ): Promise<ConfigurationSyncMigrationCounts>;
   applyConfigurationSynchronization(
     input: ApplyConfigurationSynchronizationInput,
   ): Promise<ApplyConfigurationSynchronizationResult>;
@@ -439,8 +502,17 @@ function decideEvolution(
   let evidence: ModelSnapshotEvidence | undefined;
   if (changes.some(changeNeedsEvidence)) {
     const fingerprint = stored.snapshotFingerprint ?? "";
+    const migrations = changes
+      .filter((change) => versionedBlockChange(change))
+      .map((change) => Object.freeze({ type: change.target, version: change.version!.to }));
     context.scanRequests.push(
-      Object.freeze({ changes, fields: current.fields, fingerprint, modelKey: stored.key }),
+      Object.freeze({
+        changes,
+        fields: current.fields,
+        fingerprint,
+        ...(migrations.length === 0 ? {} : { migrations: Object.freeze(migrations) }),
+        modelKey: stored.key,
+      }),
     );
     const candidate = context.evidence?.[stored.key];
     if (candidate === undefined || candidate.fingerprint !== fingerprint) {
@@ -477,12 +549,14 @@ function decideEvolution(
   const renames: ConfigurationSyncFieldRename[] = [];
   const fieldRemovals: string[] = [];
   const blockRemovals: string[] = [];
+  const blockMigrations: ConfigurationSyncBlockMigration[] = [];
   for (const change of changes) {
     const fieldKey = change.scope === "field" ? change.target : undefined;
     const blockType = change.scope === "block" ? change.target : undefined;
     let affected: SnapshotStateCounts | undefined;
     let backfill: SnapshotStateCounts | undefined;
     let violations: number | undefined;
+    let migration: ConfigurationSyncChange["migration"];
 
     if (change.kind === "field-type-changed") {
       refuse(
@@ -542,25 +616,66 @@ function decideEvolution(
           );
         }
       }
-    } else if (change.kind === "block-type-removed" || change.kind === "block-definition-changed") {
+    } else if (change.kind === "block-type-removed") {
       const holders = evidence?.blockHolders[change.target];
       affected = holderCounts(holders);
       if (holders !== undefined && total(holders) > 0) {
-        const removal = change.kind === "block-type-removed";
-        if (removal && change.hinted === true) {
+        if (change.hinted === true) {
           blockRemovals.push(change.target);
         } else {
           refuse(
-            removal ? "BLOCK_TYPE_REMOVAL_HAS_BLOCKS" : "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS",
-            removal
-              ? `Model ${modelKey} disallows block type ${change.target}, which ${total(holders)} snapshots use (${countsDescription(holders)}). Declare removedBlocks: ["${change.target}"] to drop those blocks.`
-              : `Block type ${change.target} changes its definition while ${total(holders)} snapshots of model ${modelKey} hold such blocks (${countsDescription(holders)}); a block migration is required.`,
+            "BLOCK_TYPE_REMOVAL_HAS_BLOCKS",
+            `Model ${modelKey} disallows block type ${change.target}, which ${total(holders)} snapshots use (${countsDescription(holders)}). Declare removedBlocks: ["${change.target}"] to drop those blocks.`,
             {
               affectedCount: total(holders),
               blockType,
               changeClass: change.class,
               snapshots: holders.snapshots,
             },
+          );
+        }
+      }
+    } else if (change.kind === "block-definition-changed") {
+      const holders = evidence?.blockHolders[change.target];
+      affected = holderCounts(holders);
+      if (!versionedBlockChange(change)) {
+        if (holders !== undefined && total(holders) > 0) {
+          refuse(
+            "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS",
+            `Block type ${change.target} changes its definition without a version increase while ${total(holders)} snapshots of model ${modelKey} hold such blocks (${countsDescription(holders)}). Increase the block version and declare migrations.`,
+            {
+              affectedCount: total(holders),
+              blockType,
+              changeClass: change.class,
+              snapshots: holders.snapshots,
+            },
+          );
+        }
+      } else {
+        const facts = evidence?.migrations?.[change.target];
+        const decision =
+          facts === undefined
+            ? { planned: false, refusals: [] }
+            : decideBlockMigration(modelKey, change.target, facts);
+        for (const refusal of decision.refusals) {
+          refuse(refusal.code, refusal.message, {
+            affectedCount: refusal.findings.count,
+            blockType,
+            changeClass: change.class,
+            snapshots: refusal.findings.snapshots,
+          });
+        }
+        if (decision.planned && facts !== undefined) {
+          migration = Object.freeze({ from: facts.fromVersions, to: facts.toVersion });
+          blockMigrations.push(
+            Object.freeze({
+              blockType: change.target,
+              blocks: facts.blocks,
+              draft: facts.snapshots.draft,
+              fromVersions: facts.fromVersions,
+              published: facts.snapshots.published,
+              toVersion: facts.toVersion,
+            }),
           );
         }
       }
@@ -603,6 +718,7 @@ function decideEvolution(
         ...(change.from === undefined ? {} : { from: change.from }),
         ...(change.hinted === undefined ? {} : { hinted: change.hinted }),
         kind: change.kind,
+        ...(migration === undefined ? {} : { migration }),
         ...(change.properties === undefined ? {} : { properties: change.properties }),
         scope: change.scope,
         target: change.target,
@@ -623,6 +739,13 @@ function decideEvolution(
       ...(blockRemovals.length === 0 ? {} : { blockRemovals: Object.freeze(blockRemovals.sort()) }),
       changes: Object.freeze(decided),
       ...(fieldRemovals.length === 0 ? {} : { fieldRemovals: Object.freeze(fieldRemovals.sort()) }),
+      ...(blockMigrations.length === 0
+        ? {}
+        : {
+            migrations: Object.freeze(
+              blockMigrations.sort((left, right) => left.blockType.localeCompare(right.blockType)),
+            ),
+          }),
       ...(renames.length === 0
         ? {}
         : {
@@ -632,6 +755,62 @@ function decideEvolution(
     }),
     refused,
   };
+}
+
+/** Whether a block definition change also changes the block version. */
+function versionedBlockChange(change: StructuralChange): boolean {
+  return (
+    change.kind === "block-definition-changed" &&
+    change.version !== undefined &&
+    change.version.from !== change.version.to
+  );
+}
+
+interface BlockMigrationRefusal {
+  readonly code: ConfigurationSyncDiagnosticCode;
+  readonly findings: BlockMigrationEvidence["failed"];
+  readonly message: string;
+}
+
+/** Refuses a block migration on any finding; otherwise plans it when blocks are stale. */
+function decideBlockMigration(
+  modelKey: string,
+  blockType: string,
+  facts: BlockMigrationEvidence,
+): { readonly planned: boolean; readonly refusals: readonly BlockMigrationRefusal[] } {
+  const to = facts.toVersion;
+  const groups: readonly [
+    "ahead" | "failed" | "invalid" | "missing",
+    ConfigurationSyncDiagnosticCode,
+    string,
+  ][] = [
+    [
+      "missing",
+      "BLOCK_MIGRATION_MISSING",
+      `Block type ${blockType} of model ${modelKey} has ${facts.missing.count} stored blocks without a migration path to version ${to}; declare migrations for every version after the oldest stored one.`,
+    ],
+    [
+      "ahead",
+      "BLOCK_VERSION_AHEAD",
+      `Block type ${blockType} of model ${modelKey} has ${facts.ahead.count} stored blocks newer than the configured version ${to}.`,
+    ],
+    [
+      "failed",
+      "BLOCK_MIGRATION_FAILED",
+      `Block type ${blockType} migration to version ${to} failed for ${facts.failed.count} stored blocks of model ${modelKey}.`,
+    ],
+    [
+      "invalid",
+      "BLOCK_MIGRATION_INVALID",
+      `Block type ${blockType} migration to version ${to} produced ${facts.invalid.count} invalid blocks in model ${modelKey}.`,
+    ],
+  ];
+  const refusals: BlockMigrationRefusal[] = [];
+  for (const [key, code, message] of groups) {
+    const findings = facts[key];
+    if (findings.count > 0) refusals.push({ code, findings, message });
+  }
+  return { planned: refusals.length === 0 && facts.blocks > 0, refusals };
 }
 
 function classifyMatchedModel(
@@ -1003,6 +1182,8 @@ function changeLine(change: ConfigurationSyncChange): string {
   const details: string[] = [];
   if (change.from !== undefined) details.push(`from ${change.from}`);
   if (change.hinted === true) details.push("hinted");
+  if (change.migration !== undefined)
+    details.push(`version ${change.migration.from.join(",")} -> ${change.migration.to}`);
   if (change.properties !== undefined) details.push(change.properties.join(", "));
   if (change.affected !== undefined)
     details.push(`affected: ${countsDescription(change.affected)}`);
@@ -1042,6 +1223,13 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
     if (evolution.blockRemovals !== undefined) {
       lines.push(`  planned block removals: ${evolution.blockRemovals.join(", ")}`);
     }
+    if (evolution.migrations !== undefined) {
+      const migrations = evolution.migrations.map(
+        (migration) =>
+          `${migration.blockType} ${migration.fromVersions.join(",")} -> ${migration.toVersion} (draft=${migration.draft}, published=${migration.published}, blocks=${migration.blocks})`,
+      );
+      lines.push(`  planned block migrations: ${migrations.join(", ")}`);
+    }
     if (evolution.backfills.length > 0) {
       lines.push(`  planned backfills: ${evolution.backfills.join(", ")}`);
     }
@@ -1052,7 +1240,15 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
     const related = value.relatedModelKey === undefined ? "" : ` (${value.relatedModelKey})`;
     lines.push(`- [${value.code}] ${value.modelKey}${related}: ${value.message}`);
     for (const snapshot of value.snapshots ?? []) {
-      lines.push(`    ${snapshot.state} ${snapshot.entryId} "${snapshot.title}"`);
+      const block =
+        snapshot.blockKey === undefined
+          ? ""
+          : ` block ${snapshot.blockKey}${snapshot.schemaVersion === undefined ? "" : ` v${snapshot.schemaVersion}`}`;
+      const at = snapshot.path === undefined || snapshot.path === "" ? "" : ` at ${snapshot.path}`;
+      const cause = snapshot.reason === undefined ? "" : `: ${snapshot.reason}`;
+      lines.push(
+        `    ${snapshot.state} ${snapshot.entryId} "${snapshot.title}"${block}${at}${cause}`,
+      );
     }
     if (
       value.snapshots !== undefined &&
@@ -1075,10 +1271,36 @@ export function reportConfigurationSynchronization(
   });
 }
 
-/** Scans one model's snapshots page by page through the read port. */
+function registryError(message: string): never {
+  throw new DomainError("CONTENT_INVALID_STATE", message);
+}
+
+/** Executable definitions of the migrated block types, checked against their configured versions. */
+function migrationDefinitions(
+  blocks: BlockRegistry | undefined,
+  targets: readonly ConfigurationSyncMigrationTarget[],
+): ReadonlyMap<string, BlockDefinition> {
+  if (blocks === undefined) {
+    registryError("The block registry is required to migrate stored blocks.");
+  }
+  const definitions = new Map<string, BlockDefinition>();
+  for (const target of targets) {
+    const definition = blocks.get(target.type);
+    if (definition?.version !== target.version) {
+      registryError(
+        `The block registry does not define block type ${target.type} at version ${target.version}.`,
+      );
+    }
+    definitions.set(target.type, definition);
+  }
+  return definitions;
+}
+
+/** Scans one model's snapshots, and its stale blocks when migrations apply, through the read port. */
 async function scanModel(
   state: ConfigurationSyncStateReadPort,
   request: ConfigurationSyncScanRequest,
+  blocks: BlockRegistry | undefined,
 ): Promise<ModelSnapshotEvidence> {
   const accumulator = createSnapshotEvidenceAccumulator(request);
   let after: string | undefined;
@@ -1091,20 +1313,56 @@ async function scanModel(
     accumulator.add(page.items);
     after = page.next;
   } while (after !== undefined);
-  return accumulator.result();
+  const evidence = accumulator.result();
+  if (request.migrations === undefined) return evidence;
+
+  const migrations = createMigrationEvidenceAccumulator(
+    migrationDefinitions(blocks, request.migrations),
+    contentSyncActor.id,
+  );
+  do {
+    const page = await state.readConfigurationSyncMigrationEntries({
+      ...(after === undefined ? {} : { after }),
+      limit: CONFIGURATION_SYNC_MIGRATION_PAGE_SIZE,
+      modelKey: contentModelKey(request.modelKey),
+      targets: request.migrations,
+    });
+    migrations.add(page.items);
+    after = page.next;
+  } while (after !== undefined);
+  return Object.freeze({ ...evidence, migrations: migrations.result() });
 }
 
-/** Reads persistence once, scans data-dependent models, and produces the non-mutating decision. */
+function assertRegistryCoversModels(
+  models: readonly NormalizedContentModel[],
+  blocks: BlockRegistry,
+): void {
+  for (const model of models) {
+    for (const type of model.blocks) {
+      if (blocks.get(type) === undefined) {
+        registryError(`Model ${model.key} allows block type ${type}, which the registry lacks.`);
+      }
+    }
+  }
+}
+
+/**
+ * Reads persistence once, scans data-dependent models, executes needed block
+ * migrations in memory, and produces the non-mutating decision.
+ */
 export async function prepareConfigurationSynchronization(input: {
+  /** Executable block registry; required when stored blocks need migrations. */
+  readonly blocks?: BlockRegistry;
   readonly models: readonly NormalizedContentModel[];
   readonly state: ConfigurationSyncStateReadPort;
 }): Promise<PreparedConfigurationSynchronization> {
+  if (input.blocks !== undefined) assertRegistryCoversModels(input.models, input.blocks);
   const storedModels = Object.freeze(
     (await input.state.readConfigurationSyncState()).map(copyStoredModel).sort(compareByKey),
   );
   const evidence: Record<string, ModelSnapshotEvidence> = {};
   for (const request of planConfigurationSyncScans({ models: input.models, storedModels })) {
-    evidence[request.modelKey] = await scanModel(input.state, request);
+    evidence[request.modelKey] = await scanModel(input.state, request, input.blocks);
   }
   const frozenEvidence = Object.freeze(evidence);
   const plan = planConfigurationSynchronization({
@@ -1160,12 +1418,119 @@ export function createConfigurationSyncPageEntry(input: {
 }
 
 /** Applies a freshly prepared valid plan and allocates identities only for page creates. */
+/** One operator line describing the stored blocks an apply migrated. */
+export function configurationSyncMigrationSummary(
+  counts: ConfigurationSyncMigrationCounts,
+): string {
+  return `Migrated blocks: ${counts.blocks} (drafts=${counts.drafts}, published=${counts.published}).`;
+}
+
+/** Plan JSON without planned block migrations, which the migration phase consumes. */
+function planJsonWithoutMigrations(plan: ConfigurationSyncPlan): string {
+  return renderConfigurationSyncPlanJson({
+    ...plan,
+    operations: plan.operations.map((operation) => {
+      if (!("evolution" in operation) || operation.evolution === undefined) return operation;
+      const { migrations: _migrations, ...evolution } = operation.evolution;
+      return {
+        ...operation,
+        evolution: {
+          ...evolution,
+          changes: evolution.changes.map(({ migration: _migration, ...change }) => change),
+        },
+      } as ConfigurationSyncOperation;
+    }),
+  });
+}
+
+/** Stored model keys and targets of every planned block migration. */
+function plannedMigrations(plan: ConfigurationSyncPlan): readonly {
+  readonly modelKey: ContentModelKey;
+  readonly targets: readonly ConfigurationSyncMigrationTarget[];
+}[] {
+  const planned = [];
+  for (const operation of plan.operations) {
+    if (operation.action !== "version-update" && operation.action !== "rename") continue;
+    const migrations = operation.evolution?.migrations;
+    if (migrations === undefined) continue;
+    planned.push({
+      modelKey: operation.action === "rename" ? operation.renamedFrom : operation.model.key,
+      targets: migrations.map((migration) => ({
+        type: migration.blockType,
+        version: migration.toVersion,
+      })),
+    });
+  }
+  return planned;
+}
+
+function staleSynchronization(message: string): never {
+  throw new DomainError("CONTENT_INVALID_STATE", message);
+}
+
+/** Rewrites every stale block of the planned migrations in guarded per-entry units. */
+async function migrateStoredBlocks(
+  input: {
+    readonly blocks: BlockRegistry | undefined;
+    readonly clock: Clock;
+    readonly target: ConfigurationSyncApplyPort & ConfigurationSyncStateReadPort;
+  },
+  planned: ReturnType<typeof plannedMigrations>,
+): Promise<ConfigurationSyncMigrationCounts> {
+  let blocks = 0;
+  let drafts = 0;
+  let published = 0;
+  for (const { modelKey, targets } of planned) {
+    const definitions = migrationDefinitions(input.blocks, targets);
+    let after: string | undefined;
+    do {
+      const page = await input.target.readConfigurationSyncMigrationEntries({
+        ...(after === undefined ? {} : { after }),
+        limit: CONFIGURATION_SYNC_MIGRATION_PAGE_SIZE,
+        modelKey,
+        targets,
+      });
+      const units: ConfigurationSyncEntryMigration[] = [];
+      for (const entry of page.items) {
+        const migration = planEntryMigration(entry, definitions, contentSyncActor.id);
+        if (migration.findings.length > 0) {
+          staleSynchronization(
+            "Block migration results changed since planning; the synchronization plan is stale.",
+          );
+        }
+        if (migration.unit !== undefined) units.push(migration.unit);
+      }
+      if (units.length > 0) {
+        const written = await input.target.applyConfigurationSyncBlockMigrations({
+          migratedAt: input.clock.now(),
+          modelKey,
+          units,
+        });
+        blocks += written.blocks;
+        drafts += written.drafts;
+        published += written.published;
+      }
+      after = page.next;
+    } while (after !== undefined);
+  }
+  return Object.freeze({ blocks, drafts, published });
+}
+
+/**
+ * Applies a reviewed plan. Planned block migrations are first written in
+ * guarded per-entry units; the plan is then prepared again from current state
+ * and must match the reviewed plan apart from its migrations before the final
+ * guarded mutation runs. A stale error leaves committed units in place, and a
+ * rerun completes the remaining work.
+ */
 export async function applyPreparedConfigurationSynchronization(input: {
+  /** Executable block registry; required when the plan migrates stored blocks. */
+  readonly blocks?: BlockRegistry;
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly models: readonly NormalizedContentModel[];
   readonly prepared: PreparedConfigurationSynchronization;
-  readonly target: ConfigurationSyncApplyPort;
+  readonly target: ConfigurationSyncApplyPort & ConfigurationSyncStateReadPort;
 }): Promise<ApplyConfigurationSynchronizationResult> {
   if (!input.prepared.plan.isValid) {
     throw new DomainError(
@@ -1173,10 +1538,44 @@ export async function applyPreparedConfigurationSynchronization(input: {
       "Configuration synchronization plan is invalid.",
     );
   }
+  let prepared = input.prepared;
+  let migrated: ConfigurationSyncMigrationCounts | undefined;
+  const planned = plannedMigrations(prepared.plan);
+  if (planned.length > 0) {
+    migrated = await migrateStoredBlocks(
+      { blocks: input.blocks, clock: input.clock, target: input.target },
+      planned,
+    );
+    prepared = await prepareConfigurationSynchronization({
+      ...(input.blocks === undefined ? {} : { blocks: input.blocks }),
+      models: input.models,
+      state: input.target,
+    });
+    if (
+      !prepared.plan.isValid ||
+      plannedMigrations(prepared.plan).length > 0 ||
+      planJsonWithoutMigrations(prepared.plan) !== planJsonWithoutMigrations(input.prepared.plan)
+    ) {
+      staleSynchronization("Configuration synchronization plan is stale after block migration.");
+    }
+  }
+  const result = await applyFinalMutation(input, prepared);
+  return migrated === undefined ? result : Object.freeze({ ...result, migrated });
+}
+
+async function applyFinalMutation(
+  input: {
+    readonly ids: IdGenerator;
+    readonly clock: Clock;
+    readonly models: readonly NormalizedContentModel[];
+    readonly target: ConfigurationSyncApplyPort;
+  },
+  prepared: PreparedConfigurationSynchronization,
+): Promise<ApplyConfigurationSynchronizationResult> {
   const models = new Map(input.models.map((model) => [model.key, model]));
   const appliedAt = input.clock.now();
   const pageEntries: ConfigurationSyncPageEntry[] = [];
-  for (const operation of input.prepared.plan.operations) {
+  for (const operation of prepared.plan.operations) {
     if (operation.action !== "create") continue;
     const model = models.get(operation.model.key);
     if (model?.kind !== "page") continue;
@@ -1191,10 +1590,10 @@ export async function applyPreparedConfigurationSynchronization(input: {
   }
   return input.target.applyConfigurationSynchronization({
     appliedAt,
-    evidence: input.prepared.evidence,
-    expectedStoredModels: input.prepared.storedModels,
+    evidence: prepared.evidence,
+    expectedStoredModels: prepared.storedModels,
     models: input.models,
     pageEntries,
-    plan: input.prepared.plan,
+    plan: prepared.plan,
   });
 }

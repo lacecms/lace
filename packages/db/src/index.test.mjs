@@ -10,8 +10,10 @@ import {
   encodeSortCursor,
   packageName,
   checkedInMigrations,
+  configurationSyncMigrationStatements,
   configurationSyncWriteStatements,
   sqliteWriteError,
+  syncMigrationPage,
 } from "../dist/index.js";
 
 test("exports its package identity", () => expect(packageName).toBe("@lacecms/db"));
@@ -215,4 +217,195 @@ test("synchronization writes keep renamed media references and reject unsafe key
   expect(() =>
     configurationSyncWriteStatements({ action: "rename-field", from: "a", to: "b.c" }, "posts"),
   ).toThrow();
+});
+
+function migrationDatabase(blockCount) {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    create table content_entries (id text primary key, draft_snapshot_id text, published_snapshot_id text);
+    create table content_snapshots (id text primary key, entry_id text not null, revision integer not null,
+      updated_at integer not null, updated_by text not null);
+    create table content_blocks (snapshot_id text, block_key text, block_type text, position integer,
+      schema_version integer, data_json text, updated_at integer);
+    create table media (id text primary key, status text not null);
+    create table content_media_references (snapshot_id text, source_key text, field_path text,
+      media_id text not null, created_at integer);
+    insert into content_entries values ('e1', 'd1', 'p1');
+    insert into content_snapshots values ('d1', 'e1', 3, 1, 'editor'), ('p1', 'e1', 3, 1, 'publisher');
+    insert into media values ('m1', 'active'), ('gone', 'deleting');
+  `);
+  const insertBlock = database.prepare(
+    "insert into content_blocks values (?, ?, 'note', ?, 1, '{}', 1)",
+  );
+  const insertReference = database.prepare(
+    "insert into content_media_references values (?, ?, 'image', 'm1', 1)",
+  );
+  for (const snapshot of ["d1", "p1"]) {
+    for (let index = 0; index < blockCount; index += 1) {
+      insertBlock.run(snapshot, `b${index}`, index + 1);
+      insertReference.run(snapshot, `b${index}`);
+    }
+  }
+  return database;
+}
+
+function migration(state, blockCount, overrides = {}) {
+  return {
+    blocks: Array.from({ length: blockCount }, (_, index) => ({
+      data: { cover: "m1", text: `t${index}` },
+      expectedSchemaVersion: 1,
+      key: `b${index}`,
+      schemaVersion: 3,
+    })),
+    expectedRevision: 3,
+    references: Array.from({ length: blockCount }, (_, index) => ({
+      fieldPath: "cover",
+      mediaId: "m1",
+      sourceKey: `b${index}`,
+    })),
+    revision: 4,
+    snapshotId: state === "draft" ? "d1" : "p1",
+    state,
+    ...(state === "draft" ? { updatedBy: "system:content-sync" } : {}),
+    ...overrides,
+  };
+}
+
+function runMigration(database, statements) {
+  const guard = database
+    .prepare(`select ${statements.guard.sql} as ok`)
+    .get(...statements.guard.params);
+  if (guard.ok !== 1) return false;
+  for (const write of statements.writes) {
+    // Appending a guard condition, as the D1 batch does, must keep the statement valid.
+    database.prepare(`${write.sql} and ? = 1`).run(...write.params, 1);
+  }
+  return true;
+}
+
+test("block migration statements rewrite in place within the D1 parameter limit", () => {
+  const database = migrationDatabase(200);
+  const published = configurationSyncMigrationStatements(
+    migration("published", 200, { draftGuard: { revision: 3, snapshotId: "d1" } }),
+    50,
+    99,
+  );
+  const draft = configurationSyncMigrationStatements(migration("draft", 200), 50, 99);
+  for (const statements of [published, draft]) {
+    for (const write of statements.writes) expect(write.params.length).toBeLessThanOrEqual(99);
+    expect(statements.writes.length).toBeLessThanOrEqual(19);
+  }
+  expect(runMigration(database, published)).toBe(true);
+  expect(runMigration(database, draft)).toBe(true);
+  expect(
+    database
+      .prepare("select id, revision, updated_at, updated_by from content_snapshots order by id")
+      .all()
+      .map((row) => ({ ...row })),
+  ).toEqual([
+    { id: "d1", revision: 4, updated_at: 50, updated_by: "system:content-sync" },
+    { id: "p1", revision: 4, updated_at: 50, updated_by: "publisher" },
+  ]);
+  const block = database
+    .prepare(
+      "select schema_version, data_json, position, updated_at from content_blocks where snapshot_id = 'p1' and block_key = 'b7'",
+    )
+    .get();
+  expect({ ...block }).toEqual({
+    data_json: '{"cover":"m1","text":"t7"}',
+    position: 8,
+    schema_version: 3,
+    updated_at: 50,
+  });
+  expect(
+    database
+      .prepare("select count(*) as n from content_media_references where field_path = 'cover'")
+      .get().n,
+  ).toBe(400);
+  expect(
+    database
+      .prepare("select count(*) as n from content_media_references where field_path = 'image'")
+      .get().n,
+  ).toBe(0);
+  // Repeating the same unit fails its revision and block-version guards.
+  expect(runMigration(database, draft)).toBe(false);
+});
+
+test("block migration guards check versions, current snapshots and the draft revision", () => {
+  const database = migrationDatabase(2);
+  const guarded = (value) => {
+    const statements = configurationSyncMigrationStatements(value, 50, 99);
+    return database.prepare(`select ${statements.guard.sql} as ok`).get(...statements.guard.params)
+      .ok;
+  };
+  expect(guarded(migration("draft", 2))).toBe(1);
+  expect(guarded(migration("draft", 2, { expectedRevision: 2 }))).toBe(0);
+  expect(guarded(migration("published", 2, { snapshotId: "d1" }))).toBe(0);
+  expect(
+    guarded(migration("published", 2, { draftGuard: { revision: 2, snapshotId: "d1" } })),
+  ).toBe(0);
+  database.exec("update content_blocks set schema_version = 2 where block_key = 'b1'");
+  expect(guarded(migration("draft", 2))).toBe(0);
+
+  const inactive = configurationSyncMigrationStatements(
+    migration("published", 1, {
+      references: [{ fieldPath: "cover", mediaId: "gone", sourceKey: "b0" }],
+    }),
+    50,
+    99,
+  );
+  expect(() => runMigration(database, inactive)).toThrow(/NOT NULL/u);
+});
+
+test("maps migration scan rows into ordered entries", () => {
+  const page = syncMigrationPage(
+    [
+      { draft_snapshot_id: "d1", id: "e1", published_snapshot_id: "p1" },
+      { draft_snapshot_id: "d2", id: "e2", published_snapshot_id: null },
+    ],
+    [
+      { id: "d1", revision: 2, title: "One" },
+      { id: "p1", revision: 2, title: "One" },
+      { id: "d2", revision: 1, title: "Two" },
+    ],
+    [
+      {
+        block_key: "b2",
+        block_type: "hero",
+        data_json: null,
+        position: 2,
+        schema_version: 1,
+        snapshot_id: "d1",
+      },
+      {
+        block_key: "b1",
+        block_type: "note",
+        data_json: '{"a":1}',
+        position: 1,
+        schema_version: 1,
+        snapshot_id: "d1",
+      },
+    ],
+    [{ field_path: "image", media_id: "m1", snapshot_id: "p1", source_key: "b1" }],
+    2,
+  );
+  expect(page.next).toBe("e2");
+  expect(page.items[0].draft.blocks).toEqual([
+    { data: { a: 1 }, key: "b1", position: 1, schemaVersion: 1, type: "note" },
+    { key: "b2", position: 2, schemaVersion: 1, type: "hero" },
+  ]);
+  expect(page.items[0].published.references).toEqual([
+    { fieldPath: "image", mediaId: "m1", sourceKey: "b1" },
+  ]);
+  expect(page.items[1]).toEqual({
+    draft: {
+      blocks: [],
+      references: [],
+      revision: 1,
+      snapshotId: "d2",
+      state: "draft",
+      title: "Two",
+    },
+    entryId: "e2",
+  });
 });

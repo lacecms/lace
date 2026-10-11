@@ -244,6 +244,31 @@ test("block labels and descriptions change only the projection hash", async () =
   expect(changed.content[0].structureHash).toBe(original.content[0].structureHash);
 });
 
+test("carries block migrations at runtime without changing identity or projections", async () => {
+  const hero = (migrations) =>
+    defineBlock({
+      fields: builtInBlocks.hero.fields,
+      ...(migrations === undefined ? {} : { migrations }),
+      type: "hero",
+      version: 2,
+    });
+  const migrate = (data) => ({ ...data });
+  const withBlocks = (definition) =>
+    defineConfig({
+      blocks: [...blocks.filter((block) => block.type !== "hero"), definition],
+      content: [homeModel()],
+    });
+  const plain = await withBlocks(hero());
+  const migrated = await withBlocks(hero({ 2: migrate }));
+
+  expect(migrated.runtime.blocks.get("hero").migrations[2]).toBe(migrate);
+  expect(migrated.structureHash).toBe(plain.structureHash);
+  expect(migrated.projectionHash).toBe(plain.projectionHash);
+  expect(migrated.content[0].structureHash).toBe(plain.content[0].structureHash);
+  expect(migrated.runtime.content[0].structure).toEqual(plain.runtime.content[0].structure);
+  expect(JSON.stringify(migrated.blocks)).not.toContain("migrations");
+});
+
 test("keeps fields named like display metadata in the canonical structure", async () => {
   const described = (fields) =>
     defineConfig({ blocks, content: [postModel({ fields: { title: field.text(), ...fields } })] });

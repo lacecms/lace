@@ -46,6 +46,7 @@ async function prepare(persistTo: string): Promise<number> {
       check: false,
       clock,
       ids: new UlidGenerator(),
+      blocks: config.runtime.blocks,
       models: config.runtime.content,
       target: new D1ContentRepository(database, () => undefined),
       write: (message) => console.info(message),

@@ -144,7 +144,13 @@ test("reports allowlist reorder as display and changed block definitions as migr
     ),
   };
   expect(diffContentModelStructures(baseline.structure, changedImage)).toEqual([
-    { class: "migration", kind: "block-definition-changed", scope: "block", target: "image" },
+    {
+      class: "migration",
+      kind: "block-definition-changed",
+      scope: "block",
+      target: "image",
+      version: { from: 1, to: 2 },
+    },
   ]);
 });
 
