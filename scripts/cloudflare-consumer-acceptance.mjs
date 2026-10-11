@@ -460,7 +460,11 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const create = tab.getByRole("dialog", { name: "Create entry" });
     await create.getByRole("textbox", { name: "Title" }).fill("Cloudflare published title");
     await create.getByRole("button", { name: "Create entry" }).click();
-    await main.getByRole("link", { name: "Cloudflare published title" }).click();
+    // Creating an entry opens it in the editor.
+    await visible(
+      tab.getByRole("textbox", { name: "Slug" }),
+      "cloudflare-browser-create-opens-editor",
+    );
     await tab.getByRole("textbox", { name: "Slug" }).fill("cloudflare");
     await tab.getByRole("textbox", { name: "Summary" }).fill("Cloudflare summary");
     await tab.getByRole("button", { name: "Add block" }).click();

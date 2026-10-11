@@ -501,25 +501,35 @@ test("Worker loads the same safe current build-site identity", () => {
       LACE_BUILD_SITE_LABEL: "/private/secret",
     }),
   ).toThrow("Invalid build site configuration: LACE_BUILD_SITE_ID, LACE_BUILD_SITE_LABEL.");
+  expect(() =>
+    parseCloudflareSettings({
+      ...env,
+      LACE_BUILD_SITE_ID: "real-site",
+      LACE_BUILD_SITE_LABEL: "Real site",
+      LACE_BUILD_SITE_URL: "https://site.test/?preview=secret",
+    }),
+  ).toThrow(/^Invalid build site configuration: LACE_BUILD_SITE_URL\.$/u);
 });
 
-test.each([null, { id: "real-site", label: "Real site" }])(
-  "Worker composition serves current identity %j",
-  async (site) => {
-    const fixture = await workerFixture({
-      env: site
-        ? {
-            LACE_BUILD_SITE_ID: site.id,
-            LACE_BUILD_SITE_LABEL: site.label,
-          }
-        : {},
-    });
-    await fixture.signIn();
-    const response = await fixture.call("/api/v1/admin/build-site");
-    expect(response.response.status).toBe(200);
-    expect(response.body).toEqual({ site });
-  },
-);
+test.each([
+  null,
+  { id: "real-site", label: "Real site" },
+  { id: "real-site", label: "Real site", url: "https://site.pages.dev/" },
+])("Worker composition serves current identity %j", async (site) => {
+  const fixture = await workerFixture({
+    env: site
+      ? {
+          LACE_BUILD_SITE_ID: site.id,
+          LACE_BUILD_SITE_LABEL: site.label,
+          ...(site.url ? { LACE_BUILD_SITE_URL: site.url } : {}),
+        }
+      : {},
+  });
+  await fixture.signIn();
+  const response = await fixture.call("/api/v1/admin/build-site");
+  expect(response.response.status).toBe(200);
+  expect(response.body).toEqual({ site });
+});
 
 test("Worker/D1 compares strong and weak export validators through publication", async () => {
   const fixture = await workerFixture();

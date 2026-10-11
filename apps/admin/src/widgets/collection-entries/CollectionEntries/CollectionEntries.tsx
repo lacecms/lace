@@ -5,7 +5,7 @@ import type {
   ContentEntryStatusDto,
 } from "@lacecms/contracts";
 import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { CreateEntryDialog } from "../../../features/create-entry/index.js";
 import {
@@ -15,6 +15,7 @@ import {
   technicalDetails,
   useAdminClient,
 } from "../../../shared/api/index.js";
+import { consumeFocusRequest } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { EmptyState } from "../../../shared/ui/EmptyState/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
@@ -23,6 +24,11 @@ import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 import { EntryListTable } from "../EntryListTable/index.js";
 import { EntryListToolbar } from "../EntryListToolbar/index.js";
 import { listFieldColumns } from "../list-columns.js";
+
+/** The focus request that moves focus to a collection list's heading when it mounts. */
+export function collectionFocusTarget(modelKey: string): string {
+  return `collection-heading:${modelKey}`;
+}
 
 /** The search, status filter, and sort of a collection list, as carried in the URL. */
 export type CollectionListQuery = {
@@ -83,6 +89,10 @@ export function CollectionEntries({
   useSessionRecovery(entries.error);
   const listColumns = useMemo(() => listFieldColumns(model), [model]);
   const focusHeading = useCallback(() => heading.current?.focus(), []);
+  useEffect(() => {
+    // The editor asks for this after deleting an entry and returning here.
+    if (consumeFocusRequest(collectionFocusTarget(modelKey))) heading.current?.focus();
+  }, [modelKey]);
   const change = (next: CollectionListQuery) => onQueryChange(normalized({ ...query, ...next }));
 
   const items = entries.data?.pages.flatMap((page) => page.items) ?? [];
@@ -155,6 +165,7 @@ export function CollectionEntries({
           <EntryListTable
             busy={entries.isPlaceholderData}
             canManage={canManage}
+            canPublish={can(session, "content:publish")}
             items={items}
             label={title}
             listColumns={listColumns}

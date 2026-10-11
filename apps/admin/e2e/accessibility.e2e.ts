@@ -583,6 +583,43 @@ for (const theme of ["light", "dark"] as const) {
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(page.getByRole("button", { name: "Confirm publication" })).toBeVisible();
     await expectNoAccessibilityViolations(page, "publication confirmation");
+    await page.getByRole("button", { name: "Confirm publication" }).click();
+    await expect(page.getByRole("region", { name: "Publication status" })).toContainText(
+      "Published",
+    );
+
+    // Unsaved changes on a published entry offer every lifecycle action.
+    await page.getByRole("textbox", { name: "Title" }).fill("Launch notes revised");
+    await expect(page.getByRole("button", { name: "Save and publish" })).toBeVisible();
+    const entryActions = page.getByRole("button", { name: "Entry actions" });
+    await entryActions.click();
+    await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "entry actions menu");
+    await page.getByRole("menuitem", { name: "Unpublish" }).click();
+    await expect(page.getByRole("dialog", { name: "Unpublish this entry?" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "unpublish confirmation");
+    await page.keyboard.press("Escape");
+    await expect(entryActions).toBeFocused();
+    await entryActions.click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(
+      page.getByRole("textbox", { name: "Type “Launch notes” to confirm" }),
+    ).toBeVisible();
+    await expectNoAccessibilityViolations(page, "published-entry delete confirmation");
+    await page.keyboard.press("Escape");
+    await entryActions.click();
+    await page.getByRole("menuitem", { name: "Revert to published" }).click();
+    const revert = page.getByRole("dialog", { name: "Revert to published?" });
+    await expect(revert).toBeVisible();
+    await expectNoAccessibilityViolations(page, "revert confirmation");
+    // Only unsaved changes differ, so reverting discards them locally.
+    await revert.getByRole("button", { name: "Revert to published" }).click();
+    await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Launch notes");
+
+    await page.goto("/admin/content/posts");
+    await page.getByRole("button", { name: "Actions for Launch notes" }).click();
+    await expect(page.getByRole("menuitem", { name: "Open" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "collection row actions menu");
     await page.keyboard.press("Escape");
 
     await page.goto("/admin/users");

@@ -7,6 +7,7 @@ import {
   localDraftJson,
   orderedDraftBlocks,
   resolvedPublicPath,
+  siteUrlFor,
 } from "./draft.js";
 
 const model: ContentModelDto = {
@@ -86,4 +87,21 @@ test("derives sparse positions in displayed order without mutating keys or data"
   expect(
     JSON.parse(localDraftJson({ blocks: [...blocks], fields: {}, title: "T" })).blocks,
   ).toEqual(ordered);
+});
+
+test("resolves public paths under the configured site base URL", () => {
+  expect(siteUrlFor("https://example.com/blog/", "/posts/first-post")).toBe(
+    "https://example.com/blog/posts/first-post",
+  );
+  expect(siteUrlFor("https://example.com/", "/")).toBe("https://example.com/");
+  expect(siteUrlFor("http://127.0.0.1:4321/", "/about")).toBe("http://127.0.0.1:4321/about");
+});
+
+test("a slugless collection draft starts with an empty slug that is never sent", () => {
+  const slugless = {
+    ...entry,
+    draft: { ...entry.draft, slug: undefined },
+  } as unknown as ContentEntryDto;
+  expect(draftValues(model, slugless).slug).toBe("");
+  expect(JSON.parse(localDraftJson(draftValues(model, slugless)))).not.toHaveProperty("slug");
 });

@@ -135,6 +135,10 @@ test("administrator completes the local editorial flow and preserves published o
     .getByRole("dialog", { name: "Create entry" })
     .getByRole("button", { name: "Create entry" })
     .click();
+  // Creating an entry opens it in the editor.
+  await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Acceptance note");
+  await sidebar.getByRole("link", { name: "Content", exact: true }).click();
+  await main.getByRole("link", { name: "notes" }).click();
   await expect(main.getByRole("link", { name: "Acceptance note" })).toBeVisible();
   await expectNoAccessibilityViolations(page, "collection list");
   await main.getByRole("link", { name: "Acceptance note" }).click();

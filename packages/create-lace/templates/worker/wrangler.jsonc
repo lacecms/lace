@@ -49,6 +49,8 @@
     // Safe build-site identity shown in Admin (not proof of a successful deploy).
     "LACE_BUILD_SITE_ID": "main-site",
     "LACE_BUILD_SITE_LABEL": "Main site",
+    // Optional public site base URL for "Open on site" links in the editor:
+    // "LACE_BUILD_SITE_URL": "https://<pages-project>.pages.dev/",
     // lace-site: end
     // Optional Pages deployment tracking (with the LACE_PAGES_API_TOKEN secret, Pages Read only):
     // "LACE_PAGES_ACCOUNT_ID": "<32-hex account ID>",

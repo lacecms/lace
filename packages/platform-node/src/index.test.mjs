@@ -1370,44 +1370,54 @@ test("Node loads explicit current build-site identity without private paths", ()
       LACE_BUILD_SITE_LABEL: "/private/secret",
     }),
   ).toThrow("Invalid build site configuration: LACE_BUILD_SITE_ID, LACE_BUILD_SITE_LABEL.");
+  expect(() =>
+    parseNodeRuntimeSettings({
+      ...env,
+      LACE_BUILD_SITE_ID: "real-site",
+      LACE_BUILD_SITE_LABEL: "Real site",
+      LACE_BUILD_SITE_URL: "https://user:secret@site.test/",
+    }),
+  ).toThrow(/^Invalid build site configuration: LACE_BUILD_SITE_URL\.$/u);
 });
 
-test.each([null, { id: "real-site", label: "Real site" }])(
-  "Node composition serves current identity %j",
-  async (site) => {
-    const directory = await mkdtemp(join(tmpdir(), "lace-node-build-site-"));
-    const databasePath = join(directory, "lace.sqlite");
+test.each([
+  null,
+  { id: "real-site", label: "Real site" },
+  { id: "real-site", label: "Real site", url: "https://site.test/blog/" },
+])("Node composition serves current identity %j", async (site) => {
+  const directory = await mkdtemp(join(tmpdir(), "lace-node-build-site-"));
+  const databasePath = join(directory, "lace.sqlite");
+  try {
+    migrateNodeDatabase(databasePath);
+    const settings = parseNodeRuntimeSettings({
+      ...minioEnvironment,
+      LACE_DATABASE_PATH: databasePath,
+      LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough",
+      LACE_PUBLIC_BASE_URL: "https://lace.test/",
+      ...(site ? { LACE_BUILD_SITE_ID: site.id, LACE_BUILD_SITE_LABEL: site.label } : {}),
+      ...(site?.url ? { LACE_BUILD_SITE_URL: site.url } : {}),
+    });
+    const config = await defineConfig({
+      content: [definePage({ key: "home", path: "/", version: 1 })],
+    });
+    const runtime = createNodeRuntime({
+      config,
+      settings,
+      actors: {
+        resolve: async () => ({ id: actorId("reader"), role: "viewer" }),
+      },
+    });
     try {
-      migrateNodeDatabase(databasePath);
-      const settings = parseNodeRuntimeSettings({
-        ...minioEnvironment,
-        LACE_DATABASE_PATH: databasePath,
-        LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough",
-        LACE_PUBLIC_BASE_URL: "https://lace.test/",
-        ...(site ? { LACE_BUILD_SITE_ID: site.id, LACE_BUILD_SITE_LABEL: site.label } : {}),
-      });
-      const config = await defineConfig({
-        content: [definePage({ key: "home", path: "/", version: 1 })],
-      });
-      const runtime = createNodeRuntime({
-        config,
-        settings,
-        actors: {
-          resolve: async () => ({ id: actorId("reader"), role: "viewer" }),
-        },
-      });
-      try {
-        const response = await runtime.app.request("https://lace.test/api/v1/admin/build-site");
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ site });
-      } finally {
-        runtime.close();
-      }
+      const response = await runtime.app.request("https://lace.test/api/v1/admin/build-site");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ site });
     } finally {
-      await rm(directory, { force: true, recursive: true });
+      runtime.close();
     }
-  },
-);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
 
 test("accepts an empty generated proxy setting and rejects empty list members", () => {
   const environment = {

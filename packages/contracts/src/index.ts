@@ -820,6 +820,41 @@ export const siteBuildRecordSchema = v.pipe(
 export const siteBuildListSchema = v.strictObject({
   items: v.pipe(v.array(siteBuildRecordSchema), v.maxLength(100)),
 });
+export const MAX_BUILD_SITE_URL_LENGTH = 2048;
+
+interface ParsedUrl {
+  readonly href: string;
+  readonly password: string;
+  readonly protocol: string;
+  readonly username: string;
+}
+
+// The package compiles without DOM or Node types; every supported runtime provides WHATWG URL.
+const ParsedUrl = (globalThis as unknown as { URL: new (input: string) => ParsedUrl }).URL;
+
+function isSiteBaseUrl(value: string): boolean {
+  if (!value.endsWith("/") || value.includes("?") || value.includes("#")) return false;
+  let url: ParsedUrl;
+  try {
+    url = new ParsedUrl(value);
+  } catch {
+    return false;
+  }
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.href === value
+  );
+}
+
+/** The public site's absolute HTTP(S) base URL: no credentials, query or fragment, trailing slash. */
+export const buildSiteUrlSchema = v.pipe(
+  v.string(),
+  v.maxLength(MAX_BUILD_SITE_URL_LENGTH),
+  v.check(isSiteBaseUrl, "Site URL must be an absolute HTTP(S) base URL ending with a slash."),
+);
+
 /** Operator-authored current configuration; never a filesystem path or historical attribution. */
 export const buildSiteIdentitySchema = v.strictObject({
   id: v.pipe(v.string(), v.minLength(1), v.maxLength(64), v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)),
@@ -829,6 +864,7 @@ export const buildSiteIdentitySchema = v.strictObject({
     v.maxLength(80),
     v.regex(/^[A-Za-z0-9](?:[A-Za-z0-9 _-]*[A-Za-z0-9])?$/u),
   ),
+  url: v.optional(buildSiteUrlSchema),
 });
 export const buildSiteSelectionSchema = v.strictObject({
   site: v.nullable(buildSiteIdentitySchema),

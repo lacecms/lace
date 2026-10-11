@@ -491,6 +491,10 @@
                               "minLength": 1,
                               "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9 _-]*[A-Za-z0-9])?$",
                               "type": "string"
+                            },
+                            "url": {
+                              "maxLength": 2048,
+                              "type": "string"
                             }
                           },
                           "required": ["id", "label"],

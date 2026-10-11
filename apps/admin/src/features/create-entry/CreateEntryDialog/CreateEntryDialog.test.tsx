@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  draftEntry,
   entry,
   entryList,
   renderInRouter,
@@ -16,24 +17,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("entry creation and confirmed deletion refresh the active collection list", async () => {
+test("entry creation refreshes the collection list and opens the new entry", async () => {
   const user = userEvent.setup();
-  const createEntry = vi.fn(async () => ({}) as never);
-  const deleteEntry = vi.fn(async () => undefined);
+  const created = {
+    ...draftEntry,
+    draft: { ...draftEntry.draft, entryId: "entry-new", id: "snapshot-new", title: "New post" },
+    id: "entry-new",
+  };
+  const createEntry = vi.fn(async () => created);
   const listEntries = vi.fn(async (_modelKey: string, _cursor?: string, _query?: EntryListQuery) =>
     entryList([entry]),
   );
-  // The collection list pages without a limit; the shell overview asks for one entry.
-  const listCalls = () =>
-    listEntries.mock.calls.filter(
-      ([key, , query]) => key === "posts" && query?.limit === undefined,
-    );
+  // The shell overview asks for one entry; its refresh proves the list state was invalidated.
   const overviewCalls = () =>
     listEntries.mock.calls.filter(([key, , query]) => key === "posts" && query?.limit === 1);
-  renderRoute(
+  const router = renderRoute(
     "/content/posts",
     staticSessionSource({ id: "editor-1", role: "editor" }),
-    client({ createEntry, deleteEntry, listEntries }),
+    client({ createEntry, listEntries, loadEntry: async () => created }),
   );
   await screen.findByRole("table", { name: "posts entries" });
   await waitFor(() => expect(overviewCalls()).toHaveLength(1));
@@ -43,14 +44,11 @@ test("entry creation and confirmed deletion refresh the active collection list",
   await user.type(within(createDialog).getByLabelText("Title"), "New post");
   await user.click(within(createDialog).getByRole("button", { name: "Create entry" }));
   await waitFor(() => expect(createEntry).toHaveBeenCalledWith("posts", "New post"));
-  await waitFor(() => expect(listCalls()).toHaveLength(2));
   await waitFor(() => expect(overviewCalls()).toHaveLength(2));
-
-  await user.click(screen.getByRole("button", { name: "Delete First post" }));
-  const deleteDialog = screen.getByRole("dialog", { name: "Delete entry?" });
-  await user.click(within(deleteDialog).getByRole("button", { name: "Delete entry" }));
-  await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith("entry-1", 2));
-});
+  await waitFor(() => expect(router.state.location.pathname).toBe("/content/posts/entry-new"));
+  const title = await screen.findByRole("textbox", { name: "Title" });
+  await waitFor(() => expect(title).toHaveValue("New post"));
+}, 15_000);
 
 test("requires a non-blank title, keeps failures in the dialog, and resets on cancel", async () => {
   const user = userEvent.setup();

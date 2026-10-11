@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import {
@@ -21,7 +22,7 @@ import {
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { TextField } from "../../../shared/ui/TextField/index.js";
 
-/** Creates a draft entry in a collection from its title; the editor sets everything else. */
+/** Creates a draft entry in a collection from its title and opens it in the editor. */
 export function CreateEntryDialog({
   collectionLabel,
   modelKey,
@@ -31,15 +32,21 @@ export function CreateEntryDialog({
 }) {
   const client = useAdminClient();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const trimmedTitle = title.trim();
   const create = useMutation({
     mutationFn: () => client.createEntry(modelKey, trimmedTitle),
-    onSuccess: async () => {
+    onSuccess: async (created) => {
+      queryClient.setQueryData(adminQueryKeys.entry(created.id), created);
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.models });
       changeOpen(false);
+      await navigate({
+        params: { entryId: created.id, modelKey },
+        to: "/content/$modelKey/$entryId",
+      });
     },
   });
   function changeOpen(next: boolean) {

@@ -5,11 +5,13 @@ import type {
 } from "@lacecms/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ExternalLinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   EntryStatusBadge,
   entryStatus,
   resolvedPublicPath,
+  siteUrlFor,
 } from "../../../entities/content/index.js";
 import { useSessionRecovery } from "../../../entities/session/index.js";
 import { BuildStatusInfo } from "../../../entities/site-build/index.js";
@@ -18,11 +20,18 @@ import {
   coveringBuildState,
   isTerminalBuildState,
   publicationBuildDescription,
+  type PublicationChange,
 } from "../../../features/publish-entry/index.js";
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
 import { formatAbsoluteTime, formatRelativeTime } from "../../../shared/lib/index.js";
 
 export type BuildDispatchResult = PublishContentEntryResultDto["build"];
+
+/** The build requested by the latest publish or unpublish made in this editor. */
+export interface LatestBuildChange {
+  readonly build: BuildDispatchResult;
+  readonly change: PublicationChange;
+}
 
 function RelativeTime({ iso, prefix = "" }: { readonly iso: string; readonly prefix?: string }) {
   return (
@@ -51,7 +60,13 @@ function ViewBuilds() {
 }
 
 /** Follows the persisted build covering a queued publication until it is terminal. */
-function QueuedBuild({ targetVersion }: { readonly targetVersion: number }) {
+function QueuedBuild({
+  change,
+  targetVersion,
+}: {
+  readonly change: PublicationChange;
+  readonly targetVersion: number;
+}) {
   const client = useAdminClient();
   const history = useQuery({
     queryKey: adminQueryKeys.builds,
@@ -68,8 +83,8 @@ function QueuedBuild({ targetVersion }: { readonly targetVersion: number }) {
     history.data === undefined ? undefined : coveringBuildState(history.data.items, targetVersion);
   const description =
     state === undefined
-      ? buildDispatchDescription("queued")
-      : publicationBuildDescription(state, targetVersion, site.data?.site?.label);
+      ? buildDispatchDescription("queued", change)
+      : publicationBuildDescription(state, targetVersion, site.data?.site?.label, change);
   return (
     <>
       <span role="status">{description}</span>
@@ -84,16 +99,49 @@ function QueuedBuild({ targetVersion }: { readonly targetVersion: number }) {
   );
 }
 
-function LatestBuild({ build }: { readonly build: BuildDispatchResult | undefined }) {
-  if (build === undefined)
+function LatestBuild({ latest }: { readonly latest: LatestBuildChange | undefined }) {
+  if (latest === undefined)
     return (
       <>
         No build requested from this editor. <ViewBuilds />
       </>
     );
+  const { build, change } = latest;
   if (build.status === "not-dispatched")
-    return <span role="status">{buildDispatchDescription(build.status)}</span>;
-  return <QueuedBuild targetVersion={build.targetVersion} />;
+    return <span role="status">{buildDispatchDescription(build.status, change)}</span>;
+  return <QueuedBuild change={change} targetVersion={build.targetVersion} />;
+}
+
+/**
+ * The public path, linked to the site only when the entry is published and the
+ * deployment configures the site's URL; otherwise plain text.
+ */
+function PublicPath({ path, published }: { readonly path: string; readonly published: boolean }) {
+  const client = useAdminClient();
+  const site = useQuery({ queryKey: adminQueryKeys.buildSite, queryFn: client.loadBuildSite });
+  useSessionRecovery(site.error);
+  const code = <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">{path}</code>;
+  if (!published)
+    return (
+      <>
+        {code} <span className="text-muted-foreground">Not public yet</span>
+      </>
+    );
+  const siteUrl = site.data?.site?.url;
+  if (siteUrl === undefined) return code;
+  return (
+    <a
+      aria-label={`Open ${path} on site (opens in a new tab)`}
+      className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+      href={siteUrlFor(siteUrl, path)}
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      {code}
+      <span>Open on site</span>
+      <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+    </a>
+  );
 }
 
 /**
@@ -109,7 +157,7 @@ export function EntryPublicationDetails({
 }: {
   readonly children?: ReactNode;
   readonly entry: AdminContentEntryDto;
-  readonly latestBuild: BuildDispatchResult | undefined;
+  readonly latestBuild: LatestBuildChange | undefined;
   readonly model: ContentModelDto;
 }) {
   const publicPath = resolvedPublicPath(model, entry);
@@ -141,11 +189,11 @@ export function EntryPublicationDetails({
           {publicPath === undefined ? (
             <span className="text-muted-foreground">No public URL yet</span>
           ) : (
-            <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">{publicPath}</code>
+            <PublicPath path={publicPath} published={entry.published !== undefined} />
           )}
         </Fact>
         <Fact term="Latest build">
-          <LatestBuild build={latestBuild} />
+          <LatestBuild latest={latestBuild} />
         </Fact>
       </dl>
       {children}

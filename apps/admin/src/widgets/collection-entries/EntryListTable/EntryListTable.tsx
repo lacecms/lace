@@ -11,9 +11,9 @@ import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { useMemo } from "react";
 import { EntryStatusBadge } from "../../../entities/content/index.js";
-import { DeleteEntryDialog } from "../../../features/delete-entry/index.js";
 import { formatAbsoluteTime, formatDate, formatRelativeTime } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { EntryRowActions } from "../EntryRowActions/index.js";
 import {
   Table,
   TableBody,
@@ -52,6 +52,7 @@ function Timestamp({ iso, children }: { readonly children: string; readonly iso:
 export function EntryListTable({
   busy = false,
   canManage,
+  canPublish = false,
   items,
   label,
   listColumns,
@@ -63,6 +64,8 @@ export function EntryListTable({
 }: {
   readonly busy?: boolean;
   readonly canManage: boolean;
+  /** Whether published entries may be deleted from their row menus. */
+  readonly canPublish?: boolean;
   readonly items: readonly ContentEntrySummaryDto[];
   readonly label: string;
   readonly listColumns: readonly ListFieldColumn[];
@@ -152,11 +155,10 @@ export function EntryListTable({
           ? [
               column.display({
                 cell: ({ row }) => (
-                  <DeleteEntryDialog
-                    entryId={row.original.id}
-                    expectedRevision={row.original.draftRevision}
+                  <EntryRowActions
+                    canPublish={canPublish}
+                    entry={row.original}
                     modelKey={modelKey}
-                    title={row.original.title}
                     {...(onDeleted === undefined ? {} : { onDeleted })}
                   />
                 ),
@@ -166,7 +168,7 @@ export function EntryListTable({
             ]
           : []),
       ]),
-    [canManage, listColumns, modelKey, now, onDeleted],
+    [canManage, canPublish, listColumns, modelKey, now, onDeleted],
   );
   const sorting: SortingState = [sortingFromSort(sort)];
   const table = useTable({
