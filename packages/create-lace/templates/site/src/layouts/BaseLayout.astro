@@ -1,14 +1,16 @@
 ---
+import LaceSeo from "@lacecms/astro/LaceSeo.astro";
 import type { PublishedEntry, PublishedSite } from "@lacecms/sdk";
 import "../styles/global.css";
 
 interface Props {
-  readonly entry: Pick<PublishedEntry, "id" | "modelKey">;
+  readonly entry: PublishedEntry;
   readonly site: PublishedSite;
-  readonly title: string;
+  /** The Open Graph type; blog posts render as articles. */
+  readonly type?: "article" | "website";
 }
 
-const { entry, site, title } = Astro.props;
+const { entry, site, type } = Astro.props;
 
 // Site-wide text comes from the published `settings` global; the static values
 // keep the header complete until it is published in Admin.
@@ -24,7 +26,8 @@ const tagline = text(settings.tagline);
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
-    <title>{title}</title>
+    <!-- Title, description, canonical URL and social tags with CMS fallbacks. -->
+    <LaceSeo seo={site.seo(entry)} type={type} />
   </head>
   <body>
     <header class="site-header">

@@ -22,6 +22,7 @@
       "import": "./dist/index.js"
     },
     "./LaceBlocks.astro": "./dist/LaceBlocks.astro",
+    "./LaceSeo.astro": "./dist/LaceSeo.astro",
     "./RichText.astro": "./dist/RichText.astro"
   },
   "publishConfig": {

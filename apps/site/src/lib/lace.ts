@@ -26,8 +26,10 @@ export const getSite =
     ? createAstroSiteLoader({
         env: {
           LACE_API_BASE_URL: env.LACE_API_BASE_URL ?? DEFAULT_API_BASE_URL,
+          LACE_BUILD_SITE_URL: env.LACE_BUILD_SITE_URL,
           LACE_BUILD_TOKEN: "fixture",
           LACE_PUBLIC_BASE_URL: env.LACE_PUBLIC_BASE_URL,
+          LACE_SITE_INDEXING: env.LACE_SITE_INDEXING,
         },
         fetch: fixtureFetch,
         hints,

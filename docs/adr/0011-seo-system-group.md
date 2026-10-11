@@ -56,6 +56,27 @@ global (ADR 0010).
    temporary `removedSeo: true` hint clears the groups and their `$seo`
    references in the guarded sync mutation.
 
+## Site output (CE4B)
+
+OpenSpec change `ce04b-site-seo-output` implements decision 6 on the site:
+
+- The SDK reads the site URL from `LACE_BUILD_SITE_URL`, the operator setting
+  already used for "Open on site", and the deployment switch from
+  `LACE_SITE_INDEXING` (`on` by default, `off`). Builders and Pages builds pass
+  both to the site build. Lace does not set Astro's `site` option, so the
+  value also works in `astro dev` from `.env`.
+- `resolveSeo` is a pure SDK function bound as `site.seo(entry)`. A custom
+  title template applies only when it contains `%s`, inserted literally;
+  otherwise the default `%s | {siteName}` applies, or the bare title without
+  a site name. Only resolved `image/*` media count as images.
+- Indexing `off` resolves every page to `noindex, nofollow`; a stored
+  `noindex` gives `noindex, follow`.
+- The sitemap lists every published entry except `noindex` entries and
+  entries whose stored canonical points to another URL. Without a site URL
+  no sitemap is written and the build warns.
+- `@lacecms/astro` ships `LaceSeo.astro` and the sitemap and robots response
+  helpers; sites own the layout and endpoint files.
+
 ## Alternatives considered
 
 - **Relational SEO columns.** Rejected: five columns at every copy site and a
@@ -73,3 +94,8 @@ global (ADR 0010).
   global.
 - **Emitting `seo` only when values are stored.** Rejected: consumers could
   not tell "no values" from "SEO disabled".
+- **A separate `LACE_SITE_URL` for site builds, or Astro's `site`.** Rejected:
+  a second name for the same operator value could drift from the admin links,
+  and Astro's `site` is not visible to the loader or other frameworks.
+- **An empty sitemap without a site URL.** Rejected: sitemap locations must
+  be absolute, and the owner decision is that no sitemap is generated.

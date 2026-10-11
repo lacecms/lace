@@ -16,7 +16,12 @@ For an existing root Astro site with CMS in `cms/`, use host source `..`, site `
 
 Provide `LACE_BUILDER_SECRET` (at least 32 characters, shared only with the API),
 `LACE_API_BASE_URL` (trailing slash), `LACE_BUILD_TOKEN` (read-only published
-export token), and optionally `LACE_PUBLIC_BASE_URL`. Configure the Node API
+export token), and optionally `LACE_PUBLIC_BASE_URL`. Optional
+`LACE_BUILD_SITE_URL` (absolute HTTP(S) site base URL without credentials,
+query or fragment) and `LACE_SITE_INDEXING` (`on` or `off`) are passed
+unchanged to the site build, where the published-site loader uses them for
+canonical URLs, the sitemap and `robots.txt`; empty values are omitted and an
+invalid value stops the builder at startup naming the setting. Configure the Node API
 with `LACE_BUILDER_URL` and the same `LACE_BUILDER_SECRET`. The builder listens
 on container port 8788; Compose connects it to the API through an internal
 network without publishing that port. `/health` returns only `{"status":"ok"}`.

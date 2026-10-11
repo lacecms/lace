@@ -14,6 +14,6 @@ const about = site.byPath("/about");
 if (about === undefined) return new Response(null, { status: 404 });
 ---
 
-<BaseLayout entry={about} site={site} title={about.title}>
+<BaseLayout entry={about} site={site}>
   <LaceBlocks blocks={blocks} entry={about} mediaUrl={site.mediaUrl} />
 </BaseLayout>

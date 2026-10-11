@@ -16,6 +16,7 @@ import {
 } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 
+import type { SiteOutputSettings } from "./settings.js";
 import { copySource, disjointRoots, SourceError, type SourceSelection } from "./source.js";
 
 export interface BuildRequest {
@@ -31,7 +32,7 @@ export type BuildResult =
       readonly path?: string;
     }>;
 
-export interface BuilderSettings extends SourceSelection {
+export interface BuilderSettings extends SourceSelection, SiteOutputSettings {
   readonly sourceRoot: string;
   readonly workRoot: string;
   readonly outputRoot: string;
@@ -180,6 +181,12 @@ export class FixedCommandBuilder {
         ...(this.settings.publicBaseUrl === undefined
           ? {}
           : { LACE_PUBLIC_BASE_URL: this.settings.publicBaseUrl }),
+        ...(this.settings.siteUrl === undefined
+          ? {}
+          : { LACE_BUILD_SITE_URL: this.settings.siteUrl }),
+        ...(this.settings.siteIndexing === undefined
+          ? {}
+          : { LACE_SITE_INDEXING: this.settings.siteIndexing }),
       };
       if (
         !(await execute(

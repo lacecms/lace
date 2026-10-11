@@ -580,3 +580,122 @@ test("published entries pass stored SEO values through without resolving fallbac
   expect(Object.isFrozen(site.byPath("/blog/hello").seo)).toBe(true);
   expect(site.byPath("/notes/n").seo).toBeUndefined();
 });
+
+test.each([
+  ["a relative path", "/blog"],
+  ["another scheme", "ftp://site.example/"],
+  ["credentials", "https://user:secret@site.example/"],
+  ["a query", "https://site.example/?preview=secret"],
+  ["a fragment", "https://site.example/#top"],
+  ["a bare query mark", "https://site.example/?"],
+])("rejects a site URL with %s without echoing it", async (_name, value) => {
+  const transport = scriptedFetch([]);
+  const error = await captureError(
+    createPublishedSiteLoader({
+      environment: { ...environment, LACE_BUILD_SITE_URL: value },
+      fetch: transport.fetch,
+    })(),
+  );
+  expect(error.code).toBe("missing_configuration");
+  expect(error.message).toContain("LACE_BUILD_SITE_URL");
+  expect(error.message).not.toContain(value);
+  expect(transport.requests).toHaveLength(0);
+});
+
+test.each(["no", "OFF", "true"])("rejects the indexing switch %s", async (value) => {
+  const transport = scriptedFetch([]);
+  const error = await captureError(
+    createPublishedSiteLoader({
+      environment: { ...environment, LACE_SITE_INDEXING: value },
+      fetch: transport.fetch,
+    })(),
+  );
+  expect(error.code).toBe("missing_configuration");
+  expect(error.message).toBe("LACE_SITE_INDEXING must be on or off.");
+  expect(transport.requests).toHaveLength(0);
+});
+
+test("without a site URL the view has no URLs and indexing is on", async () => {
+  const site = await createPublishedSiteLoader({
+    environment: { ...environment, LACE_BUILD_SITE_URL: "  ", LACE_SITE_INDEXING: "" },
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+  })();
+  expect(site.url).toBeUndefined();
+  expect(site.urlFor("/")).toBeUndefined();
+  expect(site.indexing).toBe(true);
+});
+
+test("a site URL with a base path keeps it and joins public paths under it", async () => {
+  const site = await createPublishedSiteLoader({
+    environment: {
+      ...environment,
+      LACE_BUILD_SITE_URL: "https://Example.com/blog",
+      LACE_SITE_INDEXING: " off ",
+    },
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+  })();
+  expect(site.url).toBe("https://example.com/blog/");
+  expect(site.urlFor("/posts/hello")).toBe("https://example.com/blog/posts/hello");
+  expect(site.urlFor("/")).toBe("https://example.com/blog/");
+  expect(site.indexing).toBe(false);
+});
+
+test("explicit site URL and indexing take precedence over the environment record", async () => {
+  const site = await createPublishedSiteLoader({
+    environment: {
+      ...environment,
+      LACE_BUILD_SITE_URL: "https://env.example/",
+      LACE_SITE_INDEXING: "off",
+    },
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+    indexing: "on",
+    siteUrl: "https://explicit.example",
+  })();
+  expect(site.url).toBe("https://explicit.example/");
+  expect(site.urlFor("/")).toBe("https://explicit.example/");
+  expect(site.indexing).toBe(true);
+});
+
+test("all entries span every model in path order and leave globals out", async () => {
+  const site = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([
+      exportResponse({
+        ...homeExport,
+        globals: [
+          {
+            blocks: [],
+            fields: {},
+            id: "settings-entry",
+            modelKey: "settings",
+            publishedAt: timestamp,
+          },
+        ],
+      }),
+    ]).fetch,
+  })();
+  expect(site.allEntries().map((entry) => entry.path)).toEqual([
+    "/",
+    "/blog/a",
+    "/blog/b",
+    "/recipes/soup",
+  ]);
+  expect(Object.isFrozen(site.allEntries())).toBe(true);
+});
+
+test("revalidate mode keeps the settings of the read that produced the view", async () => {
+  const env = { ...environment, LACE_BUILD_SITE_URL: "https://one.example/" };
+  const load = createPublishedSiteLoader({
+    environment: env,
+    fetch: scriptedFetch([
+      exportResponse(homeExport),
+      exportResponse({ ...homeExport, version: 4 }),
+    ]).fetch,
+    revalidate: true,
+  });
+  const first = await load();
+  env.LACE_BUILD_SITE_URL = "https://two.example/";
+  const second = await load();
+  expect(first.url).toBe("https://one.example/");
+  expect(second.url).toBe("https://two.example/");
+});

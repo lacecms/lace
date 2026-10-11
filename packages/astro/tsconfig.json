@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.library.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "outDir": "dist",
+    "rootDir": "src"
+  },
   "include": ["src/index.ts"]
 }

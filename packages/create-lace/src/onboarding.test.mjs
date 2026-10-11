@@ -215,7 +215,7 @@ test("generated Astro dev revalidates the export so publications appear on reloa
     served.version = 8;
     served.entries[0].blocks[0].data.heading = "Published again";
     expect((await page("/")).text, JSON.stringify(server.requests)).toContain("Published again");
-    expect((await page("/blog/first-post/")).text).toContain("First published post");
+    expect((await page("/blog/first-post/")).text).toContain("Content belongs in the CMS");
     expect(server.requests.slice(0, 3)).toEqual([null, '"7"', '"7"']);
     expect(server.requests.at(-1)).toBe('"8"');
   } finally {

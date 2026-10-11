@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { FixedCommandBuilder } from "../dist/index.js";
+import { FixedCommandBuilder, parseSiteOutputSettings } from "../dist/index.js";
 
 const cleanup = [];
 afterEach(async () => {
@@ -403,3 +403,72 @@ if (existsSync(${JSON.stringify(pause)})) {await fs.writeFile(${JSON.stringify(c
     }
   }
 }, 30000);
+
+test.each([
+  [{}, ""],
+  [{ siteIndexing: "off", siteUrl: "https://example.com/" }, "https://example.com/|off|set|set"],
+])("passes only configured site output settings to the build (%#)", async (settings, expected) => {
+  const { root, source, tool } = await fixture();
+  await writeFile(
+    tool,
+    `#!/bin/sh
+if [ "$1" = "install" ]; then
+  mkdir -p apps/site/node_modules/astro
+  exit 0
+fi
+mkdir -p apps/site/dist
+if [ -n "\${LACE_BUILD_SITE_URL+x}\${LACE_SITE_INDEXING+x}" ]; then
+  printf '%s|%s|%s|%s' "$LACE_BUILD_SITE_URL" "$LACE_SITE_INDEXING" "\${LACE_BUILD_SITE_URL+set}" "\${LACE_SITE_INDEXING+set}" > apps/site/dist/index.html
+else
+  printf '' > apps/site/dist/index.html
+fi
+`,
+  );
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: "apps/site",
+    outputDirectory: "dist",
+    workRoot: join(root, "settings-work"),
+    outputRoot: join(root, "settings-output"),
+    apiBaseUrl: "http://api.test/",
+    buildToken: "build-token",
+    toolPath: tool,
+    versionReader: async () => 1,
+    ...settings,
+  });
+  expect(await builder.build({ buildId: "settings", targetVersion: 1 })).toEqual({
+    status: "succeeded",
+  });
+  const current = await readlink(join(root, "settings-output/current"));
+  expect(await readFile(join(root, "settings-output", current, "index.html"), "utf8")).toBe(
+    expected,
+  );
+});
+
+test("site output settings treat empty values as absent and accept valid values", () => {
+  expect(parseSiteOutputSettings({})).toEqual({});
+  expect(parseSiteOutputSettings({ LACE_BUILD_SITE_URL: "", LACE_SITE_INDEXING: " " })).toEqual({});
+  expect(
+    parseSiteOutputSettings({
+      LACE_BUILD_SITE_URL: "https://example.com/blog",
+      LACE_SITE_INDEXING: "on",
+    }),
+  ).toEqual({ siteIndexing: "on", siteUrl: "https://example.com/blog" });
+});
+
+test.each([
+  [{ LACE_SITE_INDEXING: "maybe" }, "LACE_SITE_INDEXING"],
+  [{ LACE_BUILD_SITE_URL: "ftp://example.com/" }, "LACE_BUILD_SITE_URL"],
+  [{ LACE_BUILD_SITE_URL: "https://user:secret@example.com/" }, "LACE_BUILD_SITE_URL"],
+  [{ LACE_BUILD_SITE_URL: "https://example.com/?preview=secret" }, "LACE_BUILD_SITE_URL"],
+  [{ LACE_BUILD_SITE_URL: "/blog" }, "LACE_BUILD_SITE_URL"],
+])("invalid site output settings name the setting only (%#)", (environment, name) => {
+  expect(() => parseSiteOutputSettings(environment)).toThrow(
+    `Invalid builder configuration: ${name}.`,
+  );
+  try {
+    parseSiteOutputSettings(environment);
+  } catch (error) {
+    for (const value of Object.values(environment)) expect(error.message).not.toContain(value);
+  }
+});

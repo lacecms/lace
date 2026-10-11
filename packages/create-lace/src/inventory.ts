@@ -16,7 +16,7 @@ export interface TemplateFile {
   readonly metadata?: true;
 }
 
-export const TEMPLATE_VERSION = "0.24.0";
+export const TEMPLATE_VERSION = "0.25.0";
 
 const STARTER = ["starter"] as const;
 const SITE = ["starter", "existing"] as const;
@@ -60,6 +60,8 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "site/src/lib/lace.ts", owner: "user", modes: STARTER },
   { path: "site/src/pages/index.astro", owner: "user", modes: STARTER },
   { path: "site/src/pages/blog/[slug].astro", owner: "user", modes: STARTER },
+  { path: "site/src/pages/robots.txt.ts", owner: "user", modes: STARTER },
+  { path: "site/src/pages/sitemap.xml.ts", owner: "user", modes: STARTER },
   { path: "site/src/styles/global.css", owner: "user", modes: STARTER },
   { path: "site/tsconfig.json", owner: "user", modes: STARTER },
   { path: "worker/.dev.vars.example", owner: "managed", cloudflare: true },

@@ -31,11 +31,15 @@ jobs:
       # lace-site: end
       # LACE_API_BASE_URL reads the build export from the deployed CMS Worker origin;
       # LACE_PUBLIC_BASE_URL is the Worker's public origin used in rendered media URLs.
+      # Optional: LACE_BUILD_SITE_URL (the Pages site URL) enables canonical URLs and
+      # sitemap.xml; LACE_SITE_INDEXING=off keeps a staging site out of search engines.
       - run: pnpm build
         env:
           LACE_API_BASE_URL: ${{ vars.LACE_API_BASE_URL }}
           LACE_PUBLIC_BASE_URL: ${{ vars.LACE_PUBLIC_BASE_URL }}
           LACE_BUILD_TOKEN: ${{ secrets.LACE_BUILD_TOKEN }}
+          LACE_BUILD_SITE_URL: ${{ vars.LACE_BUILD_SITE_URL }}
+          LACE_SITE_INDEXING: ${{ vars.LACE_SITE_INDEXING }}
       - run: pnpm exec wrangler pages deploy {{SITE_PATH}}/dist --project-name "${{ vars.CLOUDFLARE_PAGES_PROJECT }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

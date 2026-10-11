@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
@@ -24,7 +24,9 @@ test("the fixture build emits published static routes without CMS access", () =>
     env: {
       ...process.env,
       LACE_API_BASE_URL: "https://unreachable.example/lace",
+      LACE_BUILD_SITE_URL: "https://site.example",
       LACE_SITE_DATA_MODE: "fixture",
+      LACE_SITE_INDEXING: "",
     },
     stdio: "pipe",
   });
@@ -110,7 +112,8 @@ test("the fixture build emits published static routes without CMS access", () =>
     '<img alt="A durable media URL" data-lace-part="media" height="600" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800">',
   );
   expect(post).toContain('<figcaption data-lace-part="caption">Media is served by Lace.');
-  expect(post).toContain("First published post");
+  // The stored SEO title replaces the entry title in the head.
+  expect(post).not.toContain("First published post");
   expect(post).toContain("Content belongs in the CMS");
   expect(about).toContain("Built with Lace");
   expect(note).toContain("Notes render from the published export.");
@@ -128,6 +131,78 @@ test("the fixture build emits published static routes without CMS access", () =>
   }
   expect(`${home}${post}${about}${note}`).not.toContain("DRAFT ONLY");
   expect(`${home}${post}${about}${note}`).not.toContain("javascript:");
+
+  // Head metadata resolves stored values, mapped fields and the settings defaults.
+  const heroImage =
+    '<meta content="https://cms.example.test/lace/api/v1/public/media/hero-media" property="og:image"><meta content="1200" property="og:image:width"><meta content="630" property="og:image:height"><meta content="Lace starter illustration" property="og:image:alt"><meta content="summary_large_image" name="twitter:card">';
+  expect(home).toContain(
+    '<title>Lace starter · Lace Journal</title><meta content="The reference site of the Lace CMS." name="description"><link href="https://site.example/" rel="canonical"><meta content="Lace starter · Lace Journal" property="og:title"><meta content="The reference site of the Lace CMS." property="og:description"><meta content="website" property="og:type"><meta content="https://site.example/" property="og:url"><meta content="Lace Journal" property="og:site_name">' +
+      heroImage,
+  );
+  expect(post).toContain(
+    '<title>Release notes &amp; &lt;updates&gt;</title><meta content="How the reference site renders published posts." name="description"><link href="https://site.example/blog/first-post" rel="canonical">',
+  );
+  expect(post).toContain('<meta content="article" property="og:type">');
+  expect(post).toContain(
+    '<meta content="https://cms.example.test/lace/api/v1/public/media/post-media" property="og:image"><meta content="800" property="og:image:width"><meta content="600" property="og:image:height"><meta content="Media library description" property="og:image:alt">',
+  );
+  // Inside a quoted attribute `<` is plain text; the title element escapes it.
+  expect(post).toContain('<meta content="Release notes &amp; <updates>" property="og:title">');
+  expect(post.split("<updates>")).toHaveLength(2);
+  expect(about).toContain('<link href="https://lace.example.org/about" rel="canonical">');
+  expect(about).toContain('<meta content="https://lace.example.org/about" property="og:url">');
+  expect(about).toContain(heroImage);
+  expect(note).toContain(
+    '<title>First published note · Lace Journal</title><meta content="A short published note" name="description"><link href="https://site.example/notes/first-note" rel="canonical"><meta content="noindex, follow" name="robots">',
+  );
+  for (const html of [home, post, about]) expect(html).not.toContain('name="robots"');
+  expect(readFileSync(join(siteRoot, "dist/sitemap.xml"), "utf8")).toBe(
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+      "  <url>\n    <loc>https://site.example/</loc>\n    <lastmod>2026-09-20T00:00:00.000Z</lastmod>\n  </url>\n" +
+      "  <url>\n    <loc>https://site.example/blog/first-post</loc>\n    <lastmod>2026-09-20T00:00:00.000Z</lastmod>\n  </url>\n" +
+      "</urlset>\n",
+  );
+  expect(readFileSync(join(siteRoot, "dist/robots.txt"), "utf8")).toBe(
+    "User-agent: *\nAllow: /\n\nSitemap: https://site.example/sitemap.xml\n",
+  );
+}, 30_000);
+
+test("a fixture build without a site URL and with indexing off writes no sitemap", () => {
+  const result = spawnSync("pnpm", ["run", "build"], {
+    cwd: siteRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      LACE_API_BASE_URL: "https://unreachable.example/lace",
+      LACE_BUILD_SITE_URL: "",
+      LACE_SITE_DATA_MODE: "fixture",
+      LACE_SITE_INDEXING: "off",
+    },
+  });
+  expect(result.status).toBe(0);
+  expect(`${result.stdout}${result.stderr}`).toContain(
+    "LACE_BUILD_SITE_URL is not set: sitemap.xml is not generated",
+  );
+  const files = outputFiles().map((file) => file.slice(join(siteRoot, "dist").length + 1));
+  expect(files).not.toContain("sitemap.xml");
+  expect(readFileSync(join(siteRoot, "dist/robots.txt"), "utf8")).toBe(
+    "User-agent: *\nDisallow: /\n",
+  );
+  for (const path of [
+    "index.html",
+    "blog/first-post/index.html",
+    "about/index.html",
+    "notes/first-note/index.html",
+  ]) {
+    const html = readFileSync(join(siteRoot, "dist", path), "utf8");
+    expect(html).toContain('<meta content="noindex, nofollow" name="robots">');
+    if (path === "about/index.html") {
+      expect(html).toContain('<link href="https://lace.example.org/about" rel="canonical">');
+    } else {
+      expect(html).not.toContain('rel="canonical"');
+      expect(html).not.toContain('property="og:url"');
+    }
+  }
 }, 30_000);
 
 test("a live build reads one export, keeps the token out of output and rejects unrenderable blocks", async () => {

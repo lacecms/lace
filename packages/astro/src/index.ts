@@ -1,9 +1,11 @@
-import { createPublishedSiteLoader } from "@lacecms/sdk";
+import { createPublishedSiteLoader, renderRobotsTxt, renderSitemapXml } from "@lacecms/sdk";
 import type {
   LaceFetch,
+  PublishedSite,
   PublishedSiteEnvironment,
   PublishedSiteErrorCode,
   PublishedSiteLoader,
+  SitemapOptions,
 } from "@lacecms/sdk";
 import type { RichTextElementDescription, RichTextSource } from "@lacecms/render";
 
@@ -39,6 +41,29 @@ export function createAstroSiteLoader(options: AstroSiteLoaderOptions = {}): Pub
     revalidate: options.dev === true,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.hints === undefined ? {} : { hints: options.hints }),
+  });
+}
+
+const missingSiteUrlWarning =
+  "[lace] LACE_BUILD_SITE_URL is not set: sitemap.xml is not generated, and pages have no canonical URL or og:url.";
+
+/**
+ * The `sitemap.xml` endpoint response. Without a site URL it has no body, so a
+ * static build writes no file, and a build warning names `LACE_BUILD_SITE_URL`.
+ */
+export function sitemapResponse(site: PublishedSite, options?: SitemapOptions): Response {
+  const xml = renderSitemapXml(site, options);
+  if (xml === undefined) {
+    console.warn(missingSiteUrlWarning);
+    return new Response(null, { status: 404 });
+  }
+  return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8" } });
+}
+
+/** The `robots.txt` endpoint response; it disallows everything when indexing is off. */
+export function robotsResponse(site: PublishedSite): Response {
+  return new Response(renderRobotsTxt(site), {
+    headers: { "content-type": "text/plain; charset=utf-8" },
   });
 }
 

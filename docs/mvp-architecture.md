@@ -231,7 +231,10 @@ endpoint. The builder ignores command, path, and environment overrides from the
 request and runs one image-defined build command against fixed mount paths. It
 builds into a temporary release directory and atomically switches the served
 release only after success. A later adapter may call an external CI webhook. The
-API must never accept an arbitrary shell command from an HTTP request.
+API must never accept an arbitrary shell command from an HTTP request. The
+builder's own deployment settings, never the request, supply the optional
+`LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` it forwards to the site build
+(section 9.8).
 
 ## 6. Repository structure
 
@@ -642,6 +645,17 @@ defineGlobal({
   description and image, then the model's mapped field, then the site
   default; canonical, then site URL plus path. `noindex` emits
   `noindex, follow` and excludes the entry from the sitemap.
+- Site output (CE4B): `site.seo(entry)` returns `{ title, description?,
+  image?, canonical?, robots?, siteName? }` from the pure `resolveSeo`
+  function. Mapped text counts only when non-blank (whitespace collapsed); a
+  title template counts only when it contains `%s` and is applied literally;
+  only resolved `image/*` media count as images, with the media alt text.
+  Every routable entry resolves, with or without SEO enabled on its model.
+  `LACE_SITE_INDEXING=off` resolves every page to `noindex, nofollow`.
+  `<LaceSeo>` renders the value (with an `og:type` prop, `website` by default),
+  and the sitemap lists every indexable entry whose stored canonical, if any,
+  is its own URL. The site URL comes only from `LACE_BUILD_SITE_URL`; Lace
+  does not set Astro's `site` option.
 
 ### Initial field types
 
@@ -1127,6 +1141,15 @@ creates a new request. The site's current version is the highest
 `target_version` among `succeeded` builds. The nullable `provider_*` fields hold
 the tracked deployment's stage, last check, and next due check; they are
 internal tracking state, never provider responses or credentials.
+
+Site output settings: the VPS builder reads optional `LACE_BUILD_SITE_URL`
+(absolute HTTP(S), no credentials, query or fragment) and `LACE_SITE_INDEXING`
+(`on` or `off`) from its deployment environment, refuses invalid values at
+startup without echoing them, and passes configured values unchanged to the
+fixed site build. Cloudflare Pages builds receive the same names as workflow
+repository variables or Pages environment variables. The API keeps using
+`LACE_BUILD_SITE_URL` only for "Open on site"; `LACE_SITE_INDEXING` exists
+only for site builds.
 
 Provider tracking (Cloudflare Pages, optional): the tracking start is the
 completion time of the build's outbox event, so processed events of `running`
@@ -1669,9 +1692,11 @@ dev-server code, never in client bundles.
 framework and never reads `process.env` or `import.meta.env` itself.
 
 - **Input:** an `environment` record (`LACE_API_BASE_URL`, `LACE_BUILD_TOKEN`,
-  `LACE_PUBLIC_BASE_URL`, `LACE_EXPECTED_PUBLISHED_VERSION`) and/or explicit
-  `baseUrl`, `token`, `publicBaseUrl`, and `expectedPublishedVersion` values that
-  take precedence; optional `fetch`; `revalidate` (default `false`); optional
+  `LACE_PUBLIC_BASE_URL`, `LACE_EXPECTED_PUBLISHED_VERSION`,
+  `LACE_BUILD_SITE_URL`, `LACE_SITE_INDEXING`) and/or explicit `baseUrl`,
+  `token`, `publicBaseUrl`, `expectedPublishedVersion`, `siteUrl` and
+  `indexing` values that take precedence; an invalid site URL or indexing
+  value fails with `missing_configuration` without echoing it; optional `fetch`; `revalidate` (default `false`); optional
   `hints` keyed by error code that are appended to error messages.
 - **Static mode** reads one build export per loader, shared by concurrent
   callers, and forgets a failed read so the next call retries.
@@ -1685,7 +1710,15 @@ framework and never reads `process.env` or `import.meta.env` itself.
   `media(mediaId)`, and `image(mediaId, usageAlt?)`. `global()` returns a
   `PublishedGlobal` (`id`, `modelKey`, `publishedAt`, `fields`, ordered
   `blocks`, and the same `media()` and `image()` lookups) or `undefined` when
-  the global is not published, so layouts can fall back to static values. Lookups return `undefined` when absent so routes
+  the global is not published, so layouts can fall back to static values.
+  `url` is the site URL with a trailing slash (or `undefined`), `indexing` is
+  `false` only for `LACE_SITE_INDEXING=off`, `urlFor(path)` joins a public path
+  under the site URL (keeping its base path), `allEntries()` lists every
+  published entry by path, and `seo(entry)` resolves the entry's SEO metadata
+  (section 8) from the export's `seo` section and the published defaults
+  global. The SDK also exports the pure `resolveSeo` and the framework-neutral
+  `renderSitemapXml(site, { include? })` (`undefined` without a site URL) and
+  `renderRobotsTxt(site)`. Lookups return `undefined` when absent so routes
   choose between 404 and failure. `PublishedEntry` exposes `id`, `modelKey`,
   `path`, optional `slug`, `title`, `publishedAt`, `fields`, ordered `blocks`
   (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`), typed
@@ -1765,6 +1798,14 @@ no client scripts, and requires no Astro integration. Override components for
   `mediaUrl`, resolves and parses each block in order, and renders the mapped
   component with `BlockProps`, including the `image()` describer bound to the
   entry's resolved media.
+- `@lacecms/astro/LaceSeo.astro` takes a resolved `seo` value and an optional
+  `type` (`website` or `article`) and renders `<title>`, the description,
+  canonical and robots tags, Open Graph (`og:image` with width, height and
+  alt) and `twitter:card`, emitting nothing for absent values.
+- `sitemapResponse(site, options?)` and `robotsResponse(site)` (root entry)
+  return endpoint responses; without a site URL the sitemap response has no
+  body, so a static build writes no `sitemap.xml`, and one build warning names
+  `LACE_BUILD_SITE_URL`.
 - `@lacecms/astro/RichText.astro` takes `document`, optional `components` keyed
   by node or mark name, and optional `context`. It renders the
   `describeRichText` tree with Astro's escaping and never uses `set:html`;
@@ -1883,6 +1924,30 @@ if (post === undefined) return new Response(null, { status: 404 });
 ---
 
 <LaceBlocks entry={post} blocks={blocks} mediaUrl={site.mediaUrl} />
+```
+
+Layout head and site files (user-owned):
+
+```astro
+---
+import LaceSeo from "@lacecms/astro/LaceSeo.astro";
+const { entry, site, type } = Astro.props;
+---
+
+<head>
+  <meta charset="utf-8" />
+  <LaceSeo seo={site.seo(entry)} type={type} />
+</head>
+```
+
+```ts
+// src/pages/sitemap.xml.ts; robots.txt.ts uses robotsResponse the same way.
+import { sitemapResponse } from "@lacecms/astro";
+import { getSite } from "../lib/lace";
+
+export async function GET(): Promise<Response> {
+  return sitemapResponse(await getSite());
+}
 ```
 
 Installed block component (user-owned, keeps the `data-lace-*` styling hooks):

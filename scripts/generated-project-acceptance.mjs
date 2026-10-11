@@ -974,16 +974,36 @@ async function starterJourney(project) {
   exported.globals = [
     {
       blocks: [],
-      fields: { siteName: "Acceptance Studio", tagline: "Built from the packed starter" },
+      fields: {
+        description: "Acceptance site description",
+        image: "hero-media",
+        siteName: "Acceptance Studio",
+        tagline: "Built from the packed starter",
+      },
       id: "settings-entry",
       modelKey: "settings",
       publishedAt: "2026-09-20T00:00:00.000Z",
     },
   ];
+  // The starter's SEO mappings: posts fall back to `summary`, settings holds the defaults.
+  exported.seo = {
+    defaults: {
+      description: "description",
+      image: "image",
+      modelKey: "settings",
+      siteName: "siteName",
+      titleTemplate: null,
+    },
+    models: {
+      home: { description: null, image: null },
+      posts: { description: "summary", image: null },
+    },
+  };
+  const siteUrl = "https://starter.example/";
   const token = `lace_build_${randomBytes(16).toString("hex")}`;
   secretValues.add(token);
   const pages = ["site/dist/index.html", "site/dist/blog/first-post/index.html"];
-  const build = async (label, body) => {
+  const build = async (label, body, siteEnvironment) => {
     let requests = 0;
     const server = createHttpServer((request, response) => {
       requests++;
@@ -1012,6 +1032,8 @@ async function starterJourney(project) {
           LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
           LACE_BUILD_TOKEN: token,
           LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
+          LACE_SITE_INDEXING: "",
+          ...siteEnvironment,
         },
       });
     } finally {
@@ -1021,7 +1043,7 @@ async function starterJourney(project) {
     return Promise.all(pages.map((page) => readFile(join(project, page), "utf8")));
   };
 
-  const published = await build("starter-build", exported);
+  const published = await build("starter-build", exported, { LACE_BUILD_SITE_URL: siteUrl });
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
   const html = published.join("\n");
   for (const type of ["hero", "richText", "image", "quote", "cta"]) {
@@ -1044,21 +1066,61 @@ async function starterJourney(project) {
     )
       throw new Error("starter-build: published settings global missing from the site header");
   }
+  const [home, post] = published;
+  if (
+    !home.includes("<title>Lace starter | Acceptance Studio</title>") ||
+    !home.includes('<meta content="Acceptance site description" name="description">') ||
+    !home.includes(`<link href="${siteUrl}" rel="canonical">`) ||
+    !home.includes(
+      '<meta content="https://public.example/lace/api/v1/public/media/hero-media" property="og:image">',
+    )
+  )
+    throw new Error("starter-build: home head metadata from the settings defaults missing");
+  if (
+    !post.includes(
+      '<meta content="How the reference site renders published posts." name="description">',
+    ) ||
+    !post.includes('<meta content="article" property="og:type">') ||
+    !post.includes(`<link href="${siteUrl}blog/first-post" rel="canonical">`)
+  )
+    throw new Error("starter-build: post head metadata missing");
+  const sitemap = await readFile(join(project, "site/dist/sitemap.xml"), "utf8");
+  if (
+    !sitemap.includes(`<loc>${siteUrl}</loc>`) ||
+    !sitemap.includes(`<loc>${siteUrl}blog/first-post</loc>`) ||
+    sitemap.split("<loc>").length !== 3
+  )
+    throw new Error("starter-build: sitemap.xml does not list the home page and the post");
+  if (
+    (await readFile(join(project, "site/dist/robots.txt"), "utf8")) !==
+    `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}sitemap.xml\n`
+  )
+    throw new Error("starter-build: robots.txt does not name the sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
 
   // Without a published global the header falls back to the layout's static values.
   const { globals: _globals, ...withoutGlobals } = exported;
-  for (const page of await build("starter-build-without-globals", withoutGlobals)) {
+  for (const page of await build("starter-build-without-globals", withoutGlobals, {
+    LACE_BUILD_SITE_URL: "",
+  })) {
     if (
       !page.includes('<a class="site-name" href="/">Lace starter</a>') ||
       page.includes('<p class="site-tagline">') ||
       page.includes("Acceptance Studio")
     )
       throw new Error("starter-build-without-globals: static site header fallback missing");
+    if (!page.includes("<title>") || page.includes('rel="canonical"') || page.includes("og:url"))
+      throw new Error("starter-build-without-globals: head metadata without a site URL is wrong");
   }
+  if (await stat(join(project, "site/dist/sitemap.xml")).catch(() => undefined))
+    throw new Error("starter-build-without-globals: sitemap.xml written without a site URL");
+  if (
+    (await readFile(join(project, "site/dist/robots.txt"), "utf8")) !== "User-agent: *\nAllow: /\n"
+  )
+    throw new Error("starter-build-without-globals: robots.txt is not allow-all without a sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
   console.info(
-    "Packed starter installed, typechecked and built all five blocks with and without a published global",
+    "Packed starter installed, typechecked and built all five blocks and SEO output with and without a published global and site URL",
   );
 }
 

@@ -147,8 +147,29 @@ sync refuses with `SEO_REMOVAL_HAS_DATA`). Contract additions:
 - admin media usage locations gain `{source: "seo", field: "image"}`.
 
 It requires migration `0008_content_snapshot_seo` (an additive column). The
-SDK passes stored values through as `PublishedEntry.seo`; resolving fallbacks,
-the `<head>` output, sitemap and robots arrive with CE4B.
+SDK passes stored values through as `PublishedEntry.seo`.
+
+The same next alpha adds the site output (CE4B, source template `0.25.0`). The
+additions are additive and need no REST or database change:
+
+- `@lacecms/sdk`: `site.seo(entry)`, `site.url`, `site.indexing`,
+  `site.urlFor(path)` and `site.allEntries()`; the exported `resolveSeo`,
+  `renderSitemapXml` and `renderRobotsTxt`; the loader reads the optional
+  `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` (or the `siteUrl` and
+  `indexing` options), and an invalid value fails with
+  `missing_configuration`;
+- `@lacecms/astro`: `@lacecms/astro/LaceSeo.astro`, `sitemapResponse` and
+  `robotsResponse`;
+- the VPS builder forwards the two optional settings to the site build and
+  refuses invalid values at startup; the generated Compose builder service and
+  Cloudflare Pages workflow pass them.
+
+Template `0.25.0` enables SEO on the starter `home` and `posts` models, adds
+`description` and `image` with `seoDefaults` to the starter `settings` global,
+renders `<LaceSeo>` in the starter layout and adds `sitemap.xml` and
+`robots.txt` endpoints. Its upgrade instructions carry the `0008` steps; existing
+projects adopt the configuration and site files by hand, and nothing breaks
+without adoption.
 
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
