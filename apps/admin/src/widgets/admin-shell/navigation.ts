@@ -1,5 +1,15 @@
 import type { ContentModelDto } from "@lacecms/contracts";
-import { FileText, Hammer, Image, Layers, Settings, Users, type LucideIcon } from "lucide-react";
+import {
+  FileText,
+  Globe,
+  Hammer,
+  Image,
+  Layers,
+  Settings,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import { isSingletonModel } from "../../entities/content/index.js";
 import { can, type AdminPermission, type AdminSession } from "../../entities/session/index.js";
 
 type ModelSummary = Pick<ContentModelDto, "key" | "kind" | "label">;
@@ -21,6 +31,12 @@ export type NavigationItem =
     }
   | {
       readonly icon: LucideIcon;
+      readonly kind: "global";
+      readonly label: string;
+      readonly modelKey: string;
+    }
+  | {
+      readonly icon: LucideIcon;
       readonly kind: "resource";
       readonly label: string;
       readonly path: ResourcePath;
@@ -30,7 +46,7 @@ export type NavigationItem =
 
 export interface NavigationGroup {
   readonly items: readonly NavigationItem[];
-  readonly key: "admin" | "collections" | "library" | "pages";
+  readonly key: "admin" | "collections" | "library" | "pages" | "site";
   readonly label: string;
 }
 
@@ -40,8 +56,8 @@ export function modelLabel(model: Pick<ContentModelDto, "key" | "label">): strin
 }
 
 /**
- * Shell navigation groups for a session. Pages and Collections follow the
- * configured models; resource items appear only with the permission their
+ * Shell navigation groups for a session. Pages, Collections and Site follow
+ * the configured models; resource items appear only with the permission their
  * route guard requires. Empty groups are omitted.
  */
 export function navigationGroups(
@@ -72,6 +88,18 @@ export function navigationGroups(
         })),
       key: "collections",
       label: "Collections",
+    },
+    {
+      items: models
+        .filter((model) => model.kind === "global")
+        .map((model) => ({
+          icon: Globe,
+          kind: "global" as const,
+          label: modelLabel(model),
+          modelKey: model.key,
+        })),
+      key: "site",
+      label: "Site",
     },
     {
       items: [
@@ -153,7 +181,8 @@ export function breadcrumbsFor({
   if (routeId === "/_protected/content/$modelKey")
     return [{ label: "Content", to: "/content" }, { label }];
   if (routeId !== "/_protected/content/$modelKey/$entryId") return [];
-  if (model?.kind === "page") return [{ label: "Content", to: "/content" }, { label }];
+  if (model !== undefined && isSingletonModel(model))
+    return [{ label: "Content", to: "/content" }, { label }];
   return [
     { label: "Content", to: "/content" },
     { label, params: { modelKey }, to: "/content/$modelKey" },

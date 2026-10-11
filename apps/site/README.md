@@ -1,7 +1,9 @@
 # Lace reference Astro site
 
 `apps/site` is the engine's Astro playground and build fixture for the starter
-`home` and `posts` models plus the extra `about` and `notes` routes. It never
+`home` and `posts` models and the `settings` global, plus the extra `about` and
+`notes` routes. Every route's header shows the published `settings` site name
+and tagline, with static fallbacks when the export has no such global. It never
 ships to users; generated projects receive the `create-lace` starter instead.
 Both consume the same packages: `src/lib/lace.ts` creates the published-site
 loader with `@lacecms/astro`, pages render blocks with `<LaceBlocks>` and the

@@ -1,7 +1,9 @@
 import { screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  entry,
   entryList,
+  models,
   renderInRouter,
   renderRoute,
   stubClient as client,
@@ -80,5 +82,50 @@ test("a failed count or missing page draft keeps the item available and the rout
   expect(within(aside).getByRole("link", { name: "home" })).toHaveAttribute(
     "href",
     "/admin/content#pages",
+  );
+});
+
+test("lists globals in the Site group with singleton links", async () => {
+  const settings = {
+    blocks: [],
+    fields: {},
+    key: "settings",
+    kind: "global" as const,
+    label: "Site settings",
+    version: 1,
+  };
+  renderInRouter(nav(), {
+    client: client({
+      listEntries: async (modelKey) =>
+        modelKey === "settings"
+          ? entryList([
+              { ...entry, id: "settings-1", modelKey: "settings", title: "Site settings" },
+            ])
+          : entryList(),
+      listModels: async () => ({ items: [...models.items, settings] }),
+    }),
+    session: { id: "editor-1", role: "editor" },
+  });
+  const site = await screen.findByRole("list", { name: "Site" });
+  expect(await within(site).findByRole("link", { name: "Site settings" })).toHaveAttribute(
+    "href",
+    "/content/settings/settings-1",
+  );
+  expect(within(site).getByRole("link", { name: "Site settings" })).not.toHaveTextContent(/\d/);
+  const groups = screen.getAllByRole("list").map((list) => list.getAttribute("aria-labelledby"));
+  expect(groups.indexOf("nav-group-site")).toBe(groups.indexOf("nav-group-collections") + 1);
+
+  document.body.replaceChildren();
+  renderInRouter(nav(), {
+    client: client({
+      listEntries: async () => entryList(),
+      listModels: async () => ({ items: [settings] }),
+    }),
+    session: { id: "editor-1", role: "editor" },
+  });
+  const unsynced = await screen.findByRole("list", { name: "Site" });
+  expect(within(unsynced).getByRole("link", { name: "Site settings" })).toHaveAttribute(
+    "href",
+    "/content#site",
   );
 });

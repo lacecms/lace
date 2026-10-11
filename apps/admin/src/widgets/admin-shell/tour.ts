@@ -3,6 +3,14 @@ import { buildStatusTourSummary } from "../../entities/site-build/index.js";
 import { publicationVisibilityModes } from "../../features/publish-entry/index.js";
 import { navigationGroups } from "./navigation.js";
 
+const groupGuidance = {
+  collections:
+    "Each collection holds multiple entries. Choose a collection in navigation to browse its list, search, and filter by status.",
+  pages:
+    "Each configured page has one entry. Choose a page in navigation to open it; pages waiting for synchronization lead to the Content overview.",
+  site: "Each global holds site-wide content, such as the site name, in one entry with no URL of its own. Choose it in navigation to open it; once published, it appears on every page that shows it after the next site build.",
+} as const;
+
 export interface TourStep {
   readonly id: string;
   readonly title: string;
@@ -39,15 +47,11 @@ export function tourSteps(
     },
   ];
   for (const group of groups) {
-    if (group.key === "pages" || group.key === "collections") {
+    if (group.key === "pages" || group.key === "collections" || group.key === "site") {
       steps.push({
         id: group.key,
         title: group.label,
-        paragraphs: [
-          group.key === "pages"
-            ? "Each configured page has one entry. Choose a page in navigation to open it; pages waiting for synchronization lead to the Content overview."
-            : "Each collection holds multiple entries. Choose a collection in navigation to browse its list, search, and filter by status.",
-        ],
+        paragraphs: [groupGuidance[group.key]],
       });
       continue;
     }

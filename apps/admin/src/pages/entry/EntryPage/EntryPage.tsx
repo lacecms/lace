@@ -381,6 +381,7 @@ export function EntryPage() {
                 onOpenChange={setPublishDialogOpen}
                 open={publishDialogOpen}
                 pending={publish.isPending || savingToPublish}
+                kind={model.kind}
                 publicPath={resolvedPublicPath(model, currentEntry)}
                 revision={currentEntry.draft.revision}
                 unsavedChanges={dirty}
@@ -480,24 +481,40 @@ export function EntryPage() {
                   reloading={reloadServerDraft.isPending}
                 />
               )}
-              <div className="grid gap-1">
-                <label className="sr-only" htmlFor="system-title">
-                  Title
-                </label>
-                <Input
-                  aria-describedby={titleError === undefined ? undefined : "system-title-error"}
-                  aria-invalid={titleError === undefined ? undefined : true}
-                  className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input"
-                  id="system-title"
-                  placeholder="Untitled"
-                  {...form.register("title")}
-                />
-                {titleError === undefined ? undefined : (
-                  <p className={`${fieldErrorClass} text-xs`} id="system-title-error" role="alert">
-                    {titleError.message}
+              {model.kind === "global" ? (
+                // A global's title is its model label and is owned by the system.
+                <div className="grid gap-1">
+                  <p className="m-0 py-1 text-2xl font-semibold tracking-tight">
+                    {model.label ?? model.key}
                   </p>
-                )}
-              </div>
+                  {model.description === undefined ? undefined : (
+                    <p className="m-0 text-sm text-muted-foreground">{model.description}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-1">
+                  <label className="sr-only" htmlFor="system-title">
+                    Title
+                  </label>
+                  <Input
+                    aria-describedby={titleError === undefined ? undefined : "system-title-error"}
+                    aria-invalid={titleError === undefined ? undefined : true}
+                    className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input"
+                    id="system-title"
+                    placeholder="Untitled"
+                    {...form.register("title")}
+                  />
+                  {titleError === undefined ? undefined : (
+                    <p
+                      className={`${fieldErrorClass} text-xs`}
+                      id="system-title-error"
+                      role="alert"
+                    >
+                      {titleError.message}
+                    </p>
+                  )}
+                </div>
+              )}
               <BlockEditor
                 control={form.control}
                 errors={blockErrors}

@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Locator, type Page, type Route } from "@playwright/test";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
+import { expectVisibleFocus, tabTo } from "./support/keyboard.js";
 import { sessionPath, sessionSummary } from "./support/session.js";
 
 type Role = "admin" | "editor";
@@ -57,6 +58,19 @@ const models = [
     route: "/posts/:slug",
     version: 1,
   },
+  {
+    blockDefinitions: [],
+    blocks: [],
+    description: "Name and tagline shown on every page.",
+    fields: {
+      siteName: { label: "Site name", required: true, type: "text" },
+      tagline: { label: "Tagline", required: false, type: "text" },
+    },
+    key: "settings",
+    kind: "global",
+    label: "Site settings",
+    version: 1,
+  },
 ];
 
 const blocks = [
@@ -99,7 +113,9 @@ function entry(id: string, modelKey: string, title: string, slug?: string) {
               publishedOn: "2026-09-20",
               summary: "Launch notes",
             }
-          : {},
+          : modelKey === "settings"
+            ? { siteName: "Lace", tagline: "Built with Lace" }
+            : {},
       id: `${id}-draft`,
       revision: 2,
       ...(slug === undefined ? {} : { slug }),
@@ -110,9 +126,11 @@ function entry(id: string, modelKey: string, title: string, slug?: string) {
     },
     id,
     model:
-      model.kind === "page"
-        ? { key: model.key, kind: model.kind, path: model.path }
-        : { key: model.key, kind: model.kind, route: model.route },
+      model.kind === "global"
+        ? { key: model.key, kind: model.kind }
+        : model.kind === "page"
+          ? { key: model.key, kind: model.kind, path: model.path }
+          : { key: model.key, kind: model.kind, route: model.route },
     updatedBy: { displayName: "Eddie Editor", id: "editor-1" },
   };
 }
@@ -233,9 +251,11 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
   const entries = {
     "entry-1": entry("entry-1", "posts", "Launch notes", "launch-notes"),
     "entry-home": entry("entry-home", "home", "Home"),
+    "entry-settings": entry("entry-settings", "settings", "Site settings"),
   } as Record<string, ReturnType<typeof entry> & { published?: unknown }>;
   const lists: Record<string, ReturnType<typeof summary>[]> = {
     home: [summary("entry-home", "home", "Home", "changed")],
+    settings: [summary("entry-settings", "settings", "Site settings", "changed")],
     posts: [
       summary("entry-1", "posts", "Launch notes", "changed", "launch-notes"),
       summary("entry-2", "posts", "Draft ideas", "draft", "draft-ideas"),
@@ -402,7 +422,7 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
       return json(route, { reason: "rejected", status: "failed" });
     if (path === "/api/v1/admin/settings/status")
       return json(route, {
-        configuredModels: 2,
+        configuredModels: 3,
         email: { from: "Lace <cms@lace.test>", provider: "smtp" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,
@@ -436,6 +456,16 @@ const routes: ReadonlyArray<readonly [string, string, (page: Page) => Locator]> 
     "page editor",
     "/content/home/entry-home",
     (page) => page.getByRole("textbox", { name: "Title" }),
+  ],
+  [
+    "global model route",
+    "/content/settings",
+    (page) => page.getByText("Open this global from the content landing route."),
+  ],
+  [
+    "global editor",
+    "/content/settings/entry-settings",
+    (page) => page.getByRole("textbox", { name: /Site name/u }),
   ],
   [
     "collection entry editor",
@@ -673,33 +703,6 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
     await expectNoAccessibilityViolations(page, "discard metadata confirmation");
   });
-}
-
-/** Presses Tab until `target` has focus, proving it is reachable in tab order. */
-async function tabTo(page: Page, target: Locator, limit = 60) {
-  for (let presses = 0; presses < limit; presses += 1) {
-    if (await target.evaluate((element) => element === document.activeElement)) {
-      await expectVisibleFocus(page);
-      return;
-    }
-    await page.keyboard.press("Tab");
-    await expectVisibleFocus(page);
-  }
-  await expect(target, `not reached within ${limit} Tab presses`).toBeFocused();
-}
-
-async function expectVisibleFocus(page: Page) {
-  const indication = await page.evaluate(() => {
-    const element = document.activeElement;
-    if (element === null || element === document.body) return "body";
-    const style = getComputedStyle(element);
-    return style.outlineStyle !== "none" && style.outlineWidth !== "0px"
-      ? "outline"
-      : style.boxShadow !== "none"
-        ? "shadow"
-        : `none on ${element.tagName.toLowerCase()} ${element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 40) ?? ""}`;
-  });
-  expect(indication).not.toMatch(/^none/u);
 }
 
 test("an administrator completes the editorial flow with the keyboard alone", async ({ page }) => {

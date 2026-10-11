@@ -109,6 +109,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       "home",
       "notes",
       "posts",
+      "settings",
     ]);
     const created = await json(value.server, "/api/v1/admin/models/posts/entries", {
       body: JSON.stringify({

@@ -240,6 +240,18 @@
       "title": "First published note"
     }
   ],
+  "globals": [
+    {
+      "blocks": [],
+      "fields": {
+        "siteName": "Lace Journal",
+        "tagline": "Notes from the reference site"
+      },
+      "id": "settings-entry",
+      "modelKey": "settings",
+      "publishedAt": "2026-09-20T00:00:00.000Z"
+    }
+  ],
   "media": {
     "hero-media": {
       "alt": "Lace starter illustration",

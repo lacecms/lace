@@ -68,11 +68,18 @@ The repository SHALL keep a committed snapshot of the generated file tree and ow
 - **THEN** their file trees, managed bytes, and ownership manifests match the committed contract and one another
 
 ### Requirement: CI builds a starter generated from packed packages
-Continuous integration SHALL, in addition to building the reference site, pack the Lace packages the generated project depends on, generate a project, install it from those tarballs outside the source workspace, and build its starter site against a local published-export server. The phase SHALL fail when the install resolves a Lace package from the source workspace, when the build emits fewer than the five built-in block types, or when the build token appears in any static output file.
+Continuous integration SHALL, in addition to building the reference site, pack the Lace packages the generated project depends on, generate a project, install it from those tarballs outside the source workspace, and build its starter site against a local published-export server. The phase SHALL build the starter once from an export with a published `settings` global and once from an export without globals. The phase SHALL fail when the install resolves a Lace package from the source workspace, when the build emits fewer than the five built-in block types, when a build makes more than one export read, when the site header does not show the published site name with a published global or the static fallback without one, or when the build token appears in any static output file.
 
 #### Scenario: Shipped starter builds
 - **WHEN** the starter phase runs on a clean checkout
 - **THEN** the packed generated project installs, builds all five blocks from the served export, and contains no build token in its output
+
+#### Scenario: Starter builds with and without a published global
+- **WHEN** the starter phase serves an export with a published `settings`
+  global and then one without globals
+- **THEN** the first build shows the published site name and tagline, the
+  second shows the static fallback site name, and each build reads the export
+  once
 
 #### Scenario: Template references an unpublished helper
 - **WHEN** the starter imports a module that exists only in the source workspace

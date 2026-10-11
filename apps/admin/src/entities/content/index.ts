@@ -34,6 +34,7 @@ export { entryActions, hasEntryActions, type EntryActions } from "./entry-action
 export { RichTextEditor } from "./RichTextEditor/index.js";
 export { EntryStatusBadge } from "./EntryStatusBadge/index.js";
 export { useEntryOverview } from "./overview.js";
+export { isSingletonModel } from "./model-kind.js";
 export {
   blockLevelProblems,
   validationProblems,

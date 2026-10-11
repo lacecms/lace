@@ -2,3 +2,17 @@
 :where([data-lace-block="hero"]) {
   padding-block: 2rem;
 }
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  padding: 1rem 2rem;
+}
+.site-name {
+  font-weight: 700;
+}
+.site-tagline {
+  margin: 0;
+}

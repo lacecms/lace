@@ -90,7 +90,7 @@ In Admin Settings create a read-only build token and put its one-time value into
 
 ## Publish content
 
-In Admin open Home, set a title, add blocks, save the draft and publish as the administrator. Upload images through Media and select them in image or hero blocks. For a blog page create a Posts entry with a title and a valid slug, then publish. Editors save drafts; publication requires an administrator. With compatible current artifacts, reordered, inserted and duplicated blocks save and publish in the order the editor shows.
+In Admin open Home, set a title, add blocks, save the draft and publish as the administrator. Upload images through Media and select them in image or hero blocks. For a blog page create a Posts entry with a title and a valid slug, then publish. Editors save drafts; publication requires an administrator. With compatible current artifacts, reordered, inserted and duplicated blocks save and publish in the order the editor shows. Site-wide text lives in globals under Site: open Site settings, set the site name and tagline and publish; the starter header shows static values until then.
 
 Saving a draft never changes published content or requests a build.
 

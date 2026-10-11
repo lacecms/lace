@@ -103,7 +103,7 @@ version; mixing artifacts from different versions is unsupported.
 | `0.1.0-alpha.3` | `0.17.0` | Prepared and accepted locally (Step 33H); npm publication recorded on 2026-10-07 | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
 | `0.1.0-alpha.4` | `0.20.0` | Package publication and real VPS/Cloudflare application/recovery checks owner-confirmed 2026-10-10 | Includes completed 34A–34C local verification; see real-application-verification.md for confirmation scope and evidence limits |
 
-The next alpha after `0.1.0-alpha.4` (source template `0.23.0`, not yet
+The next alpha after `0.1.0-alpha.4` (source template `0.24.0`, not yet
 released) changes the public delivery contract: every `/api/v1/public` content
 response and the build export return the published entry directly with a
 resolved `media` dictionary, without the former mirrored `draft`. The API, the
@@ -123,7 +123,11 @@ valid; older SDKs reject the new key because the export schema is strict), and
 `kind: "global"` in admin model and entry DTOs. It requires migration
 `0007_content_model_global_kind`, a table rebuild of `content_models`; back up
 before migrating, because rolling back after a global exists means restoring
-that backup.
+that backup. Template `0.24.0` delivers the `0007` upgrade steps and adds an optional
+`settings` global (`siteName`, `tagline`) to new projects' `lace.config.ts`;
+new starter layouts read it through `site.global("settings")` with static
+fallbacks. Existing projects adopt it by hand, because configuration and site
+files are user-owned.
 
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for

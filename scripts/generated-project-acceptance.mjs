@@ -971,45 +971,59 @@ async function starterJourney(project) {
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
   );
   exported.entries = exported.entries.slice(0, 2);
+  exported.globals = [
+    {
+      blocks: [],
+      fields: { siteName: "Acceptance Studio", tagline: "Built from the packed starter" },
+      id: "settings-entry",
+      modelKey: "settings",
+      publishedAt: "2026-09-20T00:00:00.000Z",
+    },
+  ];
   const token = `lace_build_${randomBytes(16).toString("hex")}`;
   secretValues.add(token);
-  let requests = 0;
-  const server = createHttpServer((request, response) => {
-    requests++;
-    if (
-      request.url !== "/api/v1/public/build-export" ||
-      request.headers.authorization !== `Bearer ${token}`
-    ) {
-      response.writeHead(403, { "content-type": "application/json" });
-      response.end(JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }));
-      return;
-    }
-    response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
-    response.end(JSON.stringify(exported));
-  });
-  await new Promise((done, fail) => {
-    server.once("error", fail);
-    server.listen(0, "127.0.0.1", done);
-  });
-  try {
-    await run("starter-build", "pnpm", ["build"], {
-      cwd: project,
-      env: {
-        ASTRO_TELEMETRY_DISABLED: "1",
-        LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
-        LACE_BUILD_TOKEN: token,
-        LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
-      },
+  const pages = ["site/dist/index.html", "site/dist/blog/first-post/index.html"];
+  const build = async (label, body) => {
+    let requests = 0;
+    const server = createHttpServer((request, response) => {
+      requests++;
+      if (
+        request.url !== "/api/v1/public/build-export" ||
+        request.headers.authorization !== `Bearer ${token}`
+      ) {
+        response.writeHead(403, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }),
+        );
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
+      response.end(JSON.stringify(body));
     });
-  } finally {
-    await new Promise((done) => server.close(done));
-  }
-  if (requests !== 1) throw new Error(`starter-build: expected one export read, saw ${requests}`);
+    await new Promise((done, fail) => {
+      server.once("error", fail);
+      server.listen(0, "127.0.0.1", done);
+    });
+    try {
+      await run(label, "pnpm", ["build"], {
+        cwd: project,
+        env: {
+          ASTRO_TELEMETRY_DISABLED: "1",
+          LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
+          LACE_BUILD_TOKEN: token,
+          LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
+        },
+      });
+    } finally {
+      await new Promise((done) => server.close(done));
+    }
+    if (requests !== 1) throw new Error(`${label}: expected one export read, saw ${requests}`);
+    return Promise.all(pages.map((page) => readFile(join(project, page), "utf8")));
+  };
+
+  const published = await build("starter-build", exported);
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
-  const html = [
-    await readFile(join(project, "site/dist/index.html"), "utf8"),
-    await readFile(join(project, "site/dist/blog/first-post/index.html"), "utf8"),
-  ].join("\n");
+  const html = published.join("\n");
   for (const type of ["hero", "richText", "image", "quote", "cta"]) {
     if (!html.includes(`data-lace-block="${type}"`))
       throw new Error(`starter-build: missing ${type}`);
@@ -1023,8 +1037,29 @@ async function starterJourney(project) {
     !html.includes('<img alt="A durable media URL" data-lace-part="media" height="600"')
   )
     throw new Error("starter-build: resolved media alt text, dimensions or focal point missing");
+  for (const page of published) {
+    if (
+      !page.includes('<a class="site-name" href="/">Acceptance Studio</a>') ||
+      !page.includes('<p class="site-tagline">Built from the packed starter</p>')
+    )
+      throw new Error("starter-build: published settings global missing from the site header");
+  }
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
-  console.info("Packed starter installed, typechecked and built all five blocks");
+
+  // Without a published global the header falls back to the layout's static values.
+  const { globals: _globals, ...withoutGlobals } = exported;
+  for (const page of await build("starter-build-without-globals", withoutGlobals)) {
+    if (
+      !page.includes('<a class="site-name" href="/">Lace starter</a>') ||
+      page.includes('<p class="site-tagline">') ||
+      page.includes("Acceptance Studio")
+    )
+      throw new Error("starter-build-without-globals: static site header fallback missing");
+  }
+  await scanTree(join(project, "site/dist"), secretValues, "starter static output");
+  console.info(
+    "Packed starter installed, typechecked and built all five blocks with and without a published global",
+  );
 }
 
 async function environmentPreparation(project) {

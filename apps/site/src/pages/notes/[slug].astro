@@ -15,6 +15,6 @@ const entry = site.bySlug("notes", Astro.params.slug ?? "");
 if (entry === undefined) return new Response(null, { status: 404 });
 ---
 
-<BaseLayout entry={entry} title={entry.title}>
+<BaseLayout entry={entry} site={site} title={entry.title}>
   <LaceBlocks blocks={blocks} entry={entry} mediaUrl={site.mediaUrl} />
 </BaseLayout>

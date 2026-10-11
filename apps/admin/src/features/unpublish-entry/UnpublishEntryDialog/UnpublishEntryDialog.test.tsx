@@ -55,7 +55,9 @@ test("states the public consequence for collection entries and pages", async () 
   cleanup();
   renderInRouter(<Harness kind="global" />, { client: stubClient() });
   await user.click(await screen.findByRole("button", { name: "Open unpublish" }));
-  expect(screen.getByRole("dialog", { name: "Unpublish this entry?" })).toHaveAccessibleDescription(
+  expect(
+    screen.getByRole("dialog", { name: "Unpublish this site content?" }),
+  ).toHaveAccessibleDescription(
     /Pages that show this content fall back to their defaults after the next site build\./u,
   );
 });

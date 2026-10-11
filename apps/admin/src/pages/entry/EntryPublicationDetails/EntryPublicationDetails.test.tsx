@@ -210,6 +210,28 @@ test("a published entry links to its page under the configured site URL", async 
   expect(link).toHaveAttribute("rel", "noopener noreferrer");
 });
 
+test("a global shows no public URL or site link", async () => {
+  renderInRouter(
+    <EntryPublicationDetails
+      entry={{ ...publishedPost, model: { key: "settings", kind: "global" } }}
+      latestBuild={undefined}
+      model={{ blocks: [], fields: {}, key: "settings", kind: "global", version: 1 }}
+    />,
+    {
+      client: stubClient({
+        loadBuildSite: async () => ({
+          site: { id: "main-site", label: "Main site", url: "https://example.com/" },
+        }),
+      }),
+    },
+  );
+  const card = await screen.findByRole("region", { name: "Publication status" });
+  expect(card).toHaveTextContent("Revision 2");
+  expect(card).not.toHaveTextContent("Public URL");
+  expect(card).not.toHaveTextContent("No public URL yet");
+  expect(within(card).queryByRole("link", { name: /on site/ })).not.toBeInTheDocument();
+});
+
 test.each([
   ["no site URL is configured", async () => ({ site: { id: "main-site", label: "Main site" } })],
   [

@@ -95,7 +95,11 @@ export function UnpublishEntryDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {kind === "page" ? "Unpublish this page?" : "Unpublish this entry?"}
+            {kind === "page"
+              ? "Unpublish this page?"
+              : kind === "global"
+                ? "Unpublish this site content?"
+                : "Unpublish this entry?"}
           </DialogTitle>
           <DialogDescription>
             {`${consequence(kind, publicPath)} The draft and any unsaved changes are kept; publishing again makes the current draft public.`}

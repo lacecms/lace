@@ -9,7 +9,8 @@ fields from server-supplied metadata and save one complete optimistic draft.
 
 ### Requirement: Draft fields are rendered from validated model metadata
 The authenticated entry route SHALL load the requested entry and its matching
-configured model before presenting editable content. It SHALL render title, the
+configured model before presenting editable content. It SHALL render the title
+of a page or collection entry, the
 collection-only slug, and every supported model-field descriptor from the
 validated serializable metadata supplied by the model API. The field surface
 SHALL cover text, textarea, rich text, number, boolean, date, datetime, select,
@@ -60,15 +61,18 @@ control, which SHALL also be marked invalid.
   editable form using unvalidated metadata
 
 ### Requirement: System fields have predictable collection-slug behavior
-Every entry editor SHALL present title as an explicit required system field. A
+Every page and collection entry editor SHALL present title as an explicit
+required system field. A global editor SHALL not render a title control,
+because a global's title is its model label and is owned by the system. A
 collection editor SHALL additionally present slug as an explicit system field;
-a page editor SHALL not render a slug control. A collection writer MAY opt into
-slug suggestions derived from title. While suggestion is enabled and the slug
-has not been manually changed, title edits SHALL update the suggested slug; a
-manual slug edit SHALL stop automatic updates until the writer explicitly
-re-enables suggestions. An empty slug control SHALL mean that the draft has no
-slug: a complete-draft save SHALL omit the slug, and a collection entry without
-a slug SHALL read as having no unsaved changes once it is loaded or saved.
+a page or global editor SHALL not render a slug control. A collection writer
+MAY opt into slug suggestions derived from title. While suggestion is enabled
+and the slug has not been manually changed, title edits SHALL update the
+suggested slug; a manual slug edit SHALL stop automatic updates until the
+writer explicitly re-enables suggestions. An empty slug control SHALL mean
+that the draft has no slug: a complete-draft save SHALL omit the slug, and a
+collection entry without a slug SHALL read as having no unsaved changes once it
+is loaded or saved.
 
 #### Scenario: An opted-in suggestion follows a title
 - **WHEN** a writer enables slug suggestions for an unedited collection slug
@@ -86,6 +90,12 @@ a slug SHALL read as having no unsaved changes once it is loaded or saved.
 - **WHEN** a writer opens a page entry
 - **THEN** the editor renders title and model fields but no slug control or slug
   suggestion affordance
+
+#### Scenario: A global entry is edited
+- **WHEN** a writer opens the `settings` global
+- **THEN** the editor renders its model fields without a title or slug
+  control, and a complete-draft save carries the stored title unchanged and no
+  slug
 
 #### Scenario: A collection entry without a slug is saved
 - **WHEN** a writer changes the title of a new or duplicated collection entry
@@ -654,7 +664,7 @@ Page entries SHALL NOT offer Duplicate or Delete. A viewer SHALL see no menu. Th
 - **THEN** the editor shows no entry actions menu
 
 ### Requirement: Unpublish is confirmed with its public consequence
-Choosing Unpublish SHALL open a confirmation dialog that can be cancelled. It SHALL say that the entry's public path stops working after the next site build, that the draft and its unsaved changes are kept, and that publishing again makes the current draft public. For a page it SHALL say that the page's fixed path will return 404 after the next build. Confirming SHALL send one unpublish request with the publication the editor displays as the expected published snapshot and with a new idempotency key. A retry of the same attempt after a network failure SHALL reuse that key. On success the editor SHALL adopt the returned entry without discarding unsaved form changes, SHALL show the entry as not published, SHALL follow the queued build in the publication card as it does after a publication, and SHALL announce the result. When the publication changed or disappeared in the meantime, the dialog SHALL show the API's conflict or not-published error and SHALL offer to reload the entry.
+Choosing Unpublish SHALL open a confirmation dialog that can be cancelled. It SHALL say that the entry's public path stops working after the next site build, that the draft and its unsaved changes are kept, and that publishing again makes the current draft public. For a page it SHALL say that the page's fixed path will return 404 after the next build. For a global the dialog SHALL ask to unpublish the site content and SHALL say that pages showing it fall back to their defaults after the next site build, without naming a path. Confirming SHALL send one unpublish request with the publication the editor displays as the expected published snapshot and with a new idempotency key. A retry of the same attempt after a network failure SHALL reuse that key. On success the editor SHALL adopt the returned entry without discarding unsaved form changes, SHALL show the entry as not published, SHALL follow the queued build in the publication card as it does after a publication, and SHALL announce the result. When the publication changed or disappeared in the meantime, the dialog SHALL show the API's conflict or not-published error and SHALL offer to reload the entry.
 
 #### Scenario: An admin unpublishes a collection entry
 - **WHEN** an admin confirms Unpublish for a published collection entry
@@ -663,6 +673,10 @@ Choosing Unpublish SHALL open a confirmation dialog that can be cancelled. It SH
 #### Scenario: An admin unpublishes a page
 - **WHEN** an admin opens Unpublish for a published page
 - **THEN** the confirmation says that the page's fixed path will return 404 after the next build
+
+#### Scenario: An admin unpublishes a global
+- **WHEN** an admin opens Unpublish for the published `settings` global
+- **THEN** the confirmation asks "Unpublish this site content?" and says that pages showing it fall back to their defaults after the next site build
 
 #### Scenario: An admin cancels Unpublish
 - **WHEN** an admin opens Unpublish and chooses Cancel
@@ -805,3 +819,40 @@ without that shape, and view-only editors, SHALL NOT show the warning.
 #### Scenario: Other blocks are unaffected
 - **WHEN** a `hero` block holds media without alt text
 - **THEN** no missing-alt warning is shown for the hero block
+
+### Requirement: The global editor presents site-wide content without a URL
+The editor of a global SHALL be headed by the global's label and SHALL show
+its description when configured. It SHALL show no public path, public URL
+fact, "Open on site" link, title control or slug control, and its entry
+actions menu SHALL offer only Revert to published and Unpublish under the same
+conditions as for a page, never Duplicate or Delete. The publish confirmation
+of a global SHALL ask to publish (or save and publish) the site content, SHALL
+name the draft revision that becomes public or say that unsaved changes are
+saved first, and SHALL state that the change affects every page that shows the
+content after the next site build. Saving, publishing, the build-state
+follow-up, revision-conflict recovery and the read-only viewer mode SHALL
+behave as for any entry.
+
+#### Scenario: An admin opens a published global
+- **WHEN** an admin opens the published `settings` global labelled "Site
+  settings" while the build site URL is configured
+- **THEN** the editor is headed "Edit Site settings", its publication card
+  shows status, revisions and build state but no public URL or "Open on site"
+  link, and the actions menu offers no Duplicate or Delete
+
+#### Scenario: An admin publishes a global
+- **WHEN** an admin opens Publish for the `settings` global at draft revision 3
+- **THEN** the confirmation asks "Publish this site content?", names draft
+  revision 3, and says the change affects every page that shows it after the
+  next site build
+
+#### Scenario: An admin saves and publishes a global
+- **WHEN** an admin with unsaved changes opens Save and publish for a global
+- **THEN** the confirmation asks "Save and publish this site content?" and
+  says the unsaved changes are saved first and then affect every page after
+  the next site build
+
+#### Scenario: A viewer opens a global
+- **WHEN** a `viewer` opens the `settings` global
+- **THEN** its fields are read-only and no save, publish or entry action is
+  offered

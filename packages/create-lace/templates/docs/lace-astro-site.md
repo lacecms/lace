@@ -175,7 +175,58 @@ The collection route reads the entry by slug on each render, so `astro dev`
 shows publications to existing routes on reload; restart `astro dev` after a
 new or renamed slug.
 
-## 7. Customize rich text
+## 7. Read site-wide content (globals)
+
+A global is a configuration-defined model with exactly one entry and no URL,
+such as site settings. Declare it in `cms/lace.config.ts`:
+
+```ts
+defineGlobal({
+  key: "settings",
+  version: 1,
+  label: "Site settings",
+  fields: {
+    siteName: field.text({ label: "Site name", required: true }),
+    tagline: field.text({ label: "Tagline" }),
+  },
+});
+```
+
+Run configuration sync, then edit and publish it from the Site group in Admin.
+Publishing a global requests a site build, because any page may show it.
+`site.global(key)` returns the published global from the same build export, or
+`undefined` while it has never been published, so keep static fallbacks. Its
+`fields` are untyped JSON; check each value before use, as in this
+`SiteHeader.astro` component:
+
+```astro
+---
+import type { PublishedSite } from "@lacecms/sdk";
+
+interface Props {
+  readonly site: PublishedSite;
+}
+
+const { site } = Astro.props;
+const settings = site.global("settings")?.fields ?? {};
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() !== "" ? value : undefined;
+const siteName = text(settings.siteName) ?? "My site";
+const tagline = text(settings.tagline);
+---
+
+<header>
+  <a href={import.meta.env.BASE_URL}>{siteName}</a>
+  {tagline === undefined ? null : <p>{tagline}</p>}
+</header>
+```
+
+Pass the `site` your page already loaded down to the header
+(`<SiteHeader site={site} />`, or through your layout's props) instead of
+calling `getSite()` again. A published global's
+`media(id)` and `image(id, usageAlt?)` resolve media like an entry's.
+
+## 8. Customize rich text
 
 `<RichText>` renders only the shared Lace allowlist and never raw HTML. Pass
 `components` to replace the element for a node or mark; an override receives
@@ -197,7 +248,7 @@ const { element } = Astro.props;
 <RichText components={{ link: ExternalLink }} document={document} />
 ```
 
-## 8. Style through the hooks
+## 9. Style through the hooks
 
 Target `data-lace-model`, `data-lace-entry`, `data-lace-block`,
 `data-lace-block-key` and `data-lace-part`; tag names and incidental classes are
@@ -213,7 +264,7 @@ not part of the contract:
 }
 ```
 
-## 9. Build
+## 10. Build
 
 ```sh
 pnpm astro build

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
+import { isSingletonModel } from "../../../entities/content/index.js";
 import { useSessionRecovery } from "../../../entities/session/index.js";
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
 import { PageError, PageLoading, PagePlaceholder } from "../../../shared/ui/PageState/index.js";
@@ -21,10 +22,10 @@ export function ModelPage() {
     return (
       <PagePlaceholder description="This content model does not exist." title="Page not found" />
     );
-  if (model.kind === "page")
+  if (isSingletonModel(model))
     return (
       <PagePlaceholder
-        description="Open this page from the content landing route."
+        description={`Open this ${model.kind === "global" ? "global" : "page"} from the content landing route.`}
         title={model.label ?? model.key}
       />
     );

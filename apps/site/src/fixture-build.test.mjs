@@ -119,6 +119,13 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(note).toMatch(
     /<img alt(?:="")? data-lace-part="media" height="480" src="[^"]*\/note-media" width="640">/u,
   );
+  // Every route renders the site header from the published settings global.
+  for (const html of [home, post, about, note]) {
+    expect(html).toMatch(
+      /<header class="site-header"><a class="site-name" href="\/">Lace Journal<\/a>/u,
+    );
+    expect(html).toContain('<p class="site-tagline">Notes from the reference site</p>');
+  }
   expect(`${home}${post}${about}${note}`).not.toContain("DRAFT ONLY");
   expect(`${home}${post}${about}${note}`).not.toContain("javascript:");
 }, 30_000);
@@ -157,6 +164,24 @@ test("a live build reads one export, keeps the token out of output and rejects u
     const home = readFileSync(join(siteRoot, "dist/index.html"), "utf8");
     expect(home).toContain('src="https://public.example/lace/api/v1/public/media/hero-media"');
     for (const file of outputFiles()) expect(readFileSync(file, "utf8")).not.toContain(token);
+    expect(home).toContain(">Lace Journal</a>");
+
+    // An export without a published settings global falls back to static values.
+    served = structuredClone(fixture);
+    delete served.globals;
+    calls = 0;
+    await build();
+    expect(calls).toBe(1);
+    for (const path of [
+      "index.html",
+      "blog/first-post/index.html",
+      "notes/first-note/index.html",
+    ]) {
+      const html = readFileSync(join(siteRoot, "dist", path), "utf8");
+      expect(html).toContain('<a class="site-name" href="/">Lace reference site</a>');
+      expect(html).not.toContain(`<p class="site-tagline">`);
+      expect(html).not.toContain("Lace Journal");
+    }
 
     served = structuredClone(fixture);
     served.entries[3].blocks[0].type = "unknownBlock";
