@@ -815,7 +815,7 @@ content_snapshots
 
 `fields_json` contains model-specific structured fields. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
-The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case; configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7).
+The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case or removed through the unpublish use case (section 10); configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7). Reverting a draft sets the published snapshot's `revision` to the new draft revision without changing its content, so an entry whose draft equals its publication is derived as published ([ADR 0008](adr/0008-entry-lifecycle-commands.md)).
 
 The database temporarily contains both snapshots, so text content is duplicated. This is intentional and acceptable for the D1 free-plan database limit because binary assets are excluded. Individual page payloads are split into block rows rather than constrained by one whole-page row.
 
@@ -1034,6 +1034,9 @@ published_state
 Every operation that changes public output increments `version` in the same
 atomic mutation. The version supplies the build-export ETag and the target
 version for build requests without hashing the full export on every request.
+Aligning a published snapshot's `revision` during a draft revert is not a
+public-output change: no renderer, SDK helper, or build step reads the
+revision, and the public entry shape planned for CE3C drops it.
 
 Outbox rows also contain `locked_at` and `locked_by` nullable columns. A
 dispatcher claims only an available, unprocessed row whose lease is absent or
@@ -1153,8 +1156,39 @@ Content publication success and site deployment success are distinct states. The
 Deleting a draft-only entry requires `content:write`. Deleting an entry that has
 a published snapshot also requires `content:publish`; the same atomic mutation
 removes its public route, increments `published_state.version`, and enqueues a
-build. The MVP has no separate unpublish command. Deleting a page does not delete
-its model and a later edit recreates the singleton entry.
+build. Page entries cannot be deleted: a page singleton is defined by
+configuration and is removed by removing its model from `lace.config.ts`. A page
+delete request fails with `CONTENT_PAGE_SINGLETON` (HTTP `409`).
+
+The entry lifecycle has three further commands
+([ADR 0008](adr/0008-entry-lifecycle-commands.md)):
+
+- **Unpublish** (`content:publish`, pages and collection entries). Inputs: entry
+  ID, expected published snapshot ID, actor, optional idempotency key (scoped
+  to the entry and actor, with the publication key rules). One guarded atomic
+  mutation removes the entry's route, clears `published_snapshot_id`, deletes
+  the published snapshot (its blocks and media references cascade), increments
+  `published_state.version`, creates or coalesces the build request, and stores
+  the idempotency result. The draft and its revision are unchanged. An entry
+  without a publication fails with `CONTENT_NOT_PUBLISHED`; a stale snapshot ID
+  fails with `CONTENT_REVISION_CONFLICT`. The removed snapshot cannot be
+  restored: republishing publishes the current draft under a new snapshot ID,
+  and fails with `CONTENT_ROUTE_CONFLICT` if another entry has claimed the
+  path meanwhile.
+- **Revert draft** (`content:write`). Inputs: entry ID, expected draft revision,
+  actor. One guarded atomic mutation, conditional on the expected draft
+  revision and the publication read by the use case, copies the published
+  title, slug, fields, schema version, blocks, and media references into the
+  draft with set-based statements, increments the draft revision once, and sets
+  the published snapshot's revision to the new draft revision. Public output,
+  `published_state.version`, and build work are unchanged. An entry without a
+  publication fails with `CONTENT_NOT_PUBLISHED`.
+- **Duplicate** (`content:write`, collection entries only). Creates a new entry
+  whose draft copies the source draft's fields and blocks with a ` (copy)` title
+  suffix within the title limit, no slug, new block keys, and a rebuilt media
+  reference projection. The copy is validated in draft mode, created at
+  revision 1, and never published. Creation is guarded on the source draft
+  revision that was read. A page duplicate fails with `CONTENT_PAGE_SINGLETON`.
 
 ## 11. Block registry and rich text
 
@@ -1280,6 +1314,9 @@ POST   /api/v1/admin/models/:modelKey/entries
 GET    /api/v1/admin/entries/:entryId
 PUT    /api/v1/admin/entries/:entryId/draft
 POST   /api/v1/admin/entries/:entryId/publish
+POST   /api/v1/admin/entries/:entryId/unpublish
+POST   /api/v1/admin/entries/:entryId/revert
+POST   /api/v1/admin/entries/:entryId/duplicate
 DELETE /api/v1/admin/entries/:entryId
 
 GET    /api/v1/admin/media

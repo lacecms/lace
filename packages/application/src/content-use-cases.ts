@@ -1,5 +1,5 @@
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
-import { sha256CanonicalJson, validateEntryAggregate } from "@lacecms/content";
+import { MAX_TITLE_LENGTH, sha256CanonicalJson, validateEntryAggregate } from "@lacecms/content";
 import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
 
 /**
@@ -9,6 +9,7 @@ import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
 export { ContentValidationError } from "@lacecms/content";
 import {
   DomainError,
+  assertCollectionEntryOperation,
   assertOrderedBlockPositions,
   blockKey,
   contentEntryId,
@@ -17,6 +18,7 @@ import {
   createContentEntry,
   mediaId,
   requirePermission,
+  requirePublishedSnapshot,
   resolveContentPublicPath,
 } from "@lacecms/domain";
 import type {
@@ -26,6 +28,7 @@ import type {
   ContentEntryId,
   ContentModelKey,
   ContentModelRoute,
+  ContentSnapshotId,
   DraftMediaReference,
   DraftSnapshot,
   PublishedSnapshot,
@@ -107,6 +110,26 @@ export interface PublishContentEntryUseCaseInput {
   readonly idempotencyKey?: string;
 }
 
+export interface UnpublishContentEntryUseCaseInput {
+  readonly actor: Actor;
+  readonly entryId: ContentEntryId;
+  readonly expectedPublishedSnapshotId: ContentSnapshotId;
+  readonly idempotencyKey?: string;
+}
+
+export interface RevertContentDraftUseCaseInput {
+  readonly actor: Actor;
+  readonly entryId: ContentEntryId;
+  readonly expectedRevision: number;
+}
+
+export interface DuplicateContentEntryUseCaseInput {
+  readonly actor: Actor;
+  readonly entryId: ContentEntryId;
+  /** When supplied, the source draft must still be at this revision. */
+  readonly expectedRevision?: number;
+}
+
 export interface DeleteContentEntryUseCaseInput {
   readonly actor: Actor;
   readonly entryId: ContentEntryId;
@@ -121,6 +144,27 @@ export interface PublishContentEntryUseCaseResult {
   readonly build: BuildDispatchOutcome;
   readonly entry: ContentEntry;
   readonly publication: "published" | "replayed";
+}
+
+export interface UnpublishContentEntryUseCaseResult {
+  readonly build: BuildDispatchOutcome;
+  readonly entry: ContentEntry;
+  readonly unpublication: "replayed" | "unpublished";
+}
+
+const DUPLICATE_TITLE_SUFFIX = " (copy)";
+
+/**
+ * Appends the duplicate suffix, shortening the source title so the result
+ * fits the shared title limit without leaving a lone surrogate.
+ */
+export function duplicateTitle(title: string): string {
+  const room = MAX_TITLE_LENGTH - DUPLICATE_TITLE_SUFFIX.length;
+  if (title.length <= room) return `${title}${DUPLICATE_TITLE_SUFFIX}`;
+  let base = title.slice(0, room);
+  const last = base.charCodeAt(base.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) base = base.slice(0, -1);
+  return `${base}${DUPLICATE_TITLE_SUFFIX}`;
 }
 
 interface NormalizedDraft extends CompleteDraftInput {
@@ -285,9 +329,114 @@ export class ContentUseCases {
     };
   }
 
+  public async unpublish(
+    input: UnpublishContentEntryUseCaseInput,
+  ): Promise<UnpublishContentEntryUseCaseResult> {
+    requirePermission(input.actor, "content:publish");
+    const entry = await this.entry(input.entryId);
+    const idempotency =
+      input.idempotencyKey === undefined
+        ? undefined
+        : {
+            actorId: input.actor.id,
+            fingerprint: publicationRequestFingerprint(
+              await sha256CanonicalJson({
+                actorId: input.actor.id,
+                entryId: input.entryId,
+                expectedPublishedSnapshotId: input.expectedPublishedSnapshotId,
+                operation: "unpublish",
+              }),
+            ),
+            key: publicationIdempotencyKey(input.idempotencyKey),
+          };
+    // A keyed retry after success must reach the adapter so it can replay.
+    if (idempotency === undefined) {
+      requirePublishedSnapshot(entry, input.expectedPublishedSnapshotId);
+    }
+    const result = await this.dependencies.content.unpublish({
+      entryId: entry.id,
+      expectedPublishedSnapshotId: input.expectedPublishedSnapshotId,
+      ...(idempotency === undefined ? {} : { idempotency }),
+      unpublishedAt: this.dependencies.clock.now(),
+      unpublishedBy: input.actor,
+    });
+    return {
+      build:
+        result.outcome === "replayed"
+          ? { status: "not-dispatched" }
+          : { status: "queued", targetVersion: result.targetVersion },
+      entry: detached(result.entry),
+      unpublication: result.outcome,
+    };
+  }
+
+  public async revertDraft(input: RevertContentDraftUseCaseInput): Promise<ContentEntry> {
+    requirePermission(input.actor, "content:write");
+    const entry = await this.entry(input.entryId);
+    const published = requirePublishedSnapshot(entry);
+    return commandEntry(
+      await this.dependencies.content.revertDraft({
+        entryId: entry.id,
+        expectedPublishedSnapshotId: published.id,
+        expectedRevision: input.expectedRevision,
+        revertedAt: this.dependencies.clock.now(),
+        revertedBy: input.actor,
+      }),
+    );
+  }
+
+  public async duplicate(input: DuplicateContentEntryUseCaseInput): Promise<ContentEntry> {
+    requirePermission(input.actor, "content:write");
+    const source = await this.entry(input.entryId);
+    assertCollectionEntryOperation(source, "duplicate");
+    if (input.expectedRevision !== undefined && input.expectedRevision !== source.draft.revision) {
+      throw new DomainError(
+        "CONTENT_REVISION_CONFLICT",
+        "The draft revision no longer matches the expected revision.",
+      );
+    }
+    const model = this.model(source.model.key);
+    const draft = await this.validateDraft(
+      {
+        blocks: source.draft.blocks.map((block) => ({
+          ...block,
+          key: blockKey(this.dependencies.idGenerator.next()),
+        })),
+        fields: source.draft.fields,
+        title: duplicateTitle(source.draft.title),
+      },
+      model,
+      "draft",
+    );
+    const now = this.dependencies.clock.now();
+    const id = contentEntryId(this.dependencies.idGenerator.next());
+    const entry = createContentEntry({
+      draft: {
+        ...draft,
+        createdAt: now,
+        entryId: id,
+        id: contentSnapshotId(this.dependencies.idGenerator.next()),
+        revision: 1,
+        state: "draft",
+        updatedAt: now,
+        updatedBy: input.actor,
+      },
+      id,
+      model: modelRoute(model),
+    });
+    return commandEntry(
+      await this.dependencies.content.create({
+        duplicateOf: { entryId: source.id, expectedRevision: source.draft.revision },
+        entry,
+        mediaReferences: draft.mediaReferences,
+      }),
+    );
+  }
+
   public async delete(input: DeleteContentEntryUseCaseInput): Promise<void> {
     requirePermission(input.actor, "content:write");
     const entry = await this.entry(input.entryId);
+    assertCollectionEntryOperation(entry, "delete");
     if (entry.published !== undefined) requirePermission(input.actor, "content:publish");
     await this.dependencies.content.delete({
       deletedAt: this.dependencies.clock.now(),

@@ -55,8 +55,11 @@ import type {
   PublishContentEntryResult,
   PublicContentEntry,
   PublicContentReadPort,
+  RevertContentDraftCommand,
   SaveCompleteDraftInput,
   RetryDispatcherLeaseInput,
+  UnpublishContentEntryCommand,
+  UnpublishContentEntryResult,
   BuildQueueReceipt,
   EnqueueSiteBuildInput,
   SiteBuildCommandPort,
@@ -113,6 +116,13 @@ import {
   entryTotals,
   entryTotalsSql,
   failure,
+  copySnapshotBlocksSql,
+  copySnapshotReferencesSql,
+  DUPLICATE_SOURCE_REVISION_SQL,
+  notPublished,
+  revertDraftSnapshotSql,
+  revisionConflict,
+  unpublicationScope,
   hydrateEntries,
   mediaCatalogItem,
   mediaCursorKind,
@@ -475,6 +485,15 @@ export class NodeContentRepository
     assertDraftPersistenceBounds(draft.blocks, input.mediaReferences);
     try {
       this.connection.transaction(() => {
+        if (input.duplicateOf !== undefined) {
+          const source = this.connection
+            .prepare(DUPLICATE_SOURCE_REVISION_SQL)
+            .get(input.duplicateOf.entryId) as { readonly revision: number } | undefined;
+          if (source === undefined) failure("Content entry does not exist.");
+          if (source.revision !== input.duplicateOf.expectedRevision) {
+            revisionConflict("The source draft revision no longer matches the duplicate guard.");
+          }
+        }
         const version = this.connection
           .prepare("select config_version from content_models where key = ?")
           .get(model.key) as { readonly config_version: number } | undefined;
@@ -667,6 +686,125 @@ export class NodeContentRepository
     } catch (error) {
       this.throwWriteError(error, false);
     }
+  }
+
+  public async unpublish(
+    input: UnpublishContentEntryCommand,
+  ): Promise<UnpublishContentEntryResult> {
+    const idempotency = input.idempotency;
+    const scope =
+      idempotency === undefined
+        ? undefined
+        : unpublicationScope(input.entryId, idempotency.actorId);
+    try {
+      return this.connection.transaction((): UnpublishContentEntryResult => {
+        if (idempotency !== undefined) {
+          if (idempotency.actorId !== input.unpublishedBy.id)
+            failure("Unpublication idempotency actor must match the unpublishing actor.");
+          const prior = this.connection
+            .prepare(
+              "select request_hash, response_json from idempotency_records where scope = ? and key = ?",
+            )
+            .get(scope, idempotency.key) as
+            | { request_hash: string; response_json: string }
+            | undefined;
+          if (prior !== undefined) {
+            if (prior.request_hash !== idempotency.fingerprint)
+              failure("Unpublication idempotency key was reused with different input.");
+            return {
+              entry: JSON.parse(prior.response_json) as ContentEntry,
+              outcome: "replayed",
+              status: "unpublished",
+            };
+          }
+        }
+        const entry = this.entryRow(input.entryId);
+        if (entry === undefined) failure("Content entry does not exist.");
+        if (entry.published_snapshot_id === null) notPublished();
+        if (entry.published_snapshot_id !== input.expectedPublishedSnapshotId) {
+          revisionConflict("The published snapshot no longer matches the expected publication.");
+        }
+        this.checkpoint("unpublish.route");
+        this.connection
+          .prepare("delete from published_routes where entry_id = ?")
+          .run(input.entryId);
+        this.connection
+          .prepare(
+            "update content_entries set published_snapshot_id = null, updated_at = ? where id = ?",
+          )
+          .run(input.unpublishedAt, input.entryId);
+        const targetVersion = this.bumpPublicState(
+          input.unpublishedAt,
+          input.unpublishedBy.id,
+          input.expectedPublishedSnapshotId,
+        );
+        const committed = this.loadEntry(input.entryId);
+        if (committed === null) failure("Unpublished content entry could not be reloaded.");
+        if (idempotency !== undefined)
+          this.connection
+            .prepare(
+              "insert into idempotency_records (scope, key, request_hash, response_json, created_at, expires_at) values (?, ?, ?, ?, ?, ?)",
+            )
+            .run(
+              scope,
+              idempotency.key,
+              idempotency.fingerprint,
+              JSON.stringify(committed),
+              input.unpublishedAt,
+              input.unpublishedAt + PUBLICATION_IDEMPOTENCY_TTL_MS,
+            );
+        this.checkpoint("unpublish.snapshot");
+        this.connection
+          .prepare("delete from content_snapshots where id = ?")
+          .run(input.expectedPublishedSnapshotId);
+        return { entry: committed, outcome: "unpublished", status: "unpublished", targetVersion };
+      })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+  }
+
+  public async revertDraft(input: RevertContentDraftCommand): Promise<ContentCommandResult> {
+    try {
+      this.connection.transaction(() => {
+        const entry = this.entryRow(input.entryId);
+        if (entry === undefined || entry.draft_snapshot_id === null) {
+          failure("Content entry does not exist.");
+        }
+        if (entry.published_snapshot_id === null) notPublished();
+        if (entry.published_snapshot_id !== input.expectedPublishedSnapshotId) {
+          revisionConflict("The published snapshot no longer matches the expected publication.");
+        }
+        const draftId = entry.draft_snapshot_id;
+        const publishedId = entry.published_snapshot_id;
+        this.checkpoint("revert.draft");
+        const changed = this.connection
+          .prepare(revertDraftSnapshotSql("content_snapshots.revision = ?"))
+          .run(input.revertedAt, input.revertedBy.id, publishedId, draftId, input.expectedRevision);
+        if (changed.changes !== 1) {
+          revisionConflict("The draft revision no longer matches the expected revision.");
+        }
+        this.connection.prepare("delete from content_blocks where snapshot_id = ?").run(draftId);
+        this.connection
+          .prepare("delete from content_media_references where snapshot_id = ?")
+          .run(draftId);
+        this.checkpoint("revert.blocks");
+        this.connection.prepare(copySnapshotBlocksSql()).run(draftId, publishedId);
+        this.connection.prepare(copySnapshotReferencesSql()).run(draftId, publishedId);
+        this.checkpoint("revert.published");
+        this.connection
+          .prepare("update content_snapshots set revision = ? where id = ?")
+          .run(input.expectedRevision + 1, publishedId);
+        this.connection
+          .prepare("update content_entries set updated_at = ? where id = ?")
+          .run(input.revertedAt, input.entryId);
+      })();
+    } catch (error) {
+      this.throwWriteError(error, false);
+    }
+    const entry = this.loadEntry(input.entryId);
+    if (entry === null) failure("Reverted content entry could not be reloaded.");
+    return { entry, status: "reverted" };
   }
 
   public async delete(
