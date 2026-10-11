@@ -3,6 +3,7 @@ import type { FieldErrors } from "react-hook-form";
 import { fieldLabel } from "./draft.js";
 import type { DraftEditorValues } from "./editor-form.js";
 import { fieldControlId } from "./field-types.js";
+import { SEO_CONTROLS } from "./seo.js";
 
 /** Where activating a validation problem moves focus. */
 export type ProblemTarget =
@@ -51,8 +52,8 @@ export function blockLevelProblems(
 
 /**
  * Lists every current validation problem in reading order: title, the block
- * list, each block in order, slug, model fields, then issues the editor could
- * not place.
+ * list, each block in order, slug, model fields, SEO values in card order,
+ * then issues the editor could not place.
  */
 export function validationProblems({
   blocks,
@@ -127,6 +128,17 @@ export function validationProblems({
       label: fieldLabel(key, field.label),
       message,
       target: { id: fieldControlId(`fields.${key}`), kind: "control" },
+    });
+  }
+  const seoErrors = (errors.seo ?? {}) as Messages;
+  for (const control of SEO_CONTROLS) {
+    const message = messageOf(seoErrors[control.key]);
+    if (message === undefined) continue;
+    problems.push({
+      id: control.id,
+      label: control.label,
+      message,
+      target: { id: control.id, kind: "control" },
     });
   }
   for (const [index, message] of unmapped.entries())

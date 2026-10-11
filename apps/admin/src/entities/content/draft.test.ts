@@ -105,3 +105,30 @@ test("a slugless collection draft starts with an empty slug that is never sent",
   expect(draftValues(model, slugless).slug).toBe("");
   expect(JSON.parse(localDraftJson(draftValues(model, slugless)))).not.toHaveProperty("slug");
 });
+
+test("loads, copies and omits the SEO group by model", () => {
+  const seoModel = { ...model, seo: { description: null, image: null } } as ContentModelDto;
+  const withSeo = {
+    ...entry,
+    draft: {
+      ...entry.draft,
+      seo: { canonical: null, description: null, image: "media-1", noindex: true, title: "SEO" },
+    },
+  } as unknown as ContentEntryDto;
+  const values = draftValues(seoModel, withSeo);
+  expect(values.seo).toEqual({
+    canonical: "",
+    description: "",
+    image: "media-1",
+    noindex: true,
+    title: "SEO",
+  });
+  expect(draftValues(model, withSeo)).not.toHaveProperty("seo");
+  expect(JSON.parse(localDraftJson(values)).seo).toEqual({
+    canonical: null,
+    description: null,
+    image: "media-1",
+    noindex: true,
+    title: "SEO",
+  });
+});

@@ -41,3 +41,23 @@ export {
   type ProblemTarget,
   type ValidationProblem,
 } from "./validation-problems.js";
+export {
+  canonicalProblem,
+  SEO_CONTROLS,
+  SEO_DESCRIPTION_RECOMMENDED,
+  SEO_TITLE_RECOMMENDED,
+  seoDefaultsAnnotation,
+  seoFormValues,
+  seoInput,
+  seoProblems,
+  seoTextLength,
+  type SeoFormValues,
+  type SeoKey,
+} from "./seo.js";
+export {
+  seoInheritance,
+  type SeoInheritance,
+  type SeoPreview,
+  type SeoSiteDefaults,
+} from "./seo-preview.js";
+export { seoSiteDefaults, useSeoDefaults } from "./seo-defaults.js";

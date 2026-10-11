@@ -275,3 +275,48 @@ test("cleared values are removed from fields and block data before saving", () =
     title: "T",
   });
 });
+
+describe("SEO validation and issue mapping", () => {
+  const seo = { canonical: "/a", description: "", image: null, noindex: false, title: "" };
+
+  test("the resolver reports SEO problems at their values", () => {
+    expect(
+      validateDraftValues(model, { blocks: [], fields: { score: 2 }, seo, title: "T" }),
+    ).toEqual({
+      seo: {
+        canonical: {
+          message:
+            "Enter an absolute URL that starts with https:// or http://, without credentials or a # fragment.",
+          type: "validate",
+        },
+      },
+    });
+  });
+
+  test("maps SEO pointers to their controls and leaves the group unmapped", () => {
+    expect(issueLocation("/seo/title", model, [])).toBe("seo.title");
+    expect(issueLocation("/seo/image", model, [])).toBe("seo.image");
+    expect(issueLocation("/seo", model, [])).toBeUndefined();
+    expect(issueLocation("/seo/other", model, [])).toBeUndefined();
+    expect(issueLocation("/seo/title/0", model, [])).toBeUndefined();
+  });
+
+  test("words SEO server issues as sentences", () => {
+    expect(
+      serverIssueMessage({
+        code: "seo_text_too_long",
+        message: "must not exceed 500 characters.",
+        path: "/seo/description",
+      }),
+    ).toBe("Enter no more than 500 characters.");
+    expect(
+      serverIssueMessage({ code: "seo_text_too_long", message: "x", path: "/seo/title" }),
+    ).toBe("Enter no more than 200 characters.");
+    expect(serverIssueMessage({ code: "invalid_seo_image", message: "x" })).toBe(
+      "Choose a media item.",
+    );
+    expect(serverIssueMessage({ code: "seo_not_allowed", message: "is not enabled." })).toBe(
+      "SEO is no longer enabled for this model. Reload the entry to continue.",
+    );
+  });
+});

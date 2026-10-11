@@ -1,4 +1,7 @@
+import { formatSeoTitle, seoText } from "@lacecms/contracts";
 import type { ExportSeoDto, PublicEntryDto, PublicMediaDto, SeoValueDto } from "@lacecms/contracts";
+
+export { seoText };
 
 /** A resolved image with the effective alt text of its usage. */
 export interface SeoImage extends Readonly<PublicMediaDto> {
@@ -44,24 +47,9 @@ export interface ResolvedSeo {
   readonly title: string;
 }
 
-/** Collapses whitespace runs and trims a string value; anything else, or blank text, is absent. */
-export function seoText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const text = value.replace(/\s+/gu, " ").trim();
-  return text === "" ? undefined : text;
-}
-
 /** The absolute URL of a public path under a site base URL ending with `/`. */
 export function siteUrlFor(siteUrl: string, path: string): string {
   return new URL(path.replace(/^\/+/u, ""), siteUrl).href;
-}
-
-function formatTitle(title: string, defaults: SeoDefaultValues | undefined): string {
-  const template = seoText(defaults?.titleTemplate);
-  // A function replacer keeps `$&` and similar sequences in titles literal.
-  if (template?.includes("%s") === true) return template.replace("%s", () => title);
-  const siteName = seoText(defaults?.siteName);
-  return siteName === undefined ? title : `${title} | ${siteName}`;
 }
 
 /**
@@ -98,6 +86,6 @@ export function resolveSeo(input: SeoResolverInput): ResolvedSeo {
     ...(resolvedImage === undefined ? {} : { image: resolvedImage }),
     ...(robots === undefined ? {} : { robots }),
     ...(siteName === undefined ? {} : { siteName }),
-    title: seoText(stored?.title) ?? formatTitle(entry.title, defaults),
+    title: seoText(stored?.title) ?? formatSeoTitle(entry.title, defaults),
   });
 }

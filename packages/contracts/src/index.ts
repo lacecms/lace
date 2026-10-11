@@ -283,10 +283,38 @@ export const contentBlockSchema = v.strictObject({
 });
 
 export {
+  isCanonicalUrl,
   MAX_SEO_CANONICAL_LENGTH,
   MAX_SEO_DESCRIPTION_LENGTH,
   MAX_SEO_TITLE_LENGTH,
+  normalizeSeoText,
 } from "@lacecms/domain";
+
+/** Collapses whitespace runs and trims a string value; anything else, or blank text, is absent. */
+export function seoText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\s+/gu, " ").trim();
+  return text === "" ? undefined : text;
+}
+
+/** The site default values that shape an entry's search title. */
+export interface SeoTitleDefaults {
+  readonly siteName?: string | undefined;
+  readonly titleTemplate?: string | undefined;
+}
+
+/**
+ * Formats an entry title for search results (ADR 0011): a title template
+ * applies only when it contains `%s`, which is replaced literally; otherwise
+ * `{title} | {siteName}`, or the bare title without a site name.
+ */
+export function formatSeoTitle(title: string, defaults: SeoTitleDefaults | undefined): string {
+  const template = seoText(defaults?.titleTemplate);
+  // A function replacer keeps `$&` and similar sequences in titles literal.
+  if (template?.includes("%s") === true) return template.replace("%s", () => title);
+  const siteName = seoText(defaults?.siteName);
+  return siteName === undefined ? title : `${title} | ${siteName}`;
+}
 
 /**
  * The SEO group of an entry of an SEO-enabled model as clients read it:

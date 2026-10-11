@@ -10,6 +10,7 @@ import {
   withoutClearedValues,
   type DraftEditorValues,
 } from "./editor-form.js";
+import { seoFormValues, seoInput } from "./seo.js";
 
 /** Form values for an entry draft, with block defaults filled from the block definitions. */
 export function draftValues(model: ContentModelDto, entry: ContentEntryDto): DraftEditorValues {
@@ -28,6 +29,7 @@ export function draftValues(model: ContentModelDto, entry: ContentEntryDto): Dra
       };
     }),
     fields: initialModelFieldValues(model, entry.draft.fields),
+    ...(model.seo === undefined ? {} : { seo: seoFormValues(entry.draft.seo) }),
     // The slug input holds "" for a slugless collection entry, so the baseline must match it.
     ...(model.kind === "collection"
       ? { slug: entry.draft.slug ?? "" }
@@ -73,6 +75,7 @@ export function localDraftJson(draft: DraftEditorValues): string {
   return canonicalizeJson({
     blocks: orderedDraftBlocks(values.blocks),
     fields: values.fields,
+    ...(values.seo === undefined ? {} : { seo: seoInput(values.seo) }),
     ...(values.slug === undefined || values.slug === "" ? {} : { slug: values.slug }),
     title: values.title,
   } as unknown as JsonValue);

@@ -56,6 +56,7 @@ const models = [
     label: "Posts",
     listFields: ["category", "featured"],
     route: "/posts/:slug",
+    seo: { description: "summary", image: "cover" },
     version: 1,
   },
   {
@@ -69,6 +70,7 @@ const models = [
     key: "settings",
     kind: "global",
     label: "Site settings",
+    seoDefaults: { description: "tagline", image: null, siteName: "siteName", titleTemplate: null },
     version: 1,
   },
 ];
@@ -118,6 +120,18 @@ function entry(id: string, modelKey: string, title: string, slug?: string) {
             : {},
       id: `${id}-draft`,
       revision: 2,
+      ...(modelKey === "posts"
+        ? {
+            // Longer than the recommended 60 characters, so the length warning is audited.
+            seo: {
+              canonical: null,
+              description: null,
+              image: null,
+              noindex: false,
+              title: "Launch notes: everything that shipped in the first public alpha",
+            },
+          }
+        : {}),
       ...(slug === undefined ? {} : { slug }),
       state: "draft",
       title,
@@ -455,7 +469,7 @@ const routes: ReadonlyArray<readonly [string, string, (page: Page) => Locator]> 
   [
     "page editor",
     "/content/home/entry-home",
-    (page) => page.getByRole("textbox", { name: "Title" }),
+    (page) => page.getByRole("textbox", { name: "Title", exact: true }),
   ],
   [
     "global model route",
@@ -470,7 +484,7 @@ const routes: ReadonlyArray<readonly [string, string, (page: Page) => Locator]> 
   [
     "collection entry editor",
     "/content/posts/entry-1",
-    (page) => page.getByRole("textbox", { name: "Title" }),
+    (page) => page.getByRole("textbox", { name: "Title", exact: true }),
   ],
   ["media library", "/media", (page) => page.getByRole("list", { name: "Media library" })],
   ["builds", "/builds", (page) => page.getByRole("heading", { name: "Builds", exact: true })],
@@ -530,6 +544,21 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expectNoAccessibilityViolations(page, screen);
     });
+
+  test(`the SEO card with a problem passes the accessibility audit (${theme} theme)`, async ({
+    page,
+  }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page);
+    await openAdmin(page, "/content/posts/entry-1", (current) =>
+      current.getByRole("textbox", { name: "SEO title" }),
+    );
+    await expect(page.getByText(/may shorten titles/u)).toBeVisible();
+    await page.getByRole("textbox", { name: "Canonical URL" }).fill("/posts/launch-notes");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByRole("alert", { name: "There is 1 problem to fix" })).toBeFocused();
+    await expectNoAccessibilityViolations(page, "SEO card with a problem");
+  });
 
   for (const [screen, path, ready] of publicRoutes)
     test(`${screen} passes the accessibility audit (${theme} theme)`, async ({ page }) => {
@@ -596,7 +625,7 @@ for (const theme of ["light", "dark"] as const) {
     await seedTheme(page, theme);
     await mockAdmin(page);
     await openAdmin(page, "/content/posts/entry-1", (current) =>
-      current.getByRole("textbox", { name: "Title" }),
+      current.getByRole("textbox", { name: "Title", exact: true }),
     );
 
     await page.getByRole("button", { name: "Add block" }).click();
@@ -619,7 +648,7 @@ for (const theme of ["light", "dark"] as const) {
     );
 
     // Unsaved changes on a published entry offer every lifecycle action.
-    await page.getByRole("textbox", { name: "Title" }).fill("Launch notes revised");
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Launch notes revised");
     await expect(page.getByRole("button", { name: "Save and publish" })).toBeVisible();
     const entryActions = page.getByRole("button", { name: "Entry actions" });
     await entryActions.click();
@@ -644,7 +673,9 @@ for (const theme of ["light", "dark"] as const) {
     await expectNoAccessibilityViolations(page, "revert confirmation");
     // Only unsaved changes differ, so reverting discards them locally.
     await revert.getByRole("button", { name: "Revert to published" }).click();
-    await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Launch notes");
+    await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
+      "Launch notes",
+    );
 
     await page.goto("/admin/content/posts");
     await page.getByRole("button", { name: "Actions for Launch notes" }).click();
@@ -723,7 +754,9 @@ test("an administrator completes the editorial flow with the keyboard alone", as
   await expect(row).toBeVisible();
   await tabTo(page, row);
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Launch notes");
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
+    "Launch notes",
+  );
 
   await tabTo(page, page.getByRole("button", { name: "Add block" }));
   await page.keyboard.press("Enter");
@@ -860,7 +893,7 @@ test("public account screens fit a 375px viewport without horizontal scrolling",
 test("the entry column stacks below the blocks on a narrow screen", async ({ browser }) => {
   const page = await narrowPage(browser);
   await openAdmin(page, "/content/posts/entry-1", (current) =>
-    current.getByRole("textbox", { name: "Title" }),
+    current.getByRole("textbox", { name: "Title", exact: true }),
   );
   const lastBlock = page.getByRole("article").last();
   const publication = page.getByRole("region", { name: "Publication status" });

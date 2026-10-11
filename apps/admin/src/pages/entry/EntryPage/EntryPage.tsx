@@ -19,8 +19,11 @@ import {
   orderedDraftBlocks,
   locationField,
   resolvedPublicPath,
+  seoDefaultsAnnotation,
+  seoInput,
   serverIssueMessage,
   suggestSlug,
+  useSeoDefaults,
   validationProblems,
   withoutClearedValues,
   type DraftEditorValues,
@@ -48,6 +51,7 @@ import { MediaPicker } from "../../../widgets/media-library/index.js";
 import { DiscardChangesDialog } from "../DiscardChangesDialog/index.js";
 import { EntryActionsMenu } from "../EntryActionsMenu/index.js";
 import { EntryConflictAlert } from "../EntryConflictAlert/index.js";
+import { EntrySeoCard } from "../EntrySeoCard/index.js";
 import { EntryEditorActions, type SaveState } from "../EntryEditorActions/index.js";
 import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
 import {
@@ -82,6 +86,12 @@ export function EntryPage() {
   const leaving = useRef(false);
   const currentEntry = savedEntry ?? entry.data;
   const model = models.data?.items.find((item) => item.key === modelKey);
+  const seoDefaults = useSeoDefaults(model?.seo === undefined ? undefined : models.data?.items);
+  const buildSite = useQuery({
+    enabled: model?.seo !== undefined,
+    queryFn: client.loadBuildSite,
+    queryKey: adminQueryKeys.buildSite,
+  });
   const modelRef = useRef<ContentModelDto | undefined>(undefined);
   modelRef.current = model;
   const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
@@ -94,9 +104,14 @@ export function EntryPage() {
   const [unmappedIssues, setUnmappedIssues] = useState<readonly string[]>([]);
   const summaryRef = useRef<HTMLElement>(null);
   const [summaryFocus, setSummaryFocus] = useState(0);
+  const summaryFocused = useRef(0);
+  // Local errors can reach the form state a render after the request to show the
+  // summary, so focus it on the first render that has it, once per request.
   useEffect(() => {
-    if (summaryFocus > 0) summaryRef.current?.focus();
-  }, [summaryFocus]);
+    if (summaryFocus === summaryFocused.current || summaryRef.current === null) return;
+    summaryFocused.current = summaryFocus;
+    summaryRef.current.focus();
+  });
   const showSummary = () => {
     setSummaryShown(true);
     setSummaryFocus((count) => count + 1);
@@ -173,8 +188,10 @@ export function EntryPage() {
         blocks: orderedDraftBlocks(values.blocks),
         expectedRevision: currentEntry.draft.revision,
         fields: values.fields,
-        // The editor has no SEO inputs yet; send the loaded values back unchanged.
-        ...(currentEntry.draft.seo === undefined ? {} : { seo: currentEntry.draft.seo }),
+        // Models without SEO accept no group, so only SEO-enabled entries send one.
+        ...(modelRef.current?.seo === undefined || values.seo === undefined
+          ? {}
+          : { seo: seoInput(values.seo) }),
         // An empty slug input means the draft has no slug.
         ...(modelRef.current?.kind === "collection" &&
         values.slug !== undefined &&
@@ -273,6 +290,8 @@ export function EntryPage() {
   useSessionRecovery(save.error);
   useSessionRecovery(publish.error);
   useSessionRecovery(reloadServerDraft.error);
+  useSessionRecovery(seoDefaults.error);
+  useSessionRecovery(buildSite.error);
   const [savingToPublish, setSavingToPublish] = useState(false);
   if (models.isPending || entry.isPending) return <PageLoading label="Loading draft" />;
   if (models.error !== null) return <PageError error={models.error} />;
@@ -597,6 +616,7 @@ export function EntryPage() {
                   ) : undefined}
                   {Object.entries(model.fields).map(([key, definition]) => (
                     <FieldRenderer
+                      annotation={seoDefaultsAnnotation(model, key)}
                       control={form.control}
                       definition={definition}
                       error={errors?.[key]?.message}
@@ -607,6 +627,16 @@ export function EntryPage() {
                   ))}
                 </section>
               ) : undefined}
+              {model.seo === undefined ? undefined : (
+                <EntrySeoCard
+                  control={form.control}
+                  defaults={seoDefaults.defaults}
+                  errors={form.formState.errors.seo}
+                  model={model}
+                  readOnly={readOnly}
+                  siteUrl={buildSite.data?.site?.url}
+                />
+              )}
             </aside>
           </fieldset>
         </form>

@@ -8,10 +8,13 @@ import {
 import type { BlockMetadata, FieldMetadata, JsonObject } from "@lacecms/content";
 import type { ContentBlockDto, ContentModelDto, ContractValidationIssue } from "@lacecms/contracts";
 import type { FieldErrors, Resolver } from "react-hook-form";
+import { SEO_MESSAGES, seoProblems, type SeoFormValues, type SeoKey } from "./seo.js";
 
 export interface DraftEditorValues {
   blocks: ContentBlockDto[];
   fields: Record<string, unknown>;
+  /** Present for entries of models with SEO enabled. */
+  seo?: SeoFormValues;
   slug?: string;
   title: string;
 }
@@ -109,7 +112,8 @@ function sentence(message: string): string {
  * message is preferred.
  */
 export function serverIssueMessage(
-  issue: Pick<ContractValidationIssue, "code" | "message">,
+  issue: Pick<ContractValidationIssue, "code" | "message"> &
+    Partial<Pick<ContractValidationIssue, "path">>,
   field?: { readonly definition: FieldMetadata; readonly value: unknown },
 ): string {
   switch (issue.code) {
@@ -134,6 +138,20 @@ export function serverIssueMessage(
       return BLOCK_MESSAGES.invalidKey;
     case "duplicate_block_key":
       return BLOCK_MESSAGES.duplicateKey;
+    case "invalid_seo_text":
+      return SEO_MESSAGES.singleLine;
+    case "seo_text_too_long":
+      return issue.path === "/seo/description"
+        ? SEO_MESSAGES.descriptionTooLong
+        : SEO_MESSAGES.titleTooLong;
+    case "invalid_canonical_url":
+      return SEO_MESSAGES.canonical;
+    case "canonical_too_long":
+      return SEO_MESSAGES.canonicalTooLong;
+    case "invalid_seo_image":
+      return SEO_MESSAGES.image;
+    case "seo_not_allowed":
+      return SEO_MESSAGES.notAllowed;
     default:
       return sentence(issue.message);
   }
@@ -166,6 +184,12 @@ function fieldErrors(
     if (problem !== undefined) fieldIssues[key] = error(problem);
   }
   if (Object.keys(fieldIssues).length > 0) errors.fields = fieldIssues;
+  if (values.seo !== undefined) {
+    const seoIssues = Object.fromEntries(
+      Object.entries(seoProblems(values.seo)).map(([key, message]) => [key, error(message)]),
+    );
+    if (Object.keys(seoIssues).length > 0) errors.seo = seoIssues;
+  }
   const blockIssues: Record<string, unknown> = {};
   const definitions = new Map(
     (model.blockDefinitions ?? []).map((definition) => [definition.type, definition]),
@@ -275,11 +299,20 @@ export type IssueLocation =
   | "title"
   | `blocks.${number}.${"block" | "key" | "schemaVersion" | "type"}`
   | `blocks.${number}.data.${string}`
-  | `fields.${string}`;
+  | `fields.${string}`
+  | `seo.${SeoKey}`;
 
 function unescapePointer(segment: string): string {
   return segment.replaceAll("~1", "/").replaceAll("~0", "~");
 }
+
+const seoKeys: ReadonlySet<string> = new Set<SeoKey>([
+  "canonical",
+  "description",
+  "image",
+  "noindex",
+  "title",
+]);
 
 const fieldKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/u;
 
@@ -297,6 +330,12 @@ export function issueLocation(
   const [root, second, third, fourth] = segments;
   if (root === "title" && segments.length === 1) return "title";
   if (root === "slug" && segments.length === 1) return "slug";
+  if (root === "seo") {
+    // An issue about the group as a whole (for example `seo_not_allowed`) has no control.
+    return segments.length === 2 && seoKeys.has(second ?? "")
+      ? `seo.${second as SeoKey}`
+      : undefined;
+  }
   if (root === "fields") {
     return second !== undefined &&
       fieldKeyPattern.test(second) &&

@@ -86,6 +86,10 @@ import {
   transportError,
   validationError,
   versionFromEntityTag,
+  formatSeoTitle,
+  isCanonicalUrl as contractsIsCanonicalUrl,
+  normalizeSeoText as contractsNormalizeSeoText,
+  seoText,
 } from "../dist/index.js";
 
 test("operational status requires a bounded engine release", () => {
@@ -1559,5 +1563,34 @@ describe("public delivery DTOs", () => {
     expect(() =>
       v.parse(publicMediaDictionarySchema, { "media-b": { ...dto.media["media-b"], alt: "" } }),
     ).toThrow();
+  });
+});
+
+describe("shared SEO text rules", () => {
+  test("seoText collapses whitespace and drops blank or non-text values", () => {
+    expect(seoText("  Hello \n  world ")).toBe("Hello world");
+    expect(seoText("   ")).toBeUndefined();
+    expect(seoText(42)).toBeUndefined();
+    expect(seoText(undefined)).toBeUndefined();
+  });
+
+  test("formatSeoTitle applies the title template rule", () => {
+    expect(formatSeoTitle("Hello", { siteName: "Lace" })).toBe("Hello | Lace");
+    expect(formatSeoTitle("Hello", { siteName: "Lace", titleTemplate: "%s — Notes" })).toBe(
+      "Hello — Notes",
+    );
+    expect(formatSeoTitle("$& costs", { titleTemplate: "%s · Shop" })).toBe("$& costs · Shop");
+    expect(formatSeoTitle("Hello", { siteName: "Lace", titleTemplate: "Notes" })).toBe(
+      "Hello | Lace",
+    );
+    expect(formatSeoTitle("Hello", { siteName: "  " })).toBe("Hello");
+    expect(formatSeoTitle("Hello", undefined)).toBe("Hello");
+  });
+
+  test("re-exports the domain SEO predicates", () => {
+    expect(contractsIsCanonicalUrl("https://example.com/a")).toBe(true);
+    expect(contractsIsCanonicalUrl("/a")).toBe(false);
+    expect(contractsNormalizeSeoText("a\nb", "title")).toBeUndefined();
+    expect(contractsNormalizeSeoText("  ", "title")).toBeNull();
   });
 });

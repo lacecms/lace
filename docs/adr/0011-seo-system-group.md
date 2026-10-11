@@ -77,6 +77,23 @@ OpenSpec change `ce04b-site-seo-output` implements decision 6 on the site:
 - `@lacecms/astro` ships `LaceSeo.astro` and the sitemap and robots response
   helpers; sites own the layout and endpoint files.
 
+## Admin editing (CE4C)
+
+OpenSpec change `ce04c-admin-seo-editing` adds the editor surface:
+
+- An *SEO* card in the entry editor of SEO-enabled models holds the group in
+  the draft form, so dirty tracking, discard, revert, conflict recovery and
+  "Copy my JSON" need no separate path. Saves send the complete group.
+- Recommended lengths (60 and 160 characters) only warn; the domain limits
+  are validated locally through the predicates re-exported by
+  `@lacecms/contracts`.
+- Placeholders and a search-result preview apply decision 6 to unsaved
+  values. `seoText` and the title template rule (`formatSeoTitle`) live in
+  `@lacecms/contracts`, shared by the admin preview and the SDK resolver.
+- Site defaults come from the published snapshot of the defaults global,
+  which is what the next build reads; without one the editor shows the next
+  step of the chain.
+
 ## Alternatives considered
 
 - **Relational SEO columns.** Rejected: five columns at every copy site and a

@@ -107,3 +107,24 @@ test("block-level problems include undefined data fields but not defined fields"
   ).toEqual(["Key.", "Version.", "Whole block.", "Undefined field."]);
   expect(blockLevelProblems(undefined, {})).toEqual([]);
 });
+
+test("lists SEO problems after model fields in card order", () => {
+  const problems = validationProblems({
+    blocks: [],
+    errors: {
+      fields: { summary: { message: "Enter text.", type: "validate" } },
+      seo: {
+        canonical: { message: "Bad URL.", type: "server" },
+        title: { message: "Too long.", type: "validate" },
+      },
+    } as never,
+    model,
+    unmapped: ["Not placed."],
+  });
+  expect(problems.map((problem) => [problem.label, problem.target])).toEqual([
+    ["Short summary", { id: "field-fields-summary", kind: "control" }],
+    ["SEO title", { id: "seo-title", kind: "control" }],
+    ["Canonical URL", { id: "seo-canonical", kind: "control" }],
+    ["Draft", undefined],
+  ]);
+});
