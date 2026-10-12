@@ -1,5 +1,11 @@
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
-import { MAX_TITLE_LENGTH, sha256CanonicalJson, validateEntryAggregate } from "@lacecms/content";
+import {
+  collectFieldMedia,
+  encodeFieldPath,
+  MAX_TITLE_LENGTH,
+  sha256CanonicalJson,
+  validateEntryAggregate,
+} from "@lacecms/content";
 import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
 
 /**
@@ -608,12 +614,10 @@ export class ContentUseCases {
     definitions: Readonly<Record<string, FieldDefinition>>,
     sourceKey: "$fields" | ReturnType<typeof blockKey>,
   ): DraftMediaReference[] {
-    const references: DraftMediaReference[] = [];
-    for (const [key, definition] of Object.entries(definitions)) {
-      if (definition.type !== "media" || !Object.hasOwn(values, key)) continue;
-      const value = values[key] as string;
-      references.push({ fieldPath: key, mediaId: mediaId(value), sourceKey });
-    }
-    return references;
+    return collectFieldMedia(definitions, values).map(({ mediaId: id, path }) => ({
+      fieldPath: encodeFieldPath(path),
+      mediaId: mediaId(id),
+      sourceKey,
+    }));
   }
 }

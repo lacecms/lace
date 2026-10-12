@@ -2882,3 +2882,83 @@ test("the publication fingerprint covers the block envelope", async () => {
   expect(fingerprints).toHaveLength(2);
   expect(fingerprints[0]).not.toBe(fingerprints[1]);
 });
+
+test("nested media traversal enforces location limits, batches IDs and preserves fake lifecycle", async () => {
+  const config = await defineConfig({
+    blocks: [],
+    content: [
+      defineCollection({
+        key: "posts",
+        version: 1,
+        route: "/blog/:slug",
+        blocks: [],
+        fields: {
+          first: field.list({ item: field.media() }),
+          second: field.list({ item: field.media() }),
+          third: field.list({ item: field.media() }),
+        },
+      }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  store.registerMedia({
+    id: mediaId("m"),
+    createdBy: editor.id,
+    createdAt: unixMilliseconds(1),
+    updatedAt: unixMilliseconds(1),
+    filename: "m.png",
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    storageKey: "media/m",
+  });
+  const reads = [];
+  const useCases = new ContentUseCases({
+    config: config.runtime,
+    content: store,
+    media: {
+      loadMediaMany: async (ids) => {
+        reads.push(ids);
+        return store.loadMediaMany(ids);
+      },
+    },
+    clock: new DeterministicClock(unixMilliseconds(2)),
+    idGenerator: new DeterministicIdGenerator("nested"),
+  });
+  const input = {
+    modelKey: "posts",
+    title: "Nested",
+    slug: "nested",
+    blocks: [],
+    fields: { first: Array(100).fill("m"), second: Array(100).fill("m") },
+  };
+  const created = await useCases.create({ actor: editor, ...input });
+  expect(reads).toEqual([["m"]]);
+  expect(store.mediaReferences(created.draft.id)).toHaveLength(200);
+  expect(store.mediaReferences(created.draft.id)[99]).toMatchObject({ fieldPath: "/first/99" });
+  await expect(
+    useCases.create({ actor: editor, ...input, fields: { ...input.fields, third: ["m"] } }),
+  ).rejects.toThrow();
+  const readCount = reads.length;
+  await expect(
+    useCases.create({ actor: { id: "viewer", role: "viewer" }, ...input }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  expect(reads).toHaveLength(readCount);
+  await expect(
+    useCases.create({ actor: editor, ...input, fields: { first: ["missing"] } }),
+  ).rejects.toThrow();
+  await useCases.publish({ actor: admin, entryId: created.id, expectedRevision: 1 });
+  expect((await store.loadPublic("/blog/nested")).entry.published.fields).toEqual(input.fields);
+  const saved = await useCases.save({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+    ...input,
+    fields: { first: [], second: [] },
+  });
+  expect(store.mediaReferences(saved.draft.id)).toEqual([]);
+  expect(
+    (await useCases.revertDraft({ actor: editor, entryId: created.id, expectedRevision: 2 })).draft
+      .fields,
+  ).toEqual(input.fields);
+});

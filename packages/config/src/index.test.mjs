@@ -706,3 +706,98 @@ test("enabling SEO is structural while mappings and defaults are projection-only
   expect(enabledConfig.runtime.content[0].structure.seo).toBe(true);
   // Models without the option keep the hashes pinned by config.projection.fixture.json.
 });
+
+test("composite metadata identity strips only descriptor display properties", async () => {
+  const make = (label, defaultLabel = "value") =>
+    defineConfig({
+      blocks: [],
+      content: [
+        definePage({
+          key: "nested",
+          path: "/nested",
+          version: 1,
+          fields: {
+            cards: field.list({
+              item: field.group({
+                fields: { label: field.text({ label }), description: field.text() },
+                defaultValue: { label: defaultLabel, description: "content" },
+              }),
+            }),
+          },
+        }),
+      ],
+    });
+  const first = await make("First");
+  const display = await make("Second");
+  const content = await make("First", "changed");
+  expect(first.content[0].structureHash).toBe(display.content[0].structureHash);
+  expect(first.content[0].projectionHash).not.toBe(display.content[0].projectionHash);
+  expect(first.content[0].structureHash).not.toBe(content.content[0].structureHash);
+  expect(first.runtime.content[0].structure.fields.cards.item.fields).toHaveProperty("label");
+  expect(first.runtime.content[0].structure.fields.cards.item.defaultValue).toEqual({
+    label: "value",
+    description: "content",
+  });
+  expect(JSON.parse(JSON.stringify(first.public.content[0])).fields.cards.item.type).toBe("group");
+});
+
+test("composites stay out of scalar-only config options and block settings", () => {
+  const fields = {
+    group: field.group({ fields: { child: field.text() } }),
+    list: field.list({ item: field.text(), defaultValue: [] }),
+  };
+  for (const listFields of [["group"], ["list"], ["group.child"]])
+    expect(() =>
+      defineCollection({ key: "nested", version: 1, route: "/nested/:slug", fields, listFields }),
+    ).toThrow();
+  expect(() =>
+    definePage({
+      key: "nested",
+      version: 1,
+      path: "/nested",
+      fields,
+      seo: { description: "group" },
+    }),
+  ).toThrow();
+  expect(() =>
+    defineGlobal({ key: "nested", version: 1, fields, seoDefaults: { siteName: "list" } }),
+  ).toThrow();
+  for (const definition of Object.values(fields))
+    expect(() =>
+      defineBlock({ type: "nested", version: 1, fields: {}, settings: { value: definition } }),
+    ).toThrow(/select, boolean, number or text/u);
+  expect(() =>
+    definePage({
+      key: "bad",
+      path: "/bad",
+      version: 1,
+      fields: { group: { type: "group", fields: { child: { type: "wrong" } } } },
+    }),
+  ).toThrow();
+});
+
+test("whole configuration composite hashes preserve data keys called label and description", async () => {
+  const make = (label, text) =>
+    defineConfig({
+      blocks: [
+        defineBlock({
+          type: "nested",
+          version: 1,
+          fields: {
+            profile: field.group({
+              label,
+              fields: { label: field.text(), description: field.text() },
+              defaultValue: { label: text, description: "data" },
+            }),
+          },
+        }),
+      ],
+      content: [definePage({ key: "home", path: "/", version: 1, blocks: ["nested"] })],
+    });
+  const first = await make("First", "same");
+  const display = await make("Second", "same");
+  const changed = await make("First", "different");
+  expect(first.structureHash).toBe(display.structureHash);
+  expect(first.projectionHash).not.toBe(display.projectionHash);
+  expect(first.structureHash).not.toBe(changed.structureHash);
+});

@@ -484,3 +484,33 @@ describe("block envelope validation", () => {
     ).toBe(undeclaredSettingMessage("size"));
   });
 });
+
+test("composites survive initialization and clearing while validating in draft mode", () => {
+  const compositeModel = {
+    ...model,
+    fields: {
+      profile: {
+        type: "group",
+        required: false,
+        fields: { name: { type: "text", required: true } },
+      },
+      items: { type: "list", required: true, minItems: 1, item: { type: "url", required: false } },
+    },
+  } satisfies ContentModelDto;
+  const fields = { profile: {}, items: [] };
+  expect(initialModelFieldValues(compositeModel, fields)).toEqual(fields);
+  expect(withoutClearedValues({ fields, blocks: [], title: "Draft" }).fields).toEqual(fields);
+  expect(validateDraftValues(compositeModel, { fields, blocks: [], title: "Draft" })).toEqual({});
+  expect(fieldProblem(compositeModel.fields.items, ["javascript:bad"])).toContain("invalid value");
+  expect(issueLocation("/fields/profile/name", compositeModel, [])).toBe("fields.profile");
+  expect(
+    serverIssueMessage(
+      {
+        code: "missing_required_field",
+        message: "Missing required value",
+        path: "/fields/profile/name",
+      },
+      { definition: compositeModel.fields.profile, value: {} },
+    ),
+  ).toContain("/fields/profile/name");
+});

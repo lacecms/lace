@@ -184,6 +184,7 @@ export type ConfigurationSyncDiagnosticCode =
   | "BLOCK_MIGRATION_MISSING"
   | "BLOCK_TYPE_REMOVAL_HAS_BLOCKS"
   | "BLOCK_VERSION_AHEAD"
+  | "COMPOSITE_EVOLUTION_UNSUPPORTED"
   | "CONSTRAINT_VIOLATED"
   | "DUPLICATE_CURRENT_MODEL"
   | "DUPLICATE_STORED_MODEL"
@@ -501,6 +502,44 @@ function decideEvolution(
         snapshots: storedCounts,
       }),
       refused: false,
+    };
+  }
+
+  const beforeFields = stored.structure?.fields as JsonObject | undefined;
+  const composite = (value: JsonValue | undefined): boolean =>
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    ((value as JsonObject).type === "group" || (value as JsonObject).type === "list");
+  const unsupportedComposites = changes.filter((change) => {
+    if (change.scope !== "field") return false;
+    const before = beforeFields?.[change.from ?? change.target];
+    const after = current.fields[change.target];
+    if (!composite(before) && !composite(after as unknown as JsonValue | undefined)) return false;
+    return !(
+      change.kind === "field-added" &&
+      after !== undefined &&
+      !after.required &&
+      !Object.hasOwn(after, "defaultValue")
+    );
+  });
+  if (unsupportedComposites.length > 0) {
+    for (const change of unsupportedComposites)
+      context.diagnostics.push(
+        diagnostic(
+          "COMPOSITE_EVOLUTION_UNSUPPORTED",
+          modelKey,
+          `Model ${modelKey} changes composite field ${change.target}; nested evolution is not supported until CE7B.`,
+          { fieldKey: change.target, changeClass: change.class },
+        ),
+      );
+    return {
+      evolution: Object.freeze({
+        backfills: Object.freeze([]),
+        changes: Object.freeze(changes.map(undecidedChange)),
+        snapshots: storedCounts,
+      }),
+      refused: true,
     };
   }
 
@@ -1347,6 +1386,7 @@ async function scanModel(
   const migrations = createMigrationEvidenceAccumulator(
     migrationDefinitions(blocks, request.migrations),
     contentSyncActor.id,
+    { fields: request.fields, blocks: new Map(blocks!.blocks.map((block) => [block.type, block])) },
   );
   do {
     const page = await state.readConfigurationSyncMigrationEntries({
@@ -1503,6 +1543,7 @@ async function migrateStoredBlocks(
     readonly blocks: BlockRegistry | undefined;
     readonly clock: Clock;
     readonly target: ConfigurationSyncApplyPort & ConfigurationSyncStateReadPort;
+    readonly models: readonly NormalizedContentModel[];
   },
   planned: ReturnType<typeof plannedMigrations>,
 ): Promise<ConfigurationSyncMigrationCounts> {
@@ -1521,7 +1562,13 @@ async function migrateStoredBlocks(
       });
       const units: ConfigurationSyncEntryMigration[] = [];
       for (const entry of page.items) {
-        const migration = planEntryMigration(entry, definitions, contentSyncActor.id);
+        const model = input.models.find(
+          (model) => model.key === modelKey || model.renamedFrom === modelKey,
+        );
+        const migration = planEntryMigration(entry, definitions, contentSyncActor.id, {
+          fields: model?.fields ?? {},
+          blocks: new Map(input.blocks!.blocks.map((block) => [block.type, block])),
+        });
         if (migration.findings.length > 0) {
           staleSynchronization(
             "Block migration results changed since planning; the synchronization plan is stale.",
@@ -1572,7 +1619,7 @@ export async function applyPreparedConfigurationSynchronization(input: {
   const planned = plannedMigrations(prepared.plan);
   if (planned.length > 0) {
     migrated = await migrateStoredBlocks(
-      { blocks: input.blocks, clock: input.clock, target: input.target },
+      { blocks: input.blocks, clock: input.clock, target: input.target, models: input.models },
       planned,
     );
     prepared = await prepareConfigurationSynchronization({

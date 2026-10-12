@@ -1,3 +1,4 @@
+import { decodeFieldPath } from "@lacecms/content";
 import type { MediaUsageEntryDto } from "@lacecms/contracts";
 import { fieldLabel } from "../../../entities/content/index.js";
 
@@ -14,7 +15,9 @@ export function usageLocationLabel(location: Location): string {
       : "Draft"
     : "Published";
   if (location.source === "seo") return `SEO image · ${states}`;
-  const field = `${fieldLabel(location.field, undefined)} field`;
+  const field = `${decodeFieldPath(location.field)
+    .map((part) => (typeof part === "number" ? `Item ${part + 1}` : fieldLabel(part, undefined)))
+    .join(" · ")} field`;
   return location.source === "field"
     ? `${field} · ${states}`
     : `${fieldLabel(location.blockType, undefined)} block · ${field} · ${states}`;

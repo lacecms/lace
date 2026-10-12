@@ -1,5 +1,8 @@
 import {
   BlockMigrationError,
+  collectFieldMedia,
+  encodeFieldPath,
+  validateSnapshotListBudget,
   ContentValidationError,
   MAX_JSON_BYTES,
   canonicalJsonByteLength,
@@ -7,7 +10,13 @@ import {
   validateBlockData,
   validateBlockSettings,
 } from "@lacecms/content";
-import type { BlockDefinition, BlockMigrationInput, JsonObject, JsonValue } from "@lacecms/content";
+import type {
+  BlockDefinition,
+  BlockMigrationInput,
+  JsonObject,
+  JsonValue,
+  ModelFieldDefinitions,
+} from "@lacecms/content";
 import { CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT } from "./configuration-evolution.js";
 import type {
   ConfigurationSyncSnapshotFindings,
@@ -28,15 +37,15 @@ export interface ConfigurationSyncMediaReference {
   readonly sourceKey: string;
 }
 
-/** One stored block read by the migration scan; `data` is present for target types. */
+/** One stored block read by the migration scan; all data is needed for snapshot budgets. */
 export interface ConfigurationSyncMigrationBlock {
-  readonly data?: JsonObject;
+  readonly data: JsonObject;
   /** Hidden blocks are validated in draft mode even in a published snapshot. */
   readonly hidden: boolean;
   readonly key: string;
   readonly position: number;
   readonly schemaVersion: number;
-  /** Stored settings; read, like `data`, only for blocks of a migrated type. */
+  /** Stored settings; read only for blocks of a migrated type. */
   readonly settings?: JsonObject;
   readonly type: string;
 }
@@ -44,6 +53,7 @@ export interface ConfigurationSyncMigrationBlock {
 /** One current snapshot of an entry read by the migration scan. */
 export interface ConfigurationSyncMigrationSnapshot {
   readonly blocks: readonly ConfigurationSyncMigrationBlock[];
+  readonly fields: JsonObject;
   readonly references: readonly ConfigurationSyncMediaReference[];
   readonly revision: number;
   readonly snapshotId: string;
@@ -146,13 +156,15 @@ function mediaReferences(
   data: JsonObject,
   sourceKey: string,
 ): ConfigurationSyncMediaReference[] {
-  const references: ConfigurationSyncMediaReference[] = [];
-  for (const [fieldPath, field] of Object.entries(definition.fields)) {
-    const value = data[fieldPath];
-    if (field.type !== "media" || typeof value !== "string") continue;
-    references.push(Object.freeze({ fieldPath, mediaId: value, sourceKey }));
-  }
-  return references;
+  return collectFieldMedia(definition.fields, data).map(({ mediaId, path }) =>
+    Object.freeze({ fieldPath: encodeFieldPath(path), mediaId, sourceKey }),
+  );
+}
+
+/** Complete current definitions used only to count unchanged snapshot data. */
+export interface MigrationBudgetContext {
+  readonly fields: ModelFieldDefinitions;
+  readonly blocks: ReadonlyMap<string, BlockDefinition>;
 }
 
 interface SnapshotOutcome {
@@ -166,6 +178,7 @@ function migrateSnapshot(
   entryId: string,
   definitions: ReadonlyMap<string, BlockDefinition>,
   findings: BlockMigrationFinding[],
+  budgetContext?: MigrationBudgetContext,
 ): SnapshotOutcome {
   const outcome: SnapshotOutcome = { blocks: [], migrated: [], references: [] };
   const priorMedia = new Set(snapshot.references.map((reference) => reference.mediaId));
@@ -227,7 +240,10 @@ function migrateSnapshot(
       if (!(error instanceof ContentValidationError)) throw error;
       const [issue] = error.issues;
       finding("invalid", block, {
-        path: (issue?.path ?? []).join("."),
+        path:
+          (issue?.path.length ?? 0) > 2
+            ? encodeFieldPath(issue!.path)
+            : (issue?.path ?? []).join("."),
         reason: issue?.code ?? "invalid_block_data",
       });
       continue;
@@ -240,7 +256,9 @@ function migrateSnapshot(
     const foreign = references.find((reference) => !priorMedia.has(reference.mediaId));
     if (foreign !== undefined) {
       finding("invalid", block, {
-        path: `data.${foreign.fieldPath}`,
+        path: foreign.fieldPath.startsWith("/")
+          ? `/data${foreign.fieldPath}`
+          : `data.${foreign.fieldPath}`,
         reason: "media_not_previously_referenced",
       });
       continue;
@@ -259,6 +277,25 @@ function migrateSnapshot(
     outcome.references.push(...references);
   }
   if (firstMigrated !== undefined) {
+    try {
+      const migratedData = new Map(outcome.blocks.map((block) => [block.key, block.data]));
+      validateSnapshotListBudget(
+        budgetContext?.fields ?? {},
+        snapshot.fields ?? {},
+        snapshot.blocks.map((block, index) => ({
+          fields: (budgetContext?.blocks ?? definitions).get(block.type)?.fields ?? {},
+          data: migratedData.get(block.key) ?? block.data ?? {},
+          path: ["blocks", index, "data"],
+        })),
+      );
+    } catch (error) {
+      if (!(error instanceof ContentValidationError)) throw error;
+      const issue = error.issues[0];
+      finding("invalid", firstMigrated, {
+        path: encodeFieldPath(issue?.path ?? []),
+        reason: issue?.code ?? "invalid_snapshot",
+      });
+    }
     const migratedKeys = new Set(outcome.blocks.map((block) => block.key));
     const kept = snapshot.references.filter((reference) => !migratedKeys.has(reference.sourceKey));
     if (kept.length + outcome.references.length > CONFIGURATION_SYNC_MAX_MEDIA_REFERENCES) {
@@ -279,16 +316,17 @@ export function planEntryMigration(
   entry: ConfigurationSyncMigrationEntry,
   definitions: ReadonlyMap<string, BlockDefinition>,
   actorId: string,
+  budgetContext?: MigrationBudgetContext,
 ): EntryMigrationPlan {
   const findings: BlockMigrationFinding[] = [];
   const published =
     entry.published === undefined
       ? undefined
-      : migrateSnapshot(entry.published, entry.entryId, definitions, findings);
+      : migrateSnapshot(entry.published, entry.entryId, definitions, findings, budgetContext);
   const draft =
     entry.draft === undefined
       ? undefined
-      : migrateSnapshot(entry.draft, entry.entryId, definitions, findings);
+      : migrateSnapshot(entry.draft, entry.entryId, definitions, findings, budgetContext);
   const blocks = [
     ...(published?.migrated ?? []).map((block) => ({ ...block, state: "published" as const })),
     ...(draft?.migrated ?? []).map((block) => ({ ...block, state: "draft" as const })),
@@ -369,6 +407,7 @@ function freezeFindings(findings: MutableFindings): ConfigurationSyncSnapshotFin
 export function createMigrationEvidenceAccumulator(
   definitions: ReadonlyMap<string, BlockDefinition>,
   actorId: string,
+  budgetContext?: MigrationBudgetContext,
 ): {
   add(entries: readonly ConfigurationSyncMigrationEntry[]): void;
   result(): Readonly<Record<string, BlockMigrationEvidence>>;
@@ -389,7 +428,7 @@ export function createMigrationEvidenceAccumulator(
   return {
     add(entries) {
       for (const entry of entries) {
-        const plan = planEntryMigration(entry, definitions, actorId);
+        const plan = planEntryMigration(entry, definitions, actorId, budgetContext);
         for (const block of plan.blocks) {
           const state = types.get(block.type)!;
           state.blocks += 1;

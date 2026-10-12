@@ -1,5 +1,748 @@
 {
-  "components": {},
+  "components": {
+    "schemas": {
+      "BlockMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "defaultValue": {
+            "type": "object"
+          },
+          "description": {
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldDefinition"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+            },
+            "type": "object"
+          },
+          "label": {
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "defaultValue": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "maxLength": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "minLength": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "type": {
+                      "const": "text"
+                    }
+                  },
+                  "required": ["type", "required", "defaultValue"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "defaultValue": {
+                      "type": "number"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "max": {
+                      "type": "number"
+                    },
+                    "min": {
+                      "type": "number"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "type": {
+                      "const": "number"
+                    }
+                  },
+                  "required": ["type", "required", "defaultValue"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "defaultValue": {
+                      "type": "boolean"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "type": {
+                      "const": "boolean"
+                    }
+                  },
+                  "required": ["type", "required", "defaultValue"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "defaultValue": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "type": {
+                      "const": "select"
+                    }
+                  },
+                  "required": ["type", "required", "defaultValue", "options"],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": ["type", "version", "fields"],
+        "type": "object"
+      },
+      "FieldDefinition": {
+        "description": "Finite descriptors: at most six group/list containers, two consecutive groups, and no direct list of lists. Content has at most 100 items/list and 500 list elements/snapshot.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "maxLength": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "minLength": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "text"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "maxLength": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "minLength": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "textarea"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "object"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "richText"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "number"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "max": {
+                "type": "number"
+              },
+              "min": {
+                "type": "number"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "number"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "boolean"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "date"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "datetime"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "options": {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "select"
+              }
+            },
+            "required": ["type", "required", "options"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "url"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "media"
+              }
+            },
+            "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "$ref": "#/components/schemas/GroupFieldDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ListFieldDefinition"
+          }
+        ]
+      },
+      "FieldMetadataMap": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/FieldDefinition"
+        },
+        "propertyNames": {
+          "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+        },
+        "type": "object"
+      },
+      "GroupFieldDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "defaultValue": {
+            "type": "object"
+          },
+          "description": {
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldDefinition"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+            },
+            "type": "object"
+          },
+          "label": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "const": "group"
+          }
+        },
+        "required": ["type", "required", "fields"],
+        "type": "object"
+      },
+      "ListFieldDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "defaultValue": {
+            "maxItems": 100,
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "item": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "maxLength": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "minLength": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "text"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "maxLength": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "minLength": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "textarea"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "object"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "richText"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "number"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "max": {
+                    "type": "number"
+                  },
+                  "min": {
+                    "type": "number"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "number"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "boolean"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "boolean"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "date"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "datetime"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "select"
+                  }
+                },
+                "required": ["type", "required", "options"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "url"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "media"
+                  }
+                },
+                "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "$ref": "#/components/schemas/GroupFieldDefinition"
+              }
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "maxItems": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minItems": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "const": "list"
+          }
+        },
+        "required": ["type", "required", "item"],
+        "type": "object"
+      }
+    }
+  },
   "info": {
     "description": "Development documentation",
     "title": "Lace API",
@@ -639,7 +1382,9 @@
                         "additionalProperties": false,
                         "properties": {
                           "blockDefinitions": {
-                            "items": {},
+                            "items": {
+                              "$ref": "#/components/schemas/BlockMetadata"
+                            },
                             "type": "array"
                           },
                           "blocks": {
@@ -653,7 +1398,9 @@
                           "description": {
                             "type": "string"
                           },
-                          "fields": {},
+                          "fields": {
+                            "$ref": "#/components/schemas/FieldMetadataMap"
+                          },
                           "key": {
                             "maxLength": 255,
                             "minLength": 1,

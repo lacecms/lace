@@ -677,14 +677,14 @@ export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.p
   limit ?`;
 /** Snapshot heads for a list of snapshot IDs; append the placeholders. */
 export const SYNC_MIGRATION_SNAPSHOTS_SQL =
-  "select id, revision, title from content_snapshots where id in";
+  "select id, revision, title, fields_json from content_snapshots where id in";
 /**
- * Blocks of a list of snapshot IDs with data and settings only for target types. Binds the
+ * Blocks of a list of snapshot IDs with all data for list budgets and settings only for target types. Binds the
  * target type JSON array first; append the snapshot placeholders and the order.
  */
 export const SYNC_MIGRATION_BLOCKS_SQL = `with target(type) as (select value from json_each(?))
  select snapshot_id, block_key, block_type, position, schema_version, hidden,
-        case when block_type in (select type from target) then data_json end as data_json,
+        data_json,
         case when block_type in (select type from target) then settings_json end as settings_json
    from content_blocks where snapshot_id in`;
 /** Media references of a list of snapshot IDs; append the placeholders. */
@@ -698,6 +698,7 @@ export interface SyncMigrationEntryRow {
 }
 
 export interface SyncMigrationSnapshotRow {
+  readonly fields_json: string;
   readonly id: string;
   readonly revision: number;
   readonly title: string;
@@ -706,7 +707,7 @@ export interface SyncMigrationSnapshotRow {
 export interface SyncMigrationBlockRow {
   readonly block_key: string;
   readonly block_type: string;
-  readonly data_json: string | null;
+  readonly data_json: string;
   readonly hidden: number;
   readonly position: number;
   readonly schema_version: number;
@@ -766,7 +767,7 @@ export function syncMigrationPage(
     const list = blocks.get(row.snapshot_id) ?? [];
     list.push(
       Object.freeze({
-        ...(row.data_json === null ? {} : { data: parseObject(row.data_json, "Block data") }),
+        data: parseObject(row.data_json, "Block data"),
         hidden: row.hidden === 1,
         key: row.block_key,
         position: row.position,
@@ -805,6 +806,7 @@ export function syncMigrationPage(
     if (row === undefined) return undefined;
     return Object.freeze({
       blocks: Object.freeze(blocks.get(row.id) ?? []),
+      fields: parseObject(row.fields_json, "Snapshot fields"),
       references: Object.freeze(references.get(row.id) ?? []),
       revision: row.revision,
       snapshotId: row.id,

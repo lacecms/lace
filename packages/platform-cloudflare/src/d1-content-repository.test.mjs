@@ -80,14 +80,18 @@ function draft(id, { blocks = [], slug = id, title = id, updatedAt = 1 } = {}) {
 
 function maximalDraft(label, count = 200) {
   const blocks = Array.from({ length: count }, (_, index) => ({
-    data: { image: `media-${index}`, label, text: "x".repeat(64) },
+    data: {
+      images: [{ image: `media-${index}` }],
+      tags: index < 100 ? [label, label] : [label],
+      text: "x".repeat(64),
+    },
     key: blockKey(`${label}-${index}`),
     position: (index + 1) * 1000,
     schemaVersion: 1,
     type: "hero",
   }));
   const references = blocks.map((block, index) => ({
-    fieldPath: "image",
+    fieldPath: "/images/0/image",
     mediaId: mediaId(`media-${index}`),
     sourceKey: block.key,
   }));
@@ -125,29 +129,42 @@ test("saves a maximal draft in one batch within parameter and query budgets", as
   await seedMedia(database, 200);
   const created = maximalDraft("created");
   counting.stats.queries = 0;
+  counting.stats.batches = 0;
   await repository.create({
     entry: draft("post", { blocks: created.blocks }),
     mediaReferences: created.references,
   });
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
+  expect(counting.stats.batches).toBe(1);
   const saved = maximalDraft("saved");
   counting.stats.queries = 0;
+  counting.stats.batches = 0;
   counting.stats.maxParameters = 0;
   const result = await repository.saveCompleteDraft(
     saveInput("post", 1, 2, saved.blocks, saved.references),
   );
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
+  expect(counting.stats.batches).toBe(1);
   expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
   expect(result.entry.draft.revision).toBe(2);
   expect(result.entry.draft.blocks).toHaveLength(200);
+  expect(result.entry.draft.blocks[0].data).toEqual(saved.blocks[0].data);
+  expect(
+    result.entry.draft.blocks.reduce(
+      (sum, block) => sum + block.data.images.length + block.data.tags.length,
+      0,
+    ),
+  ).toBe(500);
   expect(result.entry.draft.blocks.at(-1).key).toBe("saved-199");
   expect(await scalar("select count(*) from content_blocks")).toBe(200);
   expect(
     await scalar("select count(*) from content_media_references where source_key like 'saved-%'"),
   ).toBe(200);
   counting.stats.queries = 0;
+  counting.stats.batches = 0;
   await repository.publish(publishInput("post", 2, 3, "post-published"));
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
+  expect(counting.stats.batches).toBe(1);
   expect(await scalar("select count(*) from content_blocks")).toBe(400);
 });
 
@@ -156,6 +173,7 @@ test("rejects an oversized draft before sending any write", async () => {
   await repository.create({ entry: draft("post"), mediaReferences: [] });
   const oversized = maximalDraft("big", 201);
   counting.stats.queries = 0;
+  counting.stats.batches = 0;
   await expect(
     repository.saveCompleteDraft(saveInput("post", 1, 2, oversized.blocks, [])),
   ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
@@ -228,6 +246,7 @@ test("route conflict rolls back the in-batch removal of the entry's previous rou
     },
   });
   counting.stats.queries = 0;
+  counting.stats.batches = 0;
   await expect(
     repository.publish(publishInput("mover", 2, 5, "mover-second")),
   ).rejects.toMatchObject({ code: "CONTENT_ROUTE_CONFLICT" });

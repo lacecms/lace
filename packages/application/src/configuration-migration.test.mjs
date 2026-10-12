@@ -68,7 +68,7 @@ function block(key, data, schemaVersion = 1, envelope = {}) {
 }
 
 function snap(id, state, revision, blocks, references = []) {
-  return { blocks, references, revision, snapshotId: id, state, title: `Title ${id}` };
+  return { blocks, fields: {}, references, revision, snapshotId: id, state, title: `Title ${id}` };
 }
 
 /** In-memory synchronization store with guarded block-migration writes. */
@@ -674,4 +674,99 @@ test("migrates version 1 built-in image blocks to version 2 without changing the
   }
   expect(state.entries[0].draft.revision).toBe(3);
   expect(state.entries[0].published.revision).toBe(3);
+});
+
+test("checks complete resulting composite budgets and nested prior-media locations", () => {
+  const migrated = defineBlock({
+    type: "note",
+    version: 2,
+    fields: {
+      images: field.list({ item: field.media() }),
+    },
+    migrations: { 2: ({ data }) => ({ data: { images: data.images } }) },
+  });
+  const unchanged = defineBlock({
+    type: "other",
+    version: 1,
+    fields: {
+      rows: field.list({ item: field.text() }),
+    },
+  });
+  const definitions = new Map([["note", migrated]]);
+  const context = {
+    fields: { rows: field.list({ item: field.text() }) },
+    blocks: new Map([
+      ["note", migrated],
+      ["other", unchanged],
+    ]),
+  };
+  const snapshot = (extra) => ({
+    ...snap(
+      "d",
+      "draft",
+      1,
+      [
+        block("b1", { images: ["m1"] }),
+        ...Array.from({ length: 4 }, (_, i) => ({
+          ...block(`b${i + 2}`, { rows: Array(100).fill("x") }),
+          type: "other",
+          hidden: true,
+        })),
+      ],
+      [{ fieldPath: "old", mediaId: "m1", sourceKey: "b1" }],
+    ),
+    fields: { rows: Array(99 + extra).fill("x") },
+  });
+  const valid = planEntryMigration(
+    { entryId: "e", draft: snapshot(0) },
+    definitions,
+    "system:content-sync",
+    context,
+  );
+  expect(valid.findings).toEqual([]);
+  expect(valid.unit.snapshots[0].references).toEqual([
+    { fieldPath: "/images/0", mediaId: "m1", sourceKey: "b1" },
+  ]);
+  const invalid = planEntryMigration(
+    { entryId: "e", draft: snapshot(1) },
+    definitions,
+    "system:content-sync",
+    context,
+  );
+  expect(invalid.unit).toBeUndefined();
+  expect(invalid.findings).toMatchObject([
+    { kind: "invalid", reference: { reason: "too_many_list_items" } },
+  ]);
+  const defaulted = defineBlock({
+    type: "note",
+    version: 2,
+    fields: {
+      images: field.list({ item: field.media(), defaultValue: ["m1", "m1"] }),
+    },
+    migrations: { 2: () => ({ data: {} }) },
+  });
+  expect(
+    planEntryMigration(
+      { entryId: "e", draft: snapshot(0) },
+      new Map([["note", defaulted]]),
+      "system:content-sync",
+      {
+        ...context,
+        blocks: new Map([
+          ["note", defaulted],
+          ["other", unchanged],
+        ]),
+      },
+    ).findings,
+  ).toMatchObject([{ kind: "invalid", reference: { reason: "too_many_list_items" } }]);
+  const foreign = snapshot(0);
+  foreign.blocks[0].data.images = ["m2"];
+  expect(
+    planEntryMigration(
+      { entryId: "e", draft: foreign },
+      definitions,
+      "system:content-sync",
+      context,
+    ).findings,
+  ).toMatchObject([{ kind: "invalid", reference: { reason: "media_not_previously_referenced" } }]);
 });

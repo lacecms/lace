@@ -583,3 +583,36 @@ test("the parity corpus covers both accepted and rejected documents", () => {
   expect(accepted.length).toBe(11);
   expect(parityCorpus.length - accepted.length).toBe(20);
 });
+
+test("renders composite defaults and reports numeric leaf paths with context", () => {
+  const definition = defineBlock({
+    type: "nested",
+    version: 1,
+    fields: {
+      rows: field.list({
+        required: true,
+        item: field.group({
+          fields: {
+            href: field.url({ required: true }),
+            tone: field.select({ options: ["light", "dark"], defaultValue: "light" }),
+          },
+        }),
+      }),
+    },
+  });
+  expect(parseBlock(definition, block("nested", { rows: [{ href: "/" }] }), context)).toEqual({
+    rows: [{ href: "/", tone: "light" }],
+  });
+  expect(parseBlock(definition, block("nested", { rows: [] }), context)).toEqual({ rows: [] });
+  const error = captureError(() =>
+    parseBlock(definition, block("nested", { rows: [{ href: "javascript:bad" }] }), context),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.cause).toBeInstanceOf(ContentValidationError);
+  expect(error.cause.issues[0].path).toEqual(["rows", 0, "href"]);
+  expect(error.context).toMatchObject(context);
+  const oversized = captureError(() =>
+    parseBlock(definition, block("nested", { rows: Array(101).fill({ href: "/" }) }), context),
+  );
+  expect(oversized.cause.issues[0].code).toBe("list_too_long");
+});

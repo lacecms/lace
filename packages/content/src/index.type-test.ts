@@ -56,9 +56,9 @@ type _migration = Expect<
 >;
 type _migrationInput = Expect<Equal<Parameters<BlockMigration>[0], BlockMigrationInput>>;
 
-// @ts-expect-error migrations must return JSON object data synchronously.
 defineBlock({
   fields: {},
+  // @ts-expect-error migrations must return JSON object data synchronously.
   migrations: { 2: async () => ({ data: {} }) },
   type: "async",
   version: 2,
@@ -116,6 +116,8 @@ field.number({ defaultValue: "one" });
 defineBlock({ fields: {}, type: "missing-version" });
 
 const exhaustiveVisitor: FieldDefinitionVisitor<string> = {
+  group: () => "group",
+  list: () => "list",
   boolean: () => "boolean",
   date: () => "date",
   datetime: () => "datetime",
@@ -136,3 +138,41 @@ void incompleteVisitor;
 const renamedText = field.text({ renamedFrom: "headline", required: true });
 const renamedValue: FieldValue<typeof renamedText> = "value";
 void renamedValue;
+
+const composite = field.list({
+  item: field.group({
+    fields: {
+      kind: field.select({ options: ["image", "video"] as const, required: true }),
+      caption: field.text(),
+    },
+  }),
+  required: true,
+});
+const compositeValues: FieldValue<typeof composite> = [{ kind: "image" }];
+// @ts-expect-error nested literal select remains narrow.
+const wrongComposite: FieldValue<typeof composite> = [{ kind: "audio" }];
+// @ts-expect-error list items cannot be lists.
+field.list({ item: field.list({ item: field.text() }) });
+// @ts-expect-error group defaults preserve child scalar types.
+field.group({ fields: { count: field.number() }, defaultValue: { count: "bad" } });
+const partialDefault = field.group({
+  fields: { heading: field.text({ required: true }) },
+  defaultValue: {},
+});
+const depthSix = field.list({
+  item: field.group({
+    fields: {
+      children: field.list({
+        item: field.group({
+          fields: {
+            children: field.list({
+              item: field.group({ fields: { name: field.text({ required: true }) } }),
+            }),
+          },
+        }),
+      }),
+    },
+  }),
+});
+const deepValue: FieldValue<typeof depthSix> = [{ children: [{ children: [{ name: "leaf" }] }] }];
+void [compositeValues, wrongComposite, partialDefault, deepValue];

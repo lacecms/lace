@@ -678,6 +678,55 @@ Reference fields are not part of the MVP. The field-definition discriminated
 union and validation visitor must be exhaustive so that a reference variant can
 be introduced later without changing existing field encodings.
 
+### Bounded composite fields (CE7A)
+
+`field.group({ fields, ...common })` describes a plain object;
+`field.list({ item, minItems?, maxItems?, ...common })` describes an ordered
+array of one scalar or group definition. Both are available in model fields
+and block data, with recursive portable metadata and nested value inference.
+They create no nested blocks, routes, item IDs or independent lifecycle.
+See [ADR 0013](adr/0013-bounded-composite-fields.md).
+
+A definition branch permits six group/list containers and two consecutive
+groups. A list resets the consecutive-group count, never total depth, and may
+not directly contain another list. Scalars, root maps and rich-text nodes do
+not count. Definitions must be finite, detached JSON; malformed children,
+cycles, unsafe composite defaults and non-portable values fail before startup.
+List bounds are integers with effective defaults 0/100 and
+`0 ≤ minItems ≤ maxItems ≤ 100`.
+
+Absence selects a declared default, then recursively validates it. An absent
+optional container without a default stays absent, even when descendants have
+defaults or required flags. Present `{}` and `[]` override container defaults;
+child defaults apply inside present groups/items. Required means presence:
+a required empty list is publishable unless minItems is positive. Drafts may
+omit required descendants or fall below minItems; publication enforces both.
+Wrong present types, null, unknown children and sparse/undefined list elements
+fail in both modes. Composite defaults may be incomplete draft starting values;
+scalar descriptor default compatibility stays unchanged.
+
+Each normalized snapshot has at most 500 list elements, summed across fields
+and all block data, including hidden blocks. Nested lengths count independently
+(10 categories with 20 links each consume 210). Draft/published budgets are
+separate. Defaults count; rich-text arrays and block arrays do not. Fields and
+each block retain the normalized JSON byte cap; nested media retain the
+200-reference cap. Errors identify exact key/index paths. Hidden blocks use
+draft required/minimum checks even on publication, but all maximums apply.
+
+Canonical identity strips display metadata only at descriptor positions,
+recursively; child keys and default-value keys named label/description stay
+structural. Scalar-only encodings/hashes stay stable. Collection listFields,
+SEO mappings and block settings retain their existing scalar restrictions.
+
+During CE7A, new models, unchanged composites, nested display-only changes and
+version-bumped optional root composite additions without defaults can sync.
+Other structural model-field changes involving composites on populated models
+are explicitly refused pending CE7B recursive evolution; nested rename/removal
+hint syntax is not yet supported. Scalar CE1 rules stay unchanged. Versioned
+block migrations can produce composites but must check the resulting complete
+snapshot list budget, including unchanged fields/blocks, before each guarded
+unit. Unrelated published required fields retain their existing grandfathering.
+
 ### Initial built-in blocks
 
 The starter and browser editor ship with five blocks. They use only the public
@@ -921,7 +970,8 @@ content_snapshots
 └── updated_by          TEXT NOT NULL
 ```
 
-`fields_json` contains model-specific structured fields. `seo_json` holds the
+`fields_json` contains model-specific structured fields, including composite
+objects/arrays without item envelopes or separate value tables. `seo_json` holds the
 normalized SEO group (section 8) as a JSON object, or `NULL` when the snapshot
 has none; an all-empty group is never stored. Save, publication, revert and
 duplication copy it with the rest of the snapshot. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
@@ -971,7 +1021,9 @@ settings.
 
 `block_key` is stable across draft and published copies. The composite primary key allows a published snapshot to be copied using one `INSERT ... SELECT` statement without generating new per-row IDs.
 
-Block-specific data remains JSON and is validated by the block registry. A block type does not receive a dedicated SQL table or columns.
+Block-specific data, including bounded groups/lists, remains JSON and is
+validated by the block registry. Composite data does not expand the settings
+allowlist. A block type does not receive a dedicated SQL table or columns.
 
 ### 9.5 Block ordering and nesting
 
@@ -1052,7 +1104,13 @@ PRIMARY KEY(snapshot_id, source_key, field_path)
 
 `source_key` is `$fields` for snapshot fields, `$seo` (with `field_path`
 `image`) for the SEO image, or the stable block key for block data. Block keys
-never start with `$`. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
+never start with `$`. Root scalar media paths remain their field keys. Nested
+locations use RFC 6901 pointers relative to their source (`/images/0/image`),
+with field keys for groups and zero-based list indices. Saves atomically rebuild
+the complete projection after list reorders/removals; lifecycle copies retain
+nested JSON and references, remapping duplicated block source keys. Usage
+locations carry these paths; hidden-only media remains protected but excluded
+from public delivery. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
 the draft snapshot's reference projection in the same atomic mutation;
 publication copies it with `INSERT ... SELECT`. A media item may be selected only
 while its status is `active`.
@@ -1289,6 +1347,10 @@ Inputs include:
 - authenticated actor;
 - optional idempotency key.
 
+Publication recursively validates composite required descendants/minItems and
+normalized list/media/byte budgets. Revert and duplicate copy composites with
+the existing snapshot/reference rules.
+
 Publication first loads the draft, blocks, active configuration, and current
 published pointer, then validates the complete candidate without writing. A
 hidden block is validated in draft mode, so an unfinished block can be
@@ -1391,6 +1453,10 @@ The block registry maps each `block_type` to:
 - optional default data;
 - optional declared settings;
 - optional migration functions.
+
+`defineBlock({ fields })` accepts bounded composite data with inferred nested
+objects/arrays and portable metadata; rename hints remain forbidden at every
+block-data depth.
 
 `defineBlock({ settings })` declares presentational settings, separate from
 the block content, with the field builders limited to `select`, `boolean`,
@@ -1642,6 +1708,13 @@ preserve the same snapshot-revision invariant.
 
 ### Contract rules
 
+Composite metadata describes recursive group/list alternatives in REST and
+OpenAPI. Values remain plain objects/arrays with media IDs in every admin/public
+entry, global and export contract. Nested validation issues use precise JSON
+Pointers such as `/blocks/0/data/images/2/image`; usage `field` carries a nested
+relative pointer or an unchanged scalar key. SDK parsing preserves nested data
+and resolves nested media through the existing published dictionaries/helpers.
+
 - Requests and responses use shared Valibot runtime schemas.
 - Hono request validation uses `@hono/standard-validator`, keeping route integration based on Standard Schema rather than a validator-specific Hono API.
 - Database rows are never exposed directly as API DTOs.
@@ -1790,7 +1863,10 @@ framework and never reads `process.env` or `import.meta.env` itself.
 
 ### 13.3 Render core
 
-`@lacecms/render` depends only on `@lacecms/content`.
+`@lacecms/render` depends only on `@lacecms/content`. Composite parsing reuses
+shared publish validation, defaults and standalone block budgets; component
+props preserve nested inference and errors retain numeric item paths. It does
+not claim to validate fields/hidden blocks absent from its rendering input.
 
 - `BlockContext` identifies a block in errors: `modelKey`, `entryId`, `blockKey`.
 - `parseBlock(definition, block, context)` validates `block.data` with
@@ -2355,6 +2431,14 @@ connections always keep foreign keys on.
 
 ## 17. Admin application
 
+CE7A provides labeled read-only inspection of group/list data pending CE7C's
+generic nested authoring controls. Existing scalar editing remains available;
+initialization, save/discard, dirty checks, conflict JSON, revert and block copy
+preserve composites and explicit empty objects/arrays. Draft validation permits
+missing descendants/minimums. Nested server issues remain visible in the
+summary; exact leaf-control focus and list actions arrive in CE7C. Media usage
+labels translate nested pointers to readable keys and one-based item positions.
+
 The admin is a client-rendered React SPA with no SSR requirement.
 
 Core client stack:
@@ -2673,6 +2757,13 @@ Automated dependency update tooling may open version-update pull requests, but f
 
 ## 20. Testing strategy
 
+Composite verification covers typed depth-six fixtures, schema bounds 6/7 and
+2/3, list-of-list refusal, values 100/101 and snapshot totals 500/501, defaults,
+hidden data, exact paths, byte/media limits and scalar hash regressions. Shared
+fake/SQLite/D1 contracts cover lifecycle copies, reordered/removed media,
+atomic failures, concurrency, migration totals and public filtering; D1 retains
+100-bind and 50-query maximum-save budgets without per-item queries.
+
 ### Unit tests
 
 Unit tests cover pure domain and application behavior:
@@ -2761,6 +2852,13 @@ Operationally important admin information:
 - latest site build status.
 
 ## 22. Migration and compatibility policy
+
+CE7A adds group/list variants to exhaustive TypeScript consumers. Upgrade
+engine/admin/site dependencies together before adoption. No database migration
+or scalar data rewrite is required. After storing composites, rollback to a
+scalar-only engine needs matching configuration/database backup or an explicit
+validated conversion. CE7A's temporary sync and admin restrictions are described
+in section 8 and section 17; CE7B/CE7C expand them separately.
 
 Compatibility exists at three boundaries:
 

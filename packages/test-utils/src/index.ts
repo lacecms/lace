@@ -651,7 +651,7 @@ export class InMemoryContentStore
     const view = (snapshot: DraftSnapshot | PublishedSnapshot) =>
       Object.freeze({
         blocks: snapshot.blocks.map((block) => ({
-          ...(types.has(block.type) ? { data: clone(block.data) } : {}),
+          data: clone(block.data),
           hidden: block.hidden,
           key: block.key,
           position: block.position,
@@ -659,6 +659,7 @@ export class InMemoryContentStore
           ...(types.has(block.type) ? { settings: clone(block.settings) } : {}),
           type: block.type,
         })),
+        fields: clone(snapshot.fields),
         references: clone(this.references.get(snapshot.id) ?? []),
         revision: snapshot.revision,
         snapshotId: snapshot.id,

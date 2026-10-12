@@ -66,7 +66,7 @@ export async function openLocalD1() {
 
 /** Counts queries and bound parameters issued through a D1 binding. */
 export function countingD1(database) {
-  const stats = { maxParameters: 0, queries: 0 };
+  const stats = { batches: 0, maxParameters: 0, queries: 0 };
   const wrap = (statement, parameters = 0) => ({
     all: () => {
       stats.queries += 1;
@@ -94,6 +94,7 @@ export function countingD1(database) {
   return {
     binding: {
       batch: (statements) => {
+        stats.batches += 1;
         stats.queries += statements.length;
         return database.batch(statements.map((statement) => statement.inner));
       },

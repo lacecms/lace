@@ -17,6 +17,8 @@ export type FieldType =
   | "date"
   | "datetime"
   | "media"
+  | "group"
+  | "list"
   | "number"
   | "richText"
   | "select"
@@ -140,8 +142,59 @@ export type SelectFieldDefinition<
   Options extends SelectFieldOptions<Choices> = SelectFieldOptions<Choices>,
 > = CommonDefinition<"select", Options> & { readonly options: Choices };
 
+/** A finite group of named child descriptors. */
+export interface GroupFieldDefinition {
+  readonly type: "group";
+  readonly fields: ModelFieldDefinitions;
+  readonly required: boolean;
+  readonly label?: string;
+  readonly description?: string;
+  readonly defaultValue?: JsonObject;
+}
+
+/** A list item cannot itself be a list. */
+export type ListItemDefinition = Exclude<FieldDefinition, ListFieldDefinition>;
+
+/** A homogeneous ordered list; omitted bounds mean 0 and 100. */
+export interface ListFieldDefinition {
+  readonly type: "list";
+  readonly item: ListItemDefinition;
+  readonly required: boolean;
+  readonly label?: string;
+  readonly description?: string;
+  readonly defaultValue?: readonly JsonValue[];
+  readonly minItems?: number;
+  readonly maxItems?: number;
+}
+
+/** A draft starting value can omit required group descendants. */
+export type DraftFieldValue<Definition extends FieldDefinition> = Definition extends {
+  readonly type: "group";
+  readonly fields: infer Fields extends ModelFieldDefinitions;
+}
+  ? string extends keyof Fields
+    ? JsonObject
+    : { readonly [Key in keyof Fields]?: DraftFieldValue<Fields[Key]> }
+  : Definition extends {
+        readonly type: "list";
+        readonly item: infer Item extends ListItemDefinition;
+      }
+    ? readonly DraftFieldValue<Item>[]
+    : FieldValue<Definition>;
+
+/** Maximum containers along a descriptor branch. */
+export const MAX_FIELD_CONTAINER_DEPTH = 6;
+/** Maximum directly nested groups. */
+export const MAX_CONSECUTIVE_GROUPS = 2;
+/** Maximum items in any one list. */
+export const MAX_LIST_ITEMS = 100;
+/** Maximum sum of list lengths in a snapshot. */
+export const MAX_SNAPSHOT_LIST_ITEMS = 500;
+
 /** The discriminated union of all currently supported field descriptors. */
 export type FieldDefinition =
+  | GroupFieldDefinition
+  | ListFieldDefinition
   | BooleanFieldDefinition
   | DateFieldDefinition
   | DatetimeFieldDefinition
@@ -166,7 +219,19 @@ export type FieldValue<Definition extends FieldDefinition> = Definition extends 
         ? Definition extends { readonly options: readonly (infer Choice)[] }
           ? Choice
           : never
-        : string;
+        : Definition extends {
+              readonly type: "group";
+              readonly fields: infer Fields extends ModelFieldDefinitions;
+            }
+          ? string extends keyof Fields
+            ? JsonObject
+            : BlockDataValues<Fields>
+          : Definition extends {
+                readonly type: "list";
+                readonly item: infer Item extends ListItemDefinition;
+              }
+            ? readonly FieldValue<Item>[]
+            : string;
 
 /** Whether a descriptor makes a model property required through `required` or a default. */
 export type FieldIsRequired<Definition extends FieldDefinition> = Definition extends {
@@ -483,6 +548,42 @@ function buildStringValueField<
 
 /** Builders for portable Lace field descriptors. */
 export const field = {
+  /** Define named child fields stored as one plain object. */
+  group<const Options extends { readonly fields: ModelFieldDefinitions }>(
+    options: Options &
+      CommonFieldOptions<
+        NoInfer<{
+          readonly [Key in keyof Options["fields"]]?: DraftFieldValue<Options["fields"][Key]>;
+        }>
+      >,
+  ): CommonDefinition<"group", Options> & { readonly fields: Options["fields"] } {
+    return normalizeCompositeOptions("group", options) as unknown as CommonDefinition<
+      "group",
+      Options
+    > & { readonly fields: Options["fields"] };
+  },
+
+  /** Define an ordered array of scalar or group values. */
+  list<
+    const Options extends {
+      readonly item: ListItemDefinition;
+      readonly minItems?: number;
+      readonly maxItems?: number;
+    },
+  >(
+    options: Options & CommonFieldOptions<NoInfer<readonly DraftFieldValue<Options["item"]>[]>>,
+  ): CommonDefinition<"list", Options> & { readonly item: Options["item"] } & PropertyFrom<
+      Options,
+      "minItems"
+    > &
+    PropertyFrom<Options, "maxItems"> {
+    return normalizeCompositeOptions("list", options) as unknown as CommonDefinition<
+      "list",
+      Options
+    > & { readonly item: Options["item"] } & PropertyFrom<Options, "minItems"> &
+      PropertyFrom<Options, "maxItems">;
+  },
+
   /** Define a single-line text field. */
   text<const Options extends StringFieldOptions = StringFieldOptions>(
     options?: Options,
@@ -647,11 +748,154 @@ export const field = {
  * representation. Runtime schemas and callbacks are deliberately absent.
  */
 export function toFieldMetadata(definition: FieldDefinition): FieldMetadata {
-  const normalized = normalizeJsonValue(definition, "definition", new WeakSet<object>());
-  if (normalized === null || Array.isArray(normalized) || typeof normalized !== "object") {
-    fail("definition", "must be a field-definition object.");
+  return normalizeFieldDefinition(definition);
+}
+
+/** Reads own data properties without executing configuration accessors. */
+function descriptorRecord(value: unknown, path: string): Record<string, unknown> {
+  if (!isRecord(value)) fail(path, "must be a plain field-definition object.");
+  const output: Record<string, unknown> = {};
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") fail(path, "must not contain symbol keys.");
+    const property = Object.getOwnPropertyDescriptor(value, key)!;
+    if (!property.enumerable || !("value" in property))
+      fail(`${path}.${key}`, "must be an enumerable data property.");
+    Object.defineProperty(output, key, { value: property.value, enumerable: true });
   }
-  return deepFreeze(normalized) as FieldMetadata;
+  return output;
+}
+
+function normalizeCompositeOptions(type: "group" | "list", value: unknown): FieldDefinition {
+  const options = descriptorRecord(value, "options");
+  if (Object.hasOwn(options, "type")) fail("options.type", "is not supported.");
+  return normalizeFieldDefinition({ ...options, type });
+}
+
+/** Validates and detaches a descriptor, including forged JSON/configuration input. */
+export function normalizeFieldDefinition(value: unknown): FieldDefinition {
+  return normalizeDescriptor(value, "definition", 0, 0, new WeakSet<object>());
+}
+
+function normalizeDescriptor(
+  value: unknown,
+  path: string,
+  depth: number,
+  groups: number,
+  ancestors: WeakSet<object>,
+): FieldDefinition {
+  const raw = descriptorRecord(value, path);
+  if (ancestors.has(value as object)) fail(path, "must not contain a cyclic reference.");
+  const { type, ...options } = raw;
+  if (type !== "group" && type !== "list") {
+    try {
+      switch (type) {
+        case "boolean":
+          return field.boolean(options as BooleanFieldOptions);
+        case "date":
+          return field.date(options as StringValueFieldOptions);
+        case "datetime":
+          return field.datetime(options as StringValueFieldOptions);
+        case "media":
+          return field.media(options as StringValueFieldOptions);
+        case "number":
+          return field.number(options as NumberFieldOptions);
+        case "richText":
+          return field.richText(options as RichTextFieldOptions);
+        case "select":
+          return field.select(options as { readonly options: readonly [string, ...string[]] });
+        case "text":
+          return field.text(options as StringFieldOptions);
+        case "textarea":
+          return field.textarea(options as StringFieldOptions);
+        case "url":
+          return field.url(options as StringValueFieldOptions);
+        default:
+          fail(`${path}.type`, "must name a supported field type.");
+      }
+    } catch (error) {
+      if (error instanceof FieldConfigurationError) fail(path, error.message);
+      throw error;
+    }
+  }
+  if (depth >= MAX_FIELD_CONTAINER_DEPTH)
+    fail(path, `must not exceed ${MAX_FIELD_CONTAINER_DEPTH} containers.`);
+  if (type === "group" && groups >= MAX_CONSECUTIVE_GROUPS)
+    fail(path, `must not exceed ${MAX_CONSECUTIVE_GROUPS} consecutive groups.`);
+  const allowed = [
+    "label",
+    "description",
+    "required",
+    "defaultValue",
+    "renamedFrom",
+    ...(type === "group" ? ["fields"] : ["item", "minItems", "maxItems"]),
+  ];
+  for (const key of Object.keys(options))
+    if (!allowed.includes(key)) fail(`${path}.${key}`, "is not supported by this field type.");
+  const { fields, item, defaultValue, ...common } = options;
+  const normalized = normalizeOptions(common);
+  const result: Record<string, unknown> = { type };
+  addCommonOptions(result, normalized);
+  ancestors.add(value as object);
+  try {
+    if (type === "group") {
+      const children = descriptorRecord(fields, `${path}.fields`);
+      const output: Record<string, FieldDefinition> = {};
+      for (const [key, child] of Object.entries(children)) {
+        if (!FIELD_KEY_PATTERN.test(key))
+          fail(`${path}.fields.${key}`, "must be a valid field key.");
+        if (Object.hasOwn(descriptorRecord(child, `${path}.fields.${key}`), "renamedFrom"))
+          fail(
+            `${path}.fields.${key}.renamedFrom`,
+            "nested hints are not supported; block data uses block versions.",
+          );
+        Object.defineProperty(output, key, {
+          value: normalizeDescriptor(
+            child,
+            `${path}.fields.${key}`,
+            depth + 1,
+            groups + 1,
+            ancestors,
+          ),
+          enumerable: true,
+        });
+      }
+      result.fields = output;
+    } else {
+      const child = descriptorRecord(item, `${path}.item`);
+      if (child.type === "list") fail(`${path}.item`, "must not be a direct list of lists.");
+      if (Object.hasOwn(child, "renamedFrom"))
+        fail(
+          `${path}.item.renamedFrom`,
+          "nested hints are not supported; block data uses block versions.",
+        );
+      result.item = normalizeDescriptor(item, `${path}.item`, depth + 1, 0, ancestors);
+      const min = readOptionalFiniteNumber(normalized, "minItems", true);
+      const max = readOptionalFiniteNumber(normalized, "maxItems", true);
+      if ((min ?? 0) > (max ?? MAX_LIST_ITEMS) || (max ?? MAX_LIST_ITEMS) > MAX_LIST_ITEMS)
+        fail(path, `list bounds must satisfy 0 ≤ minItems ≤ maxItems ≤ ${MAX_LIST_ITEMS}.`);
+      if (min !== undefined) result.minItems = min;
+      if (max !== undefined) result.maxItems = max;
+    }
+    if (Object.hasOwn(options, "defaultValue")) {
+      const portableDefault = normalizeJsonValue(
+        defaultValue,
+        `${path}.defaultValue`,
+        new WeakSet<object>(),
+      );
+      try {
+        normalizeFieldValue(result as unknown as FieldDefinition, portableDefault, "draft", [], {
+          count: 0,
+        });
+      } catch (error) {
+        if (error instanceof ContentValidationError) fail(`${path}.defaultValue`, error.message);
+        throw error;
+      }
+      result.defaultValue = portableDefault;
+    }
+    return deepFreeze(result) as unknown as FieldDefinition;
+  } finally {
+    ancestors.delete(value as object);
+  }
 }
 
 /** A mark permitted in Lace rich-text documents. */
@@ -924,6 +1168,10 @@ export function visitFieldDefinition<Result>(
   visitor: FieldDefinitionVisitor<Result>,
 ): Result {
   switch (definition.type) {
+    case "group":
+      return visitor.group(definition);
+    case "list":
+      return visitor.list(definition);
     case "boolean":
       return visitor.boolean(definition);
     case "date":
@@ -971,6 +1219,8 @@ function isUtcIsoDatetime(value: unknown): value is string {
 
 function isFieldValue(definition: FieldDefinition, value: unknown): boolean {
   return visitFieldDefinition(definition, {
+    group: () => false,
+    list: () => false,
     boolean: () => typeof value === "boolean",
     date: () => isCalendarDate(value),
     datetime: () => isUtcIsoDatetime(value),
@@ -1002,36 +1252,130 @@ export type CompiledFieldSchema<Definition extends FieldDefinition> = v.BaseSche
   v.BaseIssue<unknown>
 >;
 
-/** Compiles a field definition into its Valibot runtime schema. */
+/** Compiles a field definition with the same normalization as aggregate validation. */
 export function compileFieldSchema<Definition extends FieldDefinition>(
   definition: Definition,
+  mode: ContentValidationMode = "publish",
 ): CompiledFieldSchema<Definition> {
-  return v.custom<FieldValue<Definition>>((value) =>
-    isFieldValue(definition, value),
-  ) as CompiledFieldSchema<Definition>;
+  return v.pipe(
+    v.custom<FieldValue<Definition>>((value) => {
+      try {
+        normalizeFieldValue(definition, value, mode, [], { count: 0 });
+        return true;
+      } catch (error) {
+        if (error instanceof ContentValidationError) return false;
+        throw error;
+      }
+    }),
+    v.transform(
+      (value) =>
+        normalizeFieldValue(definition, value, mode, [], { count: 0 }) as FieldValue<Definition>,
+    ),
+  );
 }
 
-/** Validates a submitted field value and returns its inferred value type. */
+/** Validates and normalizes one present value; absence is handled by its field map. */
 export function validateFieldValue<Definition extends FieldDefinition>(
   definition: Definition,
   value: unknown,
   path: readonly ValidationPathSegment[] = [],
+  mode: ContentValidationMode = "publish",
 ): FieldValue<Definition> {
-  const result = v.safeParse(compileFieldSchema(definition), value);
-  if (!result.success) {
-    invalid(path, "invalid_field_value", "does not conform to its field definition.");
-  }
-  return result.output;
+  return normalizeFieldValue(definition, value, mode, path, { count: 0 }) as FieldValue<Definition>;
 }
 
 /** A model field map accepted by the draft and publish validators. */
 export type ModelFieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
-/** A validated set of model field values. */
-export type ModelFieldValues = Readonly<Record<string, FieldValue<FieldDefinition>>>;
+/** Portable normalized values, including incomplete draft groups. */
+export type ModelFieldValues = JsonObject;
 
 /** The validation state of a content snapshot. */
 export type ContentValidationMode = "draft" | "publish";
+
+interface ListBudget {
+  count: number;
+}
+
+function addListItems(
+  length: number,
+  path: readonly ValidationPathSegment[],
+  budget: ListBudget,
+): void {
+  budget.count += length;
+  if (budget.count > MAX_SNAPSHOT_LIST_ITEMS)
+    invalid(
+      path,
+      "too_many_list_items",
+      `must not exceed ${MAX_SNAPSHOT_LIST_ITEMS} list elements per snapshot.`,
+    );
+}
+
+function normalizeFieldValue(
+  definition: FieldDefinition,
+  value: unknown,
+  mode: ContentValidationMode,
+  path: readonly ValidationPathSegment[],
+  budget: ListBudget,
+): JsonValue {
+  if (definition.type === "group") {
+    if (!isRecord(value)) invalid(path, "invalid_field_value", "must be a group object.");
+    return normalizeFieldMap(definition.fields, value, mode, path, budget);
+  }
+  if (definition.type === "list") {
+    if (!Array.isArray(value)) invalid(path, "invalid_field_value", "must be a list.");
+    if (value.length > (definition.maxItems ?? MAX_LIST_ITEMS))
+      invalid(
+        path,
+        "list_too_long",
+        `must contain at most ${definition.maxItems ?? MAX_LIST_ITEMS} items.`,
+      );
+    if (mode === "publish" && value.length < (definition.minItems ?? 0))
+      invalid(
+        path,
+        "list_too_short",
+        `must contain at least ${definition.minItems} items for publication.`,
+      );
+    addListItems(value.length, path, budget);
+    return Array.from({ length: value.length }, (_, index) => {
+      if (!Object.hasOwn(value, index))
+        invalid([...path, index], "invalid_field_value", "must contain a value.");
+      return normalizeFieldValue(definition.item, value[index], mode, [...path, index], budget);
+    });
+  }
+  if (!isFieldValue(definition, value))
+    invalid(path, "invalid_field_value", "does not conform to its field definition.");
+  return value as JsonValue;
+}
+
+function normalizeFieldMap(
+  definitions: ModelFieldDefinitions,
+  value: unknown,
+  mode: ContentValidationMode,
+  path: readonly ValidationPathSegment[],
+  budget: ListBudget,
+): ModelFieldValues {
+  if (!isRecord(value)) invalid(path, "invalid_fields", "must be an object.");
+  for (const key of Object.keys(value))
+    if (!Object.hasOwn(definitions, key))
+      invalid([...path, key], "unknown_field", "is not defined by this model.");
+  const output: Record<string, JsonValue> = {};
+  for (const [key, definition] of Object.entries(definitions)) {
+    let present: unknown;
+    if (Object.hasOwn(value, key)) present = value[key];
+    else if (Object.hasOwn(definition, "defaultValue")) present = definition.defaultValue;
+    else {
+      if (mode === "publish" && definition.required)
+        invalid([...path, key], "missing_required_field", "is required for publication.");
+      continue;
+    }
+    Object.defineProperty(output, key, {
+      value: normalizeFieldValue(definition, present, mode, [...path, key], budget),
+      enumerable: true,
+    });
+  }
+  return output;
+}
 
 /** Validates field data for either an incomplete draft or a publish candidate. */
 export function validateModelFields(
@@ -1040,31 +1384,98 @@ export function validateModelFields(
   mode: ContentValidationMode,
   path: readonly ValidationPathSegment[] = [],
 ): ModelFieldValues {
-  if (!isRecord(value)) {
-    invalid(path, "invalid_fields", "must be an object.");
-  }
+  return normalizeFieldMap(definitions, value, mode, path, { count: 0 });
+}
 
-  for (const key of Object.keys(value)) {
-    if (!Object.hasOwn(definitions, key)) {
-      invalid([...path, key], "unknown_field", "is not defined by this model.");
+/** Checks already normalized model/block values against one snapshot-wide budget. */
+export function validateSnapshotListBudget(
+  fields: ModelFieldDefinitions,
+  values: JsonObject,
+  blocks: readonly {
+    readonly fields: ModelFieldDefinitions;
+    readonly data: JsonObject;
+    readonly path: readonly ValidationPathSegment[];
+  }[],
+): void {
+  const budget = { count: 0 };
+  function count(
+    definition: FieldDefinition,
+    value: JsonValue | undefined,
+    path: readonly ValidationPathSegment[],
+  ): void {
+    if (definition.type === "group" && isRecord(value))
+      walk(definition.fields, value as JsonObject, path);
+    if (definition.type === "list" && Array.isArray(value)) {
+      addListItems(value.length, path, budget);
+      value.forEach((item, index) => count(definition.item, item, [...path, index]));
     }
   }
+  function walk(
+    definitions: ModelFieldDefinitions,
+    data: JsonObject,
+    path: readonly ValidationPathSegment[],
+  ): void {
+    for (const [key, definition] of Object.entries(definitions))
+      count(definition, data[key], [...path, key]);
+  }
+  walk(fields, values, ["fields"]);
+  blocks.forEach((block) => walk(block.fields, block.data, block.path));
+}
 
-  const output: Record<string, FieldValue<FieldDefinition>> = {};
-  for (const [key, definition] of Object.entries(definitions)) {
-    if (Object.hasOwn(value, key)) {
-      output[key] = validateFieldValue(definition, value[key], [...path, key]);
-      continue;
-    }
-    if (Object.hasOwn(definition, "defaultValue")) {
-      output[key] = validateFieldValue(definition, definition.defaultValue, [...path, key]);
-      continue;
-    }
-    if (mode === "publish" && definition.required) {
-      invalid([...path, key], "missing_required_field", "is required for publication.");
-    }
+/** A declared media leaf with a typed relative path. */
+export interface FieldMediaReference {
+  readonly mediaId: string;
+  readonly path: readonly ValidationPathSegment[];
+}
+
+/** Finds declared media leaves only; ordinary strings never become references. */
+export function collectFieldMedia(
+  definitions: ModelFieldDefinitions,
+  values: JsonObject,
+): readonly FieldMediaReference[] {
+  const references: FieldMediaReference[] = [];
+  function visit(
+    definition: FieldDefinition,
+    value: JsonValue | undefined,
+    path: readonly ValidationPathSegment[],
+  ): void {
+    if (definition.type === "media" && typeof value === "string")
+      references.push({ mediaId: value, path });
+    else if (definition.type === "group" && isRecord(value))
+      walk(definition.fields, value as JsonObject, path);
+    else if (definition.type === "list" && Array.isArray(value))
+      value.forEach((item, index) => visit(definition.item, item, [...path, index]));
   }
-  return output;
+  function walk(
+    fields: ModelFieldDefinitions,
+    data: JsonObject,
+    path: readonly ValidationPathSegment[],
+  ): void {
+    for (const [key, definition] of Object.entries(fields))
+      visit(definition, data[key], [...path, key]);
+  }
+  walk(definitions, values, []);
+  return references;
+}
+
+/** Keeps legacy scalar keys; nested locations are relative JSON Pointers. */
+export function encodeFieldPath(path: readonly ValidationPathSegment[]): string {
+  if (path.length === 1) return String(path[0]);
+  return (
+    "/" + path.map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")
+  );
+}
+
+/** Reads a stored reference path; numeric tokens are list indices under the field-key grammar. */
+export function decodeFieldPath(path: string): readonly ValidationPathSegment[] {
+  if (!path.startsWith("/")) return [path];
+  return path
+    .slice(1)
+    .split("/")
+    .map((part) => {
+      const decoded = part.replaceAll("~1", "/").replaceAll("~0", "~");
+      return /^(?:0|[1-9][0-9]*)$/u.test(decoded) ? Number(decoded) : decoded;
+    });
 }
 
 const BLOCK_TYPE_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
@@ -1973,6 +2384,7 @@ export function validateEntryAggregate(
       ...path,
       "data",
     ]);
+    assertJsonSize(data as JsonValue, [...path, "data"]);
     blocks.push(
       deepFreeze({
         ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
@@ -1986,6 +2398,15 @@ export function validateEntryAggregate(
       }),
     );
   }
+  validateSnapshotListBudget(
+    model.fields,
+    fields,
+    blocks.map((block, index) => ({
+      fields: registry.get(block.type)!.fields,
+      data: block.data,
+      path: ["blocks", index, "data"],
+    })),
+  );
   return deepFreeze({
     blocks: deepFreeze(blocks),
     fields,

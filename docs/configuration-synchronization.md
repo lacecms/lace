@@ -279,3 +279,22 @@ codes: `STRUCTURE_BASELINE_MISSING`, `FIELD_TYPE_CHANGED`,
 concern stored values name up to 20 snapshots (entry ID, state, title) and the
 total; block-migration refusals also name the block key and stored version;
 unhinted removal refusals name the hint to declare.
+
+## CE7A composite fields
+
+`field.group({ fields: { ... } })` and `field.list({ item: ... })` are supported
+in model fields and block data. Existing scalar models retain their structure
+hashes. Nested descriptor labels/descriptions affect the display projection;
+field keys and defaults, including data keys called `label` or `description`,
+remain structural.
+
+Until CE7B, populated models accept unchanged composites, display-only edits,
+and a version-bumped optional root composite addition with no default. Other
+composite field changes (including removal, rename, constraints or defaults)
+are explicitly refused with `COMPOSITE_EVOLUTION_UNSUPPORTED`; nested
+`renamedFrom` hints are rejected. Empty/new models can adopt composite fields.
+Block data continues to evolve through explicit block versions and migrations.
+Migration planning counts all resulting lists in model fields and blocks,
+including unchanged and hidden blocks, before writing. A migration may move
+existing media IDs into nested locations but cannot introduce an ID that was
+not referenced by that snapshot.

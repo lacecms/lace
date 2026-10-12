@@ -113,7 +113,7 @@ function richTextProblem(value: unknown): string {
  */
 export function fieldProblem(definition: FieldMetadata, value: unknown): string | undefined {
   try {
-    validateFieldValue(definition, value);
+    validateFieldValue(definition, value, [], "draft");
     return undefined;
   } catch (caught) {
     if (!(caught instanceof ContentValidationError)) throw caught;
@@ -138,6 +138,9 @@ export function fieldProblem(definition: FieldMetadata, value: unknown): string 
       return "Choose on or off.";
     case "richText":
       return richTextProblem(value);
+    case "group":
+    case "list":
+      return "This composite contains an invalid value. Review the saved JSON and the validation details.";
   }
 }
 
@@ -158,6 +161,9 @@ export function serverIssueMessage(
     Partial<Pick<ContractValidationIssue, "path">>,
   field?: { readonly definition: FieldMetadata; readonly value: unknown },
 ): string {
+  if (field?.definition.type === "group" || field?.definition.type === "list") {
+    return `${sentence(issue.message)}${issue.path === undefined ? "" : ` (${issue.path})`}`;
+  }
   switch (issue.code) {
     case "invalid_field_value": {
       const local = field === undefined ? undefined : fieldProblem(field.definition, field.value);

@@ -12,6 +12,9 @@ import {
   canonicalJsonByteLength,
   canonicalizeJson,
   compileFieldSchema,
+  collectFieldMedia,
+  encodeFieldPath,
+  decodeFieldPath,
   defineBlock,
   defineBlockRegistry,
   effectiveAltText,
@@ -906,4 +909,279 @@ test("effective alt text prefers a non-blank usage alt, then the media alt", () 
   expect(effectiveAltText(undefined, "Office")).toBe("Office");
   expect(effectiveAltText(undefined, null)).toBe("");
   expect(effectiveAltText("", " ")).toBe("");
+});
+
+function issueFrom(run) {
+  try {
+    run();
+    throw new Error("expected validation failure");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ContentValidationError);
+    return error.issues[0];
+  }
+}
+
+test("composite schema boundaries apply to builders and forged metadata", () => {
+  const chain = (depth) => {
+    let item = { type: "text", required: false };
+    for (let index = depth - 1; index >= 0; index--)
+      item =
+        index % 2 === 0
+          ? { type: "list", item, required: false }
+          : { type: "group", fields: { child: item }, required: false };
+    return item;
+  };
+  expect(toFieldMetadata(chain(6)).type).toBe("list");
+  expect(() => toFieldMetadata(chain(7))).toThrow(/6 containers/u);
+  const g = (child) => ({ type: "group", required: false, fields: { child } });
+  expect(() => toFieldMetadata(g(g(field.text())))).not.toThrow();
+  expect(() => toFieldMetadata(g(g(g(field.text()))))).toThrow(/2 consecutive/u);
+  expect(() =>
+    toFieldMetadata(g(g({ type: "list", item: g(g(field.text())), required: false }))),
+  ).not.toThrow();
+  expect(() => field.list({ item: { type: "list", item: field.text() } })).toThrow(/direct list/u);
+  const cycle = { type: "group", fields: {}, required: false };
+  cycle.fields.child = cycle;
+  expect(() => toFieldMetadata(cycle)).toThrow(/cyclic/u);
+  const shared = field.group({ fields: { title: field.text() } });
+  expect(() => field.group({ fields: { one: shared, two: shared } })).not.toThrow();
+  for (const options of [
+    { minItems: 2, maxItems: 1 },
+    { maxItems: 101 },
+    { minItems: -1 },
+    { maxItems: 1.5 },
+  ])
+    expect(() => field.list({ item: field.text(), ...options })).toThrow(FieldConfigurationError);
+  for (const value of [null, { type: "other" }, { type: "text", bogus: true }])
+    expect(() => field.group({ fields: { child: value } })).toThrow(FieldConfigurationError);
+});
+
+test("composite defaults are portable, detached and draft-compatible", () => {
+  const source = { title: "before", items: ["one"] };
+  const definition = field.group({
+    fields: {
+      title: field.text(),
+      items: field.list({ item: field.text() }),
+      required: field.text({ required: true }),
+    },
+    defaultValue: source,
+  });
+  source.title = "after";
+  source.items.push("two");
+  expect(definition.defaultValue).toEqual({ title: "before", items: ["one"] });
+  expect(Object.isFrozen(definition.defaultValue.items)).toBe(true);
+  expect(() =>
+    field.group({ fields: { href: field.url() }, defaultValue: { href: "javascript:bad" } }),
+  ).toThrow(FieldConfigurationError);
+  expect(() => field.list({ item: field.number(), defaultValue: [NaN] })).toThrow(
+    FieldConfigurationError,
+  );
+  const getter = Object.defineProperty({}, "title", {
+    enumerable: true,
+    get() {
+      throw new Error("getter ran");
+    },
+  });
+  expect(() => field.group({ fields: { title: field.text() }, defaultValue: getter })).toThrow(
+    /accessor/u,
+  );
+  expect(() => field.group({ fields: { title: field.text({ renamedFrom: "old" }) } })).toThrow(
+    /nested hints/u,
+  );
+  expect(() => field.list({ item: field.text({ renamedFrom: "old" }) })).toThrow(/nested hints/u);
+});
+
+test("composite absence, explicit empties and publication minima", () => {
+  const group = field.group({
+    fields: {
+      title: field.text({ required: true }),
+      enabled: field.boolean({ defaultValue: false }),
+    },
+    defaultValue: { title: "default" },
+  });
+  const optional = field.group({
+    fields: {
+      title: field.text({ required: true }),
+      enabled: field.boolean({ defaultValue: true }),
+    },
+  });
+  expect(validateModelFields({ optional }, {}, "publish")).toEqual({});
+  expect(validateModelFields({ group }, {}, "publish")).toEqual({
+    group: { title: "default", enabled: false },
+  });
+  expect(validateModelFields({ group }, { group: {} }, "draft")).toEqual({
+    group: { enabled: false },
+  });
+  expect(issueFrom(() => validateModelFields({ group }, { group: {} }, "publish")).path).toEqual([
+    "group",
+    "title",
+  ]);
+  const list = field.list({ item: field.text(), required: true });
+  expect(validateModelFields({ list }, { list: [] }, "publish")).toEqual({ list: [] });
+  expect(validateModelFields({ list }, {}, "draft")).toEqual({});
+  expect(issueFrom(() => validateModelFields({ list }, {}, "publish")).code).toBe(
+    "missing_required_field",
+  );
+  const minimum = field.list({ item: field.text(), minItems: 2, defaultValue: ["one"] });
+  expect(validateModelFields({ minimum }, {}, "draft")).toEqual({ minimum: ["one"] });
+  expect(issueFrom(() => validateModelFields({ minimum }, {}, "publish")).code).toBe(
+    "list_too_short",
+  );
+  expect(validateModelFields({ group }, { group: {} }, "draft")).not.toHaveProperty("group.title");
+});
+
+test("composite exact leaf paths and malformed values", () => {
+  const list = field.list({
+    item: field.group({ fields: { image: field.media(), text: field.text() } }),
+  });
+  const base = ["blocks", 0, "data", "images"];
+  expect(issueFrom(() => validateFieldValue(list, [{}, {}, { image: 42 }], base)).path).toEqual([
+    ...base,
+    2,
+    "image",
+  ]);
+  expect(issueFrom(() => validateFieldValue(list, [{ extra: true }])).code).toBe("unknown_field");
+  for (const value of [null, {}, [null], [undefined], Array(1)])
+    expect(() => validateFieldValue(list, value, [], "draft")).toThrow(ContentValidationError);
+  expect(() => validateFieldValue(field.group({ fields: {} }), null)).toThrow(
+    ContentValidationError,
+  );
+  expect(() =>
+    validateFieldValue(field.list({ item: field.text({ defaultValue: "fallback" }) }), [null]),
+  ).toThrow(ContentValidationError);
+  expect(
+    validateFieldValue(
+      field.list({
+        item: field.group({ fields: { text: field.text({ defaultValue: "default" }) } }),
+      }),
+      [{}],
+    ),
+  ).toEqual([{ text: "default" }]);
+});
+
+test("list and snapshot budgets include defaults, hidden blocks and nested lengths", () => {
+  const scalarList = field.list({ item: field.text() });
+  expect(validateFieldValue(scalarList, Array(100).fill("x"))).toHaveLength(100);
+  expect(issueFrom(() => validateFieldValue(scalarList, Array(101).fill("x"))).code).toBe(
+    "list_too_long",
+  );
+  expect(() =>
+    validateFieldValue(
+      field.list({ item: field.text(), maxItems: 2 }),
+      ["a", "b", "c"],
+      [],
+      "draft",
+    ),
+  ).toThrow(ContentValidationError);
+  const nested = field.list({ item: field.group({ fields: { links: scalarList } }) });
+  expect(
+    validateFieldValue(
+      nested,
+      Array.from({ length: 10 }, () => ({ links: Array(20).fill("x") })),
+    ),
+  ).toHaveLength(10);
+  const block = defineBlock({
+    type: "items",
+    version: 1,
+    fields: { list: scalarList, heading: field.text({ required: true }) },
+  });
+  const model = {
+    kind: "page",
+    fields: { one: scalarList, two: scalarList, three: scalarList, four: scalarList },
+    blocks: ["items"],
+  };
+  const input = {
+    kind: "page",
+    title: "Budget",
+    fields: Object.fromEntries(
+      ["one", "two", "three", "four"].map((key) => [key, Array(100).fill("x")]),
+    ),
+    blocks: [
+      {
+        key: "hidden",
+        type: "items",
+        schemaVersion: 1,
+        hidden: true,
+        data: { list: Array(100).fill("x") },
+      },
+    ],
+  };
+  expect(
+    validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish").blocks[0].hidden,
+  ).toBe(true);
+  input.blocks.push({
+    key: "overflow",
+    type: "items",
+    schemaVersion: 1,
+    hidden: true,
+    data: { list: ["x"] },
+  });
+  const issue = issueFrom(() =>
+    validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish"),
+  );
+  expect(issue.code).toBe("too_many_list_items");
+  expect(issue.path).toEqual(["blocks", 1, "data", "list"]);
+  const defaults = Object.fromEntries(
+    Array.from({ length: 6 }, (_, i) => [
+      "list" + i,
+      field.list({ item: field.text(), defaultValue: Array(100).fill("x") }),
+    ]),
+  );
+  expect(issueFrom(() => validateModelFields(defaults, {}, "draft")).code).toBe(
+    "too_many_list_items",
+  );
+});
+
+test("normalized block bytes include composite defaults", () => {
+  const block = defineBlock({
+    type: "large",
+    version: 1,
+    fields: {
+      group: field.group({
+        fields: { text: field.text({ defaultValue: "x".repeat(MAX_JSON_BYTES) }) },
+        defaultValue: {},
+      }),
+    },
+  });
+  expect(() =>
+    validateEntryAggregate(
+      {
+        kind: "page",
+        title: "Bytes",
+        fields: {},
+        blocks: [{ key: "large", type: "large", schemaVersion: 1, data: {} }],
+      },
+      { kind: "page", fields: {}, blocks: ["large"] },
+      defineBlockRegistry([block]),
+      "draft",
+    ),
+  ).toThrow(/UTF-8/u);
+});
+
+test("media traversal distinguishes groups, list indices and legacy paths", () => {
+  const fields = {
+    cover: field.media(),
+    contact: field.group({ fields: { photo: field.media() } }),
+    images: field.list({
+      item: field.group({ fields: { image: field.media(), caption: field.text() } }),
+    }),
+    media: field.list({ item: field.media() }),
+  };
+  const data = {
+    cover: "a",
+    contact: { photo: "b" },
+    images: [{ image: "a", caption: "not-media" }, { image: "b" }],
+    media: ["c"],
+  };
+  expect(
+    collectFieldMedia(fields, data).map(({ mediaId, path }) => [mediaId, encodeFieldPath(path)]),
+  ).toEqual([
+    ["a", "cover"],
+    ["b", "/contact/photo"],
+    ["a", "/images/0/image"],
+    ["b", "/images/1/image"],
+    ["c", "/media/0"],
+  ]);
+  expect(decodeFieldPath("cover")).toEqual(["cover"]);
+  expect(decodeFieldPath("/images/0/image")).toEqual(["images", 0, "image"]);
 });

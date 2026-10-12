@@ -291,3 +291,24 @@ Refreshes must resolve current stable releases from the listed sources, run the
 disposable smoke check on the selected Node LTS, update the catalog and lockfile
 together, and record the new selection date. Framework major upgrades require
 test and migration review, as required by the architecture dependency policy.
+
+## Composite field adoption (CE7A)
+
+Composite definitions add recursive `group`/`list` metadata while preserving the
+existing content JSON envelopes, media usage DTOs and database schema. Scalar
+configuration hashes and scalar media paths are unchanged. Nested media paths
+use relative RFC 6901 pointers such as `/images/0/image`; indices stored in
+pointers are zero-based.
+
+Adopt compatible engine, bundled admin, contracts, SDK and site/render packages
+together before declaring or storing composites. Older consumers may reject
+the new metadata or fail to validate/render nested data. The CE7A admin shows
+composites as read-only JSON and preserves them during scalar edits and
+lifecycle commands; generic authoring follows in CE7C. Populated composite
+model evolution is restricted until CE7B. Registry/starter adoption follows in
+CE7D; existing built-in blocks keep their flat schemas.
+
+There is no database migration or automatic down-conversion. After storing
+composites, rollback to an older engine/site requires restoring a compatible
+backup of data and configuration as well as packages. Keep that backup before
+adoption and test the site build against the same definitions.

@@ -166,3 +166,33 @@ test("loaded envelopes are kept and blank envelope text is never sent", () => {
   expect(sent[1]).not.toHaveProperty("anchor");
   expect(sent[1]).not.toHaveProperty("className");
 });
+
+test("nested content and empty composites survive dirty baselines and conflict JSON", () => {
+  const definition = {
+    type: "group",
+    required: false,
+    fields: { rows: { type: "list", required: false, item: { type: "text", required: false } } },
+  } as const;
+  const nestedModel = {
+    ...model,
+    fields: { profile: definition },
+    blockDefinitions: [{ type: "hero", version: 1, fields: { profile: definition } }],
+  };
+  const nestedEntry = {
+    ...entry,
+    draft: {
+      ...entry.draft,
+      fields: { profile: { rows: [] } },
+      blocks: entry.draft.blocks.map((block) => ({ ...block, data: { profile: {} } })),
+    },
+  };
+  const baseline = draftValues(nestedModel, nestedEntry);
+  const json = localDraftJson(baseline);
+  expect(JSON.parse(json)).toMatchObject({
+    fields: { profile: { rows: [] } },
+    blocks: [{ data: { profile: {} } }],
+  });
+  expect(localDraftJson(draftValues(nestedModel, structuredClone(nestedEntry)))).toBe(json);
+  expect(localDraftJson({ ...baseline, title: "Edited" })).not.toBe(json);
+  expect(orderedDraftBlocks(structuredClone(baseline.blocks))[0]?.data).toEqual({ profile: {} });
+});

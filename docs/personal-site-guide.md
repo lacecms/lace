@@ -582,3 +582,66 @@ HTML статический, но картинки в данном пример�
 - `scripts/generated-project-acceptance.mjs`, `apps/builder/src/runner.ts`;
 - `apps/api/worker/index.ts`, `apps/api/wrangler.jsonc`, `docs/cloudflare-worker.md`;
 - `apps/site/src/`, `docs/auth-operations.md`, `apps/admin/src/pages/login/`.
+
+## Составные поля (CE7A)
+
+В модели можно описать группу и упорядоченный список. Такой же набор `fields`
+можно передать в `defineBlock` для пользовательского блока:
+
+```ts
+import { defineCollection } from "@lacecms/config";
+import { defineBlock, field } from "@lacecms/content";
+
+const peopleFields = {
+  heading: field.text(),
+  people: field.list({
+    minItems: 1,
+    maxItems: 20,
+    item: field.group({
+      fields: {
+        name: field.text({ required: true }),
+        photo: field.media(),
+        role: field.select({ options: ["author", "editor"], defaultValue: "author" }),
+      },
+    }),
+  }),
+};
+const peopleBlock = defineBlock({ type: "people", version: 1, fields: peopleFields });
+const authors = defineCollection({
+  key: "authors", version: 1, route: "/authors/:slug", fields: peopleFields,
+  blocks: ["people"],
+});
+```
+
+Данные остаются обычным JSON: `{ people: [{ name: "Ada", photo: "media-id" }] }`.
+SDK сохраняет вложенность и порядок; ID из вложенного поля можно передать
+обычному `entry.image(id)` или `entry.media(id)`. Render проверяет те же
+определения и применяет defaults перед передачей props компоненту.
+
+Отсутствующая необязательная группа остаётся отсутствующей, её дочерние defaults
+не применяются. У переданного `{}` defaults дочерних полей применяются; `[]`
+перекрывает default списка. `required` требует присутствия при публикации, но
+не делает список непустым: для этого нужен `minItems`. Черновик допускает
+отсутствующие обязательные значения и длину меньше `minItems`; неверные типы,
+небезопасные URL, `null`, пропуски и `undefined` в элементах всегда запрещены.
+Default элемента не исправляет отсутствующий элемент списка.
+
+Ограничения: до 6 контейнеров на пути, до 2 групп подряд (список сбрасывает этот
+счётчик), прямой список списков запрещён. В каждом списке максимум 100 элементов,
+во всём нормализованном snapshot — 500, включая defaults и скрытые блоки. Каждый
+вложенный список тоже учитывается: 10 групп с 20 элементами дают 210. Массивы
+rich-text и сам список блоков в этот счётчик не входят. Сохраняется лимит 200
+media-локаций; один ID в двух местах занимает две локации. Вложенный путь media
+выглядит как `/people/0/photo`, в интерфейсе это первый элемент.
+
+В CE7A admin показывает составные поля как JSON только для чтения и сохраняет
+их при изменении скалярных полей, копировании блоков и командах жизненного
+цикла. Редактор групп/списков появится в CE7C. CE7B добавит рекурсивную эволюцию
+моделей; сейчас для заполненной модели допустимы только display-изменения и
+добавление необязательного корневого composite без default с повышением версии.
+Настройки блоков, SEO mappings и `listFields` остаются скалярными корневыми полями.
+Встроенные Gallery/Navigation и стартер относятся к CE7D.
+
+Обновляй engine/admin и пакеты сайта согласованно. До записи составных значений
+сделай backup: возврат к старой версии требует восстановления совместимых
+данных и конфигурации, автоматического преобразования обратно нет.

@@ -880,10 +880,18 @@ function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
   return JSON.parse(JSON.stringify(rest)) as MutableJsonObject;
 }
 
+function fieldDefinitionStructure(definition: JsonValue): MutableJsonObject {
+  const result = withoutDisplayProperties(definition);
+  if (result.type === "group") result.fields = fieldMapStructure(result.fields);
+  if (result.type === "list" && result.item !== undefined)
+    result.item = fieldDefinitionStructure(result.item);
+  return result;
+}
+
 function fieldMapStructure(fields: JsonValue | undefined): MutableJsonObject {
   const structure: MutableJsonObject = {};
   for (const [key, definition] of Object.entries((fields ?? {}) as JsonObject)) {
-    structure[key] = withoutDisplayProperties(definition);
+    structure[key] = fieldDefinitionStructure(definition);
   }
   return structure;
 }
@@ -1009,11 +1017,33 @@ export async function defineConfig<const Models extends readonly ContentModelDef
     blocks,
     content: hashModels.map(omitListFields),
   } as unknown as JsonValue;
+  // Preserve scalar-only global hashes; composite identity visits descriptor positions
+  // so content/default keys named label or description remain structural.
   const publicProjection: PublicConfigProjection = {
     blocks,
     content: deepFreeze(publicModels),
     projectionHash: await sha256CanonicalJson(projection),
-    structureHash: await sha256CanonicalJson(omitDisplayMetadata(structure)),
+    structureHash: await sha256CanonicalJson(
+      [...blocks, ...publicModels].some((definition) =>
+        Object.values(definition.fields).some(
+          (field) => field.type === "group" || field.type === "list",
+        ),
+      )
+        ? {
+            blocks: blocks.map((block) => ({
+              ...withoutDisplayProperties(block as unknown as JsonValue),
+              fields: fieldMapStructure(block.fields as unknown as JsonValue),
+              ...(block.settings === undefined
+                ? {}
+                : { settings: fieldMapStructure(block.settings as unknown as JsonValue) }),
+            })),
+            content: hashModels.map((model) => ({
+              ...withoutDisplayProperties(omitListFields(model)),
+              fields: fieldMapStructure((model as JsonObject).fields),
+            })),
+          }
+        : omitDisplayMetadata(structure),
+    ),
   };
   const normalized: NormalizedConfig<Models> = {
     ...publicProjection,

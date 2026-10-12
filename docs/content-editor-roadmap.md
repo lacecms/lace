@@ -910,6 +910,12 @@ do not assign a migration number in advance.
 
 ### Session CE7A — Composite field definitions and end-to-end data contract
 
+**Status:** done (archived 2026-10-12) in
+[`ce07a-composite-field-data-contract`](../openspec/changes/archive/2026-10-12-ce07a-composite-field-data-contract/proposal.md)
+on the shared Wave 3 branch `codex/content-editor-wave-3`. Implementation was explicitly authorized on 2026-10-12. The proposal includes safe read-only admin inspection
+until CE7C and explicit sync refusals for unsupported composite evolution until
+CE7B; those sessions retain their own scope.
+
 - Add typed `field.group` and `field.list` builders, recursive portable
   descriptors and exhaustive consumers. Preserve field inference through
   nested objects and arrays; reject cyclic definitions, malformed children
@@ -944,6 +950,39 @@ validation errors have precise JSON Pointer paths; nested media survive all
 lifecycle operations and disappear from usage only when no stored reference
 remains. Public output resolves nested media consistently on both runtimes.
 Scalar-only configuration and content retain their existing behavior.
+
+**Implementation evidence (2026-10-12):** CE7A is implemented on
+`codex/content-editor-wave-3`; all 23 OpenSpec tasks are complete. Its 14 delta
+requirements were synchronized into 11 main capabilities, and the change was
+archived on 2026-10-12. Definitions,
+normalization, budgets, metadata/OpenAPI, recursive media traversal, guarded
+migration scans, SDK/render compatibility and read-only admin inspection are
+covered. Storage remains in the existing JSON columns; no DB migration was added.
+CE7B/CE7C/CE7D have not been started or pre-created.
+
+Passing verification:
+
+- `pnpm --filter @lacecms/{content,config,contracts,application,server,sdk,render,test-utils} test`
+  (each package run separately): 63 / 46 / 70 / 71 / 79 / 85 / 79 / 44 tests.
+- `pnpm --filter @lacecms/content type-test`,
+  `pnpm --filter @lacecms/config type-test`, and
+  `pnpm --filter @lacecms/render typecheck` preserve nested inference and rejected values.
+- Node shared repository suite: 134 tests across file and in-memory SQLite.
+  D1 shared repository + budget suites: 74 tests under local Miniflare/workerd.
+  These cover nested references, route/global/export filtering, metadata builds,
+  lifecycle copies, guarded rollback, 500/501 migration totals, unchanged/hidden
+  data, sync refusal without writes and resumable scalar regressions.
+- Focused admin field controls, draft preservation, editor validation/summary and
+  usage labels: 44 tests. Maximal D1 create/save/publish uses one batch per mutation,
+  with 200 blocks, 200 nested media locations and 500 elements, within 50 queries
+  and 100 binds per statement.
+- `pnpm openapi:generate` and `pnpm openapi:check`: generated artifact is deterministic.
+  The check used a temporary Git index containing the planned artifact because
+  the script also requires no artifact diff against the index; the user's index
+  was untouched.
+- Root `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and
+  `pnpm exec openspec validate ce07a-composite-field-data-contract --type change --strict`.
+  Existing lint warnings outside this change remain non-failing.
 
 ### Session CE7B — Nested schema evolution and synchronization
 

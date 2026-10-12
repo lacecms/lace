@@ -673,3 +673,70 @@ test("classifies enabling and disabling SEO and collects SEO holders", async () 
   };
   expect(configurationSyncContentWrites(operation, plain)).toEqual([{ action: "remove-seo" }]);
 });
+
+test("CE7A composite introduction and explicit nested evolution refusals", async () => {
+  const root = field.group({ fields: { title: field.text({ label: "Title" }) } });
+  const before = await posts();
+  const added = await posts({ version: 2, fields: { ...before.fields, root } });
+  expect(
+    planConfigurationSynchronization({ models: [added], storedModels: [storedFrom(before)] })
+      .isValid,
+  ).toBe(true);
+  expect(planConfigurationSynchronization({ models: [added], storedModels: [] }).isValid).toBe(
+    true,
+  );
+  const renamed = await posts({
+    version: 3,
+    fields: {
+      ...before.fields,
+      newRoot: field.group({ fields: root.fields, renamedFrom: "root" }),
+    },
+  });
+  const removed = await posts({ version: 3 });
+  const withDefault = await posts({
+    version: 3,
+    fields: { ...before.fields, root: field.group({ fields: root.fields, defaultValue: {} }) },
+  });
+  for (const after of [renamed, removed, withDefault]) {
+    const plan = planConfigurationSynchronization({
+      models: [after],
+      storedModels: [storedFrom(added)],
+    });
+    expect(plan.isValid).toBe(false);
+    expect(plan.diagnostics.some((item) => item.code === "COMPOSITE_EVOLUTION_UNSUPPORTED")).toBe(
+      true,
+    );
+  }
+  const display = await posts({
+    version: 2,
+    fields: {
+      ...before.fields,
+      root: field.group({ fields: { title: field.text({ label: "Changed" }) } }),
+    },
+  });
+  expect(
+    planConfigurationSynchronization({ models: [display], storedModels: [storedFrom(added)] })
+      .isValid,
+  ).toBe(true);
+  const defaultAddition = await posts({
+    version: 2,
+    fields: { ...before.fields, root: field.group({ fields: root.fields, defaultValue: {} }) },
+  });
+  expect(
+    planConfigurationSynchronization({
+      models: [defaultAddition],
+      storedModels: [storedFrom(before)],
+    }).diagnostics.some((item) => item.code === "COMPOSITE_EVOLUTION_UNSUPPORTED"),
+  ).toBe(true);
+  const listBefore = await posts({ fields: { list: field.list({ item: field.text() }) } });
+  const listAfter = await posts({
+    version: 2,
+    fields: { list: field.list({ item: field.text(), maxItems: 10 }) },
+  });
+  expect(
+    planConfigurationSynchronization({
+      models: [listAfter],
+      storedModels: [storedFrom(listBefore)],
+    }).diagnostics.some((item) => item.code === "COMPOSITE_EVOLUTION_UNSUPPORTED"),
+  ).toBe(true);
+});
