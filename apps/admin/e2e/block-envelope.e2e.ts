@@ -146,7 +146,8 @@ async function retype(page: Page, text: string) {
  * trigger is focused directly because it precedes the controls just edited.
  */
 async function blockAction(page: Page, card: Locator, action: string) {
-  await card.getByRole("button", { name: "Actions for Hero block" }).focus();
+  const trigger = card.getByRole("button", { name: "Actions for Hero block" });
+  await trigger.focus();
   await expectVisibleFocus(page);
   await page.keyboard.press("Enter");
   const item = page.getByRole("menuitem", { name: action });
@@ -154,6 +155,8 @@ async function blockAction(page: Page, card: Locator, action: string) {
   while (!(await item.evaluate((element) => element === document.activeElement)))
     await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 }
 
 test("an admin edits block envelopes with the keyboard alone", async ({ context, page }) => {

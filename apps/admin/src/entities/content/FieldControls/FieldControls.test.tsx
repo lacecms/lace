@@ -156,17 +156,20 @@ test("date and datetime helpers never shift days across time zones", () => {
   expect(openableUrl("not a url")).toBeUndefined();
 });
 
-test.each([false, true])("composite inspection stays read-only for every role (%s)", (readOnly) => {
-  render(
-    <Harness
-      readOnly={readOnly}
-      definition={{ type: "list", required: false, item: { type: "media", required: false } }}
-      initial={["media-1"]}
-    />,
-  );
-  const control = screen.getByRole("textbox", { name: "Value" });
-  expect(control).toHaveAttribute("readonly");
-  expect(control).toHaveValue('[\n  "media-1"\n]');
-  expect(screen.getByText(/Composite editing is coming/u)).toBeInTheDocument();
-  expect(value()).toBe('["media-1"]');
-});
+test.each([false, true])(
+  "composite controls render labelled lists for every role (%s)",
+  (readOnly) => {
+    render(
+      <Harness
+        readOnly={readOnly}
+        definition={{ type: "list", required: false, item: { type: "text", required: false } }}
+        initial={["Saved"]}
+      />,
+    );
+    expect(screen.getByRole("list", { name: "Value" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Value item 1" })).toHaveValue("Saved");
+    if (readOnly) expect(screen.queryByRole("button", { name: "Add Value item" })).toBeNull();
+    else expect(screen.getByRole("button", { name: "Add Value item" })).toBeEnabled();
+    expect(value()).toBe('["Saved"]');
+  },
+);

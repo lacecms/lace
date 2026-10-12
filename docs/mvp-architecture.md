@@ -737,6 +737,13 @@ satisfy limits in its actual intermediate state. Nested model JSON and rebuilt
 snapshot revisions/audit fields and the existing final version/build behavior.
 Reports distinguish schema wildcard paths from concrete indexed value paths.
 
+CE7C list descriptors optionally declare `itemLabel`, naming an immediate
+text, textarea, select or URL child of a group item. It is portable presentation
+metadata only: exclude it from structural identity at list descriptor positions,
+include it in projection identity and preserve content/default keys of that name.
+Changing it needs no version bump or migration. Summaries use plain text and
+never display media IDs. Gallery/Navigation remain CE7D.
+
 ### Initial built-in blocks
 
 The starter and browser editor ship with five blocks. They use only the public
@@ -2441,13 +2448,20 @@ connections always keep foreign keys on.
 
 ## 17. Admin application
 
-CE7A provides labeled read-only inspection of group/list data pending CE7C's
-generic nested authoring controls. Existing scalar editing remains available;
-initialization, save/discard, dirty checks, conflict JSON, revert and block copy
-preserve composites and explicit empty objects/arrays. Draft validation permits
-missing descendants/minimums. Nested server issues remain visible in the
-summary; exact leaf-control focus and list actions arrive in CE7C. Media usage
-labels translate nested pointers to readable keys and one-based item positions.
+CE7C authors groups and lists recursively through labelled fieldsets and
+repeatable controls, reusing scalar, media and rich-text controls. Lists support
+Add, Remove, Duplicate, Move up/down and isolated keyboard/pointer sorting.
+Groups and complex items collapse without unmounting editing state; viewers
+can operate disclosures but cannot mutate values. UI item identities are
+transient sidecars and never enter stored or public JSON. Explicit absence,
+empty objects/arrays and shared recursive defaults retain their meanings.
+Counts and prospective growth gates include normalized defaults, nested lists
+and hidden blocks in the 500-element entry budget. Required/minimum guidance
+is publication-only. Exact recursive errors open block tabs and all ancestor
+disclosures before focusing the leaf/container. Pending lifecycle requests
+lock content mutations so indexed errors cannot land on another item.
+Save/discard, dirty checks, conflict JSON and lifecycle copies retain all
+composite values; no list slots are silently removed during serialization.
 
 The admin is a client-rendered React SPA with no SSR requirement.
 

@@ -75,6 +75,11 @@ export const contentMetadataOpenApi = {
       item: { oneOf: [...scalarTypes.map(scalar), ref("GroupFieldDefinition")] },
       minItems: { type: "integer", minimum: 0, maximum: 100 },
       maxItems: { type: "integer", minimum: 0, maximum: 100 },
+      itemLabel: {
+        type: "string",
+        description:
+          "Immediate text, textarea, select or URL child of a group item; presentation only.",
+      },
       defaultValue: { type: "array", maxItems: 100 },
     },
   },

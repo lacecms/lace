@@ -1197,3 +1197,27 @@ test("nested model hints remain portable while block hints are rejected", () => 
     /renamedFrom/u,
   );
 });
+
+test("list itemLabel is portable presentation metadata with validated targets", () => {
+  const item = field.group({
+    fields: {
+      title: field.text(),
+      caption: field.textarea(),
+      url: field.url(),
+      kind: field.select({ options: ["a"] }),
+      image: field.media(),
+    },
+  });
+  for (const itemLabel of ["title", "caption", "url", "kind"]) {
+    const list = field.list({ item, itemLabel });
+    expect(toFieldMetadata(list).itemLabel).toBe(itemLabel);
+    expect(JSON.parse(JSON.stringify(list)).itemLabel).toBe(itemLabel);
+    expect(validateFieldValue(list, [{ title: "Hello" }], [], "draft")).toEqual([
+      { title: "Hello" },
+    ]);
+  }
+  for (const itemLabel of ["missing", "title.child", "image", 1, null])
+    expect(() => field.list({ item, itemLabel })).toThrow(/itemLabel/);
+  expect(() => field.list({ item: field.text(), itemLabel: "title" })).toThrow(/itemLabel/);
+  expect(() => toFieldMetadata({ ...field.text(), itemLabel: "title" })).toThrow();
+});

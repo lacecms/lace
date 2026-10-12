@@ -1,6 +1,6 @@
 # ADR 0013: Bounded composite fields
 
-- Status: accepted for CE7A and CE7B implementation
+- Status: accepted for CE7A, CE7B and CE7C implementation
 - Date: 2026-10-12
 
 ## Context
@@ -39,8 +39,15 @@ combined model/block budgets and each actual block migration intermediate.
 Model JSON and complete model-field references commit in the guarded final
 mutation without editorial revision/audit changes. Block migrations retain
 resumable guarded units and one final version/build transition.
-Admin inspection is read-only until CE7C. Gallery/Navigation and starter
-adoption remain CE7D. No database migration is needed.
+CE7C adds recursive generic controls and projection-only list `itemLabel`
+metadata targeting an immediate text/textarea/select/URL group child. Transient
+item identity follows moves, errors and editing state without a content envelope.
+Disclosures preserve mounted controls and viewers can inspect without mutation.
+Explicit container creation/absence and detached defaults retain shared validation
+semantics. Prospective normalized growth checks include hidden blocks; nested
+error navigation reveals every ancestor and targets exact controls. Pending
+lifecycle requests lock mutations to prevent indexed-response races.
+Gallery/Navigation and starter adoption remain CE7D. No database migration is needed.
 
 ## Consequences
 

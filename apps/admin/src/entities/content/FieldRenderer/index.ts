@@ -1,4 +1,6 @@
 export {
+  EntryListBudget,
+  useCompositeEditing,
   FieldRenderer,
   FieldRendererProvider,
   type FieldDefinition,

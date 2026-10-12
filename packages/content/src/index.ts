@@ -165,6 +165,8 @@ export interface ListFieldDefinition {
   readonly defaultValue?: readonly JsonValue[];
   readonly minItems?: number;
   readonly maxItems?: number;
+  /** Immediate text/textarea/select/URL child used for an item summary. */
+  readonly itemLabel?: string;
 }
 
 /** A draft starting value can omit required group descendants. */
@@ -569,6 +571,7 @@ export const field = {
       readonly item: ListItemDefinition;
       readonly minItems?: number;
       readonly maxItems?: number;
+      readonly itemLabel?: string;
     },
   >(
     options: Options & CommonFieldOptions<NoInfer<readonly DraftFieldValue<Options["item"]>[]>>,
@@ -576,12 +579,14 @@ export const field = {
       Options,
       "minItems"
     > &
-    PropertyFrom<Options, "maxItems"> {
+    PropertyFrom<Options, "maxItems"> &
+    PropertyFrom<Options, "itemLabel"> {
     return normalizeCompositeOptions("list", options) as unknown as CommonDefinition<
       "list",
       Options
     > & { readonly item: Options["item"] } & PropertyFrom<Options, "minItems"> &
-      PropertyFrom<Options, "maxItems">;
+      PropertyFrom<Options, "maxItems"> &
+      PropertyFrom<Options, "itemLabel">;
   },
 
   /** Define a single-line text field. */
@@ -827,7 +832,7 @@ function normalizeDescriptor(
     "required",
     "defaultValue",
     "renamedFrom",
-    ...(type === "group" ? ["fields"] : ["item", "minItems", "maxItems"]),
+    ...(type === "group" ? ["fields"] : ["item", "minItems", "maxItems", "itemLabel"]),
   ];
   for (const key of Object.keys(options))
     if (!allowed.includes(key)) fail(`${path}.${key}`, "is not supported by this field type.");
@@ -864,6 +869,22 @@ function normalizeDescriptor(
           "list item descriptors have no field key and cannot be renamed.",
         );
       result.item = normalizeDescriptor(item, `${path}.item`, depth + 1, 0, ancestors);
+      if (Object.hasOwn(options, "itemLabel")) {
+        const key = options.itemLabel;
+        const itemDefinition = result.item as FieldDefinition;
+        if (
+          typeof key !== "string" ||
+          !FIELD_KEY_PATTERN.test(key) ||
+          itemDefinition.type !== "group" ||
+          !Object.hasOwn(itemDefinition.fields, key) ||
+          !["text", "textarea", "select", "url"].includes(itemDefinition.fields[key]!.type)
+        )
+          fail(
+            `${path}.itemLabel`,
+            "must name an immediate text, textarea, select or URL group child.",
+          );
+        result.itemLabel = key;
+      }
       const min = readOptionalFiniteNumber(normalized, "minItems", true);
       const max = readOptionalFiniteNumber(normalized, "maxItems", true);
       if ((min ?? 0) > (max ?? MAX_LIST_ITEMS) || (max ?? MAX_LIST_ITEMS) > MAX_LIST_ITEMS)

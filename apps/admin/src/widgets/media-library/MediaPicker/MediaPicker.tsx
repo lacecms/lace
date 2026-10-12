@@ -14,13 +14,15 @@ import { SelectedMedia } from "../SelectedMedia/index.js";
  */
 export function MediaPicker({
   fieldKey,
+  describedBy,
+  invalid,
   id,
   label: givenLabel,
   onChange,
   readOnly = false,
   value,
 }: Pick<FieldRendererProps, "fieldKey" | "onChange" | "value"> &
-  Partial<Pick<FieldRendererProps, "id" | "readOnly">> & {
+  Partial<Pick<FieldRendererProps, "id" | "readOnly" | "describedBy" | "invalid">> & {
     /** Names the control in its actions and dialog; defaults to the field key's label. */
     readonly label?: string;
   }) {
@@ -38,12 +40,21 @@ export function MediaPicker({
   }, [mediaId]);
 
   return (
-    <div className="grid gap-2" id={id}>
+    <div
+      className="grid gap-2"
+      id={id}
+      role="group"
+      aria-label={label}
+      aria-describedby={describedBy}
+      aria-invalid={invalid}
+    >
       {mediaId === undefined && readOnly ? (
         <p className="m-0 text-sm text-muted-foreground">No media selected</p>
       ) : mediaId === undefined ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button
+            aria-describedby={describedBy}
+            aria-invalid={invalid}
             aria-haspopup="dialog"
             aria-label={`Choose media for ${label}`}
             onClick={() => setOpen(true)}
@@ -58,6 +69,8 @@ export function MediaPicker({
       ) : (
         <SelectedMedia
           actionRef={action}
+          describedBy={describedBy}
+          invalid={invalid}
           label={label}
           mediaId={mediaId}
           onRemove={() => {

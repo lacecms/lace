@@ -176,3 +176,10 @@ const depthSix = field.list({
 });
 const deepValue: FieldValue<typeof depthSix> = [{ children: [{ children: [{ name: "leaf" }] }] }];
 void [compositeValues, wrongComposite, partialDefault, deepValue];
+
+const labelledItems = field.list({ itemLabel: "kind", item: composite.item });
+const labelledValues: FieldValue<typeof labelledItems> = [{ kind: "image" }];
+const labelOption: string = labelledItems.itemLabel;
+// @ts-expect-error presentation metadata does not widen the item content type
+const badLabelledValue: FieldValue<typeof labelledItems> = [{ kind: "other" }];
+void [labelledValues, labelOption, badLabelledValue];

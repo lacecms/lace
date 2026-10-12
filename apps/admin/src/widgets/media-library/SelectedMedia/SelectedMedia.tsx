@@ -38,6 +38,8 @@ function facts(item: MediaMetadataDto): string {
  */
 export function SelectedMedia({
   actionRef,
+  describedBy,
+  invalid,
   label,
   mediaId,
   onRemove,
@@ -46,6 +48,8 @@ export function SelectedMedia({
   readOnly = false,
 }: {
   readonly actionRef?: Ref<HTMLButtonElement>;
+  readonly describedBy?: string | undefined;
+  readonly invalid?: boolean | undefined;
   readonly label: string;
   readonly mediaId: string;
   readonly onRemove: () => void;
@@ -120,6 +124,8 @@ export function SelectedMedia({
         {readOnly ? undefined : (
           <>
             <Button
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
               aria-haspopup="dialog"
               aria-label={`Replace media for ${label}`}
               onClick={onReplace}

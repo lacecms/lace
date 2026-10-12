@@ -436,36 +436,14 @@ function UnavailableMediaField() {
   );
 }
 
-function CompositeField({ id, describedBy, invalid, label, value }: FieldRendererProps) {
-  return (
-    <div>
-      <p className="text-muted-foreground">
-        Composite editing is coming in a later update. Saved values are preserved.
-      </p>
-      <textarea
-        aria-describedby={describedBy}
-        aria-invalid={invalid}
-        aria-label={label}
-        className="w-full rounded-md border p-3 font-mono text-sm"
-        id={id}
-        readOnly
-        rows={8}
-        value={value === undefined ? "(absent)" : JSON.stringify(value, null, 2)}
-      />
-    </div>
-  );
-}
-
-/** The built-in control for every field type; the registry may override any of them. */
+/** Scalar controls reused by the recursive field renderer. */
 export const builtInRenderers: Record<
-  FieldDefinition["type"],
+  Exclude<FieldDefinition["type"], "group" | "list">,
   ComponentType<FieldRendererProps>
 > = {
   boolean: BooleanField,
   date: DateField,
   datetime: DatetimeField,
-  group: CompositeField,
-  list: CompositeField,
   media: UnavailableMediaField,
   number: NumberField,
   richText: RichTextField,

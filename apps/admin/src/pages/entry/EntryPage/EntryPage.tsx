@@ -3,9 +3,9 @@ import type {
   ContentModelDto,
   UnpublishContentEntryResultDto,
 } from "@lacecms/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useBlocker } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
 import type { ContractValidationIssue } from "@lacecms/contracts";
 import { useForm } from "react-hook-form";
 import { ulid } from "ulid";
@@ -13,6 +13,7 @@ import {
   createDraftResolver,
   draftValues,
   FieldRenderer,
+  EntryListBudget,
   FieldRendererProvider,
   issueLocation,
   localDraftJson,
@@ -71,6 +72,7 @@ export function EntryPage() {
   const client = useAdminClient();
   const session = useSession();
   const queryClient = useQueryClient();
+  const pendingRequests = useIsMutating();
   const models = useQuery({ queryFn: client.listModels, queryKey: adminQueryKeys.models });
   const entry = useQuery({
     queryFn: () => client.loadEntry(entryId),
@@ -97,11 +99,18 @@ export function EntryPage() {
   });
   const modelRef = useRef<ContentModelDto | undefined>(undefined);
   modelRef.current = model;
+  const transient = useRef(new Map<string, { name: string; message: string }>());
+  const [transientDirty, setTransientDirty] = useState(false);
+  const onTransientChange = useCallback(() => setTransientDirty(transient.current.size > 0), []);
+  const [editorEpoch, setEditorEpoch] = useState(0);
   const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
     defaultValues: { blocks: [], fields: {}, title: "" },
     // The validation summary takes focus instead of the first invalid control.
     shouldFocusError: false,
-    ...(model === undefined ? {} : { resolver: createDraftResolver(model) }),
+    reValidateMode: "onSubmit",
+    ...(model === undefined
+      ? {}
+      : { resolver: createDraftResolver(model, () => [...transient.current.values()]) }),
   });
   const [summaryShown, setSummaryShown] = useState(false);
   const [unmappedIssues, setUnmappedIssues] = useState<readonly string[]>([]);
@@ -130,7 +139,7 @@ export function EntryPage() {
     const blocks = form.getValues("blocks");
     const unmapped: string[] = [];
     for (const issue of issues) {
-      const location = issueLocation(issue.path, currentModel, blocks);
+      const location = issueLocation(issue.path, currentModel, blocks, form.getValues("fields"));
       if (location === undefined) {
         unmapped.push(serverIssueMessage(issue));
         continue;
@@ -145,7 +154,10 @@ export function EntryPage() {
       // Publication reports required fields; a hidden block is exempt, so the summary can tell.
       form.setError(location as never, {
         message,
-        type: issue.code === "missing_required_field" ? PUBLICATION_ISSUE_TYPE : "server",
+        type:
+          issue.code === "missing_required_field" || issue.code === "list_too_short"
+            ? PUBLICATION_ISSUE_TYPE
+            : "server",
       });
     }
     setUnmappedIssues(unmapped);
@@ -183,14 +195,14 @@ export function EntryPage() {
       form.setValue("slug", suggested, { shouldDirty: true });
   }, [form, slugManuallyEdited, suggestingSlug, titleValue]);
   const blocker = useBlocker({
-    enableBeforeUnload: () => !leaving.current && form.formState.isDirty,
-    shouldBlockFn: () => !leaving.current && form.formState.isDirty,
+    enableBeforeUnload: () => !leaving.current && (form.formState.isDirty || transientDirty),
+    shouldBlockFn: () => !leaving.current && (form.formState.isDirty || transientDirty),
     withResolver: true,
   });
   const save = useMutation({
     mutationFn: (submitted: DraftEditorValues) => {
       if (currentEntry === undefined) throw new Error("The entry has not loaded.");
-      const values = withoutClearedValues(submitted);
+      const values = withoutClearedValues(submitted, modelRef.current);
       return client.saveDraft(entryId, {
         blocks: orderedDraftBlocks(values.blocks),
         expectedRevision: currentEntry.draft.revision,
@@ -273,7 +285,7 @@ export function EntryPage() {
     )(event);
   };
   useSaveShortcut(() => {
-    if (readOnly || save.isPending || !form.formState.isDirty) return;
+    if (readOnly || busy || !(form.formState.isDirty || transientDirty)) return;
     void submitDraft();
   });
   /** Replaces the form with a server draft the user chose to adopt. */
@@ -283,6 +295,9 @@ export function EntryPage() {
     queryClient.setQueryData(adminQueryKeys.entry(entryId), adopted);
     setSavedEntry(adopted);
     loaded.current = `${adopted.id}:${adopted.draft.revision}`;
+    setEditorEpoch((value) => value + 1);
+    transient.current.clear();
+    setTransientDirty(false);
     form.reset(draftValues(adoptedModel, adopted));
     hideSummary();
     setConflict(undefined);
@@ -318,7 +333,7 @@ export function EntryPage() {
     | Record<string, Record<string, unknown>>
     | undefined;
   const canPublish = can(session, "content:publish");
-  const dirty = form.formState.isDirty;
+  const dirty = form.formState.isDirty || transientDirty;
   const saveState: SaveState = readOnly
     ? { kind: "view-only" }
     : save.isPending
@@ -352,7 +367,12 @@ export function EntryPage() {
       () => showSummary(),
     )();
   };
-  const busy = save.isPending || publish.isPending || savingToPublish || duplicate.isPending;
+  const busy =
+    pendingRequests > 0 ||
+    save.isPending ||
+    publish.isPending ||
+    savingToPublish ||
+    duplicate.isPending;
   const adoptUnpublished = (result: UnpublishContentEntryResultDto) => {
     // The draft revision is unchanged, so the form keeps any unsaved values.
     queryClient.setQueryData(adminQueryKeys.entry(entryId), result.entry);
@@ -372,7 +392,7 @@ export function EntryPage() {
   const copyLocalDraft = async () => {
     try {
       if (navigator.clipboard === undefined) throw new Error("Clipboard is unavailable.");
-      await navigator.clipboard.writeText(localDraftJson(form.getValues()));
+      await navigator.clipboard.writeText(localDraftJson(form.getValues(), modelRef.current));
       setCopyError(undefined);
     } catch {
       setCopyError("Could not copy local JSON. Select and copy it manually from your browser.");
@@ -434,6 +454,9 @@ export function EntryPage() {
           model={model}
           onDeleted={leaveAfterDelete}
           onDiscardUnsaved={() => {
+            setEditorEpoch((value) => value + 1);
+            transient.current.clear();
+            setTransientDirty(false);
             form.reset(draftValues(model, currentEntry));
             hideSummary();
           }}
@@ -453,20 +476,30 @@ export function EntryPage() {
           unsavedChanges={dirty}
         />
       </ShellHeaderActions>
-      <FieldRendererProvider readOnly={readOnly} renderers={mediaRenderers}>
+      <FieldRendererProvider
+        epoch={editorEpoch}
+        transient={transient.current}
+        onTransientChange={onTransientChange}
+        busy={busy || reloadServerDraft.isPending}
+        form={form}
+        model={model}
+        readOnly={readOnly}
+        renderers={mediaRenderers}
+      >
         <form
           aria-labelledby="entry-title"
           className="grid max-w-[80rem] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
           id={formId}
+          noValidate
           onSubmit={(event) => {
-            if (readOnly) {
+            if (readOnly || busy) {
               event.preventDefault();
               return;
             }
             void submitDraft(event);
           }}
         >
-          <fieldset className="contents" disabled={readOnly}>
+          <div className="contents">
             <div className="grid min-w-0 content-start gap-4">
               <h1
                 className="m-0 text-xs font-medium tracking-wide text-muted-foreground uppercase"
@@ -535,6 +568,7 @@ export function EntryPage() {
                     aria-describedby={titleError === undefined ? undefined : "system-title-error"}
                     aria-invalid={titleError === undefined ? undefined : true}
                     className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input"
+                    disabled={readOnly || busy}
                     id="system-title"
                     placeholder="Untitled"
                     {...form.register("title")}
@@ -550,6 +584,7 @@ export function EntryPage() {
                   )}
                 </div>
               )}
+              <EntryListBudget control={form.control as never} model={model} />
               <BlockEditor
                 control={form.control}
                 errors={blockErrors}
@@ -594,6 +629,7 @@ export function EntryPage() {
                       <Input
                         aria-describedby={slugError === undefined ? undefined : "system-slug-error"}
                         aria-invalid={slugError === undefined ? undefined : true}
+                        disabled={readOnly || busy}
                         id="system-slug"
                         {...form.register("slug", {
                           onChange: () => {
@@ -603,6 +639,7 @@ export function EntryPage() {
                       />
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <input
+                          disabled={readOnly || busy}
                           checked={suggestingSlug}
                           className="size-3.5 accent-primary"
                           onChange={(event) => {
@@ -644,17 +681,19 @@ export function EntryPage() {
                 </section>
               ) : undefined}
               {model.seo === undefined ? undefined : (
-                <EntrySeoCard
-                  control={form.control}
-                  defaults={seoDefaults.defaults}
-                  errors={form.formState.errors.seo}
-                  model={model}
-                  readOnly={readOnly}
-                  siteUrl={buildSite.data?.site?.url}
-                />
+                <fieldset className="min-w-0 border-0 p-0" disabled={readOnly || busy}>
+                  <EntrySeoCard
+                    control={form.control}
+                    defaults={seoDefaults.defaults}
+                    errors={form.formState.errors.seo}
+                    model={model}
+                    readOnly={readOnly || busy}
+                    siteUrl={buildSite.data?.site?.url}
+                  />
+                </fieldset>
               )}
             </aside>
-          </fieldset>
+          </div>
         </form>
       </FieldRendererProvider>
       <DiscardChangesDialog

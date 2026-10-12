@@ -918,8 +918,10 @@ function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
 function fieldDefinitionStructure(definition: JsonValue): MutableJsonObject {
   const result = withoutDisplayProperties(definition);
   if (result.type === "group") result.fields = fieldMapStructure(result.fields);
-  if (result.type === "list" && result.item !== undefined)
-    result.item = fieldDefinitionStructure(result.item);
+  if (result.type === "list") {
+    delete result.itemLabel;
+    if (result.item !== undefined) result.item = fieldDefinitionStructure(result.item);
+  }
   return result;
 }
 

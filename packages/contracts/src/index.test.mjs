@@ -1798,3 +1798,15 @@ test("cyclic and accessor-backed forged metadata are refused without evaluation"
   });
   expect(v.safeParse(fieldMetadataMapSchema, accessor).success).toBe(false);
 });
+
+test("list label metadata survives recursive contracts and invalid targets fail", () => {
+  const cards = field.list({
+    itemLabel: "title",
+    item: field.group({ fields: { title: field.text(), image: field.media() } }),
+  });
+  expect(v.parse(fieldMetadataMapSchema, { cards }).cards.itemLabel).toBe("title");
+  for (const itemLabel of ["image", "absent", "title.child", 1])
+    expect(v.safeParse(fieldMetadataMapSchema, { cards: { ...cards, itemLabel } }).success).toBe(
+      false,
+    );
+});

@@ -989,7 +989,7 @@ Passing verification:
 **Status:** implemented on 2026-10-12 in
 [`ce07b-nested-schema-evolution`](../openspec/changes/archive/2026-10-12-ce07b-nested-schema-evolution/proposal.md),
 with apply explicitly authorized. Accepted specs were synchronized and the change
-was archived on 2026-10-12. CE7C/CE7D remain separate and unimplemented.
+was archived on 2026-10-12. CE7C/CE7D remain separate delivery units; CE7C implementation is recorded below.
 
 - Extend CE1's canonical structure comparison recursively. Child display
   metadata is projection-only; nested structural changes are explicit and
@@ -1053,6 +1053,11 @@ Passing verification:
 
 ### Session CE7C — Generic group and list editing
 
+**Status:** implemented, synchronized into the three accepted capabilities and
+archived on 2026-10-12 as
+[`ce07c-generic-group-list-editing`](../openspec/changes/archive/2026-10-12-ce07c-generic-group-list-editing/). Configuration/editor behavior and rollback guidance are
+in [Composite fields](composite-fields.md). CE7D remains separate and unimplemented.
+
 - Render groups as labelled fieldsets with descriptions and nested controls.
   Render lists as labelled repeatable items, supporting Add, Remove,
   Duplicate, Move up/down and accessible drag-and-drop ordering. Reuse media,
@@ -1078,6 +1083,40 @@ Passing verification:
 media selection, item duplication/removal/reordering, collapsed error focus,
 limits and conflict recovery without lost values. Keyboard-only operation and
 accessibility audits meet architecture section 17; viewers cannot mutate data.
+
+**Verification evidence (2026-10-12):**
+
+- Content descriptor tests: 65 passed plus content type tests; contracts: 71
+  passed; config: 55 passed; focused application configuration evolution: 28
+  passed. Existing descriptor/hash fixtures remain pinned. `pnpm openapi:check`
+  reproduced the checked-in generation using a temporary Git index/object store
+  for the intentional uncommitted OpenAPI delta; the real index was untouched.
+- Admin suite: 166 files / 705 tests passed. Following final focus and pending
+  control fixes, the affected editor/block components passed a further 83 tests;
+  another 22 SEO/block-card tests passed after final permission/pending-request
+  guards.
+  Composite-focused coverage includes absence/empty containers, defaults,
+  detached copies, identical item identity, transient scalar clears, recursive
+  errors, explicit 100/101 and 499/500/501 boundaries, hidden blocks and rich-text
+  exclusion. Descriptor-aware serialization also covers a group whose `type`
+  child contains `doc` without confusing it with a rich-text document.
+- Playwright: 37 scenarios passed across `composites.e2e.ts`, `editor.e2e.ts`,
+  `block-envelope.e2e.ts`, `seo.e2e.ts` and `entry-actions.e2e.ts`. CE7C fixtures
+  cover page/collection/global fields, block data, pointer and nested keyboard
+  sorting/cancellation, scalar insertion, media selection/upload, rich text,
+  limits, delayed saves, conflict JSON/reload and exact nested focus through
+  block tabs/disclosures. Axe passed for editor and viewer forms in light/dark
+  themes at 375px without globally disabled rules; no horizontal overflow.
+  The final pending-control changes passed the 20-scenario composites/envelope/SEO
+  subset again. The envelope keyboard harness waits for menu closure/focus return
+  before starting the next action.
+- Root typecheck, Oxlint/boundary/color checks, Oxfmt and strict validation of
+  `ce07c-generic-group-list-editing` all passed. No SQL
+  migration or persisted list-item envelope was added. The documented descriptor
+  example passed shared metadata normalization and nested publication validation.
+- Browser fixtures mock the API; this is editor acceptance and shared-contract
+  verification, not a new deployed Node/Cloudflare or owner-site acceptance run.
+  Gallery/Navigation definitions, shipped layouts and starter adoption remain CE7D.
 
 ### Session CE7D — Gallery, Navigation and shipped site examples
 

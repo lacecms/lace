@@ -887,3 +887,33 @@ test("hint lookup does not treat inherited constructor as a configured field", (
     }).renamedFields,
   ).toEqual({ title: "constructor" });
 });
+
+test("itemLabel changes only projection identity at every descriptor position", async () => {
+  const make = async (itemLabel, data = "stored") => {
+    const cards = field.list({
+      ...(itemLabel === undefined ? {} : { itemLabel }),
+      item: field.group({
+        fields: { title: field.text(), caption: field.text(), itemLabel: field.text() },
+        defaultValue: { itemLabel: data },
+      }),
+    });
+    return defineConfig({
+      blocks: [defineBlock({ type: "cards", version: 1, fields: { cards } })],
+      content: [
+        homeModel({ blocks: ["cards"], fields: { nested: field.group({ fields: { cards } }) } }),
+      ],
+    });
+  };
+  const before = await make(undefined),
+    after = await make("title"),
+    other = await make("caption");
+  for (const config of [after, other]) {
+    expect(config.structureHash).toBe(before.structureHash);
+    expect(config.runtime.content[0].structureHash).toBe(before.runtime.content[0].structureHash);
+    expect(config.projectionHash).not.toBe(before.projectionHash);
+  }
+  expect(
+    after.runtime.content[0].structure.fields.nested.fields.cards.item.defaultValue.itemLabel,
+  ).toBe("stored");
+  expect((await make("title", "changed")).structureHash).not.toBe(after.structureHash);
+});

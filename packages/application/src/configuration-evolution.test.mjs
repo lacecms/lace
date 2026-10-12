@@ -1184,3 +1184,25 @@ test("schema hint lookup uses own field keys even for constructor", async () => 
     validateStructureHints(before.structure, { renamedFields: { missing: "constructor" } }),
   ).toEqual([{ target: "missing", from: "constructor", kind: "source-missing" }]);
 });
+
+test("itemLabel sync is projection-only without content writes or version changes", async () => {
+  const make = (itemLabel) =>
+    posts({
+      fields: {
+        cards: field.list({
+          itemLabel,
+          item: field.group({ fields: { title: field.text(), caption: field.text() } }),
+        }),
+      },
+    });
+  const before = await make("title"),
+    after = await make("caption");
+  const plan = planConfigurationSynchronization({
+    models: [after],
+    storedModels: [storedFrom(before)],
+  });
+  expect(plan.status).not.toBe("blocked");
+  expect(configurationSyncContentWrites(plan)).toEqual([]);
+  expect(after.structureHash).toBe(before.structureHash);
+  expect(after.projectionHash).not.toBe(before.projectionHash);
+});

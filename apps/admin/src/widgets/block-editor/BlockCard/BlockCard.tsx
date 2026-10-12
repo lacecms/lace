@@ -78,7 +78,11 @@ function hasMessages(
   keys: Readonly<Record<string, unknown>>,
 ): boolean {
   const entries = (error?.[group] ?? {}) as Readonly<Record<string, ErrorEntry>>;
-  return Object.keys(keys).some((key) => entries[key]?.message !== undefined);
+  const has = (value: unknown): boolean =>
+    value !== null &&
+    typeof value === "object" &&
+    (typeof (value as ErrorEntry)?.message === "string" || Object.values(value).some(has));
+  return Object.keys(keys).some((key) => has(entries[key]));
 }
 
 function TabProblemMarker({ shown }: { readonly shown: boolean }) {
@@ -97,6 +101,8 @@ function TabProblemMarker({ shown }: { readonly shown: boolean }) {
  */
 export function BlockCard({
   active,
+  busy = false,
+  duplicateProblem,
   blockKey,
   collapsed,
   control,
@@ -116,6 +122,8 @@ export function BlockCard({
   total,
 }: {
   readonly active: boolean;
+  readonly busy?: boolean;
+  readonly duplicateProblem?: string | undefined;
   readonly blockKey: string;
   readonly collapsed: boolean;
   readonly control: Control<DraftEditorValues, unknown, DraftEditorValues>;
@@ -138,7 +146,7 @@ export function BlockCard({
   readonly total: number;
 }) {
   const id = useId();
-  const sortable = useSortable({ id: blockKey });
+  const sortable = useSortable({ id: blockKey, disabled: readOnly || busy });
   // Duplicate and Remove move focus elsewhere. They run once the menu has
   // closed, so its focus trap and focus return cannot take focus back.
   const afterClose = useRef<() => void>(undefined);
@@ -226,16 +234,19 @@ export function BlockCard({
       tabIndex={-1}
     >
       <header className="flex min-w-0 items-center gap-2">
-        <Button
-          aria-label={`Reorder ${label} block`}
-          className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
-          size="icon-sm"
-          variant="ghost"
-          {...sortable.attributes}
-          {...sortable.listeners}
-        >
-          <GripVerticalIcon aria-hidden />
-        </Button>
+        {!readOnly ? (
+          <Button
+            disabled={busy}
+            aria-label={`Reorder ${label} block`}
+            className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+            size="icon-sm"
+            variant="ghost"
+            {...sortable.attributes}
+            {...sortable.listeners}
+          >
+            <GripVerticalIcon aria-hidden />
+          </Button>
+        ) : null}
         <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
           <Icon aria-hidden className="size-4" />
         </span>
@@ -281,63 +292,78 @@ export function BlockCard({
             />
           </Button>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button aria-label={`Actions for ${label} block`} size="icon-sm" variant="ghost">
-              <MoreHorizontalIcon aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            onCloseAutoFocus={(event) => {
-              const action = afterClose.current;
-              if (action === undefined) return;
-              afterClose.current = undefined;
-              event.preventDefault();
-              action();
-            }}
-          >
-            <DropdownMenuItem disabled={index === 0} onSelect={() => onMove(index - 1)}>
-              <ArrowUpIcon aria-hidden />
-              Move up
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={index === total - 1} onSelect={() => onMove(index + 1)}>
-              <ArrowDownIcon aria-hidden />
-              Move down
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                afterClose.current = onDuplicate;
+        {!readOnly ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                disabled={busy}
+                aria-label={`Actions for ${label} block`}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <MoreHorizontalIcon aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(event) => {
+                const action = afterClose.current;
+                if (action === undefined) return;
+                afterClose.current = undefined;
+                event.preventDefault();
+                action();
               }}
             >
-              <CopyIcon aria-hidden />
-              Duplicate
-            </DropdownMenuItem>
-            {readOnly ? undefined : (
+              <DropdownMenuItem disabled={busy || index === 0} onSelect={() => onMove(index - 1)}>
+                <ArrowUpIcon aria-hidden />
+                Move up
+              </DropdownMenuItem>
               <DropdownMenuItem
+                disabled={busy || index === total - 1}
+                onSelect={() => onMove(index + 1)}
+              >
+                <ArrowDownIcon aria-hidden />
+                Move down
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={busy || !!duplicateProblem}
+                title={duplicateProblem}
                 onSelect={() => {
-                  hiddenField.onChange(!hiddenOnSite);
-                  onAnnounce?.(
-                    `${label} block ${index + 1} ${hiddenOnSite ? "shown on" : "hidden from"} the site.`,
-                  );
+                  afterClose.current = onDuplicate;
                 }}
               >
-                {hiddenOnSite ? <EyeIcon aria-hidden /> : <EyeOffIcon aria-hidden />}
-                {hiddenOnSite ? "Show block" : "Hide block"}
+                <CopyIcon aria-hidden />
+                Duplicate
               </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() => {
-                afterClose.current = onRemove;
-              }}
-              variant="destructive"
-            >
-              <Trash2Icon aria-hidden />
-              Remove
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {readOnly ? undefined : (
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() => {
+                    if (busy || readOnly) return;
+                    hiddenField.onChange(!hiddenOnSite);
+                    onAnnounce?.(
+                      `${label} block ${index + 1} ${hiddenOnSite ? "shown on" : "hidden from"} the site.`,
+                    );
+                  }}
+                >
+                  {hiddenOnSite ? <EyeIcon aria-hidden /> : <EyeOffIcon aria-hidden />}
+                  {hiddenOnSite ? "Show block" : "Hide block"}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() => {
+                  afterClose.current = onRemove;
+                }}
+                variant="destructive"
+              >
+                <Trash2Icon aria-hidden />
+                Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </header>
       {problems.length === 0 ? undefined : (
         <div id={`${id}-problems`} role="alert">
@@ -398,14 +424,16 @@ export function BlockCard({
               tabIndex={-1}
               value="settings"
             >
-              <BlockSettingsPanel
-                control={control}
-                definition={definition}
-                error={error}
-                index={index}
-                linkBase={linkBase}
-                settingsError={(key) => controlError(error, "settings", key, hiddenOnSite)}
-              />
+              <fieldset className="min-w-0 border-0 p-0" disabled={busy}>
+                <BlockSettingsPanel
+                  control={control}
+                  definition={definition}
+                  error={error}
+                  index={index}
+                  linkBase={linkBase}
+                  settingsError={(key) => controlError(error, "settings", key, hiddenOnSite)}
+                />
+              </fieldset>
             </TabsContent>
           </Tabs>
         )}

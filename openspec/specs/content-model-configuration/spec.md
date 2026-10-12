@@ -112,11 +112,13 @@ allowed blocks, with the `label` and `description` display properties removed
 only from the model, from each field definition, from each block definition,
 and from each block field definition. Field keys, block field keys, and keys
 inside default values SHALL be preserved even when they are named `label` or
-`description`. Structural hashes SHALL exclude a collection's `listFields`
+`description` or `itemLabel`. A list descriptor's optional `itemLabel` SHALL also be removed only at descriptor positions;
+field keys and default-value keys named `itemLabel` SHALL remain structural.
+Structural hashes SHALL exclude a collection's `listFields`
 presentation metadata and the temporary synchronization hints (`renamedFrom`
 on a model or a field, `removedFields`, `removedBlocks`); projection hashes
 SHALL include the complete serializable normalized definition, including
-`listFields`, except those hints. Normalized field definitions SHALL NOT
+`listFields` and list `itemLabel`, except those hints. Normalized field definitions SHALL NOT
 contain the field `renamedFrom` hint. Each runtime model SHALL carry its
 temporary hints, its detached canonical structure and, when it differs from
 the structural hash, the structural hash produced by the earlier rule that
@@ -335,9 +337,9 @@ any value other than `true`.
 ### Requirement: Composite metadata and identity remain portable and compatible
 Pages, collections and globals SHALL accept validated composites in their model
 fields and block data. The runtime and public projections SHALL retain recursive
-metadata. Structural identity SHALL exclude display labels/descriptions at every
+metadata. Structural identity SHALL exclude display labels/descriptions and list `itemLabel` at every
 descriptor position and preserve child keys and all default-value keys, including
-`label` and `description`. Nested display-only changes SHALL be projection-only.
+`label`, `description` and `itemLabel`. Nested display-only changes SHALL be projection-only.
 Scalar-only configurations SHALL keep their hashes and encodings. Collection
 listFields and SEO mappings SHALL remain restricted to their existing supported
 root scalar fields; composites and nested paths SHALL be refused there.
@@ -384,3 +386,24 @@ Nested removal paths SHALL use configured ancestor names. The planner SHALL map 
 #### Scenario: Repeat with retained hints
 - **WHEN** synchronization already applied those nested hints and an unrelated structural change is planned
 - **THEN** the retained hints do not repeat the rewrite or cause a missing-source diagnostic
+
+### Requirement: List item labels are projection-only metadata
+Valid list `itemLabel` metadata SHALL survive runtime, admin and public metadata
+projection in model fields and block data at any permitted depth. Adding,
+changing or removing it SHALL change projection identity only, without a
+model/block version bump, content migration or content write. Structural
+canonicalization SHALL remove it only at list descriptor positions, preserving
+field keys and default data named `itemLabel`. Configurations without this
+option SHALL retain existing encodings and hashes.
+
+#### Scenario: Display change inside block data
+- **WHEN** a block's nested group-valued list changes itemLabel from title to caption without a version change
+- **THEN** model and whole-configuration structural hashes remain equal, projection hashes change and synchronization accepts a projection-only update
+
+#### Scenario: Preserve content keys
+- **WHEN** a group child named itemLabel changes its constraints or a default object's itemLabel value changes
+- **THEN** structural identity changes and those keys remain in the canonical structure
+
+#### Scenario: Existing configuration compatibility
+- **WHEN** scalar and composite fixtures without itemLabel are normalized
+- **THEN** their existing hashes and metadata encodings remain unchanged

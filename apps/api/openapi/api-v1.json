@@ -718,6 +718,10 @@
               }
             ]
           },
+          "itemLabel": {
+            "description": "Immediate text, textarea, select or URL child of a group item; presentation only.",
+            "type": "string"
+          },
           "label": {
             "type": "string"
           },

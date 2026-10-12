@@ -14,10 +14,12 @@ import {
  */
 export function AddBlockMenu({
   children,
+  unavailable,
   definitions,
   onChoose,
 }: {
   /** The trigger button; it receives the popover's open state and ARIA. */
+  readonly unavailable?: (definition: BlockDefinitionDto) => string | undefined;
   readonly children: ReactElement;
   readonly definitions: readonly BlockDefinitionDto[];
   readonly onChoose: (definition: BlockDefinitionDto) => void;
@@ -30,11 +32,14 @@ export function AddBlockMenu({
   const matches = definitions.filter((definition) => matchesBlockFilter(definition, query));
 
   const choose = (definition: BlockDefinitionDto) => {
+    if (unavailable?.(definition)) return;
     chosen.current = true;
     setOpen(false);
     onChoose(definition);
   };
-  const options = () => [...(list.current?.querySelectorAll("button") ?? [])];
+  const options = () => [
+    ...(list.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []),
+  ];
   const onFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -107,6 +112,8 @@ export function AddBlockMenu({
               return (
                 <li key={definition.type}>
                   <button
+                    disabled={!!unavailable?.(definition)}
+                    title={unavailable?.(definition)}
                     aria-describedby={
                       definition.description === undefined ? undefined : `${optionId}-description`
                     }
@@ -130,6 +137,9 @@ export function AddBlockMenu({
                           {definition.description}
                         </span>
                       )}
+                      {unavailable?.(definition) ? (
+                        <small className="text-muted-foreground">{unavailable(definition)}</small>
+                      ) : null}
                     </span>
                   </button>
                 </li>
