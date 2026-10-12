@@ -806,10 +806,13 @@ Block data changes through block versions. A changed block definition bumps
 its `version` and declares `migrations` (section 11); every model that allows
 the block also bumps its own version. Sync composes the migrations from each
 stored block's `schemaVersion` to the configured version and runs them in
-memory during planning, so `--check` is a full dry run: each result is
-validated against the new definition in publish mode for published snapshots
-and draft mode for drafts, must stay within the block size and media-reference
-limits, and may reference only media the snapshot already referenced. Any
+memory during planning, so `--check` is a full dry run: each migration
+receives the stored data and settings, and each result is validated against
+the new definition, its data in publish mode for visible blocks of published
+snapshots and in draft mode for drafts and hidden blocks, its settings with
+the declared defaults applied. Results must stay within the block size and
+media-reference limits and may reference only media the snapshot already
+referenced. Any
 missing step, failure, invalid result, or stored version newer than the
 configuration refuses the plan without writing. Apply then rewrites the stale
 blocks in place in guarded units of one entry — guarded on snapshot revision,
@@ -937,18 +940,34 @@ content_blocks
 ├── position            INTEGER NOT NULL
 ├── schema_version      INTEGER NOT NULL
 ├── data_json           TEXT NOT NULL
+├── anchor              TEXT NULL
+├── class_name          TEXT NULL
+├── hidden              INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
+├── settings_json       TEXT NOT NULL DEFAULT '{}'
 ├── created_at          INTEGER NOT NULL
 └── updated_at          INTEGER NOT NULL
 
 PRIMARY KEY(snapshot_id, block_key)
 ```
 
-Index:
+Indexes:
 
 ```sql
 CREATE INDEX content_blocks_snapshot_position_idx
 ON content_blocks(snapshot_id, position);
+
+CREATE UNIQUE INDEX content_blocks_snapshot_anchor_idx
+ON content_blocks(snapshot_id, anchor) WHERE anchor IS NOT NULL;
 ```
+
+The block envelope ([ADR 0012](adr/0012-block-envelope.md)) holds presentation
+values outside the block data: an optional in-page `anchor`, an optional CSS
+`class_name`, a `hidden` flag and the `settings_json` the block definition
+declares (section 11), stored with defaults applied. Every block copy (publish,
+revert, duplicate) and every block write (save, sync migration) lists these
+columns on both runtimes. Migration `0009` added them without a rebuild;
+existing blocks read as visible, without an anchor or class, with `{}`
+settings.
 
 `block_key` is stable across draft and published copies. The composite primary key allows a published snapshot to be copied using one `INSERT ... SELECT` statement without generating new per-row IDs.
 
@@ -959,6 +978,12 @@ Block-specific data remains JSON and is validated by the block registry. A block
 The MVP uses sparse integer positions such as `1000`, `2000`, and `3000`. Inserting between two blocks normally changes only the inserted block. Positions are normalized when there is no safe gap.
 
 The MVP supports a flat top-level block list. A block may contain its own bounded nested data in `data_json`, but arbitrary parent/child block trees are out of scope.
+
+A block anchor is unique within an entry: entry validation rejects a repeated
+anchor (`duplicate_block_anchor`), hidden blocks included, and the partial
+unique index enforces the rule per snapshot. A draft and its published copy
+therefore share anchors. A save deletes the draft's block rows before inserting
+them again, so swapping anchors between two blocks never collides.
 
 All draft mutations are atomic at snapshot scope. A successful mutation changes
 the draft fields and complete ordered block list, increments
@@ -1265,7 +1290,10 @@ Inputs include:
 - optional idempotency key.
 
 Publication first loads the draft, blocks, active configuration, and current
-published pointer, then validates the complete candidate without writing. It
+published pointer, then validates the complete candidate without writing. A
+hidden block is validated in draft mode, so an unfinished block can be
+published hidden; it is copied into the published snapshot with the rest of
+the aggregate but never delivered (see the public responses in section 12). It
 then executes the following as one guarded database transaction or D1 atomic
 batch:
 
@@ -1361,12 +1389,24 @@ The block registry maps each `block_type` to:
 - a runtime validation schema;
 - serializable form metadata;
 - optional default data;
-- optional data migration functions.
+- optional declared settings;
+- optional migration functions.
+
+`defineBlock({ settings })` declares presentational settings, separate from
+the block content, with the field builders limited to `select`, `boolean`,
+`number` and `text`; every setting declares a `defaultValue`. Settings enter
+the block metadata (only when declared, so blocks without settings keep their
+hashes) and therefore the structural hash: changing a setting needs a block
+version increase and a migration. Stored blocks keep their settings with
+defaults applied, and the admin and public block contracts carry them. Built-in
+blocks declare no settings.
 
 `defineBlock({ version, migrations })` keys each migration by its target
 version. The keys form one contiguous range ending at the block's version
 (a version 1 block declares none), and each value is a pure, synchronous
-function from the previous version's data to the target version's data.
+function that receives `{ data, settings }` of the previous version and
+returns `{ data, settings? }` of the target version; a result without
+`settings` keeps the input settings.
 Migrations are runtime-only: like the validator they never enter the metadata
 projection, the canonical structure or any hash. Only configuration
 synchronization runs them (section 8); keep a migration for as long as any
@@ -1381,7 +1421,7 @@ defineBlock({
     attribution: field.text(),
   },
   migrations: {
-    2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }),
+    2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote ?? "" } }),
   },
 });
 ```
@@ -1479,8 +1519,16 @@ seo (export) = {
 media = { [mediaId]: { id, url, mimeType, width, height, alt, caption, focalPoint } }
 ```
 
-`blocks` keep `key`, `type`, `schemaVersion`, `position`, and `data`, ordered
-by position, and `publishedAt` is the creation time of the published snapshot.
+`blocks` hold the visible blocks only, ordered by position, each as
+`{ key, type, schemaVersion, position, anchor?, className?, settings, data }`
+with no `hidden` key (a missing `settings` validates as `{}`; the API always
+sends it). Media referenced only by hidden blocks are left out of the `media`
+dictionary and are not served by the public media route, while they keep their
+reference rows and stay protected by the deletion guard. Admin snapshot DTOs
+return every block with `hidden` and `settings`, and create and save requests
+accept the envelope with `anchor`, `className`, `hidden` and `settings`
+optional, so clients that omit them keep working. Block metadata in model DTOs
+carries declared `settings`. `publishedAt` is the creation time of the published snapshot.
 The globals read is anonymous like the page read, reads by model key without
 `published_routes`, and returns `404` for an unknown key, a page or collection
 key, or an unpublished global. Public entries of models with SEO enabled carry `seo` with the stored values,
@@ -1721,7 +1769,9 @@ framework and never reads `process.env` or `import.meta.env` itself.
   `renderRobotsTxt(site)`. Lookups return `undefined` when absent so routes
   choose between 404 and failure. `PublishedEntry` exposes `id`, `modelKey`,
   `path`, optional `slug`, `title`, `publishedAt`, `fields`, ordered `blocks`
-  (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`), typed
+  (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`,
+  `settings` and optional `anchor` and `className`; hidden blocks are never
+  delivered), typed
   from contract DTOs, and the same `media()` and `image()` lookups over the
   export's media dictionary. `image()` returns the resolved item with the
   effective alt text: the non-blank usage alt (such as the `image` block's
@@ -2266,7 +2316,9 @@ JSON values are stored as SQLite `TEXT` and validated before persistence. Fields
 
 Additive columns use a plain `ALTER TABLE … ADD` on both runtimes, as
 migration `0008` does for the nullable `content_snapshots.seo_json`; it
-rewrites no rows and needs no backfill.
+rewrites no rows and needs no backfill. Migration `0009` adds the block
+envelope columns the same way (`NOT NULL` columns carry constant defaults) and
+creates the partial unique anchor index.
 
 A migration that must rebuild a table referenced by foreign keys (for example
 `0007`, which widens the `content_models.kind` check) runs
@@ -2741,6 +2793,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
   one global maps site defaults, and the SDK resolves fallbacks
   ([ADR 0011](adr/0011-seo-system-group.md)).
 - Blocks are separate relational rows with type-specific JSON payloads.
+- Blocks carry an envelope (anchor, CSS class, hidden flag, declared settings);
+  hidden blocks stay stored but are never delivered
+  ([ADR 0012](adr/0012-block-envelope.md)).
 - Top-level blocks are flat and sparsely ordered.
 - Content models are defined in code and projected into the database.
 - Configuration sync classifies structural changes against a stored baseline

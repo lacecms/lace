@@ -123,6 +123,23 @@ drops the SEO values of that draft and its media usage reads fail on SEO image
 references, so do not run an older engine once SEO values exist; roll back by
 restoring the backup.
 
+### Block envelope migration
+
+Migration `0009_content_block_envelope` adds the block envelope
+([ADR 0012](adr/0012-block-envelope.md)) to `content_blocks`: nullable
+`anchor` and `class_name`, `hidden` (`NOT NULL DEFAULT 0`, checked to `0` or
+`1`) and `settings_json` (`NOT NULL DEFAULT '{}'`), plus the partial unique
+index `content_blocks_snapshot_anchor_idx` on `(snapshot_id, anchor)` where
+`anchor` is set. The statements are additive `ALTER TABLE … ADD` and one
+`CREATE UNIQUE INDEX` on Node SQLite and D1: no table is rebuilt, no foreign
+key changes and there is no backfill. Existing blocks read as visible, without
+an anchor or class name, with `{}` settings; the index starts empty because
+every existing anchor is `NULL`.
+
+Back up before migrating. An older engine ignores the columns, but it would
+deliver hidden blocks publicly and reset envelopes on save, so do not run an
+older engine once envelopes exist; roll back by restoring the backup.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

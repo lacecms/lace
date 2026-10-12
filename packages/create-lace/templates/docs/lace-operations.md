@@ -322,8 +322,8 @@ const quote = defineBlock({
   type: "quote",
   version: 2,
   fields: { text: field.text({ required: true }), attribution: field.text() },
-  // Pure and synchronous: version 1 data in, version 2 data out.
-  migrations: { 2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }) },
+  // Pure and synchronous: version 1 { data, settings } in, version 2 { data, settings? } out.
+  migrations: { 2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote ?? "" } }) },
 });
 ```
 

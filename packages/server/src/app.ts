@@ -16,6 +16,7 @@ import {
   SiteBuildUseCases,
 } from "@lacecms/application";
 import type {
+  CompleteDraftInput,
   DeferTask,
   EmailSender,
   InvitationIssueResult,
@@ -122,7 +123,12 @@ import {
   MultipartParseError,
   parseMultipartRequest,
 } from "@mjackson/multipart-parser";
-import type { ClassifiedError, ContractValidationIssue, ExportSeoDto } from "@lacecms/contracts";
+import type {
+  ClassifiedError,
+  ContentBlockDto,
+  ContractValidationIssue,
+  ExportSeoDto,
+} from "@lacecms/contracts";
 import { toJsonSchema } from "@valibot/to-json-schema";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
@@ -174,6 +180,24 @@ type ServerContentModel =
       readonly path: string;
       readonly seo?: ServerModelSeo;
     });
+
+/**
+ * A request block as use-case input; the contract has already checked that
+ * its settings are a JSON object and its envelope values are well formed.
+ */
+function blockInput(block: ContentBlockDto): CompleteDraftInput["blocks"][number] {
+  return {
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
+    data: block.data,
+    hidden: block.hidden,
+    key: block.key as never,
+    position: block.position,
+    schemaVersion: block.schemaVersion,
+    settings: block.settings as CompleteDraftInput["blocks"][number]["data"],
+    type: block.type,
+  };
+}
 
 interface ServerBlockMetadata {
   readonly type: string;
@@ -1807,7 +1831,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.content.create({
         actor: resolvedActor,
         modelKey,
-        blocks: blocks.map((block) => ({ ...block, key: block.key as never })),
+        blocks: blocks.map(blockInput),
         fields,
         ...(seo === undefined ? {} : { seo }),
         ...(slug === undefined ? {} : { slug }),
@@ -1864,7 +1888,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const resolvedActor = await actor(context);
       const entry = await input.content.save({
         actor: resolvedActor,
-        blocks: body.blocks.map((block) => ({ ...block, key: block.key as never })),
+        blocks: body.blocks.map(blockInput),
         entryId: context.req.param("entryId") as never,
         expectedRevision: revision(body, context.req.raw),
         fields: body.fields,

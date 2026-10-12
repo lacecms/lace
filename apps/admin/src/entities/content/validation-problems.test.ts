@@ -29,7 +29,9 @@ const block = (key: string, type = "hero") => ({
   data: {},
   key,
   position: 1024,
+  hidden: false,
   schemaVersion: 1,
+  settings: {},
   type,
 });
 

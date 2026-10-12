@@ -22,6 +22,7 @@ import {
   toBlockMetadata,
   toBlockRegistryMetadata,
   validateBlockData,
+  validateBlockSettings,
   validateEntryAggregate,
   toFieldMetadata,
   validateEntryPayload,
@@ -319,8 +320,8 @@ test("defines runtime-only block migrations outside metadata", () => {
     version: 3,
   });
   const migrated = quoteV3({
-    2: ({ body, ...rest }) => ({ ...rest, quote: body }),
-    3: ({ quote, ...rest }) => ({ ...rest, text: quote }),
+    2: ({ data: { body, ...rest } }) => ({ data: { ...rest, quote: body } }),
+    3: ({ data: { quote, ...rest }, settings }) => ({ data: { ...rest, text: quote }, settings }),
   });
   expect(toBlockMetadata(migrated)).toEqual(toBlockMetadata(plain));
   expect(Object.keys(migrated.migrations)).toEqual(["2", "3"]);
@@ -328,11 +329,20 @@ test("defines runtime-only block migrations outside metadata", () => {
   expect(JSON.stringify(toBlockMetadata(migrated))).not.toContain("migrations");
   expect(plain).not.toHaveProperty("migrations");
 
-  const v1 = { attribution: "Ada", body: "Hello" };
-  expect(migrateBlockData(migrated, v1, 1)).toEqual({ attribution: "Ada", text: "Hello" });
-  expect(migrateBlockData(migrated, { quote: "Hi" }, 2)).toEqual({ text: "Hi" });
-  expect(migrateBlockData(migrated, { text: "Same" }, 3)).toEqual({ text: "Same" });
-  expect(v1).toEqual({ attribution: "Ada", body: "Hello" });
+  const v1 = { data: { attribution: "Ada", body: "Hello" }, settings: { tone: "dark" } };
+  expect(migrateBlockData(migrated, v1, 1)).toEqual({
+    data: { attribution: "Ada", text: "Hello" },
+    settings: { tone: "dark" },
+  });
+  expect(migrateBlockData(migrated, { data: { quote: "Hi" }, settings: {} }, 2)).toEqual({
+    data: { text: "Hi" },
+    settings: {},
+  });
+  expect(migrateBlockData(migrated, { data: { text: "Same" }, settings: {} }, 3)).toEqual({
+    data: { text: "Same" },
+    settings: {},
+  });
+  expect(v1).toEqual({ data: { attribution: "Ada", body: "Hello" }, settings: { tone: "dark" } });
 
   for (const [migrations, key] of [
     [{ 4: () => ({}) }, "migrations.4"],
@@ -358,10 +368,11 @@ test("defines runtime-only block migrations outside metadata", () => {
 });
 
 test("fails block migration composition with stable codes", () => {
-  const onlyThree = quoteV3({ 3: (data) => data });
+  const onlyThree = quoteV3({ 3: (block) => block });
+  const stored = (data) => ({ data, settings: {} });
   const missing = (() => {
     try {
-      migrateBlockData(onlyThree, { text: "x" }, 1);
+      migrateBlockData(onlyThree, stored({ text: "x" }), 1);
     } catch (error) {
       return error;
     }
@@ -373,28 +384,212 @@ test("fails block migration composition with stable codes", () => {
     fromVersion: 1,
     toVersion: 3,
   });
-  expect(() => migrateBlockData(onlyThree, { text: "x" }, 4)).toThrow(
+  expect(() => migrateBlockData(onlyThree, stored({ text: "x" }), 4)).toThrow(
     expect.objectContaining({ code: "version_ahead" }),
   );
-  const input = { text: "x" };
+  const input = stored({ text: "x" });
   expect(() =>
     migrateBlockData(
       quoteV3({
-        3: (data) => {
-          data.text = "mutated";
-          return data;
+        3: (block) => {
+          block.data.text = "mutated";
+          return block;
         },
       }),
       input,
       2,
     ),
   ).toThrow(expect.objectContaining({ code: "migration_failed", step: 3 }));
-  expect(input).toEqual({ text: "x" });
-  for (const result of [[], Promise.resolve({}), { fn: () => 1 }, { n: Number.NaN }, null]) {
-    expect(() => migrateBlockData(quoteV3({ 3: () => result }), { text: "x" }, 2)).toThrow(
+  expect(input).toEqual(stored({ text: "x" }));
+  for (const result of [
+    [],
+    Promise.resolve({ data: {} }),
+    { data: { fn: () => 1 } },
+    { data: { n: Number.NaN } },
+    null,
+    { text: "x" },
+    { data: [] },
+    { data: {}, settings: [] },
+    { data: {}, extra: true },
+  ]) {
+    expect(() => migrateBlockData(quoteV3({ 3: () => result }), stored({ text: "x" }), 2)).toThrow(
       expect.objectContaining({ code: "invalid_result", step: 3 }),
     );
   }
+});
+
+test("migrations carry, rename and keep block settings", () => {
+  const renamed = quoteV3({
+    3: ({ data, settings: { tone, ...rest } }) => ({ data, settings: { ...rest, theme: tone } }),
+  });
+  expect(migrateBlockData(renamed, { data: { text: "x" }, settings: { tone: "dark" } }, 2)).toEqual(
+    { data: { text: "x" }, settings: { theme: "dark" } },
+  );
+  const dataOnly = quoteV3({ 3: ({ data }) => ({ data: { ...data, attribution: "Ada" } }) });
+  expect(
+    migrateBlockData(dataOnly, { data: { text: "x" }, settings: { align: "center" } }, 2),
+  ).toEqual({ data: { attribution: "Ada", text: "x" }, settings: { align: "center" } });
+});
+
+const settingsBlock = defineBlock({
+  fields: { heading: field.text({ required: true }) },
+  settings: {
+    align: field.select({ defaultValue: "left", options: ["left", "center"] }),
+    boxed: field.boolean({ defaultValue: false }),
+  },
+  type: "panel",
+  version: 1,
+});
+
+test("declares block settings with defaults in metadata only when present", () => {
+  expect(toBlockMetadata(settingsBlock).settings).toEqual({
+    align: { defaultValue: "left", options: ["left", "center"], required: false, type: "select" },
+    boxed: { defaultValue: false, required: false, type: "boolean" },
+  });
+  const none = defineBlock({ fields: {}, settings: {}, type: "plain", version: 1 });
+  expect(toBlockMetadata(none)).not.toHaveProperty("settings");
+  expect(none).not.toHaveProperty("settings");
+  expect(toBlockMetadata(none)).toEqual(
+    toBlockMetadata(defineBlock({ fields: {}, type: "plain", version: 1 })),
+  );
+  for (const builtIn of Object.values(builtInBlocks)) {
+    expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
+  }
+  for (const [settings, message] of [
+    [{ image: field.media({ defaultValue: "m" }) }, "settings.image must be a select"],
+    [{ body: field.textarea({ defaultValue: "x" }) }, "settings.body must be a select"],
+    [{ link: field.url({ defaultValue: "https://a.dev" }) }, "settings.link must be a select"],
+    [{ on: field.date({ defaultValue: "2026-01-01" }) }, "settings.on must be a select"],
+    [{ size: field.number() }, "settings.size must declare a defaultValue"],
+    [
+      { tone: field.text({ defaultValue: "x", renamedFrom: "theme" }) },
+      "settings.tone must not declare renamedFrom",
+    ],
+    [{ "1bad": field.boolean({ defaultValue: true }) }, "settings.1bad must be a valid field key"],
+    ["nope", "settings must be a plain object"],
+  ]) {
+    expect(() => defineBlock({ fields: {}, settings, type: "bad", version: 1 })).toThrow(message);
+  }
+  expect(validateBlockSettings(settingsBlock, { boxed: true })).toEqual({
+    align: "left",
+    boxed: true,
+  });
+});
+
+function envelopeAggregate(blocks, mode = "draft") {
+  return validateEntryAggregate(
+    { blocks, fields: {}, kind: "page", title: "Home" },
+    { blocks: ["panel", "hero"], fields: {}, kind: "page" },
+    defineBlockRegistry([settingsBlock, builtInBlocks.hero]),
+    mode,
+  );
+}
+
+function panel(key, envelope = {}, data = { heading: "Hi" }) {
+  return { data, key, schemaVersion: 1, type: "panel", ...envelope };
+}
+
+function issueOf(run) {
+  try {
+    run();
+  } catch (error) {
+    expect(error).toBeInstanceOf(ContentValidationError);
+    const [issue] = error.issues;
+    return { code: issue.code, path: issue.path.join("/") };
+  }
+  throw new Error("expected a validation error");
+}
+
+test("validates and normalizes the block envelope", () => {
+  const [block] = envelopeAggregate([panel("b1")]).blocks;
+  expect(block).toEqual({
+    data: { heading: "Hi" },
+    hidden: false,
+    key: "b1",
+    schemaVersion: 1,
+    settings: { align: "left", boxed: false },
+    type: "panel",
+  });
+  const [full] = envelopeAggregate([
+    panel("b1", {
+      anchor: "faq-2",
+      className: "  hero--wide  md:w-1/2 hero--wide ",
+      hidden: true,
+      settings: { boxed: true },
+    }),
+  ]).blocks;
+  expect(full).toMatchObject({
+    anchor: "faq-2",
+    className: "hero--wide md:w-1/2",
+    hidden: true,
+    settings: { align: "left", boxed: true },
+  });
+  expect(envelopeAggregate([panel("b1", { anchor: "pricing" })]).blocks[0].anchor).toBe("pricing");
+  for (const anchor of ["Pricing", "2nd", "-top", "", "a".repeat(65), 7]) {
+    expect(issueOf(() => envelopeAggregate([panel("b1", { anchor })]))).toEqual({
+      code: "invalid_block_anchor",
+      path: "blocks/0/anchor",
+    });
+  }
+  expect(
+    issueOf(() =>
+      envelopeAggregate([
+        panel("b1", { anchor: "faq" }),
+        panel("b2", { anchor: "faq", hidden: true }),
+      ]),
+    ),
+  ).toEqual({ code: "duplicate_block_anchor", path: "blocks/1/anchor" });
+  for (const className of [
+    "",
+    "   ",
+    'a"b',
+    "a<b",
+    "1col",
+    Array.from({ length: 17 }, (_, index) => `c${index}`).join(" "),
+    Array.from({ length: 5 }, (_, index) => `${"x".repeat(60)}${index}`).join(" "),
+    "x".repeat(65),
+    3,
+  ]) {
+    expect(issueOf(() => envelopeAggregate([panel("b1", { className })]))).toEqual({
+      code: "invalid_block_class_name",
+      path: "blocks/0/className",
+    });
+  }
+  expect(issueOf(() => envelopeAggregate([panel("b1", { hidden: "yes" })]))).toEqual({
+    code: "invalid_block_hidden",
+    path: "blocks/0/hidden",
+  });
+  expect(issueOf(() => envelopeAggregate([panel("b1", { settings: [] })]))).toEqual({
+    code: "invalid_block_settings",
+    path: "blocks/0/settings",
+  });
+  expect(issueOf(() => envelopeAggregate([panel("b1", { settings: { width: 3 } })]))).toEqual({
+    code: "unknown_field",
+    path: "blocks/0/settings/width",
+  });
+  expect(
+    issueOf(() => envelopeAggregate([panel("b1", { settings: { align: "right" } })])).path,
+  ).toBe("blocks/0/settings/align");
+  expect(
+    issueOf(() =>
+      envelopeAggregate([
+        { data: {}, key: "h1", schemaVersion: 1, settings: { x: 1 }, type: "hero" },
+      ]),
+    ),
+  ).toEqual({ code: "unknown_field", path: "blocks/0/settings/x" });
+  expect(issueOf(() => envelopeAggregate([panel("b1", { visible: true })]))).toEqual({
+    code: "unknown_key",
+    path: "blocks/0/visible",
+  });
+});
+
+test("validates hidden blocks in draft mode at publication", () => {
+  const hidden = envelopeAggregate([panel("b1", { hidden: true }, {})], "publish");
+  expect(hidden.blocks[0]).toMatchObject({ data: {}, hidden: true });
+  expect(issueOf(() => envelopeAggregate([panel("b1", {}, {})], "publish"))).toEqual({
+    code: "missing_required_field",
+    path: "blocks/0/data/heading",
+  });
 });
 
 test("registers public-DSL built-ins and validates ordered entry aggregates", () => {
@@ -459,8 +654,10 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
   );
   expect(aggregate.blocks[0]).toEqual({
     data: { heading: "Welcome" },
+    hidden: false,
     key: "block-1",
     schemaVersion: 1,
+    settings: {},
     type: "hero",
   });
   const ulidAggregate = validateEntryAggregate(
@@ -694,7 +891,10 @@ test("image version 2 makes alt text optional and migrates version 1 data unchan
     ContentValidationError,
   );
   const stored = { alt: "A lake", caption: "Morning", media: "media-1" };
-  expect(migrateBlockData(builtInBlocks.image, stored, 1)).toEqual(stored);
+  expect(migrateBlockData(builtInBlocks.image, { data: stored, settings: {} }, 1)).toEqual({
+    data: stored,
+    settings: {},
+  });
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
   expect(metadata).toMatchObject({ type: "image", version: 2 });
   expect(metadata.fields.alt.required).toBe(false);

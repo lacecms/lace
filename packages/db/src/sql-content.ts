@@ -239,12 +239,16 @@ export interface SnapshotRow {
 }
 
 export interface BlockRow {
+  readonly anchor: string | null;
   readonly block_key: string;
   readonly block_type: string;
+  readonly class_name: string | null;
   readonly created_at: number;
   readonly data_json: string;
+  readonly hidden: number;
   readonly position: number;
   readonly schema_version: number;
+  readonly settings_json: string;
   readonly snapshot_id: string;
   readonly updated_at: number;
 }
@@ -423,20 +427,27 @@ export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id,
    from content_entries e
    join content_models m on m.key = e.model_key and m.kind = 'global'
    join content_snapshots s on s.id = e.published_snapshot_id`;
+/**
+ * Excludes a reference `r` held by a hidden block, which is never delivered;
+ * `$fields` and `$seo` never match a block key.
+ */
+const DELIVERED_REFERENCE_SQL = `not exists (select 1 from content_blocks b
+                    where b.snapshot_id = r.snapshot_id and b.block_key = r.source_key
+                      and b.hidden = 1)`;
 export const PUBLIC_MEDIA_SQL = `select ${MEDIA_COLUMNS_SQL}
    from media m
   where m.id = ? and exists (
     select 1 from content_media_references r
     join content_entries e on e.published_snapshot_id = r.snapshot_id
-    where r.media_id = m.id
+    where r.media_id = m.id and ${DELIVERED_REFERENCE_SQL}
   ) limit 1`;
-/** Active media referenced by the given published snapshots, one row per pair. */
+/** Active media delivered by the given published snapshots, one row per pair. */
 export function publicSnapshotMediaSql(count: number): string {
   return `select distinct r.snapshot_id as public_snapshot_id, ${MEDIA_COLUMNS_SQL}
    from content_media_references r
    join media m on m.id = r.media_id
   where r.snapshot_id in (${Array.from({ length: count }, () => "?").join(", ")})
-    and m.status = 'active'
+    and m.status = 'active' and ${DELIVERED_REFERENCE_SQL}
   order by r.snapshot_id asc, m.id asc`;
 }
 export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL} from media m where m.id = ? limit 1`;
@@ -668,11 +679,13 @@ export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.p
 export const SYNC_MIGRATION_SNAPSHOTS_SQL =
   "select id, revision, title from content_snapshots where id in";
 /**
- * Blocks of a list of snapshot IDs with data only for target types. Binds the
+ * Blocks of a list of snapshot IDs with data and settings only for target types. Binds the
  * target type JSON array first; append the snapshot placeholders and the order.
  */
-export const SYNC_MIGRATION_BLOCKS_SQL = `select snapshot_id, block_key, block_type, position, schema_version,
-        case when block_type in (select value from json_each(?)) then data_json end as data_json
+export const SYNC_MIGRATION_BLOCKS_SQL = `with target(type) as (select value from json_each(?))
+ select snapshot_id, block_key, block_type, position, schema_version, hidden,
+        case when block_type in (select type from target) then data_json end as data_json,
+        case when block_type in (select type from target) then settings_json end as settings_json
    from content_blocks where snapshot_id in`;
 /** Media references of a list of snapshot IDs; append the placeholders. */
 export const SYNC_MIGRATION_REFERENCES_SQL =
@@ -694,8 +707,10 @@ export interface SyncMigrationBlockRow {
   readonly block_key: string;
   readonly block_type: string;
   readonly data_json: string | null;
+  readonly hidden: number;
   readonly position: number;
   readonly schema_version: number;
+  readonly settings_json: string | null;
   readonly snapshot_id: string;
 }
 
@@ -752,9 +767,13 @@ export function syncMigrationPage(
     list.push(
       Object.freeze({
         ...(row.data_json === null ? {} : { data: parseObject(row.data_json, "Block data") }),
+        hidden: row.hidden === 1,
         key: row.block_key,
         position: row.position,
         schemaVersion: row.schema_version,
+        ...(row.settings_json === null
+          ? {}
+          : { settings: parseObject(row.settings_json, "Block settings") }),
         type: row.block_type,
       }),
     );
@@ -817,7 +836,7 @@ export interface ConfigurationSyncMigrationStatements {
   readonly writes: readonly ConfigurationSyncWriteStatement[];
 }
 
-const MIGRATED_BLOCK_VALUES = 4;
+const MIGRATED_BLOCK_VALUES = 5;
 const MIGRATED_REFERENCE_VALUES = 3;
 
 function valueRows(rows: number, width: number): string {
@@ -873,11 +892,12 @@ export function configurationSyncMigrationStatements(
           block.schemaVersion,
           JSON.stringify(block.data),
           block.expectedSchemaVersion,
+          JSON.stringify(block.settings),
         ]),
         migration.snapshotId,
       ],
       sql: `update content_blocks
-     set schema_version = v.column2, data_json = v.column3, updated_at = ?
+     set schema_version = v.column2, data_json = v.column3, settings_json = v.column5, updated_at = ?
     from (values ${valueRows(group.length, MIGRATED_BLOCK_VALUES)}) as v
    where content_blocks.snapshot_id = ? and content_blocks.block_key = v.column1
      and content_blocks.schema_version = v.column4`,
@@ -928,7 +948,10 @@ export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug
         s.created_at, s.updated_at, s.updated_by, u.role
    from content_snapshots s left join user u on u.id = s.updated_by`;
 export const BLOCK_COLUMNS_SQL =
-  "select snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at from content_blocks";
+  "select snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at from content_blocks";
+/** Columns of a content block row, listed by every copy between snapshots. */
+export const BLOCK_COPY_COLUMNS_SQL =
+  "block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at";
 export const PENDING_SITE_BUILD_SQL =
   "type = 'site.build.requested' and processed_at is null and locked_at is null";
 
@@ -968,8 +991,8 @@ export function revertDraftSnapshotSql(condition: string): string {
 
 /** Copies one snapshot's blocks into another. Parameters: target, source, then `condition`'s. */
 export function copySnapshotBlocksSql(condition = "1 = 1"): string {
-  return `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
-  select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at
+  return `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL})
+  select ?, ${BLOCK_COPY_COLUMNS_SQL}
     from content_blocks where snapshot_id = ? and ${condition}`;
 }
 
@@ -1539,10 +1562,14 @@ export function storedSnapshots(
   for (const row of blockRows) {
     const blocks = grouped.get(row.snapshot_id) ?? [];
     blocks.push({
+      ...(row.anchor === null ? {} : { anchor: row.anchor }),
+      ...(row.class_name === null ? {} : { className: row.class_name }),
       data: parseObject(row.data_json, "Block data"),
+      hidden: row.hidden === 1,
       key: blockKey(row.block_key),
       position: row.position,
       schemaVersion: row.schema_version,
+      settings: parseObject(row.settings_json, "Block settings"),
       type: row.block_type,
     });
     grouped.set(row.snapshot_id, blocks);
@@ -1662,14 +1689,21 @@ export function publicGlobalContent(
   });
 }
 
-/** Public projections cannot disclose the independently mutable draft snapshot. */
+/**
+ * Public projections cannot disclose the independently mutable draft snapshot
+ * or hidden blocks, which stay stored but are never delivered.
+ */
 export function publicEntry(entry: ContentEntry): ContentEntry {
   if (entry.published === undefined) failure("Public entry is missing its published snapshot.");
+  const published = Object.freeze({
+    ...entry.published,
+    blocks: Object.freeze(entry.published.blocks.filter((block) => !block.hidden)),
+  });
   return Object.freeze({
-    draft: Object.freeze({ ...entry.published, state: "draft" as const }),
+    draft: Object.freeze({ ...published, state: "draft" as const }),
     id: entry.id,
     model: entry.model,
-    published: entry.published,
+    published,
   });
 }
 

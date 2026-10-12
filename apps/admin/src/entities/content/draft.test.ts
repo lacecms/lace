@@ -28,7 +28,17 @@ const model: ContentModelDto = {
 
 const entry = {
   draft: {
-    blocks: [{ data: {}, key: "01J", position: 1024, schemaVersion: 1, type: "hero" }],
+    blocks: [
+      {
+        data: {},
+        hidden: false,
+        key: "01J",
+        position: 1024,
+        schemaVersion: 1,
+        settings: {},
+        type: "hero",
+      },
+    ],
     fields: {},
     revision: 3,
     slug: "draft-slug",
@@ -74,7 +84,9 @@ test("derives sparse positions in displayed order without mutating keys or data"
       data: Object.freeze({ heading: `Block ${index}` }),
       key: `key-${index}`,
       position,
+      hidden: false,
       schemaVersion: 1,
+      settings: {},
       type: "hero",
     }),
   );

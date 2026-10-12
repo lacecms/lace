@@ -583,3 +583,55 @@ test("publication and revert preserve the SEO group", () => {
   expect(reverted.draft.seo).toEqual(seo);
   expect(Object.isFrozen(reverted.draft.seo)).toBe(true);
 });
+
+test("publication and revert preserve block envelopes and complete legacy blocks", () => {
+  const legacy = entry();
+  expect(legacy.draft.blocks[0]).toEqual({
+    ...block("block-1", 1000, { nested: { body: "Original" } }),
+    hidden: false,
+    settings: {},
+  });
+  expect(legacy.draft.blocks[0]).not.toHaveProperty("anchor");
+  const envelope = {
+    anchor: "pricing",
+    className: "wide",
+    hidden: true,
+    settings: { align: "center" },
+  };
+  const saved = saveCompleteDraft(legacy, {
+    blocks: [{ ...block("block-1", 1000), ...envelope }],
+    expectedRevision: 1,
+    fields: {},
+    mediaReferences: [],
+    title: "Original",
+    updatedAt: unixMilliseconds(2),
+    updatedBy: editor,
+  });
+  expect(saved.draft.blocks[0]).toMatchObject(envelope);
+  const published = publishContentEntry(saved, {
+    expectedRevision: 2,
+    publishedAt: unixMilliseconds(3),
+    publishedBy: admin,
+    publishedSnapshotId: contentSnapshotId("published-1"),
+  });
+  expect(published.published.blocks[0]).toMatchObject(envelope);
+  const changed = saveCompleteDraft(published, {
+    blocks: [{ ...block("block-1", 1000), settings: { align: "left" } }],
+    expectedRevision: 2,
+    fields: {},
+    mediaReferences: [],
+    title: "Original",
+    updatedAt: unixMilliseconds(4),
+    updatedBy: editor,
+  });
+  expect(changed.draft.blocks[0]).toMatchObject({ hidden: false, settings: { align: "left" } });
+  expect(changed.draft.blocks[0]).not.toHaveProperty("anchor");
+  const reverted = revertContentDraft(changed, {
+    expectedPublishedSnapshotId: contentSnapshotId("published-1"),
+    expectedRevision: 3,
+    revertedAt: unixMilliseconds(5),
+    revertedBy: editor,
+  });
+  expect(reverted.draft.blocks[0]).toMatchObject(envelope);
+  expect(Object.isFrozen(reverted.draft.blocks[0].settings)).toBe(true);
+});

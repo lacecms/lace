@@ -359,13 +359,14 @@ change during planning without writing:
 - A stored version that the configured migrations cannot reach SHALL refuse
   the plan (`BLOCK_MIGRATION_MISSING`).
 - For every other stale block, the system SHALL execute the composed
-  migrations in memory. A migration that fails SHALL refuse the plan
-  (`BLOCK_MIGRATION_FAILED`).
-- It SHALL validate each result against the configured block definition, in
-  publish mode for a published snapshot and in draft mode for a draft. The
-  validation SHALL apply the block's default data and the per-block JSON size
-  limit. A result that fails validation SHALL refuse the plan
-  (`BLOCK_MIGRATION_INVALID`).
+  migrations in memory over the block's stored data and settings. A migration
+  that fails SHALL refuse the plan (`BLOCK_MIGRATION_FAILED`).
+- It SHALL validate each result against the configured block definition: the
+  data in publish mode for a visible block of a published snapshot, and in
+  draft mode for a draft or a hidden block; the settings against the declared
+  settings with their defaults applied. The validation SHALL apply the block's
+  default data and the per-block JSON size limit. A result that fails
+  validation SHALL refuse the plan (`BLOCK_MIGRATION_INVALID`).
 - A media ID in a media field of a migrated result that the same snapshot did
   not reference before migration SHALL refuse the plan
   (`BLOCK_MIGRATION_INVALID`).
@@ -375,12 +376,12 @@ change during planning without writing:
 A refusal SHALL name the model, the block type, the configured version, and
 up to 20 affected blocks. Each named block SHALL carry its entry ID, state,
 title, block key and stored version. For a failed validation, the refusal
-SHALL also carry the validation path and code of the first failure. A refused
-migration SHALL make the whole plan invalid, and no model, snapshot, block,
-media-reference, public-state or outbox data SHALL change. A valid plan SHALL
-report, per migrated block type, the configured version, the distinct stored
-versions, and the number of drafts, published snapshots and blocks that the
-apply migrates.
+SHALL also carry the validation path (under `data` or `settings`) and code of
+the first failure. A refused migration SHALL make the whole plan invalid, and
+no model, snapshot, block, media-reference, public-state or outbox data SHALL
+change. A valid plan SHALL report, per migrated block type, the configured
+version, the distinct stored versions, and the number of drafts, published
+snapshots and blocks that the apply migrates.
 
 #### Scenario: Two-step migration is planned
 - **WHEN** a populated model allows a block type whose definition moves from
@@ -398,7 +399,7 @@ apply migrates.
 
 #### Scenario: Invalid migration result refuses the plan
 - **WHEN** a migration returns data that omits a field required by the new
-  definition for a block of a published snapshot
+  definition for a visible block of a published snapshot
 - **THEN** the plan is invalid with `BLOCK_MIGRATION_INVALID` naming the
   published snapshot, block key and the failing field path, and the database
   is unchanged
@@ -408,6 +409,23 @@ apply migrates.
   draft holds
 - **THEN** the plan stays valid because draft validation permits the missing
   required field
+
+#### Scenario: Hidden published blocks are validated in draft mode
+- **WHEN** a migration result omits a required field for a hidden block of a
+  published snapshot
+- **THEN** the plan stays valid
+
+#### Scenario: Invalid migrated settings refuse the plan
+- **WHEN** a migration returns settings with a key the new definition does not
+  declare
+- **THEN** the plan is invalid with `BLOCK_MIGRATION_INVALID` whose path names
+  that key under `settings`
+
+#### Scenario: New settings receive their defaults
+- **WHEN** version 2 of a block adds an `align` setting with default `left`
+  and its migration returns the stored version 1 envelope unchanged
+- **THEN** the plan is valid and the migrated blocks carry settings
+  `{align: "left"}`
 
 #### Scenario: Missing step refuses the plan
 - **WHEN** stored blocks have version 1 and the configured version 3 block
@@ -500,3 +518,16 @@ before it.
 - **THEN** that unit changes nothing, synchronization stops as stale without
   its final mutation, and a rerun migrates the saved draft if it still holds
   stale blocks
+
+### Requirement: Block migration rewrites keep the envelope
+When a guarded migration unit rewrites a migrated block, it SHALL replace the
+block's settings with the validated migrated settings together with its data
+and schema version, and SHALL keep the block's anchor, class name and hidden
+flag. The unit guard, revision and audit rules SHALL be unchanged.
+
+#### Scenario: A rewrite migrates settings and keeps presentation values
+- **WHEN** sync migrates a hidden block with anchor `pricing`, class name
+  `wide` and settings `{tone: "dark"}` through a migration that renames the
+  setting to `theme`
+- **THEN** the stored block has the new schema version, settings
+  `{theme: "dark"}`, anchor `pricing`, class name `wide` and `hidden: true`

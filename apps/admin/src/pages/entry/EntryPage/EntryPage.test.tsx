@@ -602,7 +602,7 @@ const summaryModel: ContentModelDto = {
 const summaryBlocks = [
   { data: { heading: "First hero" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA1", position: 100 },
   { data: { heading: "Second hero" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA2", position: 200 },
-].map((block) => ({ ...block, schemaVersion: 1, type: "hero" }));
+].map((block) => ({ ...block, hidden: false, schemaVersion: 1, settings: {}, type: "hero" }));
 
 function mountSummary(overrides: Partial<AdminClient> = {}, role: "admin" | "editor" = "editor") {
   const saveDraft = vi.fn(

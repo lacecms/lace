@@ -100,6 +100,7 @@ import {
   STORED_MODEL_STATE_JSON_SQL,
   SYNC_BLOCKS_SQL,
   SYNC_MIGRATION_BLOCKS_SQL,
+  BLOCK_COPY_COLUMNS_SQL,
   SYNC_MIGRATION_ENTRIES_SQL,
   SYNC_MIGRATION_REFERENCES_SQL,
   SYNC_MIGRATION_SNAPSHOTS_SQL,
@@ -229,7 +230,8 @@ const GUARD_SQL = "exists (select 1 from mutation_guards where token = ?)";
 const INJECTED_FAILURE_SQL = "insert into mutation_guards (token, created_at) values (null, 0)";
 const LEASED_SITE_BUILD_SQL =
   "select id from outbox_events where locked_by = ? and type = 'site.build.requested' and processed_at is null and locked_at > ?";
-const BLOCK_VALUES_PER_ROW = 5;
+// Key, type, position, version, data and one envelope JSON value per block row.
+const BLOCK_VALUES_PER_ROW = 6;
 const REFERENCE_VALUES_PER_ROW = 3;
 
 export interface D1RepositoryOptions {
@@ -874,8 +876,8 @@ export class D1ContentRepository
     );
     batch.checkpoint("publish.blocks");
     batch.add(
-      `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
-       select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at
+      `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL})
+       select ?, ${BLOCK_COPY_COLUMNS_SQL}
          from content_blocks where snapshot_id = ? and ${exists.sql}`,
       newId,
       draftId,
@@ -2043,8 +2045,11 @@ export class D1ContentRepository
     const shared = token === undefined ? [snapshotId, timestamp] : [snapshotId, timestamp, token];
     for (const group of chunks(blocks, rowsPerStatement(shared.length, BLOCK_VALUES_PER_ROW))) {
       batch.add(
-        `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
-         select ?1, v.column1, v.column2, v.column3, v.column4, v.column5, ?2, ?2
+        `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json,
+                                     anchor, class_name, hidden, settings_json, created_at, updated_at)
+         select ?1, v.column1, v.column2, v.column3, v.column4, v.column5,
+                v.column6 ->> '$.anchor', v.column6 ->> '$.className',
+                coalesce(v.column6 ->> '$.hidden', 0), coalesce(v.column6 -> '$.settings', '{}'), ?2, ?2
            from (values ${numberedValues(group.length, BLOCK_VALUES_PER_ROW, shared.length)}) v
           ${token === undefined ? "" : "where exists (select 1 from mutation_guards where token = ?3)"}`,
         ...shared,
@@ -2054,6 +2059,13 @@ export class D1ContentRepository
           block.position,
           block.schemaVersion,
           JSON.stringify(block.data),
+          // One bound envelope keeps a 200-block save within the D1 statement budget.
+          JSON.stringify({
+            ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+            ...(block.className === undefined ? {} : { className: block.className }),
+            hidden: block.hidden ? 1 : 0,
+            settings: block.settings,
+          }),
         ]),
       );
     }

@@ -370,3 +370,69 @@ test("SEO migration adds an empty nullable snapshot column and keeps content", a
     await miniflare.dispose();
   }
 });
+
+test("block envelope migration adds default columns and the anchor index additively", async () => {
+  const BLOCK_ENVELOPE = "0009_content_block_envelope.sql";
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < BLOCK_ENVELOPE));
+    await apply([
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's', 'p', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('d1', 'e1', 1, 'post', 'Post', '{}', 1, 1, 1, 'admin')",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('p1', 'e1', 1, 'post', 'Post', '{}', 1, 1, 1, 'admin')",
+      "update content_entries set draft_snapshot_id = 'd1', published_snapshot_id = 'p1' where id = 'e1'",
+      "insert into published_routes (path, entry_id, snapshot_id, updated_at) values ('/blog/post', 'e1', 'p1', 1)",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values ('p1', 'b1', 'image', 1000, 2, '{\"media\":\"m1\"}', 1, 1)",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+      "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('p1', 'b1', 'media', 'm1', 1)",
+    ]);
+    const rows = async (sql) => (await database.prepare(sql).all()).results;
+    const state = async () => ({
+      blocks: await rows("select * from content_blocks"),
+      references: await rows("select * from content_media_references"),
+      routes: await rows("select * from published_routes"),
+      snapshots: await rows("select * from content_snapshots"),
+    });
+    const before = await state();
+    const statements = await migrationStatements((file) => file === BLOCK_ENVELOPE);
+    expect(statements.some((statement) => /create table|drop table/iu.test(statement))).toBe(false);
+    await apply(statements);
+    expect(await state()).toEqual({
+      ...before,
+      blocks: before.blocks.map((row) => ({
+        ...row,
+        anchor: null,
+        class_name: null,
+        hidden: 0,
+        settings_json: "{}",
+      })),
+    });
+    const insert = (snapshot, key, anchor, hidden = 0) =>
+      database
+        .prepare(
+          "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, hidden, created_at, updated_at) values (?, ?, 'image', 2000, 2, '{}', ?, ?, 1, 1)",
+        )
+        .bind(snapshot, key, anchor, hidden)
+        .run();
+    await insert("p1", "b2", "pricing");
+    await expect(insert("p1", "b3", "pricing")).rejects.toThrow(/UNIQUE constraint/u);
+    await insert("d1", "b2", "pricing", 1);
+    await insert("p1", "b4", null);
+    await insert("p1", "b5", null);
+    await expect(insert("p1", "b6", null, 2)).rejects.toThrow(/CHECK constraint/u);
+    await expect(insert("missing", "b7", null)).rejects.toThrow(/FOREIGN KEY/u);
+  } finally {
+    await miniflare.dispose();
+  }
+});

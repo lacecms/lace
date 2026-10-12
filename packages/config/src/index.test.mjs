@@ -389,6 +389,40 @@ test("omits canonical structures and legacy hashes from public projections", asy
   expect(config.runtime.content[0].structureHash).toBe(config.content[0].structureHash);
 });
 
+test("puts declared block settings in structural identity and omits empty ones", async () => {
+  const hero = (settings) =>
+    defineBlock({
+      fields: builtInBlocks.hero.fields,
+      ...(settings === undefined ? {} : { settings }),
+      type: "hero",
+      version: 2,
+    });
+  const withBlocks = (definition) =>
+    defineConfig({
+      blocks: [...blocks.filter((block) => block.type !== "hero"), definition],
+      content: [homeModel()],
+    });
+  const align = (defaultValue, options = ["left", "center"]) => ({
+    align: field.select({ defaultValue, options }),
+  });
+  const plain = await withBlocks(hero());
+  const empty = await withBlocks(hero({}));
+  const left = await withBlocks(hero(align("left")));
+  const center = await withBlocks(hero(align("center")));
+  const wider = await withBlocks(hero(align("left", ["left", "center", "right"])));
+
+  expect(empty.content[0].structureHash).toBe(plain.content[0].structureHash);
+  expect(empty.content[0].projectionHash).toBe(plain.content[0].projectionHash);
+  expect(JSON.stringify(empty.blocks)).not.toContain("settings");
+  expect(left.content[0].structureHash).not.toBe(plain.content[0].structureHash);
+  expect(center.content[0].structureHash).not.toBe(left.content[0].structureHash);
+  expect(wider.content[0].structureHash).not.toBe(left.content[0].structureHash);
+  expect(left.runtime.content[0].structure.blockDefinitions[0].settings.align).toMatchObject({
+    defaultValue: "left",
+    type: "select",
+  });
+});
+
 test("rejects model blocks missing from the root registry and separates projections", async () => {
   await expect(defineConfig({ blocks: [], content: [homeModel()] })).rejects.toThrow(
     /unregistered/u,

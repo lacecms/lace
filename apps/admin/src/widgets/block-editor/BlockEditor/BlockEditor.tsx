@@ -23,7 +23,7 @@ import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { AddBlockMenu } from "../AddBlockMenu/index.js";
 import { BlockCard } from "../BlockCard/index.js";
 import { RemovedBlockNotice } from "../RemovedBlockNotice/index.js";
-import { blockLabel, type BlockDefinitionDto } from "../block-presentation.js";
+import { blockLabel, defaultSettings, type BlockDefinitionDto } from "../block-presentation.js";
 
 interface RemovedBlock {
   readonly block: ContentBlockDto;
@@ -121,13 +121,16 @@ export function BlockEditor({
   const insertDefinition = (index: number, definition: BlockDefinitionDto) =>
     insertBlock(index, {
       data: structuredClone(definition.defaultValue ?? {}) as ContentBlockDto["data"],
+      hidden: false,
       key: ulid(),
       position: Math.max(0, ...fields.map((block) => block.position)) + 1_024,
       schemaVersion: definition.version,
+      settings: defaultSettings(definition),
       type: definition.type,
     });
   const duplicate = (index: number) => {
-    const block = getValues(`blocks.${index}`);
+    // An anchor is unique within the entry, so the copy starts without one.
+    const { anchor: _anchor, ...block } = getValues(`blocks.${index}`);
     insertBlock(index + 1, {
       ...structuredClone(block),
       key: ulid(),

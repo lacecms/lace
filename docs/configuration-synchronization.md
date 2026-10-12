@@ -198,24 +198,30 @@ export const quote = defineBlock({
   version: 3,
   fields: { text: field.text({ required: true }), source: field.text() },
   migrations: {
-    // Each key is a target version; each function receives the previous version's data.
-    2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }),
-    3: ({ attribution, ...rest }) =>
-      attribution === undefined ? rest : { ...rest, source: attribution },
+    // Each key is a target version; each function receives the previous
+    // version's { data, settings } and returns { data, settings? }.
+    2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote ?? "" } }),
+    3: ({ data: { attribution, ...rest } }) => ({
+      data: attribution === undefined ? rest : { ...rest, source: attribution },
+    }),
   },
 });
 ```
 
 - **Rules.** Migration keys form one contiguous range that ends at the block's
   `version` (a version 1 block declares none). Each function is pure and
-  synchronous, receives a frozen copy and returns plain JSON object data.
+  synchronous, receives a frozen copy of the stored `{ data, settings }` and
+  returns `{ data, settings? }` of JSON objects; leaving out `settings` keeps
+  the input settings. A block that adds, removes or changes declared
+  `settings` also bumps its version; new settings receive their defaults.
   Migrations never affect hashes, so adding or removing them alone needs no
   version bump. Every model that allows the block bumps its own version,
   because its structure embeds the block definition.
 - **Dry run.** Planning reads the model's entries that hold a block of the type
   at another version (pages of 50 entries) and composes the chain from each
   stored `schemaVersion`. Each result is validated against the new definition:
-  publish mode for published snapshots, draft mode for drafts, the per-block
+  publish mode for visible blocks of published snapshots, draft mode for drafts
+  and hidden blocks, declared settings with their defaults, the per-block
   size limit, the per-entry limit of 200 media references, and no media the
   snapshot did not already reference. `--check` therefore runs every
   migration. Refusals: `BLOCK_MIGRATION_MISSING` (no step reaches the stored
@@ -230,7 +236,8 @@ export const quote = defineBlock({
   unit, re-running the same migrations. Each snapshot write is guarded on its
   revision, on still being the entry's current draft or published snapshot,
   and on every migrated block's stored `schema_version`; the migrated blocks'
-  media references are rebuilt. A draft gets `revision + 1` and the actor
+  data and settings are replaced (anchor, class name and hidden flag are kept)
+  and their media references are rebuilt. A draft gets `revision + 1` and the actor
   `system:content-sync`, so an editor with the entry open receives a revision
   conflict. A published snapshot that was in sync with its draft takes the same
   new revision; otherwise it keeps its revision, so entry status never changes.

@@ -171,6 +171,38 @@ renders `<LaceSeo>` in the starter layout and adds `sitemap.xml` and
 projects adopt the configuration and site files by hand, and nothing breaks
 without adoption.
 
+The same next alpha changes the block contract (CE6A,
+[ADR 0012](adr/0012-block-envelope.md)). Every block gains an envelope
+beside its data:
+
+- admin draft and published snapshot DTOs return each block with `hidden`
+  and `settings` and, when set, `anchor` and `className`; create and save
+  requests accept all four as optional values that default (visible, no
+  anchor or class, declared setting defaults), so clients that omit them keep
+  working, but a save still replaces the whole draft including envelopes;
+- public entries, public globals and the build export leave hidden blocks out
+  and return each block as `{key, type, schemaVersion, position, anchor?,
+  className?, settings, data}` with no `hidden` key; a missing `settings`
+  validates as `{}`, and older SDKs reject the new keys because public
+  parsing is strict;
+- media referenced only by hidden blocks are left out of the public `media`
+  dictionary and the public media route, while their usage and deletion guard
+  are unchanged;
+- block metadata in model DTOs may carry `settings`;
+- new `422` issue codes: `invalid_block_anchor`, `duplicate_block_anchor`,
+  `invalid_block_class_name`, `invalid_block_hidden` and
+  `invalid_block_settings` (plus field codes under `/blocks/<i>/settings`);
+- **breaking for user-written block migrations:** a migration step now
+  receives `{ data, settings }` and returns `{ data, settings? }` instead of
+  bare data, so `2: ({ quote, ...rest }) => ({ ...rest, text: quote })`
+  becomes `2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote } })`.
+  Sync reports a migration that still returns bare data as
+  `BLOCK_MIGRATION_INVALID`.
+
+It requires migration `0009_content_block_envelope` (additive columns and a
+partial unique index). Rendering anchors, classes and settings in block
+components comes with the site packages and template of CE6B.
+
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
 projects upgrading from `0.14.0`. Upgrading an alpha.2 installation also

@@ -28,7 +28,7 @@ function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields =
 }
 
 function block(key, position, data = { heading: key }) {
-  return { data, key, position, schemaVersion: 1, type: "hero" };
+  return { data, key, position, schemaVersion: 1, settings: {}, type: "hero" };
 }
 
 function mediaItem(id, overrides = {}) {
@@ -698,4 +698,32 @@ test("revalidate mode keeps the settings of the read that produced the view", as
   const second = await load();
   expect(first.url).toBe("https://one.example/");
   expect(second.url).toBe("https://two.example/");
+});
+
+test("published blocks carry their envelope and legacy blocks default their settings", async () => {
+  const anchored = {
+    ...block("first", 0),
+    anchor: "pricing",
+    className: "wide",
+    settings: { align: "center" },
+  };
+  const { settings: _settings, ...legacy } = block("second", 1);
+  const transport = scriptedFetch([
+    exportResponse(
+      buildExport(4, [exportEntry({ blocks: [anchored, legacy], id: "home", path: "/" })]),
+    ),
+  ]);
+  const site = await createPublishedSiteLoader({ environment, fetch: transport.fetch })();
+  expect(site.byPath("/").blocks).toEqual([anchored, block("second", 1)]);
+
+  const hidden = scriptedFetch([
+    exportResponse(
+      buildExport(5, [
+        exportEntry({ blocks: [{ ...block("first", 0), hidden: true }], id: "home", path: "/" }),
+      ]),
+    ),
+  ]);
+  await expect(
+    createPublishedSiteLoader({ environment, fetch: hidden.fetch })(),
+  ).rejects.toBeInstanceOf(LaceSdkError);
 });

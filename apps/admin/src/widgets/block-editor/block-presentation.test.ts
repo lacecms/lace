@@ -4,6 +4,7 @@ import {
   blockIcon,
   blockLabel,
   blockSummary,
+  defaultSettings,
   matchesBlockFilter,
   type BlockDefinitionDto,
 } from "./block-presentation.js";
@@ -72,4 +73,13 @@ test("filters blocks by label, type, and description without case", () => {
   expect(matchesBlockFilter(hero, "optional TEXT")).toBe(true);
   expect(matchesBlockFilter({ fields: {}, type: "banner", version: 1 }, "ban")).toBe(true);
   expect(matchesBlockFilter(hero, "gallery")).toBe(false);
+});
+
+test("new blocks take the default of every declared setting", () => {
+  expect(defaultSettings({})).toEqual({});
+  const settings = {
+    align: { defaultValue: "left", options: ["left", "center"], required: false, type: "select" },
+    boxed: { defaultValue: false, required: false, type: "boolean" },
+  } as const;
+  expect(defaultSettings({ settings } as never)).toEqual({ align: "left", boxed: false });
 });

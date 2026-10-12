@@ -110,12 +110,21 @@ export const contentBlocks = sqliteTable(
     dataJson: text("data_json").notNull(),
     createdAt: timestamp("created_at"),
     updatedAt: timestamp("updated_at"),
+    // Block envelope (CE6A): presentation values outside the block data.
+    anchor: text("anchor"),
+    className: text("class_name"),
+    hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+    settingsJson: text("settings_json").notNull().default("{}"),
   },
   (table) => [
     primaryKey({ columns: [table.snapshotId, table.blockKey] }),
     index("content_blocks_snapshot_position_idx").on(table.snapshotId, table.position),
+    uniqueIndex("content_blocks_snapshot_anchor_idx")
+      .on(table.snapshotId, table.anchor)
+      .where(sql`${table.anchor} is not null`),
     check("content_blocks_position_check", sql`${table.position} > 0`),
     check("content_blocks_schema_version_check", sql`${table.schemaVersion} > 0`),
+    check("content_blocks_hidden_check", sql`${table.hidden} in (0, 1)`),
   ],
 );
 

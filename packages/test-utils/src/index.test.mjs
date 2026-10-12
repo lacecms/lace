@@ -2642,3 +2642,243 @@ test("synchronization enables, refuses, prunes and remaps SEO", async () => {
   );
   expect(disabled.plan).toMatchObject({ diagnostics: [], isValid: true });
 });
+
+const panelBlock = defineBlock({
+  fields: { heading: field.text({ required: true }), image: field.media() },
+  settings: {
+    align: field.select({ defaultValue: "left", options: ["left", "center"] }),
+    boxed: field.boolean({ defaultValue: false }),
+  },
+  type: "panel",
+  version: 1,
+});
+
+async function envelopeFixture(prefix = "envelope") {
+  const config = await defineConfig({
+    blocks: [panelBlock],
+    content: [
+      defineCollection({ blocks: ["panel"], key: "posts", route: "/blog/:slug", version: 1 }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  for (const id of ["media-1", "media-2"]) {
+    await store.createMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      height: 1,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      storageKey: `media/${id}.png`,
+      width: 1,
+    });
+  }
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(10)),
+    config: config.runtime,
+    content: store,
+    idGenerator: new DeterministicIdGenerator(prefix),
+    media: store,
+  });
+  const prepared = await prepareConfigurationSynchronization({
+    models: config.runtime.content,
+    state: store,
+  });
+  await applyPreparedConfigurationSynchronization({
+    clock: new DeterministicClock(unixMilliseconds(5)),
+    ids: new DeterministicIdGenerator(`${prefix}-sync`),
+    models: config.runtime.content,
+    prepared,
+    target: store,
+  });
+  return { store, useCases };
+}
+
+const panel = (key, position, envelope = {}, data = { heading: key }) => ({
+  data,
+  key,
+  position,
+  schemaVersion: 1,
+  type: "panel",
+  ...envelope,
+});
+
+const envelopePost = (blocks) => ({ blocks, fields: {}, slug: "a", title: "A" });
+
+test("content use cases carry block envelopes through save, publish, revert and duplicate", async () => {
+  const { store, useCases } = await envelopeFixture();
+  const created = await useCases.create({
+    actor: editor,
+    modelKey: "posts",
+    ...envelopePost([
+      panel("b1", 1000, {
+        anchor: "pricing",
+        className: " wide  wide ",
+        settings: { boxed: true },
+      }),
+      panel("b2", 2000, { hidden: true }, { image: "media-2" }),
+      panel("b3", 3000, {}, { heading: "Shown", image: "media-1" }),
+    ]),
+  });
+  const [first, hidden, plain] = created.draft.blocks;
+  expect(first).toMatchObject({
+    anchor: "pricing",
+    className: "wide",
+    hidden: false,
+    settings: { align: "left", boxed: true },
+  });
+  // Omitted envelope values take their defaults.
+  expect(plain).toMatchObject({ hidden: false, settings: { align: "left", boxed: false } });
+  expect(plain).not.toHaveProperty("anchor");
+  expect(hidden).toMatchObject({ data: { image: "media-2" }, hidden: true });
+  // Hidden-block media stays referenced.
+  expect(store.mediaReferences(created.draft.id)).toEqual([
+    { fieldPath: "image", mediaId: "media-2", sourceKey: "b2" },
+    { fieldPath: "image", mediaId: "media-1", sourceKey: "b3" },
+  ]);
+
+  // The hidden block lacks its required heading, yet publication succeeds.
+  const { entry: published } = await useCases.publish({
+    actor: admin,
+    entryId: created.id,
+    expectedRevision: 1,
+  });
+  expect(published.published.blocks).toEqual(created.draft.blocks);
+  const publicEntry = await store.loadPublic("/blog/a");
+  expect(publicEntry.entry.published.blocks.map((block) => block.key)).toEqual(["b1", "b3"]);
+  expect(publicEntry.media.map((media) => media.id)).toEqual(["media-1"]);
+  expect(await store.loadPublicMedia(mediaId("media-2"))).toBeNull();
+  expect(await store.loadPublicMedia(mediaId("media-1"))).not.toBeNull();
+
+  const unhidden = await useCases.save({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+    ...envelopePost([
+      panel("b1", 1000, { settings: { align: "center" } }),
+      panel("b2", 2000, {}, { image: "media-2" }),
+    ]),
+  });
+  expect(unhidden.draft.blocks[0]).not.toHaveProperty("anchor");
+  await expect(
+    useCases.publish({ actor: admin, entryId: created.id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({
+    issues: [{ code: "missing_required_field", path: ["blocks", 1, "data", "heading"] }],
+  });
+  expect((await store.loadPublic("/blog/a")).entry.published.id).toBe(published.published.id);
+
+  const reverted = await useCases.revertDraft({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 2,
+  });
+  expect(reverted.draft.blocks).toEqual(published.published.blocks);
+
+  const copy = await useCases.duplicate({ actor: editor, entryId: created.id });
+  expect(copy.draft.blocks.map(({ key: _key, ...rest }) => rest)).toEqual(
+    reverted.draft.blocks.map(({ key: _key, ...rest }) => rest),
+  );
+  expect(copy.draft.blocks.map((block) => block.key)).not.toContain("b1");
+});
+
+test("content use cases refuse invalid block envelopes before writing", async () => {
+  const { store, useCases } = await envelopeFixture();
+  let writes = 0;
+  const create = store.create.bind(store);
+  store.create = async (input) => {
+    writes++;
+    return create(input);
+  };
+  const refused = async (blocks, issue) =>
+    expect(
+      useCases.create({ actor: editor, modelKey: "posts", ...envelopePost(blocks) }),
+    ).rejects.toMatchObject({ issues: [issue] });
+  await refused([panel("b1", 1000, { anchor: "faq" }), panel("b2", 2000, { anchor: "faq" })], {
+    code: "duplicate_block_anchor",
+    path: ["blocks", 1, "anchor"],
+  });
+  await refused([panel("b1", 1000, { anchor: "FAQ" })], {
+    code: "invalid_block_anchor",
+    path: ["blocks", 0, "anchor"],
+  });
+  await refused([panel("b1", 1000, { settings: { width: 2 } })], {
+    code: "unknown_field",
+    path: ["blocks", 0, "settings", "width"],
+  });
+  await expect(
+    useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...envelopePost([panel("b1", 1000, { hidden: true }, { image: "media-missing" })]),
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(writes).toBe(0);
+});
+
+test("hidden-block media counts toward the media-reference limit", async () => {
+  const config = await defineConfig({
+    blocks: [
+      defineBlock({
+        fields: { cover: field.media(), image: field.media() },
+        type: "pair",
+        version: 1,
+      }),
+    ],
+    content: [
+      defineCollection({ blocks: ["pair"], key: "posts", route: "/blog/:slug", version: 1 }),
+    ],
+  });
+  let reads = 0;
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(1)),
+    config: config.runtime,
+    content: new InMemoryContentStore(),
+    idGenerator: new DeterministicIdGenerator("envelope-refs"),
+    media: {
+      loadMedia: async () => null,
+      loadMediaMany: async () => {
+        reads++;
+        return [];
+      },
+    },
+  });
+  // 101 blocks, every one hidden, hold 202 references.
+  const blocks = Array.from({ length: 101 }, (_, index) => ({
+    data: { cover: "same-id", image: "same-id" },
+    hidden: true,
+    key: `block-${index}`,
+    position: (index + 1) * 1000,
+    schemaVersion: 1,
+    type: "pair",
+  }));
+  await expect(
+    useCases.create({ actor: editor, blocks, fields: {}, modelKey: "posts", title: "Many" }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(reads).toBe(0);
+});
+
+test("the publication fingerprint covers the block envelope", async () => {
+  const fingerprints = [];
+  for (const hidden of [false, true]) {
+    const { store, useCases } = await envelopeFixture("envelope-fingerprint");
+    const publish = store.publish.bind(store);
+    store.publish = async (input) => {
+      fingerprints.push(input.idempotency.fingerprint);
+      return publish(input);
+    };
+    const created = await useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...envelopePost([panel("b1", 1000, { hidden })]),
+    });
+    await useCases.publish({
+      actor: admin,
+      entryId: created.id,
+      expectedRevision: 1,
+      idempotencyKey: "publish-1",
+    });
+  }
+  expect(fingerprints).toHaveLength(2);
+  expect(fingerprints[0]).not.toBe(fingerprints[1]);
+});

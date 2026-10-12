@@ -5,8 +5,9 @@ import {
   canonicalJsonByteLength,
   migrateBlockData,
   validateBlockData,
+  validateBlockSettings,
 } from "@lacecms/content";
-import type { BlockDefinition, JsonObject, JsonValue } from "@lacecms/content";
+import type { BlockDefinition, BlockMigrationInput, JsonObject, JsonValue } from "@lacecms/content";
 import { CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT } from "./configuration-evolution.js";
 import type {
   ConfigurationSyncSnapshotFindings,
@@ -30,9 +31,13 @@ export interface ConfigurationSyncMediaReference {
 /** One stored block read by the migration scan; `data` is present for target types. */
 export interface ConfigurationSyncMigrationBlock {
   readonly data?: JsonObject;
+  /** Hidden blocks are validated in draft mode even in a published snapshot. */
+  readonly hidden: boolean;
   readonly key: string;
   readonly position: number;
   readonly schemaVersion: number;
+  /** Stored settings; read, like `data`, only for blocks of a migrated type. */
+  readonly settings?: JsonObject;
   readonly type: string;
 }
 
@@ -71,6 +76,8 @@ export interface ConfigurationSyncMigratedBlock {
   readonly expectedSchemaVersion: number;
   readonly key: string;
   readonly schemaVersion: number;
+  /** Migrated settings with the declared defaults applied. */
+  readonly settings: JsonObject;
 }
 
 /** The guarded rewrite of one snapshot of a migration unit. */
@@ -162,7 +169,7 @@ function migrateSnapshot(
 ): SnapshotOutcome {
   const outcome: SnapshotOutcome = { blocks: [], migrated: [], references: [] };
   const priorMedia = new Set(snapshot.references.map((reference) => reference.mediaId));
-  const mode = snapshot.state === "published" ? "publish" : "draft";
+  const published = snapshot.state === "published";
   const finding = (
     kind: BlockMigrationFindingKind,
     block: ConfigurationSyncMigrationBlock,
@@ -188,9 +195,13 @@ function migrateSnapshot(
   for (const block of snapshot.blocks) {
     const definition = definitions.get(block.type);
     if (definition === undefined || block.schemaVersion === definition.version) continue;
-    let migrated: JsonObject;
+    let migrated: BlockMigrationInput;
     try {
-      migrated = migrateBlockData(definition, block.data ?? {}, block.schemaVersion);
+      migrated = migrateBlockData(
+        definition,
+        { data: block.data ?? {}, settings: block.settings ?? {} },
+        block.schemaVersion,
+      );
     } catch (error) {
       if (!(error instanceof BlockMigrationError)) throw error;
       const kinds = {
@@ -205,9 +216,13 @@ function migrateSnapshot(
       });
       continue;
     }
+    // A hidden block is never delivered, so it keeps draft-mode validation.
+    const mode = published && !block.hidden ? "publish" : "draft";
     let validated: JsonObject;
+    let settings: JsonObject;
     try {
-      validated = validateBlockData(definition, migrated, mode, ["data"]) as JsonObject;
+      validated = validateBlockData(definition, migrated.data, mode, ["data"]) as JsonObject;
+      settings = validateBlockSettings(definition, migrated.settings, ["settings"]);
     } catch (error) {
       if (!(error instanceof ContentValidationError)) throw error;
       const [issue] = error.issues;
@@ -237,6 +252,7 @@ function migrateSnapshot(
         expectedSchemaVersion: block.schemaVersion,
         key: block.key,
         schemaVersion: definition.version,
+        settings,
       }),
     );
     outcome.migrated.push({ fromVersion: block.schemaVersion, type: block.type });

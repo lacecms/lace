@@ -242,14 +242,28 @@ export function isSingletonKind(kind: ContentModelKind): boolean {
   return kind !== "collection";
 }
 
-/** One block in a flat, fully ordered content snapshot. */
+/**
+ * One block in a flat, fully ordered content snapshot, with its presentation
+ * envelope: an optional in-page anchor and CSS class name, whether it is
+ * hidden from delivery, and the settings its definition declares.
+ */
 export interface ContentBlock {
+  readonly anchor?: string;
+  readonly className?: string;
   readonly data: JsonObject;
+  readonly hidden: boolean;
   readonly key: BlockKey;
   readonly position: number;
   readonly schemaVersion: number;
+  readonly settings: JsonObject;
   readonly type: string;
 }
+
+/** A block whose envelope values may be omitted; omitted values take their defaults. */
+export type ContentBlockInput = Omit<ContentBlock, "hidden" | "settings"> & {
+  readonly hidden?: boolean;
+  readonly settings?: JsonObject;
+};
 
 interface SnapshotBase {
   readonly blocks: readonly ContentBlock[];
@@ -318,12 +332,17 @@ function cloneJson(value: JsonValue): JsonValue {
   );
 }
 
-function cloneBlock(block: ContentBlock): ContentBlock {
+/** Copies a block, completing omitted envelope values as visible with `{}` settings. */
+function cloneBlock(block: ContentBlockInput): ContentBlock {
   return {
+    ...(typeof block.anchor === "string" ? { anchor: block.anchor } : {}),
+    ...(typeof block.className === "string" ? { className: block.className } : {}),
     data: cloneJson(block.data) as JsonObject,
+    hidden: block.hidden === true,
     key: block.key,
     position: block.position,
     schemaVersion: block.schemaVersion,
+    settings: cloneJson(block.settings ?? {}) as JsonObject,
     type: block.type,
   };
 }
@@ -440,7 +459,7 @@ export function assertPublicPathAvailable(
   }
 }
 
-function assertBlockKeys(blocks: readonly ContentBlock[]): void {
+function assertBlockKeys(blocks: readonly ContentBlockInput[]): void {
   const keys = new Set<string>();
   for (const block of blocks) {
     if (typeof block.key !== "string" || block.key.length === 0) {
@@ -454,7 +473,7 @@ function assertBlockKeys(blocks: readonly ContentBlock[]): void {
 }
 
 /** Validates the strict sparse ordering stored with a complete block aggregate. */
-export function assertOrderedBlockPositions(blocks: readonly ContentBlock[]): void {
+export function assertOrderedBlockPositions(blocks: readonly ContentBlockInput[]): void {
   assertBlockKeys(blocks);
   let previousPosition = 0;
   for (const [index, block] of blocks.entries()) {

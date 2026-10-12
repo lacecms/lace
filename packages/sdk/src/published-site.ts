@@ -1,8 +1,8 @@
 import { effectiveAltText } from "@lacecms/contracts";
 import type {
   BuildExportDto,
-  ContentBlockDto,
   EntityTag,
+  PublicBlockDto,
   PublicEntryDto,
   SeoValueDto,
   PublicMediaDto,
@@ -47,8 +47,11 @@ export interface PublishedSiteLoaderOptions {
   readonly token?: string;
 }
 
-/** One published block, ordered by `position` within its entry. */
-export type PublishedBlock = ContentBlockDto;
+/**
+ * One published block, ordered by `position` within its entry, with its
+ * anchor, class name and settings; hidden blocks are never delivered.
+ */
+export type PublishedBlock = PublicBlockDto;
 
 /** A media item referenced by published content, resolved from the export. */
 export type PublishedMedia = Readonly<PublicMediaDto>;

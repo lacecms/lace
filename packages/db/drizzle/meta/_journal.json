@@ -64,6 +64,13 @@
       "when": 1791756612246,
       "tag": "0008_content_snapshot_seo",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791794161634,
+      "tag": "0009_content_block_envelope",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,11 @@
-import { canonicalizeJson, defineBlock, field, toBlockMetadata } from "@lacecms/content";
+import {
+  canonicalizeJson,
+  defineBlock,
+  field,
+  isBlockAnchor,
+  normalizeBlockClassName,
+  toBlockMetadata,
+} from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
 import {
   BlockOrderError,
@@ -147,6 +154,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     "description",
     "fields",
     "label",
+    "settings",
     "type",
     "version",
   ]);
@@ -160,6 +168,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     (value.label !== undefined && typeof value.label !== "string") ||
     (value.description !== undefined && typeof value.description !== "string") ||
     !isFieldMetadataMap(value.fields) ||
+    (value.settings !== undefined && !isFieldMetadataMap(value.settings)) ||
     (value.defaultValue !== undefined && !isJsonObject(value.defaultValue))
   ) {
     return false;
@@ -170,6 +179,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
       ...(value.description === undefined ? {} : { description: value.description }),
       fields: value.fields,
       ...(value.label === undefined ? {} : { label: value.label }),
+      ...(value.settings === undefined ? {} : { settings: value.settings }),
       type: value.type,
       version: value.version,
     });
@@ -274,12 +284,72 @@ export const actorSchema = v.strictObject({
   role: v.picklist(["admin", "editor", "viewer"]),
 });
 
-export const contentBlockSchema = v.strictObject({
+export {
+  isBlockAnchor,
+  MAX_BLOCK_ANCHOR_LENGTH,
+  MAX_BLOCK_CLASS_NAME_LENGTH,
+  MAX_BLOCK_CLASS_TOKENS,
+  normalizeBlockClassName,
+} from "@lacecms/content";
+
+/**
+ * Presentation values shared by admin and public blocks. Omitted settings
+ * parse as `{}`; the API always sends them.
+ */
+/** A block settings record of JSON values. */
+export type BlockSettingsDto = Readonly<Record<string, unknown>>;
+
+/**
+ * Block settings; a missing value parses as `{}`. The schema is typed as a
+ * plain record because a default over the recursive JSON object type exceeds
+ * TypeScript's instantiation depth.
+ */
+const blockSettingsSchema = v.optional(
+  v.custom<BlockSettingsDto>(isJsonObject),
+  (): BlockSettingsDto => ({}),
+);
+
+const blockEnvelopeEntries = {
+  anchor: v.optional(
+    v.pipe(
+      v.string(),
+      v.check(
+        (value: string) => isBlockAnchor(value),
+        "An anchor must start with a lowercase letter and use only lowercase letters, digits and hyphens, up to 64 characters.",
+      ),
+    ),
+  ),
+  className: v.optional(
+    v.pipe(
+      v.string(),
+      v.check(
+        (value: string) => normalizeBlockClassName(value) !== undefined,
+        "A class name must hold 1 to 16 valid class tokens, up to 256 characters.",
+      ),
+    ),
+  ),
+  settings: blockSettingsSchema,
+};
+
+const blockIdentityEntries = {
   data: jsonObjectSchema,
   key: identifierSchema,
   position: nonNegativeIntegerSchema,
   schemaVersion: v.pipe(v.number(), v.integer(), v.minValue(1)),
   type: identifierSchema,
+};
+
+/** An admin block; omitted envelope values default (visible, no anchor or class). */
+export const contentBlockSchema = v.strictObject({
+  ...blockIdentityEntries,
+  ...blockEnvelopeEntries,
+  hidden: v.optional(v.boolean(), false),
+});
+
+/** A delivered block: hidden blocks are never public, so there is no `hidden` key. */
+export const publicBlockSchema = v.strictObject({
+  ...blockIdentityEntries,
+  ...blockEnvelopeEntries,
 });
 
 export {
@@ -869,7 +939,7 @@ export const mediaFocalPointSchema = v.strictObject({
 
 /** One published entry as public consumers see it; no draft or editorial data. */
 export const publicEntrySchema = v.strictObject({
-  blocks: v.array(contentBlockSchema),
+  blocks: v.array(publicBlockSchema),
   fields: jsonObjectSchema,
   id: identifierSchema,
   modelKey: identifierSchema,
@@ -904,7 +974,7 @@ export const publicMediaDictionarySchema = v.pipe(
 
 /** One published route-less global; no path, slug, title, draft, or editorial data. */
 export const publicGlobalSchema = v.strictObject({
-  blocks: v.array(contentBlockSchema),
+  blocks: v.array(publicBlockSchema),
   fields: jsonObjectSchema,
   id: identifierSchema,
   modelKey: identifierSchema,
@@ -1191,6 +1261,7 @@ export type SeoInputDto = v.InferOutput<typeof seoInputSchema>;
 export type ModelSeoDto = v.InferOutput<typeof modelSeoSchema>;
 export type SeoDefaultsDto = v.InferOutput<typeof seoDefaultsSchema>;
 export type ContentBlockDto = v.InferOutput<typeof contentBlockSchema>;
+export type PublicBlockDto = v.InferOutput<typeof publicBlockSchema>;
 export type PublicEntryDto = v.InferOutput<typeof publicEntrySchema>;
 export type PublicMediaDto = v.InferOutput<typeof publicMediaSchema>;
 export type PublicMediaDictionaryDto = v.InferOutput<typeof publicMediaDictionarySchema>;
@@ -1230,13 +1301,29 @@ export function toContentModelRouteDto(route: ContentModelRoute) {
 }
 
 export function toContentBlockDto(block: ContentBlock): ContentBlockDto {
+  return { ...toPublicBlockDto(block), hidden: block.hidden };
+}
+
+/** Maps a delivered block; callers leave hidden blocks out first. */
+export function toPublicBlockDto(block: ContentBlock): PublicBlockDto {
   return {
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
     data: block.data,
     key: block.key,
     position: block.position,
     schemaVersion: block.schemaVersion,
+    settings: block.settings,
     type: block.type,
   };
+}
+
+/** The delivered blocks of a published snapshot, ordered by position, without hidden ones. */
+function publicBlocks(blocks: readonly ContentBlock[]): PublicBlockDto[] {
+  return blocks
+    .filter((block) => !block.hidden)
+    .sort((left, right) => left.position - right.position)
+    .map(toPublicBlockDto);
 }
 
 /** Maps a stored SEO group to the complete client shape with `null` for unset values. */
@@ -1569,9 +1656,7 @@ export function toPublicEntryDto(
   const snapshot = entry.published;
   if (snapshot === undefined) throw new TypeError("A public entry requires a published snapshot.");
   return {
-    blocks: [...snapshot.blocks]
-      .sort((left, right) => left.position - right.position)
-      .map(toContentBlockDto),
+    blocks: publicBlocks(snapshot.blocks),
     fields: snapshot.fields,
     id: entry.id,
     modelKey: entry.model.key,
@@ -1597,9 +1682,7 @@ export function toPublicGlobalDto(entry: ContentEntry): PublicGlobalDto {
   const snapshot = entry.published;
   if (snapshot === undefined) throw new TypeError("A public global requires a published snapshot.");
   return {
-    blocks: [...snapshot.blocks]
-      .sort((left, right) => left.position - right.position)
-      .map(toContentBlockDto),
+    blocks: publicBlocks(snapshot.blocks),
     fields: snapshot.fields,
     id: entry.id,
     modelKey: entry.model.key,

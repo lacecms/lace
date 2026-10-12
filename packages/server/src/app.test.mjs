@@ -30,6 +30,7 @@ async function fixture({
   allowed = true,
   maxBodyBytes = 256,
   models,
+  blocks = [],
   builds,
   security,
   buildSite,
@@ -47,6 +48,7 @@ async function fixture({
         version: 1,
       }),
       defineBlock({ fields: { body: field.richText() }, type: "richText", version: 1 }),
+      ...blocks,
     ],
     content: models ?? [
       definePage({ key: "home", path: "/", version: 1 }),
@@ -2248,4 +2250,195 @@ test("SEO values travel through admin, public and export contracts", async () =>
       locations: [{ field: "image", source: "seo", states: ["draft", "published"] }],
     }),
   ]);
+});
+
+test("block envelopes travel through admin, public and export contracts", async () => {
+  const panel = defineBlock({
+    fields: { heading: field.text({ required: true }), image: field.media() },
+    settings: { align: field.select({ defaultValue: "left", options: ["left", "center"] }) },
+    type: "panel",
+    version: 1,
+  });
+  const models = [
+    defineCollection({ blocks: ["panel"], key: "posts", route: "/blog/:slug", version: 1 }),
+    defineGlobal({ blocks: ["panel"], key: "settings", version: 1 }),
+  ];
+  const { app, store } = await fixture({ blocks: [panel], maxBodyBytes: 8192, models });
+  for (const id of ["shown", "secret"]) {
+    store.registerMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      status: "active",
+      storageKey: `private/${id}`,
+      updatedAt: unixMilliseconds(1),
+    });
+  }
+  const call = (path, { body, method = "POST" } = {}) =>
+    json(app, path, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { "content-type": "application/json" },
+    });
+  const block = (key, position, envelope = {}, data = { heading: key }) => ({
+    data,
+    key,
+    position,
+    schemaVersion: 1,
+    type: "panel",
+    ...envelope,
+  });
+
+  const panelMetadata = (await json(app, "/api/v1/admin/content-models")).body.items.find(
+    (model) => model.key === "posts",
+  ).blockDefinitions[0];
+  expect(panelMetadata.settings).toEqual({
+    align: { defaultValue: "left", options: ["left", "center"], required: false, type: "select" },
+  });
+
+  const created = await call("/api/v1/admin/models/posts/entries", {
+    body: {
+      blocks: [
+        block(
+          "b1",
+          1000,
+          { anchor: "pricing", className: " wide  wide " },
+          { heading: "A", image: "shown" },
+        ),
+        block("b2", 2000, { hidden: true }, { image: "secret" }),
+        block("b3", 3000),
+      ],
+      fields: {},
+      slug: "hello",
+      title: "Hello",
+    },
+  });
+  expect(created.response.status).toBe(201);
+  expect(created.body.draft.blocks).toEqual([
+    {
+      anchor: "pricing",
+      className: "wide",
+      data: { heading: "A", image: "shown" },
+      hidden: false,
+      key: "b1",
+      position: 1000,
+      schemaVersion: 1,
+      settings: { align: "left" },
+      type: "panel",
+    },
+    {
+      data: { image: "secret" },
+      hidden: true,
+      key: "b2",
+      position: 2000,
+      schemaVersion: 1,
+      settings: { align: "left" },
+      type: "panel",
+    },
+    {
+      data: { heading: "b3" },
+      hidden: false,
+      key: "b3",
+      position: 3000,
+      schemaVersion: 1,
+      settings: { align: "left" },
+      type: "panel",
+    },
+  ]);
+  const entryPath = `/api/v1/admin/entries/${created.body.id}`;
+
+  for (const [envelope, pointer, code] of [
+    [{ anchor: "Top" }, "/blocks/0/anchor", undefined],
+    [{ hidden: "yes" }, "/blocks/0/hidden", undefined],
+    [{ settings: { width: 2 } }, "/blocks/0/settings/width", "unknown_field"],
+    [{ settings: { align: "right" } }, "/blocks/0/settings/align", undefined],
+  ]) {
+    const invalid = await call(`${entryPath}/draft`, {
+      body: {
+        blocks: [block("b1", 1000, envelope)],
+        expectedRevision: 1,
+        fields: {},
+        slug: "hello",
+        title: "Hello",
+      },
+      method: "PUT",
+    });
+    expect(invalid.response.status, JSON.stringify(envelope)).toBe(422);
+    expect(invalid.body.error.code).toBe("VALIDATION_FAILED");
+    const issue = invalid.body.error.details.issues.find((value) => value.path === pointer);
+    expect(issue, JSON.stringify(invalid.body.error.details.issues)).toBeDefined();
+    if (code !== undefined) expect(issue.code).toBe(code);
+  }
+  const duplicate = await call(`${entryPath}/draft`, {
+    body: {
+      blocks: [block("b1", 1000, { anchor: "faq" }), block("b2", 2000, { anchor: "faq" })],
+      expectedRevision: 1,
+      fields: {},
+      slug: "hello",
+      title: "Hello",
+    },
+    method: "PUT",
+  });
+  expect(duplicate.response.status).toBe(422);
+  expect(duplicate.body.error.details.issues).toEqual([
+    expect.objectContaining({ code: "duplicate_block_anchor", path: "/blocks/1/anchor" }),
+  ]);
+
+  // The hidden block lacks its required heading, yet the entry publishes.
+  const published = await call(`${entryPath}/publish`, { body: { expectedRevision: 1 } });
+  expect(published.response.status).toBe(200);
+  const global = await call("/api/v1/admin/models/settings/entries", {
+    body: {
+      blocks: [block("g1", 1000, { hidden: true }, { heading: "G", image: "secret" })],
+      fields: {},
+      title: "Settings",
+    },
+  });
+  expect(global.response.status).toBe(201);
+  await call(`/api/v1/admin/entries/${global.body.id}/publish`, { body: { expectedRevision: 1 } });
+  const publicGlobal = await json(app, "/api/v1/public/globals/settings");
+  expect(publicGlobal.body.global.blocks).toEqual([]);
+  expect(publicGlobal.body.media).toEqual({});
+
+  const delivered = [
+    {
+      anchor: "pricing",
+      className: "wide",
+      data: { heading: "A", image: "shown" },
+      key: "b1",
+      position: 1000,
+      schemaVersion: 1,
+      settings: { align: "left" },
+      type: "panel",
+    },
+    {
+      data: { heading: "b3" },
+      key: "b3",
+      position: 3000,
+      schemaVersion: 1,
+      settings: { align: "left" },
+      type: "panel",
+    },
+  ];
+  const page = await json(app, "/api/v1/public/collections/posts/hello");
+  expect(page.body.entry.blocks).toEqual(delivered);
+  expect(Object.keys(page.body.media)).toEqual(["shown"]);
+  expect(
+    (await json(app, "/api/v1/public/content/by-path?path=/blog/hello")).body.entry.blocks,
+  ).toEqual(delivered);
+  expect((await json(app, "/api/v1/public/collections/posts")).body.items[0].blocks).toEqual(
+    delivered,
+  );
+  const exported = (await json(app, "/api/v1/public/build-export")).body;
+  expect(exported.entries[0].blocks).toEqual(delivered);
+  expect(Object.keys(exported.media)).toEqual(["shown"]);
+  expect((await json(app, "/api/v1/public/media/shown")).response.status).not.toBe(404);
+  expect((await json(app, "/api/v1/public/media/secret")).response.status).toBe(404);
+  expect((await json(app, entryPath)).body.published.blocks[1]).toMatchObject({
+    hidden: true,
+    key: "b2",
+  });
 });

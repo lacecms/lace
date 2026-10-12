@@ -25,6 +25,7 @@ import {
 import type {
   Actor,
   ContentBlock,
+  ContentBlockInput,
   ContentEntry,
   ContentEntryId,
   ContentModelKey,
@@ -68,7 +69,8 @@ export interface ContentUseCaseDependencies {
 }
 
 export interface CompleteDraftInput {
-  readonly blocks: readonly ContentBlock[];
+  /** Omitted envelope values take their defaults (visible, declared setting defaults). */
+  readonly blocks: readonly ContentBlockInput[];
   readonly fields: JsonObject;
   /**
    * The submitted SEO group; absent or `null` stores none. Validated against the
@@ -529,12 +531,18 @@ export class ContentUseCases {
     assertOrderedBlockPositions(input.blocks);
     const aggregate = validateEntryAggregate(
       {
-        blocks: input.blocks.map(({ data, key, schemaVersion, type }) => ({
-          data,
-          key,
-          schemaVersion,
-          type,
-        })),
+        blocks: input.blocks.map(
+          ({ anchor, className, data, hidden, key, schemaVersion, settings, type }) => ({
+            ...(anchor === undefined ? {} : { anchor }),
+            ...(className === undefined ? {} : { className }),
+            data,
+            ...(hidden === undefined ? {} : { hidden }),
+            key,
+            schemaVersion,
+            ...(settings === undefined ? {} : { settings }),
+            type,
+          }),
+        ),
         fields: input.fields,
         kind: model.kind,
         ...(input.slug === undefined ? {} : { slug: input.slug }),
@@ -544,11 +552,15 @@ export class ContentUseCases {
       this.dependencies.config.blocks,
       mode,
     );
-    const blocks = aggregate.blocks.map((block, index) => ({
+    const blocks: ContentBlock[] = aggregate.blocks.map((block, index) => ({
+      ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+      ...(block.className === undefined ? {} : { className: block.className }),
       data: block.data as JsonObject,
+      hidden: block.hidden,
       key: blockKey(block.key),
       position: input.blocks[index]!.position,
       schemaVersion: block.schemaVersion,
+      settings: block.settings,
       type: block.type,
     }));
     const seo = normalizeEntrySeo(input.seo ?? null, { enabled: seoEnabled(model) });

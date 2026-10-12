@@ -1,4 +1,4 @@
-import type { ContentModelDto } from "@lacecms/contracts";
+import type { ContentBlockDto, ContentModelDto } from "@lacecms/contracts";
 import {
   BoxIcon,
   ImageIcon,
@@ -27,6 +27,18 @@ const MAX_SUMMARY_LENGTH = 120;
 /** The admin-owned icon for a block type; unknown types share a default icon. */
 export function blockIcon(type: string): LucideIcon {
   return builtInIcons[type] ?? BoxIcon;
+}
+
+/** The declared settings of a new block, each at its default. */
+export function defaultSettings(
+  definition: Pick<BlockDefinitionDto, "settings">,
+): ContentBlockDto["settings"] {
+  return Object.fromEntries(
+    Object.entries(definition.settings ?? {}).map(([key, setting]) => [
+      key,
+      structuredClone(setting.defaultValue),
+    ]),
+  );
 }
 
 /** The configured label, or one derived from the stable type. */

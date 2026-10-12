@@ -316,6 +316,13 @@ const seoKeys: ReadonlySet<string> = new Set<SeoKey>([
 
 const fieldKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/u;
 
+const blockEnvelopeKeys: ReadonlySet<string> = new Set([
+  "anchor",
+  "className",
+  "hidden",
+  "settings",
+]);
+
 /**
  * Maps a server JSON Pointer to the form location that shows it. Pointers
  * below a field (for example into a rich-text document) map to the field.
@@ -351,6 +358,8 @@ export function issueLocation(
   if (third === undefined) return `blocks.${index}.block`;
   if (third === "key" || third === "type" || third === "schemaVersion")
     return segments.length === 3 ? `blocks.${index}.${third}` : undefined;
+  // Envelope values have no control of their own yet; their issues stay on the block.
+  if (blockEnvelopeKeys.has(third)) return `blocks.${index}.block`;
   if (third !== "data") return undefined;
   if (fourth === undefined) return `blocks.${index}.block`;
   return fieldKeyPattern.test(fourth) ? `blocks.${index}.data.${fourth}` : `blocks.${index}.block`;

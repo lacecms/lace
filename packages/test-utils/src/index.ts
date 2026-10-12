@@ -652,9 +652,11 @@ export class InMemoryContentStore
       Object.freeze({
         blocks: snapshot.blocks.map((block) => ({
           ...(types.has(block.type) ? { data: clone(block.data) } : {}),
+          hidden: block.hidden,
           key: block.key,
           position: block.position,
           schemaVersion: block.schemaVersion,
+          ...(types.has(block.type) ? { settings: clone(block.settings) } : {}),
           type: block.type,
         })),
         references: clone(this.references.get(snapshot.id) ?? []),
@@ -716,6 +718,7 @@ export class InMemoryContentStore
                     ...block,
                     data: clone(value.data),
                     schemaVersion: value.schemaVersion,
+                    settings: clone(value.settings),
                   });
             }),
           ),
@@ -1162,19 +1165,39 @@ export class InMemoryContentStore
     return Object.freeze({ entry: projected, media });
   }
 
-  /** Mirrors the SQL public projection: no editorial draft, active published media only. */
+  /** References a published snapshot delivers: none held by a hidden block (like SQL). */
+  private deliveredReferences(snapshot: PublishedSnapshot): readonly DraftMediaReference[] {
+    const hidden = new Set(
+      snapshot.blocks.filter((block) => block.hidden).map((block) => block.key as string),
+    );
+    return (this.references.get(snapshot.id) ?? []).filter(
+      (reference) => !hidden.has(reference.sourceKey),
+    );
+  }
+
+  /**
+   * Mirrors the SQL public projection: no editorial draft, no hidden blocks,
+   * active delivered media only.
+   */
   private publicView(entry: ContentEntry, path: string): PublicContentEntry {
     const copied = copyEntry(entry);
-    const published = copied.published!;
+    const published = Object.freeze({
+      ...copied.published!,
+      blocks: Object.freeze(copied.published!.blocks.filter((block) => !block.hidden)),
+    });
     const ids = new Set(
-      (this.references.get(published.id) ?? []).map((reference) => reference.mediaId as string),
+      this.deliveredReferences(entry.published!).map((reference) => reference.mediaId as string),
     );
     const media = [...ids].sort().flatMap((id) => {
       const value = this.media.get(id);
       return value === undefined || value.status !== "active" ? [] : [clone(value)];
     });
     return Object.freeze({
-      entry: Object.freeze({ ...copied, draft: Object.freeze({ ...published, state: "draft" }) }),
+      entry: Object.freeze({
+        ...copied,
+        draft: Object.freeze({ ...published, state: "draft" as const }),
+        published,
+      }),
       media: Object.freeze(media),
       path,
     });
@@ -1185,9 +1208,7 @@ export class InMemoryContentStore
     const isPublished = [...this.entries.values()].some(
       (entry) =>
         entry.published !== undefined &&
-        (this.references.get(entry.published.id) ?? []).some(
-          (reference) => reference.mediaId === id,
-        ),
+        this.deliveredReferences(entry.published).some((reference) => reference.mediaId === id),
     );
     const value = this.media.get(id);
     return isPublished && value !== undefined ? clone(value) : null;

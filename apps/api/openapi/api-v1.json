@@ -851,7 +851,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -864,6 +874,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -1057,7 +1070,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -1070,6 +1093,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -1273,7 +1299,17 @@
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "anchor": {
+                          "type": "string"
+                        },
+                        "className": {
+                          "type": "string"
+                        },
                         "data": {},
+                        "hidden": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "key": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -1286,6 +1322,9 @@
                         "schemaVersion": {
                           "minimum": 1,
                           "type": "integer"
+                        },
+                        "settings": {
+                          "default": {}
                         },
                         "type": {
                           "maxLength": 255,
@@ -1395,7 +1434,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -1408,6 +1457,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -1601,7 +1653,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -1614,6 +1676,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -1839,7 +1904,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -1852,6 +1927,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -2045,7 +2123,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -2058,6 +2146,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -2314,7 +2405,17 @@
                               "items": {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "anchor": {
+                                    "type": "string"
+                                  },
+                                  "className": {
+                                    "type": "string"
+                                  },
                                   "data": {},
+                                  "hidden": {
+                                    "default": false,
+                                    "type": "boolean"
+                                  },
                                   "key": {
                                     "maxLength": 255,
                                     "minLength": 1,
@@ -2327,6 +2428,9 @@
                                   "schemaVersion": {
                                     "minimum": 1,
                                     "type": "integer"
+                                  },
+                                  "settings": {
+                                    "default": {}
                                   },
                                   "type": {
                                     "maxLength": 255,
@@ -2520,7 +2624,17 @@
                               "items": {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "anchor": {
+                                    "type": "string"
+                                  },
+                                  "className": {
+                                    "type": "string"
+                                  },
                                   "data": {},
+                                  "hidden": {
+                                    "default": false,
+                                    "type": "boolean"
+                                  },
                                   "key": {
                                     "maxLength": 255,
                                     "minLength": 1,
@@ -2533,6 +2647,9 @@
                                   "schemaVersion": {
                                     "minimum": 1,
                                     "type": "integer"
+                                  },
+                                  "settings": {
+                                    "default": {}
                                   },
                                   "type": {
                                     "maxLength": 255,
@@ -2765,7 +2882,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -2778,6 +2905,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -2971,7 +3101,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -2984,6 +3124,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -3242,7 +3385,17 @@
                               "items": {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "anchor": {
+                                    "type": "string"
+                                  },
+                                  "className": {
+                                    "type": "string"
+                                  },
                                   "data": {},
+                                  "hidden": {
+                                    "default": false,
+                                    "type": "boolean"
+                                  },
                                   "key": {
                                     "maxLength": 255,
                                     "minLength": 1,
@@ -3255,6 +3408,9 @@
                                   "schemaVersion": {
                                     "minimum": 1,
                                     "type": "integer"
+                                  },
+                                  "settings": {
+                                    "default": {}
                                   },
                                   "type": {
                                     "maxLength": 255,
@@ -3448,7 +3604,17 @@
                               "items": {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "anchor": {
+                                    "type": "string"
+                                  },
+                                  "className": {
+                                    "type": "string"
+                                  },
                                   "data": {},
+                                  "hidden": {
+                                    "default": false,
+                                    "type": "boolean"
+                                  },
                                   "key": {
                                     "maxLength": 255,
                                     "minLength": 1,
@@ -3461,6 +3627,9 @@
                                   "schemaVersion": {
                                     "minimum": 1,
                                     "type": "integer"
+                                  },
+                                  "settings": {
+                                    "default": {}
                                   },
                                   "type": {
                                     "maxLength": 255,
@@ -5396,7 +5565,17 @@
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "anchor": {
+                          "type": "string"
+                        },
+                        "className": {
+                          "type": "string"
+                        },
                         "data": {},
+                        "hidden": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "key": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -5409,6 +5588,9 @@
                         "schemaVersion": {
                           "minimum": 1,
                           "type": "integer"
+                        },
+                        "settings": {
+                          "default": {}
                         },
                         "type": {
                           "maxLength": 255,
@@ -5514,7 +5696,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -5527,6 +5719,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -5720,7 +5915,17 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
+                              "hidden": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "key": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -5733,6 +5938,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -6951,6 +7159,12 @@
                             "items": {
                               "additionalProperties": false,
                               "properties": {
+                                "anchor": {
+                                  "type": "string"
+                                },
+                                "className": {
+                                  "type": "string"
+                                },
                                 "data": {},
                                 "key": {
                                   "maxLength": 255,
@@ -6964,6 +7178,9 @@
                                 "schemaVersion": {
                                   "minimum": 1,
                                   "type": "integer"
+                                },
+                                "settings": {
+                                  "default": {}
                                 },
                                 "type": {
                                   "maxLength": 255,
@@ -7078,6 +7295,12 @@
                             "items": {
                               "additionalProperties": false,
                               "properties": {
+                                "anchor": {
+                                  "type": "string"
+                                },
+                                "className": {
+                                  "type": "string"
+                                },
                                 "data": {},
                                 "key": {
                                   "maxLength": 255,
@@ -7091,6 +7314,9 @@
                                 "schemaVersion": {
                                   "minimum": 1,
                                   "type": "integer"
+                                },
+                                "settings": {
+                                  "default": {}
                                 },
                                 "type": {
                                   "maxLength": 255,
@@ -7373,6 +7599,12 @@
                             "items": {
                               "additionalProperties": false,
                               "properties": {
+                                "anchor": {
+                                  "type": "string"
+                                },
+                                "className": {
+                                  "type": "string"
+                                },
                                 "data": {},
                                 "key": {
                                   "maxLength": 255,
@@ -7386,6 +7618,9 @@
                                 "schemaVersion": {
                                   "minimum": 1,
                                   "type": "integer"
+                                },
+                                "settings": {
+                                  "default": {}
                                 },
                                 "type": {
                                   "maxLength": 255,
@@ -7664,6 +7899,12 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
                               "key": {
                                 "maxLength": 255,
@@ -7677,6 +7918,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -7926,6 +8170,12 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
                               "key": {
                                 "maxLength": 255,
@@ -7939,6 +8189,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -8178,6 +8431,12 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
                               "key": {
                                 "maxLength": 255,
@@ -8191,6 +8450,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,
@@ -8420,6 +8682,12 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "anchor": {
+                                "type": "string"
+                              },
+                              "className": {
+                                "type": "string"
+                              },
                               "data": {},
                               "key": {
                                 "maxLength": 255,
@@ -8433,6 +8701,9 @@
                               "schemaVersion": {
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "settings": {
+                                "default": {}
                               },
                               "type": {
                                 "maxLength": 255,

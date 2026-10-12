@@ -361,11 +361,27 @@ const CONTENT_TABLES = [
   "content_media_references",
 ];
 
-/** Later migrations add `content_snapshots.seo_json` (0008), empty for existing rows. */
+/**
+ * Later migrations add `content_snapshots.seo_json` (0008) and the block
+ * envelope (0009), with empty or default values for existing rows.
+ */
 function withEmptySeo(tables) {
-  return {
+  return withDefaultEnvelope({
     ...tables,
     content_snapshots: tables.content_snapshots.map((row) => ({ ...row, seo_json: null })),
+  });
+}
+
+function withDefaultEnvelope(tables) {
+  return {
+    ...tables,
+    content_blocks: tables.content_blocks.map((row) => ({
+      ...row,
+      anchor: null,
+      class_name: null,
+      hidden: 0,
+      settings_json: "{}",
+    })),
   };
 }
 
@@ -450,6 +466,40 @@ test("SEO migration adds an empty nullable column to a populated 0007 database",
       expect(
         connection.prepare("select seo_json from content_snapshots where id = 'd1'").get(),
       ).toEqual({ seo_json: '{"title":"Hello"}' });
+      expect(connection.pragma("foreign_keys", { simple: true })).toBe(1);
+      expect(connection.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      migrated.connection.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("block envelope migration adds default columns and the anchor index to a populated 0008 database", async () => {
+  const { checkedInMigrations, listAppliedMigrations } = await import("../dist/index.js");
+  const root = await mkdtemp(join(tmpdir(), "lace-block-envelope-"));
+  try {
+    let before;
+    const path = await databaseAtMigration(root, 9, (connection) => {
+      for (const statement of POPULATED_0006) connection.prepare(statement).run();
+      before = snapshotTables(connection);
+    });
+    migrateNodeDatabase(path);
+    const migrated = openNodeDatabase(path);
+    try {
+      const connection = migrated.connection;
+      expect(listAppliedMigrations(connection)).toHaveLength(checkedInMigrations.length);
+      expect(snapshotTables(connection)).toEqual(withDefaultEnvelope(before));
+      const insert = connection.prepare(
+        "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, hidden, created_at, updated_at) values (?, ?, 'image', 2000, 2, '{}', ?, ?, 1, 1)",
+      );
+      insert.run("p1", "b2", "pricing", 0);
+      expect(() => insert.run("p1", "b3", "pricing", 0)).toThrow(/UNIQUE constraint/u);
+      insert.run("d1", "b2", "pricing", 1);
+      insert.run("p1", "b4", null, 0);
+      insert.run("p1", "b5", null, 0);
+      expect(() => insert.run("p1", "b6", null, 2)).toThrow(/CHECK constraint/u);
       expect(connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(connection.pragma("foreign_key_check")).toEqual([]);
     } finally {

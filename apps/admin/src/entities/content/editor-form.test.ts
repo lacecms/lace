@@ -126,7 +126,9 @@ describe("metadata-driven draft validation", () => {
       data: { actionUrl: "javascript:alert(1)" },
       key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
       position: 1_000,
+      hidden: false,
       schemaVersion: 1,
+      settings: {},
       type: "cta",
     };
     expect(isUlid(block.key)).toBe(true);
@@ -150,6 +152,16 @@ describe("metadata-driven draft validation", () => {
       "blocks.0.schemaVersion",
     );
     expect(issueLocation("/blocks/0", blockModel, [block])).toBe("blocks.0.block");
+    // Envelope issues have no control until the Settings tab exists; they stay on the block.
+    for (const pointer of [
+      "/blocks/0/anchor",
+      "/blocks/0/className",
+      "/blocks/0/hidden",
+      "/blocks/0/settings",
+      "/blocks/0/settings/align",
+    ]) {
+      expect(issueLocation(pointer, blockModel, [block])).toBe("blocks.0.block");
+    }
     expect(issueLocation("/blocks/0/data", blockModel, [block])).toBe("blocks.0.block");
     expect(issueLocation("/blocks/1/data/actionUrl", blockModel, [block])).toBeUndefined();
     expect(issueLocation("/blocks/01/type", blockModel, [block])).toBeUndefined();
@@ -260,7 +272,9 @@ test("cleared values are removed from fields and block data before saving", () =
           data: { alt: null, media: "media-1" },
           key: "k",
           position: 0,
+          hidden: false,
           schemaVersion: 1,
+          settings: {},
           type: "image",
         },
       ],
@@ -269,7 +283,15 @@ test("cleared values are removed from fields and block data before saving", () =
     } as never),
   ).toEqual({
     blocks: [
-      { data: { media: "media-1" }, key: "k", position: 0, schemaVersion: 1, type: "image" },
+      {
+        data: { media: "media-1" },
+        hidden: false,
+        key: "k",
+        position: 0,
+        schemaVersion: 1,
+        settings: {},
+        type: "image",
+      },
     ],
     fields: { title: "Kept", zero: 0 },
     title: "T",

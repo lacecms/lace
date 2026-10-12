@@ -11,6 +11,10 @@ function maximalBlocks(label, count = 200) {
     data: { media: `budget-media-${i}`, alt: `${label} image ${i}` },
   }));
 }
+// Responses carry the block envelope: admin blocks with defaults, public ones without `hidden`.
+const adminBlocks = (blocks) => blocks.map((block) => ({ ...block, hidden: false, settings: {} }));
+const publicBlocks = (blocks) => blocks.map((block) => ({ ...block, settings: {} }));
+
 async function fixture() {
   let count, database;
   const f = await openProductRuntime("worker", {
@@ -73,7 +77,7 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
       { ...admin, method: "POST", json: draft("created") },
       201,
     );
-    expect(created.draft.blocks).toEqual(draft("created").blocks);
+    expect(created.draft.blocks).toEqual(adminBlocks(draft("created").blocks));
     const path = `/api/v1/admin/entries/${created.id}`;
     const saved = await f.measured(
       "save-200",
@@ -81,7 +85,7 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
       { ...admin, method: "PUT", json: { ...draft("saved"), expectedRevision: 1 } },
       200,
     );
-    expect(saved.draft.blocks).toEqual(draft("saved").blocks);
+    expect(saved.draft.blocks).toEqual(adminBlocks(draft("saved").blocks));
     await f.measured(
       "publish-200",
       path + "/publish",
@@ -94,7 +98,7 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
       {},
       200,
     );
-    expect(published.entry.blocks).toEqual(draft("saved").blocks);
+    expect(published.entry.blocks).toEqual(publicBlocks(draft("saved").blocks));
     // The public read resolves every one of the 200 referenced media items.
     expect(Object.keys(published.media)).toHaveLength(200);
     const refs = await f.database
@@ -138,7 +142,7 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
       );
       const intact = await (await f.call(path, admin)).json();
       expect(intact.draft.revision).toBe(2);
-      expect(intact.draft.blocks).toEqual(draft("saved").blocks);
+      expect(intact.draft.blocks).toEqual(adminBlocks(draft("saved").blocks));
     }
     await f.database.prepare("update media set status = 'active' where id = ?").bind(last).run();
     expect(
@@ -156,7 +160,7 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
       { ...admin, method: "PUT", json: { ...duplicates, expectedRevision: 2 } },
       200,
     );
-    expect(repeated.draft.blocks).toEqual(duplicates.blocks);
+    expect(repeated.draft.blocks).toEqual(adminBlocks(duplicates.blocks));
     expect(
       (
         await f.database
@@ -211,7 +215,13 @@ test("34B D1 exports 100/201/501 complete published entries across hydration chu
                 },
               ];
         if (index === 1) blocks[0].data.alt = "y".repeat(999900);
-        expected.push({ id, path: `/notes/${id}`, title: `Published ${index}`, fields, blocks });
+        expected.push({
+          id,
+          path: `/notes/${id}`,
+          title: `Published ${index}`,
+          fields,
+          blocks: publicBlocks(blocks),
+        });
         await enqueue(
           "insert into content_entries (id, model_key, created_by, created_at, updated_at) values (?, 'notes', 'budget-admin', 1, 1)",
           id,
@@ -233,7 +243,7 @@ test("34B D1 exports 100/201/501 complete published entries across hydration chu
         );
         for (const block of blocks) {
           await enqueue(
-            "insert into content_blocks values (?, ?, ?, ?, ?, ?, 1, 1)",
+            "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, 1, 1)",
             `${id}-published`,
             block.key,
             block.type,

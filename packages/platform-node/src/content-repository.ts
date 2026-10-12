@@ -95,6 +95,7 @@ import {
   STORED_MODEL_STATE_SQL,
   SYNC_BLOCKS_SQL,
   SYNC_MIGRATION_BLOCKS_SQL,
+  BLOCK_COPY_COLUMNS_SQL,
   SYNC_MIGRATION_ENTRIES_SQL,
   SYNC_MIGRATION_REFERENCES_SQL,
   SYNC_MIGRATION_SNAPSHOTS_SQL,
@@ -650,7 +651,7 @@ export class NodeContentRepository
         this.checkpoint("publish.blocks");
         this.connection
           .prepare(
-            "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at from content_blocks where snapshot_id = ?",
+            `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
           )
           .run(input.publishedSnapshotId, entry.draft.id);
         this.checkpoint("publish.references");
@@ -1512,7 +1513,7 @@ export class NodeContentRepository
 
   private insertBlocks(snapshot: Pick<DraftSnapshot, "blocks" | "id" | "updatedAt">): void {
     const statement = this.connection.prepare(
-      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     for (const block of snapshot.blocks) {
       statement.run(
@@ -1522,6 +1523,10 @@ export class NodeContentRepository
         block.position,
         block.schemaVersion,
         JSON.stringify(block.data),
+        block.anchor ?? null,
+        block.className ?? null,
+        block.hidden ? 1 : 0,
+        JSON.stringify(block.settings),
         snapshot.updatedAt,
         snapshot.updatedAt,
       );

@@ -992,12 +992,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(9);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(10);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(9);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(10);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1088,7 +1088,9 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       expect(() => insertEntry.run("home-2", "home", 1, "admin", 1, 1)).toThrow();
       expect(() =>
         database.connection
-          .prepare("insert into content_blocks values (?, ?, ?, ?, ?, ?, ?, ?)")
+          .prepare(
+            "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+          )
           .run("missing", "block", "hero", 1000, 1, "{}", 1, 1),
       ).toThrow();
 
@@ -1184,7 +1186,9 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       database.connection.prepare("delete from media where id = ?").run("media-1");
 
       database.connection
-        .prepare("insert into content_blocks values (?, ?, ?, ?, ?, ?, ?, ?)")
+        .prepare(
+          "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
         .run("post-2-draft", "block-1", "hero", 1000, 1, "{}", 1, 1);
       database.connection.prepare("delete from content_entries where id = ?").run("post-2");
       expect(

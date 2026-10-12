@@ -22,12 +22,16 @@ function noteV3(migrations = {}) {
       text: field.text({ maxLength: 20, required: true }),
     },
     migrations: {
-      2: ({ body, image, ...rest }) => ({
-        ...rest,
-        ...(image === undefined ? {} : { cover: image }),
-        ...(body === undefined ? {} : { quote: body }),
+      2: ({ data: { body, image, ...rest } }) => ({
+        data: {
+          ...rest,
+          ...(image === undefined ? {} : { cover: image }),
+          ...(body === undefined ? {} : { quote: body }),
+        },
       }),
-      3: ({ quote, ...rest }) => (quote === undefined ? rest : { ...rest, text: quote }),
+      3: ({ data: { quote, ...rest } }) => ({
+        data: quote === undefined ? rest : { ...rest, text: quote },
+      }),
       ...migrations,
     },
     type: "note",
@@ -50,8 +54,17 @@ async function config(block, version) {
   });
 }
 
-function block(key, data, schemaVersion = 1) {
-  return { data, key, position: Number(key.slice(1)), schemaVersion, type: "note" };
+function block(key, data, schemaVersion = 1, envelope = {}) {
+  return {
+    data,
+    hidden: false,
+    key,
+    position: Number(key.slice(1)),
+    schemaVersion,
+    settings: {},
+    type: "note",
+    ...envelope,
+  };
 }
 
 function snap(id, state, revision, blocks, references = []) {
@@ -145,6 +158,7 @@ function store(baseline, entries, options = {}) {
             const stored = snapshot.blocks.find((value) => value.key === migrated.key);
             stored.data = migrated.data;
             stored.schemaVersion = migrated.schemaVersion;
+            stored.settings = migrated.settings;
           }
           const keys = new Set(migration.blocks.map((value) => value.key));
           snapshot.references = [
@@ -215,7 +229,13 @@ test("plans entry migrations with the revision rule and published snapshots firs
     snapshots: [
       {
         blocks: [
-          { data: { text: "draft only" }, expectedSchemaVersion: 1, key: "b1", schemaVersion: 3 },
+          {
+            data: { text: "draft only" },
+            expectedSchemaVersion: 1,
+            key: "b1",
+            schemaVersion: 3,
+            settings: {},
+          },
         ],
         expectedRevision: 1,
         references: [],
@@ -320,6 +340,65 @@ test("validates migrated drafts and published snapshots in their own modes", () 
   ]);
 });
 
+test("validates hidden published blocks in draft mode and migrates settings", () => {
+  const definitions = new Map([["note", noteV3()]]);
+  const hidden = planEntryMigration(
+    {
+      entryId: "e",
+      published: snap("p", "published", 1, [block("b1", {}, 1, { anchor: "a", hidden: true })]),
+    },
+    definitions,
+    "system:content-sync",
+  );
+  expect(hidden.findings).toEqual([]);
+  expect(hidden.unit.snapshots[0].blocks[0]).toMatchObject({ data: {}, settings: {} });
+
+  const themed = (migration) =>
+    new Map([
+      [
+        "note",
+        defineBlock({
+          fields: { text: field.text() },
+          migrations: { 2: migration },
+          settings: {
+            align: field.select({ defaultValue: "left", options: ["left", "center"] }),
+            theme: field.text({ defaultValue: "light" }),
+          },
+          type: "note",
+          version: 2,
+        }),
+      ],
+    ]);
+  const stored = block("b1", { text: "x" }, 1, { settings: { tone: "dark" } });
+  const renamed = planEntryMigration(
+    { draft: snap("d", "draft", 1, [stored]), entryId: "e" },
+    themed(({ data, settings: { tone, ...rest } }) => ({
+      data,
+      settings: { ...rest, theme: tone },
+    })),
+    "system:content-sync",
+  );
+  expect(renamed.findings).toEqual([]);
+  // New settings receive their declared defaults.
+  expect(renamed.unit.snapshots[0].blocks[0].settings).toEqual({ align: "left", theme: "dark" });
+
+  const kept = planEntryMigration(
+    { draft: snap("d", "draft", 1, [stored]), entryId: "e" },
+    themed((value) => value),
+    "system:content-sync",
+  );
+  expect(kept.findings).toMatchObject([
+    { kind: "invalid", reference: { path: "settings.tone", reason: "unknown_field" } },
+  ]);
+
+  const bare = planEntryMigration(
+    { draft: snap("d", "draft", 1, [stored]), entryId: "e" },
+    themed(({ data }) => data),
+    "system:content-sync",
+  );
+  expect(bare.findings).toMatchObject([{ kind: "invalid", type: "note" }]);
+});
+
 test("refuses failed, missing and ahead migrations and plans valid ones from evidence", async () => {
   const baseline = (await config(noteV1, 1)).runtime.content[0];
   const target = await config(noteV3(), 2);
@@ -387,7 +466,7 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
 
   const onlyThree = defineBlock({
     fields: noteV3().fields,
-    migrations: { 3: (data) => data },
+    migrations: { 3: (value) => value },
     type: "note",
     version: 3,
   });
@@ -404,7 +483,7 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
 
   const v2 = defineBlock({
     fields: { quote: field.text() },
-    migrations: { 2: ({ body, ...rest }) => ({ ...rest, quote: body }) },
+    migrations: { 2: ({ data: { body, ...rest } }) => ({ data: { ...rest, quote: body } }) },
     type: "note",
     version: 2,
   });
@@ -556,8 +635,10 @@ test("migrates version 1 built-in image blocks to version 2 without changing the
   const data = { alt: "A lake", caption: "Morning", media: "m1" };
   const image = () => ({
     data: { ...data },
+    hidden: false,
     key: "b1",
     position: 0,
+    settings: {},
     schemaVersion: 1,
     type: "image",
   });
