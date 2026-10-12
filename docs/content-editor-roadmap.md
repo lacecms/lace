@@ -1,9 +1,9 @@
 # Lace Content and Editor Roadmap
 
 > Active roadmap. Started 2026-10-10 after the MVP roadmap was archived.
-> Wave 1 is done. Wave 2 is detailed and ready for just-in-time OpenSpec
-> proposals. Later waves are an ordered backlog and are detailed only when
-> they are selected.
+> Waves 1 and 2 are done. Wave 3 starts with the detailed CE7 plan, ready
+> for just-in-time OpenSpec proposals. CE8 and CE9 remain draft until CE7 is
+> implemented. Wave 4 remains an ordered backlog.
 
 ## 1. Purpose and source of truth
 
@@ -48,7 +48,8 @@ apply unchanged:
   repository contract tests. D1 work uses guarded batches, never interactive
   transactions.
 
-Status values: `planned`, `proposed`, `in progress`, `done` (archived).
+Status values: `backlog`, `draft` (scope not finalized), `planned`,
+`proposed`, `in progress`, `done` (archived).
 
 ## 3. Baseline (2026-10-10)
 
@@ -121,9 +122,9 @@ The findings that motivate this roadmap. File references are to the state of
 | 2 | CE5 | Global singletons (settings, navigation, footer) | A8 | M | done |
 | 2 | CE4 | SEO metadata and site defaults | A3 | L | done |
 | 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | L | done |
-| 3 | CE7 | Group and repeatable list fields | A6 | — | backlog |
-| 3 | CE8 | Rich-text editor expansion | B1 | — | backlog |
-| 3 | CE9 | Field layout and form UX | B2 | — | backlog |
+| 3 | CE7 | Group/list fields, Gallery and Navigation blocks | A6 | L | planned |
+| 3 | CE8 | Rich-text editor expansion | B1 | — | draft |
+| 3 | CE9 | Field layout and form UX | B2 | — | draft |
 | 4 | CE10 | Entry references and internal links | A7 | — | backlog |
 | 4 | CE11 | Responsive images | C3 | — | backlog |
 | 4 | CE12 | Bounded revision history | C1 | — | backlog |
@@ -137,6 +138,11 @@ because site-level SEO defaults are read from a global. CE6 depends on
 neither technically; it runs last by owner choice, but it must land before
 beta because it changes the stored and public block contract. Database
 migration numbers are assigned when each session is proposed.
+
+Wave 3 begins with **CE7A → CE7B → CE7C → CE7D**. CE8 and CE9
+are draft topics, not implementation-ready steps; detail them after CE7 is
+implemented and verified. Create only the next selected session's OpenSpec
+change, never all four in advance.
 
 ## 5. Wave 1 — detailed steps
 
@@ -783,22 +789,288 @@ the generated-project acceptance passes.
 editing settings and keyboard access to the tabs; the accessibility
 acceptance in architecture section 17 holds.
 
-## 7. Later waves — backlog
+## 7. Wave 3 — structured fields and editor improvements
 
-These items are ordered but not detailed. Each is expanded in this document,
-with owner decisions, when it is selected.
+Only CE7 is detailed and selected for just-in-time proposals. CE8 and CE9
+remain draft and will be specified after CE7 implementation, using its actual
+editor behavior and verification results.
 
-- **CE7 Group and repeatable list fields (A6):** `field.group` and
-  `field.list` for FAQ, pricing, feature and gallery blocks; media reference
-  projection for nested paths. The starter and reference site gain a
-  `navigation` global built on `field.list` (deferred from CE5).
-- **CE8 Rich-text expansion (B1):** heading levels 2–4 with configurable sets
-  (an H1 in the body duplicates the page title), horizontal rule, code block,
-  link `target` and `rel`, bubble menu, paste cleanup from Google Docs and
-  Word, per-field node and mark allowlists. Tables later.
-- **CE9 Field layout and form UX (B2):** required markers, placeholders,
-  tabs and groups (Content / SEO / Settings), conditional visibility,
-  character counters, automatic slug for new entries.
+## Step CE7 — Group and repeatable list fields
+
+**Status:** planned.
+
+**Goal:** models and blocks can describe bounded structured objects and
+repeatable values, with typed configuration, safe nested media, automatic
+admin forms and predictable schema evolution. Ship Gallery and Navigation
+as useful first-party examples; use Navigation in a site-wide global.
+
+**Size:** L (four session units).
+
+### Structural model
+
+Pages, collection entries and globals all support model fields and an ordered
+list of allowed blocks. Fields are fixed properties defined in configuration;
+blocks are sections that editors may add, remove and reorder. Both contain
+editable content and follow the draft/publication lifecycle.
+
+`field.group` describes one object with named child fields. `field.list`
+describes an ordered array whose elements share one field definition, either
+a scalar field or a group. Both builders are available in model fields and
+block **data** fields. They do not group or repeat blocks, introduce child
+blocks, or expand the CE6 allowlist for presentational block settings.
+
+For example, a Gallery is one block with an `images` list of groups containing
+media, alt override and caption fields. Each image item is data belonging to
+that block, not an instance of the existing Image block. The site component
+receives the complete Gallery data and renders its images together.
+
+A list element has no independent route, publication or entry lifecycle.
+Changing a list never creates collection entries. Visual form sections and
+configuration-driven tabs remain CE9; a data group is not merely a layout hint.
+
+### Owner decisions (2026-10-12)
+
+1. **Maximum container depth: 6.** Count every `group` and `list` along a
+   field-definition branch. The model-fields/block-data root and scalar leaves
+   do not count. Rich-text document nodes are outside this counter. A scalar
+   may follow the sixth container; a seventh container is refused.
+2. **Maximum consecutive groups: 2.** A third directly nested group is
+   refused. A list resets the consecutive-group counter, but never the total
+   depth counter. This is not a limit of two groups in the entire branch.
+3. **No direct list of lists.** A list element may be a supported scalar or
+   group, never another list. A nested list must be a named field of a group.
+   Schemas are finite; recursive definitions are not supported.
+4. **At most 100 elements per list.** A field may declare a lower `maxItems`,
+   never a higher limit. Empty lists are representable; publication minimums
+   and required-field behavior are made explicit in CE7A.
+5. **At most 500 list elements per entry snapshot.** Sum all list lengths in
+   model fields and every block's data, including hidden blocks. Nested
+   elements count independently: 10 categories with 20 links each consume
+   210 elements. Groups do not themselves add to this budget unless they are
+   elements of a list. Draft and published snapshots are checked separately,
+   not summed together. Count the normalized data after defaults are applied.
+6. **Existing payload/media limits remain.** Nested values count toward the
+   existing JSON byte limits and the 200-media-reference limit. A shallow
+   schema does not bypass these bounds. Enforce all limits on the server;
+   admin affordances help editors stay within them.
+7. **Ship Gallery and Navigation blocks.** Use the same public builders and
+   generic form controls as project-defined blocks. Gallery renders an
+   adaptive image grid; Navigation supports links and one level of child
+   links. These example schemas need not consume the full permitted depth.
+8. **Use Navigation in a global.** The starter and reference site declare a
+   route-less `navigation` global that allows the Navigation block, and the
+   shared site layout renders its published blocks as site-wide navigation.
+   The same block can also render local navigation in page content when that
+   model allows it. It reads its own data, not the global implicitly.
+
+### Depth examples and intended coverage
+
+| Structure | Container depth | Outcome |
+| --- | :---: | --- |
+| Gallery: list → group → media/caption | 2 | allowed |
+| Card: group → group → URL/text | 2 | allowed |
+| Card: group → group → group | 3 | refused: three consecutive groups |
+| Navigation: list → group → list → group → URL/text | 4 | allowed |
+| Mega menu: list → group → list → group → list → group → URL/text | 6 | allowed |
+| Any branch with a seventh container | 7 | refused |
+| Matrix: list → list | 2 | refused: direct list of lists |
+
+This covers galleries, FAQ, testimonials and team cards; pricing plans with
+feature lists; footer columns with links; categorized FAQ; and menus with
+columns of links. It permits three nested list levels when group elements
+separate them. Supporting a schema does not imply shipping a block for every
+example: only Gallery and Navigation are selected for CE7.
+
+### Architecture and capability changes
+
+Update the architecture in the relevant session before production code, and
+record a short ADR for bounded composite fields:
+
+- Section 8: the field DSL, recursive serializable descriptors and value
+  inference, draft/publish semantics, limits and nested sync classification.
+- Sections 9.3, 9.4 and 9.7: nested values stay in the existing fields/block
+  JSON payloads; nested media enter the reference projection and deletion
+  guard. Section 9.5 retains the flat top-level block invariant.
+- Sections 10–12: nested validation, entry-wide budgets, copy/lifecycle
+  behavior, block definitions and admin/public contracts.
+- Sections 13 and 17: render validation, registry/starter delivery and nested
+  admin controls with accessible error navigation.
+- Sections 20 and 22: cross-runtime verification and upgrade compatibility.
+
+Affected accepted capabilities include `content-validation`,
+`content-model-configuration`, `block-registry`, `schema-evolution`,
+`configuration-synchronization`, `content-repository-contracts`, the Node and
+D1 repositories, `rest-contracts`, `admin-draft-editor`, media usage/delivery,
+`render-core`, the block source registry and generated-project acceptance.
+Each proposal resolves the exact affected spec paths for that session.
+
+No new composite-value tables are planned. If a change to media-reference
+storage needs a database migration, propose it explicitly for both runtimes;
+do not assign a migration number in advance.
+
+### Session CE7A — Composite field definitions and end-to-end data contract
+
+- Add typed `field.group` and `field.list` builders, recursive portable
+  descriptors and exhaustive consumers. Preserve field inference through
+  nested objects and arrays; reject cyclic definitions, malformed children
+  and invalid defaults before startup.
+- Define absence, empty object/list, `required`, defaults and `minItems` /
+  `maxItems` precisely. Preserve the existing principle: incomplete required
+  content can be saved as a draft; wrong present types, unknown keys and
+  safety/maximum limits cannot. Publication enforces required descendants of
+  present groups/list items and declared minimums. An absent optional group
+  does not manufacture missing-child errors.
+- Apply the agreed depth, consecutive-group and list rules to every schema
+  and the per-list/entry-wide element limits to normalized content. Hidden
+  blocks still consume the entry budget and retain draft-mode publication
+  validation. Use shared rules for API and render validation.
+- Extend configuration metadata, runtime validators, REST/OpenAPI schemas,
+  SDK/public data parsing and render-core handling to carry composites.
+  Keep the CE6 settings field allowlist unchanged and collection `listFields`
+  restricted to its currently supported scalar fields.
+- Recursively collect nested media references using unambiguous field paths
+  that distinguish group keys and list indices while preserving existing
+  scalar paths. Maintain usage labels, deletion protection, metadata-triggered
+  builds, public media resolution and hidden-block delivery filtering.
+- Verify save, load, publish, revert, duplicate and block migration results on
+  Node SQLite and D1. Reorder/removal rewrites the media projection from the
+  resulting snapshot; stale indices must not protect removed media or release
+  remaining media. Keep existing scalar-only encodings/hashes compatible.
+
+**Acceptance:** typed fixtures and runtime negative tests for all schema
+boundaries (6/7 depth, 2/3 consecutive groups, direct list-of-list), list lengths
+100/101 and entry totals 500/501, including defaults and hidden blocks; nested
+validation errors have precise JSON Pointer paths; nested media survive all
+lifecycle operations and disappear from usage only when no stored reference
+remains. Public output resolves nested media consistently on both runtimes.
+Scalar-only configuration and content retain their existing behavior.
+
+### Session CE7B — Nested schema evolution and synchronization
+
+- Extend CE1's canonical structure comparison recursively. Child display
+  metadata is projection-only; nested structural changes are explicit and
+  retain model/block version requirements. Preserve keys in stored defaults
+  even when named `label` or `description`.
+- Support compatible child additions, defaults and validated constraint
+  changes within groups and across list elements. Tightening list bounds
+  scans existing snapshots and refuses offending data without pruning it.
+- Extend explicit model-field rename/removal hints to unambiguous nested
+  schema paths, including a defined way to address fields of every list item.
+  Define their syntax in the proposal; never infer renames, remove list items
+  to satisfy a maximum, or convert a scalar into a composite silently.
+- Existing block-data changes continue through versioned block migrations.
+  Validate complete resulting snapshots, including the aggregate list budget
+  and media constraints, not only each migrated block in isolation.
+- Preserve guarded writes, concurrency conflicts, media-reference rebuilding,
+  published-version/build behavior and resumable block migration semantics.
+  `--check` reports nested paths and affected snapshots without writing.
+
+**Acceptance:** adding a child to existing group/list values, nested default
+application, hinted nested rename/removal and rejected tightening are covered
+on both runtimes; nested media rename/removal updates usage correctly;
+invalid/over-budget migrations and unhinted destructive changes are refused;
+repeated sync and interrupted block migration remain safe. Reports identify
+model, snapshot and nested schema path.
+
+### Session CE7C — Generic group and list editing
+
+- Render groups as labelled fieldsets with descriptions and nested controls.
+  Render lists as labelled repeatable items, supporting Add, Remove,
+  Duplicate, Move up/down and accessible drag-and-drop ordering. Reuse media,
+  rich-text and scalar controls within composites.
+- Keep complex items collapsible, with a useful summary and error/count
+  indicators. Define optional presentation metadata for item labels in this
+  proposal; it must not alter stored content or structural hashes.
+- Preserve editing state during moves/collapse: values, rich-text selection
+  where applicable, media selection and field errors must follow the correct
+  item. UI identity must not introduce an undocumented public data envelope.
+- Show per-list counts and entry-budget feedback. Prevent Add/Duplicate when
+  they would exceed a maximum, including the nested elements copied by a
+  duplicate; show publication-only minimum/required issues distinctly from
+  errors that block draft saving.
+- Map local/server nested errors to exact controls. Summary activation opens
+  the relevant block tab and all containing collapsed groups/items, then
+  focuses the field. Read-only viewers can inspect every value without
+  mutation actions.
+- Preserve save/discard, unsaved-navigation protection, revision-conflict
+  recovery, Copy my JSON, revert, duplication and the existing save shortcut.
+
+**Acceptance:** browser tests cover model and block composites, nested lists,
+media selection, item duplication/removal/reordering, collapsed error focus,
+limits and conflict recovery without lost values. Keyboard-only operation and
+accessibility audits meet architecture section 17; viewers cannot mutate data.
+
+### Session CE7D — Gallery, Navigation and shipped site examples
+
+- Add Gallery and Navigation definitions and Astro source components to the
+  registry, reference site and starter, with matching schemas and components.
+  Both honor the CE6 envelope (anchor, CSS classes, hidden behavior) and use
+  generic admin editing without block-specific React forms.
+- Gallery: optional section title and a list of image groups with media,
+  optional alt override and caption. Follow CE3 media metadata/fallback rules,
+  render dimensions and focal point, and ship a responsive grid. Responsive
+  image variants/srcset remain CE11; lightbox and carousel are not required.
+- Navigation: a list of labelled URL items with an optional list of labelled
+  child links (one submenu level). Define parent-link/disclosure behavior in
+  the proposal; ship keyboard-accessible disclosure and narrow-screen behavior.
+  Links use existing safe URL forms, not CE10 entry references. Supporting
+  deeper user-defined schemas does not require a built-in mega-menu renderer.
+- Add a `navigation` global allowing this block and render it through the
+  normal block map from the shared layout. Reuse the already-loaded site
+  view, supply a useful fallback before publication, and preserve existing
+  site-name and SEO behavior. Normal global save/publish/unpublish semantics
+  control when site-wide navigation changes become visible.
+- Document configuration examples for model-level groups/lists as well as
+  the two blocks, the limit counters, nested evolution and media behavior.
+  Update registry metadata, starter ownership template, compatibility and
+  manual adoption instructions for user-owned layouts/configuration.
+
+**Acceptance:** reference and packed generated sites build with both blocks;
+Gallery media, captions and alt fallbacks render correctly; Navigation works
+with keyboard and narrow viewports, globally and in page content. Published
+navigation drives the layout while later draft edits remain isolated;
+unpublished/missing navigation uses the fallback. Starter/registry parity and
+cross-runtime editor-to-public-delivery checks pass.
+
+### Completion and boundaries
+
+CE7 is complete only when all four sessions are implemented and verified,
+including root typecheck, Oxlint, Oxfmt and each change's strict OpenSpec
+validation. Architecture/spec updates and upgrade guidance accompany their
+changes; archiving remains an explicit owner action.
+
+CE7 does not add nested blocks, heterogeneous list item types, references,
+custom React block editors, conditional visibility, configurable form tabs,
+new rich-text features or responsive image generation. After CE7 completes,
+review its actual forms before detailing CE8 and CE9.
+
+## Step CE8 — Rich-text expansion (draft)
+
+**Status:** draft. Detail after CE7 implementation; no session split or
+implementation-ready scope is approved yet.
+
+Candidate topics from B1: configurable heading sets (proposed default H2–H4),
+horizontal rule, code block, link `target`/`rel`, bubble menu, Word/Google Docs
+paste cleanup and per-field node/mark allowlists. Existing H1–H3 content needs
+an explicit compatibility policy; the proposed default is not permission to
+rewrite or reject it. Tables remain a later candidate.
+
+## Step CE9 — Field layout and form UX (draft)
+
+**Status:** draft. Detail after CE7 implementation; no session split or
+implementation-ready scope is approved yet.
+
+Candidate topics from B2: required markers, placeholders, character counters,
+visual groups/tabs (Content / SEO / Settings), declarative conditional
+visibility and automatic slug suggestions for new entries. Visual grouping
+must be distinguished from CE7's stored data groups. Visibility/value retention,
+validation and slug-generation policies remain to be decided.
+
+## 8. Later waves — backlog
+
+Wave 4 items remain ordered but not detailed. Expand each with owner decisions
+when selected; CE8 and CE9 draft topics are recorded above.
+
 - **CE10 Entry references and internal links (A7):** reference fields and
   `entry:<id>` links in URL fields and rich text, resolved to paths at build
   time so slug changes do not break links.
@@ -815,7 +1087,7 @@ token-protected draft preview, trash for deleted entries, and an early
 decision on whether localized content will ever be supported, because locales
 would affect snapshot and route keys.
 
-## 8. Session log
+## 9. Session log
 
 Record each completed session here: date, OpenSpec change name, outcome and
 any decision that changed this document.
