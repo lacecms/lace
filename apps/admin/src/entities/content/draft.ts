@@ -15,7 +15,9 @@ import { seoFormValues, seoInput } from "./seo.js";
 /** Form values for an entry draft, with block defaults filled from the block definitions. */
 export function draftValues(model: ContentModelDto, entry: ContentEntryDto): DraftEditorValues {
   return {
-    blocks: entry.draft.blocks.map((block) => {
+    blocks: entry.draft.blocks.map((loaded) => {
+      // Text inputs hold "" for an absent anchor or class name, so the baseline must match them.
+      const block = { ...loaded, anchor: loaded.anchor ?? "", className: loaded.className ?? "" };
       const definition = model.blockDefinitions?.find((item) => item.type === block.type);
       if (definition === undefined) return block;
       return {

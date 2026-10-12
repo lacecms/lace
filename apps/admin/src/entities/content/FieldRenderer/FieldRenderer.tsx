@@ -58,7 +58,7 @@ export function FieldRenderer({
   readonly definition: FieldDefinition;
   readonly error: string | undefined;
   readonly fieldKey: string;
-  readonly name: `blocks.${number}.data.${string}` | `fields.${string}`;
+  readonly name: `blocks.${number}.${"data" | "settings"}.${string}` | `fields.${string}`;
   readonly notice?: ReactNode;
   readonly placeholder?: string | undefined;
 }) {

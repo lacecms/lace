@@ -108,6 +108,16 @@ test("block-level problems include undefined data fields but not defined fields"
     ),
   ).toEqual(["Key.", "Version.", "Whole block.", "Undefined field."]);
   expect(blockLevelProblems(undefined, {})).toEqual([]);
+  expect(
+    blockLevelProblems(
+      {
+        anchor: { message: "Anchor." },
+        settings: { align: { message: "Align." }, size: { message: "Undeclared setting." } },
+      },
+      {},
+      { align: {} },
+    ),
+  ).toEqual(["Undeclared setting."]);
 });
 
 test("lists SEO problems after model fields in card order", () => {
@@ -129,4 +139,83 @@ test("lists SEO problems after model fields in card order", () => {
     ["Canonical URL", { id: "seo-canonical", kind: "control" }],
     ["Draft", undefined],
   ]);
+});
+
+test("settings problems follow content fields and hidden-block publication problems do not block", () => {
+  const settingsModel = {
+    ...model,
+    blockDefinitions: [
+      {
+        ...model.blockDefinitions[0],
+        settings: {
+          align: { defaultValue: "left", options: ["left"], required: false, type: "select" },
+        },
+      },
+    ],
+  } as unknown as ContentModelDto;
+  const hidden = { ...block("B"), hidden: true };
+  const problems = validationProblems({
+    blocks: [block("A"), hidden],
+    errors: {
+      blocks: {
+        0: {
+          anchor: { message: "Anchor problem." },
+          className: { message: "Class problem." },
+          data: { heading: { message: "Heading problem." } },
+          settings: { align: { message: "Align problem." } },
+        },
+        1: {
+          data: {
+            body: { message: "Too long.", type: "validate" },
+            heading: { message: "Required to publish.", type: "publication" },
+          },
+        },
+      },
+      title: { message: "Title problem." },
+    } as never,
+    model: settingsModel,
+  });
+  expect(problems.map(({ blocking, label, target }) => ({ blocking, label, target }))).toEqual([
+    { blocking: true, label: "Title", target: { id: "system-title", kind: "control" } },
+    {
+      blocking: true,
+      label: "Heading in Hero block 1",
+      target: { id: "field-blocks-0-data-heading", kind: "control" },
+    },
+    {
+      blocking: true,
+      label: "Anchor in Hero block 1",
+      target: { id: "field-blocks-0-anchor", kind: "control" },
+    },
+    {
+      blocking: true,
+      label: "Align in Hero block 1",
+      target: { id: "field-blocks-0-settings-align", kind: "control" },
+    },
+    {
+      blocking: true,
+      label: "CSS classes in Hero block 1",
+      target: { id: "field-blocks-0-className", kind: "control" },
+    },
+    {
+      blocking: true,
+      label: "Body in Hero block 2 (hidden)",
+      target: { id: "field-blocks-1-data-body", kind: "control" },
+    },
+    {
+      blocking: false,
+      label: "Heading in Hero block 2 (hidden)",
+      target: { id: "field-blocks-1-data-heading", kind: "control" },
+    },
+  ]);
+  // The same publication problem in a visible block blocks.
+  expect(
+    validationProblems({
+      blocks: [block("A")],
+      errors: {
+        blocks: { 0: { data: { heading: { message: "Required.", type: "publication" } } } },
+      } as never,
+      model: settingsModel,
+    })[0]?.blocking,
+  ).toBe(true);
 });

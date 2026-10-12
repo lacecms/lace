@@ -1,5 +1,7 @@
 export {
+  anchorProblem,
   BLOCK_MESSAGES,
+  classNameProblem,
   createDraftResolver,
   fieldProblem,
   initialModelFieldValues,
@@ -8,6 +10,7 @@ export {
   locationField,
   serverIssueMessage,
   suggestSlug,
+  undeclaredSettingMessage,
   validateDraftValues,
   withoutClearedValues,
   type DraftEditorValues,
@@ -37,6 +40,7 @@ export { useEntryOverview } from "./overview.js";
 export { isSingletonModel } from "./model-kind.js";
 export {
   blockLevelProblems,
+  PUBLICATION_ISSUE_TYPE,
   validationProblems,
   type ProblemTarget,
   type ValidationProblem,
@@ -61,3 +65,4 @@ export {
   type SeoSiteDefaults,
 } from "./seo-preview.js";
 export { seoSiteDefaults, useSeoDefaults } from "./seo-defaults.js";
+export { fieldControlId } from "./field-types.js";

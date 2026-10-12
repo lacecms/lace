@@ -1,1 +1,1 @@
-export { BlockCard } from "./BlockCard.js";
+export { BlockCard, type BlockTab } from "./BlockCard.js";

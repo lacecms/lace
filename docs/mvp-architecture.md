@@ -2431,12 +2431,15 @@ Controls hold a cleared value as `null` in form state, because React Hook Form w
 Blocks render as cards. A card header shows the following:
 
 - a drag handle;
-- the block's icon and label;
-- a one-line summary of its data: the first text value, then rich-text plain text, then a URL or select value, then "Media selected", otherwise "Empty block".
+- the block's icon and label, with a *Hidden* badge (part of the card's accessible name) when the block is hidden;
+- a one-line summary of its data: the first text value, then rich-text plain text, then a URL or select value, then "Media selected", otherwise "Empty block";
+- the block's `#anchor` when it has one.
+
+An expanded card has a *Content* tab with the block's fields and a *Settings* tab with its envelope ([ADR 0012](adr/0012-block-envelope.md)): an *Anchor* input validated as the writer types (format, and uniqueness within the entry including hidden blocks) with *Copy link*, which copies the entry's site URL plus `#anchor` when the build site URL and the entry path are known and `#anchor` otherwise; a *Hide on site* switch; the settings the block declares, through the field controls; and a *CSS classes* input checked with the shared class-name rule. Both panels stay mounted, the tabs use arrow keys, Home and End, and a tab whose controls have problems says so in its name. The selected tab is kept per block key. A hidden card is muted with a muted background and a dashed border, never by lowering text contrast. Viewers get no tabs: the content fields are followed by a read-only *Settings* section. Anchor and class name are held as strings in form state (empty for none) and blank values are left out of saves.
 
 Collapsing hides only the fields, so a collapsed card stays recognizable. A block with a validation error stays expanded. The block that focus or a pointer last entered is highlighted. A block that has just been added, inserted, or duplicated is highlighted, expanded, and focused.
 
-Each card's actions menu offers Move up, Move down, Duplicate, and Remove. Removal leaves an inline notice with Undo, which restores the same key and data at the same place. The next structural action makes the removal final.
+Each card's actions menu offers Move up, Move down, Duplicate, Hide block or Show block (announced in a status region by label and position), and Remove. A duplicate starts without an anchor. Removal leaves an inline notice with Undo, which restores the same key and data at the same place. The next structural action makes the removal final.
 
 An insert control between adjacent blocks and an Add block button after the list open the same popover. It lists the model's allowed blocks with icon, label, and description, and it has a text filter.
 
@@ -2451,7 +2454,7 @@ Each editable rich-text field has a fixed toolbar named after the field. It hold
 
 The toggles report their pressed state for the selection. The toolbar is one tab stop with arrow-key movement, `Alt+F10` moves focus from the text to it, and Escape returns. Tooltips and `aria-keyshortcuts` name each shortcut. The editor adds undo and redo and keeps Tiptap's mark, list, heading, and Markdown shortcuts. `⌘K`/`Ctrl+K` opens the link popover, which applies only URLs that pass the shared allowlist and says which forms are permitted. The Tiptap schema declares only allowlisted attributes: links carry `href` and lists carry nothing. Every document the editor produces therefore passes the shared validator. Empty fields show a placeholder, also exposed as `aria-placeholder`. Viewers get neither the toolbar nor the placeholder.
 
-Validation problems appear where they occur. Field messages are sentences such as "Enter at least 5 characters." A block card shows its block-level problems and a "Has problems" marker: a type that is not allowed, a stale version, a key problem, or data for an undefined field. A block whose type the model no longer allows still renders, so it can be removed. When Save is blocked, or the server rejects a save or publish, a summary above the title takes focus. It counts the problems and links each one, in reading order, to its control or block card. The admin maps server JSON Pointers, including deep rich-text paths, to the same locations. Issues it cannot place are listed as text.
+Validation problems appear where they occur. Field messages are sentences such as "Enter at least 5 characters." A block card shows its block-level problems and a "Has problems" marker: a type that is not allowed, a stale version, a key problem, data for an undefined field, or a value for an undeclared setting. Anchor, class name, and declared setting problems are shown on their Settings controls; activating one in the summary selects the Settings tab first. Summary entries name hidden blocks as hidden. A problem only publication reports (a required field) in a block that is now hidden is listed last as not blocking publication and is not counted, because publication validates hidden blocks in draft mode; every other problem in a hidden block blocks Save as usual. A block whose type the model no longer allows still renders, so it can be removed. When Save is blocked, or the server rejects a save or publish, a summary above the title takes focus. It counts the problems and links each one, in reading order, to its control or block card. The admin maps server JSON Pointers, including deep rich-text paths, to the same locations. Issues it cannot place are listed as text.
 
 ### Component source and design tokens
 

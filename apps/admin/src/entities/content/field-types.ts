@@ -31,7 +31,10 @@ export type FieldRendererRegistry = Partial<
 
 /** The DOM id of the control for a model or block field's form name. */
 export function fieldControlId(
-  name: `blocks.${number}.data.${string}` | `fields.${string}`,
+  name:
+    | `blocks.${number}.${"anchor" | "className"}`
+    | `blocks.${number}.${"data" | "settings"}.${string}`
+    | `fields.${string}`,
 ): string {
   return `field-${name.replaceAll(".", "-")}`;
 }

@@ -18,8 +18,10 @@ import {
   localDraftJson,
   orderedDraftBlocks,
   locationField,
+  PUBLICATION_ISSUE_TYPE,
   resolvedPublicPath,
   seoDefaultsAnnotation,
+  siteUrlFor,
   seoInput,
   serverIssueMessage,
   suggestSlug,
@@ -88,7 +90,8 @@ export function EntryPage() {
   const model = models.data?.items.find((item) => item.key === modelKey);
   const seoDefaults = useSeoDefaults(model?.seo === undefined ? undefined : models.data?.items);
   const buildSite = useQuery({
-    enabled: model?.seo !== undefined,
+    // SEO previews and copied block links resolve against the site URL.
+    enabled: model !== undefined && (model.seo !== undefined || model.blocks.length > 0),
     queryFn: client.loadBuildSite,
     queryKey: adminQueryKeys.buildSite,
   });
@@ -139,7 +142,11 @@ export function EntryPage() {
           ? undefined
           : { definition, value: form.getValues(location as never) },
       );
-      form.setError(location as never, { message, type: "server" });
+      // Publication reports required fields; a hidden block is exempt, so the summary can tell.
+      form.setError(location as never, {
+        message,
+        type: issue.code === "missing_required_field" ? PUBLICATION_ISSUE_TYPE : "server",
+      });
     }
     setUnmappedIssues(unmapped);
     showSummary();
@@ -371,6 +378,13 @@ export function EntryPage() {
       setCopyError("Could not copy local JSON. Select and copy it manually from your browser.");
     }
   };
+  const siteUrl = buildSite.data?.site?.url;
+  const publicPath =
+    model === undefined || currentEntry === undefined
+      ? undefined
+      : resolvedPublicPath(model, currentEntry);
+  const blockLinkBase =
+    siteUrl === undefined || publicPath === undefined ? undefined : siteUrlFor(siteUrl, publicPath);
   const problems = summaryShown
     ? validationProblems({
         // Errors change with every revalidation, which re-renders the page.
@@ -540,7 +554,9 @@ export function EntryPage() {
                 control={form.control}
                 errors={blockErrors}
                 getValues={form.getValues}
+                linkBase={blockLinkBase}
                 model={model}
+                readOnly={readOnly}
               />
             </div>
             <aside aria-label="Entry details" className="grid min-w-0 content-start gap-4">

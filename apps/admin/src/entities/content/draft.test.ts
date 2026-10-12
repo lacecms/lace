@@ -50,6 +50,8 @@ const entry = {
 test("fills block defaults and resolves the published public path first", () => {
   const values = draftValues(model, entry);
   expect(values.blocks[0]?.data).toEqual({ heading: "Hello" });
+  // Absent envelope text values are "" so loaded inputs match the dirty baseline.
+  expect(values.blocks[0]).toMatchObject({ anchor: "", className: "" });
   expect(values).toMatchObject({ slug: "draft-slug", title: "Draft" });
   expect(resolvedPublicPath(model, entry)).toBe("/posts/live-slug");
 });
@@ -143,4 +145,24 @@ test("loads, copies and omits the SEO group by model", () => {
     noindex: true,
     title: "SEO",
   });
+});
+
+test("loaded envelopes are kept and blank envelope text is never sent", () => {
+  const enveloped = {
+    ...entry,
+    draft: {
+      ...entry.draft,
+      blocks: [
+        { ...entry.draft.blocks[0], anchor: "pricing", className: "wide", hidden: true },
+        { ...entry.draft.blocks[0], key: "02J", type: "retired" },
+      ],
+    },
+  } as unknown as ContentEntryDto;
+  const values = draftValues(model, enveloped);
+  expect(values.blocks[0]).toMatchObject({ anchor: "pricing", className: "wide", hidden: true });
+  expect(values.blocks[1]).toMatchObject({ anchor: "", className: "", type: "retired" });
+  const sent = JSON.parse(localDraftJson(values)).blocks;
+  expect(sent[0]).toMatchObject({ anchor: "pricing", className: "wide", hidden: true });
+  expect(sent[1]).not.toHaveProperty("anchor");
+  expect(sent[1]).not.toHaveProperty("className");
 });

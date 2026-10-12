@@ -1,0 +1,30 @@
+## 1. Form values and local envelope validation
+
+- [x] 1.1 In `apps/admin/src/entities/content/draft.ts`, make `draftValues` hold `anchor` and `className` as strings (`""` when absent) for every loaded block; in `editor-form.ts`, make `withoutClearedValues` drop blank (trimmed) anchors and class names, send the class name trimmed and drop `null`/`undefined` setting values; update `draft.test.ts`/`editor-form.test.ts` (loaded draft is not dirty-relevant: values equal defaults; "Copy my JSON" and save payload omit blanks) (design 1).
+- [x] 1.2 Add envelope messages to `BLOCK_MESSAGES` and pure helpers `anchorProblem(anchor, otherAnchors)` and `classNameProblem(value)` built on `isBlockAnchor`/`normalizeBlockClassName`; extend the resolver with `anchor`, `className`, `settings.<key>` (`fieldProblem` per declared setting) and undeclared setting keys; map server codes `invalid_block_anchor`, `duplicate_block_anchor`, `invalid_block_class_name`, `invalid_block_hidden`, `invalid_block_settings` in `serverIssueMessage`; unit tests assert local and server messages are equal (design 2).
+- [x] 1.3 Extend `IssueLocation`, `issueLocation` and `locationField` for `/blocks/<i>/anchor`, `/className`, `/settings/<key>[/…]`, `/settings`, `/hidden`; extend `blockLevelProblems` with `hidden`, the `settings` root message and undeclared setting keys; update `editor-form.test.ts` and `validation-problems.test.ts` (design 9).
+
+## 2. Validation summary with Settings targets and hidden blocks
+
+- [x] 2.1 In `validation-problems.ts`, list per block: block-level problems, content fields, then anchor, declared settings and CSS classes, with labels naming label and position and " (hidden)" for hidden blocks; add `blocking` (false only for a `publication`-typed error in a hidden block) and order non-blocking problems last; unit tests cover order, labels and blocking (design 7).
+- [x] 2.2 In `EntryPage.applyServerIssues`, set `type: "publication"` for `missing_required_field` issues; in `EntryValidationSummary`, count blocking problems in the heading, show non-blocking ones under "In hidden blocks, does not block publishing", use the neutral heading and border when only non-blocking problems remain; the field control shows the hidden-block note for non-blocking errors; tests in `EntryPage.test.tsx` and a summary unit test (design 7).
+- [x] 2.3 Make `focusProblemTarget` dispatch a bubbling `lace:reveal-control` event when the target is inside a hidden tab panel and focus it after the card selects the tab (design 4).
+
+## 3. Block card tabs and Settings panel
+
+- [x] 3.1 In `BlockEditor`, keep per-block tab selection (`Map<key, "content" | "settings">`) beside the collapse set, pass `tab`, `onTabChange`, `readOnly`, `linkBase`, `onToggleHidden` and the other blocks' anchors to `BlockCard`, handle `lace:reveal-control` by selecting the tab with `flushSync`; start new blocks and duplicates with `anchor: ""`, `className: ""`; keep the envelope on undo (design 3, 4).
+- [x] 3.2 In `BlockCard`, render the body as `Tabs` with force-mounted *Content* and *Settings* panels (inactive panel `hidden`), problem markers in tab names from the block's error object, and the existing collapse behavior around both (design 3).
+- [x] 3.3 Build the Settings panel (new `BlockSettingsPanel` in `widgets/block-editor`): Anchor input with `#` adornment, live format/uniqueness message, description and Copy link (disabled while blank/invalid/repeated; clipboard + toast); Hide on site `Switch` with description; declared settings via `FieldRenderer` at `blocks.<i>.settings.<key>` under "Block settings"; CSS classes input with live message and description; component tests (design 2, 5).
+- [x] 3.4 Hidden presentation: muted background and dashed border, `Hidden` badge in the accessible name, *Hide block*/*Show block* menu item that sets `hidden` with `shouldDirty`, a polite status announcement naming label and position in `BlockEditor`, and `#anchor` in the header; tests in `BlockCard.test.tsx` and `BlockEditor.test.tsx` (design 6).
+- [x] 3.5 Viewer presentation: no tabs; content fields followed by a read-only *Settings* section (anchor or "None", visibility, declared settings read-only, CSS classes or "None"); no Copy link or hide/show; Hidden badge kept; tests (design 8).
+- [x] 3.6 In `EntryPage`, query the build site for every model and pass `linkBase` (`siteUrlFor(siteUrl, resolvedPublicPath)` or undefined) and `readOnly` to `BlockEditor`; test the copied absolute and fragment-only links (design 5).
+
+## 4. Browser tests
+
+- [x] 4.1 Add `apps/admin/e2e/block-envelope.e2e.ts` (mocked API, keyboard only): switch tabs with arrows/Home/End; type an invalid then a repeated anchor (live messages, Copy link disabled), fix it and copy the link (clipboard value); hide and show from the card menu and the switch (badge, announcement); change a declared `select` setting and enter CSS classes; Save and assert the exact request envelope; a server issue at `/blocks/1/anchor` opens the Settings tab from the summary; a publish rejected for a required field becomes non-blocking after hiding the block.
+- [x] 4.2 Extend `apps/admin/e2e/accessibility.e2e.ts` to audit, in both themes, an editor with a block's Settings tab open with an anchor problem, a hidden block and a viewer's read-only Settings section; keep the existing keyboard and 375px checks green.
+
+## 5. Documentation and verification
+
+- [x] 5.1 Update `docs/mvp-architecture.md` section 17 (block card tabs, Settings controls, hidden presentation, envelope issue mapping, hidden-block summary rule), `docs/adr/0012-block-envelope.md` consequences (the editor edits envelopes since CE6C) and `docs/content-editor-roadmap.md` (CE6 status, the corrected hidden-block summary wording; the session log row is added at archive).
+- [x] 5.2 Run `pnpm turbo run test --filter=@lacecms/app-admin`, the admin Playwright e2e (`pnpm --filter @lacecms/app-admin test:e2e`) and accessibility specs, root `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and `pnpm exec openspec validate ce06c-admin-block-envelope --type change --strict`.

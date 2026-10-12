@@ -3,7 +3,7 @@ import { expectNoAccessibilityViolations } from "./support/accessibility.js";
 import { expectVisibleFocus, tabTo } from "./support/keyboard.js";
 import { sessionPath, sessionSummary } from "./support/session.js";
 
-type Role = "admin" | "editor";
+type Role = "admin" | "editor" | "viewer";
 
 // Match API calls by pathname prefix so Vite module URLs under /src/shared/api
 // are never intercepted.
@@ -558,6 +558,37 @@ for (const theme of ["light", "dark"] as const) {
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(page.getByRole("alert", { name: "There is 1 problem to fix" })).toBeFocused();
     await expectNoAccessibilityViolations(page, "SEO card with a problem");
+  });
+
+  test(`block envelope controls pass the accessibility audit (${theme} theme)`, async ({
+    page,
+  }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page);
+    await openAdmin(page, "/content/home/entry-home", (current) =>
+      current.getByRole("tab", { name: "Settings" }).first(),
+    );
+    const card = page.locator("article[data-block-key]").first();
+    await card.getByRole("button", { name: "Actions for Hero block" }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitem", { name: "Hide block" }).click();
+    await expect(card).toHaveAccessibleName("Hero Hidden");
+    await card.getByRole("tab", { name: "Settings" }).click();
+    await card.getByRole("textbox", { name: "Anchor" }).fill("Bad Anchor");
+    await expect(card.getByText(/^Start with a lowercase letter/u)).toBeVisible();
+    await expectNoAccessibilityViolations(page, "block Settings tab with a hidden block");
+  });
+
+  test(`read-only block settings pass the accessibility audit (${theme} theme)`, async ({
+    page,
+  }) => {
+    await seedTheme(page, theme);
+    await mockAdmin(page, { role: "viewer" });
+    await openAdmin(page, "/content/home/entry-home", (current) =>
+      current.getByRole("region", { name: "Settings" }).first(),
+    );
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expectNoAccessibilityViolations(page, "read-only block settings");
   });
 
   for (const [screen, path, ready] of publicRoutes)

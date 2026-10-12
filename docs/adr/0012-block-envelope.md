@@ -78,9 +78,13 @@ the `0009` upgrade steps.
 ## Consequences
 
 - An admin older than the API would erase envelopes on save; the admin ships
-  with the API. Until CE6C the editor keeps loaded envelopes unchanged, starts
-  new blocks with setting defaults and drops the anchor from duplicated
-  blocks.
+  with the API. Since CE6C the editor edits envelopes in each block card's
+  *Settings* tab (anchor with live validation and a copy-link action, hidden
+  switch, declared settings, CSS classes), hides and shows blocks from the card
+  menu, starts new blocks with setting defaults and drops the anchor from
+  duplicated blocks. Its validation summary treats a publication-only problem
+  in a hidden block as not blocking publication; draft problems in hidden
+  blocks still block saving.
 - An older SDK rejects public blocks with envelope keys; SDK and API move
   together in the next alpha.
 - The CE1C migration signature changed before any published alpha shipped it.

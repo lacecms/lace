@@ -2,6 +2,9 @@ import { describe, expect, test } from "vitest";
 import type { ContentModelDto } from "@lacecms/contracts";
 import type { FieldMetadata } from "@lacecms/content";
 import {
+  anchorProblem,
+  BLOCK_MESSAGES,
+  classNameProblem,
   fieldProblem,
   initialModelFieldValues,
   isUlid,
@@ -9,6 +12,7 @@ import {
   locationField,
   serverIssueMessage,
   suggestSlug,
+  undeclaredSettingMessage,
   validateDraftValues,
   withoutClearedValues,
 } from "./editor-form.js";
@@ -152,14 +156,11 @@ describe("metadata-driven draft validation", () => {
       "blocks.0.schemaVersion",
     );
     expect(issueLocation("/blocks/0", blockModel, [block])).toBe("blocks.0.block");
-    // Envelope issues have no control until the Settings tab exists; they stay on the block.
-    for (const pointer of [
-      "/blocks/0/anchor",
-      "/blocks/0/className",
-      "/blocks/0/hidden",
-      "/blocks/0/settings",
-      "/blocks/0/settings/align",
-    ]) {
+    // Anchor and class name have Settings controls; other envelope issues stay on the block.
+    expect(issueLocation("/blocks/0/anchor", blockModel, [block])).toBe("blocks.0.anchor");
+    expect(issueLocation("/blocks/0/className", blockModel, [block])).toBe("blocks.0.className");
+    expect(issueLocation("/blocks/0/anchor/x", blockModel, [block])).toBeUndefined();
+    for (const pointer of ["/blocks/0/hidden", "/blocks/0/settings", "/blocks/0/settings/align"]) {
       expect(issueLocation(pointer, blockModel, [block])).toBe("blocks.0.block");
     }
     expect(issueLocation("/blocks/0/data", blockModel, [block])).toBe("blocks.0.block");
@@ -264,6 +265,23 @@ describe("metadata-driven draft validation", () => {
   });
 });
 
+test("blank envelope text and cleared settings are left out before saving", () => {
+  const block = { data: {}, hidden: false, key: "k", position: 0, schemaVersion: 1, type: "cta" };
+  expect(
+    withoutClearedValues({
+      blocks: [
+        { ...block, anchor: "", className: "  ", settings: { align: null, size: 2 } },
+        { ...block, anchor: "pricing", className: " wide  md:w-1/2 ", settings: {} },
+      ],
+      fields: {},
+      title: "T",
+    } as never).blocks,
+  ).toEqual([
+    { ...block, settings: { size: 2 } },
+    { ...block, anchor: "pricing", className: "wide  md:w-1/2", settings: {} },
+  ]);
+});
+
 test("cleared values are removed from fields and block data before saving", () => {
   expect(
     withoutClearedValues({
@@ -340,5 +358,129 @@ describe("SEO validation and issue mapping", () => {
     expect(serverIssueMessage({ code: "seo_not_allowed", message: "is not enabled." })).toBe(
       "SEO is no longer enabled for this model. Reload the entry to continue.",
     );
+  });
+});
+
+describe("block envelope validation", () => {
+  const envelopeModel = {
+    blockDefinitions: [
+      {
+        fields: { heading: { required: true, type: "text" } },
+        settings: {
+          align: {
+            defaultValue: "left",
+            options: ["left", "center"],
+            required: false,
+            type: "select",
+          },
+        },
+        type: "hero",
+        version: 1,
+      },
+    ],
+    blocks: ["hero"],
+    fields: {},
+    key: "home",
+    kind: "page" as const,
+    path: "/",
+    version: 1,
+  } as unknown as ContentModelDto;
+  const block = (key: string, envelope: Record<string, unknown>) => ({
+    anchor: "",
+    className: "",
+    data: { heading: "Hi" },
+    hidden: false,
+    key,
+    position: 1_000,
+    schemaVersion: 1,
+    settings: { align: "left" },
+    type: "hero",
+    ...envelope,
+  });
+  const first = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+  const second = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
+
+  test("anchors are checked for format and repeats, hidden blocks included", () => {
+    expect(anchorProblem("", ["pricing"])).toBeUndefined();
+    expect(anchorProblem("pricing", ["faq"])).toBeUndefined();
+    expect(anchorProblem("Pricing Table", [])).toBe(BLOCK_MESSAGES.anchorFormat);
+    expect(anchorProblem("pricing", ["pricing"])).toBe(BLOCK_MESSAGES.duplicateAnchor);
+    expect(
+      validateDraftValues(envelopeModel, {
+        blocks: [
+          block(first, { anchor: "pricing" }),
+          block(second, { anchor: "pricing", hidden: true }),
+        ],
+        fields: {},
+        title: "Home",
+      }),
+    ).toMatchObject({
+      blocks: {
+        0: { anchor: { message: BLOCK_MESSAGES.duplicateAnchor } },
+        1: { anchor: { message: BLOCK_MESSAGES.duplicateAnchor } },
+      },
+    });
+  });
+
+  test("class names and settings are validated like the server", () => {
+    expect(classNameProblem("  ")).toBeUndefined();
+    expect(classNameProblem(" wide  md:w-1/2 ")).toBeUndefined();
+    expect(classNameProblem("1bad")).toBe(BLOCK_MESSAGES.className);
+    const errors = validateDraftValues(envelopeModel, {
+      blocks: [block(first, { className: "1bad", settings: { align: "right", size: 2 } })],
+      fields: {},
+      title: "Home",
+    });
+    expect(errors).toMatchObject({
+      blocks: {
+        0: {
+          className: { message: BLOCK_MESSAGES.className },
+          settings: {
+            align: { message: "Choose one of the listed options." },
+            size: { message: undeclaredSettingMessage("size") },
+          },
+        },
+      },
+    });
+  });
+
+  test("declared settings map to their controls and descriptors", () => {
+    const blocks = [block(first, {})];
+    expect(issueLocation("/blocks/0/settings/align", envelopeModel, blocks)).toBe(
+      "blocks.0.settings.align",
+    );
+    expect(issueLocation("/blocks/0/settings/align/deep", envelopeModel, blocks)).toBe(
+      "blocks.0.settings.align",
+    );
+    expect(issueLocation("/blocks/0/settings/size", envelopeModel, blocks)).toBe("blocks.0.block");
+    expect(issueLocation("/blocks/0/settings", envelopeModel, blocks)).toBe("blocks.0.block");
+    expect(locationField("blocks.0.settings.align", envelopeModel, blocks)).toMatchObject({
+      type: "select",
+    });
+  });
+
+  test("server envelope codes use the local sentences", () => {
+    expect(serverIssueMessage({ code: "invalid_block_anchor", message: "x" })).toBe(
+      anchorProblem("Bad", []),
+    );
+    expect(serverIssueMessage({ code: "duplicate_block_anchor", message: "x" })).toBe(
+      anchorProblem("a", ["a"]),
+    );
+    expect(serverIssueMessage({ code: "invalid_block_class_name", message: "x" })).toBe(
+      classNameProblem("1bad"),
+    );
+    expect(serverIssueMessage({ code: "invalid_block_settings", message: "x" })).toBe(
+      BLOCK_MESSAGES.invalidSettings,
+    );
+    expect(serverIssueMessage({ code: "invalid_block_hidden", message: "x" })).toBe(
+      BLOCK_MESSAGES.invalidSettings,
+    );
+    expect(
+      serverIssueMessage({
+        code: "unknown_field",
+        message: "x",
+        path: "/blocks/0/settings/size",
+      }),
+    ).toBe(undeclaredSettingMessage("size"));
   });
 });
