@@ -115,6 +115,53 @@ For a custom block, export its `defineBlock` value from a module that
 `pnpm exec lace add block <type> --site ..` to scaffold a typed component with
 the styling hooks and register it in the block map.
 
+Editors can give a block an in-page anchor, an extra CSS class name and the
+settings its definition declares, and can hide it. Components also receive
+`anchor` and `className` when the block has them, and `settings` with every
+declared default applied. Place the anchor as the `id` of the component's root
+element and merge the class name into its `class`; Astro leaves out an
+`undefined` attribute, so a block without them renders unchanged:
+
+```astro
+---
+import type { BlockProps } from "@lacecms/render";
+import type * as definitions from "../../../cms/lace.blocks";
+
+type Props = BlockProps<typeof definitions.banner>;
+
+const { anchor, block, className, data, settings } = Astro.props;
+---
+
+<section class:list={["banner", `banner--${settings.tone}`, className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+  <p data-lace-part="message">{data.message}</p>
+</section>
+```
+
+Declare settings beside the fields with the `select`, `boolean`, `number` or
+`text` builders, each with a `defaultValue`; `settings` is then typed with
+every declared key present. Settings are part of the block definition, so
+adding or changing one needs a version increase and a migration, which
+receives and returns `{ data, settings }`:
+
+```ts
+export const banner = defineBlock({
+  type: "banner",
+  version: 1,
+  fields: { message: field.text({ required: true }) },
+  settings: {
+    tone: field.select({ options: ["info", "warning"], defaultValue: "info" }),
+  },
+});
+```
+
+Anchors are unique within one entry, so a link such as `#pricing` in a URL or
+rich-text field reaches the block on that entry's page; keep anchors distinct
+yourself when a page renders blocks of several entries, such as a global. A
+hidden block stays in Admin and in the published entry but is never delivered:
+the build export leaves it out and `LaceBlocks` never renders it. An invalid
+anchor, class name or settings value fails the build with
+`invalid_block_envelope` and its block.
+
 ## 6. Render a page and a collection
 
 Read entries from the published site by path, or by model and slug. Your
@@ -336,7 +383,9 @@ const { element } = Astro.props;
 
 Target `data-lace-model`, `data-lace-entry`, `data-lace-block`,
 `data-lace-block-key` and `data-lace-part`; tag names and incidental classes are
-not part of the contract:
+not part of the contract. A block's `id` and its editor class name are content
+that editors choose and change, so style them only for classes you offer
+editors on purpose (and keep those classes in any CSS purge safelist):
 
 ```css
 /* Style Lace content only through the public data-lace-* hooks. */

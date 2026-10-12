@@ -1,14 +1,34 @@
-import { ContentValidationError, effectiveAltText, validateBlockData } from "@lacecms/content";
-import type { BlockDataValues, BlockDefinition, ModelFieldDefinitions } from "@lacecms/content";
+import {
+  ContentValidationError,
+  effectiveAltText,
+  isBlockAnchor,
+  normalizeBlockClassName,
+  validateBlockData,
+  validateBlockSettings,
+} from "@lacecms/content";
+import type {
+  BlockDataValues,
+  BlockDefinition,
+  BlockSettingsValues,
+  ModelFieldDefinitions,
+} from "@lacecms/content";
 import { LaceRenderError } from "./errors.js";
 import type { BlockContext } from "./errors.js";
 
-/** The structural block shape the render core reads; the public block DTO satisfies it. */
+/**
+ * The structural block shape the render core reads; the public and admin block
+ * DTOs satisfy it. Hidden blocks are skipped; the public DTO never has one.
+ */
 export interface RenderableBlock {
+  readonly anchor?: string | undefined;
+  readonly className?: string | undefined;
   readonly data: unknown;
+  readonly hidden?: boolean | undefined;
   readonly key: string;
   readonly position: number;
   readonly schemaVersion: number;
+  /** Stored settings; a missing value reads as `{}`. */
+  readonly settings?: unknown;
   readonly type: string;
 }
 
@@ -46,8 +66,8 @@ export interface ImageDescription {
 /** Describes one media usage; the optional usage alt overrides the media alt. */
 export type ImageDescriber = (mediaId: string, usageAlt?: string | null) => ImageDescription;
 
-// oxlint-disable-next-line typescript/no-explicit-any -- definitions vary by field record.
-type AnyBlockDefinition = BlockDefinition<any>;
+// oxlint-disable-next-line typescript/no-explicit-any -- definitions vary by field and settings record.
+type AnyBlockDefinition = BlockDefinition<any, any>;
 
 /** The parsed data type of a block definition. */
 export type BlockDataOf<Definition extends AnyBlockDefinition> =
@@ -55,16 +75,38 @@ export type BlockDataOf<Definition extends AnyBlockDefinition> =
     ? BlockDataValues<Fields>
     : never;
 
+/** The parsed settings type of a block definition; every declared setting is present. */
+export type BlockSettingsOf<Definition extends AnyBlockDefinition> =
+  Definition extends BlockDefinition<
+    infer _Fields extends ModelFieldDefinitions,
+    infer Settings extends ModelFieldDefinitions
+  >
+    ? BlockSettingsValues<Settings>
+    : never;
+
+/** A block's validated envelope: anchor and class name when set, and settings with defaults. */
+export interface ParsedBlockEnvelope<Definition extends AnyBlockDefinition = BlockDefinition> {
+  readonly anchor?: string;
+  readonly className?: string;
+  readonly settings: BlockSettingsOf<Definition>;
+}
+
 /** Builds a public media URL for a media identifier. */
 export type MediaUrlBuilder = (mediaId: string) => string;
 
 /** The props every framework adapter passes to a block component. */
 export interface BlockProps<Definition extends AnyBlockDefinition = BlockDefinition> {
+  /** The block's in-page anchor; components place it as their root `id`. */
+  readonly anchor?: string;
   readonly block: RenderableBlock;
+  /** The editor's normalized class name; components merge it into their root `class`. */
+  readonly className?: string;
   readonly context: BlockContext;
   readonly data: BlockDataOf<Definition>;
   readonly image: ImageDescriber;
   readonly mediaUrl: MediaUrlBuilder;
+  /** The block's settings with every declared default applied. */
+  readonly settings: BlockSettingsOf<Definition>;
 }
 
 /** Pairs a block definition with the adapter-specific component that renders it. */
@@ -123,6 +165,57 @@ export function parseBlock<Definition extends AnyBlockDefinition>(
     }
     throw error;
   }
+}
+
+/**
+ * Validates a block's envelope: the anchor format, the class name (returned
+ * normalized), and the settings against the definition's declared settings
+ * with defaults applied. Failures use `invalid_block_envelope`.
+ */
+export function parseBlockEnvelope<Definition extends AnyBlockDefinition>(
+  definition: Definition,
+  block: RenderableBlock,
+  context: BlockContext,
+): ParsedBlockEnvelope<Definition> {
+  if (block.anchor !== undefined && !isBlockAnchor(block.anchor)) {
+    throw new LaceRenderError(
+      "invalid_block_envelope",
+      "an anchor must start with a lowercase letter and use only lowercase letters, digits and hyphens, up to 64 characters.",
+      { context, fieldPath: ["anchor"] },
+    );
+  }
+  let className: string | undefined;
+  if (block.className !== undefined) {
+    className = normalizeBlockClassName(block.className);
+    if (className === undefined) {
+      throw new LaceRenderError(
+        "invalid_block_envelope",
+        "a class name must hold 1 to 16 valid class tokens, up to 256 characters.",
+        { context, fieldPath: ["className"] },
+      );
+    }
+  }
+  let settings: BlockSettingsOf<Definition>;
+  try {
+    settings = validateBlockSettings(definition, block.settings ?? {}, [
+      "settings",
+    ]) as BlockSettingsOf<Definition>;
+  } catch (error) {
+    if (error instanceof ContentValidationError) {
+      const issue = error.issues[0];
+      throw new LaceRenderError(
+        "invalid_block_envelope",
+        issue === undefined ? error.message : issue.message,
+        { cause: error, context, fieldPath: issue?.path ?? ["settings"] },
+      );
+    }
+    throw error;
+  }
+  return Object.freeze({
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(className === undefined ? {} : { className }),
+    settings,
+  });
 }
 
 /** Defines an immutable block map; each key must equal its definition's type. */
@@ -204,26 +297,33 @@ export function createImageDescriber(
   };
 }
 
-/** Resolves and parses an entry's blocks in order, producing each component and its props. */
+/**
+ * Resolves and parses an entry's visible blocks in order, producing each
+ * component and its props. Hidden blocks are left out before resolving, so
+ * they never render and never fail preparation.
+ */
 export function prepareBlocks<Component>(
   map: BlockMap<Component>,
   entry: RenderableEntry,
   mediaUrl: MediaUrlBuilder,
 ): readonly PreparedBlock<Component>[] {
   return Object.freeze(
-    entry.blocks.map((block) => {
-      const context: BlockContext = Object.freeze({
-        blockKey: block.key,
-        entryId: entry.id,
-        modelKey: entry.modelKey,
-      });
-      const { component, definition } = resolveBlock(map, block, context);
-      const data = parseBlock(definition, block, context);
-      const image = createImageDescriber(entry, mediaUrl, context);
-      return Object.freeze({
-        component,
-        props: Object.freeze({ block, context, data, image, mediaUrl }),
-      });
-    }),
+    entry.blocks
+      .filter((block) => block.hidden !== true)
+      .map((block) => {
+        const context: BlockContext = Object.freeze({
+          blockKey: block.key,
+          entryId: entry.id,
+          modelKey: entry.modelKey,
+        });
+        const { component, definition } = resolveBlock(map, block, context);
+        const data = parseBlock(definition, block, context);
+        const envelope = parseBlockEnvelope(definition, block, context);
+        const image = createImageDescriber(entry, mediaUrl, context);
+        return Object.freeze({
+          component,
+          props: Object.freeze({ ...envelope, block, context, data, image, mediaUrl }),
+        });
+      }),
   );
 }

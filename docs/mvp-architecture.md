@@ -1804,13 +1804,25 @@ framework and never reads `process.env` or `import.meta.env` itself.
   rejects a key that differs from its definition type, and returns a frozen
   map. `resolveBlock(map, block, context)` returns the entry or fails on an
   unknown block type, which preserves the build-failure behavior for blocks a
-  site cannot render. `prepareBlocks(map, entry, mediaUrl)` resolves and parses
-  an entry's blocks in order and returns each mapped component with its
-  `BlockProps`, so adapters only render the result. A `RenderableEntry` may
+  site cannot render. `prepareBlocks(map, entry, mediaUrl)` leaves out every
+  block marked `hidden` before resolving it (a defensive skip: public blocks are
+  never hidden), then resolves and parses the remaining blocks in order and
+  returns each mapped component with its `BlockProps`, so adapters only render
+  the result. `RenderableBlock` carries optional `anchor`, `className`,
+  `hidden` and `settings`, so the public and the admin block DTOs both satisfy
+  it. A `RenderableEntry` may
   carry `media(mediaId)` resolving its media; `PublishedEntry` does.
+- `parseBlockEnvelope(definition, block, context)` checks the anchor with
+  `isBlockAnchor`, normalizes the class name with `normalizeBlockClassName`
+  and validates the settings with `validateBlockSettings`, applying every
+  declared default to a missing or partial record.
 - `BlockProps<Definition>` is the prop contract every adapter passes to a block
-  component: `block`, parsed `data`, `context`, `mediaUrl`, and
-  `image(mediaId, usageAlt?)`. `image()` returns an `ImageDescription`
+  component: `block`, parsed `data`, typed `settings`
+  (`BlockSettingsOf<Definition>`, every declared key present, `{}` without
+  declared settings), `anchor` and the normalized `className` when the block
+  has them, `context`, `mediaUrl`, and `image(mediaId, usageAlt?)`. Components
+  place `anchor` as their root `id` and merge `className` into their root
+  `class`; there is no wrapper element. `image()` returns an `ImageDescription`
   (`src`, effective `alt`, and when known `width`, `height`, `caption`, and an
   `objectPosition` of `X% Y%` from the focal point) so blocks avoid layout
   shift and honour the focal point. An entry without resolved media falls back
@@ -1823,8 +1835,9 @@ framework and never reads `process.env` or `import.meta.env` itself.
   (a link `href` has passed `isSafeUrl`), and `source` names the originating
   node or mark. No raw HTML string is produced.
 - **Errors:** `LaceRenderError` with codes `invalid_block_data`,
-  `block_version_mismatch`, `unknown_block_type`, `invalid_rich_text`, and
-  `missing_media`,
+  `invalid_block_envelope` (anchor, class name or settings, with the field
+  path), `block_version_mismatch`, `unknown_block_type`, `invalid_rich_text`,
+  and `missing_media`,
   carrying the context, the field path, and the underlying
   `ContentValidationError` as `cause`. Messages name model, entry, block key,
   and field path.
@@ -1845,9 +1858,10 @@ no client scripts, and requires no Astro integration. Override components for
   inside externalized dependencies. The module fails fast when evaluated in a
   browser; `LACE_BUILD_TOKEN` must never reach a client bundle.
 - `@lacecms/astro/LaceBlocks.astro` takes `entry`, `blocks` (the block map), and
-  `mediaUrl`, resolves and parses each block in order, and renders the mapped
-  component with `BlockProps`, including the `image()` describer bound to the
-  entry's resolved media.
+  `mediaUrl`, resolves and parses each visible block in order, and renders the
+  mapped component with `BlockProps`, including the envelope props and the
+  `image()` describer bound to the entry's resolved media. It renders no hidden
+  block and adds no wrapper markup.
 - `@lacecms/astro/LaceSeo.astro` takes a resolved `seo` value and an optional
   `type` (`website` or `article`) and renders `<title>`, the description,
   canonical and robots tags, Open Graph (`og:image` with width, height and
@@ -1901,6 +1915,13 @@ map file, checks installed package versions against item ranges, checks
 built-in definition versions against `lace.config.ts`, and scaffolds a typed
 component for a configured custom block that has no registry item. Ownership
 and conflict rules are in section 7.
+
+Registry components and scaffolds follow one root-element convention: the
+block's `anchor` is the root `id` and its `className` follows the component's
+own classes in the root `class` (`class:list={["hero", className]}`, or
+`class={className}` for a root without classes). Astro omits `undefined`
+attributes, so a block without an envelope renders the markup of earlier
+revisions.
 
 ### 13.6 Framework selection
 
@@ -2009,11 +2030,11 @@ import type { builtInBlocks } from "@lacecms/content";
 import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.hero>;
-const { block, data, image } = Astro.props;
+const { anchor, block, className, data, image } = Astro.props;
 const media = data.image === undefined ? undefined : image(data.image);
 ---
 
-<section class="hero" data-lace-block={block.type} data-lace-block-key={block.key}>
+<section class:list={["hero", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   <h1 data-lace-part="heading">{data.heading}</h1>
   {data.body && <div data-lace-part="body"><RichText document={data.body} /></div>}
   {media && <img alt={media.alt} data-lace-part="media" height={media.height} src={media.src} width={media.width} />}

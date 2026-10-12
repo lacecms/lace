@@ -14,6 +14,23 @@
                     }
                   ],
                   "type": "paragraph"
+                },
+                {
+                  "content": [
+                    {
+                      "marks": [
+                        {
+                          "attrs": {
+                            "href": "#get-started"
+                          },
+                          "type": "link"
+                        }
+                      ],
+                      "text": "See how to start",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
                 }
               ],
               "type": "doc"
@@ -30,6 +47,8 @@
           "type": "hero"
         },
         {
+          "anchor": "get-started",
+          "className": "cta--highlight",
           "data": {
             "actionLabel": "Get started",
             "actionUrl": "https://lace.example/docs",
@@ -162,6 +181,7 @@
           "type": "richText"
         },
         {
+          "className": "full-bleed",
           "data": {
             "alt": "A durable media URL",
             "caption": "Media is served by Lace.",

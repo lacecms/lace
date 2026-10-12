@@ -368,7 +368,7 @@ Style your site with its own stylesheets. Stable hooks are `data-lace-model`, `d
 }
 ```
 
-Block keys are unique within an entry, so scope instance selectors by entry. Built-in parts: hero `eyebrow`, `heading`, `body`, `media`, `action`; richText `content`; image `media`, `caption`; quote `text`, `attribution`; cta `heading`, `body`, `action`. Optional parts are absent when their content is absent.
+Block keys are unique within an entry, so scope instance selectors by entry. Built-in parts: hero `eyebrow`, `heading`, `body`, `media`, `action`; richText `content`; image `media`, `caption`; quote `text`, `attribution`; cta `heading`, `body`, `action`. Optional parts are absent when their content is absent. A block's `id` (its in-page anchor) and its editor class name are content that editors set in Admin, not part of the `data-lace-*` styling contract; style an editor class only when you offer it on purpose. Hidden blocks are never rendered.
 
 <!-- lace-site: end -->
 

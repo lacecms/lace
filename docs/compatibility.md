@@ -200,8 +200,28 @@ beside its data:
   `BLOCK_MIGRATION_INVALID`.
 
 It requires migration `0009_content_block_envelope` (additive columns and a
-partial unique index). Rendering anchors, classes and settings in block
-components comes with the site packages and template of CE6B.
+partial unique index). Back up first: an older engine would deliver hidden
+blocks, so rolling back once envelopes exist restores the backup.
+
+The site packages of the same next alpha render the envelope (CE6B, source
+template `0.26.0`):
+
+- `@lacecms/render`: `RenderableBlock` accepts optional `anchor`,
+  `className`, `hidden` and `settings`; `prepareBlocks` skips hidden blocks;
+  `BlockProps` gains `anchor`, `className` and typed `settings`
+  (`BlockSettingsOf`); `parseBlockEnvelope` is exported; the new error code
+  `invalid_block_envelope` reports an invalid anchor, class name or settings
+  value. The additions are additive for TypeScript;
+- registry block revisions `cta` 2, `hero` 3, `image` 4, `quote` 2 and
+  `richText` 2 place the anchor as the root `id` and merge the class name
+  into the root `class`, with unchanged markup without an envelope; `lace add
+  block` scaffolds custom components the same way.
+
+Template `0.26.0` ships these components and the `0009` upgrade steps. Block
+components are user-owned, so existing sites adopt them with
+`pnpm exec lace add block --all` (edited components are reported as
+conflicts); components that ignore the new props keep rendering without ids
+or editor classes.
 
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for

@@ -97,8 +97,26 @@ test("the fixture build emits published static routes without CMS access", () =>
     /<main data-lace-model="home" data-lace-entry="home-entry"><section class="hero" data-lace-block="hero" data-lace-block-key="home-hero">.*?<h1 data-lace-part="heading">/su,
   );
   expect(post).toMatch(
-    /<main data-lace-model="posts" data-lace-entry="first-post-entry">.*?<figure data-lace-block="image" data-lace-block-key="post-image">/su,
+    /<main data-lace-model="posts" data-lace-entry="first-post-entry">.*?<figure class="full-bleed" data-lace-block="image" data-lace-block-key="post-image">/su,
   );
+
+  // Block anchors become root ids, editor classes follow the component's own
+  // classes, and an in-page link reaches the anchored block.
+  expect(home).toContain('<a href="#get-started">See how to start</a>');
+  expect(home.match(/\bid="get-started"/gu)).toHaveLength(1);
+  expect(home).toContain(
+    '<aside class="cta cta--highlight" data-lace-block="cta" data-lace-block-key="home-cta" id="get-started">',
+  );
+  expect(post).not.toMatch(/<figure\b[^>]*\bid=/u);
+  for (const html of [about, note]) {
+    expect(html).not.toMatch(
+      /<(?:section|figure|blockquote|aside)\b[^>]*data-lace-block=[^>]*\bid=/u,
+    );
+  }
+  expect(about).toContain(
+    '<section class="hero" data-lace-block="hero" data-lace-block-key="about-hero">',
+  );
+  expect(note).toContain('<blockquote data-lace-block="quote" data-lace-block-key="note-quote">');
 
   expect(home).toContain("The static Lace starter");
   expect(home).toContain("[data-lace-block=hero]");

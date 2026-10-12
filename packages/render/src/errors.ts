@@ -11,6 +11,7 @@ export interface BlockContext {
 export type LaceRenderErrorCode =
   | "block_version_mismatch"
   | "invalid_block_data"
+  | "invalid_block_envelope"
   | "invalid_rich_text"
   | "missing_media"
   | "unknown_block_type";

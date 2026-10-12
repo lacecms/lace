@@ -124,10 +124,10 @@ import type * as definitions from "../../../../lace.blocks";
 
 type Props = BlockProps<typeof definitions.faq>;
 
-const { block, context, data, mediaUrl } = Astro.props;
+const { anchor, block, className, context, data, mediaUrl } = Astro.props;
 ---
 
-<section data-lace-block={block.type} data-lace-block-key={block.key}>
+<section class={className} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   <p data-lace-part="question">{data.question}</p>
   {data.answer !== undefined && <div data-lace-part="answer"><RichText context={{ block: context, fieldPath: ["answer"] }} document={data.answer} /></div>}
   {data.photo !== undefined && <img alt="" data-lace-part="photo" src={mediaUrl(data.photo)} />}

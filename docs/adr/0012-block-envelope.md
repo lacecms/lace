@@ -62,6 +62,19 @@ and public DTOs and every user-owned block component.
    always return `hidden` and `settings`; public parsing treats a missing
    `settings` as `{}`.
 
+### Rendering (CE6B)
+
+The render core skips hidden blocks before resolving them, so a hidden block
+that reaches it outside the SDK never renders or fails a build. Block props
+gain `anchor`, the normalized `className` and `settings` typed from the
+definition with defaults applied; an invalid anchor, class name or settings
+value fails with `invalid_block_envelope`. Built-in registry components
+(revisions `cta` 2, `hero` 3, `image` 4, `quote` 2, `richText` 2) and custom
+scaffolds put the anchor on their root `id` and the class name after their own
+root classes, with unchanged markup when a block has neither. Anchors are
+unique per entry, not per page. Template `0.26.0` delivers the components and
+the `0009` upgrade steps.
+
 ## Consequences
 
 - An admin older than the API would erase envelopes on save; the admin ships

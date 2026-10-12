@@ -11,6 +11,7 @@ import {
   defineBlockMap,
   describeRichText,
   parseBlock,
+  parseBlockEnvelope,
   prepareBlocks,
   resolveBlock,
 } from "../dist/index.js";
@@ -200,6 +201,7 @@ test("prepareBlocks returns components and props in block order", () => {
     data: { quote: "Middle" },
     image: expect.any(Function),
     mediaUrl,
+    settings: {},
   });
   expect(Object.isFrozen(prepared)).toBe(true);
 });
@@ -284,6 +286,114 @@ test("entries without resolved media fall back to the media URL builder", () => 
     src: "https://api.example/media/office",
   });
   expect(prepared.props.image("office").alt).toBe("");
+});
+
+const banner = defineBlock({
+  fields: { message: field.text({ required: true }) },
+  settings: {
+    compact: field.boolean({ defaultValue: false }),
+    layout: field.select({ defaultValue: "wide", options: ["wide", "narrow"] }),
+  },
+  type: "banner",
+  version: 1,
+});
+const envelopeMap = defineBlockMap({
+  banner: { component: "Banner", definition: banner },
+  cta: { component: "Cta", definition: builtInBlocks.cta },
+  hero: { component: "Hero", definition: builtInBlocks.hero },
+});
+
+function prepareEnvelope(...blocks) {
+  return prepareBlocks(envelopeMap, { blocks, id: "entry-1", modelKey: "home" }, () => "");
+}
+
+test("prepareBlocks skips hidden blocks and keeps the order of the visible ones", () => {
+  const prepared = prepareEnvelope(
+    block("hero", { heading: "Top" }, { key: "a" }),
+    block("quote", { quote: "Hidden" }, { hidden: true, key: "b", position: 1 }),
+    block(
+      "cta",
+      { actionLabel: "Go", actionUrl: "/go", heading: "End" },
+      { hidden: false, key: "c", position: 2 },
+    ),
+  );
+  expect(prepared.map(({ props }) => props.block.key)).toEqual(["a", "c"]);
+});
+
+test.each([
+  ["an unknown type", block("gallery", {}, { hidden: true, key: "g" })],
+  ["an older version", block("hero", { heading: "Old" }, { hidden: true, schemaVersion: 0 })],
+  ["invalid data", block("hero", {}, { hidden: true })],
+  ["an invalid envelope", block("hero", { heading: "x" }, { anchor: "Bad", hidden: true })],
+])("a hidden block with %s never fails preparation", (_name, hidden) => {
+  expect(prepareEnvelope(hidden)).toEqual([]);
+});
+
+test("block props carry the anchor, the normalized class name and parsed settings", () => {
+  const [prepared] = prepareEnvelope(
+    block(
+      "banner",
+      { message: "Hi" },
+      { anchor: "pricing", className: "wide  dark wide", settings: { layout: "narrow" } },
+    ),
+  );
+  expect(prepared.props).toMatchObject({
+    anchor: "pricing",
+    className: "wide dark",
+    data: { message: "Hi" },
+    settings: { compact: false, layout: "narrow" },
+  });
+});
+
+test("a block without an envelope gets no anchor or class name and empty settings", () => {
+  const [prepared] = prepareEnvelope(block("hero", { heading: "Top" }));
+  expect(Object.hasOwn(prepared.props, "anchor")).toBe(false);
+  expect(Object.hasOwn(prepared.props, "className")).toBe(false);
+  expect(prepared.props.settings).toEqual({});
+});
+
+test("declared setting defaults apply to missing and empty settings", () => {
+  for (const overrides of [{}, { settings: {} }]) {
+    const [prepared] = prepareEnvelope(block("banner", { message: "Hi" }, overrides));
+    expect(prepared.props.settings).toEqual({ compact: false, layout: "wide" });
+  }
+});
+
+test.each([
+  ["an undeclared setting", { settings: { width: 3 } }, ["settings", "width"]],
+  ["an invalid setting value", { settings: { layout: "tall" } }, ["settings", "layout"]],
+  ["non-object settings", { settings: [] }, ["settings"]],
+  ["an invalid anchor", { anchor: "Pricing Table" }, ["anchor"]],
+  ["an invalid class name", { className: "<script>" }, ["className"]],
+  ["a blank class name", { className: "   " }, ["className"]],
+])("%s fails with invalid_block_envelope", (_name, overrides, fieldPath) => {
+  const error = captureError(() =>
+    prepareEnvelope(block("banner", { message: "Hi" }, { key: "b-1", ...overrides })),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("invalid_block_envelope");
+  expect(error.context).toEqual({ blockKey: "b-1", entryId: "entry-1", modelKey: "home" });
+  expect(error.fieldPath).toEqual(fieldPath);
+  expect(error.message).toContain("Cannot render block b-1 of model home entry entry-1");
+  expect(error.message).toContain(`at field ${fieldPath.join(".")}`);
+});
+
+test("an undeclared setting keeps the validation failure as its cause", () => {
+  const error = captureError(() =>
+    parseBlockEnvelope(
+      builtInBlocks.hero,
+      block("hero", {}, { settings: { tone: "dark" } }),
+      context,
+    ),
+  );
+  expect(error.cause).toBeInstanceOf(ContentValidationError);
+});
+
+test("a version mismatch is reported before an invalid envelope", () => {
+  const error = captureError(() =>
+    prepareEnvelope(block("banner", { message: "Hi" }, { anchor: "Bad", schemaVersion: 2 })),
+  );
+  expect(error.code).toBe("block_version_mismatch");
 });
 
 test("prepareBlocks fails on a block the site cannot render", () => {

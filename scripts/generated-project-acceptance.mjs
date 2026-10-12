@@ -547,8 +547,15 @@ async function nodeJourney(context) {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Published rich text" }] }],
   };
+  // The hero carries an anchor and an editor class; a hidden quote is stored and
+  // published but must never reach the built site.
   const blocks = [
-    { type: "hero", data: { heading: "Published hero", image: mediaId } },
+    {
+      type: "hero",
+      anchor: "intro",
+      className: "hero--wide",
+      data: { heading: "Published hero", image: mediaId },
+    },
     { type: "richText", data: { content: richText } },
     {
       type: "image",
@@ -559,6 +566,7 @@ async function nodeJourney(context) {
       type: "cta",
       data: { heading: "Published call to action", actionLabel: "Home", actionUrl: "/" },
     },
+    { type: "quote", hidden: true, data: { quote: "Hidden acceptance quote" } },
   ].map((block, index) => {
     const schemaVersion = blockVersions.get(block.type);
     if (schemaVersion === undefined) throw new Error(`edit: posts does not allow ${block.type}`);
@@ -637,9 +645,14 @@ async function nodeJourney(context) {
     if (!html.includes(`data-lace-block="${type}"`))
       throw new Error(`astro-build: missing ${type}`);
   }
+  if (!/<section class="hero hero--wide" [^>]*\bid="intro"/u.test(html))
+    throw new Error("astro-build: hero anchor or editor class missing");
+  const hiddenKey = blocks.find((block) => block.hidden === true)?.key ?? "";
+  if (html.includes("Hidden acceptance quote") || html.includes(hiddenKey))
+    throw new Error("astro-build: hidden block rendered");
   if (html.includes(buildToken)) throw new Error("astro-build: exposed build token");
   console.info(
-    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish and Astro build passed",
+    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish with block envelopes and Astro build passed",
   );
   return { base, cookie, png, entryId, mediaId, blocks, buildToken, token, password, email };
 }
@@ -1059,6 +1072,15 @@ async function starterJourney(project) {
     !html.includes('<img alt="A durable media URL" data-lace-part="media" height="600"')
   )
     throw new Error("starter-build: resolved media alt text, dimensions or focal point missing");
+  // The fixture home hero links to the anchored, classed call to action.
+  if (
+    !published[0].includes('<a href="#get-started">See how to start</a>') ||
+    !published[0].includes(
+      '<aside class="cta cta--highlight" data-lace-block="cta" data-lace-block-key="home-cta" id="get-started">',
+    ) ||
+    published[0].split('id="get-started"').length !== 2
+  )
+    throw new Error("starter-build: block anchor, editor class or in-page link missing");
   for (const page of published) {
     if (
       !page.includes('<a class="site-name" href="/">Acceptance Studio</a>') ||
@@ -1120,7 +1142,7 @@ async function starterJourney(project) {
     throw new Error("starter-build-without-globals: robots.txt is not allow-all without a sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
   console.info(
-    "Packed starter installed, typechecked and built all five blocks and SEO output with and without a published global and site URL",
+    "Packed starter installed, typechecked and built all five blocks, block anchors and SEO output with and without a published global and site URL",
   );
 }
 
