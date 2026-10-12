@@ -9,7 +9,8 @@ fields from server-supplied metadata and save one complete optimistic draft.
 
 ### Requirement: Draft fields are rendered from validated model metadata
 The authenticated entry route SHALL load the requested entry and its matching
-configured model before presenting editable content. It SHALL render title, the
+configured model before presenting editable content. It SHALL render the title
+of a page or collection entry, the
 collection-only slug, and every supported model-field descriptor from the
 validated serializable metadata supplied by the model API. The field surface
 SHALL cover text, textarea, rich text, number, boolean, date, datetime, select,
@@ -60,15 +61,18 @@ control, which SHALL also be marked invalid.
   editable form using unvalidated metadata
 
 ### Requirement: System fields have predictable collection-slug behavior
-Every entry editor SHALL present title as an explicit required system field. A
+Every page and collection entry editor SHALL present title as an explicit
+required system field. A global editor SHALL not render a title control,
+because a global's title is its model label and is owned by the system. A
 collection editor SHALL additionally present slug as an explicit system field;
-a page editor SHALL not render a slug control. A collection writer MAY opt into
-slug suggestions derived from title. While suggestion is enabled and the slug
-has not been manually changed, title edits SHALL update the suggested slug; a
-manual slug edit SHALL stop automatic updates until the writer explicitly
-re-enables suggestions. An empty slug control SHALL mean that the draft has no
-slug: a complete-draft save SHALL omit the slug, and a collection entry without
-a slug SHALL read as having no unsaved changes once it is loaded or saved.
+a page or global editor SHALL not render a slug control. A collection writer
+MAY opt into slug suggestions derived from title. While suggestion is enabled
+and the slug has not been manually changed, title edits SHALL update the
+suggested slug; a manual slug edit SHALL stop automatic updates until the
+writer explicitly re-enables suggestions. An empty slug control SHALL mean
+that the draft has no slug: a complete-draft save SHALL omit the slug, and a
+collection entry without a slug SHALL read as having no unsaved changes once it
+is loaded or saved.
 
 #### Scenario: An opted-in suggestion follows a title
 - **WHEN** a writer enables slug suggestions for an unedited collection slug
@@ -86,6 +90,12 @@ a slug SHALL read as having no unsaved changes once it is loaded or saved.
 - **WHEN** a writer opens a page entry
 - **THEN** the editor renders title and model fields but no slug control or slug
   suggestion affordance
+
+#### Scenario: A global entry is edited
+- **WHEN** a writer opens the `settings` global
+- **THEN** the editor renders its model fields without a title or slug
+  control, and a complete-draft save carries the stored title unchanged and no
+  slug
 
 #### Scenario: A collection entry without a slug is saved
 - **WHEN** a writer changes the title of a new or duplicated collection entry
@@ -530,7 +540,7 @@ The entry editor SHALL place its save-state indicator, its single Save action, f
 - **THEN** the publication details and entry fields appear below the last block, keyboard focus reaches them after the block controls, and the page does not scroll horizontally
 
 ### Requirement: Viewers see the editor read-only
-When the signed-in role is `viewer`, the entry editor SHALL present the draft without Save, the save shortcut, Publish, or the entry actions menu. It SHALL present its field, slug, title, rich-text, and block controls as non-editable, and the save-state indicator SHALL read that the entry is view only. Media fields SHALL show their selected item without Choose media, Replace, or Remove. The API SHALL remain the authorization boundary for any request made independently of the editor.
+When the signed-in role is `viewer`, the entry editor SHALL present the draft without Save, the save shortcut, Publish, or the entry actions menu. It SHALL present its field, slug, title, rich-text, and block controls as non-editable, and the save-state indicator SHALL read that the entry is view only. Media fields SHALL show their selected item without Choose media, Replace, or Remove. A block card SHALL show its content fields followed by a read-only *Settings* section with the anchor, whether the block is hidden, the declared settings and the CSS classes, without tabs, Copy link, or Hide block and Show block. A hidden block SHALL still show its Hidden badge. The API SHALL remain the authorization boundary for any request made independently of the editor.
 
 #### Scenario: A viewer opens an entry
 - **WHEN** a viewer opens a loaded entry
@@ -540,45 +550,69 @@ When the signed-in role is `viewer`, the entry editor SHALL present the draft wi
 - **WHEN** a viewer presses the save shortcut in the editor
 - **THEN** no draft-save request is sent
 
+#### Scenario: A viewer reads a block's settings
+- **WHEN** a viewer opens an entry with a hidden block that has anchor
+  `pricing`
+- **THEN** the card shows the Hidden badge and a read-only Settings section
+  with the anchor `pricing`, and offers no tabs, Copy link, or Show block
+
 ### Requirement: Validation problems are shown where they occur and summarized
 Every local or server validation problem SHALL be shown at its location. A
 field problem SHALL be shown on its field. A block problem that belongs to no
 single field SHALL be shown inside that block's card, together with a text
 marker that the block has problems. Such problems include a disallowed or
 unregistered type, a version that is not current, a missing, malformed, or
-duplicate key, and data for an undefined field. A problem with the block list
-as a whole SHALL be shown with the block list. An existing block whose type the
-model no longer allows SHALL still render as a card with a default icon, its
-type as label, and its problem, so the writer can remove it. Field messages
-SHALL be complete sentences that state what is wrong or what to enter. They
-SHALL NOT repeat validator-internal phrasing and SHALL NOT include the
-rejected value.
+duplicate key, data for an undefined field, a setting the definition does not
+declare, and an invalid hidden flag or settings object. A problem with the
+block's anchor, class name or a declared setting SHALL be shown on that
+control in the Settings tab. A problem with the block list as a whole SHALL be
+shown with the block list. An existing block whose type the model no longer
+allows SHALL still render as a card with a default icon, its type as label,
+and its problem, so the writer can remove it. Field messages SHALL be complete
+sentences that state what is wrong or what to enter. They SHALL NOT repeat
+validator-internal phrasing and SHALL NOT include the rejected value.
 
 When local validation blocks a Save, or the server rejects a save or publish
 with validation issues, the editor SHALL show a validation summary above the
-title and move focus to it. The summary SHALL state the number of problems. It
-SHALL list each problem in the editor's reading order: the title, then each
-block in order, then the slug, then the model fields. Each entry SHALL be a
-link that names the field and, for a block field, the block's label and
-position. Activating an entry SHALL move focus to that control, or to the
-block card for a block problem, and scroll it into view. Because the list
-follows reading order, the first block entry links to the first invalid
-block. A server issue whose path does not match a visible location SHALL be
-listed as text without a link. The summary SHALL replace the generic failure
-message for validation rejections. It SHALL update as problems are resolved
-and disappear when none remain.
+title and move focus to it. The summary SHALL state the number of problems to
+fix. It SHALL list each problem in the editor's reading order: the title, then
+each block in order (its block-level problems, its content fields, then its
+anchor, declared settings and CSS classes), then the slug, then the model
+fields. Each entry SHALL be a link that names the field and, for a block
+field or setting, the block's label and position, and for a hidden block that
+the block is hidden. Activating an entry SHALL move focus to that control, or
+to the block card for a block problem, and scroll it into view; for a control
+in a Settings tab it SHALL first select that tab. Because the list follows
+reading order, the first block entry links to the first invalid block. A
+server issue whose path does not match a visible location SHALL be listed as
+text without a link. The summary SHALL replace the generic failure message for
+validation rejections. It SHALL update as problems are resolved and disappear
+when none remain.
+
+A problem that only publication reports (a field required for publication)
+and that belongs to a block that is hidden SHALL be listed after the other
+problems as not blocking publication, SHALL NOT be counted among the problems
+to fix, and SHALL be shown on its control with the same note. When only such
+problems remain, the summary SHALL state that the remaining problems are in
+hidden blocks and do not block publishing. Every other problem in a hidden
+block SHALL be counted and SHALL block Save as in a visible block.
 
 The editor SHALL map server JSON Pointer issue paths as follows:
 
 - `/title`, `/slug`, and `/fields/<key>` map to their controls.
 - `/blocks/<index>/data/<key>` maps to that block's field.
-- `/blocks/<index>/key`, `/type`, and `/schemaVersion`, as well as
-  `/blocks/<index>` and `/blocks/<index>/data`, map to that block.
+- `/blocks/<index>/anchor` and `/blocks/<index>/className` map to that
+  block's Anchor and CSS classes controls.
+- `/blocks/<index>/settings/<key>` maps to that block's setting control when
+  the definition declares `<key>`, and to the block otherwise.
+- `/blocks/<index>/key`, `/type`, `/schemaVersion`, `/hidden`, and
+  `/settings`, as well as `/blocks/<index>` and `/blocks/<index>/data`, map to
+  that block.
 - `/blocks` maps to the block list.
 
-A deeper pointer below a field, such as a path into a rich-text document,
-SHALL map to that field. Mapping SHALL preserve the writer's complete local
-draft and dirty state.
+A deeper pointer below a field or setting, such as a path into a rich-text
+document, SHALL map to that field or setting. Mapping SHALL preserve the
+writer's complete local draft and dirty state.
 
 #### Scenario: Local validation blocks a save
 - **WHEN** a writer saves a draft whose second block has a text field below its
@@ -592,12 +626,17 @@ draft and dirty state.
 - **THEN** the block is expanded, the field's control receives focus, and it is
   scrolled into view
 
+#### Scenario: A summary link opens the Settings tab
+- **WHEN** a writer activates the summary entry for a block's anchor while that
+  block's Content tab is selected
+- **THEN** the Settings tab is selected and the Anchor input receives focus
+
 #### Scenario: Server issues map to the same locations
 - **WHEN** the server rejects a save with issues at
-  `/blocks/0/data/body/content/0` and `/fields/summary`
-- **THEN** the first block's Body field and the Summary field show the
-  rejection, the summary lists both with links, and the local values remain
-  unchanged and dirty
+  `/blocks/0/data/body/content/0`, `/blocks/1/anchor` and `/fields/summary`
+- **THEN** the first block's Body field, the second block's Anchor input and
+  the Summary field show the rejection, the summary lists all three with links,
+  and the local values remain unchanged and dirty
 
 #### Scenario: A server issue has no visible location
 - **WHEN** the server rejects a save with an issue at a path the editor cannot
@@ -617,6 +656,19 @@ draft and dirty state.
   required model field is missing for publication
 - **THEN** that field shows that it is required to publish and the summary
   links to it
+
+#### Scenario: Hiding a block makes its publication problems non-blocking
+- **WHEN** a publish is rejected because a required field of the second block
+  is empty, and the writer then hides that block
+- **THEN** the summary lists that problem as being in a hidden block that does
+  not block publishing, no longer counts it, and Save and publish is not
+  blocked by it
+
+#### Scenario: A draft problem in a hidden block still blocks Save
+- **WHEN** a writer saves a draft whose hidden block has a text field above its
+  maximum length
+- **THEN** no draft-save request is sent and the summary counts the problem and
+  names the block as hidden
 
 #### Scenario: Fixing problems clears the summary
 - **WHEN** a writer corrects every listed problem and saves again
@@ -654,7 +706,7 @@ Page entries SHALL NOT offer Duplicate or Delete. A viewer SHALL see no menu. Th
 - **THEN** the editor shows no entry actions menu
 
 ### Requirement: Unpublish is confirmed with its public consequence
-Choosing Unpublish SHALL open a confirmation dialog that can be cancelled. It SHALL say that the entry's public path stops working after the next site build, that the draft and its unsaved changes are kept, and that publishing again makes the current draft public. For a page it SHALL say that the page's fixed path will return 404 after the next build. Confirming SHALL send one unpublish request with the publication the editor displays as the expected published snapshot and with a new idempotency key. A retry of the same attempt after a network failure SHALL reuse that key. On success the editor SHALL adopt the returned entry without discarding unsaved form changes, SHALL show the entry as not published, SHALL follow the queued build in the publication card as it does after a publication, and SHALL announce the result. When the publication changed or disappeared in the meantime, the dialog SHALL show the API's conflict or not-published error and SHALL offer to reload the entry.
+Choosing Unpublish SHALL open a confirmation dialog that can be cancelled. It SHALL say that the entry's public path stops working after the next site build, that the draft and its unsaved changes are kept, and that publishing again makes the current draft public. For a page it SHALL say that the page's fixed path will return 404 after the next build. For a global the dialog SHALL ask to unpublish the site content and SHALL say that pages showing it fall back to their defaults after the next site build, without naming a path. Confirming SHALL send one unpublish request with the publication the editor displays as the expected published snapshot and with a new idempotency key. A retry of the same attempt after a network failure SHALL reuse that key. On success the editor SHALL adopt the returned entry without discarding unsaved form changes, SHALL show the entry as not published, SHALL follow the queued build in the publication card as it does after a publication, and SHALL announce the result. When the publication changed or disappeared in the meantime, the dialog SHALL show the API's conflict or not-published error and SHALL offer to reload the entry.
 
 #### Scenario: An admin unpublishes a collection entry
 - **WHEN** an admin confirms Unpublish for a published collection entry
@@ -663,6 +715,10 @@ Choosing Unpublish SHALL open a confirmation dialog that can be cancelled. It SH
 #### Scenario: An admin unpublishes a page
 - **WHEN** an admin opens Unpublish for a published page
 - **THEN** the confirmation says that the page's fixed path will return 404 after the next build
+
+#### Scenario: An admin unpublishes a global
+- **WHEN** an admin opens Unpublish for the published `settings` global
+- **THEN** the confirmation asks "Unpublish this site content?" and says that pages showing it fall back to their defaults after the next site build
 
 #### Scenario: An admin cancels Unpublish
 - **WHEN** an admin opens Unpublish and chooses Cancel
@@ -805,3 +861,381 @@ without that shape, and view-only editors, SHALL NOT show the warning.
 #### Scenario: Other blocks are unaffected
 - **WHEN** a `hero` block holds media without alt text
 - **THEN** no missing-alt warning is shown for the hero block
+
+### Requirement: The global editor presents site-wide content without a URL
+The editor of a global SHALL be headed by the global's label and SHALL show
+its description when configured. It SHALL show no public path, public URL
+fact, "Open on site" link, title control or slug control, and its entry
+actions menu SHALL offer only Revert to published and Unpublish under the same
+conditions as for a page, never Duplicate or Delete. The publish confirmation
+of a global SHALL ask to publish (or save and publish) the site content, SHALL
+name the draft revision that becomes public or say that unsaved changes are
+saved first, and SHALL state that the change affects every page that shows the
+content after the next site build. Saving, publishing, the build-state
+follow-up, revision-conflict recovery and the read-only viewer mode SHALL
+behave as for any entry.
+
+#### Scenario: An admin opens a published global
+- **WHEN** an admin opens the published `settings` global labelled "Site
+  settings" while the build site URL is configured
+- **THEN** the editor is headed "Edit Site settings", its publication card
+  shows status, revisions and build state but no public URL or "Open on site"
+  link, and the actions menu offers no Duplicate or Delete
+
+#### Scenario: An admin publishes a global
+- **WHEN** an admin opens Publish for the `settings` global at draft revision 3
+- **THEN** the confirmation asks "Publish this site content?", names draft
+  revision 3, and says the change affects every page that shows it after the
+  next site build
+
+#### Scenario: An admin saves and publishes a global
+- **WHEN** an admin with unsaved changes opens Save and publish for a global
+- **THEN** the confirmation asks "Save and publish this site content?" and
+  says the unsaved changes are saved first and then affect every page after
+  the next site build
+
+#### Scenario: A viewer opens a global
+- **WHEN** a `viewer` opens the `settings` global
+- **THEN** its fields are read-only and no save, publish or entry action is
+  offered
+
+### Requirement: The editor edits the SEO group of SEO-enabled entries
+The editor of a page or collection entry whose model enables SEO SHALL show an
+*SEO* card in the right-hand column after the *Fields* card. The card SHALL
+hold, in this order, an "SEO title" input, an "SEO description" text area, an
+"SEO image" media control using the existing media picker, a "Canonical URL"
+input, a "Hide from search engines" switch and a search-result preview. The
+editor of a model without SEO, including every global, SHALL show no SEO card.
+
+The SEO values SHALL be part of the draft form: changing one SHALL mark the
+draft unsaved, and loading, saving, publishing, discarding unsaved changes,
+reverting to published and adopting a reloaded server draft SHALL reset them
+to the loaded values. "Copy my JSON" SHALL include them. For an SEO-enabled
+model, every draft save SHALL carry a complete `seo` object with `title`,
+`description`, `image`, `canonical` and `noindex`, where blank or
+whitespace-only text and a removed image are sent as `null` and `noindex` is a
+boolean. A save of an entry whose model has no SEO SHALL carry no `seo` key.
+Viewers SHALL see the SEO values and the preview read-only, with the SEO image
+shown without picker actions.
+
+#### Scenario: Edit and save SEO values
+- **WHEN** an editor opens the post "Hello" of an SEO-enabled collection, types
+  "Hello from Lace" as the SEO title, checks "Hide from search engines" and
+  saves
+- **THEN** the draft is marked unsaved before the save, and the save request
+  carries `seo` `{title: "Hello from Lace", description: null, image: null,
+  canonical: null, noindex: true}`
+
+#### Scenario: Clearing a stored value
+- **WHEN** an editor clears the stored SEO description "Old text" and saves
+- **THEN** the save request carries `seo.description` `null` and the reloaded
+  draft has no SEO description
+
+#### Scenario: Choose an SEO image
+- **WHEN** an editor chooses an image through the SEO image control and saves
+- **THEN** the card shows the selected image with its filename and alt text,
+  and the save request carries its media ID as `seo.image`
+
+#### Scenario: Revert restores SEO values
+- **WHEN** an editor changes the SEO title of a published entry and reverts to
+  the published version
+- **THEN** the SEO title input shows the published SEO title again and the
+  draft is not marked unsaved
+
+#### Scenario: Model without SEO
+- **WHEN** an editor opens and saves an entry of a model without SEO
+- **THEN** no SEO card is shown and the save request has no `seo` key
+
+#### Scenario: A viewer opens an SEO-enabled entry
+- **WHEN** a `viewer` opens an entry with a stored SEO title and image
+- **THEN** the SEO card shows the title, the image without Choose media,
+  Replace or Remove, and the preview, and none of its controls accept edits
+
+### Requirement: SEO text shows its length against recommendations
+The SEO title and SEO description SHALL each show a visible character count of
+the trimmed text in code points against a recommended length of 60 for the
+title and 160 for the description, as part of the control's accessible
+description. When the count exceeds the recommended length, a warning
+associated with the control SHALL say that search results may shorten the
+text. The warning SHALL NOT block saving or publishing and SHALL disappear
+when the count is back within the recommendation. Neither the count nor the
+warning SHALL be announced on every keystroke.
+
+#### Scenario: Title within the recommendation
+- **WHEN** an editor types a 45-character SEO title
+- **THEN** the title shows "45 / 60" and no length warning
+
+#### Scenario: Long description warns without blocking
+- **WHEN** an editor types a 180-character SEO description and saves
+- **THEN** the description shows "180 / 160" with a warning that search results
+  may shorten it, and the save request is sent
+
+#### Scenario: Shortening removes the warning
+- **WHEN** an editor shortens a 70-character SEO title to 58 characters
+- **THEN** the length warning disappears
+
+### Requirement: SEO validation problems are shown on the SEO controls
+The editor SHALL validate SEO values locally before saving, with the same
+rules as the API: SEO title at most 200 and SEO description at most 500 code
+points after trimming, both single-line plain text, and a non-blank canonical
+URL that is an absolute `http` or `https` URL without credentials or fragment
+of at most 2,048 characters. A violation SHALL block the save and SHALL be
+shown on its control as a sentence that does not repeat the value. Server
+issues whose paths are `/seo/title`, `/seo/description`, `/seo/image`,
+`/seo/canonical` or `/seo/noindex` SHALL be shown on the matching control.
+SEO problems SHALL appear in the validation summary after the model fields,
+in card order, and activating one SHALL move focus to its control. A server
+issue at `/seo` itself SHALL be listed in the summary as text.
+
+#### Scenario: Relative canonical URL
+- **WHEN** an editor enters `/posts/hello` as the canonical URL and saves
+- **THEN** no save request is sent, the canonical URL control says to enter an
+  absolute URL starting with `https://` or `http://`, and the summary links
+  "Canonical URL" to it
+
+#### Scenario: Line break in the description
+- **WHEN** an editor enters a description containing a line break and saves
+- **THEN** no save request is sent and the description control says to use a
+  single line
+
+#### Scenario: Server rejects the SEO image
+- **WHEN** a save is rejected with an issue at `/seo/image`
+- **THEN** the SEO image control shows the problem and the summary links
+  "SEO image" to it
+
+#### Scenario: SEO no longer enabled on the server
+- **WHEN** a save is rejected with `seo_not_allowed` at `/seo`
+- **THEN** the summary lists the problem as text without a link
+
+### Requirement: Inherited SEO values are shown as placeholders
+While an SEO value is empty, its control SHALL show what the site will use
+instead, following the fallback chain of ADR 0011, and SHALL expose the same
+text as part of its accessible description:
+- SEO title: "Uses entry title: " followed by the current entry title formatted
+  with the site title template, or "Uses entry title" while the entry title is
+  empty.
+- SEO description: "Uses {field label}: " followed by the text of the model's
+  mapped description field when it has text, otherwise "Uses site
+  description: " followed by the site default description when it has text;
+  otherwise no placeholder.
+- SEO image: a line "Uses the image from {field label}" when the model's
+  mapped image field holds media, otherwise "Uses the site image" when the
+  site default image is set, otherwise "No image is shared".
+- Canonical URL: "Uses this page's URL: " followed by the page's absolute URL
+  when the build site URL is configured and the entry has a path, otherwise
+  "Uses this page's URL".
+
+Inherited values SHALL reflect unsaved form values of the entry, and SHALL
+read site defaults from the published entry of the global that declares
+`seoDefaults`. When no global declares `seoDefaults`, it is not published, or
+it cannot be read, the editor SHALL behave as if there were no site defaults
+and SHALL NOT block editing. A stored SEO value SHALL replace its placeholder.
+
+#### Scenario: Title from the entry title and template
+- **WHEN** the published defaults global has site name "Lace" and no title
+  template, and an editor opens the post "Hello" with no SEO title
+- **THEN** the SEO title placeholder reads "Uses entry title: Hello | Lace"
+
+#### Scenario: Description from the mapped field
+- **WHEN** the model maps its description to the field "Excerpt" holding
+  "A short intro" and the SEO description is empty
+- **THEN** the SEO description placeholder reads "Uses Excerpt: A short intro"
+
+#### Scenario: Description from the site default
+- **WHEN** the mapped description field is empty and the published site
+  default description is "Notes on Lace"
+- **THEN** the SEO description placeholder reads "Uses site description:
+  Notes on Lace"
+
+#### Scenario: Unsaved edits update the placeholder
+- **WHEN** an editor types "New intro" into the mapped Excerpt field without
+  saving
+- **THEN** the SEO description placeholder reads "Uses Excerpt: New intro"
+
+#### Scenario: Defaults global not published
+- **WHEN** the global declaring `seoDefaults` has only a draft and the post
+  "Hello" has no SEO title
+- **THEN** the SEO title placeholder reads "Uses entry title: Hello"
+
+### Requirement: The SEO card previews the search result
+The SEO card SHALL show a search-result preview labelled as such, computed from
+the current form values and the published site defaults with the same rules
+as the site's SEO resolver: the title is the SEO title, otherwise the entry
+title formatted with the title template (a template applies only when it
+contains `%s`; otherwise `{title} | {site name}`, or the bare title without a
+site name); the URL is the canonical URL, otherwise the build site URL plus
+the entry's path, otherwise the path alone, and is omitted for a collection
+entry without a slug; the description is the first text of the SEO
+description, the mapped field and the site default, otherwise a note that
+search engines choose their own snippet. When "Hide from search engines" is
+checked, the preview SHALL say that the page is hidden from search results.
+The preview SHALL NOT be a live region.
+
+#### Scenario: Preview with a custom template
+- **WHEN** the site title template is "%s — Lace Notes", the site URL is
+  `https://example.com/` and the post "Hello" at `/posts/hello` has no SEO
+  title or canonical URL
+- **THEN** the preview shows the title "Hello — Lace Notes" and the URL
+  `https://example.com/posts/hello`
+
+#### Scenario: Preview follows typing
+- **WHEN** an editor types "Custom title" into the SEO title
+- **THEN** the preview title reads "Custom title"
+
+#### Scenario: Hidden entry
+- **WHEN** an editor checks "Hide from search engines"
+- **THEN** the preview says the page is hidden from search results
+
+### Requirement: The site defaults global names the defaults it provides
+In the editor of the global that declares `seoDefaults`, each mapped field
+SHALL show, to writers and viewers and as part of its accessible description,
+which site default it provides: the site name used in search and social
+titles, the title template (with `%s` standing for the entry title), the
+default description, or the default sharing image. Other fields and other
+globals SHALL show no such text.
+
+#### Scenario: Settings global with site defaults
+- **WHEN** an admin opens the `settings` global whose `seoDefaults` map
+  `siteName` and `tagline` as site name and description
+- **THEN** the "Site name" field says it is the site name used in search and
+  social titles, and the "Tagline" field says it is the default description
+  for search and social previews
+
+#### Scenario: Viewer sees the defaults text
+- **WHEN** a `viewer` opens the same global
+- **THEN** both fields show the same site-default text while read-only
+
+### Requirement: Block cards separate content and settings
+For writers, an expanded block card SHALL present a *Content* tab with the
+block's fields and a *Settings* tab with the block's envelope controls. The
+Content tab SHALL be selected when a card first renders. Both panels SHALL stay
+mounted while hidden, so switching tabs or collapsing the card never resets
+rich-text, media or field state. The tabs SHALL follow the tabs keyboard
+pattern: the tab list is one tab stop, Left and Right arrows move between and
+select the tabs, and Home and End select the first and last tab. The selected
+tab SHALL be kept per block across reorders and saves while the editor is
+mounted. A tab whose panel contains a control with a validation problem SHALL
+show a problem marker that is part of the tab's accessible name.
+
+#### Scenario: A writer switches tabs with the keyboard
+- **WHEN** a writer moves focus to a block's Content tab and presses the Right
+  arrow
+- **THEN** the Settings tab is selected and focused, its panel is shown, and
+  the content fields keep their values
+
+#### Scenario: A settings problem marks its tab
+- **WHEN** a block's anchor has a validation problem while its Content tab is
+  selected
+- **THEN** the Settings tab's name states that it has problems
+
+### Requirement: The Settings tab edits the block envelope
+The Settings tab SHALL show, in this order: an *Anchor* input, a *Hide on
+site* switch, one control for each setting the block definition declares, and
+a *CSS classes* input. Each control SHALL change only that value of that block
+and mark the draft unsaved.
+
+The Anchor input SHALL show a `#` prefix outside the value and SHALL validate
+as the writer types: an anchor SHALL start with a lowercase letter and use only
+lowercase letters, digits and hyphens, up to 64 characters, and SHALL NOT equal
+another block's anchor in the entry, hidden blocks included. The messages SHALL
+be complete sentences that do not repeat the value. An empty Anchor input
+means the block has no anchor. The input SHALL offer *Copy link* while the
+anchor is valid and unique. Copy link SHALL copy the entry's site URL followed
+by `#` and the anchor when the build site URL and the entry's public path are
+known, and otherwise `#` and the anchor, and SHALL announce that the link was
+copied or that copying failed.
+
+The Hide on site switch SHALL state that a hidden block stays in the draft and
+the publication but is not shown on the site. Declared settings SHALL use the
+same controls, labels, descriptions and messages as fields of the same type.
+The CSS classes input SHALL accept 1 to 16 class names separated by spaces, at
+most 256 characters, using the shared class-name rule, and an empty input means
+the block has no class name.
+
+#### Scenario: A writer sets an anchor and copies its link
+- **WHEN** a writer types `pricing` into a collection entry's block Anchor
+  input while the build site URL is `https://example.com/` and the entry's path
+  is `/posts/first`, and activates Copy link
+- **THEN** `https://example.com/posts/first#pricing` is copied, the copy is
+  announced, and the next save carries anchor `pricing` for that block
+
+#### Scenario: An invalid anchor is reported as typed
+- **WHEN** a writer types `Pricing Table` into the Anchor input
+- **THEN** the input shows a sentence describing the anchor format, Copy link
+  is not offered, and Save is blocked with the problem in the summary
+
+#### Scenario: A repeated anchor is reported
+- **WHEN** a writer types an anchor that a hidden block of the same entry
+  already uses
+- **THEN** the input states that another block in this entry uses this anchor
+  and Save is blocked
+
+#### Scenario: A writer edits a declared setting and classes
+- **WHEN** a writer changes a declared `align` select setting to `center` and
+  enters ` wide  md:w-1/2 ` as CSS classes, then saves
+- **THEN** the save request carries settings with `align: "center"` and class
+  name `wide md:w-1/2` for that block
+
+#### Scenario: Clearing the anchor removes it
+- **WHEN** a writer clears the Anchor input of a block with anchor `pricing`
+  and saves
+- **THEN** the save request carries that block without an anchor
+
+### Requirement: Hidden blocks are visible as hidden in the editor
+A hidden block's card SHALL be visibly muted without lowering text contrast
+below the accessibility rules, and SHALL show a *Hidden* badge that is part of
+the card's accessible name. The card menu SHALL offer *Hide block* for a
+visible block and *Show block* for a hidden block; choosing it SHALL change
+the block's hidden flag, mark the draft unsaved, and announce the change. The
+card header SHALL show the block's anchor as `#anchor` beside the summary
+whenever the block has an anchor, collapsed or expanded.
+
+#### Scenario: A writer hides a block from the card menu
+- **WHEN** a writer opens a visible block's menu and chooses Hide block
+- **THEN** the card shows the Hidden badge, the Hide on site switch is on, the
+  change is announced, and the next save carries `hidden: true` for that block
+
+#### Scenario: A writer shows a hidden block
+- **WHEN** a writer chooses Show block on a hidden block
+- **THEN** the Hidden badge disappears and the next save carries
+  `hidden: false` for that block
+
+#### Scenario: A collapsed card shows its anchor
+- **WHEN** a writer collapses a block with anchor `pricing`
+- **THEN** the card header still shows `#pricing`
+
+### Requirement: Block envelopes survive draft operations
+The editor SHALL keep every block's anchor, class name, hidden flag and
+settings through edits, reordering, collapse, tab changes, discard, conflict
+reload and saves, and SHALL send the current values with every save, leaving
+out a blank anchor, a blank class name and cleared setting values. A block
+added in the editor SHALL start visible, without an anchor or class name, with
+the default of every setting its definition declares. Duplicating a block
+SHALL copy its class name, hidden flag and settings and SHALL leave out its
+anchor, so the copy never repeats an anchor. Undoing a removal SHALL restore the
+block with its envelope. A block whose type the model no longer allows SHALL
+keep its envelope unchanged.
+
+#### Scenario: Saving keeps envelopes set through the API
+- **WHEN** an editor loads a draft whose block has anchor `pricing`,
+  `hidden: true` and settings `{align: "center"}`, edits a field of that block
+  and saves
+- **THEN** the save request carries the same anchor, hidden flag and settings
+  for the block
+
+#### Scenario: A new block takes declared setting defaults
+- **WHEN** an editor adds a block whose definition declares `align` with
+  default `left`
+- **THEN** the new block is visible with settings `{align: "left"}` and no
+  anchor
+
+#### Scenario: Duplicating a block drops its anchor
+- **WHEN** an editor duplicates a block with anchor `pricing` and class name
+  `wide`
+- **THEN** the copy carries class name `wide` and no anchor, and the draft
+  saves without an anchor conflict
+
+#### Scenario: A loaded envelope is not an unsaved change
+- **WHEN** an editor opens a draft whose blocks have no anchor and no class
+  name, and switches a block to its Settings tab without editing
+- **THEN** the draft is not marked unsaved

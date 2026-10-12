@@ -228,3 +228,211 @@ test("media metadata migration adds empty constrained columns and keeps referenc
     await miniflare.dispose();
   }
 });
+
+test("global-kind migration rebuilds content models of a populated database in one batch", async () => {
+  const GLOBAL_KIND = "0007_content_model_global_kind.sql";
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < GLOBAL_KIND));
+    await apply([
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) values ('home', 'page', 'Home', 1, 's-home', 'p-home', '{}', 's-home', 1, 2)",
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 2, 's-posts', 'p-posts', 1, 2)",
+      "insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) values ('home', 'home', 1, 'admin', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('p1', 'e1', 1, 'post', 'Post', '{}', 2, 1, 1, 'admin')",
+      "update content_entries set draft_snapshot_id = 'p1', published_snapshot_id = 'p1' where id = 'e1'",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values ('p1', 'b1', 'image', 1000, 2, '{}', 1, 1)",
+      "insert into published_routes (path, entry_id, snapshot_id, updated_at) values ('/blog/post', 'e1', 'p1', 1)",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+      "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('p1', 'b1', 'image', 'm1', 1)",
+    ]);
+    const tables = [
+      "content_models",
+      "content_entries",
+      "content_snapshots",
+      "content_blocks",
+      "published_routes",
+      "content_media_references",
+    ];
+    const state = async () =>
+      Object.fromEntries(
+        await Promise.all(
+          tables.map(async (table) => [
+            table,
+            (await database.prepare(`select * from ${table} order by 1, 2`).all()).results,
+          ]),
+        ),
+      );
+    const before = await state();
+    const statements = await migrationStatements((file) => file === GLOBAL_KIND);
+    expect(statements.some((statement) => /drop table `content_models`/iu.test(statement))).toBe(
+      true,
+    );
+    await apply(statements);
+    expect(await state()).toEqual(before);
+    await database
+      .prepare(
+        "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('settings', 'global', 'Settings', 1, 's', 'p', 3, 3)",
+      )
+      .run();
+    await expect(
+      database
+        .prepare(
+          "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('bad', 'singleton', 'Bad', 1, 's', 'p', 3, 3)",
+        )
+        .run(),
+    ).rejects.toThrow(/CHECK constraint/u);
+    await expect(
+      database.prepare("delete from content_models where key = 'posts'").run(),
+    ).rejects.toThrow(/FOREIGN KEY/u);
+    await expect(
+      database
+        .prepare(
+          "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e2', 'missing', 'admin', 1, 1)",
+        )
+        .run(),
+    ).rejects.toThrow(/FOREIGN KEY/u);
+    await database.prepare("update content_models set key = 'articles' where key = 'posts'").run();
+    expect(
+      await database.prepare("select model_key from content_entries where id = 'e1'").first(),
+    ).toEqual({ model_key: "articles" });
+  } finally {
+    await miniflare.dispose();
+  }
+});
+
+test("SEO migration adds an empty nullable snapshot column and keeps content", async () => {
+  const SNAPSHOT_SEO = "0008_content_snapshot_seo.sql";
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < SNAPSHOT_SEO));
+    await apply([
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's', 'p', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('p1', 'e1', 1, 'post', 'Post', '{}', 1, 1, 1, 'admin')",
+      "update content_entries set draft_snapshot_id = 'p1', published_snapshot_id = 'p1' where id = 'e1'",
+      "insert into published_routes (path, entry_id, snapshot_id, updated_at) values ('/blog/post', 'e1', 'p1', 1)",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+      "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('p1', '$fields', 'cover', 'm1', 1)",
+    ]);
+    const rows = async (sql) => (await database.prepare(sql).all()).results;
+    const before = {
+      references: await rows("select * from content_media_references"),
+      routes: await rows("select * from published_routes"),
+      snapshots: await rows("select * from content_snapshots"),
+    };
+    const statements = await migrationStatements((file) => file === SNAPSHOT_SEO);
+    expect(statements.some((statement) => /create table|drop table/iu.test(statement))).toBe(false);
+    await apply(statements);
+    expect({
+      references: await rows("select * from content_media_references"),
+      routes: await rows("select * from published_routes"),
+      snapshots: await rows("select * from content_snapshots"),
+    }).toEqual({
+      ...before,
+      snapshots: before.snapshots.map((row) => ({ ...row, seo_json: null })),
+    });
+    await database
+      .prepare("update content_snapshots set seo_json = ? where id = 'p1'")
+      .bind('{"title":"Hello"}')
+      .run();
+    expect(await database.prepare("select seo_json from content_snapshots").first()).toEqual({
+      seo_json: '{"title":"Hello"}',
+    });
+    await expect(
+      database
+        .prepare(
+          "insert into content_snapshots (id, entry_id, revision, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) values ('x1', 'missing', 1, 'X', '{}', null, 1, 1, 1, 'admin')",
+        )
+        .run(),
+    ).rejects.toThrow(/FOREIGN KEY/u);
+  } finally {
+    await miniflare.dispose();
+  }
+});
+
+test("block envelope migration adds default columns and the anchor index additively", async () => {
+  const BLOCK_ENVELOPE = "0009_content_block_envelope.sql";
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+    }),
+  );
+  try {
+    const database = await miniflare.getD1Database("DB");
+    const apply = async (statements) =>
+      database.batch(statements.map((statement) => database.prepare(statement)));
+    await apply(await migrationStatements((file) => file < BLOCK_ENVELOPE));
+    await apply([
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's', 'p', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('e1', 'posts', 'admin', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('d1', 'e1', 1, 'post', 'Post', '{}', 1, 1, 1, 'admin')",
+      "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('p1', 'e1', 1, 'post', 'Post', '{}', 1, 1, 1, 'admin')",
+      "update content_entries set draft_snapshot_id = 'd1', published_snapshot_id = 'p1' where id = 'e1'",
+      "insert into published_routes (path, entry_id, snapshot_id, updated_at) values ('/blog/post', 'e1', 'p1', 1)",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values ('p1', 'b1', 'image', 1000, 2, '{\"media\":\"m1\"}', 1, 1)",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('m1', 'media/m1', 'a.png', 'image/png', 1, '{}', 'active', 'admin', 1, 1)",
+      "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) values ('p1', 'b1', 'media', 'm1', 1)",
+    ]);
+    const rows = async (sql) => (await database.prepare(sql).all()).results;
+    const state = async () => ({
+      blocks: await rows("select * from content_blocks"),
+      references: await rows("select * from content_media_references"),
+      routes: await rows("select * from published_routes"),
+      snapshots: await rows("select * from content_snapshots"),
+    });
+    const before = await state();
+    const statements = await migrationStatements((file) => file === BLOCK_ENVELOPE);
+    expect(statements.some((statement) => /create table|drop table/iu.test(statement))).toBe(false);
+    await apply(statements);
+    expect(await state()).toEqual({
+      ...before,
+      blocks: before.blocks.map((row) => ({
+        ...row,
+        anchor: null,
+        class_name: null,
+        hidden: 0,
+        settings_json: "{}",
+      })),
+    });
+    const insert = (snapshot, key, anchor, hidden = 0) =>
+      database
+        .prepare(
+          "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, hidden, created_at, updated_at) values (?, ?, 'image', 2000, 2, '{}', ?, ?, 1, 1)",
+        )
+        .bind(snapshot, key, anchor, hidden)
+        .run();
+    await insert("p1", "b2", "pricing");
+    await expect(insert("p1", "b3", "pricing")).rejects.toThrow(/UNIQUE constraint/u);
+    await insert("d1", "b2", "pricing", 1);
+    await insert("p1", "b4", null);
+    await insert("p1", "b5", null);
+    await expect(insert("p1", "b6", null, 2)).rejects.toThrow(/CHECK constraint/u);
+    await expect(insert("missing", "b7", null)).rejects.toThrow(/FOREIGN KEY/u);
+  } finally {
+    await miniflare.dispose();
+  }
+});

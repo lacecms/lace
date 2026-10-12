@@ -602,7 +602,7 @@ const summaryModel: ContentModelDto = {
 const summaryBlocks = [
   { data: { heading: "First hero" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA1", position: 100 },
   { data: { heading: "Second hero" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA2", position: 200 },
-].map((block) => ({ ...block, schemaVersion: 1, type: "hero" }));
+].map((block) => ({ ...block, hidden: false, schemaVersion: 1, settings: {}, type: "hero" }));
 
 function mountSummary(overrides: Partial<AdminClient> = {}, role: "admin" | "editor" = "editor") {
   const saveDraft = vi.fn(
@@ -966,3 +966,79 @@ test.each(["save", "publish", "reload"] as const)(
     expect(source.invalidate).toHaveBeenCalled();
   },
 );
+
+const settingsModel: ContentModelDto = {
+  blocks: [],
+  description: "Name and tagline shown on every page.",
+  fields: {
+    siteName: { label: "Site name", required: true, type: "text" },
+    tagline: { label: "Tagline", required: false, type: "text" },
+  },
+  key: "settings",
+  kind: "global",
+  label: "Site settings",
+  version: 1,
+};
+const settingsEntry = {
+  ...draftEntry,
+  draft: {
+    ...draftEntry.draft,
+    entryId: "settings-1",
+    fields: { siteName: "Lace", tagline: "Old tagline" },
+    title: "Site settings",
+  },
+  id: "settings-1",
+  model: { key: "settings", kind: "global" as const },
+};
+
+test("a global editor shows site content without title, slug, or public URL", async () => {
+  const user = userEvent.setup();
+  const saveDraft = vi.fn<AdminClient["saveDraft"]>(
+    async (_entryId, input) =>
+      ({ ...settingsEntry, draft: { ...settingsEntry.draft, ...input, revision: 3 } }) as never,
+  );
+  const published = {
+    ...settingsEntry,
+    published: { ...settingsEntry.draft, id: "published-1", state: "published" as const },
+  };
+  renderRoute(
+    "/content/settings/settings-1",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    client({
+      listModels: async () => ({ items: [...models.items, settingsModel] }),
+      loadBuildSite: async () => ({
+        site: { id: "main-site", label: "Main site", url: "https://example.com/" },
+      }),
+      loadEntry: async () => published,
+      saveDraft,
+    }),
+  );
+  expect(await screen.findByRole("heading", { name: "Edit Site settings" })).toBeInTheDocument();
+  expect(screen.getByText("Name and tagline shown on every page.")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Slug")).not.toBeInTheDocument();
+  const publication = screen.getByRole("region", { name: "Publication status" });
+  expect(publication).not.toHaveTextContent("Public URL");
+  expect(within(publication).queryByRole("link", { name: /on site/ })).not.toBeInTheDocument();
+
+  await user.clear(screen.getByLabelText(/Site name/));
+  await user.type(screen.getByLabelText(/Site name/), "Lace Journal");
+  await user.click(screen.getByRole("button", { name: "Save and publish" }));
+  const dialog = await screen.findByRole("dialog", { name: "Save and publish this site content?" });
+  expect(dialog).toHaveTextContent(
+    "It affects every page that shows it after the next site build.",
+  );
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
+  const input = saveDraft.mock.calls[0]?.[1];
+  expect(input?.title).toBe("Site settings");
+  expect(input).not.toHaveProperty("slug");
+  expect(input?.fields).toEqual({ siteName: "Lace Journal", tagline: "Old tagline" });
+  expect(await screen.findByText("Saved revision 3")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Publish" }));
+  const publish = await screen.findByRole("dialog", { name: "Publish this site content?" });
+  expect(publish).toHaveTextContent(
+    "Draft revision 3 becomes the public version. It affects every page that shows it after the next site build.",
+  );
+});

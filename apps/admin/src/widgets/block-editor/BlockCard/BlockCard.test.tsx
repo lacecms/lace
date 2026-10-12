@@ -27,7 +27,9 @@ const defaultValues: DraftEditorValues = {
       data: { eyebrow: "News", heading: "Welcome home" },
       key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
       position: 100,
+      hidden: false,
       schemaVersion: 1,
+      settings: {},
       type: "hero",
     },
   ],
@@ -37,13 +39,13 @@ const defaultValues: DraftEditorValues = {
 
 type CardProps = Omit<ComponentProps<typeof BlockCard>, "blockKey" | "control" | "definition">;
 
-function Harness(props: CardProps) {
+function Harness({ values = defaultValues, ...props }: CardProps & { values?: DraftEditorValues }) {
   const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
     defaultValues: { blocks: [], fields: {}, title: "" },
   });
   // Loading values through reset, as the entry page does, keeps react-hook-form's
   // DeepPartial default-value type off the recursive JSON block data.
-  useState(() => form.reset(defaultValues));
+  useState(() => form.reset(values));
   return (
     <DndContext>
       <SortableContext items={["01ARZ3NDEKTSV4RRFFQ69G5FAV"]}>
@@ -308,4 +310,30 @@ test("a hero block with media never warns about alt text", async () => {
   await screen.findByRole("textbox", { name: "Heading" });
   expect(screen.queryByText(/has no alt text/)).toBeNull();
   expect(getMedia).not.toHaveBeenCalled();
+});
+
+test("a collapsed hidden card keeps its Hidden badge and valid anchor in the header", () => {
+  const [loaded] = defaultValues.blocks;
+  const props: CardProps = {
+    active: false,
+    collapsed: true,
+    error: undefined,
+    index: 0,
+    onActivate: vi.fn(),
+    onDuplicate: vi.fn(),
+    onMove: vi.fn(),
+    onRemove: vi.fn(),
+    onToggleCollapsed: vi.fn(),
+    total: 1,
+  };
+  render(
+    <Harness
+      {...props}
+      values={{ ...defaultValues, blocks: [{ ...loaded!, anchor: "pricing", hidden: true }] }}
+    />,
+  );
+  const card = screen.getByRole("article", { name: "Hero Hidden" });
+  expect(card).toHaveTextContent("#pricing");
+  // Collapsing hides the tabs with the fields.
+  expect(screen.queryByRole("tab")).toBe(null);
 });

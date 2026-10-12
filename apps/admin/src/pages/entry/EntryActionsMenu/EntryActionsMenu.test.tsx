@@ -23,6 +23,15 @@ const about: ContentModelDto = {
   version: 1,
 };
 
+const settings: ContentModelDto = {
+  blocks: [],
+  fields: {},
+  key: "settings",
+  kind: "global",
+  label: "Site settings",
+  version: 1,
+};
+
 function published(revision: number, draftRevision = revision): AdminContentEntryDto {
   return {
     ...draftEntry,
@@ -121,6 +130,24 @@ test.each([
     posts,
     true,
     ["Duplicate", "Revert to published"],
+  ],
+  [
+    "admin, published global with saved changes",
+    true,
+    true,
+    { ...published(2, 3), model: { key: "settings", kind: "global" } },
+    settings,
+    false,
+    ["Revert to published", "Unpublish"],
+  ],
+  [
+    "editor, published global",
+    false,
+    true,
+    { ...published(2), model: { key: "settings", kind: "global" } },
+    settings,
+    false,
+    ["No actions available for this entry"],
   ],
   [
     "admin, unpublished page",

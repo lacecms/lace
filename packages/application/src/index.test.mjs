@@ -13,7 +13,7 @@ import {
   SiteBuildUseCases,
   checkConfigurationSynchronization,
   contentSyncActor,
-  createConfigurationSyncPageEntry,
+  createConfigurationSyncSingletonEntry,
   applyPreparedConfigurationSynchronization,
   opaqueCursor,
   opaqueTokenSecret,
@@ -30,7 +30,7 @@ import {
 } from "../dist/index.js";
 import { DomainError } from "@lacecms/domain";
 import { unixMilliseconds } from "@lacecms/domain";
-import { defineCollection, defineConfig, definePage } from "@lacecms/config";
+import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
 test("exports its package identity", () => expect(packageName).toBe("@lacecms/application"));
 
@@ -190,6 +190,106 @@ test("requires explicit safe renames and protects stored entries and snapshots",
   expect(snapshotChange.diagnostics[0].message).toContain("draft=1, published=2");
 });
 
+test("refuses kind changes involving globals and blocks removing a synchronized global", () => {
+  for (const [configured, storedKind] of [
+    ["global", "page"],
+    ["page", "global"],
+    ["collection", "global"],
+    ["global", "collection"],
+  ]) {
+    const plan = planConfigurationSynchronization({
+      models: [model({ key: "settings", kind: configured })],
+      storedModels: [stored({ entryCount: 1, key: "settings", kind: storedKind })],
+    });
+    expect(plan.isValid).toBe(false);
+    expect(plan.operations).toMatchObject([
+      { action: "incompatible-change", model: { key: "settings" } },
+    ]);
+    expect(plan.diagnostics[0].code).toBe("MODEL_KIND_CHANGED");
+  }
+  const renamed = planConfigurationSynchronization({
+    models: [model({ key: "settings", kind: "global", renamedFrom: "posts" })],
+    storedModels: [stored({ entryCount: 1 })],
+  });
+  expect(renamed).toMatchObject({
+    isValid: false,
+    diagnostics: [{ code: "RENAME_KIND_CHANGED" }],
+  });
+  const removed = planConfigurationSynchronization({
+    models: [],
+    storedModels: [stored({ entryCount: 1, key: "settings", kind: "global" })],
+  });
+  expect(removed).toMatchObject({
+    isValid: false,
+    operations: [{ action: "blocked-removal", model: { key: "settings" } }],
+  });
+});
+
+test("materializes a global singleton entry for a created global", async () => {
+  const settings = {
+    ...defineGlobal({
+      fields: { siteName: field.text({ defaultValue: "Lace" }) },
+      key: "settings",
+      label: "Site settings",
+      version: 1,
+    }),
+    projectionHash: "projection-settings",
+    structureHash: "structure-settings",
+  };
+  const entry = createConfigurationSyncSingletonEntry({
+    appliedAt: 1,
+    entryId: "entry-settings",
+    model: settings,
+    snapshotId: "snapshot-settings",
+  });
+  expect(entry.entry.model).toEqual({ key: "settings", kind: "global" });
+  expect(entry.entry.draft).toMatchObject({
+    blocks: [],
+    fields: { siteName: "Lace" },
+    title: "Site settings",
+  });
+  expect(entry.entry.draft).not.toHaveProperty("slug");
+  const prepared = await prepareConfigurationSynchronization({
+    models: [settings],
+    state: {
+      async readConfigurationSyncState() {
+        return [];
+      },
+    },
+  });
+  let received;
+  await applyPreparedConfigurationSynchronization({
+    clock: { now: () => 1 },
+    ids: {
+      next: (() => {
+        let id = 0;
+        return () => `id-${++id}`;
+      })(),
+    },
+    models: [settings],
+    prepared,
+    target: {
+      async applyConfigurationSynchronization(input) {
+        received = input;
+        return { operations: input.plan.operations, status: "applied", targetVersion: 1 };
+      },
+    },
+  });
+  expect(received.singletonEntries.map((item) => item.modelKey)).toEqual(["settings"]);
+  expect(() =>
+    createConfigurationSyncSingletonEntry({
+      appliedAt: 1,
+      entryId: "entry-posts",
+      model: {
+        ...defineCollection({ key: "posts", route: "/p/:slug", version: 1 }),
+        projectionHash: "p",
+        structureHash: "s",
+      },
+      snapshotId: "snapshot-posts",
+    }),
+  ).toThrow(/page and global/u);
+});
+
 test("rejects duplicate and ambiguous synchronization identity evidence", () => {
   const duplicateStored = planConfigurationSynchronization({
     models: [],
@@ -259,7 +359,7 @@ test("prepares a detached dry run and materializes page defaults only for apply"
   const prepared = await prepareConfigurationSynchronization({ models: [page], state });
   expect(prepared.report.check.exitCode).toBe(1);
   expect(prepared.storedModels).toEqual([]);
-  const pageEntry = createConfigurationSyncPageEntry({
+  const pageEntry = createConfigurationSyncSingletonEntry({
     appliedAt: 1,
     entryId: "entry-home",
     model: page,
@@ -290,7 +390,7 @@ test("prepares a detached dry run and materializes page defaults only for apply"
       },
     },
   });
-  expect(received.pageEntries[0].entry.draft.fields).toEqual({ greeting: "Hello" });
+  expect(received.singletonEntries[0].entry.draft.fields).toEqual({ greeting: "Hello" });
 });
 
 test("resolves portable actor display names and ASCII-only search folding", () => {

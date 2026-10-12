@@ -25,7 +25,7 @@ unconfigured Node deployment records.
 | `CACHE` | KV binding | no | Opt-in derived cache. Absent means no-op; misses and failures never change results. |
 | `LACE_PUBLIC_BASE_URL` | variable | yes | Canonical absolute HTTP(S) base URL. It is the only source for public media URLs. |
 | `LACE_BUILD_SITE_ID`, `LACE_BUILD_SITE_LABEL` | variable | no | Safe build-site identity shown in Admin; set both or neither. |
-| `LACE_BUILD_SITE_URL` | variable | no | Public site base URL (for example the Pages domain) that the editor links published entries to. Requires the identity; empty means unset. |
+| `LACE_BUILD_SITE_URL` | variable | no | Public site base URL (for example the Pages domain) that the editor links published entries to. Requires the identity; empty means unset. Give the Pages build the same value (workflow repository variable or Pages environment variable) for canonical URLs and `sitemap.xml`. |
 | `LACE_AUTH_SECRET` | secret | yes | Better Auth and rate-limit HMAC secret. |
 | `LACE_DEPLOY_HOOK_URL` | secret | no | HTTPS deploy-hook URL that rebuilds the static site. |
 | `LACE_DEPLOY_HOOK_TIMEOUT_MS` | variable | no | Deploy-hook call timeout from 1 to 60000 ms; defaults to 10000. |

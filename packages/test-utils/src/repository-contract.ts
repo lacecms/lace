@@ -1,5 +1,6 @@
 import {
   applyPreparedConfigurationSynchronization,
+  contentModelRoute,
   prepareConfigurationSynchronization,
   publicationIdempotencyKey,
   publicationRequestFingerprint,
@@ -40,6 +41,7 @@ import type {
   ContentBlock,
   ContentEntry,
   ContentModelRoute,
+  EntrySeo,
   MediaMetadata,
 } from "@lacecms/domain";
 import type { ExpectStatic } from "vitest";
@@ -120,7 +122,15 @@ const admin: Actor = Object.freeze({ id: actorId("admin"), role: "admin" });
 const routes = new Map<string, ContentModelRoute>([
   ["posts", { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" }],
   ["home", { key: contentModelKey("home"), kind: "page", path: "/" }],
+  ["settings", { key: contentModelKey("settings"), kind: "global" }],
 ]);
+
+type ContractModelKey = "home" | "posts" | "settings";
+const CONTRACT_MODELS: Readonly<Record<ContractModelKey, readonly [string, string]>> = {
+  home: ["page", "Home"],
+  posts: ["collection", "Posts"],
+  settings: ["global", "Site settings"],
+};
 const resolveRoute = (key: string): ContentModelRoute | undefined => routes.get(key);
 const noModels = (): undefined => undefined;
 
@@ -145,13 +155,13 @@ async function count(sql: ContractSql, statement: string, ...params: unknown[]):
   return row?.count ?? 0;
 }
 
-async function seedModels(sql: ContractSql, ...keys: readonly ("home" | "posts")[]): Promise<void> {
+async function seedModels(sql: ContractSql, ...keys: readonly ContractModelKey[]): Promise<void> {
   for (const key of keys) {
     await sql.run(
       "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
       key,
-      key === "home" ? "page" : "collection",
-      key === "home" ? "Home" : "Posts",
+      CONTRACT_MODELS[key][0],
+      CONTRACT_MODELS[key][1],
       1,
       "structure",
       "projection",
@@ -181,7 +191,7 @@ async function seedUser(sql: ContractSql, id: string, name: string, email: strin
 
 function entry(
   id: string,
-  modelKey: "home" | "posts",
+  modelKey: ContractModelKey,
   input: {
     readonly blocks?: readonly ContentBlock[];
     readonly fields?: JsonObject;
@@ -214,9 +224,11 @@ function entry(
 function heroBlock(key: string, image: string, title = key, type = "hero", position = 1000) {
   return Object.freeze({
     data: { image, title },
+    hidden: false,
     key: blockKey(key),
     position,
     schemaVersion: 1,
+    settings: {},
     type,
   });
 }
@@ -297,16 +309,24 @@ function syncCollection(overrides: Record<string, unknown> = {}): SyncModel {
   } as unknown as SyncModel;
 }
 
+function syncGlobal(overrides: Record<string, unknown> = {}): SyncModel {
+  return {
+    fields: {},
+    key: "settings",
+    kind: "global",
+    label: "Site settings",
+    projectionHash: "projection-settings",
+    structureHash: "structure-settings",
+    version: 1,
+    ...overrides,
+  } as unknown as SyncModel;
+}
+
 function syncResolver(models: readonly SyncModel[]) {
   const values = new Map(models.map((model) => [String(model.key), model]));
   return (key: string): ContentModelRoute | undefined => {
-    const model = values.get(key) as
-      | { readonly kind: string; readonly path?: string; readonly route?: string }
-      | undefined;
-    if (model === undefined) return undefined;
-    return model.kind === "page"
-      ? { key: contentModelKey(key), kind: "page", path: model.path! }
-      : { key: contentModelKey(key), kind: "collection", route: model.route! };
+    const model = values.get(key);
+    return model === undefined ? undefined : contentModelRoute(model);
   };
 }
 
@@ -2404,9 +2424,11 @@ contract(
 
     const mediaBlock = (key: string, type: string, position: number, image: string) => ({
       data: { image },
+      hidden: false,
       key: blockKey(key),
       position,
       schemaVersion: 1,
+      settings: {},
       type,
     });
     const published = entry("e-one", "posts", {
@@ -2719,9 +2741,11 @@ async function evolvingPosts(
 function richTextBlock(key: string) {
   return Object.freeze({
     data: { content: { content: [], type: "doc" } },
+    hidden: false,
     key: blockKey(key),
     position: 1000,
     schemaVersion: 1,
+    settings: {},
     type: "richText",
   });
 }
@@ -3063,7 +3087,15 @@ contract(
 );
 
 function block(key: string, type: string, position: number, data: JsonObject) {
-  return Object.freeze({ data, key: blockKey(key), position, schemaVersion: 1, type });
+  return Object.freeze({
+    data,
+    hidden: false,
+    key: blockKey(key),
+    position,
+    schemaVersion: 1,
+    settings: {},
+    type,
+  });
 }
 
 /** Seeds hinted-rewrite content: two media fields, an image block and a quote block. */
@@ -3362,12 +3394,16 @@ function noteV3(migrations: BlockMigrations = {}): BlockDefinition {
   return defineBlock({
     fields: { cover: field.media(), text: field.text({ required: true }) },
     migrations: {
-      2: ({ body, image, ...rest }) => ({
-        ...rest,
-        ...(image === undefined ? {} : { cover: image }),
-        ...(body === undefined ? {} : { quote: body }),
+      2: ({ data: { body, image, ...rest } }) => ({
+        data: {
+          ...rest,
+          ...(image === undefined ? {} : { cover: image }),
+          ...(body === undefined ? {} : { quote: body }),
+        },
       }),
-      3: ({ quote, ...rest }) => (quote === undefined ? rest : { ...rest, text: quote }),
+      3: ({ data: { quote, ...rest } }) => ({
+        data: quote === undefined ? rest : { ...rest, text: quote },
+      }),
       ...migrations,
     },
     type: "note",
@@ -3418,7 +3454,15 @@ async function syncNotes(
 }
 
 function note(key: string, data: JsonObject, position = 2000) {
-  return Object.freeze({ data, key: blockKey(key), position, schemaVersion: 1, type: "note" });
+  return Object.freeze({
+    data,
+    hidden: false,
+    key: blockKey(key),
+    position,
+    schemaVersion: 1,
+    settings: {},
+    type: "note",
+  });
 }
 
 /**
@@ -3530,21 +3574,15 @@ contract(
       updatedAt: 30,
       updatedBy: { id: "system:content-sync" },
     });
-    expect(
-      draftOnly.draft.blocks.map(({ data, key, position, schemaVersion, type }) => ({
-        data,
-        key,
-        position,
-        schemaVersion,
-        type,
-      })),
-    ).toEqual([
+    expect(draftOnly.draft.blocks).toEqual([
       { ...richTextBlock("text-1") },
       {
         data: { cover: "m-1", text: "Draft note" },
+        hidden: false,
         key: "n1",
         position: 2000,
         schemaVersion: 3,
+        settings: {},
         type: "note",
       },
     ]);
@@ -3591,9 +3629,9 @@ contract(
         }),
         "BLOCK_MIGRATION_FAILED",
       ],
-      [noteV3({ 3: () => ({}) }), "BLOCK_MIGRATION_INVALID"],
+      [noteV3({ 3: () => ({ data: {} }) }), "BLOCK_MIGRATION_INVALID"],
       [
-        noteV3({ 3: ({ quote }) => ({ cover: "m-2", text: quote ?? "x" }) }),
+        noteV3({ 3: ({ data: { quote } }) => ({ data: { cover: "m-2", text: quote ?? "x" } }) }),
         "BLOCK_MIGRATION_INVALID",
       ],
     ] as const;
@@ -3606,7 +3644,10 @@ contract(
         code: "CONTENT_INVALID_STATE",
       });
     }
-    const invalid = await prepareNotes(repository, await noteConfig(noteV3({ 3: () => ({}) }), 2));
+    const invalid = await prepareNotes(
+      repository,
+      await noteConfig(noteV3({ 3: () => ({ data: {} }) }), 2),
+    );
     // Drafts validate in draft mode; only published snapshots lack the required text.
     expect(invalid.plan.diagnostics[0]).toMatchObject({ affectedCount: 2 });
     expect(invalid.plan.diagnostics[0]!.snapshots).toMatchObject([
@@ -3967,6 +4008,859 @@ contract(
       ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
       expect(await mediaMetadataState(sql), checkpoint).toEqual(before);
     }
+  },
+);
+
+// ---------------------------------------------------------------- globals
+
+function globalEntry(id: string, updatedAt: number, image = "media-1") {
+  return entry(id, "settings", {
+    blocks: [heroBlock(`${id}-block`, image, "Banner")],
+    fields: { image, title: "Lace" },
+    title: "Site settings",
+    updatedAt,
+  });
+}
+
+async function seedPublishedGlobal(repository: ContractRepository, sql: ContractSql) {
+  await seedModels(sql, "home", "posts", "settings");
+  await seedMedia(sql, "media-1");
+  await seedMedia(sql, "media-2");
+  for (const [id, model] of [
+    ["home", "home"],
+    ["post", "posts"],
+  ] as const) {
+    await repository.create({
+      entry: heroEntry(id, model, 1),
+      mediaReferences: references(`${id}-block`),
+    });
+    await repository.publish(publish(id, 1, 2, `${id}-published`));
+  }
+  await repository.create({
+    entry: globalEntry("settings", 1, "media-2"),
+    mediaReferences: [
+      { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: "$fields" },
+      { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: blockKey("settings-block") },
+    ],
+  });
+  return repository.publish(publish("settings", 1, 3, "settings-published"));
+}
+
+contract("synchronizes a global singleton without a route", async (runtime, expect) => {
+  const models = [syncPage(), syncGlobal()];
+  const { repository, sql } = await runtime.open({
+    nextId: sequence("outbox"),
+    resolveModel: syncResolver(models),
+  });
+  await expect(applySync(repository, models, 10)).resolves.toMatchObject({ status: "applied" });
+  expect(await repository.readConfigurationSyncState()).toMatchObject([
+    { entryCount: 1, key: "home", kind: "page" },
+    { draftSnapshotCount: 1, entryCount: 1, key: "settings", kind: "global" },
+  ]);
+  const listed = await repository.list({
+    limit: 10,
+    listFields: [],
+    modelKey: contentModelKey("settings"),
+    sort: "-updatedAt",
+  });
+  expect(listed.items).toMatchObject([{ status: "draft", title: "Site settings" }]);
+  const loaded = await repository.load({ entryId: contentEntryId(listed.items[0]!.id) });
+  expect(loaded).toMatchObject({
+    draft: { blocks: [], revision: 1, updatedBy: { id: "system:content-sync" } },
+    model: { key: "settings", kind: "global" },
+  });
+  expect(loaded!.draft).not.toHaveProperty("slug");
+  expect(
+    await sql.get("select singleton_key from content_entries where model_key = 'settings'"),
+  ).toEqual({ singleton_key: 1 });
+  expect(await count(sql, "select count(*) as count from published_routes")).toBe(0);
+  await expect(
+    repository.create({ entry: globalEntry("second", 11), mediaReferences: [] }),
+  ).rejects.toMatchObject({ code: "CONTENT_MODEL_CARDINALITY_CONFLICT" });
+  expect(
+    await count(sql, "select count(*) as count from content_entries where model_key = 'settings'"),
+  ).toBe(1);
+});
+
+contract("rolls back a failed synchronized global singleton", async (runtime, expect) => {
+  const models = [syncGlobal()];
+  const { repository, sql } = await runtime.open({
+    beforeMutation: (checkpoint) => {
+      if (checkpoint === "sync.page.snapshot") throw new Error("injected failure");
+    },
+    resolveModel: syncResolver(models),
+  });
+  await expect(applySync(repository, models, 10)).rejects.toMatchObject({
+    code: "CONTENT_INVALID_STATE",
+  });
+  expect(await repository.readConfigurationSyncState()).toEqual([]);
+  expect(await count(sql, "select count(*) as count from content_entries")).toBe(0);
+});
+
+contract("publishes and reads a global by model key without a route", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({
+    nextId: sequence("outbox"),
+    resolveModel: resolveRoute,
+  });
+  await seedModels(sql, "settings");
+  await seedMedia(sql, "media-1");
+  await repository.create({
+    entry: globalEntry("settings", 1),
+    mediaReferences: references("settings-block"),
+  });
+  expect(await repository.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
+  expect(await repository.loadPublicMedia("media-1")).toBeNull();
+  const version = await repository.publishedContentVersion();
+  const published = await repository.publish(publish("settings", 1, 2, "settings-published"));
+  expect(published).toMatchObject({ outcome: "published", targetVersion: version + 1 });
+  expect(await count(sql, "select count(*) as count from published_routes")).toBe(0);
+  expect(await repository.publishedContentVersion()).toBe(version + 1);
+  const pending = await sql.all<{ payload_json: string }>(
+    "select payload_json from outbox_events where type = 'site.build.requested' and processed_at is null",
+  );
+  expect(pending).toHaveLength(1);
+
+  const read = await repository.loadPublicGlobal(contentModelKey("settings"));
+  expect(read).toMatchObject({
+    entry: {
+      id: "settings",
+      model: { key: "settings", kind: "global" },
+      published: { fields: { image: "media-1", title: "Lace" }, id: "settings-published" },
+    },
+    media: [{ id: "media-1" }],
+  });
+  expect(read).not.toHaveProperty("path");
+  expect(await repository.loadPublicMedia("media-1")).toMatchObject({ id: "media-1" });
+
+  await repository.saveCompleteDraft(
+    save("settings", 1, 3, { fields: { title: "Changed" }, title: "Site settings" }),
+  );
+  await repository.publish(publish("settings", 2, 4, "settings-republished"));
+  expect(await repository.loadPublicGlobal(contentModelKey("settings"))).toMatchObject({
+    entry: { published: { fields: { title: "Changed" }, id: "settings-republished" } },
+    media: [],
+  });
+  expect(await repository.publishedContentVersion()).toBe(version + 2);
+  expect(
+    await count(sql, "select count(*) as count from outbox_events where processed_at is null"),
+  ).toBe(1);
+  expect(
+    await count(sql, "select count(*) as count from content_snapshots where entry_id = 'settings'"),
+  ).toBe(2);
+});
+
+contract(
+  "keeps globals out of routed reads and lists them in the export",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedPublishedGlobal(repository, sql);
+    await seedMedia(sql, "media-3");
+    await repository.saveCompleteDraft(
+      save("settings", 1, 4, {
+        fields: { image: "media-3" },
+        mediaReferences: [
+          { fieldPath: "image", mediaId: mediaId("media-3"), sourceKey: "$fields" },
+        ],
+        title: "Site settings",
+      }),
+    );
+
+    expect(await repository.loadPublic("/")).toMatchObject({ entry: { id: "home" } });
+    for (const key of ["home", "posts", "missing"]) {
+      expect(await repository.loadPublicGlobal(contentModelKey(key)), key).toBeNull();
+    }
+    expect(
+      (await repository.listPublic({ limit: 10, modelKey: contentModelKey("settings") })).items,
+    ).toEqual([]);
+    expect(
+      (await repository.listPublic({ limit: 10, modelKey: contentModelKey("posts") })).items.map(
+        (item) => item.entry.id,
+      ),
+    ).toEqual(["post"]);
+
+    const exported = await repository.exportBuildContent();
+    expect(exported.entries.map((item) => item.path)).toEqual(["/", "/blog/post"]);
+    expect(exported.globals.map((item) => item.entry.id)).toEqual(["settings"]);
+    expect(exported.globals[0]).toMatchObject({
+      entry: { published: { fields: { image: "media-2" } } },
+      media: [{ id: "media-2" }],
+    });
+    expect(exported.globals[0]).not.toHaveProperty("path");
+    expect(
+      [...exported.entries, ...exported.globals].flatMap((item) => item.media.map((m) => m.id)),
+    ).toEqual(["media-1", "media-1", "media-2"]);
+    // Media referenced only by the global's draft stays private.
+    expect(await repository.loadPublicMedia("media-3")).toBeNull();
+    expect(await repository.loadPublicMedia("media-2")).toMatchObject({ id: "media-2" });
+  },
+);
+
+contract("unpublishes and reverts a global without touching routes", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+  await seedPublishedGlobal(repository, sql);
+  await repository.saveCompleteDraft(
+    save("settings", 1, 4, { fields: { title: "Changed" }, title: "Site settings" }),
+  );
+  const version = await repository.publishedContentVersion();
+  const reverted = await repository.revertDraft(revertCommand("settings", 2, "settings-published"));
+  expect(reverted.entry!.draft).toMatchObject({ fields: { image: "media-2" }, revision: 3 });
+  expect(await repository.publishedContentVersion()).toBe(version);
+
+  const routesBefore = await sql.all("select * from published_routes order by path");
+  const result = await repository.unpublish(unpublishCommand("settings", "settings-published", 5));
+  expect(result).toMatchObject({ outcome: "unpublished", targetVersion: version + 1 });
+  expect(result.entry.draft).toEqual(reverted.entry!.draft);
+  expect(await repository.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
+  expect((await repository.exportBuildContent()).globals).toEqual([]);
+  expect(await repository.loadPublicMedia("media-2")).toBeNull();
+  expect(await sql.all("select * from published_routes order by path")).toEqual(routesBefore);
+  expect(await repository.publishedContentVersion()).toBe(version + 1);
+});
+
+contract(
+  "rolls back global publication and unpublication at every checkpoint",
+  async (runtime, expect) => {
+    const publicationCheckpoints = PUBLICATION_CHECKPOINTS.filter(
+      (checkpoint) => checkpoint !== "publish.route",
+    );
+    for (const checkpoint of publicationCheckpoints) {
+      const { repository, sql } = await runtime.open({
+        beforeMutation: (name) => {
+          if (name === checkpoint) throw new Error(`injected ${checkpoint}`);
+        },
+        resolveModel: resolveRoute,
+      });
+      await seedModels(sql, "settings");
+      await seedMedia(sql, "media-1");
+      await repository.create({
+        entry: globalEntry("settings", 1),
+        mediaReferences: references("settings-block"),
+      });
+      const before = await lifecycleState(sql);
+      await expect(
+        repository.publish(publish("settings", 1, 2, "settings-published")),
+        checkpoint,
+      ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+      expect(await lifecycleState(sql), checkpoint).toEqual(before);
+    }
+    for (const checkpoint of UNPUBLICATION_CHECKPOINTS) {
+      let armed = false;
+      const { repository, sql } = await runtime.open({
+        beforeMutation: (name) => {
+          if (armed && name === checkpoint) throw new Error(`injected ${checkpoint}`);
+        },
+        resolveModel: resolveRoute,
+      });
+      await seedPublishedGlobal(repository, sql);
+      const before = await lifecycleState(sql);
+      armed = true;
+      await expect(
+        repository.unpublish(unpublishCommand("settings", "settings-published", 5)),
+        checkpoint,
+      ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+      expect(await lifecycleState(sql), checkpoint).toEqual(before);
+    }
+  },
+);
+
+const seoReference = (media: string) =>
+  Object.freeze({ fieldPath: "image", mediaId: mediaId(media), sourceKey: "$seo" as const });
+
+/** A `posts` entry whose draft carries an SEO group. */
+function seoEntry(id: string, seo: EntrySeo, updatedAt: number, slug = id): ContentEntry {
+  const value = entry(id, "posts", { slug, title: id, updatedAt });
+  return createContentEntry({ draft: { ...value.draft, seo }, id: value.id, model: value.model });
+}
+
+async function seoState(sql: ContractSql) {
+  return {
+    references: await sql.all(
+      "select snapshot_id, source_key, field_path, media_id from content_media_references order by snapshot_id, source_key, field_path",
+    ),
+    seo: await sql.all("select id, revision, seo_json from content_snapshots order by id"),
+    version: (await sql.get<{ version: number }>("select version from published_state"))?.version,
+  };
+}
+
+contract(
+  "persists and copies the SEO group through save, publish, revert and duplicate",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts");
+    for (const id of ["media-1", "media-2"]) await seedMedia(sql, id);
+    const seo = { canonical: "https://example.com/a", image: mediaId("media-1"), title: "A" };
+    await repository.create({
+      entry: seoEntry("post", seo, 1, "post"),
+      mediaReferences: [seoReference("media-1")],
+    });
+    expect(await sql.get("select seo_json from content_snapshots where id = 'post-draft'")).toEqual(
+      { seo_json: '{"canonical":"https://example.com/a","image":"media-1","title":"A"}' },
+    );
+
+    const changedSeo = { image: mediaId("media-2"), noindex: true as const, title: "B" };
+    await repository.saveCompleteDraft(
+      save("post", 1, 2, {
+        mediaReferences: [seoReference("media-2")],
+        seo: changedSeo,
+        slug: "post",
+      }),
+    );
+    expect((await repository.load({ entryId: contentEntryId("post") }))!.draft.seo).toEqual(
+      changedSeo,
+    );
+    await repository.publish(publish("post", 2, 3, "post-published"));
+    const published = (await repository.load({ entryId: contentEntryId("post") }))!;
+    expect(published.published!.seo).toEqual(changedSeo);
+    expect(
+      await sql.all(
+        "select snapshot_id, media_id from content_media_references where source_key = '$seo' order by snapshot_id",
+      ),
+    ).toEqual([
+      { media_id: "media-2", snapshot_id: "post-draft" },
+      { media_id: "media-2", snapshot_id: "post-published" },
+    ]);
+    const publicEntry = await repository.loadPublic("/blog/post");
+    expect(publicEntry!.entry.published!.seo).toEqual(changedSeo);
+    expect(publicEntry!.media.map((media) => media.id)).toEqual(["media-2"]);
+    const exported = await repository.exportBuildContent();
+    expect(exported.entries[0]!.entry.published!.seo).toEqual(changedSeo);
+    expect(exported.entries[0]!.media.map((media) => media.id)).toEqual(["media-2"]);
+    expect(await repository.loadPublicMedia(mediaId("media-2"))).not.toBeNull();
+    expect(await repository.loadPublicMedia(mediaId("media-1"))).toBeNull();
+
+    // Saving without a group clears it from the draft only.
+    await repository.saveCompleteDraft(save("post", 2, 4, { slug: "post" }));
+    const cleared = (await repository.load({ entryId: contentEntryId("post") }))!;
+    expect(cleared.draft).not.toHaveProperty("seo");
+    expect(cleared.published!.seo).toEqual(changedSeo);
+    expect(
+      await count(
+        sql,
+        "select count(*) as count from content_media_references where snapshot_id = 'post-draft'",
+      ),
+    ).toBe(0);
+
+    await repository.revertDraft({
+      entryId: contentEntryId("post"),
+      expectedPublishedSnapshotId: contentSnapshotId("post-published"),
+      expectedRevision: 3,
+      revertedAt: unixMilliseconds(5),
+      revertedBy: editor,
+    });
+    const reverted = (await repository.load({ entryId: contentEntryId("post") }))!;
+    expect(reverted.draft.seo).toEqual(changedSeo);
+    expect(
+      await sql.all(
+        "select source_key, media_id from content_media_references where snapshot_id = 'post-draft'",
+      ),
+    ).toEqual([{ media_id: "media-2", source_key: "$seo" }]);
+
+    await repository.create({
+      duplicateOf: { entryId: contentEntryId("post"), expectedRevision: 4 },
+      entry: seoEntry("copy", changedSeo, 6, "copy"),
+      mediaReferences: [seoReference("media-2")],
+    });
+    expect((await repository.load({ entryId: contentEntryId("copy") }))!.draft.seo).toEqual(
+      changedSeo,
+    );
+    expect((await repository.loadMediaCatalogItem("media-2"))!.usageCount).toBe(2);
+  },
+);
+
+contract(
+  "SEO images protect media and appear in usage but stay private while draft-only",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts");
+    await seedMedia(sql, "media-1");
+    await repository.create({
+      entry: seoEntry("post", { image: mediaId("media-1") }, 1),
+      mediaReferences: [seoReference("media-1")],
+    });
+    await expect(
+      repository.markForDeletion({
+        mediaId: mediaId("media-1"),
+        requestedAt: unixMilliseconds(2),
+        requestedBy: editor,
+      }),
+    ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+    expect((await repository.loadMediaCatalogItem("media-1"))!.usageCount).toBe(1);
+    expect(await repository.loadMediaUsage({ limit: 50, mediaId: mediaId("media-1") })).toEqual([
+      expect.objectContaining({
+        entryId: "post",
+        locations: [{ field: "image", source: "seo", states: ["draft"] }],
+      }),
+    ]);
+    expect(await repository.loadPublicMedia(mediaId("media-1"))).toBeNull();
+    expect((await repository.exportBuildContent()).entries).toEqual([]);
+  },
+);
+
+/** A `posts` configuration with SEO and a `note` block of the given definition. */
+async function seoNoteConfig(
+  note: BlockDefinition,
+  version: number,
+  overrides: Partial<CollectionModelInput> = {},
+) {
+  return defineConfig({
+    blocks: [...Object.values(builtInBlocks), note],
+    content: [
+      defineCollection({
+        blocks: ["richText", "note"],
+        fields: { headline: field.text() },
+        key: "posts",
+        route: "/blog/:slug",
+        seo: true,
+        version,
+        ...overrides,
+      } as CollectionModelInput),
+    ],
+  });
+}
+
+async function syncSeoNotes(
+  repository: ContractRepository,
+  config: Awaited<ReturnType<typeof seoNoteConfig>>,
+  at: number,
+) {
+  const prepared = await prepareConfigurationSynchronization({
+    blocks: config.runtime.blocks,
+    models: config.runtime.content,
+    state: repository,
+  });
+  if (!prepared.plan.isValid) return { prepared };
+  return {
+    prepared,
+    result: await applyPreparedConfigurationSynchronization({
+      blocks: config.runtime.blocks,
+      clock: { now: () => unixMilliseconds(at) },
+      ids: { next: sequence(`sync-${at}`) },
+      models: config.runtime.content,
+      prepared,
+      target: repository,
+    }),
+  };
+}
+
+async function seedSeoNotes(repository: ContractRepository, sql: ContractSql): Promise<void> {
+  for (const id of ["m-1", "m-2"]) await seedMedia(sql, id);
+  const value = entry("live", "posts", {
+    blocks: [note("n1", { body: "Live", image: "m-1" })],
+    fields: { headline: "Head" },
+    slug: "live",
+    title: "Live",
+    updatedAt: 20,
+  });
+  await repository.create({
+    entry: createContentEntry({
+      draft: { ...value.draft, seo: { image: mediaId("m-2"), title: "Live SEO" } },
+      id: value.id,
+      model: value.model,
+    }),
+    mediaReferences: [
+      { fieldPath: "image", mediaId: mediaId("m-1"), sourceKey: blockKey("n1") },
+      seoReference("m-2"),
+    ],
+  });
+  await repository.publish(publish("live", 1, 21, "live-published"));
+}
+
+contract(
+  "block migrations and field rewrites during synchronization keep SEO groups",
+  async (runtime, expect) => {
+    const v1 = await seoNoteConfig(noteV1, 1);
+    const { repository, sql } = await runtime.open({
+      resolveModel: syncResolver(v1.runtime.content),
+    });
+    await syncSeoNotes(repository, v1, 10);
+    await seedSeoNotes(repository, sql);
+    const seoRows = () =>
+      sql.all("select id, seo_json from content_snapshots where seo_json is not null order by id");
+    const seoReferences = () =>
+      sql.all(
+        "select snapshot_id, media_id from content_media_references where source_key = '$seo' order by snapshot_id",
+      );
+    const rows = await seoRows();
+    const references = await seoReferences();
+    expect(rows).toHaveLength(2);
+    expect(references).toHaveLength(2);
+
+    const migrated = await syncSeoNotes(repository, await seoNoteConfig(noteV3(), 2), 30);
+    expect(migrated.result).toMatchObject({ status: "applied" });
+    expect(await seoRows()).toEqual(rows);
+    expect(await seoReferences()).toEqual(references);
+
+    const rewritten = await syncSeoNotes(
+      repository,
+      await seoNoteConfig(noteV3(), 3, {
+        blocks: ["richText"],
+        fields: { title: field.text({ renamedFrom: "headline" }) },
+        removedBlocks: ["note"],
+      }),
+      40,
+    );
+    expect(rewritten.result).toMatchObject({ status: "applied" });
+    const live = (await repository.load({ entryId: contentEntryId("live") }))!;
+    expect(live.draft.fields).toEqual({ title: "Head" });
+    expect(live.draft.blocks).toEqual([]);
+    expect(live.published!.seo).toEqual({ image: "m-2", title: "Live SEO" });
+    expect(await seoReferences()).toEqual(references);
+  },
+);
+
+contract(
+  "refuses disabling SEO with stored values and prunes them atomically with the hint",
+  async (runtime, expect) => {
+    const v1 = await seoNoteConfig(noteV1, 1);
+    let armed = false;
+    const { repository, sql } = await runtime.open({
+      beforeMutation: (name) => {
+        if (armed && name === "sync.model.remove-seo") throw new Error("injected remove-seo");
+      },
+      resolveModel: syncResolver(v1.runtime.content),
+    });
+    await syncSeoNotes(repository, v1, 10);
+    await seedSeoNotes(repository, sql);
+    const before = await seoState(sql);
+
+    const unhinted = await syncSeoNotes(
+      repository,
+      await seoNoteConfig(noteV1, 2, { seo: false }),
+      30,
+    );
+    expect(unhinted.prepared.plan.diagnostics).toMatchObject([
+      {
+        affectedCount: 2,
+        code: "SEO_REMOVAL_HAS_DATA",
+        snapshots: [
+          { entryId: "live", state: "draft", title: "Live" },
+          { entryId: "live", state: "published", title: "Live" },
+        ],
+      },
+    ]);
+    expect(unhinted.prepared.report.text).toContain("removedSeo: true");
+    expect(await seoState(sql)).toEqual(before);
+
+    const hinted = await seoNoteConfig(noteV1, 2, { removedSeo: true, seo: false });
+    armed = true;
+    await expect(syncSeoNotes(repository, hinted, 31)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    expect(await seoState(sql)).toEqual(before);
+    armed = false;
+
+    const pruned = await syncSeoNotes(repository, hinted, 32);
+    expect(pruned.prepared.report.text).toContain("planned SEO removal");
+    expect(pruned.result).toMatchObject({ status: "applied", targetVersion: before.version! + 1 });
+    const after = await seoState(sql);
+    expect(after.seo.map((row) => row.seo_json)).toEqual([null, null]);
+    expect(after.seo.map((row) => row.revision)).toEqual(before.seo.map((row) => row.revision));
+    expect(after.references).toEqual(before.references.filter((row) => row.source_key !== "$seo"));
+    expect((await repository.loadMediaCatalogItem("m-2"))!.usageCount).toBe(0);
+    expect((await repository.loadMediaCatalogItem("m-1"))!.usageCount).toBe(1);
+  },
+);
+
+contract(
+  "media metadata of a published SEO image requests a build while a draft-only one does not",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts");
+    for (const id of ["media-1", "media-2"]) await seedMedia(sql, id);
+    await repository.create({
+      entry: seoEntry("live", { image: mediaId("media-1") }, 1),
+      mediaReferences: [seoReference("media-1")],
+    });
+    await repository.publish(publish("live", 1, 2, "live-published"));
+    await repository.create({
+      entry: seoEntry("draft", { image: mediaId("media-2") }, 3),
+      mediaReferences: [seoReference("media-2")],
+    });
+    // A draft-only use keeps the item off the public site.
+    await repository.saveCompleteDraft(save("live", 1, 4, { slug: "live" }));
+    const version = await repository.publishedContentVersion();
+    const builds = await pendingBuilds(sql);
+
+    const drafted = await repository.updateMediaMetadata(
+      metadataUpdate("media-2", 1, 10, { alt: "Draft" }),
+    );
+    expect(drafted).not.toHaveProperty("targetVersion");
+    expect(await repository.publishedContentVersion()).toBe(version);
+    expect(await pendingBuilds(sql)).toEqual(builds);
+
+    const live = await repository.updateMediaMetadata(
+      metadataUpdate("media-1", 1, 11, { alt: "Share image" }),
+    );
+    expect(live.targetVersion).toBe(version + 1);
+    const pending = await pendingBuilds(sql);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ reason: "media_metadata", targetVersion: version + 1 });
+    expect(await repository.loadPublicMedia("media-1")).toMatchObject({ alt: "Share image" });
+  },
+);
+
+// ---------------------------------------------------------------- block envelope
+
+/** A hero block with envelope values; the repository stores what it receives. */
+function envelopeBlock(
+  key: string,
+  image: string,
+  envelope: Partial<Pick<ContentBlock, "anchor" | "className" | "hidden" | "settings">>,
+  position = 1000,
+): ContentBlock {
+  return Object.freeze({ ...heroBlock(key, image, key, "hero", position), ...envelope });
+}
+
+function blockReference(media: string, key: string) {
+  return Object.freeze({ fieldPath: "image", mediaId: mediaId(media), sourceKey: blockKey(key) });
+}
+
+async function envelopeRows(sql: ContractSql) {
+  return sql.all(
+    "select snapshot_id, block_key, anchor, class_name, hidden, settings_json from content_blocks order by snapshot_id, position",
+  );
+}
+
+contract(
+  "persists and copies block envelopes through save, publish, revert and duplicate",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts");
+    for (const id of ["media-1", "media-2"]) await seedMedia(sql, id);
+    const shown = envelopeBlock("b1", "media-1", {
+      anchor: "pricing",
+      className: "wide md:w-1/2",
+      settings: { align: "center", boxed: true },
+    });
+    const hidden = envelopeBlock("b2", "media-2", { hidden: true, settings: {} }, 2000);
+    await repository.create({
+      entry: entry("post", "posts", { blocks: [shown, hidden], slug: "post", updatedAt: 1 }),
+      mediaReferences: [blockReference("media-1", "b1"), blockReference("media-2", "b2")],
+    });
+    expect(await envelopeRows(sql)).toEqual([
+      {
+        anchor: "pricing",
+        block_key: "b1",
+        class_name: "wide md:w-1/2",
+        hidden: 0,
+        settings_json: '{"align":"center","boxed":true}',
+        snapshot_id: "post-draft",
+      },
+      {
+        anchor: null,
+        block_key: "b2",
+        class_name: null,
+        hidden: 1,
+        settings_json: "{}",
+        snapshot_id: "post-draft",
+      },
+    ]);
+    expect((await repository.load({ entryId: contentEntryId("post") }))!.draft.blocks).toEqual([
+      shown,
+      hidden,
+    ]);
+
+    // The published copy shares the draft's anchors: uniqueness is per snapshot.
+    await repository.publish(publish("post", 1, 2, "post-published"));
+    const published = (await repository.load({ entryId: contentEntryId("post") }))!;
+    expect(published.published!.blocks).toEqual([shown, hidden]);
+
+    const changed = envelopeBlock("b1", "media-1", { settings: { align: "left" } });
+    await repository.saveCompleteDraft(
+      save("post", 1, 3, {
+        blocks: [changed],
+        mediaReferences: [blockReference("media-1", "b1")],
+        slug: "post",
+      }),
+    );
+    const saved = (await repository.load({ entryId: contentEntryId("post") }))!;
+    expect(saved.draft.blocks).toEqual([changed]);
+    expect(saved.published!.blocks).toEqual([shown, hidden]);
+
+    await repository.revertDraft({
+      entryId: contentEntryId("post"),
+      expectedPublishedSnapshotId: contentSnapshotId("post-published"),
+      expectedRevision: 2,
+      revertedAt: unixMilliseconds(4),
+      revertedBy: editor,
+    });
+    expect((await repository.load({ entryId: contentEntryId("post") }))!.draft.blocks).toEqual([
+      shown,
+      hidden,
+    ]);
+
+    const copyBlocks = [
+      envelopeBlock("c1", "media-1", { anchor: "pricing", className: "wide md:w-1/2" }),
+      envelopeBlock("c2", "media-2", { hidden: true }, 2000),
+    ];
+    await repository.create({
+      duplicateOf: { entryId: contentEntryId("post"), expectedRevision: 3 },
+      entry: entry("copy", "posts", { blocks: copyBlocks, updatedAt: 5 }),
+      mediaReferences: [blockReference("media-1", "c1"), blockReference("media-2", "c2")],
+    });
+    expect((await repository.load({ entryId: contentEntryId("copy") }))!.draft.blocks).toEqual(
+      copyBlocks,
+    );
+  },
+);
+
+contract(
+  "leaves hidden blocks and their exclusive media out of public delivery",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts", "settings");
+    for (const id of ["media-1", "media-2", "media-3"]) await seedMedia(sql, id);
+    await repository.create({
+      entry: entry("post", "posts", {
+        blocks: [
+          envelopeBlock("b1", "media-1", { anchor: "top" }),
+          envelopeBlock("b2", "media-2", { hidden: true }, 2000),
+          // media-1 is also held by a hidden block; the visible use keeps it public.
+          envelopeBlock("b3", "media-1", { hidden: true }, 3000),
+        ],
+        slug: "post",
+        updatedAt: 1,
+      }),
+      mediaReferences: [
+        blockReference("media-1", "b1"),
+        blockReference("media-2", "b2"),
+        blockReference("media-1", "b3"),
+      ],
+    });
+    await repository.publish(publish("post", 1, 2, "post-published"));
+    await repository.create({
+      entry: entry("settings", "settings", {
+        blocks: [envelopeBlock("g1", "media-3", { hidden: true })],
+        fields: { image: "media-1", title: "Lace" },
+        title: "Site settings",
+        updatedAt: 3,
+      }),
+      mediaReferences: [
+        { fieldPath: "image", mediaId: mediaId("media-1"), sourceKey: "$fields" as const },
+        blockReference("media-3", "g1"),
+      ],
+    });
+    await repository.publish(publish("settings", 1, 4, "settings-published"));
+
+    const keys = (value: { readonly entry: ContentEntry } | null) =>
+      value!.entry.published!.blocks.map((block) => block.key as string);
+    const mediaIds = (value: { readonly media: readonly { readonly id: string }[] } | null) =>
+      value!.media.map((media) => media.id);
+    const byPath = await repository.loadPublic("/blog/post");
+    expect(keys(byPath)).toEqual(["b1"]);
+    expect(byPath!.entry.published!.blocks[0]).toMatchObject({ anchor: "top", hidden: false });
+    expect(mediaIds(byPath)).toEqual(["media-1"]);
+    const page = await repository.listPublic({ limit: 10, modelKey: contentModelKey("posts") });
+    expect(keys(page.items[0]!)).toEqual(["b1"]);
+    expect(mediaIds(page.items[0]!)).toEqual(["media-1"]);
+    const global = await repository.loadPublicGlobal(contentModelKey("settings"));
+    expect(keys(global)).toEqual([]);
+    expect(mediaIds(global)).toEqual(["media-1"]);
+    const exported = await repository.exportBuildContent();
+    expect(keys(exported.entries[0]!)).toEqual(["b1"]);
+    expect(exported.entries.flatMap(mediaIds)).toEqual(["media-1"]);
+    expect(keys(exported.globals[0]!)).toEqual([]);
+    expect(mediaIds(exported.globals[0]!)).toEqual(["media-1"]);
+    expect(await repository.loadPublicMedia(mediaId("media-1"))).not.toBeNull();
+    expect(await repository.loadPublicMedia(mediaId("media-2"))).toBeNull();
+    expect(await repository.loadPublicMedia(mediaId("media-3"))).toBeNull();
+
+    // Hidden blocks stay stored, so their media stays protected and listed.
+    await expect(
+      repository.markForDeletion({
+        mediaId: mediaId("media-2"),
+        requestedAt: unixMilliseconds(5),
+        requestedBy: editor,
+      }),
+    ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+    expect(await repository.loadMediaUsage({ limit: 50, mediaId: mediaId("media-2") })).toEqual([
+      expect.objectContaining({
+        entryId: "post",
+        locations: [
+          {
+            blockKey: "b2",
+            blockType: "hero",
+            field: "image",
+            source: "block",
+            states: ["draft", "published"],
+          },
+        ],
+      }),
+    ]);
+    expect(
+      (await repository.load({ entryId: contentEntryId("post") }))!.published!.blocks.map(
+        (block) => block.key as string,
+      ),
+    ).toEqual(["b1", "b2", "b3"]);
+  },
+);
+
+const panelV1 = defineBlock({
+  fields: { body: field.text() },
+  settings: { tone: field.text({ defaultValue: "light" }) },
+  type: "note",
+  version: 1,
+});
+
+const panelV2 = defineBlock({
+  fields: { body: field.text() },
+  migrations: {
+    2: ({ data, settings: { tone = "light", ...rest } }) => ({
+      data,
+      settings: { ...rest, theme: tone },
+    }),
+  },
+  settings: {
+    align: field.select({ defaultValue: "left", options: ["left", "center"] }),
+    theme: field.text({ defaultValue: "light" }),
+  },
+  type: "note",
+  version: 2,
+});
+
+contract(
+  "block migrations rewrite settings and keep anchors, class names and hidden flags",
+  async (runtime, expect) => {
+    const v1 = await noteConfig(panelV1, 1);
+    const { repository, sql } = await runtime.open({
+      resolveModel: syncResolver(v1.runtime.content),
+    });
+    await syncNotes(repository, v1, 10);
+    const stored = Object.freeze({
+      ...note("n1", { body: "Live" }),
+      anchor: "intro",
+      className: "lead",
+      hidden: true,
+      settings: { tone: "dark" },
+    });
+    await repository.create({
+      entry: entry("live", "posts", {
+        blocks: [stored],
+        slug: "live",
+        title: "Live",
+        updatedAt: 20,
+      }),
+      mediaReferences: [],
+    });
+    await repository.publish(publish("live", 1, 21, "live-published"));
+
+    const v2 = await noteConfig(panelV2, 2);
+    const prepared = await prepareNotes(repository, v2);
+    expect(prepared.plan.isValid).toBe(true);
+    await syncNotes(repository, v2, 30, prepared);
+    expect(await envelopeRows(sql)).toEqual(
+      ["live-draft", "live-published"].map((snapshot) => ({
+        anchor: "intro",
+        block_key: "n1",
+        class_name: "lead",
+        hidden: 1,
+        settings_json: '{"align":"left","theme":"dark"}',
+        snapshot_id: snapshot,
+      })),
+    );
+    const live = (await repository.load({ entryId: contentEntryId("live") }))!;
+    expect(live.draft.blocks[0]).toMatchObject({ schemaVersion: 2, settings: { theme: "dark" } });
+    expect(live.published!.blocks[0]).toMatchObject({ anchor: "intro", hidden: true });
   },
 );
 

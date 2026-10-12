@@ -1,3 +1,5 @@
+import type { ContentModelDto } from "@lacecms/contracts";
+
 /** The lifecycle actions an entry menu offers; each mirrors the API's permission rule. */
 export interface EntryActions {
   readonly delete: boolean;
@@ -9,12 +11,12 @@ export interface EntryActions {
 /**
  * Which lifecycle actions to offer for an entry. Visibility is a convenience:
  * the API stays the authorization boundary. A published entry's deletion also
- * needs `content:publish`, and pages are never duplicated or deleted.
+ * needs `content:publish`, and pages and globals are never duplicated or deleted.
  */
 export function entryActions(input: {
   readonly canPublish: boolean;
   readonly canWrite: boolean;
-  readonly kind: "collection" | "page";
+  readonly kind: ContentModelDto["kind"];
   readonly published: boolean;
   /** The saved draft's revision differs from the published revision. */
   readonly savedChanges: boolean;

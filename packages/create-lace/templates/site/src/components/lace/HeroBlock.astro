@@ -5,11 +5,11 @@ import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.hero>;
 
-const { block, context, data, image } = Astro.props;
+const { anchor, block, className, context, data, image } = Astro.props;
 const media = data.image === undefined ? undefined : image(data.image);
 ---
 
-<section class="hero" data-lace-block={block.type} data-lace-block-key={block.key}>
+<section class:list={["hero", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   {data.eyebrow !== undefined && <p data-lace-part="eyebrow">{data.eyebrow}</p>}
   <h1 data-lace-part="heading">{data.heading}</h1>
   {data.body !== undefined && <div data-lace-part="body"><RichText context={{ block: context, fieldPath: ["body"] }} document={data.body} /></div>}

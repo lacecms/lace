@@ -29,7 +29,7 @@ operation, not a readiness side effect.
 | `LACE_ADMIN_DEV_ORIGIN` | no | Absolute origin for the Admin development server. The Docker topology uses `http://admin:5173`. |
 | `LACE_SITE_DEV_ORIGIN` | no | Absolute origin for the Astro development server. The Docker topology uses `http://site:4321`. |
 | `LACE_BUILD_SITE_ID`, `LACE_BUILD_SITE_LABEL` | no | Safe build-site identity shown in Admin; set both or neither. |
-| `LACE_BUILD_SITE_URL` | no | Public site base URL (absolute HTTP(S), no credentials, query or fragment) that the editor links published entries to. Requires the identity; empty means unset. |
+| `LACE_BUILD_SITE_URL` | no | Public site base URL (absolute HTTP(S), no credentials, query or fragment) that the editor links published entries to. Requires the identity; empty means unset. Passed to the site build as well (the Compose builder service), it drives canonical URLs, `og:url` and `sitemap.xml`. |
 
 Startup errors identify invalid variable names, never their values. The runtime
 does not derive public URLs from `Host`, `Forwarded`, or `X-Forwarded-*`
@@ -155,14 +155,22 @@ The `about` route uses `getStaticPaths()` so it emits no static page before
 publication. Further pages and collections need matching Astro route files;
 collections use `getStaticPaths()`. The existing routes read entries from the
 published-site loader in [`src/lib/lace.ts`](../apps/site/src/lib/lace.ts)
-(`byPath`, `entries`, `bySlug`) and render ordered blocks with
+(`byPath`, `entries`, `bySlug`; `global(modelKey)` returns a published global
+or `undefined`) and render ordered blocks with
 `<LaceBlocks>` from `@lacecms/astro` and the block map
 [`src/lace/blocks.ts`](../apps/site/src/lace/blocks.ts). Lace validates route definitions; it does not create
 Astro files or choose a layout. The reference site reads the committed fixture
 until live mode is configured; live mode reads locally published content.
 
-To add a model, register a `definePage` or `defineCollection` call in
-`lace.config.ts`. Start a new model at `version: 1`; choose a unique key and
+To add a model, register a `definePage`, `defineCollection` or `defineGlobal`
+call in `lace.config.ts`. A global is route-less site-wide content (for
+example site settings): sync creates its single draft, it is never served by
+path, and `GET /api/v1/public/globals/:modelKey` (or `getGlobal()` in
+`@lacecms/sdk`) returns `{global, media}` once it is published, `404` before.
+A page or collection may declare `seo: true` (or name fallback fields with
+`seo: { description, image }`) to store per-entry SEO values; its public
+entries and export entries then carry `seo`, and the export's `seo` section
+lists the mappings and the `seoDefaults` global. Start a new model at `version: 1`; choose a unique key and
 path or route, then list its allowed blocks. `notes` demonstrates an optional
 text field with `fields: { summary: field.text() }`. Add further fields using
 typed `field` descriptors and render any field intended for public display in

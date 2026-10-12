@@ -14,6 +14,11 @@ import {
   configurationSyncWriteStatements,
   mediaMetadata,
   mediaMetadataUpdateParams,
+  mediaUsageEntries,
+  seoJson,
+  publicEntry,
+  storedSnapshot,
+  storedSnapshots,
   sqliteWriteError,
   syncMigrationPage,
 } from "../dist/index.js";
@@ -221,6 +226,93 @@ test("synchronization writes keep renamed media references and reject unsafe key
   ).toThrow();
 });
 
+test("the SEO removal write clears groups and SEO references of one model only", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    create table content_entries (id text primary key, model_key text not null);
+    create table content_snapshots (id text primary key, entry_id text not null, seo_json text);
+    create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
+    insert into content_entries values ('e1', 'posts'), ('e2', 'pages');
+    insert into content_snapshots values
+      ('s1', 'e1', '{"image":"media-1","title":"A"}'), ('s2', 'e1', null),
+      ('s3', 'e2', '{"title":"B"}');
+    insert into content_media_references values
+      ('s1', '$seo', 'image', 'media-1'), ('s1', '$fields', 'cover', 'media-2'),
+      ('s3', '$seo', 'image', 'media-1');
+  `);
+  for (const statement of configurationSyncWriteStatements({ action: "remove-seo" }, "posts")) {
+    database.prepare(`${statement.sql} and ? = 1`).run(...statement.params, 1);
+  }
+  const rows = (sql) =>
+    database
+      .prepare(sql)
+      .all()
+      .map((row) => ({ ...row }));
+  expect(rows("select id, seo_json from content_snapshots order by id")).toEqual([
+    { id: "s1", seo_json: null },
+    { id: "s2", seo_json: null },
+    { id: "s3", seo_json: '{"title":"B"}' },
+  ]);
+  expect(
+    rows("select snapshot_id, source_key from content_media_references order by snapshot_id"),
+  ).toEqual([
+    { snapshot_id: "s1", source_key: "$fields" },
+    { snapshot_id: "s3", source_key: "$seo" },
+  ]);
+});
+
+test("SEO groups round-trip through snapshot rows", () => {
+  const row = {
+    created_at: 1,
+    entry_id: "e1",
+    fields_json: "{}",
+    id: "s1",
+    revision: 1,
+    role: "editor",
+    schema_version: 1,
+    seo_json: seoJson({ title: "Hello", noindex: true, image: "media-1" }),
+    slug: null,
+    title: "Hello",
+    updated_at: 1,
+    updated_by: "editor-1",
+  };
+  expect(row.seo_json).toBe('{"image":"media-1","noindex":true,"title":"Hello"}');
+  expect(storedSnapshot(row).seo).toEqual({ image: "media-1", noindex: true, title: "Hello" });
+  expect(storedSnapshot({ ...row, seo_json: null })).not.toHaveProperty("seo");
+  expect(seoJson(undefined)).toBeNull();
+  expect(() => storedSnapshot({ ...row, seo_json: '{"canonical":"/a"}' })).toThrow();
+});
+
+test("media usage maps SEO image references between fields and blocks", () => {
+  const base = {
+    block_type: null,
+    entry_id: "e1",
+    model_key: "posts",
+    position: null,
+    slug: "hello",
+    status: "published",
+    title: "Hello",
+  };
+  const [entry] = mediaUsageEntries([
+    {
+      ...base,
+      field_path: "media",
+      source_key: "b1",
+      block_type: "image",
+      position: 1000,
+      state: "draft",
+    },
+    { ...base, field_path: "image", source_key: "$seo", state: "published" },
+    { ...base, field_path: "image", source_key: "$seo", state: "draft" },
+    { ...base, field_path: "cover", source_key: "$fields", state: "draft" },
+  ]);
+  expect(entry.locations).toEqual([
+    { field: "cover", source: "field", states: ["draft"] },
+    { field: "image", source: "seo", states: ["draft", "published"] },
+    { blockKey: "b1", blockType: "image", field: "media", source: "block", states: ["draft"] },
+  ]);
+});
+
 function migrationDatabase(blockCount) {
   const database = new DatabaseSync(":memory:");
   database.exec(`
@@ -228,7 +320,8 @@ function migrationDatabase(blockCount) {
     create table content_snapshots (id text primary key, entry_id text not null, revision integer not null,
       updated_at integer not null, updated_by text not null);
     create table content_blocks (snapshot_id text, block_key text, block_type text, position integer,
-      schema_version integer, data_json text, updated_at integer);
+      schema_version integer, data_json text, updated_at integer, anchor text, hidden integer default 0,
+      settings_json text not null default '{}');
     create table media (id text primary key, status text not null);
     create table content_media_references (snapshot_id text, source_key text, field_path text,
       media_id text not null, created_at integer);
@@ -237,14 +330,14 @@ function migrationDatabase(blockCount) {
     insert into media values ('m1', 'active'), ('gone', 'deleting');
   `);
   const insertBlock = database.prepare(
-    "insert into content_blocks values (?, ?, 'note', ?, 1, '{}', 1)",
+    "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, updated_at, anchor, hidden) values (?, ?, 'note', ?, 1, '{}', 1, ?, 1)",
   );
   const insertReference = database.prepare(
     "insert into content_media_references values (?, ?, 'image', 'm1', 1)",
   );
   for (const snapshot of ["d1", "p1"]) {
     for (let index = 0; index < blockCount; index += 1) {
-      insertBlock.run(snapshot, `b${index}`, index + 1);
+      insertBlock.run(snapshot, `b${index}`, index + 1, `a${index}`);
       insertReference.run(snapshot, `b${index}`);
     }
   }
@@ -258,6 +351,7 @@ function migration(state, blockCount, overrides = {}) {
       expectedSchemaVersion: 1,
       key: `b${index}`,
       schemaVersion: 3,
+      settings: { tone: `s${index}` },
     })),
     expectedRevision: 3,
     references: Array.from({ length: blockCount }, (_, index) => ({
@@ -295,7 +389,8 @@ test("block migration statements rewrite in place within the D1 parameter limit"
   const draft = configurationSyncMigrationStatements(migration("draft", 200), 50, 99);
   for (const statements of [published, draft]) {
     for (const write of statements.writes) expect(write.params.length).toBeLessThanOrEqual(99);
-    expect(statements.writes.length).toBeLessThanOrEqual(19);
+    // 200 blocks: 11 block rewrites (5 values per row), 1 delete, 7 reference inserts, 1 head.
+    expect(statements.writes.length).toBeLessThanOrEqual(20);
   }
   expect(runMigration(database, published)).toBe(true);
   expect(runMigration(database, draft)).toBe(true);
@@ -310,13 +405,17 @@ test("block migration statements rewrite in place within the D1 parameter limit"
   ]);
   const block = database
     .prepare(
-      "select schema_version, data_json, position, updated_at from content_blocks where snapshot_id = 'p1' and block_key = 'b7'",
+      "select schema_version, data_json, settings_json, anchor, hidden, position, updated_at from content_blocks where snapshot_id = 'p1' and block_key = 'b7'",
     )
     .get();
+  // Settings migrate with the data; the anchor and hidden flag stay.
   expect({ ...block }).toEqual({
+    anchor: "a7",
     data_json: '{"cover":"m1","text":"t7"}',
+    hidden: 1,
     position: 8,
     schema_version: 3,
+    settings_json: '{"tone":"s7"}',
     updated_at: 50,
   });
   expect(
@@ -375,16 +474,20 @@ test("maps migration scan rows into ordered entries", () => {
         block_key: "b2",
         block_type: "hero",
         data_json: null,
+        hidden: 1,
         position: 2,
         schema_version: 1,
+        settings_json: null,
         snapshot_id: "d1",
       },
       {
         block_key: "b1",
         block_type: "note",
         data_json: '{"a":1}',
+        hidden: 0,
         position: 1,
         schema_version: 1,
+        settings_json: '{"tone":"dark"}',
         snapshot_id: "d1",
       },
     ],
@@ -393,8 +496,16 @@ test("maps migration scan rows into ordered entries", () => {
   );
   expect(page.next).toBe("e2");
   expect(page.items[0].draft.blocks).toEqual([
-    { data: { a: 1 }, key: "b1", position: 1, schemaVersion: 1, type: "note" },
-    { key: "b2", position: 2, schemaVersion: 1, type: "hero" },
+    {
+      data: { a: 1 },
+      hidden: false,
+      key: "b1",
+      position: 1,
+      schemaVersion: 1,
+      settings: { tone: "dark" },
+      type: "note",
+    },
+    { hidden: true, key: "b2", position: 2, schemaVersion: 1, type: "hero" },
   ]);
   expect(page.items[0].published.references).toEqual([
     { fieldPath: "image", mediaId: "m1", sourceKey: "b1" },
@@ -457,4 +568,66 @@ test("maps descriptive media metadata and refuses inconsistent rows", () => {
   expect(() => mediaMetadataUpdateParams({ ...input, updatedAt: 4 })).toThrow(
     expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
   );
+});
+
+test("maps stored block envelopes and drops hidden blocks from public entries", () => {
+  const snapshotRow = (id) => ({
+    created_at: 1,
+    entry_id: "e1",
+    fields_json: "{}",
+    id,
+    revision: 1,
+    role: "editor",
+    schema_version: 1,
+    seo_json: null,
+    slug: null,
+    title: "Home",
+    updated_at: 1,
+    updated_by: "editor",
+  });
+  const blockRow = (key, overrides = {}) => ({
+    anchor: null,
+    block_key: key,
+    block_type: "note",
+    class_name: null,
+    created_at: 1,
+    data_json: "{}",
+    hidden: 0,
+    position: 1,
+    schema_version: 1,
+    settings_json: "{}",
+    snapshot_id: "p1",
+    updated_at: 1,
+    ...overrides,
+  });
+  const snapshots = storedSnapshots(
+    [snapshotRow("p1")],
+    [
+      blockRow("b1", { anchor: "pricing", class_name: "wide", settings_json: '{"tone":"dark"}' }),
+      blockRow("b2", { hidden: 1, position: 2 }),
+    ],
+  );
+  const blocks = snapshots.get("p1").blocks;
+  expect(blocks[0]).toEqual({
+    anchor: "pricing",
+    className: "wide",
+    data: {},
+    hidden: false,
+    key: "b1",
+    position: 1,
+    schemaVersion: 1,
+    settings: { tone: "dark" },
+    type: "note",
+  });
+  expect(blocks[1]).toMatchObject({ hidden: true, key: "b2", settings: {} });
+  expect(blocks[1]).not.toHaveProperty("anchor");
+  const published = { ...snapshots.get("p1"), state: "published" };
+  const projected = publicEntry({
+    draft: { ...published, state: "draft" },
+    id: "e1",
+    model: { key: "home", kind: "page", path: "/" },
+    published,
+  });
+  expect(projected.published.blocks.map((block) => block.key)).toEqual(["b1"]);
+  expect(projected.draft.blocks.map((block) => block.key)).toEqual(["b1"]);
 });

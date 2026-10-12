@@ -104,7 +104,8 @@ function NavigationLink({
   readonly onNavigate?: (() => void) | undefined;
 }) {
   const Icon = item.icon;
-  if (item.kind === "page") return <PageLink item={item} onNavigate={onNavigate} />;
+  if (item.kind === "page" || item.kind === "global")
+    return <SingletonLink item={item} onNavigate={onNavigate} />;
   if (item.kind === "collection") return <CollectionLink item={item} onNavigate={onNavigate} />;
   return (
     <Link className={itemClass} onClick={onNavigate} to={item.path}>
@@ -114,11 +115,11 @@ function NavigationLink({
   );
 }
 
-function PageLink({
+function SingletonLink({
   item,
   onNavigate,
 }: {
-  readonly item: Extract<NavigationItem, { kind: "page" }>;
+  readonly item: Extract<NavigationItem, { kind: "global" | "page" }>;
   readonly onNavigate?: (() => void) | undefined;
 }) {
   const overview = useEntryOverview(item.modelKey);
@@ -131,13 +132,14 @@ function PageLink({
       <span className="truncate">{item.label}</span>
     </>
   );
-  // Without a synchronized singleton the overview's Pages section explains the
-  // pending sync; the hash keeps the link from claiming the overview as current.
+  // Without a synchronized singleton the overview's Pages or Site section
+  // explains the pending sync; the hash keeps the link from claiming the
+  // overview as current.
   return singleton === undefined ? (
     <Link
       activeOptions={{ includeHash: true }}
       className={itemClass}
-      hash="pages"
+      hash={item.kind === "page" ? "pages" : "site"}
       onClick={onNavigate}
       to="/content"
     >

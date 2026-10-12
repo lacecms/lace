@@ -39,9 +39,12 @@ export function FieldRendererProvider({
 /**
  * Renders one model or block field with its label, description, control, and
  * error. A `placeholder` is also part of the control's accessible description,
- * and a `notice` (guidance for writers) is shown below it unless view only.
+ * and a `notice` (guidance for writers) is shown below it unless view only. An
+ * `annotation` (what the field is used for) is shown to every user and is part
+ * of the accessible description.
  */
 export function FieldRenderer({
+  annotation,
   control,
   definition,
   error,
@@ -50,11 +53,12 @@ export function FieldRenderer({
   notice,
   placeholder,
 }: {
+  readonly annotation?: string | undefined;
   readonly control: Control<DraftEditorValues, unknown, DraftEditorValues>;
   readonly definition: FieldDefinition;
   readonly error: string | undefined;
   readonly fieldKey: string;
-  readonly name: `blocks.${number}.data.${string}` | `fields.${string}`;
+  readonly name: `blocks.${number}.${"data" | "settings"}.${string}` | `fields.${string}`;
   readonly notice?: ReactNode;
   readonly placeholder?: string | undefined;
 }) {
@@ -65,10 +69,12 @@ export function FieldRenderer({
   const descriptionId = `${id}-description`;
   const placeholderId = `${id}-placeholder`;
   const noticeId = `${id}-notice`;
+  const annotationId = `${id}-annotation`;
   const shownNotice = readOnly || notice === undefined || notice === null ? undefined : notice;
   const describedBy =
     [
       definition.description === undefined ? undefined : descriptionId,
+      annotation === undefined ? undefined : annotationId,
       placeholder === undefined ? undefined : placeholderId,
       shownNotice === undefined ? undefined : noticeId,
       error === undefined ? undefined : errorId,
@@ -92,6 +98,11 @@ export function FieldRenderer({
           {definition.description === undefined ? undefined : (
             <small className="text-xs text-muted-foreground" id={descriptionId}>
               {definition.description}
+            </small>
+          )}
+          {annotation === undefined ? undefined : (
+            <small className="text-xs text-muted-foreground" id={annotationId}>
+              {annotation}
             </small>
           )}
           <Renderer

@@ -75,6 +75,7 @@ Review `.env`:
 <!-- lace-site: starter existing -->
 
 - Build site: `LACE_BUILD_SOURCE_ROOT`, `LACE_BUILD_SITE_DIR`, `LACE_BUILD_OUTPUT_DIR`, `LACE_BUILD_SITE_ID` and `LACE_BUILD_SITE_LABEL` select what the builder builds; see [Selecting the build site](lace-operations.md#selecting-the-build-site).
+- Site output: set `LACE_BUILD_SITE_URL` to the public site URL so pages get canonical URLs and the build writes `sitemap.xml`; set `LACE_SITE_INDEXING=off` on a staging installation to keep it out of search engines.
 
 <!-- lace-site: end -->
 

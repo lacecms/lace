@@ -103,7 +103,7 @@ version; mixing artifacts from different versions is unsupported.
 | `0.1.0-alpha.3` | `0.17.0` | Prepared and accepted locally (Step 33H); npm publication recorded on 2026-10-07 | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
 | `0.1.0-alpha.4` | `0.20.0` | Package publication and real VPS/Cloudflare application/recovery checks owner-confirmed 2026-10-10 | Includes completed 34A–34C local verification; see real-application-verification.md for confirmation scope and evidence limits |
 
-The next alpha after `0.1.0-alpha.4` (source template `0.23.0`, not yet
+The next alpha after `0.1.0-alpha.4` (source template `0.24.0`, not yet
 released) changes the public delivery contract: every `/api/v1/public` content
 response and the build export return the published entry directly with a
 resolved `media` dictionary, without the former mirrored `draft`. The API, the
@@ -114,6 +114,114 @@ responses or the raw export must be updated. The same release requires
 migrations `0005_content_model_structure` and `0006_media_descriptive_metadata`
 and a configuration sync after raising the version of every model that allows
 the version 2 `image` block, as the `0.23.0` upgrade instructions state.
+
+The same next alpha adds route-less `global` models (CE5,
+[ADR 0010](adr/0010-global-models.md)): a new anonymous
+`GET /api/v1/public/globals/:modelKey` route, an additive `globals` key in the
+build export (the SDK treats a missing key as empty, so older exports stay
+valid; older SDKs reject the new key because the export schema is strict), and
+`kind: "global"` in admin model and entry DTOs. It requires migration
+`0007_content_model_global_kind`, a table rebuild of `content_models`; back up
+before migrating, because rolling back after a global exists means restoring
+that backup. Template `0.24.0` delivers the `0007` upgrade steps and adds an optional
+`settings` global (`siteName`, `tagline`) to new projects' `lace.config.ts`;
+new starter layouts read it through `site.global("settings")` with static
+fallbacks. Existing projects adopt it by hand, because configuration and site
+files are user-owned.
+
+The same next alpha adds per-entry SEO data (CE4A,
+[ADR 0011](adr/0011-seo-system-group.md)). Pages and collections opt in with
+`seo` in `lace.config.ts` (a structural change: raise the model version and
+run configuration sync), one global may declare `seoDefaults`, and disabling
+SEO with stored values needs the temporary `removedSeo: true` hint (otherwise
+sync refuses with `SEO_REMOVAL_HAS_DATA`). Contract additions:
+
+- admin draft and published snapshot DTOs and public entries carry
+  `seo: {title, description, image, canonical, noindex}` for SEO-enabled
+  models; create and save requests accept an optional, nullable `seo`, and a
+  non-null `seo` for a model without SEO fails with `422 seo_not_allowed`;
+- admin model DTOs carry `seo` (fallback fields) or `seoDefaults`;
+- the build export gains a `seo` section (`{models, defaults}`); a missing
+  section validates as empty, and older SDKs reject the new key because the
+  export schema is strict;
+- admin media usage locations gain `{source: "seo", field: "image"}`.
+
+It requires migration `0008_content_snapshot_seo` (an additive column). The
+SDK passes stored values through as `PublishedEntry.seo`.
+
+The same next alpha adds the site output (CE4B, source template `0.25.0`). The
+additions are additive and need no REST or database change:
+
+- `@lacecms/sdk`: `site.seo(entry)`, `site.url`, `site.indexing`,
+  `site.urlFor(path)` and `site.allEntries()`; the exported `resolveSeo`,
+  `renderSitemapXml` and `renderRobotsTxt`; the loader reads the optional
+  `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` (or the `siteUrl` and
+  `indexing` options), and an invalid value fails with
+  `missing_configuration`;
+- `@lacecms/astro`: `@lacecms/astro/LaceSeo.astro`, `sitemapResponse` and
+  `robotsResponse`;
+- the VPS builder forwards the two optional settings to the site build and
+  refuses invalid values at startup; the generated Compose builder service and
+  Cloudflare Pages workflow pass them.
+
+Template `0.25.0` enables SEO on the starter `home` and `posts` models, adds
+`description` and `image` with `seoDefaults` to the starter `settings` global,
+renders `<LaceSeo>` in the starter layout and adds `sitemap.xml` and
+`robots.txt` endpoints. Its upgrade instructions carry the `0008` steps; existing
+projects adopt the configuration and site files by hand, and nothing breaks
+without adoption.
+
+The same next alpha changes the block contract (CE6A,
+[ADR 0012](adr/0012-block-envelope.md)). Every block gains an envelope
+beside its data:
+
+- admin draft and published snapshot DTOs return each block with `hidden`
+  and `settings` and, when set, `anchor` and `className`; create and save
+  requests accept all four as optional values that default (visible, no
+  anchor or class, declared setting defaults), so clients that omit them keep
+  working, but a save still replaces the whole draft including envelopes;
+- public entries, public globals and the build export leave hidden blocks out
+  and return each block as `{key, type, schemaVersion, position, anchor?,
+  className?, settings, data}` with no `hidden` key; a missing `settings`
+  validates as `{}`, and older SDKs reject the new keys because public
+  parsing is strict;
+- media referenced only by hidden blocks are left out of the public `media`
+  dictionary and the public media route, while their usage and deletion guard
+  are unchanged;
+- block metadata in model DTOs may carry `settings`;
+- new `422` issue codes: `invalid_block_anchor`, `duplicate_block_anchor`,
+  `invalid_block_class_name`, `invalid_block_hidden` and
+  `invalid_block_settings` (plus field codes under `/blocks/<i>/settings`);
+- **breaking for user-written block migrations:** a migration step now
+  receives `{ data, settings }` and returns `{ data, settings? }` instead of
+  bare data, so `2: ({ quote, ...rest }) => ({ ...rest, text: quote })`
+  becomes `2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote } })`.
+  Sync reports a migration that still returns bare data as
+  `BLOCK_MIGRATION_INVALID`.
+
+It requires migration `0009_content_block_envelope` (additive columns and a
+partial unique index). Back up first: an older engine would deliver hidden
+blocks, so rolling back once envelopes exist restores the backup.
+
+The site packages of the same next alpha render the envelope (CE6B, source
+template `0.26.0`):
+
+- `@lacecms/render`: `RenderableBlock` accepts optional `anchor`,
+  `className`, `hidden` and `settings`; `prepareBlocks` skips hidden blocks;
+  `BlockProps` gains `anchor`, `className` and typed `settings`
+  (`BlockSettingsOf`); `parseBlockEnvelope` is exported; the new error code
+  `invalid_block_envelope` reports an invalid anchor, class name or settings
+  value. The additions are additive for TypeScript;
+- registry block revisions `cta` 2, `hero` 3, `image` 4, `quote` 2 and
+  `richText` 2 place the anchor as the root `id` and merge the class name
+  into the root `class`, with unchanged markup without an envelope; `lace add
+  block` scaffolds custom components the same way.
+
+Template `0.26.0` ships these components and the `0009` upgrade steps. Block
+components are user-owned, so existing sites adopt them with
+`pnpm exec lace add block --all` (edited components are reported as
+conflicts); components that ignore the new props keep rendering without ids
+or editor classes.
 
 Templates `0.15.0` and `0.16.0` were source-only steps between the published
 alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for

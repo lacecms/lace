@@ -34,7 +34,9 @@ export type StructuralChangeKind =
   | "field-renamed"
   | "field-type-changed"
   | "model-property-changed"
-  | "route-changed";
+  | "route-changed"
+  | "seo-disabled"
+  | "seo-enabled";
 
 /** One classified structural difference. `target` is a field key, block type, or model property. */
 export interface StructuralChange {
@@ -60,6 +62,8 @@ export interface StructureHints {
   readonly removedFields?: readonly string[];
   /** Current field key to former field key. */
   readonly renamedFields?: Readonly<Record<string, string>>;
+  /** Stored SEO groups may be cleared after `seo` is disabled. */
+  readonly removedSeo?: boolean;
 }
 
 /** A field rename hint that contradicts the stored baseline. */
@@ -105,6 +109,8 @@ export interface ConfigurationSyncSnapshot {
   }[];
   readonly entryId: string;
   readonly fields: JsonObject;
+  /** Whether the snapshot holds an SEO group; absent means it holds none. */
+  readonly hasSeo?: boolean;
   readonly revision: number;
   readonly snapshotId: string;
   readonly state: "draft" | "published";
@@ -134,6 +140,8 @@ export interface ModelSnapshotEvidence {
   /** Block-migration facts per block type whose version changed; present when scanned. */
   readonly migrations?: Readonly<Record<string, BlockMigrationEvidence>>;
   readonly oversized: ConfigurationSyncSnapshotFindings;
+  /** Snapshots holding an SEO group; present when SEO is being disabled. */
+  readonly seoHolders?: SnapshotHolders;
   readonly snapshots: SnapshotStateCounts;
   readonly violations: Readonly<Record<string, ConfigurationSyncSnapshotFindings>>;
 }
@@ -174,6 +182,7 @@ const MODEL_IDENTITY_PROPERTIES = new Set([
   "kind",
   "path",
   "route",
+  "seo",
   "version",
 ]);
 const SCOPE_ORDER = { block: 1, field: 0, model: 2 } as const;
@@ -415,6 +424,26 @@ export function diffContentModelStructures(
     }
   }
 
+  if (baseline.seo !== target.seo) {
+    if (target.seo === true) {
+      changes.push({ class: "compatible", kind: "seo-enabled", scope: "model", target: "seo" });
+    } else if (baseline.seo === true) {
+      changes.push({
+        class: "destructive",
+        ...(hints.removedSeo === true ? { hinted: true as const } : {}),
+        kind: "seo-disabled",
+        scope: "model",
+        target: "seo",
+      });
+    } else {
+      changes.push({
+        class: "breaking",
+        kind: "model-property-changed",
+        scope: "model",
+        target: "seo",
+      });
+    }
+  }
   for (const property of ["path", "route"]) {
     if (!same(baseline[property], target[property])) {
       changes.push({ class: "breaking", kind: "route-changed", scope: "model", target: property });
@@ -600,6 +629,9 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
   const blockTypes = new Set<string>();
   const backfilled = new Set<string>();
   const validated = new Map<string, StructuralChange>();
+  const seoHolders = request.changes.some((change) => change.kind === "seo-disabled")
+    ? emptyHolders()
+    : undefined;
   for (const change of request.changes) {
     if (change.kind === "field-removed") removedFields.add(change.target);
     if (change.kind === "field-renamed" && change.from !== undefined) {
@@ -620,6 +652,7 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
     add(page) {
       for (const snapshot of page) {
         snapshots[snapshot.state] += 1;
+        if (seoHolders !== undefined && snapshot.hasSeo === true) addHolder(seoHolders, snapshot);
         for (const [key, holders] of Object.entries(fieldHolders)) {
           if (Object.hasOwn(snapshot.fields, key)) addHolder(holders, snapshot);
         }
@@ -668,6 +701,9 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
         fieldHolders: freezeHolders(fieldHolders),
         fingerprint: request.fingerprint,
         oversized: freezeFindings(oversized),
+        ...(seoHolders === undefined
+          ? {}
+          : { seoHolders: freezeHolders({ seo: seoHolders }).seo! }),
         snapshots: Object.freeze({ ...snapshots }),
         violations: Object.freeze(
           Object.fromEntries(

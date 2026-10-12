@@ -56,6 +56,7 @@ import type {
   MediaReadPort,
   MediaUsageEntry,
   PublicContentEntry,
+  PublicGlobalContent,
   PublicContentReadPort,
   PublishContentEntryCommand,
   PublishContentEntryResult,
@@ -91,6 +92,7 @@ import {
   PENDING_SITE_BUILD_SQL,
   PUBLICATION_IDEMPOTENCY_TTL_MS,
   PUBLIC_MEDIA_SQL,
+  PUBLIC_GLOBAL_SQL,
   PUBLIC_ROUTE_SQL,
   SNAPSHOT_COLUMNS_SQL,
   SQL_MAX_PAGE_SIZE,
@@ -98,6 +100,7 @@ import {
   STORED_MODEL_STATE_JSON_SQL,
   SYNC_BLOCKS_SQL,
   SYNC_MIGRATION_BLOCKS_SQL,
+  BLOCK_COPY_COLUMNS_SQL,
   SYNC_MIGRATION_ENTRIES_SQL,
   SYNC_MIGRATION_REFERENCES_SQL,
   SYNC_MIGRATION_SNAPSHOTS_SQL,
@@ -139,7 +142,9 @@ import {
   mediaUsageEntries,
   parseObject,
   publicContentEntry,
+  publicGlobalContent,
   publicSnapshotMedia,
+  seoJson,
   publicSnapshotMediaSql,
   revisionConflict,
   sameStoredModelStates,
@@ -173,6 +178,7 @@ import type {
   EntryRow,
   MediaUsageRow,
   OutboxRow,
+  PublicGlobalRow,
   PublicRow,
   SiteBuildRow,
   SnapshotRow,
@@ -189,7 +195,8 @@ import type {
 } from "@lacecms/db";
 import {
   DomainError,
-  resolveContentPublicPath,
+  contentPublicPath,
+  isSingletonKind,
   siteBuildId,
   unixMilliseconds,
 } from "@lacecms/domain";
@@ -197,6 +204,7 @@ import type {
   ActorId,
   ContentBlock,
   ContentEntry,
+  ContentModelKey,
   DraftSnapshot,
   MediaMetadata,
   PublishedSnapshot,
@@ -222,7 +230,8 @@ const GUARD_SQL = "exists (select 1 from mutation_guards where token = ?)";
 const INJECTED_FAILURE_SQL = "insert into mutation_guards (token, created_at) values (null, 0)";
 const LEASED_SITE_BUILD_SQL =
   "select id from outbox_events where locked_by = ? and type = 'site.build.requested' and processed_at is null and locked_at > ?";
-const BLOCK_VALUES_PER_ROW = 5;
+// Key, type, position, version, data and one envelope JSON value per block row.
+const BLOCK_VALUES_PER_ROW = 6;
 const REFERENCE_VALUES_PER_ROW = 3;
 
 export interface D1RepositoryOptions {
@@ -579,6 +588,18 @@ export class D1ContentRepository
       : null;
   }
 
+  public async loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null> {
+    const row = await this.first<PublicGlobalRow>(
+      `${PUBLIC_GLOBAL_SQL} where e.model_key = ? limit 1`,
+      modelKey,
+    );
+    if (row === undefined) return null;
+    const entries = await this.hydrate([row]);
+    return entries.has(row.id)
+      ? publicGlobalContent(row, entries, await this.publicMedia([row]))
+      : null;
+  }
+
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
     const row = await this.first(PUBLIC_MEDIA_SQL, id);
     return row === undefined ? null : mediaMetadata(row);
@@ -680,10 +701,15 @@ export class D1ContentRepository
 
   public async exportBuildContent(): Promise<BuildContentExport> {
     const rows = await this.all<PublicRow>(`${PUBLIC_ROUTE_SQL} order by r.path asc`);
-    const entries = await this.hydrate(rows);
-    const media = await this.publicMedia(rows);
+    const globalRows = await this.all<PublicGlobalRow>(
+      `${PUBLIC_GLOBAL_SQL} order by e.model_key asc`,
+    );
+    // One hydration and media pass covers routed entries and globals.
+    const entries = await this.hydrate([...rows, ...globalRows]);
+    const media = await this.publicMedia([...rows, ...globalRows]);
     return Object.freeze({
       entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
+      globals: Object.freeze(globalRows.map((row) => publicGlobalContent(row, entries, media))),
       version: await this.publishedContentVersion(),
     });
   }
@@ -726,7 +752,7 @@ export class D1ContentRepository
       `insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) select ?, ?, ?, ?, ?, ? ${guarded}`,
       id,
       model.key,
-      model.kind === "page" ? 1 : null,
+      isSingletonKind(model.kind) ? 1 : null,
       draft.updatedBy.id,
       draft.createdAt,
       draft.updatedAt,
@@ -742,7 +768,7 @@ export class D1ContentRepository
       ...(token === undefined ? [] : [token]),
     );
     if (token !== undefined) this.releaseGuard(batch, token);
-    const results = await this.execute(batch, model.kind === "page");
+    const results = await this.execute(batch, isSingletonKind(model.kind));
     if (source !== undefined && results[0]!.meta.changes !== 1) {
       const current = await this.first<{ readonly revision: number }>(
         DUPLICATE_SOURCE_REVISION_SQL,
@@ -784,10 +810,11 @@ export class D1ContentRepository
       token,
     );
     batch.add(
-      `update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, updated_at = ?, updated_by = ? where id = ? and ${GUARD_SQL}`,
+      `update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, seo_json = ?, updated_at = ?, updated_by = ? where id = ? and ${GUARD_SQL}`,
       mutation.slug ?? null,
       mutation.title,
       JSON.stringify(mutation.fields),
+      seoJson(mutation.seo),
       mutation.updatedAt,
       mutation.updatedBy.id,
       draftId,
@@ -806,7 +833,7 @@ export class D1ContentRepository
   public async publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult> {
     const entry = await this.loadEntry(input.entryId);
     if (entry === null) failure("Content entry does not exist.");
-    const path = resolveContentPublicPath(entry.model, entry.draft.slug);
+    const path = contentPublicPath(entry.model, entry.draft.slug);
     const idempotency = input.idempotency;
     const scope =
       idempotency === undefined ? undefined : `publication:${input.entryId}:${idempotency.actorId}`;
@@ -833,8 +860,8 @@ export class D1ContentRepository
     const batch = this.batch();
     batch.checkpoint("publish.snapshot");
     const snapshotIndex = batch.add(
-      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by)
-       select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version, ?, ?, ?
+      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by)
+       select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ?
          from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id
         where e.id = ? and s.id = ? and s.revision = ?
           ${idempotency === undefined ? "" : "and not exists (select 1 from idempotency_records where scope = ? and key = ?)"}`,
@@ -849,8 +876,8 @@ export class D1ContentRepository
     );
     batch.checkpoint("publish.blocks");
     batch.add(
-      `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
-       select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at
+      `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL})
+       select ?, ${BLOCK_COPY_COLUMNS_SQL}
          from content_blocks where snapshot_id = ? and ${exists.sql}`,
       newId,
       draftId,
@@ -865,20 +892,23 @@ export class D1ContentRepository
       draftId,
       ...exists.params,
     );
-    batch.checkpoint("publish.route");
-    batch.add(
-      `delete from published_routes where entry_id = ? and ${exists.sql}`,
-      input.entryId,
-      ...exists.params,
-    );
-    batch.add(
-      `insert into published_routes (path, entry_id, snapshot_id, updated_at) select ?, ?, ?, ? where ${exists.sql}`,
-      path,
-      input.entryId,
-      newId,
-      input.publishedAt,
-      ...exists.params,
-    );
+    // A global has no route; its publication only replaces the snapshot.
+    if (path !== undefined) {
+      batch.checkpoint("publish.route");
+      batch.add(
+        `delete from published_routes where entry_id = ? and ${exists.sql}`,
+        input.entryId,
+        ...exists.params,
+      );
+      batch.add(
+        `insert into published_routes (path, entry_id, snapshot_id, updated_at) select ?, ?, ?, ? where ${exists.sql}`,
+        path,
+        input.entryId,
+        newId,
+        input.publishedAt,
+        ...exists.params,
+      );
+    }
     batch.add(
       `update content_entries set published_snapshot_id = ?, updated_at = ? where id = ? and ${exists.sql}`,
       newId,
@@ -1148,7 +1178,7 @@ export class D1ContentRepository
     }
     const expectedByKey = new Map(input.expectedStoredModels.map((model) => [model.key, model]));
     const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
-    const pageEntries = new Map(input.pageEntries.map((page) => [page.modelKey, page]));
+    const singletonEntries = new Map(input.singletonEntries.map((page) => [page.modelKey, page]));
     const batch = this.batch();
     const token = this.guard(batch, input.appliedAt, {
       params: [json],
@@ -1174,10 +1204,10 @@ export class D1ContentRepository
           input.appliedAt,
           token,
         );
-        if (configuration.kind === "page") {
-          const page = pageEntries.get(operation.model.key);
+        if (isSingletonKind(configuration.kind)) {
+          const page = singletonEntries.get(operation.model.key);
           if (page === undefined || page.entry.model.key !== operation.model.key) {
-            failure("Page synchronization entry is missing or invalid.");
+            failure("Singleton synchronization entry is missing or invalid.");
           }
           const draft = page.entry.draft;
           assertDraftPersistenceBounds(draft.blocks, []);
@@ -1882,7 +1912,7 @@ export class D1ContentRepository
   }
 
   private async publicMedia(
-    rows: readonly PublicRow[],
+    rows: readonly EntryRow[],
   ): Promise<Map<string, readonly MediaMetadata[]>> {
     const ids = rows.flatMap((row) =>
       row.published_snapshot_id === null ? [] : [row.published_snapshot_id],
@@ -1988,13 +2018,14 @@ export class D1ContentRepository
     token?: string,
   ): void {
     batch.add(
-      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${token === undefined ? "" : `where ${GUARD_SQL}`}`,
+      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${token === undefined ? "" : `where ${GUARD_SQL}`}`,
       snapshot.id,
       snapshot.entryId,
       snapshot.revision,
       snapshot.slug ?? null,
       snapshot.title,
       JSON.stringify(snapshot.fields),
+      seoJson(snapshot.seo),
       schemaVersion,
       snapshot.createdAt,
       snapshot.updatedAt,
@@ -2014,8 +2045,11 @@ export class D1ContentRepository
     const shared = token === undefined ? [snapshotId, timestamp] : [snapshotId, timestamp, token];
     for (const group of chunks(blocks, rowsPerStatement(shared.length, BLOCK_VALUES_PER_ROW))) {
       batch.add(
-        `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
-         select ?1, v.column1, v.column2, v.column3, v.column4, v.column5, ?2, ?2
+        `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json,
+                                     anchor, class_name, hidden, settings_json, created_at, updated_at)
+         select ?1, v.column1, v.column2, v.column3, v.column4, v.column5,
+                v.column6 ->> '$.anchor', v.column6 ->> '$.className',
+                coalesce(v.column6 ->> '$.hidden', 0), coalesce(v.column6 -> '$.settings', '{}'), ?2, ?2
            from (values ${numberedValues(group.length, BLOCK_VALUES_PER_ROW, shared.length)}) v
           ${token === undefined ? "" : "where exists (select 1 from mutation_guards where token = ?3)"}`,
         ...shared,
@@ -2025,6 +2059,13 @@ export class D1ContentRepository
           block.position,
           block.schemaVersion,
           JSON.stringify(block.data),
+          // One bound envelope keeps a 200-block save within the D1 statement budget.
+          JSON.stringify({
+            ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+            ...(block.className === undefined ? {} : { className: block.className }),
+            hidden: block.hidden ? 1 : 0,
+            settings: block.settings,
+          }),
         ]),
       );
     }

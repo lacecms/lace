@@ -3,6 +3,7 @@ import type { FieldErrors } from "react-hook-form";
 import { fieldLabel } from "./draft.js";
 import type { DraftEditorValues } from "./editor-form.js";
 import { fieldControlId } from "./field-types.js";
+import { SEO_CONTROLS } from "./seo.js";
 
 /** Where activating a validation problem moves focus. */
 export type ProblemTarget =
@@ -12,6 +13,11 @@ export type ProblemTarget =
 
 /** One validation problem in the editor's reading order. */
 export interface ValidationProblem {
+  /**
+   * False for a problem only publication reports in a block that is now
+   * hidden: publication validates hidden blocks in draft mode.
+   */
+  readonly blocking: boolean;
   readonly id: string;
   readonly label: string;
   readonly message: string;
@@ -23,6 +29,17 @@ type Messages = Readonly<Record<string, { readonly message?: unknown } | undefin
 
 const blockLevelKeys = ["key", "type", "schemaVersion", "block"] as const;
 
+/** The error type of server issues that only publication reports. */
+export const PUBLICATION_ISSUE_TYPE = "publication";
+
+function isPublicationOnly(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { readonly type?: unknown }).type === PUBLICATION_ISSUE_TYPE
+  );
+}
+
 function messageOf(value: unknown): string | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const { message } = value as { readonly message?: unknown };
@@ -30,29 +47,37 @@ function messageOf(value: unknown): string | undefined {
 }
 
 /**
- * The messages of one block's errors that belong to no single visible field:
- * key, type, version, whole-block issues, and data for undefined fields.
+ * The messages of one block's errors that belong to no single visible
+ * control: key, type, version, whole-block issues, data for undefined fields
+ * and values for undeclared settings.
  */
 export function blockLevelProblems(
   error: Readonly<Record<string, unknown>> | undefined,
   fields: Readonly<Record<string, unknown>>,
+  settings: Readonly<Record<string, unknown>> = {},
 ): string[] {
   if (error === undefined) return [];
   const messages = blockLevelKeys
     .map((key) => messageOf(error[key]))
     .filter((message): message is string => message !== undefined);
-  const data = (error.data ?? {}) as Messages;
-  for (const [key, value] of Object.entries(data)) {
-    const message = messageOf(value);
-    if (message !== undefined && !Object.hasOwn(fields, key)) messages.push(message);
+  for (const [group, declared] of [
+    ["data", fields],
+    ["settings", settings],
+  ] as const) {
+    for (const [key, value] of Object.entries((error[group] ?? {}) as Messages)) {
+      const message = messageOf(value);
+      if (message !== undefined && !Object.hasOwn(declared, key)) messages.push(message);
+    }
   }
   return messages;
 }
 
 /**
  * Lists every current validation problem in reading order: title, the block
- * list, each block in order, slug, model fields, then issues the editor could
- * not place.
+ * list, each block in order (block-level problems, content fields, then the
+ * anchor, declared settings and CSS classes of its Settings tab), slug, model
+ * fields, SEO values in card order, then issues the editor could not place.
+ * Problems that do not block publication come last.
  */
 export function validationProblems({
   blocks,
@@ -69,6 +94,7 @@ export function validationProblems({
   const title = messageOf(errors.title);
   if (title !== undefined)
     problems.push({
+      blocking: true,
       id: "title",
       label: "Title",
       message: title,
@@ -79,6 +105,7 @@ export function validationProblems({
   const listMessage = messageOf(blockErrors.root);
   if (listMessage !== undefined)
     problems.push({
+      blocking: true,
       id: "blocks",
       label: "Blocks",
       message: listMessage,
@@ -89,23 +116,54 @@ export function validationProblems({
     if (error === undefined) continue;
     const definition = model.blockDefinitions?.find((item) => item.type === block.type);
     const fields = definition?.fields ?? {};
-    const blockName = `${fieldLabel(block.type, definition?.label)} block ${index + 1}`;
-    for (const [position, message] of blockLevelProblems(error, fields).entries())
+    const settings = definition?.settings ?? {};
+    const blockName = `${fieldLabel(block.type, definition?.label)} block ${index + 1}${
+      block.hidden ? " (hidden)" : ""
+    }`;
+    for (const [position, message] of blockLevelProblems(error, fields, settings).entries())
       problems.push({
+        blocking: true,
         id: `block-${block.key}-${position}`,
         label: blockName,
         message,
         target: { key: block.key, kind: "block" },
       });
-    const data = (error.data ?? {}) as Messages;
-    for (const [key, field] of Object.entries(fields)) {
-      const message = messageOf(data[key]);
+    const controls: readonly (readonly [
+      id: string,
+      label: string,
+      value: unknown,
+      name: Parameters<typeof fieldControlId>[0],
+    ])[] = [
+      ...Object.entries(fields).map(
+        ([key, field]) =>
+          [
+            key,
+            fieldLabel(key, field.label),
+            (error.data as Messages | undefined)?.[key],
+            `blocks.${index}.data.${key}`,
+          ] as const,
+      ),
+      ["envelope-anchor", "Anchor", error.anchor, `blocks.${index}.anchor`],
+      ...Object.entries(settings).map(
+        ([key, setting]) =>
+          [
+            `settings-${key}`,
+            fieldLabel(key, setting.label),
+            (error.settings as Messages | undefined)?.[key],
+            `blocks.${index}.settings.${key}`,
+          ] as const,
+      ),
+      ["envelope-className", "CSS classes", error.className, `blocks.${index}.className`],
+    ];
+    for (const [id, label, value, name] of controls) {
+      const message = messageOf(value);
       if (message === undefined) continue;
       problems.push({
-        id: `block-${block.key}-${key}`,
-        label: `${fieldLabel(key, field.label)} in ${blockName}`,
+        blocking: !(block.hidden && isPublicationOnly(value)),
+        id: `block-${block.key}-${id}`,
+        label: `${label} in ${blockName}`,
         message,
-        target: { id: fieldControlId(`blocks.${index}.data.${key}`), kind: "control" },
+        target: { id: fieldControlId(name), kind: "control" },
       });
     }
   }
@@ -113,6 +171,7 @@ export function validationProblems({
   const slug = messageOf(errors.slug);
   if (slug !== undefined)
     problems.push({
+      blocking: true,
       id: "slug",
       label: "Slug",
       message: slug,
@@ -123,13 +182,35 @@ export function validationProblems({
     const message = messageOf(fieldErrors[key]);
     if (message === undefined) continue;
     problems.push({
+      blocking: true,
       id: `field-${key}`,
       label: fieldLabel(key, field.label),
       message,
       target: { id: fieldControlId(`fields.${key}`), kind: "control" },
     });
   }
+  const seoErrors = (errors.seo ?? {}) as Messages;
+  for (const control of SEO_CONTROLS) {
+    const message = messageOf(seoErrors[control.key]);
+    if (message === undefined) continue;
+    problems.push({
+      blocking: true,
+      id: control.id,
+      label: control.label,
+      message,
+      target: { id: control.id, kind: "control" },
+    });
+  }
   for (const [index, message] of unmapped.entries())
-    problems.push({ id: `unmapped-${index}`, label: "Draft", message, target: undefined });
-  return problems;
+    problems.push({
+      blocking: true,
+      id: `unmapped-${index}`,
+      label: "Draft",
+      message,
+      target: undefined,
+    });
+  return [
+    ...problems.filter((problem) => problem.blocking),
+    ...problems.filter((problem) => !problem.blocking),
+  ];
 }

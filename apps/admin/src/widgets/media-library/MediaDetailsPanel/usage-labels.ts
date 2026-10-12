@@ -13,6 +13,7 @@ export function usageLocationLabel(location: Location): string {
       ? "Draft and published"
       : "Draft"
     : "Published";
+  if (location.source === "seo") return `SEO image · ${states}`;
   const field = `${fieldLabel(location.field, undefined)} field`;
   return location.source === "field"
     ? `${field} · ${states}`

@@ -1,13 +1,21 @@
 # Lace reference Astro site
 
 `apps/site` is the engine's Astro playground and build fixture for the starter
-`home` and `posts` models plus the extra `about` and `notes` routes. It never
+`home` and `posts` models and the `settings` global, plus the extra `about` and
+`notes` routes. Every route's header shows the published `settings` site name
+and tagline, with static fallbacks when the export has no such global. It never
 ships to users; generated projects receive the `create-lace` starter instead.
 Both consume the same packages: `src/lib/lace.ts` creates the published-site
 loader with `@lacecms/astro`, pages render blocks with `<LaceBlocks>` and the
 block map `src/lace/blocks.ts`, and `src/components/lace/` holds the registry
 block components recorded in `lace.site.json`. A repository test keeps those
 components byte-identical to `registry/` and the starter.
+
+Every model enables SEO and `settings` maps the site defaults (`seoDefaults`),
+so `BaseLayout` renders `<LaceSeo>` from `site.seo(entry)`; posts and notes
+use `og:type` `article`. `src/pages/sitemap.xml.ts` and
+`src/pages/robots.txt.ts` render the sitemap and `robots.txt` with the
+`@lacecms/astro` helpers.
 
 ## Build inputs
 
@@ -38,3 +46,9 @@ API and set live mode in the ignored `.env` as described in the root
 the loader revalidates the export on every request, so publications to existing
 routes appear on reload; restart the site process after a new or renamed slug.
 Draft saves do not appear on the public site.
+
+Two optional settings shape the SEO output in both modes. `LACE_BUILD_SITE_URL`
+(for example `https://site.example/`) gives pages their canonical URL and
+`og:url` and enables `sitemap.xml`; without it the build warns and writes no
+sitemap. `LACE_SITE_INDEXING=off` marks every page `noindex, nofollow` and makes
+`robots.txt` disallow everything, for staging builds.

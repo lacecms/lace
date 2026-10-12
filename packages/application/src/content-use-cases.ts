@@ -17,13 +17,15 @@ import {
   contentSnapshotId,
   createContentEntry,
   mediaId,
+  normalizeEntrySeo,
   requirePermission,
   requirePublishedSnapshot,
-  resolveContentPublicPath,
+  contentPublicPath,
 } from "@lacecms/domain";
 import type {
   Actor,
   ContentBlock,
+  ContentBlockInput,
   ContentEntry,
   ContentEntryId,
   ContentModelKey,
@@ -31,6 +33,7 @@ import type {
   ContentSnapshotId,
   DraftMediaReference,
   DraftSnapshot,
+  EntrySeo,
   PublishedSnapshot,
 } from "@lacecms/domain";
 import {
@@ -66,8 +69,14 @@ export interface ContentUseCaseDependencies {
 }
 
 export interface CompleteDraftInput {
-  readonly blocks: readonly ContentBlock[];
+  /** Omitted envelope values take their defaults (visible, declared setting defaults). */
+  readonly blocks: readonly ContentBlockInput[];
   readonly fields: JsonObject;
+  /**
+   * The submitted SEO group; absent or `null` stores none. Validated against the
+   * shared rules, and refused for a model without SEO.
+   */
+  readonly seo?: unknown;
   readonly slug?: string;
   readonly title: string;
 }
@@ -167,21 +176,40 @@ export function duplicateTitle(title: string): string {
   return `${base}${DUPLICATE_TITLE_SUFFIX}`;
 }
 
-interface NormalizedDraft extends CompleteDraftInput {
+interface NormalizedDraft extends Omit<CompleteDraftInput, "seo"> {
   readonly blocks: readonly ContentBlock[];
   readonly fields: JsonObject;
   readonly mediaReferences: readonly DraftMediaReference[];
+  readonly seo?: EntrySeo;
+}
+
+/** Whether a configured model enables the per-entry SEO group. */
+function seoEnabled(model: NormalizedContentModel): boolean {
+  return model.kind !== "global" && model.seo !== undefined;
 }
 
 function detached<Value>(value: Value): Value {
   return JSON.parse(JSON.stringify(value)) as Value;
 }
 
-function modelRoute(model: NormalizedContentModel): ContentModelRoute {
+/** Maps a configured model to the route identity stored with its entries. */
+export function contentModelRoute(model: NormalizedContentModel): ContentModelRoute {
   const key = contentModelKey(model.key);
-  return model.kind === "page"
-    ? { key, kind: "page", path: model.path }
-    : { key, kind: "collection", route: model.route };
+  switch (model.kind) {
+    case "page":
+      return { key, kind: "page", path: model.path };
+    case "collection":
+      return { key, kind: "collection", route: model.route };
+    case "global":
+      return { key, kind: "global" };
+    default:
+      return model satisfies never;
+  }
+}
+
+/** A global's title is system-owned: always its model label, or its key. */
+function systemTitle(model: NormalizedContentModel, title: string): string {
+  return model.kind === "global" ? (model.label ?? model.key) : title;
 }
 
 function commandEntry(result: ContentCommandResult): ContentEntry {
@@ -201,7 +229,11 @@ export class ContentUseCases {
   public async create(input: CreateContentEntryUseCaseInput): Promise<ContentEntry> {
     requirePermission(input.actor, "content:write");
     const model = this.model(input.modelKey);
-    const draft = await this.validateDraft(input, model, "draft");
+    const draft = await this.validateDraft(
+      { ...input, title: systemTitle(model, input.title) },
+      model,
+      "draft",
+    );
     const now = this.dependencies.clock.now();
     const id = contentEntryId(this.dependencies.idGenerator.next());
     const entry = createContentEntry({
@@ -216,7 +248,7 @@ export class ContentUseCases {
         updatedBy: input.actor,
       },
       id,
-      model: modelRoute(model),
+      model: contentModelRoute(model),
     });
     return commandEntry(
       await this.dependencies.content.create({ entry, mediaReferences: draft.mediaReferences }),
@@ -288,7 +320,12 @@ export class ContentUseCases {
   public async save(input: SaveContentDraftUseCaseInput): Promise<ContentEntry> {
     requirePermission(input.actor, "content:write");
     const entry = await this.entry(input.entryId);
-    const draft = await this.validateDraft(input, this.model(entry.model.key), "draft");
+    const model = this.model(entry.model.key);
+    const draft = await this.validateDraft(
+      { ...input, title: systemTitle(model, input.title) },
+      model,
+      "draft",
+    );
     return commandEntry(
       await this.dependencies.content.saveCompleteDraft({
         entryId: entry.id,
@@ -308,7 +345,7 @@ export class ContentUseCases {
     requirePermission(input.actor, "content:publish");
     const entry = await this.entry(input.entryId);
     const draft = await this.validateDraft(entry.draft, this.model(entry.model.key), "publish");
-    resolveContentPublicPath(entry.model, draft.slug);
+    contentPublicPath(entry.model, draft.slug);
     const result = await this.dependencies.content.publish({
       entryId: entry.id,
       expectedRevision: input.expectedRevision,
@@ -403,6 +440,7 @@ export class ContentUseCases {
           key: blockKey(this.dependencies.idGenerator.next()),
         })),
         fields: source.draft.fields,
+        ...(source.draft.seo === undefined ? {} : { seo: source.draft.seo }),
         title: duplicateTitle(source.draft.title),
       },
       model,
@@ -422,7 +460,7 @@ export class ContentUseCases {
         updatedBy: input.actor,
       },
       id,
-      model: modelRoute(model),
+      model: contentModelRoute(model),
     });
     return commandEntry(
       await this.dependencies.content.create({
@@ -493,12 +531,18 @@ export class ContentUseCases {
     assertOrderedBlockPositions(input.blocks);
     const aggregate = validateEntryAggregate(
       {
-        blocks: input.blocks.map(({ data, key, schemaVersion, type }) => ({
-          data,
-          key,
-          schemaVersion,
-          type,
-        })),
+        blocks: input.blocks.map(
+          ({ anchor, className, data, hidden, key, schemaVersion, settings, type }) => ({
+            ...(anchor === undefined ? {} : { anchor }),
+            ...(className === undefined ? {} : { className }),
+            data,
+            ...(hidden === undefined ? {} : { hidden }),
+            key,
+            schemaVersion,
+            ...(settings === undefined ? {} : { settings }),
+            type,
+          }),
+        ),
         fields: input.fields,
         kind: model.kind,
         ...(input.slug === undefined ? {} : { slug: input.slug }),
@@ -508,20 +552,29 @@ export class ContentUseCases {
       this.dependencies.config.blocks,
       mode,
     );
-    const blocks = aggregate.blocks.map((block, index) => ({
+    const blocks: ContentBlock[] = aggregate.blocks.map((block, index) => ({
+      ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+      ...(block.className === undefined ? {} : { className: block.className }),
       data: block.data as JsonObject,
+      hidden: block.hidden,
       key: blockKey(block.key),
       position: input.blocks[index]!.position,
       schemaVersion: block.schemaVersion,
+      settings: block.settings,
       type: block.type,
     }));
+    const seo = normalizeEntrySeo(input.seo ?? null, { enabled: seoEnabled(model) });
     const normalized = {
       blocks,
       fields: aggregate.fields as JsonObject,
+      ...(seo === undefined ? {} : { seo }),
       ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
       title: aggregate.title,
     };
     const mediaReferences = this.collectMedia(normalized.fields, model.fields, "$fields");
+    if (seo?.image !== undefined) {
+      mediaReferences.push({ fieldPath: "image", mediaId: mediaId(seo.image), sourceKey: "$seo" });
+    }
     for (const block of normalized.blocks) {
       mediaReferences.push(
         ...this.collectMedia(

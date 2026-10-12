@@ -154,7 +154,9 @@ test("server block validation stays on the nested editable block field", async (
     data: { heading: "Original" },
     key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     position: 100,
+    hidden: false,
     schemaVersion: 1,
+    settings: {},
     type: "hero",
   };
   renderRoute(
@@ -228,7 +230,7 @@ const existingBlocks = [
   { data: { heading: "First" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA1", position: 100, type: "hero" },
   { data: { heading: "Second" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA2", position: 200, type: "hero" },
   { data: { heading: "Third" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA3", position: 300, type: "hero" },
-].map((block) => ({ ...block, schemaVersion: 1 }));
+].map((block) => ({ ...block, hidden: false, schemaVersion: 1, settings: {} }));
 
 function mountCards() {
   const saveDraft = vi.fn(
@@ -365,9 +367,11 @@ test("a block whose type the model no longer allows renders with its error and c
             existingBlocks[0]!,
             {
               data: { text: "Old" },
+              hidden: false,
               key: "01ARZ3NDEKTSV4RRFFQ69G5FA9",
               position: 900,
               schemaVersion: 1,
+              settings: {},
               type: "legacyBanner",
             },
           ],
@@ -397,4 +401,87 @@ test("a block whose type the model no longer allows renders with its error and c
   expect(saveDraft.mock.calls[0]![1].blocks.map((block) => block.key)).toEqual([
     existingBlocks[0]!.key,
   ]);
+});
+
+test("saves keep loaded block envelopes, new blocks take setting defaults, copies drop anchors", async () => {
+  const user = userEvent.setup();
+  const panelModel: ContentModelDto = {
+    blockDefinitions: [
+      {
+        fields: { heading: { required: true, type: "text" } },
+        label: "Panel",
+        settings: {
+          align: {
+            defaultValue: "left",
+            options: ["left", "center"],
+            required: false,
+            type: "select",
+          },
+        },
+        type: "panel",
+        version: 1,
+      },
+    ],
+    blocks: ["panel"],
+    fields: {},
+    key: "posts",
+    kind: "collection",
+    route: "/posts/:slug",
+    version: 1,
+  };
+  const loaded = {
+    anchor: "pricing",
+    className: "wide",
+    data: { heading: "Plans" },
+    hidden: true,
+    key: "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+    position: 100,
+    schemaVersion: 1,
+    settings: { align: "center" },
+    type: "panel",
+  };
+  const saveDraft = vi.fn(
+    async (_entryId: string, input: Parameters<AdminClient["saveDraft"]>[1]) => ({
+      ...draftEntry,
+      draft: { ...draftEntry.draft, ...input, revision: 3 },
+    }),
+  );
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "editor-1", role: "editor" }),
+    client({
+      listModels: async () => ({ items: [models.items[0]!, panelModel] }) as never,
+      loadEntry: async () => ({
+        ...draftEntry,
+        draft: { ...draftEntry.draft, blocks: [loaded] },
+      }),
+      saveDraft: saveDraft as unknown as AdminClient["saveDraft"],
+    }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  const heading = screen.getByRole("textbox", { name: "Heading" });
+  await user.clear(heading);
+  await user.type(heading, "Pricing plans");
+  await blockAction(
+    user,
+    screen.getByRole("button", { name: "Actions for Panel block" }),
+    "Duplicate",
+  );
+  await addBlock(user, "Panel");
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
+  const [kept, copy, added] = saveDraft.mock.calls[0]![1].blocks;
+  expect(kept).toMatchObject({
+    anchor: "pricing",
+    className: "wide",
+    data: { heading: "Pricing plans" },
+    hidden: true,
+    key: loaded.key,
+    settings: { align: "center" },
+  });
+  expect(copy).toMatchObject({ className: "wide", hidden: true, settings: { align: "center" } });
+  expect(copy).not.toHaveProperty("anchor");
+  expect(copy!.key).not.toBe(loaded.key);
+  expect(added).toMatchObject({ hidden: false, settings: { align: "left" }, type: "panel" });
+  expect(added).not.toHaveProperty("anchor");
 });

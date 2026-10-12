@@ -128,7 +128,7 @@ test("content sync migrates stored blocks and blocks a throwing migration", asyn
       "insert into content_snapshots (id, entry_id, revision, title, fields_json, schema_version, created_at, updated_at, updated_by) values ('s1', 'e1', 1, 'Note', '{}', 1, 1, 1, 'editor')",
     );
     sql(
-      "insert into content_blocks values ('s1', 'n1', 'note', 1, 1, '{\"body\":\"Hello\"}', 1, 1)",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values ('s1', 'n1', 'note', 1, 1, '{\"body\":\"Hello\"}', 1, 1)",
     );
     sql("update content_entries set draft_snapshot_id = 's1' where id = 'e1'");
 
@@ -146,7 +146,10 @@ test("content sync migrates stored blocks and blocks a throwing migration", asyn
 
     const v2 = await project(
       "v2",
-      noteConfigSource(2, "{ 2: ({ body, ...rest }) => ({ ...rest, text: body }) }"),
+      noteConfigSource(
+        2,
+        "{ 2: ({ data: { body, ...rest } }) => ({ data: { ...rest, text: body } }) }",
+      ),
     );
     const pending = await runCommand(command("content sync", true), environment, v2);
     expect(pending.code).toBe("SYNC_PENDING");

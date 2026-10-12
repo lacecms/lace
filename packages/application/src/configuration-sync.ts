@@ -8,6 +8,7 @@ import {
   contentModelKey,
   contentSnapshotId,
   createContentEntry,
+  isSingletonKind,
 } from "@lacecms/domain";
 import type {
   Actor,
@@ -120,6 +121,8 @@ export interface ConfigurationSyncEvolution {
   readonly migrations?: readonly ConfigurationSyncBlockMigration[];
   /** Hinted field renames whose stored values are moved; present when non-empty. */
   readonly renames?: readonly ConfigurationSyncFieldRename[];
+  /** Whether hinted SEO removal clears stored SEO groups; present when true. */
+  readonly seoRemoval?: true;
   readonly snapshots: SnapshotStateCounts;
 }
 
@@ -142,6 +145,7 @@ export type ConfigurationSyncContentWrite =
   | { readonly action: "backfill-field"; readonly fieldKey: string; readonly json: string }
   | { readonly action: "remove-block-type"; readonly blockType: string }
   | { readonly action: "remove-field"; readonly fieldKey: string }
+  | { readonly action: "remove-seo" }
   | { readonly action: "rename-field"; readonly from: string; readonly to: string };
 
 interface ConfigurationSyncModelOperation {
@@ -196,6 +200,7 @@ export type ConfigurationSyncDiagnosticCode =
   | "RENAME_SOURCE_STILL_CONFIGURED"
   | "REMOVAL_HAS_ENTRIES"
   | "ROUTE_CHANGE_HAS_PUBLISHED"
+  | "SEO_REMOVAL_HAS_DATA"
   | "SNAPSHOT_EVIDENCE_STALE"
   | "STRUCTURE_BASELINE_MISSING"
   | "STRUCTURE_CHANGE_HAS_SNAPSHOTS"
@@ -261,8 +266,8 @@ export interface ConfigurationSyncStateReadPort {
   readConfigurationSyncState(): Promise<readonly StoredContentModelState[]>;
 }
 
-/** One pre-materialized singleton draft required by a page-model create operation. */
-export interface ConfigurationSyncPageEntry {
+/** One pre-materialized singleton draft required by a page or global create operation. */
+export interface ConfigurationSyncSingletonEntry {
   readonly entry: ContentEntry;
   readonly modelKey: ContentModelKey;
 }
@@ -274,7 +279,7 @@ export interface ApplyConfigurationSynchronizationInput {
   readonly evidence: ConfigurationSyncEvidence;
   readonly expectedStoredModels: readonly StoredContentModelState[];
   readonly models: readonly NormalizedContentModel[];
-  readonly pageEntries: readonly ConfigurationSyncPageEntry[];
+  readonly singletonEntries: readonly ConfigurationSyncSingletonEntry[];
   readonly plan: ConfigurationSyncPlan;
 }
 
@@ -550,6 +555,7 @@ function decideEvolution(
   const fieldRemovals: string[] = [];
   const blockRemovals: string[] = [];
   const blockMigrations: ConfigurationSyncBlockMigration[] = [];
+  let seoRemoval = false;
   for (const change of changes) {
     const fieldKey = change.scope === "field" ? change.target : undefined;
     const blockType = change.scope === "block" ? change.target : undefined;
@@ -611,6 +617,24 @@ function decideEvolution(
               affectedCount: total(holders),
               changeClass: change.class,
               fieldKey,
+              snapshots: holders.snapshots,
+            },
+          );
+        }
+      }
+    } else if (change.kind === "seo-disabled") {
+      const holders = evidence?.seoHolders;
+      affected = holderCounts(holders);
+      if (holders !== undefined && total(holders) > 0) {
+        if (change.hinted === true) {
+          seoRemoval = true;
+        } else {
+          refuse(
+            "SEO_REMOVAL_HAS_DATA",
+            `Model ${modelKey} disables seo while ${total(holders)} snapshots hold SEO values (${countsDescription(holders)}). Declare removedSeo: true to prune them.`,
+            {
+              affectedCount: total(holders),
+              changeClass: change.class,
               snapshots: holders.snapshots,
             },
           );
@@ -751,6 +775,7 @@ function decideEvolution(
         : {
             renames: Object.freeze(renames.sort((left, right) => left.to.localeCompare(right.to))),
           }),
+      ...(seoRemoval ? { seoRemoval: true as const } : {}),
       snapshots: evidence?.snapshots ?? storedCounts,
     }),
     refused,
@@ -864,6 +889,7 @@ function classifyMatchedModel(
       ...(current.removedBlocks === undefined ? {} : { removedBlocks: current.removedBlocks }),
       ...(current.removedFields === undefined ? {} : { removedFields: current.removedFields }),
       ...(current.renamedFields === undefined ? {} : { renamedFields: current.renamedFields }),
+      ...(current.kind !== "global" && current.removedSeo === true ? { removedSeo: true } : {}),
     };
     const issues = validateStructureHints(stored.structure!, hints);
     for (const issue of issues) {
@@ -1121,7 +1147,7 @@ export function configurationSyncBackfills(
 
 /**
  * Ordered content writes of an applied operation: field renames, field
- * removals, block-type removals, then default backfills.
+ * removals, block-type removals, SEO removal, then default backfills.
  */
 export function configurationSyncContentWrites(
   operation: ConfigurationSyncOperation,
@@ -1140,6 +1166,7 @@ export function configurationSyncContentWrites(
     ...(evolution.blockRemovals ?? []).map((blockType) =>
       Object.freeze({ action: "remove-block-type" as const, blockType }),
     ),
+    ...(evolution.seoRemoval === true ? [Object.freeze({ action: "remove-seo" as const })] : []),
     ...configurationSyncBackfills(operation, model).map((backfill) =>
       Object.freeze({ action: "backfill-field" as const, ...backfill }),
     ),
@@ -1223,6 +1250,7 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
     if (evolution.blockRemovals !== undefined) {
       lines.push(`  planned block removals: ${evolution.blockRemovals.join(", ")}`);
     }
+    if (evolution.seoRemoval === true) lines.push("  planned SEO removal: all snapshots");
     if (evolution.migrations !== undefined) {
       const migrations = evolution.migrations.map(
         (migration) =>
@@ -1378,26 +1406,27 @@ export async function prepareConfigurationSynchronization(input: {
   });
 }
 
-/** Creates the one incomplete draft that a newly synchronized page must own. */
-export function createConfigurationSyncPageEntry(input: {
+/** Creates the one incomplete draft that a newly synchronized page or global must own. */
+export function createConfigurationSyncSingletonEntry(input: {
   readonly appliedAt: UnixMilliseconds;
   readonly entryId: ContentEntryId | string;
   readonly model: NormalizedContentModel;
   readonly snapshotId: ContentSnapshotId | string;
-}): ConfigurationSyncPageEntry {
-  if (input.model.kind !== "page") {
+}): ConfigurationSyncSingletonEntry {
+  if (input.model.kind === "collection") {
     throw new DomainError(
       "CONTENT_INVALID_STATE",
-      "Only page models receive synchronized entries.",
+      "Only page and global models receive synchronized entries.",
     );
   }
   const entryId = contentEntryId(input.entryId);
   const snapshotId = contentSnapshotId(input.snapshotId);
-  const model: ContentModelRoute = Object.freeze({
-    key: contentModelKey(input.model.key),
-    kind: "page",
-    path: input.model.path,
-  });
+  const key = contentModelKey(input.model.key);
+  const model: ContentModelRoute = Object.freeze(
+    input.model.kind === "page"
+      ? { key, kind: "page" as const, path: input.model.path }
+      : { key, kind: "global" as const },
+  );
   const entry = createContentEntry({
     id: entryId,
     model,
@@ -1417,7 +1446,7 @@ export function createConfigurationSyncPageEntry(input: {
   return Object.freeze({ entry, modelKey: model.key });
 }
 
-/** Applies a freshly prepared valid plan and allocates identities only for page creates. */
+/** Applies a freshly prepared valid plan and allocates identities only for singleton creates. */
 /** One operator line describing the stored blocks an apply migrated. */
 export function configurationSyncMigrationSummary(
   counts: ConfigurationSyncMigrationCounts,
@@ -1574,13 +1603,13 @@ async function applyFinalMutation(
 ): Promise<ApplyConfigurationSynchronizationResult> {
   const models = new Map(input.models.map((model) => [model.key, model]));
   const appliedAt = input.clock.now();
-  const pageEntries: ConfigurationSyncPageEntry[] = [];
+  const singletonEntries: ConfigurationSyncSingletonEntry[] = [];
   for (const operation of prepared.plan.operations) {
     if (operation.action !== "create") continue;
     const model = models.get(operation.model.key);
-    if (model?.kind !== "page") continue;
-    pageEntries.push(
-      createConfigurationSyncPageEntry({
+    if (model === undefined || !isSingletonKind(model.kind)) continue;
+    singletonEntries.push(
+      createConfigurationSyncSingletonEntry({
         appliedAt,
         entryId: input.ids.next(),
         model,
@@ -1593,7 +1622,7 @@ async function applyFinalMutation(
     evidence: prepared.evidence,
     expectedStoredModels: prepared.storedModels,
     models: input.models,
-    pageEntries,
+    singletonEntries,
     plan: prepared.plan,
   });
 }

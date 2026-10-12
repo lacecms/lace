@@ -7,6 +7,7 @@ import {
   SiteBuildDispatcher,
   SiteBuildTracker,
   SiteBuildUseCases,
+  contentModelRoute,
 } from "@lacecms/application";
 import type {
   BuildTriggerResult,
@@ -21,7 +22,7 @@ import { createCloudflareEmailSender, type SendEmailBinding } from "./email.js";
 import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
 import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
 import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
-import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
+import { unixMilliseconds } from "@lacecms/domain";
 import {
   createEmailSender,
   createLaceApp,
@@ -230,10 +231,7 @@ export function createCloudflareRuntime(
     settings.database,
     (key) => {
       const model = input.config.runtime.content.find((candidate) => candidate.key === key);
-      if (model === undefined) return undefined;
-      return model.kind === "page"
-        ? { key: contentModelKey(model.key), kind: "page", path: model.path }
-        : { key: contentModelKey(model.key), kind: "collection", route: model.route };
+      return model === undefined ? undefined : contentModelRoute(model);
     },
     { nextId: () => ids.next() },
   );

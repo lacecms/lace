@@ -231,7 +231,10 @@ endpoint. The builder ignores command, path, and environment overrides from the
 request and runs one image-defined build command against fixed mount paths. It
 builds into a temporary release directory and atomically switches the served
 release only after success. A later adapter may call an external CI webhook. The
-API must never accept an arbitrary shell command from an HTTP request.
+API must never accept an arbitrary shell command from an HTTP request. The
+builder's own deployment settings, never the request, supply the optional
+`LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` it forwards to the site build
+(section 9.8).
 
 ## 6. Repository structure
 
@@ -406,9 +409,13 @@ fresh project and moving configuration manually.
 ### Starter and reference site
 
 The `create-lace` starter is the single source of what users receive: minimal
-`home` and `posts` pages, a layout, global styles, the five built-in registry
-blocks, `lace.site.json`, the block map file, and the loader file. It contains
-no tests, fixtures, or engine-development routes.
+`home` and `posts` pages, a `settings` global (`siteName`, `tagline`), a
+layout, global styles, the five built-in registry blocks, `lace.site.json`, the
+block map file, and the loader file. Each page passes the published site to the
+layout, which renders a site header from `site.global("settings")` and falls
+back to static values while the global is unpublished; navigation stays static
+until a list field exists. It contains no tests, fixtures, or
+engine-development routes.
 
 `apps/site` is the engine development playground and integration fixture. It may
 carry extra models and routes, custom blocks, edge-case content, and the
@@ -479,6 +486,7 @@ import {
   builtInBlocks,
   defineCollection,
   defineConfig,
+  defineGlobal,
   definePage,
   field,
 } from "@lacecms/config";
@@ -515,6 +523,16 @@ export default defineConfig({
       listFields: ["category", "author"],
       blocks: ["richText", "image", "quote"],
     }),
+
+    defineGlobal({
+      key: "settings",
+      version: 1,
+      label: "Site settings",
+      fields: {
+        siteName: field.text({ required: true }),
+        tagline: field.text(),
+      },
+    }),
   ],
 });
 ```
@@ -526,9 +544,11 @@ created once during application startup.
 
 For the MVP, every snapshot has the following common system fields:
 
-- `title` is required for both pages and collection entries;
-- `slug` is `NULL` for pages; it may be absent from an incomplete collection
-  draft but is required for publication;
+- `title` is required for every entry; for a global it is system-owned: saving
+  a global always stores the model label (or key) as its title;
+- `slug` is `NULL` for pages and globals (a global rejects a submitted slug);
+  it may be absent from an incomplete collection draft but is required for
+  publication;
 - a collection route contains exactly one `:slug` segment;
 - slugs use lowercase ASCII letters, digits, and single hyphens
   (`^[a-z0-9]+(?:-[a-z0-9]+)*$`); the admin may suggest a normalized slug, but
@@ -550,13 +570,92 @@ are different.
 `content_models.kind` uses domain-language values:
 
 ```ts
-type ContentModelKind = "page" | "collection";
+type ContentModelKind = "page" | "collection" | "global";
 ```
 
-- `page` represents a singleton model and permits exactly one content entry.
-- `collection` permits any number of content entries.
+- `page` represents a singleton model with one fixed path and permits exactly
+  one content entry.
+- `collection` permits any number of content entries, each routed by its slug.
+- `global` represents a route-less singleton for site-wide content such as
+  site settings or a footer ([ADR 0010](adr/0010-global-models.md)). It is
+  declared with `defineGlobal({ key, version, label?, description?, fields?,
+  blocks? })` plus the same temporary synchronization hints as a page, and
+  never has a `path`, `route` or `listFields`. A global is never served by
+  path; it is read by model key.
 
-Pages and collection entries share storage, snapshot, block, validation, and publication behavior.
+Pages, collection entries and globals share storage, snapshot, block,
+validation, and publication behavior. Model keys are unique across all three
+kinds, and a model's kind is part of its structure: a kind change between any
+two kinds is breaking and refused by sync, also through `renamedFrom`.
+
+### SEO metadata
+
+Pages and collections may opt into a per-entry SEO system group
+([ADR 0011](adr/0011-seo-system-group.md)):
+
+```ts
+defineCollection({
+  key: "posts",
+  version: 4,
+  route: "/blog/:slug",
+  fields: { excerpt: field.textarea(), cover: field.media() },
+  seo: { description: "excerpt", image: "cover" }, // or `seo: true`
+});
+
+defineGlobal({
+  key: "settings",
+  version: 2,
+  fields: {
+    siteName: field.text({ required: true }),
+    titleTemplate: field.text(),
+    metaDescription: field.textarea(),
+    shareImage: field.media(),
+  },
+  seoDefaults: {
+    siteName: "siteName",
+    titleTemplate: "titleTemplate",
+    description: "metaDescription",
+    image: "shareImage",
+  },
+});
+```
+
+- The group holds `title`, `description`, `image` (a media ID), `canonical` (an
+  absolute URL) and `noindex`. It is stored with each snapshot outside
+  `fields`, so project field keys never collide with it, and it follows the
+  draft and publish flow.
+- `seo: { description?, image? }` names fallback fields of the same model: a
+  `text` or `textarea` field for the description and a `media` field for the
+  image. Globals cannot declare `seo`.
+- At most one global declares `seoDefaults`, whose values name its own fields
+  (`siteName`, `titleTemplate` and `description` are `text` or `textarea`,
+  `image` is `media`). Defaults have no storage of their own.
+- Whether SEO is enabled is structural; the fallback mapping and
+  `seoDefaults` are projection-only, like `listFields`. A model without the
+  option carries no `seo` property, so its hashes are unchanged.
+- Values are plain text: `title` (at most 200 code points) and `description`
+  (at most 500) are single-line, trimmed and cleared when empty; `canonical`
+  is an absolute `http`/`https` URL without credentials or fragment (at most
+  2,048 characters); `noindex` is stored only when `true`. The API rejects
+  values above these hard limits; the admin warns earlier (60 and 160
+  characters). Saving a non-null `seo` for a model without SEO fails with
+  `seo_not_allowed` at `/seo`.
+- Fallbacks are resolved by the SDK, never stored: title, then the entry title
+  formatted by the title template (`%s`, default `%s | {siteName}`);
+  description and image, then the model's mapped field, then the site
+  default; canonical, then site URL plus path. `noindex` emits
+  `noindex, follow` and excludes the entry from the sitemap.
+- Site output (CE4B): `site.seo(entry)` returns `{ title, description?,
+  image?, canonical?, robots?, siteName? }` from the pure `resolveSeo`
+  function. Mapped text counts only when non-blank (whitespace collapsed); a
+  title template counts only when it contains `%s` and is applied literally;
+  only resolved `image/*` media count as images, with the media alt text.
+  Every routable entry resolves, with or without SEO enabled on its model.
+  `LACE_SITE_INDEXING=off` resolves every page to `noindex, nofollow`.
+  `<LaceSeo>` renders the value (with an `og:type` prop, `website` by default),
+  and the sitemap lists every indexable entry whose stored canonical, if any,
+  is its own URL. The site URL comes only from `LACE_BUILD_SITE_URL`; Lace
+  does not set Astro's `site` option.
 
 ### Initial field types
 
@@ -648,8 +747,8 @@ field keys and default values are structural even when named `label` or
 `description`. A changed structure hash without a version
 bump fails; a projection-only change is safe and does not require a bump.
 
-Renames are never guessed. `definePage` and `defineCollection` accept a temporary
-`renamedFrom` key. Sync performs the key migration only when the previous key
+Renames are never guessed. `definePage`, `defineCollection` and `defineGlobal`
+accept a temporary `renamedFrom` key. Sync performs the key migration only when the previous key
 exists, the new key does not, and kind/cardinality remain compatible; the option
 must be removed after all environments have applied the sync. Without that
 explicit hint, a key change is treated as one addition and one removal, and the
@@ -669,6 +768,8 @@ baseline with the configured structure and classifies every difference
 | Remove a field or disallow a block type | destructive | without a hint: apply only when no snapshot holds that data, otherwise refuse; with a `removedFields` or `removedBlocks` hint: prune the field values or drop the blocks |
 | Rename a field (field-level `renamedFrom` hint) | destructive | move the stored values to the new key; refuse if the new key already holds data |
 | Change the definition of an allowed block type | migration | without a block version increase: apply only when no snapshot holds a block of that type, otherwise refuse; with a version increase: migrate every stale block through the declared block migrations, refusing when a step is missing, a migration throws, or a result is invalid |
+| Enable `seo` on a page or collection | compatible | apply; stored snapshots are unchanged |
+| Disable `seo` | destructive | without a hint: apply only when no snapshot holds an SEO group, otherwise refuse (`SEO_REMOVAL_HAS_DATA`); with `removedSeo: true`: clear the groups and their `$seo` media references |
 | Change a field type or an unrecognized field property | breaking | refuse |
 | Change a page path or collection route | breaking | refuse while the model has published snapshots |
 
@@ -685,7 +786,8 @@ rename or silently transforms content.
 
 Destructive changes to populated data need explicit, temporary hints: a model
 field may declare `renamedFrom: "<former key>"` in its field options, and a
-model may declare `removedFields` and `removedBlocks`. Hints are excluded from
+model may declare `removedFields` and `removedBlocks`; a page or collection
+that disables SEO may declare `removedSeo: true`. Hints are excluded from
 the canonical structure, both hashes and the public projection, so adding or
 removing one never needs a version bump; block fields cannot declare
 `renamedFrom` (block data changes use block versions). A hint takes effect only
@@ -704,10 +806,13 @@ Block data changes through block versions. A changed block definition bumps
 its `version` and declares `migrations` (section 11); every model that allows
 the block also bumps its own version. Sync composes the migrations from each
 stored block's `schemaVersion` to the configured version and runs them in
-memory during planning, so `--check` is a full dry run: each result is
-validated against the new definition in publish mode for published snapshots
-and draft mode for drafts, must stay within the block size and media-reference
-limits, and may reference only media the snapshot already referenced. Any
+memory during planning, so `--check` is a full dry run: each migration
+receives the stored data and settings, and each result is validated against
+the new definition, its data in publish mode for visible blocks of published
+snapshots and in draft mode for drafts and hidden blocks, its settings with
+the declared defaults applied. Results must stay within the block size and
+media-reference limits and may reference only media the snapshot already
+referenced. Any
 missing step, failure, invalid result, or stored version newer than the
 configuration refuses the plan without writing. Apply then rewrites the stale
 blocks in place in guarded units of one entry — guarded on snapshot revision,
@@ -726,8 +831,8 @@ When a successful sync changes the serializable configuration visible to public
 consumers, it increments `published_state.version` and requests a build in the
 same atomic mutation.
 
-Sync also ensures that every page model has one singleton entry. A newly created
-page entry receives the model label as its draft title, `NULL` slug, configured
+Sync also ensures that every page and global model has one singleton entry. A
+newly created singleton entry receives the model label as its draft title, `NULL` slug, configured
 defaults, an empty block list, and the audit actor `system:content-sync`; missing
 required model fields remain valid in draft mode until publication. Collections
 are created only through the admin/API and require an initial title.
@@ -747,7 +852,7 @@ All primary IDs should be application-generated sortable string IDs, such as ULI
 ```text
 content_models
 ├── key                 TEXT PRIMARY KEY
-├── kind                TEXT NOT NULL CHECK(kind IN ('page', 'collection'))
+├── kind                TEXT NOT NULL CHECK(kind IN ('page', 'collection', 'global'))
 ├── label               TEXT NOT NULL
 ├── config_version      INTEGER NOT NULL
 ├── structure_hash      TEXT NOT NULL
@@ -782,7 +887,7 @@ content_entries
 
 `draft_snapshot_id` is nullable at the SQL level only to break the insertion cycle between a new entry and its first snapshot. Entry creation inserts the entry, inserts its draft snapshot, and assigns the pointer atomically. Application code treats a committed entry without a draft as invalid. `published_snapshot_id` remains nullable until the first publication.
 
-The API sets `singleton_key = 1` for pages and `NULL` for collection entries. SQLite permits multiple `NULL` values in a unique index, so this partial index enforces a single page entry per page model:
+The API sets `singleton_key = 1` for pages and globals and `NULL` for collection entries. SQLite permits multiple `NULL` values in a unique index, so this partial index enforces a single entry per page or global model:
 
 ```sql
 CREATE UNIQUE INDEX content_entries_singleton_idx
@@ -809,13 +914,17 @@ content_snapshots
 ├── slug                TEXT
 ├── title               TEXT NOT NULL
 ├── fields_json         TEXT NOT NULL
+├── seo_json            TEXT NULL
 ├── schema_version      INTEGER NOT NULL
 ├── created_at          INTEGER NOT NULL
 ├── updated_at          INTEGER NOT NULL
 └── updated_by          TEXT NOT NULL
 ```
 
-`fields_json` contains model-specific structured fields. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
+`fields_json` contains model-specific structured fields. `seo_json` holds the
+normalized SEO group (section 8) as a JSON object, or `NULL` when the snapshot
+has none; an all-empty group is never stored. Save, publication, revert and
+duplication copy it with the rest of the snapshot. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
 The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case or removed through the unpublish use case (section 10); configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7). Reverting a draft sets the published snapshot's `revision` to the new draft revision without changing its content, so an entry whose draft equals its publication is derived as published ([ADR 0008](adr/0008-entry-lifecycle-commands.md)).
 
@@ -831,18 +940,34 @@ content_blocks
 ├── position            INTEGER NOT NULL
 ├── schema_version      INTEGER NOT NULL
 ├── data_json           TEXT NOT NULL
+├── anchor              TEXT NULL
+├── class_name          TEXT NULL
+├── hidden              INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
+├── settings_json       TEXT NOT NULL DEFAULT '{}'
 ├── created_at          INTEGER NOT NULL
 └── updated_at          INTEGER NOT NULL
 
 PRIMARY KEY(snapshot_id, block_key)
 ```
 
-Index:
+Indexes:
 
 ```sql
 CREATE INDEX content_blocks_snapshot_position_idx
 ON content_blocks(snapshot_id, position);
+
+CREATE UNIQUE INDEX content_blocks_snapshot_anchor_idx
+ON content_blocks(snapshot_id, anchor) WHERE anchor IS NOT NULL;
 ```
+
+The block envelope ([ADR 0012](adr/0012-block-envelope.md)) holds presentation
+values outside the block data: an optional in-page `anchor`, an optional CSS
+`class_name`, a `hidden` flag and the `settings_json` the block definition
+declares (section 11), stored with defaults applied. Every block copy (publish,
+revert, duplicate) and every block write (save, sync migration) lists these
+columns on both runtimes. Migration `0009` added them without a rebuild;
+existing blocks read as visible, without an anchor or class, with `{}`
+settings.
 
 `block_key` is stable across draft and published copies. The composite primary key allows a published snapshot to be copied using one `INSERT ... SELECT` statement without generating new per-row IDs.
 
@@ -853,6 +978,12 @@ Block-specific data remains JSON and is validated by the block registry. A block
 The MVP uses sparse integer positions such as `1000`, `2000`, and `3000`. Inserting between two blocks normally changes only the inserted block. Positions are normalized when there is no safe gap.
 
 The MVP supports a flat top-level block list. A block may contain its own bounded nested data in `data_json`, but arbitrary parent/child block trees are out of scope.
+
+A block anchor is unique within an entry: entry validation rejects a repeated
+anchor (`duplicate_block_anchor`), hidden blocks included, and the partial
+unique index enforces the rule per snapshot. A draft and its published copy
+therefore share anchors. A save deletes the draft's block rows before inserting
+them again, so swapping anchors between two blocks never collides.
 
 All draft mutations are atomic at snapshot scope. A successful mutation changes
 the draft fields and complete ordered block list, increments
@@ -876,6 +1007,9 @@ This table guarantees unique public paths and supports direct lookup by URL.
 - Page paths are fixed by their model definition.
 - Collection paths are produced from the model route and the published snapshot slug.
 - A draft slug change does not change the public path before publication.
+- Globals never own a route. Their publication writes no `published_routes`
+  row, so by-path reads, collection lists and the export's `entries` never
+  contain them; they are read by model key (section 12).
 
 ### 9.7 Media
 
@@ -916,15 +1050,16 @@ content_media_references
 PRIMARY KEY(snapshot_id, source_key, field_path)
 ```
 
-`source_key` is `$fields` for snapshot fields or the stable block key for block
-data. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
+`source_key` is `$fields` for snapshot fields, `$seo` (with `field_path`
+`image`) for the SEO image, or the stable block key for block data. Block keys
+never start with `$`. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
 the draft snapshot's reference projection in the same atomic mutation;
 publication copies it with `INSERT ... SELECT`. A media item may be selected only
 while its status is `active`.
 
 The same projection is the only source of media usage. An entry uses an item
 when its current draft or current published snapshot references it in an entry
-field or a block field. Every admin media DTO carries `usageCount`, the number
+field, a block field or its SEO image. Every admin media DTO carries `usageCount`, the number
 of distinct using entries, and the media detail read lists up to 50 of them with
 each location and whether the draft, the published version, or both use it.
 Because only current snapshots keep references, usage and the deletion guard
@@ -1031,6 +1166,15 @@ creates a new request. The site's current version is the highest
 `target_version` among `succeeded` builds. The nullable `provider_*` fields hold
 the tracked deployment's stage, last check, and next due check; they are
 internal tracking state, never provider responses or credentials.
+
+Site output settings: the VPS builder reads optional `LACE_BUILD_SITE_URL`
+(absolute HTTP(S), no credentials, query or fragment) and `LACE_SITE_INDEXING`
+(`on` or `off`) from its deployment environment, refuses invalid values at
+startup without echoing them, and passes configured values unchanged to the
+fixed site build. Cloudflare Pages builds receive the same names as workflow
+repository variables or Pages environment variables. The API keeps using
+`LACE_BUILD_SITE_URL` only for "Open on site"; `LACE_SITE_INDEXING` exists
+only for site builds.
 
 Provider tracking (Cloudflare Pages, optional): the tracking start is the
 completion time of the build's outbox event, so processed events of `running`
@@ -1146,7 +1290,10 @@ Inputs include:
 - optional idempotency key.
 
 Publication first loads the draft, blocks, active configuration, and current
-published pointer, then validates the complete candidate without writing. It
+published pointer, then validates the complete candidate without writing. A
+hidden block is validated in draft mode, so an unfinished block can be
+published hidden; it is copied into the published snapshot with the rest of
+the aggregate but never delivered (see the public responses in section 12). It
 then executes the following as one guarded database transaction or D1 atomic
 batch:
 
@@ -1190,10 +1337,21 @@ build. Page entries cannot be deleted: a page singleton is defined by
 configuration and is removed by removing its model from `lace.config.ts`. A page
 delete request fails with `CONTENT_PAGE_SINGLETON` (HTTP `409`).
 
+Globals follow the page lifecycle without a route
+([ADR 0010](adr/0010-global-models.md)). Save, publish, unpublish and revert
+apply unchanged, except that publication resolves no path and writes no
+`published_routes` row, and unpublication removes only the publication. Like
+every publication, publishing or unpublishing a global increments
+`published_state.version` and requests a build, because any page may render
+it. Delete and duplicate of a global fail with `CONTENT_PAGE_SINGLETON`, whose
+message names configuration-defined singletons, and creating a second entry
+fails with `CONTENT_MODEL_CARDINALITY_CONFLICT`. Saving a global stores the
+model label as its title and rejects a slug.
+
 The entry lifecycle has three further commands
 ([ADR 0008](adr/0008-entry-lifecycle-commands.md)):
 
-- **Unpublish** (`content:publish`, pages and collection entries). Inputs: entry
+- **Unpublish** (`content:publish`, all model kinds). Inputs: entry
   ID, expected published snapshot ID, actor, optional idempotency key (scoped
   to the entry and actor, with the publication key rules). One guarded atomic
   mutation removes the entry's route, clears `published_snapshot_id`, deletes
@@ -1218,7 +1376,8 @@ The entry lifecycle has three further commands
   suffix within the title limit, no slug, new block keys, and a rebuilt media
   reference projection. The copy is validated in draft mode, created at
   revision 1, and never published. Creation is guarded on the source draft
-  revision that was read. A page duplicate fails with `CONTENT_PAGE_SINGLETON`.
+  revision that was read. A page or global duplicate fails with
+  `CONTENT_PAGE_SINGLETON`.
 
 ## 11. Block registry and rich text
 
@@ -1230,12 +1389,24 @@ The block registry maps each `block_type` to:
 - a runtime validation schema;
 - serializable form metadata;
 - optional default data;
-- optional data migration functions.
+- optional declared settings;
+- optional migration functions.
+
+`defineBlock({ settings })` declares presentational settings, separate from
+the block content, with the field builders limited to `select`, `boolean`,
+`number` and `text`; every setting declares a `defaultValue`. Settings enter
+the block metadata (only when declared, so blocks without settings keep their
+hashes) and therefore the structural hash: changing a setting needs a block
+version increase and a migration. Stored blocks keep their settings with
+defaults applied, and the admin and public block contracts carry them. Built-in
+blocks declare no settings.
 
 `defineBlock({ version, migrations })` keys each migration by its target
 version. The keys form one contiguous range ending at the block's version
 (a version 1 block declares none), and each value is a pure, synchronous
-function from the previous version's data to the target version's data.
+function that receives `{ data, settings }` of the previous version and
+returns `{ data, settings? }` of the target version; a result without
+`settings` keeps the input settings.
 Migrations are runtime-only: like the validator they never enter the metadata
 projection, the canonical structure or any hash. Only configuration
 synchronization runs them (section 8); keep a migration for as long as any
@@ -1250,7 +1421,7 @@ defineBlock({
     attribution: field.text(),
   },
   migrations: {
-    2: ({ quote, ...rest }) => ({ ...rest, text: quote ?? "" }),
+    2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote ?? "" } }),
   },
 });
 ```
@@ -1310,6 +1481,7 @@ Representative routes:
 
 ```text
 GET /api/v1/public/pages/:modelKey
+GET /api/v1/public/globals/:modelKey
 GET /api/v1/public/collections/:modelKey
 GET /api/v1/public/collections/:modelKey/:slug
 GET /api/v1/public/content/by-path?path=/blog/hello
@@ -1326,20 +1498,50 @@ generation; it requires a read-only build token.
 Public content responses return the published entry directly, never a draft:
 
 ```text
-PublicEntry = { id, modelKey, path, slug?, title, fields, blocks, publishedAt }
+PublicEntry = { id, modelKey, path, slug?, title, fields, blocks, publishedAt, seo? }
+PublicGlobal = { id, modelKey, fields, blocks, publishedAt }
 
 GET pages/:modelKey, collections/:modelKey/:slug, content/by-path
   -> { entry: PublicEntry, media }
+GET globals/:modelKey
+  -> { global: PublicGlobal, media }
 GET collections/:modelKey
   -> { items: PublicEntry[], media, nextCursor? }
 GET build-export
-  -> { entries: PublicEntry[], media, version }
+  -> { entries: PublicEntry[], globals: PublicGlobal[], media, seo, version }
+
+seo (entry) = { title, description, image, canonical, noindex }   // null when unset
+seo (export) = {
+  models: { [modelKey]: { description, image } },               // mapped field keys or null
+  defaults: { modelKey, siteName, titleTemplate, description, image } | null
+}
 
 media = { [mediaId]: { id, url, mimeType, width, height, alt, caption, focalPoint } }
 ```
 
-`blocks` keep `key`, `type`, `schemaVersion`, `position`, and `data`, ordered
-by position, and `publishedAt` is the creation time of the published snapshot.
+`blocks` hold the visible blocks only, ordered by position, each as
+`{ key, type, schemaVersion, position, anchor?, className?, settings, data }`
+with no `hidden` key (a missing `settings` validates as `{}`; the API always
+sends it). Media referenced only by hidden blocks are left out of the `media`
+dictionary and are not served by the public media route, while they keep their
+reference rows and stay protected by the deletion guard. Admin snapshot DTOs
+return every block with `hidden` and `settings`, and create and save requests
+accept the envelope with `anchor`, `className`, `hidden` and `settings`
+optional, so clients that omit them keep working. Block metadata in model DTOs
+carries declared `settings`. `publishedAt` is the creation time of the published snapshot.
+The globals read is anonymous like the page read, reads by model key without
+`published_routes`, and returns `404` for an unknown key, a page or collection
+key, or an unpublished global. Public entries of models with SEO enabled carry `seo` with the stored values,
+even when none is set; entries of other models and globals never carry it.
+The export's `seo` section describes the fallback mappings and the defaults
+global for the SDK resolver; a missing section validates as
+`{models: {}, defaults: null}`, and the API always sends it. Changing it is a
+configuration projection change, so the published version and the export
+ETag advance with sync.
+The export's `entries` hold routed entries only,
+and `globals` holds every published global ordered by model key; contract
+validation treats a missing `globals` as empty so older exports stay valid,
+and the API always sends it.
 `media` resolves exactly the media items referenced by the returned entries'
 published snapshots (from `content_media_references`), keyed by ID in ascending
 order; unknown values are `null`. Field and block values keep storing media IDs.
@@ -1428,7 +1630,11 @@ tokens. `POST /api/v1/password-reset/request` always returns `202` with the same
 body and schedules delivery without awaiting it.
 
 The draft `PUT` accepts `expectedRevision` plus the complete editable draft:
-`title`, `slug`, `fields`, and the ordered block list. It validates and persists
+`title`, `slug`, `fields`, the ordered block list and, for models with SEO
+enabled, the optional `seo` group (absent or `null` stores none). Admin
+snapshot DTOs carry `seo` with `null` for unset values for those models, and
+content-model DTOs carry the fallback mapping (`seo`) or the defaults mapping
+(`seoDefaults`). It validates and persists
 that aggregate atomically and returns the incremented revision. The admin may
 edit individual blocks locally, but its Save command uses this aggregate
 endpoint. Granular block mutation endpoints may be added later only if they
@@ -1456,7 +1662,9 @@ preserve the same snapshot-revision invariant.
   direction; default newest first), with cursors bound to that query. Media
   DTOs name the uploader as `createdBy` with an `id` and `displayName`, and
   carry `usageCount` and the `alt`, `caption`, and `focalPoint` values that are
-  set. `GET /api/v1/admin/media/:mediaId` adds the bounded `usage` list and an
+  set. `GET /api/v1/admin/media/:mediaId` adds the bounded `usage` list (each
+  location is a model field, a block field, or `{source: "seo", field:
+  "image"}`) and an
   `ETag` of the item's `updatedAt` in Unix milliseconds.
 - `PATCH /api/v1/admin/media/:mediaId` (`media:write`) takes a strict body with
   any of `alt`, `caption`, and `focalPoint` (`null` clears a value) and requires
@@ -1516,6 +1724,7 @@ const lace = createLaceClient({
 });
 
 const home = await lace.getPage("home");
+const settings = await lace.getGlobal("settings");
 const posts = await lace.getCollection("posts");
 const exportData = await lace.getBuildExport();
 ```
@@ -1531,9 +1740,11 @@ dev-server code, never in client bundles.
 framework and never reads `process.env` or `import.meta.env` itself.
 
 - **Input:** an `environment` record (`LACE_API_BASE_URL`, `LACE_BUILD_TOKEN`,
-  `LACE_PUBLIC_BASE_URL`, `LACE_EXPECTED_PUBLISHED_VERSION`) and/or explicit
-  `baseUrl`, `token`, `publicBaseUrl`, and `expectedPublishedVersion` values that
-  take precedence; optional `fetch`; `revalidate` (default `false`); optional
+  `LACE_PUBLIC_BASE_URL`, `LACE_EXPECTED_PUBLISHED_VERSION`,
+  `LACE_BUILD_SITE_URL`, `LACE_SITE_INDEXING`) and/or explicit `baseUrl`,
+  `token`, `publicBaseUrl`, `expectedPublishedVersion`, `siteUrl` and
+  `indexing` values that take precedence; an invalid site URL or indexing
+  value fails with `missing_configuration` without echoing it; optional `fetch`; `revalidate` (default `false`); optional
   `hints` keyed by error code that are appended to error messages.
 - **Static mode** reads one build export per loader, shared by concurrent
   callers, and forgets a failed read so the next call retries.
@@ -1543,11 +1754,24 @@ framework and never reads `process.env` or `import.meta.env` itself.
   different export version fails the build.
 - **Output:** `PublishedSite` with `version`, `byPath(path)`,
   `entries(modelKey)` (sorted by path; empty for an unknown model),
-  `bySlug(modelKey, slug)`, `mediaUrl(mediaId)`, `media(mediaId)`, and
-  `image(mediaId, usageAlt?)`. Lookups return `undefined` when absent so routes
+  `bySlug(modelKey, slug)`, `global(modelKey)`, `mediaUrl(mediaId)`,
+  `media(mediaId)`, and `image(mediaId, usageAlt?)`. `global()` returns a
+  `PublishedGlobal` (`id`, `modelKey`, `publishedAt`, `fields`, ordered
+  `blocks`, and the same `media()` and `image()` lookups) or `undefined` when
+  the global is not published, so layouts can fall back to static values.
+  `url` is the site URL with a trailing slash (or `undefined`), `indexing` is
+  `false` only for `LACE_SITE_INDEXING=off`, `urlFor(path)` joins a public path
+  under the site URL (keeping its base path), `allEntries()` lists every
+  published entry by path, and `seo(entry)` resolves the entry's SEO metadata
+  (section 8) from the export's `seo` section and the published defaults
+  global. The SDK also exports the pure `resolveSeo` and the framework-neutral
+  `renderSitemapXml(site, { include? })` (`undefined` without a site URL) and
+  `renderRobotsTxt(site)`. Lookups return `undefined` when absent so routes
   choose between 404 and failure. `PublishedEntry` exposes `id`, `modelKey`,
   `path`, optional `slug`, `title`, `publishedAt`, `fields`, ordered `blocks`
-  (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`), typed
+  (`PublishedBlock`: `type`, `key`, `position`, `schemaVersion`, `data`,
+  `settings` and optional `anchor` and `className`; hidden blocks are never
+  delivered), typed
   from contract DTOs, and the same `media()` and `image()` lookups over the
   export's media dictionary. `image()` returns the resolved item with the
   effective alt text: the non-blank usage alt (such as the `image` block's
@@ -1556,8 +1780,8 @@ framework and never reads `process.env` or `import.meta.env` itself.
   otherwise; `mediaUrl()` returns the resolved URL of a known ID. No
   draft-shaped property exists on the view.
 - The loader trusts the CMS-resolved `path`, never re-derives route patterns or
-  names model keys, and rejects duplicate paths and duplicate slugs within a
-  model.
+  names model keys, and rejects duplicate paths, duplicate slugs within a
+  model, duplicate global keys, and a global key shared with an entry.
 - **Errors:** `LacePublishedSiteError` (a `LaceSdkError`) with stable codes
   `missing_configuration`, `rejected_token` (HTTP 401/403), `api_unavailable`
   (transport failure), `version_mismatch`, and `invalid_export`. Other SDK
@@ -1580,13 +1804,25 @@ framework and never reads `process.env` or `import.meta.env` itself.
   rejects a key that differs from its definition type, and returns a frozen
   map. `resolveBlock(map, block, context)` returns the entry or fails on an
   unknown block type, which preserves the build-failure behavior for blocks a
-  site cannot render. `prepareBlocks(map, entry, mediaUrl)` resolves and parses
-  an entry's blocks in order and returns each mapped component with its
-  `BlockProps`, so adapters only render the result. A `RenderableEntry` may
+  site cannot render. `prepareBlocks(map, entry, mediaUrl)` leaves out every
+  block marked `hidden` before resolving it (a defensive skip: public blocks are
+  never hidden), then resolves and parses the remaining blocks in order and
+  returns each mapped component with its `BlockProps`, so adapters only render
+  the result. `RenderableBlock` carries optional `anchor`, `className`,
+  `hidden` and `settings`, so the public and the admin block DTOs both satisfy
+  it. A `RenderableEntry` may
   carry `media(mediaId)` resolving its media; `PublishedEntry` does.
+- `parseBlockEnvelope(definition, block, context)` checks the anchor with
+  `isBlockAnchor`, normalizes the class name with `normalizeBlockClassName`
+  and validates the settings with `validateBlockSettings`, applying every
+  declared default to a missing or partial record.
 - `BlockProps<Definition>` is the prop contract every adapter passes to a block
-  component: `block`, parsed `data`, `context`, `mediaUrl`, and
-  `image(mediaId, usageAlt?)`. `image()` returns an `ImageDescription`
+  component: `block`, parsed `data`, typed `settings`
+  (`BlockSettingsOf<Definition>`, every declared key present, `{}` without
+  declared settings), `anchor` and the normalized `className` when the block
+  has them, `context`, `mediaUrl`, and `image(mediaId, usageAlt?)`. Components
+  place `anchor` as their root `id` and merge `className` into their root
+  `class`; there is no wrapper element. `image()` returns an `ImageDescription`
   (`src`, effective `alt`, and when known `width`, `height`, `caption`, and an
   `objectPosition` of `X% Y%` from the focal point) so blocks avoid layout
   shift and honour the focal point. An entry without resolved media falls back
@@ -1599,8 +1835,9 @@ framework and never reads `process.env` or `import.meta.env` itself.
   (a link `href` has passed `isSafeUrl`), and `source` names the originating
   node or mark. No raw HTML string is produced.
 - **Errors:** `LaceRenderError` with codes `invalid_block_data`,
-  `block_version_mismatch`, `unknown_block_type`, `invalid_rich_text`, and
-  `missing_media`,
+  `invalid_block_envelope` (anchor, class name or settings, with the field
+  path), `block_version_mismatch`, `unknown_block_type`, `invalid_rich_text`,
+  and `missing_media`,
   carrying the context, the field path, and the underlying
   `ContentValidationError` as `cause`. Messages name model, entry, block key,
   and field path.
@@ -1621,9 +1858,18 @@ no client scripts, and requires no Astro integration. Override components for
   inside externalized dependencies. The module fails fast when evaluated in a
   browser; `LACE_BUILD_TOKEN` must never reach a client bundle.
 - `@lacecms/astro/LaceBlocks.astro` takes `entry`, `blocks` (the block map), and
-  `mediaUrl`, resolves and parses each block in order, and renders the mapped
-  component with `BlockProps`, including the `image()` describer bound to the
-  entry's resolved media.
+  `mediaUrl`, resolves and parses each visible block in order, and renders the
+  mapped component with `BlockProps`, including the envelope props and the
+  `image()` describer bound to the entry's resolved media. It renders no hidden
+  block and adds no wrapper markup.
+- `@lacecms/astro/LaceSeo.astro` takes a resolved `seo` value and an optional
+  `type` (`website` or `article`) and renders `<title>`, the description,
+  canonical and robots tags, Open Graph (`og:image` with width, height and
+  alt) and `twitter:card`, emitting nothing for absent values.
+- `sitemapResponse(site, options?)` and `robotsResponse(site)` (root entry)
+  return endpoint responses; without a site URL the sitemap response has no
+  body, so a static build writes no `sitemap.xml`, and one build warning names
+  `LACE_BUILD_SITE_URL`.
 - `@lacecms/astro/RichText.astro` takes `document`, optional `components` keyed
   by node or mark name, and optional `context`. It renders the
   `describeRichText` tree with Astro's escaping and never uses `set:html`;
@@ -1669,6 +1915,13 @@ map file, checks installed package versions against item ranges, checks
 built-in definition versions against `lace.config.ts`, and scaffolds a typed
 component for a configured custom block that has no registry item. Ownership
 and conflict rules are in section 7.
+
+Registry components and scaffolds follow one root-element convention: the
+block's `anchor` is the root `id` and its `className` follows the component's
+own classes in the root `class` (`class:list={["hero", className]}`, or
+`class={className}` for a root without classes). Astro omits `undefined`
+attributes, so a block without an envelope renders the markup of earlier
+revisions.
 
 ### 13.6 Framework selection
 
@@ -1744,6 +1997,30 @@ if (post === undefined) return new Response(null, { status: 404 });
 <LaceBlocks entry={post} blocks={blocks} mediaUrl={site.mediaUrl} />
 ```
 
+Layout head and site files (user-owned):
+
+```astro
+---
+import LaceSeo from "@lacecms/astro/LaceSeo.astro";
+const { entry, site, type } = Astro.props;
+---
+
+<head>
+  <meta charset="utf-8" />
+  <LaceSeo seo={site.seo(entry)} type={type} />
+</head>
+```
+
+```ts
+// src/pages/sitemap.xml.ts; robots.txt.ts uses robotsResponse the same way.
+import { sitemapResponse } from "@lacecms/astro";
+import { getSite } from "../lib/lace";
+
+export async function GET(): Promise<Response> {
+  return sitemapResponse(await getSite());
+}
+```
+
 Installed block component (user-owned, keeps the `data-lace-*` styling hooks):
 
 ```astro
@@ -1753,11 +2030,11 @@ import type { builtInBlocks } from "@lacecms/content";
 import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.hero>;
-const { block, data, image } = Astro.props;
+const { anchor, block, className, data, image } = Astro.props;
 const media = data.image === undefined ? undefined : image(data.image);
 ---
 
-<section class="hero" data-lace-block={block.type} data-lace-block-key={block.key}>
+<section class:list={["hero", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   <h1 data-lace-part="heading">{data.heading}</h1>
   {data.body && <div data-lace-part="body"><RichText document={data.body} /></div>}
   {media && <img alt={media.alt} data-lace-part="media" height={media.height} src={media.src} width={media.width} />}
@@ -2058,6 +2335,24 @@ The architecture responds to those constraints by:
 
 JSON values are stored as SQLite `TEXT` and validated before persistence. Fields that later require indexed filtering may be promoted to generated columns or a dedicated index table through a future migration.
 
+Additive columns use a plain `ALTER TABLE … ADD` on both runtimes, as
+migration `0008` does for the nullable `content_snapshots.seo_json`; it
+rewrites no rows and needs no backfill. Migration `0009` adds the block
+envelope columns the same way (`NOT NULL` columns carry constant defaults) and
+creates the partial unique anchor index.
+
+A migration that must rebuild a table referenced by foreign keys (for example
+`0007`, which widens the `content_models.kind` check) runs
+`PRAGMA defer_foreign_keys = on`, creates the replacement table, copies every
+row, drops the old table and renames the replacement, all in one migration
+file. D1 applies the file as one batch and accepts the deferred drop and
+rename; D1 cannot switch foreign keys off. Node SQLite does not clear the
+deferred violation counted by the drop, so the explicit Node migrator follows
+SQLite's documented rebuild procedure instead: it suspends `foreign_keys` on
+its own connection while the migrations run, runs `PRAGMA foreign_key_check`,
+and fails unless the check is empty before restoring enforcement. Application
+connections always keep foreign keys on.
+
 ## 17. Admin application
 
 The admin is a client-rendered React SPA with no SSR requirement.
@@ -2099,9 +2394,9 @@ Primary routes:
 /settings              settings:manage
 ```
 
-The content-model response drives navigation and field forms. Pages open their singleton editor directly; collections open a paginated entry list.
+The content-model response drives navigation and field forms. Pages and globals open their singleton editor directly; collections open a paginated entry list. The model route of a page or global (`/content/<key>`) shows only a pointer back to the content overview.
 
-The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL. Writers get a labeled "Actions for {title}" menu in each row with Open, Duplicate and Delete. Delete appears for draft-only entries, and for published ones only with `content:publish`. Creating or duplicating an entry opens it in the editor.
+The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Site (globals, linked to their singleton editors), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), omitting empty groups, shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs; a page or global editor is located by Content and the model label only. The content overview has Pages, Collections and Site sections; a global's card shows its label, description, status and last edit but no path. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL. Writers get a labeled "Actions for {title}" menu in each row with Open, Duplicate and Delete. Delete appears for draft-only entries, and for published ones only with `content:publish`. Creating or duplicating an entry opens it in the editor.
 
 The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, errors inside the card, and a "Forgot password?" link. The accept-invite, forgot-password, and reset-password screens are the same kind of public card. Accept and reset read the token from the URL fragment, remove it from the address bar, and keep it only in component state, never in the query string, router state, query cache, or browser storage. Forgot-password shows the same confirmation whether or not the address has an account. `/account` is available to every signed-in user from the user menu: it changes the display name, changes the password (signing out other sessions by default), and lists sessions with a "This device" marker and confirmed Sign out actions. Users lists accounts with a "You" marker, role and status badges, and no raw IDs, and below them the pending invitations with Resend and a confirmed Revoke. Inviting a user, changing a role, disabling or enabling an account, sending a password reset, and signing a user out everywhere each happen in a dialog; no admin screen collects another person's password. When an invitation or reset email is not sent, its dialog shows the link once, like a new build token. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable, Send password reset, or Sign out everywhere for their own account and is warned before demoting it. Settings shows API readiness, configured models, active build tokens, and email delivery (provider and sender, with a rate-limited Send test email action addressed only to the signed-in administrator) as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
 
@@ -2115,13 +2410,14 @@ The shell header stays pinned while a screen scrolls. It gives the screen an act
 
 - Duplicate (collections) opens the copy of the last saved draft.
 - Revert to published lists what is lost: the saved draft changes since the publication, and unsaved changes. When only unsaved changes differ, it discards them locally.
-- Unpublish says that the path stops working after the next build, or for a page that its fixed path returns 404. The draft and unsaved changes are kept, and the card follows the queued build.
+- Unpublish says that the path stops working after the next build, for a page that its fixed path returns 404, and for a global ("this site content") that pages showing it fall back to their defaults. The draft and unsaved changes are kept, and the card follows the queued build.
 - Delete (collections; published entries need `content:publish`) asks a published entry's title to be typed and says the page leaves the site after the next build. It returns to the collection list without the discard prompt.
 
-Both menus are non-modal Radix menus whose confirmations open after the menu closes and return focus to the menu button. Save is bound to the draft form and to `⌘S`/`Ctrl+S`, and the shortcut always suppresses the browser's page save. The title is a large input at the top of the main column, and the blocks follow it. A right-hand column, which stacks after the blocks on narrow screens, holds two cards:
+Both menus are non-modal Radix menus whose confirmations open after the menu closes and return focus to the menu button. Save is bound to the draft form and to `⌘S`/`Ctrl+S`, and the shortcut always suppresses the browser's page save. The title is a large input at the top of the main column, and the blocks follow it. A global has no title input: its system-owned title is the model label, shown as static text with the model description, and its save sends the stored title unchanged. A global's publish confirmation asks to publish "this site content" and says that it affects every page that shows it after the next site build. A right-hand column, which stacks after the blocks on narrow screens, holds two cards, and a third for entries of SEO-enabled models:
 
-- Publication: the derived status, the live and draft revisions, the last editor's display name, relative times with the absolute time on hover, the public path, and the latest build state. Raw IDs and ISO timestamps never appear. When the entry is published and the operator sets the optional `LACE_BUILD_SITE_URL` (returned by `GET /api/v1/admin/build-site` beside the site ID and label), the path is an "Open on site" link to that base URL; otherwise it stays text.
-- Fields: the entry's slug and model fields.
+- Publication: the derived status, the live and draft revisions, the last editor's display name, relative times with the absolute time on hover, the public path (omitted for a global, which has no URL and no "Open on site" link), and the latest build state. Raw IDs and ISO timestamps never appear. When the entry is published and the operator sets the optional `LACE_BUILD_SITE_URL` (returned by `GET /api/v1/admin/build-site` beside the site ID and label), the path is an "Open on site" link to that base URL; otherwise it stays text.
+- Fields: the entry's slug (collections only) and model fields. In the global that declares `seoDefaults`, each mapped field says which site default it provides (site name, title template, default description or default image), for writers and viewers alike.
+- SEO (CE4C): the SEO title, SEO description, SEO image (the media picker), canonical URL and a "Hide from search engines" switch, part of the draft form like any field. Every save of an SEO-enabled entry sends the complete group, with `null` for blank values; other entries send no `seo`. Title and description show a character count against the recommended 60 and 160 characters and a warning above it that never blocks saving; the API limits are validated locally and server issues under `/seo/*` map to these controls. Empty values show what the site inherits, following ADR 0011 ("Uses entry title: …", "Uses {field}: …", "Uses site description: …", "Uses this page's URL: …", and which image is shared). A search-result preview shows the resolved title, URL and description and says when the entry is hidden. Inherited values follow unsaved form values and read site defaults from the published defaults global; the admin cannot see `LACE_SITE_INDEXING`, so the preview describes the entry, not the deployment.
 
 Until the Builds screen reads persisted builds in Step 21, the latest build state is the dispatch result of the most recent publish from the editor. The field controls are built on the shared primitives:
 
@@ -2135,12 +2431,15 @@ Controls hold a cleared value as `null` in form state, because React Hook Form w
 Blocks render as cards. A card header shows the following:
 
 - a drag handle;
-- the block's icon and label;
-- a one-line summary of its data: the first text value, then rich-text plain text, then a URL or select value, then "Media selected", otherwise "Empty block".
+- the block's icon and label, with a *Hidden* badge (part of the card's accessible name) when the block is hidden;
+- a one-line summary of its data: the first text value, then rich-text plain text, then a URL or select value, then "Media selected", otherwise "Empty block";
+- the block's `#anchor` when it has one.
+
+An expanded card has a *Content* tab with the block's fields and a *Settings* tab with its envelope ([ADR 0012](adr/0012-block-envelope.md)): an *Anchor* input validated as the writer types (format, and uniqueness within the entry including hidden blocks) with *Copy link*, which copies the entry's site URL plus `#anchor` when the build site URL and the entry path are known and `#anchor` otherwise; a *Hide on site* switch; the settings the block declares, through the field controls; and a *CSS classes* input checked with the shared class-name rule. Both panels stay mounted, the tabs use arrow keys, Home and End, and a tab whose controls have problems says so in its name. The selected tab is kept per block key. A hidden card is muted with a muted background and a dashed border, never by lowering text contrast. Viewers get no tabs: the content fields are followed by a read-only *Settings* section. Anchor and class name are held as strings in form state (empty for none) and blank values are left out of saves.
 
 Collapsing hides only the fields, so a collapsed card stays recognizable. A block with a validation error stays expanded. The block that focus or a pointer last entered is highlighted. A block that has just been added, inserted, or duplicated is highlighted, expanded, and focused.
 
-Each card's actions menu offers Move up, Move down, Duplicate, and Remove. Removal leaves an inline notice with Undo, which restores the same key and data at the same place. The next structural action makes the removal final.
+Each card's actions menu offers Move up, Move down, Duplicate, Hide block or Show block (announced in a status region by label and position), and Remove. A duplicate starts without an anchor. Removal leaves an inline notice with Undo, which restores the same key and data at the same place. The next structural action makes the removal final.
 
 An insert control between adjacent blocks and an Add block button after the list open the same popover. It lists the model's allowed blocks with icon, label, and description, and it has a text filter.
 
@@ -2155,7 +2454,7 @@ Each editable rich-text field has a fixed toolbar named after the field. It hold
 
 The toggles report their pressed state for the selection. The toolbar is one tab stop with arrow-key movement, `Alt+F10` moves focus from the text to it, and Escape returns. Tooltips and `aria-keyshortcuts` name each shortcut. The editor adds undo and redo and keeps Tiptap's mark, list, heading, and Markdown shortcuts. `⌘K`/`Ctrl+K` opens the link popover, which applies only URLs that pass the shared allowlist and says which forms are permitted. The Tiptap schema declares only allowlisted attributes: links carry `href` and lists carry nothing. Every document the editor produces therefore passes the shared validator. Empty fields show a placeholder, also exposed as `aria-placeholder`. Viewers get neither the toolbar nor the placeholder.
 
-Validation problems appear where they occur. Field messages are sentences such as "Enter at least 5 characters." A block card shows its block-level problems and a "Has problems" marker: a type that is not allowed, a stale version, a key problem, or data for an undefined field. A block whose type the model no longer allows still renders, so it can be removed. When Save is blocked, or the server rejects a save or publish, a summary above the title takes focus. It counts the problems and links each one, in reading order, to its control or block card. The admin maps server JSON Pointers, including deep rich-text paths, to the same locations. Issues it cannot place are listed as text.
+Validation problems appear where they occur. Field messages are sentences such as "Enter at least 5 characters." A block card shows its block-level problems and a "Has problems" marker: a type that is not allowed, a stale version, a key problem, data for an undefined field, or a value for an undeclared setting. Anchor, class name, and declared setting problems are shown on their Settings controls; activating one in the summary selects the Settings tab first. Summary entries name hidden blocks as hidden. A problem only publication reports (a required field) in a block that is now hidden is listed last as not blocking publication and is not counted, because publication validates hidden blocks in draft mode; every other problem in a hidden block blocks Save as usual. A block whose type the model no longer allows still renders, so it can be removed. When Save is blocked, or the server rejects a save or publish, a summary above the title takes focus. It counts the problems and links each one, in reading order, to its control or block card. The admin maps server JSON Pointers, including deep rich-text paths, to the same locations. Issues it cannot place are listed as text.
 
 ### Component source and design tokens
 
@@ -2507,13 +2806,20 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Authorization uses admin, editor, and viewer roles mapped to permissions.
 - Only admin has `content:publish` by default.
 - Tiptap is used for rich-text fields/blocks, not as the entire page document.
-- `content_models.kind` distinguishes `page` from `collection`.
-- Pages and collection records share `content_entries`.
+- `content_models.kind` distinguishes `page`, `collection` and the route-less
+  singleton `global` ([ADR 0010](adr/0010-global-models.md)).
+- Pages, collection records and globals share `content_entries`.
 - Content has draft and published snapshots only.
 - Media carry global descriptive metadata (alt text, caption, focal point);
   editing published media advances the published version without
   republication ([ADR 0009](adr/0009-media-metadata.md)).
+- Routable models may opt into an SEO system group stored with each snapshot;
+  one global maps site defaults, and the SDK resolves fallbacks
+  ([ADR 0011](adr/0011-seo-system-group.md)).
 - Blocks are separate relational rows with type-specific JSON payloads.
+- Blocks carry an envelope (anchor, CSS class, hidden flag, declared settings);
+  hidden blocks stay stored but are never delivered
+  ([ADR 0012](adr/0012-block-envelope.md)).
 - Top-level blocks are flat and sparsely ordered.
 - Content models are defined in code and projected into the database.
 - Configuration sync classifies structural changes against a stored baseline

@@ -6,33 +6,33 @@
   "blockMapSha256": "fe99316d998d116c2bce9a233090465ae80f8bfb17db7066170bb761682d8598",
   "items": {
     "cta": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/CtaBlock.astro": "a3d6e8e7a4730985c73f99a5a89231a98c40f3645f9ce4a88aaa5520b45e01f6"
+        "src/components/lace/CtaBlock.astro": "42fe89c754c00daffed4e89860a2ac455c91d63f2fe6c387ad4e305721d60ec0"
       }
     },
     "hero": {
-      "revision": 2,
+      "revision": 3,
       "files": {
-        "src/components/lace/HeroBlock.astro": "0b4794709eb7eceeda7fea01e11da7aa733772db5c184c0e02e31ab72150a22c"
+        "src/components/lace/HeroBlock.astro": "4d03d3c231fbbb55b2b77ebb7ba4434a534ef017dddeac41b54ac026dbe567f6"
       }
     },
     "image": {
-      "revision": 3,
+      "revision": 4,
       "files": {
-        "src/components/lace/ImageBlock.astro": "5510cd3b724c0e1d0df060a384cd9d84b25975b771923fb38688bde7633d970c"
+        "src/components/lace/ImageBlock.astro": "004e0ee6a85bc37a8d0b5d84a1b6b82ac844a2e96183fb95227a39d8b59cbfc5"
       }
     },
     "quote": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/QuoteBlock.astro": "489802b97ae9def11e127df372397d937e8f330b33609fd8ba1a0908a44ef9c4"
+        "src/components/lace/QuoteBlock.astro": "0a8143310c920b0103c08cc28ae1c624f5c69a6390f98e2f097540e7cd8de93f"
       }
     },
     "richText": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/RichTextBlock.astro": "0041a09497c61ef9acc41f9c79b93ad37dd6c30f19788685e6932b13c8fc964d"
+        "src/components/lace/RichTextBlock.astro": "8716b129857ca3dd8e6c144c18d2d140e4d6471f0cb2c5a4544d6e8d9b7a3f38"
       }
     }
   }

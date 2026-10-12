@@ -11,7 +11,7 @@ function Harness({
   onReload = () => undefined,
   onUnpublished = () => undefined,
 }: {
-  readonly kind?: "collection" | "page";
+  readonly kind?: "collection" | "global" | "page";
   readonly onReload?: () => void;
   readonly onUnpublished?: () => void;
 }) {
@@ -30,7 +30,7 @@ function Harness({
         onReload={onReload}
         onUnpublished={onUnpublished}
         open={open}
-        publicPath={kind === "page" ? "/about" : "/posts/first"}
+        publicPath={kind === "global" ? undefined : kind === "page" ? "/about" : "/posts/first"}
         returnFocus={trigger}
       />
     </>
@@ -51,6 +51,14 @@ test("states the public consequence for collection entries and pages", async () 
   await user.click(await screen.findByRole("button", { name: "Open unpublish" }));
   expect(screen.getByRole("dialog", { name: "Unpublish this page?" })).toHaveAccessibleDescription(
     /The page's fixed path \/about will return 404 after the next site build\./u,
+  );
+  cleanup();
+  renderInRouter(<Harness kind="global" />, { client: stubClient() });
+  await user.click(await screen.findByRole("button", { name: "Open unpublish" }));
+  expect(
+    screen.getByRole("dialog", { name: "Unpublish this site content?" }),
+  ).toHaveAccessibleDescription(
+    /Pages that show this content fall back to their defaults after the next site build\./u,
   );
 });
 

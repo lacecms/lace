@@ -28,7 +28,17 @@ const model: ContentModelDto = {
 
 const entry = {
   draft: {
-    blocks: [{ data: {}, key: "01J", position: 1024, schemaVersion: 1, type: "hero" }],
+    blocks: [
+      {
+        data: {},
+        hidden: false,
+        key: "01J",
+        position: 1024,
+        schemaVersion: 1,
+        settings: {},
+        type: "hero",
+      },
+    ],
     fields: {},
     revision: 3,
     slug: "draft-slug",
@@ -40,6 +50,8 @@ const entry = {
 test("fills block defaults and resolves the published public path first", () => {
   const values = draftValues(model, entry);
   expect(values.blocks[0]?.data).toEqual({ heading: "Hello" });
+  // Absent envelope text values are "" so loaded inputs match the dirty baseline.
+  expect(values.blocks[0]).toMatchObject({ anchor: "", className: "" });
   expect(values).toMatchObject({ slug: "draft-slug", title: "Draft" });
   expect(resolvedPublicPath(model, entry)).toBe("/posts/live-slug");
 });
@@ -74,7 +86,9 @@ test("derives sparse positions in displayed order without mutating keys or data"
       data: Object.freeze({ heading: `Block ${index}` }),
       key: `key-${index}`,
       position,
+      hidden: false,
       schemaVersion: 1,
+      settings: {},
       type: "hero",
     }),
   );
@@ -104,4 +118,51 @@ test("a slugless collection draft starts with an empty slug that is never sent",
   } as unknown as ContentEntryDto;
   expect(draftValues(model, slugless).slug).toBe("");
   expect(JSON.parse(localDraftJson(draftValues(model, slugless)))).not.toHaveProperty("slug");
+});
+
+test("loads, copies and omits the SEO group by model", () => {
+  const seoModel = { ...model, seo: { description: null, image: null } } as ContentModelDto;
+  const withSeo = {
+    ...entry,
+    draft: {
+      ...entry.draft,
+      seo: { canonical: null, description: null, image: "media-1", noindex: true, title: "SEO" },
+    },
+  } as unknown as ContentEntryDto;
+  const values = draftValues(seoModel, withSeo);
+  expect(values.seo).toEqual({
+    canonical: "",
+    description: "",
+    image: "media-1",
+    noindex: true,
+    title: "SEO",
+  });
+  expect(draftValues(model, withSeo)).not.toHaveProperty("seo");
+  expect(JSON.parse(localDraftJson(values)).seo).toEqual({
+    canonical: null,
+    description: null,
+    image: "media-1",
+    noindex: true,
+    title: "SEO",
+  });
+});
+
+test("loaded envelopes are kept and blank envelope text is never sent", () => {
+  const enveloped = {
+    ...entry,
+    draft: {
+      ...entry.draft,
+      blocks: [
+        { ...entry.draft.blocks[0], anchor: "pricing", className: "wide", hidden: true },
+        { ...entry.draft.blocks[0], key: "02J", type: "retired" },
+      ],
+    },
+  } as unknown as ContentEntryDto;
+  const values = draftValues(model, enveloped);
+  expect(values.blocks[0]).toMatchObject({ anchor: "pricing", className: "wide", hidden: true });
+  expect(values.blocks[1]).toMatchObject({ anchor: "", className: "", type: "retired" });
+  const sent = JSON.parse(localDraftJson(values)).blocks;
+  expect(sent[0]).toMatchObject({ anchor: "pricing", className: "wide", hidden: true });
+  expect(sent[1]).not.toHaveProperty("anchor");
+  expect(sent[1]).not.toHaveProperty("className");
 });

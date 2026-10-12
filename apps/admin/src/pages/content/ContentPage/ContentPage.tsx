@@ -28,17 +28,18 @@ function modelLabel(model: Pick<ContentModelDto, "key" | "label">) {
   return model.label ?? model.key;
 }
 
-/** Status overview of every configured page and collection. */
+/** Status overview of every configured page, collection and global. */
 export function ContentPage() {
   const client = useAdminClient();
   const models = useQuery({ queryFn: client.listModels, queryKey: adminQueryKeys.models });
   useSessionRecovery(models.error);
   const pages = models.data?.items.filter((model) => model.kind === "page") ?? [];
   const collections = models.data?.items.filter((model) => model.kind === "collection") ?? [];
+  const globals = models.data?.items.filter((model) => model.kind === "global") ?? [];
   return (
     <section className={pageClass} aria-labelledby="content-title">
       <h1 id="content-title">Content</h1>
-      <p>Pages and collections defined in your site configuration.</p>
+      <p>Pages, collections and site-wide globals defined in your site configuration.</p>
       {models.isPending ? <LoadingState label="Loading content models" lines={3} /> : undefined}
       {models.error === null ? undefined : (
         <ErrorState
@@ -48,7 +49,7 @@ export function ContentPage() {
       )}
       {models.data?.items.length === 0 ? (
         <EmptyState
-          description="Define a page or collection in lace.config.ts, restart the local API, then run pnpm content:sync. Models are defined in code."
+          description="Define a page, collection or global in lace.config.ts, restart the local API, then run pnpm content:sync. Models are defined in code."
           title="No content models configured"
         />
       ) : undefined}
@@ -60,7 +61,7 @@ export function ContentPage() {
           <ul className={gridClass}>
             {pages.map((model) => (
               <li className="grid" key={model.key}>
-                <PageCard model={model} />
+                <SingletonCard model={model} />
               </li>
             ))}
           </ul>
@@ -80,6 +81,20 @@ export function ContentPage() {
           </ul>
         </section>
       )}
+      {globals.length === 0 ? undefined : (
+        <section aria-labelledby="site-title" className="grid scroll-mt-4 gap-3" id="site">
+          <h2 className={sectionHeadingClass} id="site-title">
+            Site
+          </h2>
+          <ul className={gridClass}>
+            {globals.map((model) => (
+              <li className="grid" key={model.key}>
+                <SingletonCard model={model} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </section>
   );
 }
@@ -93,7 +108,8 @@ function CardSkeleton({ label }: { readonly label: string }) {
   );
 }
 
-function PageCard({ model }: { readonly model: ContentModelDto }) {
+/** A page or global: one configuration-defined entry, opened directly. */
+function SingletonCard({ model }: { readonly model: ContentModelDto }) {
   const overview = useEntryOverview(model.key);
   useSessionRecovery(overview.error);
   const label = modelLabel(model);
@@ -107,11 +123,12 @@ function PageCard({ model }: { readonly model: ContentModelDto }) {
       />
     );
   const entry = overview.data.items[0];
+  const noun = model.kind === "global" ? "global" : "page";
   if (entry === undefined)
     return (
       <EmptyState
-        description="This page has no editable draft yet. Local synchronization may be pending: run pnpm content:sync, then reload."
-        title="Page draft missing"
+        description={`This ${noun} has no editable draft yet. Local synchronization may be pending: run pnpm content:sync, then reload.`}
+        title={model.kind === "global" ? `${label} draft missing` : "Page draft missing"}
       />
     );
   return (
@@ -128,6 +145,9 @@ function PageCard({ model }: { readonly model: ContentModelDto }) {
           {model.path === undefined ? undefined : (
             <span className="truncate font-mono text-xs text-muted-foreground">{model.path}</span>
           )}
+          {model.kind === "global" && model.description !== undefined ? (
+            <span className="text-xs text-muted-foreground">{model.description}</span>
+          ) : undefined}
         </div>
         <EntryStatusBadge status={entry.status} />
       </div>

@@ -146,7 +146,7 @@ function PublicPath({ path, published }: { readonly path: string; readonly publi
 
 /**
  * The editor's publication card: derived status, live and draft revisions,
- * last editor, public URL, and the persisted state of the build covering the
+ * last editor, public URL (none for a global), and the persisted state of the build covering the
  * latest publication made in this editor.
  */
 export function EntryPublicationDetails({
@@ -185,13 +185,16 @@ export function EntryPublicationDetails({
         <Fact term="Last edited">
           {entry.updatedBy.displayName} · <RelativeTime iso={entry.draft.updatedAt} />
         </Fact>
-        <Fact term="Public URL">
-          {publicPath === undefined ? (
-            <span className="text-muted-foreground">No public URL yet</span>
-          ) : (
-            <PublicPath path={publicPath} published={entry.published !== undefined} />
-          )}
-        </Fact>
+        {model.kind === "global" ? undefined : (
+          // A global has no URL of its own; every page may show it.
+          <Fact term="Public URL">
+            {publicPath === undefined ? (
+              <span className="text-muted-foreground">No public URL yet</span>
+            ) : (
+              <PublicPath path={publicPath} published={entry.published !== undefined} />
+            )}
+          </Fact>
+        )}
         <Fact term="Latest build">
           <LatestBuild latest={latestBuild} />
         </Fact>

@@ -1,6 +1,8 @@
 import { MAX_SLUG_LENGTH } from "@lacecms/content";
 import type { JsonObject, JsonValue } from "@lacecms/content";
 import type { SiteBuildStatus } from "./build-status.js";
+import { cloneEntrySeo } from "./seo.js";
+import type { EntrySeo } from "./seo.js";
 
 export const packageName = "@lacecms/domain";
 export const BLOCK_POSITION_STEP = 1_000;
@@ -19,7 +21,7 @@ export type MediaId = Brand<string, "MediaId">;
 export type SiteBuildId = Brand<string, "SiteBuildId">;
 export type UnixMilliseconds = Brand<number, "UnixMilliseconds">;
 
-export type ContentModelKind = "collection" | "page";
+export type ContentModelKind = "collection" | "global" | "page";
 export type Role = "admin" | "editor" | "viewer";
 export type Permission =
   | "content:read"
@@ -226,16 +228,42 @@ export interface CollectionContentModelRoute {
   readonly route: string;
 }
 
-export type ContentModelRoute = CollectionContentModelRoute | PageContentModelRoute;
+/** A route-less singleton model, read by its key and never by path. */
+export interface GlobalContentModelRoute {
+  readonly key: ContentModelKey;
+  readonly kind: "global";
+}
 
-/** One block in a flat, fully ordered content snapshot. */
+export type RoutableContentModelRoute = CollectionContentModelRoute | PageContentModelRoute;
+export type ContentModelRoute = GlobalContentModelRoute | RoutableContentModelRoute;
+
+/** Page and global models are configuration-defined singletons. */
+export function isSingletonKind(kind: ContentModelKind): boolean {
+  return kind !== "collection";
+}
+
+/**
+ * One block in a flat, fully ordered content snapshot, with its presentation
+ * envelope: an optional in-page anchor and CSS class name, whether it is
+ * hidden from delivery, and the settings its definition declares.
+ */
 export interface ContentBlock {
+  readonly anchor?: string;
+  readonly className?: string;
   readonly data: JsonObject;
+  readonly hidden: boolean;
   readonly key: BlockKey;
   readonly position: number;
   readonly schemaVersion: number;
+  readonly settings: JsonObject;
   readonly type: string;
 }
+
+/** A block whose envelope values may be omitted; omitted values take their defaults. */
+export type ContentBlockInput = Omit<ContentBlock, "hidden" | "settings"> & {
+  readonly hidden?: boolean;
+  readonly settings?: JsonObject;
+};
 
 interface SnapshotBase {
   readonly blocks: readonly ContentBlock[];
@@ -244,6 +272,8 @@ interface SnapshotBase {
   readonly fields: JsonObject;
   readonly id: ContentSnapshotId;
   readonly revision: number;
+  /** The SEO system group, absent when no value is set. */
+  readonly seo?: EntrySeo;
   readonly slug?: string;
   readonly title: string;
   readonly updatedAt: UnixMilliseconds;
@@ -302,12 +332,17 @@ function cloneJson(value: JsonValue): JsonValue {
   );
 }
 
-function cloneBlock(block: ContentBlock): ContentBlock {
+/** Copies a block, completing omitted envelope values as visible with `{}` settings. */
+function cloneBlock(block: ContentBlockInput): ContentBlock {
   return {
+    ...(typeof block.anchor === "string" ? { anchor: block.anchor } : {}),
+    ...(typeof block.className === "string" ? { className: block.className } : {}),
     data: cloneJson(block.data) as JsonObject,
+    hidden: block.hidden === true,
     key: block.key,
     position: block.position,
     schemaVersion: block.schemaVersion,
+    settings: cloneJson(block.settings ?? {}) as JsonObject,
     type: block.type,
   };
 }
@@ -320,6 +355,7 @@ function cloneSnapshot<Snapshot extends ContentSnapshot>(snapshot: Snapshot): Sn
     fields: cloneJson(snapshot.fields) as JsonObject,
     id: snapshot.id,
     revision: snapshot.revision,
+    ...(snapshot.seo === undefined ? {} : { seo: cloneEntrySeo(snapshot.seo) }),
     ...(snapshot.slug === undefined ? {} : { slug: snapshot.slug }),
     state: snapshot.state,
     title: snapshot.title,
@@ -386,14 +422,19 @@ export function resolveCollectionPublicPath(route: string, slug: string): string
   return normalizePagePublicPath(normalizedRoute.replace(":slug", slug));
 }
 
-/** Resolves the public path for one model and, for collections, its publication slug. */
-export function resolveContentPublicPath(model: ContentModelRoute, slug?: string): string {
+/** Resolves the public path for one routable model and, for collections, its publication slug. */
+export function resolveContentPublicPath(model: RoutableContentModelRoute, slug?: string): string {
   return model.kind === "page"
     ? normalizePagePublicPath(model.path)
     : resolveCollectionPublicPath(model.route, slug ?? "");
 }
 
-/** Enforces page singleton cardinality before a specialized atomic store operation. */
+/** Resolves an entry's public path, or `undefined` for a route-less global. */
+export function contentPublicPath(model: ContentModelRoute, slug?: string): string | undefined {
+  return model.kind === "global" ? undefined : resolveContentPublicPath(model, slug);
+}
+
+/** Enforces singleton cardinality before a specialized atomic store operation. */
 export function assertEntryCreationAllowed(
   kind: ContentModelKind,
   existingEntryCount: number,
@@ -401,8 +442,8 @@ export function assertEntryCreationAllowed(
   if (!Number.isSafeInteger(existingEntryCount) || existingEntryCount < 0) {
     fail("CONTENT_INVALID_STATE", "existingEntryCount must be a non-negative safe integer.");
   }
-  if (kind === "page" && existingEntryCount > 0) {
-    fail("CONTENT_MODEL_CARDINALITY_CONFLICT", "A page model already has its singleton entry.");
+  if (isSingletonKind(kind) && existingEntryCount > 0) {
+    fail("CONTENT_MODEL_CARDINALITY_CONFLICT", `A ${kind} model already has its singleton entry.`);
   }
 }
 
@@ -418,7 +459,7 @@ export function assertPublicPathAvailable(
   }
 }
 
-function assertBlockKeys(blocks: readonly ContentBlock[]): void {
+function assertBlockKeys(blocks: readonly ContentBlockInput[]): void {
   const keys = new Set<string>();
   for (const block of blocks) {
     if (typeof block.key !== "string" || block.key.length === 0) {
@@ -432,7 +473,7 @@ function assertBlockKeys(blocks: readonly ContentBlock[]): void {
 }
 
 /** Validates the strict sparse ordering stored with a complete block aggregate. */
-export function assertOrderedBlockPositions(blocks: readonly ContentBlock[]): void {
+export function assertOrderedBlockPositions(blocks: readonly ContentBlockInput[]): void {
   assertBlockKeys(blocks);
   let previousPosition = 0;
   for (const [index, block] of blocks.entries()) {
@@ -535,7 +576,7 @@ export function createContentEntry(input: {
 export interface DraftMediaReference {
   readonly fieldPath: string;
   readonly mediaId: MediaId;
-  readonly sourceKey: "$fields" | BlockKey;
+  readonly sourceKey: "$fields" | "$seo" | BlockKey;
 }
 
 export interface CompleteDraftMutation {
@@ -543,6 +584,7 @@ export interface CompleteDraftMutation {
   readonly expectedRevision: number;
   readonly fields: JsonObject;
   readonly mediaReferences: readonly DraftMediaReference[];
+  readonly seo?: EntrySeo;
   readonly slug?: string;
   readonly title: string;
   readonly updatedAt: UnixMilliseconds;
@@ -569,6 +611,7 @@ export function saveCompleteDraft(
     fields: cloneJson(mutation.fields) as JsonObject,
     id: entry.draft.id,
     revision: entry.draft.revision + 1,
+    ...(mutation.seo === undefined ? {} : { seo: cloneEntrySeo(mutation.seo) }),
     ...(mutation.slug === undefined ? {} : { slug: mutation.slug }),
     state: "draft",
     title: mutation.title,
@@ -646,15 +689,15 @@ export function requirePublishedSnapshot(
   return entry.published;
 }
 
-/** Refuses lifecycle operations that configuration-defined page singletons do not support. */
+/** Refuses lifecycle operations that configuration-defined singletons do not support. */
 export function assertCollectionEntryOperation(
   entry: Pick<ContentEntry, "model">,
   operation: "delete" | "duplicate",
 ): void {
-  if (entry.model.kind === "page") {
+  if (isSingletonKind(entry.model.kind)) {
     fail(
       "CONTENT_PAGE_SINGLETON",
-      `Page entries are defined by configuration and cannot be ${operation === "delete" ? "deleted" : "duplicated"}.`,
+      `Page and global entries are defined by configuration and cannot be ${operation === "delete" ? "deleted" : "duplicated"}.`,
     );
   }
 }
@@ -700,6 +743,7 @@ export function revertContentDraft(
     fields: content.fields,
     id: entry.draft.id,
     revision,
+    ...(content.seo === undefined ? {} : { seo: content.seo }),
     ...(content.slug === undefined ? {} : { slug: content.slug }),
     state: "draft",
     title: content.title,
@@ -747,3 +791,13 @@ export type {
   SiteBuildStatus,
   TrackedSiteBuildOutcome,
 } from "./build-status.js";
+export {
+  MAX_SEO_CANONICAL_LENGTH,
+  MAX_SEO_DESCRIPTION_LENGTH,
+  MAX_SEO_TITLE_LENGTH,
+  cloneEntrySeo,
+  isCanonicalUrl,
+  normalizeEntrySeo,
+  normalizeSeoText,
+} from "./seo.js";
+export type { EntrySeo, SeoTextKind } from "./seo.js";

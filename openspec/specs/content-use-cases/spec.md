@@ -19,8 +19,9 @@ deletion requires `content:publish` when the entry has a current published
 snapshot and `content:write` otherwise. Listing and loading an entry or its
 snapshots SHALL require `content:read`. Authorization failure SHALL use the
 stable domain authorization error and SHALL not invoke a state-changing port.
-Deleting or duplicating a page entry SHALL fail with `CONTENT_PAGE_SINGLETON`
-after authorization and before any state-changing port is invoked.
+Deleting or duplicating a page or global entry SHALL fail with
+`CONTENT_PAGE_SINGLETON` after authorization and before any state-changing port
+is invoked.
 
 #### Scenario: Editor can manage an unpublished draft but cannot publish it
 - **WHEN** an editor creates or saves an unpublished entry and then requests
@@ -55,6 +56,12 @@ after authorization and before any state-changing port is invoked.
 - **WHEN** an administrator requests deletion of a page entry, published or not
 - **THEN** it fails with `CONTENT_PAGE_SINGLETON` and the entry, its snapshots,
   and its route remain unchanged
+
+#### Scenario: Global deletion is refused
+- **WHEN** an administrator requests deletion of a global entry, published or
+  not
+- **THEN** it fails with `CONTENT_PAGE_SINGLETON` and the entry and its
+  snapshots remain unchanged
 
 ### Requirement: Complete aggregate validation precedes each lifecycle write
 The system SHALL resolve the entry's normalized model and runtime block registry
@@ -256,7 +263,7 @@ a publication replaced or removed after it was read, SHALL fail with
 
 ### Requirement: Duplication creates an unpublished copy of a collection entry
 The duplicate use case SHALL accept a source entry identity and an optional
-expected draft revision. It SHALL refuse a page source with
+expected draft revision. It SHALL refuse a page or global source with
 `CONTENT_PAGE_SINGLETON` and an expected revision that differs from the source
 draft with `CONTENT_REVISION_CONFLICT`. It SHALL build a new entry of the same
 model whose draft copies the source draft's fields and blocks, with these
@@ -286,8 +293,143 @@ published by duplication, and the source SHALL be unchanged.
 - **WHEN** a caller duplicates a page entry
 - **THEN** it fails with `CONTENT_PAGE_SINGLETON` and no entry is created
 
+#### Scenario: Duplicating a global fails
+- **WHEN** a caller duplicates a global entry
+- **THEN** it fails with `CONTENT_PAGE_SINGLETON` and no entry is created
+
 #### Scenario: A source save races the duplication
 - **WHEN** the source draft is saved between the duplicate read and the guarded
   creation
 - **THEN** duplication fails with `CONTENT_REVISION_CONFLICT` and no entry is
   created
+
+### Requirement: Global entries follow the page lifecycle without a route
+The save, publish, unpublish and revert use cases SHALL apply to a global entry
+with the same authorization, validation, revision, idempotency and conflict
+rules as to a page entry. Saving a global draft SHALL store the model label, or
+the model key when no label is configured, as the title regardless of the
+submitted title, and SHALL reject a submitted slug. Publishing a global SHALL
+resolve no public path, SHALL create or replace no published route, and SHALL
+increment the published-state version and create or coalesce one site-build
+request in the same atomic mutation as for every publication. Unpublishing a
+global SHALL remove only its published snapshot and SHALL increment the
+published-state version and request a build. Creating an entry of a global
+model through the content commands SHALL fail with
+`CONTENT_MODEL_CARDINALITY_CONFLICT` because synchronization owns its singleton.
+
+#### Scenario: Save ignores a submitted global title
+- **WHEN** an editor saves the `settings` global labelled `Site settings` with
+  the title `Anything`
+- **THEN** the saved draft's title is `Site settings` and its revision
+  advances once
+
+#### Scenario: Publishing a global writes no route
+- **WHEN** an administrator publishes a valid global draft
+- **THEN** the global has a published snapshot, no published route exists for
+  it, the published-state version advances by one, and one pending build
+  request targets that version
+
+#### Scenario: Unpublishing a global
+- **WHEN** an administrator unpublishes a published global with the current
+  published snapshot ID
+- **THEN** the published snapshot is removed, the draft is unchanged, the
+  published-state version advances, and a build is requested
+
+#### Scenario: Reverting a global draft
+- **WHEN** an editor reverts a published global whose draft changed
+- **THEN** the draft holds the published fields and blocks and the published
+  state, version and build work are unchanged
+
+### Requirement: Entry lifecycle use cases carry the SEO group
+Create and save SHALL accept an optional SEO group as part of the complete
+editable draft. An absent or `null` group SHALL store no SEO values, so a save
+still replaces the whole draft. For a model without SEO enabled, a submitted
+group that is not `null` SHALL fail with a content validation issue
+`seo_not_allowed` at `/seo`, with no repository write. Draft and publish
+validation SHALL both apply the shared SEO rules. Publication SHALL validate
+the stored draft's group again in publish mode. The publication idempotency
+fingerprint SHALL cover the group. An SEO image SHALL be recorded as a draft
+media reference with source `$seo` and path `image`. It SHALL count toward the
+200-reference limit and SHALL require an `active` media item, exactly like a
+media field. Revert SHALL restore the published group. Duplicate SHALL copy
+the source draft's group and its image reference. A singleton created by
+synchronization SHALL start without a group. Authorization SHALL be that of
+the surrounding command.
+
+#### Scenario: Save and publish an SEO group
+- **WHEN** an editor saves a draft of an SEO-enabled collection entry with
+  `seo: {title: "Hello", image: "media-1", canonical: "https://example.com/hello"}`
+  and then publishes it
+- **THEN** the draft and the new published snapshot carry that group, and both
+  snapshots reference `media-1` from `$seo`/`image`
+
+#### Scenario: Saving without a group clears it
+- **WHEN** an editor saves a draft that previously had an SEO group and omits
+  `seo`
+- **THEN** the new draft revision carries no group and no `$seo` reference
+
+#### Scenario: Reject SEO on a model without it
+- **WHEN** a save for a model without SEO submits `seo: {title: "x"}`
+- **THEN** it fails with `422` issue `seo_not_allowed` at `/seo` and the draft
+  revision is unchanged
+- **WHEN** the same save submits `seo: null`
+- **THEN** the save succeeds
+
+#### Scenario: Reject an unavailable SEO image
+- **WHEN** a save names an SEO image that does not exist or is not `active`
+- **THEN** it fails as an unavailable media reference does and writes nothing
+
+#### Scenario: Duplicate and revert copy the group
+- **WHEN** an entry with a published SEO group and a different draft group is
+  reverted, and another entry with a draft group is duplicated
+- **THEN** the reverted draft carries the published group, and the copy's
+  draft carries the source draft's group and image reference
+
+### Requirement: Entry lifecycle use cases carry the block envelope
+Create and save SHALL accept each block's optional envelope values as part of
+the complete editable draft and store the normalized envelope that aggregate
+validation returns. An omitted envelope value SHALL take its default (no
+anchor, no class name, visible, declared setting defaults), so a client that
+does not send envelope values keeps working, but a save still replaces the
+whole draft, including the envelope. Publication SHALL validate the stored
+draft again in publish mode, where hidden blocks are validated in draft mode,
+and the publication idempotency fingerprint SHALL cover the envelope. Media
+fields of a hidden block SHALL remain draft media references: they SHALL count
+toward the 200-reference limit and SHALL require `active` media. Revert SHALL
+restore the published envelopes. Duplicate SHALL copy every source block's
+envelope, including its anchor, under new block keys. Envelope validation
+failures SHALL be content validation issues under the block's path, with no
+repository write.
+
+#### Scenario: Publish an entry with an unfinished hidden block
+- **WHEN** an editor publishes a draft whose only incomplete block is hidden
+- **THEN** publication succeeds, and the published snapshot stores the hidden
+  block with its incomplete data
+
+#### Scenario: Unhiding an incomplete block blocks publication
+- **WHEN** the editor saves the same draft with the block visible and
+  publishes it
+- **THEN** publication fails with `missing_required_field` under that block's
+  data path, and public content is unchanged
+
+#### Scenario: Omitted envelope values default
+- **WHEN** a client saves a block with only `key`, `type`, `schemaVersion`,
+  `position` and `data` for a block that declares settings
+- **THEN** the stored block is visible, has no anchor or class name, and
+  carries the declared setting defaults
+
+#### Scenario: A duplicate anchor is refused before writing
+- **WHEN** a save submits two blocks with the anchor `faq`
+- **THEN** it fails with `422` issue `duplicate_block_anchor` and the draft
+  revision is unchanged
+
+#### Scenario: Hidden-block media stays referenced
+- **WHEN** a draft holds a hidden image block that references `media-1`
+- **THEN** the draft's media references include `media-1` from that block's
+  key, and the save fails if `media-1` is not `active`
+
+#### Scenario: Duplicate and revert copy envelopes
+- **WHEN** an entry with an anchored hidden block is duplicated, and another
+  entry whose draft changed a published block's settings is reverted
+- **THEN** the copy holds the anchored hidden block under a new key, and the
+  reverted draft holds the published settings

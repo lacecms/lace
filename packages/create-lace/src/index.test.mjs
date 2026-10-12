@@ -63,16 +63,37 @@ test("generates deterministic owned source and hashed managed files", async () =
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
   // Upgrading from the published alpha.2 engines needs the 33D build-outcome migration.
   expect(instructions.database.join("\n")).toContain("0003_site_build_outcomes");
+  // The block envelope is additive, but an older engine would deliver hidden blocks.
+  expect(instructions.database[0]).toMatch(
+    /0009_content_block_envelope.*additive.*rolling back .* requires restoring that backup/u,
+  );
+  // Per-entry SEO adds one nullable column; rolling back needs no restore.
+  expect(instructions.database[3]).toMatch(
+    /0008_content_snapshot_seo.*additive.*rolling back .* works without restoring/u,
+  );
+  // Global models need the content_models rebuild; back up before migrating.
+  expect(instructions.database[6]).toMatch(
+    /0007_content_model_global_kind.*rolling back .* requires restoring that backup/u,
+  );
   // Schema evolution and media metadata need two additive migrations.
-  expect(instructions.database[0]).toContain(
+  expect(instructions.database[9]).toContain(
     "0005_content_model_structure and 0006_media_descriptive_metadata",
   );
   // Invitations and password recovery need the additive account-token migration.
   expect(instructions.database.join("\n")).toContain("0004_account_tokens");
   expect(instructions.configuration[0]).toMatch(
-    /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
+    /^Template 0\.26\.0: block anchors.*id=\{anchor\}.*\{ data, settings \}.*pnpm exec lace add block --all/u,
+  );
+  expect(instructions.configuration[1]).toMatch(
+    /^Template 0\.25\.0: search and social metadata.*site\.seo\(entry\).*LACE_SITE_INDEXING.*Nothing breaks without adoption/u,
   );
   expect(instructions.configuration[2]).toMatch(
+    /^Template 0\.24\.0: global models.*site\.global\(key\).*upgrade does not add them/u,
+  );
+  expect(instructions.configuration[3]).toMatch(
+    /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
+  );
+  expect(instructions.configuration[5]).toMatch(
     /image block is version 2.*raise the version of every model that allows image.*refuses image blocks still stored at version 1/u,
   );
   expect(instructions.configuration.join("\n")).toMatch(
@@ -283,7 +304,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.4");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.4");
-  expect(TEMPLATE_VERSION).toBe("0.23.0");
+  expect(TEMPLATE_VERSION).toBe("0.26.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");

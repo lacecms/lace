@@ -25,7 +25,7 @@ The render core SHALL parse a block's data against a block definition using the 
 - **THEN** parsing fails with `block_version_mismatch` naming both versions
 
 ### Requirement: Block maps resolve every rendered block type
-The render core SHALL let a site define a block map keyed by block type whose values pair a block definition with an adapter-specific component. Defining a map SHALL fail when a key differs from its definition's type, and the defined map SHALL be immutable. Resolving a block SHALL return its map entry or fail with `unknown_block_type` naming the block type, model key, entry identifier, and block key. Inherited object properties SHALL never resolve as block types. The render core SHALL also prepare an entry's blocks in their given order, resolving and parsing each into the component and the props that adapters pass to it: the block, its parsed data, its context, the media URL builder, and the image describer.
+The render core SHALL let a site define a block map keyed by block type whose values pair a block definition with an adapter-specific component. Defining a map SHALL fail when a key differs from its definition's type, and the defined map SHALL be immutable. Resolving a block SHALL return its map entry or fail with `unknown_block_type` naming the block type, model key, entry identifier, and block key. Inherited object properties SHALL never resolve as block types. The render core SHALL also prepare an entry's blocks in their given order, resolving and parsing each into the component and the props that adapters pass to it: the block, its parsed data, its parsed settings, its anchor and class name when set, its context, the media URL builder, and the image describer. Preparation SHALL leave out every block marked hidden before resolving or parsing it, so a hidden block never renders and never fails preparation.
 
 #### Scenario: A site cannot render a published block
 - **WHEN** an entry contains a `gallery` block and the site's map has no `gallery` key
@@ -37,7 +37,15 @@ The render core SHALL let a site define a block map keyed by block type whose va
 
 #### Scenario: An entry's blocks are prepared
 - **WHEN** an entry with hero, quote, and call-to-action blocks is prepared with a map covering all three
-- **THEN** three component-and-props pairs are returned in block order, each with parsed data, the block's context, the media URL builder and the image describer
+- **THEN** three component-and-props pairs are returned in block order, each with parsed data, parsed settings, the block's context, the media URL builder and the image describer
+
+#### Scenario: A hidden block is skipped
+- **WHEN** an entry has a visible hero, a hidden quote and a visible call to action
+- **THEN** preparation returns only the hero and the call to action, in that order
+
+#### Scenario: A hidden block the site cannot render
+- **WHEN** a hidden block has a type missing from the map, an older schema version or invalid data
+- **THEN** preparation succeeds without it
 
 ### Requirement: Rich text is described through the shared allowlist
 The render core SHALL describe a rich-text document only after validating it with the content package's rich-text validation, so it accepts and rejects exactly the documents the CMS accepts and rejects, including link URLs. The description SHALL be a tree of text nodes and element nodes; each element SHALL carry a tag from a fixed allowlist (`p`, `h1`–`h3`, `ul`, `ol`, `li`, `blockquote`, `br`, `strong`, `em`, `s`, `code`, `a`), only safe attributes (a link `href` that passed URL validation), the originating node or mark name, and its children. Marks SHALL wrap text in the order listed, first mark outermost. The description SHALL contain no raw HTML string. Invalid documents SHALL fail with `invalid_rich_text` carrying the optional block context and the field path.
@@ -75,3 +83,26 @@ The render core SHALL give block components an image describer that takes a medi
 #### Scenario: Referenced media is missing
 - **WHEN** an entry with resolved media renders a block whose media identifier is not resolved
 - **THEN** rendering fails with `missing_media` naming the identifier, model, entry, and block key
+
+### Requirement: Block components receive the block envelope
+The render core SHALL give each prepared block's props the block's anchor and its normalized class name when the block has them, and SHALL leave both props out otherwise. It SHALL parse the block's settings against the definition's declared settings with every declared default applied, treating missing settings as an empty record, and SHALL type the parsed settings from the definition so that every declared setting key is present; a definition without settings SHALL yield an empty record. Preparation SHALL fail with `invalid_block_envelope` when an anchor is not a valid block anchor, when a class name does not normalize to a valid block class name, or when settings fail validation (including keys the definition does not declare); the failure SHALL name the model key, entry identifier, block key and the field path (`anchor`, `className`, or `settings` followed by the setting key), and SHALL keep a validation failure as its cause.
+
+#### Scenario: Anchor and class reach the component
+- **WHEN** a visible block with anchor `pricing` and class name `wide  dark` is prepared
+- **THEN** its props carry anchor `pricing` and class name `wide dark`
+
+#### Scenario: A block without an envelope
+- **WHEN** a block has no anchor, no class name and no settings
+- **THEN** its props carry no anchor or class name and an empty settings record
+
+#### Scenario: Settings defaults apply
+- **WHEN** a block whose definition declares a `layout` select setting defaulting to `wide` is prepared with settings `{}`
+- **THEN** its props carry settings `{layout: "wide"}`, typed so `layout` is always present
+
+#### Scenario: An undeclared setting
+- **WHEN** a block's settings contain a key its definition does not declare
+- **THEN** preparation fails with `invalid_block_envelope` naming the model, entry, block key and the `settings` field path
+
+#### Scenario: An invalid anchor
+- **WHEN** a block reaching the render core has anchor `Pricing Table`
+- **THEN** preparation fails with `invalid_block_envelope` naming the block and the `anchor` field path

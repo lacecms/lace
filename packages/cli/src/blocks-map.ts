@@ -139,7 +139,9 @@ export function renderCustomScaffold(options: {
   const usesRichText = fields.some(([, field]) => field.type === "richText");
   const usesMedia = fields.some(([, field]) => field.type === "media");
   const props = [
+    "anchor",
     "block",
+    "className",
     ...(usesRichText ? ["context"] : []),
     "data",
     ...(usesMedia ? ["mediaUrl"] : []),
@@ -155,7 +157,7 @@ export function renderCustomScaffold(options: {
     `const { ${props.join(", ")} } = Astro.props;`,
     "---",
     "",
-    "<section data-lace-block={block.type} data-lace-block-key={block.key}>",
+    "<section class={className} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>",
     ...fields.map(([key, field]) => fieldMarkup(key, field)),
     "</section>",
   ];

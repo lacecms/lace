@@ -54,6 +54,7 @@ import type {
   PublishContentEntryCommand,
   PublishContentEntryResult,
   PublicContentEntry,
+  PublicGlobalContent,
   PublicContentReadPort,
   RevertContentDraftCommand,
   SaveCompleteDraftInput,
@@ -73,6 +74,7 @@ import type {
 } from "@lacecms/application";
 import {
   BLOCK_COLUMNS_SQL,
+  seoJson,
   ENTRY_COLUMNS_SQL,
   ENTRY_SEARCH_SQL,
   ENTRY_SORT_SQL,
@@ -87,11 +89,13 @@ import {
   MEDIA_USAGE_SQL,
   PUBLICATION_IDEMPOTENCY_TTL_MS,
   PUBLIC_MEDIA_SQL,
+  PUBLIC_GLOBAL_SQL,
   PUBLIC_ROUTE_SQL,
   SNAPSHOT_COLUMNS_SQL,
   STORED_MODEL_STATE_SQL,
   SYNC_BLOCKS_SQL,
   SYNC_MIGRATION_BLOCKS_SQL,
+  BLOCK_COPY_COLUMNS_SQL,
   SYNC_MIGRATION_ENTRIES_SQL,
   SYNC_MIGRATION_REFERENCES_SQL,
   SYNC_MIGRATION_SNAPSHOTS_SQL,
@@ -135,6 +139,7 @@ import {
   mediaUsageEntries,
   parseObject,
   publicContentEntry,
+  publicGlobalContent,
   publicSnapshotMedia,
   publicSnapshotMediaSql,
   sameStoredModelStates,
@@ -166,6 +171,7 @@ import type {
   EntryRow,
   MediaUsageRow,
   OutboxRow,
+  PublicGlobalRow,
   PublicRow,
   SiteBuildRow,
   SnapshotRow,
@@ -183,13 +189,15 @@ import type {
 import {
   DomainError,
   contentSnapshotId,
-  resolveContentPublicPath,
+  contentPublicPath,
+  isSingletonKind,
   siteBuildId,
   unixMilliseconds,
 } from "@lacecms/domain";
 import type {
   ActorId,
   ContentEntry,
+  ContentModelKey,
   DraftSnapshot,
   MediaMetadata,
   PublishedSnapshot,
@@ -363,7 +371,9 @@ export class NodeContentRepository
           input.expectedStoredModels.map((model) => [model.key, model]),
         );
         const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
-        const pageEntries = new Map(input.pageEntries.map((page) => [page.modelKey, page]));
+        const singletonEntries = new Map(
+          input.singletonEntries.map((page) => [page.modelKey, page]),
+        );
         for (const operation of actualPlan.operations) {
           if (operation.action === "create") {
             const configuration = configurationByKey.get(operation.model.key);
@@ -386,10 +396,10 @@ export class NodeContentRepository
                 input.appliedAt,
                 input.appliedAt,
               );
-            if (configuration.kind === "page") {
-              const page = pageEntries.get(operation.model.key);
+            if (isSingletonKind(configuration.kind)) {
+              const page = singletonEntries.get(operation.model.key);
               if (page === undefined || page.entry.model.key !== operation.model.key) {
-                failure("Page synchronization entry is missing or invalid.");
+                failure("Singleton synchronization entry is missing or invalid.");
               }
               this.checkpoint("sync.page.entry");
               this.connection
@@ -517,7 +527,7 @@ export class NodeContentRepository
           .run(
             id,
             model.key,
-            model.kind === "page" ? 1 : null,
+            isSingletonKind(model.kind) ? 1 : null,
             draft.updatedBy.id,
             draft.createdAt,
             draft.updatedAt,
@@ -530,7 +540,7 @@ export class NodeContentRepository
           .run(draft.id, id);
       })();
     } catch (error) {
-      this.throwWriteError(error, model.kind === "page");
+      this.throwWriteError(error, isSingletonKind(model.kind));
     }
     const entry = this.loadEntry(id);
     if (entry === null) failure("Created content entry could not be reloaded.");
@@ -548,12 +558,13 @@ export class NodeContentRepository
       this.connection.transaction(() => {
         const changed = this.connection
           .prepare(
-            "update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, updated_at = ?, updated_by = ? where id = ? and revision = ?",
+            "update content_snapshots set revision = revision + 1, slug = ?, title = ?, fields_json = ?, seo_json = ?, updated_at = ?, updated_by = ? where id = ? and revision = ?",
           )
           .run(
             input.mutation.slug ?? null,
             input.mutation.title,
             JSON.stringify(input.mutation.fields),
+            seoJson(input.mutation.seo),
             input.mutation.updatedAt,
             input.mutation.updatedBy.id,
             draftSnapshotId,
@@ -592,7 +603,7 @@ export class NodeContentRepository
   public async publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult> {
     const entry = this.loadEntry(input.entryId);
     if (entry === null) failure("Content entry does not exist.");
-    const path = resolveContentPublicPath(entry.model, entry.draft.slug);
+    const path = contentPublicPath(entry.model, entry.draft.slug);
     const scope =
       input.idempotency === undefined
         ? undefined
@@ -622,7 +633,7 @@ export class NodeContentRepository
         this.checkpoint("publish.snapshot");
         const copied = this.connection
           .prepare(
-            "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?",
+            "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?",
           )
           .run(
             input.publishedSnapshotId,
@@ -640,7 +651,7 @@ export class NodeContentRepository
         this.checkpoint("publish.blocks");
         this.connection
           .prepare(
-            "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at from content_blocks where snapshot_id = ?",
+            `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
           )
           .run(input.publishedSnapshotId, entry.draft.id);
         this.checkpoint("publish.references");
@@ -649,15 +660,18 @@ export class NodeContentRepository
             "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) select ?, source_key, field_path, media_id, created_at from content_media_references where snapshot_id = ?",
           )
           .run(input.publishedSnapshotId, entry.draft.id);
-        this.checkpoint("publish.route");
-        this.connection
-          .prepare("delete from published_routes where entry_id = ?")
-          .run(input.entryId);
-        this.connection
-          .prepare(
-            "insert into published_routes (path, entry_id, snapshot_id, updated_at) values (?, ?, ?, ?)",
-          )
-          .run(path, input.entryId, input.publishedSnapshotId, input.publishedAt);
+        // A global has no route; its publication only replaces the snapshot.
+        if (path !== undefined) {
+          this.checkpoint("publish.route");
+          this.connection
+            .prepare("delete from published_routes where entry_id = ?")
+            .run(input.entryId);
+          this.connection
+            .prepare(
+              "insert into published_routes (path, entry_id, snapshot_id, updated_at) values (?, ?, ?, ?)",
+            )
+            .run(path, input.entryId, input.publishedSnapshotId, input.publishedAt);
+        }
         this.connection
           .prepare(
             "update content_entries set published_snapshot_id = ?, updated_at = ? where id = ?",
@@ -1290,6 +1304,15 @@ export class NodeContentRepository
     return entries.has(row.id) ? publicContentEntry(row, entries, this.publicMedia([row])) : null;
   }
 
+  public async loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null> {
+    const row = this.connection
+      .prepare(`${PUBLIC_GLOBAL_SQL} where e.model_key = ? limit 1`)
+      .get(modelKey) as PublicGlobalRow | undefined;
+    if (row === undefined) return null;
+    const entries = this.hydrate([row]);
+    return entries.has(row.id) ? publicGlobalContent(row, entries, this.publicMedia([row])) : null;
+  }
+
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
     const row = this.connection.prepare(PUBLIC_MEDIA_SQL).get(id) as
       | Record<string, unknown>
@@ -1395,10 +1418,15 @@ export class NodeContentRepository
     const rows = this.connection
       .prepare(`${PUBLIC_ROUTE_SQL} order by r.path asc`)
       .all() as readonly PublicRow[];
-    const entries = this.hydrate(rows);
-    const media = this.publicMedia(rows);
+    const globalRows = this.connection
+      .prepare(`${PUBLIC_GLOBAL_SQL} order by e.model_key asc`)
+      .all() as readonly PublicGlobalRow[];
+    // One hydration and media pass covers routed entries and globals.
+    const entries = this.hydrate([...rows, ...globalRows]);
+    const media = this.publicMedia([...rows, ...globalRows]);
     return Object.freeze({
       entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
+      globals: Object.freeze(globalRows.map((row) => publicGlobalContent(row, entries, media))),
       version: await this.publishedContentVersion(),
     });
   }
@@ -1421,7 +1449,7 @@ export class NodeContentRepository
     return this.hydrate([row]).get(row.id) ?? null;
   }
 
-  private publicMedia(rows: readonly PublicRow[]): Map<string, readonly MediaMetadata[]> {
+  private publicMedia(rows: readonly EntryRow[]): Map<string, readonly MediaMetadata[]> {
     const ids = rows.flatMap((row) =>
       row.published_snapshot_id === null ? [] : [row.published_snapshot_id],
     );
@@ -1466,7 +1494,7 @@ export class NodeContentRepository
   private insertSnapshot(snapshot: DraftSnapshot, schemaVersion: number): void {
     this.connection
       .prepare(
-        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         snapshot.id,
@@ -1475,6 +1503,7 @@ export class NodeContentRepository
         snapshot.slug ?? null,
         snapshot.title,
         JSON.stringify(snapshot.fields),
+        seoJson(snapshot.seo),
         schemaVersion,
         snapshot.createdAt,
         snapshot.updatedAt,
@@ -1484,7 +1513,7 @@ export class NodeContentRepository
 
   private insertBlocks(snapshot: Pick<DraftSnapshot, "blocks" | "id" | "updatedAt">): void {
     const statement = this.connection.prepare(
-      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     for (const block of snapshot.blocks) {
       statement.run(
@@ -1494,6 +1523,10 @@ export class NodeContentRepository
         block.position,
         block.schemaVersion,
         JSON.stringify(block.data),
+        block.anchor ?? null,
+        block.className ?? null,
+        block.hidden ? 1 : 0,
+        JSON.stringify(block.settings),
         snapshot.updatedAt,
         snapshot.updatedAt,
       );

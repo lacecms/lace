@@ -81,6 +81,65 @@ all four columns `NULL`, and there is no backfill. `metadata_json` stays
 reserved. Older engines keep starting against the migrated database and
 ignore the new columns, so a rollback leaves any stored values unused.
 
+### Global model kind migration
+
+Migration `0007_content_model_global_kind` widens the `content_models.kind`
+check to accept `global` ([ADR 0010](adr/0010-global-models.md)). SQLite cannot
+alter a check, so the migration rebuilds `content_models`: it creates
+`__new_content_models` with the widened check, copies every row with an
+explicit column list, drops the old table and renames the new one. Every
+model, entry, snapshot, block, route and media reference is unchanged, and the
+`content_entries.model_key` foreign key keeps its key-update cascade and
+delete restriction. No backfill runs.
+
+`content_entries` references `content_models`, so the file starts with
+`PRAGMA defer_foreign_keys = on`. D1 cannot switch foreign keys off, but it
+accepts the deferred drop and rename when the file is applied as one batch
+(`wrangler d1 migrations apply`). Node SQLite rejects the same deferred drop at
+commit, so `migrateNodeDatabase` follows SQLite's documented rebuild
+procedure: its own connection runs the pending migrations with
+`foreign_keys = OFF`, then runs `PRAGMA foreign_key_check` and fails with a
+"foreign-key violation" error unless the check is empty, and restores
+enforcement. Application connections always keep foreign keys on.
+
+Back up the database before migrating (copy the stopped SQLite file, or
+`wrangler d1 export`). Older engines read a migrated database without globals
+normally, but refuse a stored `global` model; rollback after creating a global
+means restoring the backup.
+
+### Snapshot SEO migration
+
+Migration `0008_content_snapshot_seo` adds the nullable
+`content_snapshots.seo_json` column, which holds a snapshot's SEO group
+([ADR 0011](adr/0011-seo-system-group.md)) as canonical JSON. It is one
+additive `ALTER TABLE … ADD` on Node SQLite and D1: no table is rebuilt, no
+foreign key or index changes, every existing snapshot starts with `NULL` and
+there is no backfill. Like `fields_json`, the column has no database check;
+the application stores only validated values.
+
+Back up before migrating, as for every migration. An older engine starts
+against the migrated database and ignores the column, but a save from it
+drops the SEO values of that draft and its media usage reads fail on SEO image
+references, so do not run an older engine once SEO values exist; roll back by
+restoring the backup.
+
+### Block envelope migration
+
+Migration `0009_content_block_envelope` adds the block envelope
+([ADR 0012](adr/0012-block-envelope.md)) to `content_blocks`: nullable
+`anchor` and `class_name`, `hidden` (`NOT NULL DEFAULT 0`, checked to `0` or
+`1`) and `settings_json` (`NOT NULL DEFAULT '{}'`), plus the partial unique
+index `content_blocks_snapshot_anchor_idx` on `(snapshot_id, anchor)` where
+`anchor` is set. The statements are additive `ALTER TABLE … ADD` and one
+`CREATE UNIQUE INDEX` on Node SQLite and D1: no table is rebuilt, no foreign
+key changes and there is no backfill. Existing blocks read as visible, without
+an anchor or class name, with `{}` settings; the index starts empty because
+every existing anchor is `NULL`.
+
+Back up before migrating. An older engine ignores the columns, but it would
+deliver hidden blocks publicly and reset envelopes on save, so do not run an
+older engine once envelopes exist; roll back by restoring the backup.
+
 ## Cloudflare D1
 
 The D1 content repository (`@lacecms/platform-cloudflare`) uses the same

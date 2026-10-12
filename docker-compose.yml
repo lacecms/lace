@@ -127,6 +127,10 @@ services:
       LACE_API_BASE_URL: http://api:3000/
       LACE_BUILD_TOKEN: ${LACE_BUILD_TOKEN:?set LACE_BUILD_TOKEN}
       LACE_PUBLIC_BASE_URL: ${LACE_PUBLIC_BASE_URL:?set LACE_PUBLIC_BASE_URL}
+      # Optional site output: canonical URLs and the sitemap use the site URL;
+      # LACE_SITE_INDEXING=off keeps a staging site out of search engines.
+      LACE_BUILD_SITE_URL: ${LACE_BUILD_SITE_URL:-}
+      LACE_SITE_INDEXING: ${LACE_SITE_INDEXING:-}
     volumes:
       - type: bind
         source: ${LACE_BUILD_SOURCE_ROOT:-.}

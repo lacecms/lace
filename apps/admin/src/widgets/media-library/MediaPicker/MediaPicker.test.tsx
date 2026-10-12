@@ -6,12 +6,14 @@ import {
   addBlock,
   draftEntry,
   mediaItem,
+  renderInRouter,
   renderRoute,
   stubClient as client,
   staticSessionSource,
 } from "../../../app/testing/index.js";
 import { type AdminRole } from "../../../entities/session/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
+import { MediaPicker } from "./index.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -216,4 +218,15 @@ test("a block picker uploads several files, reports each, and uses an upload exp
   expect(await screen.findByText("fresh.png")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Replace media for Image" })).toHaveFocus();
   expect(saveDraft).not.toHaveBeenCalled();
+});
+
+test("a given label names the picker actions and dialog", async () => {
+  const user = userEvent.setup();
+  renderInRouter(
+    <MediaPicker fieldKey="image" label="SEO image" onChange={() => undefined} value={undefined} />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Choose media for SEO image" }));
+  expect(
+    await screen.findByRole("dialog", { name: "Choose media for SEO image" }),
+  ).toBeInTheDocument();
 });

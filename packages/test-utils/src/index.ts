@@ -77,6 +77,7 @@ import type {
   OpaqueTokenSecret,
   OpaqueTokenVerifier,
   PublicContentEntry,
+  PublicGlobalContent,
   PublicContentReadPort,
   PublishContentEntryCommand,
   PublishContentEntryResult,
@@ -98,7 +99,8 @@ import {
   contentModelKey,
   createContentEntry,
   publishContentEntry,
-  resolveContentPublicPath,
+  contentPublicPath,
+  isSingletonKind,
   revertContentDraft,
   saveCompleteDraft,
   unixMilliseconds,
@@ -109,6 +111,8 @@ import type {
   BlockKey,
   ContentBlock,
   ContentEntry,
+  ContentModelKey,
+  ContentModelRoute,
   DraftMediaReference,
   DraftSnapshot,
   MediaMetadata,
@@ -246,12 +250,18 @@ function withFieldDefault<Snapshot extends DraftSnapshot | PublishedSnapshot>(
   }) as unknown as Snapshot;
 }
 
-function routeForModel(model: NormalizedContentModel) {
-  return Object.freeze(
-    model.kind === "page"
-      ? { key: contentModelKey(model.key), kind: "page" as const, path: model.path }
-      : { key: contentModelKey(model.key), kind: "collection" as const, route: model.route },
-  );
+function routeForModel(model: NormalizedContentModel): ContentModelRoute {
+  const key = contentModelKey(model.key);
+  switch (model.kind) {
+    case "page":
+      return Object.freeze({ key, kind: "page", path: model.path });
+    case "collection":
+      return Object.freeze({ key, kind: "collection", route: model.route });
+    case "global":
+      return Object.freeze({ key, kind: "global" });
+    default:
+      return model satisfies never;
+  }
 }
 
 async function collectBytes(stream: ByteStream): Promise<Uint8Array> {
@@ -605,6 +615,7 @@ export class InMemoryContentStore
           })),
           entryId: entry.id,
           fields: clone(snapshot.fields),
+          hasSeo: snapshot.seo !== undefined,
           revision: snapshot.revision,
           snapshotId: snapshot.id,
           state: snapshot.state,
@@ -641,9 +652,11 @@ export class InMemoryContentStore
       Object.freeze({
         blocks: snapshot.blocks.map((block) => ({
           ...(types.has(block.type) ? { data: clone(block.data) } : {}),
+          hidden: block.hidden,
           key: block.key,
           position: block.position,
           schemaVersion: block.schemaVersion,
+          ...(types.has(block.type) ? { settings: clone(block.settings) } : {}),
           type: block.type,
         })),
         references: clone(this.references.get(snapshot.id) ?? []),
@@ -705,6 +718,7 @@ export class InMemoryContentStore
                     ...block,
                     data: clone(value.data),
                     schemaVersion: value.schemaVersion,
+                    settings: clone(value.settings),
                   });
             }),
           ),
@@ -756,9 +770,12 @@ export class InMemoryContentStore
     }
 
     const models = new Map(input.models.map((model) => [model.key, model]));
-    const pageEntries = new Map(input.pageEntries.map((page) => [page.modelKey, page.entry]));
+    const singletonEntries = new Map(
+      input.singletonEntries.map((page) => [page.modelKey, page.entry]),
+    );
     const nextStates = new Map(this.modelStates);
     const nextEntries = new Map(this.entries);
+    const nextReferences = new Map(this.references);
     for (const operation of actualPlan.operations) {
       if (operation.action === "create") {
         const currentModel = models.get(operation.model.key);
@@ -766,8 +783,8 @@ export class InMemoryContentStore
           throw new DomainError("CONTENT_INVALID_STATE", "Synchronization model is unavailable.");
         }
         nextStates.set(operation.model.key, stateForModel(operation.model, currentModel));
-        if (currentModel.kind === "page") {
-          const entry = pageEntries.get(operation.model.key);
+        if (isSingletonKind(currentModel.kind)) {
+          const entry = singletonEntries.get(operation.model.key);
           if (
             entry === undefined ||
             entry.model.key !== operation.model.key ||
@@ -775,7 +792,7 @@ export class InMemoryContentStore
           ) {
             throw new DomainError(
               "CONTENT_INVALID_STATE",
-              "Page synchronization entry is invalid.",
+              "Singleton synchronization entry is invalid.",
             );
           }
           nextEntries.set(entry.id, copyEntry(entry));
@@ -810,6 +827,36 @@ export class InMemoryContentStore
           );
         }
       }
+      const evolution =
+        operation.action === "version-update" || operation.action === "rename"
+          ? operation.evolution
+          : undefined;
+      if (evolution?.seoRemoval === true) {
+        for (const [entryId, entry] of nextEntries) {
+          if (entry.model.key !== operation.model.key) continue;
+          const withoutSeo = <Snapshot extends DraftSnapshot | PublishedSnapshot>(
+            snapshot: Snapshot,
+          ): Snapshot => {
+            const { seo: _seo, ...rest } = snapshot;
+            const references = nextReferences.get(snapshot.id);
+            if (references !== undefined) {
+              nextReferences.set(
+                snapshot.id,
+                Object.freeze(references.filter((reference) => reference.sourceKey !== "$seo")),
+              );
+            }
+            return Object.freeze(rest) as Snapshot;
+          };
+          nextEntries.set(
+            entryId,
+            Object.freeze({
+              ...entry,
+              draft: withoutSeo(entry.draft),
+              ...(entry.published === undefined ? {} : { published: withoutSeo(entry.published) }),
+            }),
+          );
+        }
+      }
       for (const backfill of configurationSyncBackfills(operation, currentModel)) {
         const value = JSON.parse(backfill.json) as JsonValue;
         for (const [entryId, entry] of nextEntries) {
@@ -829,6 +876,9 @@ export class InMemoryContentStore
     }
     this.modelStates = nextStates;
     this.entries = nextEntries;
+    this.references.clear();
+    for (const [snapshotId, references] of nextReferences)
+      this.references.set(snapshotId, references);
     if (!configurationSyncAdvancesPublicState(actualPlan)) {
       return Object.freeze({ operations: actualPlan.operations, status: "applied" });
     }
@@ -973,18 +1023,21 @@ export class InMemoryContentStore
     if (entry === undefined)
       throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
     const published = publishContentEntry(entry, input);
-    const path = resolveContentPublicPath(published.model, published.published!.slug);
-    assertPublicPathAvailable(path, published.id, this.routes.get(path));
+    const path = contentPublicPath(published.model, published.published!.slug);
     const nextRoutes = new Map(this.routes);
-    for (const [existingPath, route] of nextRoutes) {
-      if (route.entryId === published.id) nextRoutes.delete(existingPath);
+    // A global has no route; its publication only replaces the snapshot.
+    if (path !== undefined) {
+      assertPublicPathAvailable(path, published.id, this.routes.get(path));
+      for (const [existingPath, route] of nextRoutes) {
+        if (route.entryId === published.id) nextRoutes.delete(existingPath);
+      }
+      nextRoutes.set(path, {
+        entryId: published.id,
+        path,
+        snapshotId: published.published!.id,
+        updatedAt: input.publishedAt,
+      });
     }
-    nextRoutes.set(path, {
-      entryId: published.id,
-      path,
-      snapshotId: published.published!.id,
-      updatedAt: input.publishedAt,
-    });
     this.entries.set(published.id, published);
     // Publication replaces the prior published snapshot, as SQLite cascades its references.
     if (entry.published !== undefined) this.references.delete(entry.published.id);
@@ -1095,27 +1148,67 @@ export class InMemoryContentStore
     return entry?.published === undefined ? null : this.publicView(entry, path);
   }
 
-  /** Mirrors the SQL public projection: no editorial draft, active published media only. */
+  public async loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null> {
+    const entry = this.publicGlobals().find((candidate) => candidate.model.key === modelKey);
+    return entry === undefined ? null : this.publicGlobalView(entry);
+  }
+
+  /** Published globals ordered by model key, like the shared SQL projection. */
+  private publicGlobals(): readonly ContentEntry[] {
+    return [...this.entries.values()]
+      .filter((entry) => entry.model.kind === "global" && entry.published !== undefined)
+      .sort((left, right) => left.model.key.localeCompare(right.model.key));
+  }
+
+  private publicGlobalView(entry: ContentEntry): PublicGlobalContent {
+    const { entry: projected, media } = this.publicView(entry, "");
+    return Object.freeze({ entry: projected, media });
+  }
+
+  /** References a published snapshot delivers: none held by a hidden block (like SQL). */
+  private deliveredReferences(snapshot: PublishedSnapshot): readonly DraftMediaReference[] {
+    const hidden = new Set(
+      snapshot.blocks.filter((block) => block.hidden).map((block) => block.key as string),
+    );
+    return (this.references.get(snapshot.id) ?? []).filter(
+      (reference) => !hidden.has(reference.sourceKey),
+    );
+  }
+
+  /**
+   * Mirrors the SQL public projection: no editorial draft, no hidden blocks,
+   * active delivered media only.
+   */
   private publicView(entry: ContentEntry, path: string): PublicContentEntry {
     const copied = copyEntry(entry);
-    const published = copied.published!;
+    const published = Object.freeze({
+      ...copied.published!,
+      blocks: Object.freeze(copied.published!.blocks.filter((block) => !block.hidden)),
+    });
     const ids = new Set(
-      (this.references.get(published.id) ?? []).map((reference) => reference.mediaId as string),
+      this.deliveredReferences(entry.published!).map((reference) => reference.mediaId as string),
     );
     const media = [...ids].sort().flatMap((id) => {
       const value = this.media.get(id);
       return value === undefined || value.status !== "active" ? [] : [clone(value)];
     });
     return Object.freeze({
-      entry: Object.freeze({ ...copied, draft: Object.freeze({ ...published, state: "draft" }) }),
+      entry: Object.freeze({
+        ...copied,
+        draft: Object.freeze({ ...published, state: "draft" as const }),
+        published,
+      }),
       media: Object.freeze(media),
       path,
     });
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
-    const isPublished = [...this.routes.values()].some((route) =>
-      (this.references.get(route.snapshotId) ?? []).some((reference) => reference.mediaId === id),
+    // Like PUBLIC_MEDIA_SQL: any current published snapshot, routed or not.
+    const isPublished = [...this.entries.values()].some(
+      (entry) =>
+        entry.published !== undefined &&
+        this.deliveredReferences(entry.published).some((reference) => reference.mediaId === id),
     );
     const value = this.media.get(id);
     return isPublished && value !== undefined ? clone(value) : null;
@@ -1274,6 +1367,7 @@ export class InMemoryContentStore
       entries: Object.freeze(
         this.publicEntries().map(({ entry, path }) => this.publicView(entry, path)),
       ),
+      globals: Object.freeze(this.publicGlobals().map((entry) => this.publicGlobalView(entry))),
       version: this.publicVersion,
     });
   }
@@ -1309,6 +1403,7 @@ export class InMemoryContentStore
           blockType?: string;
           field: string;
           position: number;
+          seo?: true;
           states: Set<MediaUsageState>;
         }
       >();
@@ -1319,11 +1414,12 @@ export class InMemoryContentStore
       for (const [state, snapshot] of snapshots) {
         for (const reference of this.references.get(snapshot.id) ?? []) {
           if (reference.mediaId !== mediaIdValue) continue;
+          const seo = reference.sourceKey === "$seo";
           const block =
-            reference.sourceKey === "$fields"
+            reference.sourceKey === "$fields" || seo
               ? undefined
               : snapshot.blocks.find((candidate) => candidate.key === reference.sourceKey);
-          if (reference.sourceKey !== "$fields" && block === undefined) {
+          if (reference.sourceKey !== "$fields" && !seo && block === undefined) {
             throw new Error("A media reference names a block that does not exist.");
           }
           const key = `${reference.sourceKey}\u0000${reference.fieldPath}`;
@@ -1331,6 +1427,7 @@ export class InMemoryContentStore
             ...(block === undefined ? {} : { blockKey: block.key, blockType: block.type }),
             field: reference.fieldPath,
             position: block?.position ?? 0,
+            ...(seo ? { seo: true as const } : {}),
             states: new Set<MediaUsageState>(),
           };
           if (block !== undefined) {
@@ -1342,10 +1439,10 @@ export class InMemoryContentStore
         }
       }
       if (locations.size === 0) continue;
+      const rank = (location: { blockKey?: BlockKey; seo?: true }): number =>
+        location.blockKey !== undefined ? 2 : location.seo === true ? 1 : 0;
       const ordered = [...locations.values()].sort((left, right) => {
-        if ((left.blockKey === undefined) !== (right.blockKey === undefined)) {
-          return left.blockKey === undefined ? -1 : 1;
-        }
+        if (rank(left) !== rank(right)) return rank(left) - rank(right);
         if (left.position !== right.position) return left.position - right.position;
         const leftKey = `${left.blockKey ?? ""}\u0000${left.field}`;
         const rightKey = `${right.blockKey ?? ""}\u0000${right.field}`;
@@ -1358,19 +1455,25 @@ export class InMemoryContentStore
           entryId: entry.id,
           locations: Object.freeze(
             ordered.map((location): MediaUsageLocation =>
-              location.blockKey === undefined
+              location.seo === true
                 ? Object.freeze({
-                    field: location.field,
-                    source: "field" as const,
+                    field: "image" as const,
+                    source: "seo" as const,
                     states: states(location.states),
                   })
-                : Object.freeze({
-                    blockKey: location.blockKey,
-                    blockType: location.blockType!,
-                    field: location.field,
-                    source: "block" as const,
-                    states: states(location.states),
-                  }),
+                : location.blockKey === undefined
+                  ? Object.freeze({
+                      field: location.field,
+                      source: "field" as const,
+                      states: states(location.states),
+                    })
+                  : Object.freeze({
+                      blockKey: location.blockKey,
+                      blockType: location.blockType!,
+                      field: location.field,
+                      source: "block" as const,
+                      states: states(location.states),
+                    }),
             ),
           ),
           modelKey: entry.model.key,

@@ -22,6 +22,9 @@ test.each([
   ["editor", "page", true, true, true, [false, true, false, false]],
   ["viewer", "collection", true, true, true, [false, false, false, false]],
   ["viewer", "page", true, true, false, [false, false, false, false]],
+  ["admin", "global", true, true, false, [false, true, true, false]],
+  ["admin", "global", false, false, false, [false, false, false, false]],
+  ["editor", "global", true, true, false, [false, true, false, false]],
 ] as const)(
   "%s on a %s (published %s, saved changes %s, unsaved changes %s)",
   (role, kind, published, savedChanges, unsavedChanges, expected) => {

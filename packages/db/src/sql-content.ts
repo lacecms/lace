@@ -23,6 +23,7 @@ import type {
   MediaUsageLocation,
   MediaUsageState,
   PublicContentEntry,
+  PublicGlobalContent,
   ConfigurationSyncMediaReference,
   ConfigurationSyncMigrationBlock,
   ConfigurationSyncMigrationPage,
@@ -43,6 +44,7 @@ import {
   normalizeBuildFailure,
   actorId,
   blockKey,
+  cloneEntrySeo,
   contentEntryId,
   contentModelKey,
   contentSnapshotId,
@@ -51,6 +53,7 @@ import {
   MAX_MEDIA_ALT_LENGTH,
   MAX_MEDIA_CAPTION_LENGTH,
   isSiteBuildStatus,
+  normalizeEntrySeo,
   normalizeTrackedOutcomeReason,
   retryableSiteBuildStatuses,
   siteBuildId,
@@ -62,6 +65,7 @@ import type {
   ContentEntry,
   ContentModelRoute,
   DraftSnapshot,
+  EntrySeo,
   MediaMetadata,
   PublishedSnapshot,
   Role,
@@ -227,6 +231,7 @@ export interface SnapshotRow {
   readonly revision: number;
   readonly role: string | null;
   readonly schema_version: number;
+  readonly seo_json: string | null;
   readonly slug: string | null;
   readonly title: string;
   readonly updated_at: number;
@@ -234,12 +239,16 @@ export interface SnapshotRow {
 }
 
 export interface BlockRow {
+  readonly anchor: string | null;
   readonly block_key: string;
   readonly block_type: string;
+  readonly class_name: string | null;
   readonly created_at: number;
   readonly data_json: string;
+  readonly hidden: number;
   readonly position: number;
   readonly schema_version: number;
+  readonly settings_json: string;
   readonly snapshot_id: string;
   readonly updated_at: number;
 }
@@ -251,6 +260,7 @@ export interface StoredSnapshot {
   readonly fields: JsonObject;
   readonly id: string;
   readonly revision: number;
+  readonly seo?: EntrySeo;
   readonly slug?: string;
   readonly title: string;
   readonly updatedAt: number;
@@ -298,6 +308,10 @@ export interface PublicRow extends EntryRow {
   readonly published_created_at: number;
 }
 
+export interface PublicGlobalRow extends EntryRow {
+  readonly published_created_at: number;
+}
+
 export interface StoredModelStateRow {
   readonly draft_snapshot_count: number;
   readonly entry_count: number;
@@ -315,6 +329,8 @@ export interface StoredModelStateRow {
 export interface SyncSnapshotRow {
   readonly entry_id: string;
   readonly fields_json: string;
+  /** 1 when the snapshot holds an SEO group. */
+  readonly has_seo: number;
   readonly id: string;
   readonly revision: number;
   readonly state: string;
@@ -405,20 +421,33 @@ export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, 
    from published_routes r
    join content_entries e on e.id = r.entry_id and e.published_snapshot_id = r.snapshot_id
    join content_snapshots s on s.id = r.snapshot_id`;
+/** Published route-less globals; never joins `published_routes`. */
+export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
+        s.created_at as published_created_at
+   from content_entries e
+   join content_models m on m.key = e.model_key and m.kind = 'global'
+   join content_snapshots s on s.id = e.published_snapshot_id`;
+/**
+ * Excludes a reference `r` held by a hidden block, which is never delivered;
+ * `$fields` and `$seo` never match a block key.
+ */
+const DELIVERED_REFERENCE_SQL = `not exists (select 1 from content_blocks b
+                    where b.snapshot_id = r.snapshot_id and b.block_key = r.source_key
+                      and b.hidden = 1)`;
 export const PUBLIC_MEDIA_SQL = `select ${MEDIA_COLUMNS_SQL}
    from media m
   where m.id = ? and exists (
     select 1 from content_media_references r
     join content_entries e on e.published_snapshot_id = r.snapshot_id
-    where r.media_id = m.id
+    where r.media_id = m.id and ${DELIVERED_REFERENCE_SQL}
   ) limit 1`;
-/** Active media referenced by the given published snapshots, one row per pair. */
+/** Active media delivered by the given published snapshots, one row per pair. */
 export function publicSnapshotMediaSql(count: number): string {
   return `select distinct r.snapshot_id as public_snapshot_id, ${MEDIA_COLUMNS_SQL}
    from content_media_references r
    join media m on m.id = r.media_id
   where r.snapshot_id in (${Array.from({ length: count }, () => "?").join(", ")})
-    and m.status = 'active'
+    and m.status = 'active' and ${DELIVERED_REFERENCE_SQL}
   order by r.snapshot_id asc, m.id asc`;
 }
 export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL} from media m where m.id = ? limit 1`;
@@ -484,6 +513,7 @@ export const STORED_MODEL_BASELINES_SQL = `select m.key, ${VALID_BASELINE_SQL} a
    from content_models m order by m.key asc`;
 /** Binds model key, exclusive snapshot-ID cursor, and page limit. */
 export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title, s.fields_json,
+        s.seo_json is not null as has_seo,
         case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
    from content_snapshots s
    join content_entries e on e.id = s.entry_id
@@ -585,6 +615,19 @@ export function configurationSyncWriteStatements(
       ];
     case "backfill-field":
       return [{ params: [write.json, modelKey], sql: backfillFieldSql(write.fieldKey) }];
+    case "remove-seo":
+      return [
+        {
+          params: [modelKey],
+          sql: `update content_snapshots set seo_json = null
+   where entry_id in (${MODEL_ENTRY_IDS_SQL}) and seo_json is not null`,
+        },
+        {
+          params: [modelKey],
+          sql: `delete from content_media_references
+   where source_key = '$seo' and snapshot_id in (${MODEL_SNAPSHOT_IDS_SQL})`,
+        },
+      ];
   }
 }
 
@@ -605,6 +648,7 @@ export function syncSnapshotPage(
       blocks: Object.freeze(blocks.get(row.id) ?? []),
       entryId: row.entry_id,
       fields: parseObject(row.fields_json, "Snapshot fields"),
+      hasSeo: row.has_seo === 1,
       revision: row.revision,
       snapshotId: row.id,
       state: row.state === "published" ? "published" : "draft",
@@ -635,11 +679,13 @@ export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.p
 export const SYNC_MIGRATION_SNAPSHOTS_SQL =
   "select id, revision, title from content_snapshots where id in";
 /**
- * Blocks of a list of snapshot IDs with data only for target types. Binds the
+ * Blocks of a list of snapshot IDs with data and settings only for target types. Binds the
  * target type JSON array first; append the snapshot placeholders and the order.
  */
-export const SYNC_MIGRATION_BLOCKS_SQL = `select snapshot_id, block_key, block_type, position, schema_version,
-        case when block_type in (select value from json_each(?)) then data_json end as data_json
+export const SYNC_MIGRATION_BLOCKS_SQL = `with target(type) as (select value from json_each(?))
+ select snapshot_id, block_key, block_type, position, schema_version, hidden,
+        case when block_type in (select type from target) then data_json end as data_json,
+        case when block_type in (select type from target) then settings_json end as settings_json
    from content_blocks where snapshot_id in`;
 /** Media references of a list of snapshot IDs; append the placeholders. */
 export const SYNC_MIGRATION_REFERENCES_SQL =
@@ -661,8 +707,10 @@ export interface SyncMigrationBlockRow {
   readonly block_key: string;
   readonly block_type: string;
   readonly data_json: string | null;
+  readonly hidden: number;
   readonly position: number;
   readonly schema_version: number;
+  readonly settings_json: string | null;
   readonly snapshot_id: string;
 }
 
@@ -719,9 +767,13 @@ export function syncMigrationPage(
     list.push(
       Object.freeze({
         ...(row.data_json === null ? {} : { data: parseObject(row.data_json, "Block data") }),
+        hidden: row.hidden === 1,
         key: row.block_key,
         position: row.position,
         schemaVersion: row.schema_version,
+        ...(row.settings_json === null
+          ? {}
+          : { settings: parseObject(row.settings_json, "Block settings") }),
         type: row.block_type,
       }),
     );
@@ -784,7 +836,7 @@ export interface ConfigurationSyncMigrationStatements {
   readonly writes: readonly ConfigurationSyncWriteStatement[];
 }
 
-const MIGRATED_BLOCK_VALUES = 4;
+const MIGRATED_BLOCK_VALUES = 5;
 const MIGRATED_REFERENCE_VALUES = 3;
 
 function valueRows(rows: number, width: number): string {
@@ -840,11 +892,12 @@ export function configurationSyncMigrationStatements(
           block.schemaVersion,
           JSON.stringify(block.data),
           block.expectedSchemaVersion,
+          JSON.stringify(block.settings),
         ]),
         migration.snapshotId,
       ],
       sql: `update content_blocks
-     set schema_version = v.column2, data_json = v.column3, updated_at = ?
+     set schema_version = v.column2, data_json = v.column3, settings_json = v.column5, updated_at = ?
     from (values ${valueRows(group.length, MIGRATED_BLOCK_VALUES)}) as v
    where content_blocks.snapshot_id = ? and content_blocks.block_key = v.column1
      and content_blocks.schema_version = v.column4`,
@@ -891,11 +944,14 @@ export function configurationSyncMigrationStatements(
     writes: Object.freeze(writes),
   });
 }
-export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.schema_version,
+export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version,
         s.created_at, s.updated_at, s.updated_by, u.role
    from content_snapshots s left join user u on u.id = s.updated_by`;
 export const BLOCK_COLUMNS_SQL =
-  "select snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at from content_blocks";
+  "select snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at from content_blocks";
+/** Columns of a content block row, listed by every copy between snapshots. */
+export const BLOCK_COPY_COLUMNS_SQL =
+  "block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at";
 export const PENDING_SITE_BUILD_SQL =
   "type = 'site.build.requested' and processed_at is null and locked_at is null";
 
@@ -928,15 +984,15 @@ export const DUPLICATE_SOURCE_REVISION_SQL =
 export function revertDraftSnapshotSql(condition: string): string {
   return `update content_snapshots
      set revision = revision + 1, slug = p.slug, title = p.title, fields_json = p.fields_json,
-         schema_version = p.schema_version, updated_at = ?, updated_by = ?
-    from (select slug, title, fields_json, schema_version from content_snapshots where id = ?) as p
+         seo_json = p.seo_json, schema_version = p.schema_version, updated_at = ?, updated_by = ?
+    from (select slug, title, fields_json, seo_json, schema_version from content_snapshots where id = ?) as p
    where content_snapshots.id = ? and ${condition}`;
 }
 
 /** Copies one snapshot's blocks into another. Parameters: target, source, then `condition`'s. */
 export function copySnapshotBlocksSql(condition = "1 = 1"): string {
-  return `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at)
-  select ?, block_key, block_type, position, schema_version, data_json, created_at, updated_at
+  return `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL})
+  select ?, ${BLOCK_COPY_COLUMNS_SQL}
     from content_blocks where snapshot_id = ? and ${condition}`;
 }
 
@@ -995,7 +1051,7 @@ export function storedModelStates(
 ): readonly StoredContentModelState[] {
   return Object.freeze(
     rows.map((row) => {
-      if (row.kind !== "collection" && row.kind !== "page")
+      if (row.kind !== "collection" && row.kind !== "global" && row.kind !== "page")
         failure("Stored model kind is invalid.");
       return Object.freeze({
         draftSnapshotCount: row.draft_snapshot_count,
@@ -1361,17 +1417,21 @@ interface MediaUsageLocationDraft {
   blockType?: string;
   readonly field: string;
   position: number;
+  readonly seo?: true;
   readonly states: Set<MediaUsageState>;
 }
 
-/** Orders usage locations: entry fields by name, then blocks by position and key. */
+function usageLocationRank(location: MediaUsageLocationDraft): number {
+  return location.blockKey !== undefined ? 2 : location.seo === true ? 1 : 0;
+}
+
+/** Orders usage locations: entry fields by name, the SEO image, then blocks by position and key. */
 function compareUsageLocations(
   left: MediaUsageLocationDraft,
   right: MediaUsageLocationDraft,
 ): number {
-  if ((left.blockKey === undefined) !== (right.blockKey === undefined)) {
-    return left.blockKey === undefined ? -1 : 1;
-  }
+  const rank = usageLocationRank(left) - usageLocationRank(right);
+  if (rank !== 0) return rank;
   if (left.position !== right.position) return left.position - right.position;
   const leftKey = `${left.blockKey ?? ""}\u0000${left.field}`;
   const rightKey = `${right.blockKey ?? ""}\u0000${right.field}`;
@@ -1394,7 +1454,8 @@ export function mediaUsageEntries(rows: readonly MediaUsageRow[]): readonly Medi
       entry = { locations: new Map(), row };
       entries.set(row.entry_id, entry);
     }
-    const isBlock = row.source_key !== "$fields";
+    const isSeo = row.source_key === "$seo";
+    const isBlock = !isSeo && row.source_key !== "$fields";
     if (isBlock && (row.block_type === null || row.position === null)) {
       throw new Error("A media reference names a block that does not exist.");
     }
@@ -1405,6 +1466,7 @@ export function mediaUsageEntries(rows: readonly MediaUsageRow[]): readonly Medi
         ...(isBlock ? { blockKey: row.source_key, blockType: row.block_type! } : {}),
         field: row.field_path,
         position: isBlock ? row.position! : 0,
+        ...(isSeo ? { seo: true as const } : {}),
         states: new Set(),
       };
       entry.locations.set(key, location);
@@ -1421,19 +1483,25 @@ export function mediaUsageEntries(rows: readonly MediaUsageRow[]): readonly Medi
         entryId: contentEntryId(row.entry_id),
         locations: Object.freeze(
           [...locations.values()].sort(compareUsageLocations).map((location): MediaUsageLocation =>
-            location.blockKey === undefined
+            location.seo === true
               ? Object.freeze({
-                  field: location.field,
-                  source: "field" as const,
+                  field: "image" as const,
+                  source: "seo" as const,
                   states: usageStates(location.states),
                 })
-              : Object.freeze({
-                  blockKey: blockKey(location.blockKey),
-                  blockType: location.blockType!,
-                  field: location.field,
-                  source: "block" as const,
-                  states: usageStates(location.states),
-                }),
+              : location.blockKey === undefined
+                ? Object.freeze({
+                    field: location.field,
+                    source: "field" as const,
+                    states: usageStates(location.states),
+                  })
+                : Object.freeze({
+                    blockKey: blockKey(location.blockKey),
+                    blockType: location.blockType!,
+                    field: location.field,
+                    source: "block" as const,
+                    states: usageStates(location.states),
+                  }),
           ),
         ),
         modelKey: contentModelKey(row.model_key),
@@ -1456,6 +1524,18 @@ export function chunks<Value>(
   return result;
 }
 
+/** Serializes a normalized SEO group for `content_snapshots.seo_json`; `NULL` when absent. */
+export function seoJson(seo: EntrySeo | undefined): string | null {
+  return seo === undefined ? null : JSON.stringify(cloneEntrySeo(seo));
+}
+
+/** Parses a stored SEO group, re-applying the shared rules to catch corrupt rows. */
+function storedSeo(value: string): EntrySeo {
+  const seo = normalizeEntrySeo(parseObject(value, "Snapshot SEO"), { enabled: true });
+  if (seo === undefined) failure("A stored SEO group must hold at least one value.");
+  return seo;
+}
+
 export function storedSnapshot(row: SnapshotRow): StoredSnapshot {
   return {
     blocks: [],
@@ -1464,6 +1544,7 @@ export function storedSnapshot(row: SnapshotRow): StoredSnapshot {
     fields: parseObject(row.fields_json, "Snapshot fields"),
     id: row.id,
     revision: row.revision,
+    ...(row.seo_json === null ? {} : { seo: storedSeo(row.seo_json) }),
     ...(row.slug === null ? {} : { slug: row.slug }),
     title: row.title,
     updatedAt: assertTimestamp(row.updated_at, "Snapshot update time"),
@@ -1481,10 +1562,14 @@ export function storedSnapshots(
   for (const row of blockRows) {
     const blocks = grouped.get(row.snapshot_id) ?? [];
     blocks.push({
+      ...(row.anchor === null ? {} : { anchor: row.anchor }),
+      ...(row.class_name === null ? {} : { className: row.class_name }),
       data: parseObject(row.data_json, "Block data"),
+      hidden: row.hidden === 1,
       key: blockKey(row.block_key),
       position: row.position,
       schemaVersion: row.schema_version,
+      settings: parseObject(row.settings_json, "Block settings"),
       type: row.block_type,
     });
     grouped.set(row.snapshot_id, blocks);
@@ -1518,6 +1603,7 @@ export function snapshotValue(
     fields: source.fields,
     id: contentSnapshotId(source.id),
     revision: source.revision,
+    ...(source.seo === undefined ? {} : { seo: source.seo }),
     ...(source.slug === undefined ? {} : { slug: source.slug }),
     state,
     title: source.title,
@@ -1589,14 +1675,35 @@ export function publicContentEntry(
   });
 }
 
-/** Public projections cannot disclose the independently mutable draft snapshot. */
+/** Projects a published global row into a public global with its referenced media. */
+export function publicGlobalContent(
+  row: PublicGlobalRow,
+  entries: ReadonlyMap<string, ContentEntry>,
+  media: ReadonlyMap<string, readonly MediaMetadata[]>,
+): PublicGlobalContent {
+  const entry = entries.get(row.id);
+  if (entry === undefined) failure("Published global references an unreadable entry.");
+  return Object.freeze({
+    entry: publicEntry(entry),
+    media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
+  });
+}
+
+/**
+ * Public projections cannot disclose the independently mutable draft snapshot
+ * or hidden blocks, which stay stored but are never delivered.
+ */
 export function publicEntry(entry: ContentEntry): ContentEntry {
   if (entry.published === undefined) failure("Public entry is missing its published snapshot.");
+  const published = Object.freeze({
+    ...entry.published,
+    blocks: Object.freeze(entry.published.blocks.filter((block) => !block.hidden)),
+  });
   return Object.freeze({
-    draft: Object.freeze({ ...entry.published, state: "draft" as const }),
+    draft: Object.freeze({ ...published, state: "draft" as const }),
     id: entry.id,
     model: entry.model,
-    published: entry.published,
+    published,
   });
 }
 
@@ -1620,17 +1727,21 @@ export function siteBuildPayload(payloadJson: string): JsonObject | null {
 }
 
 /** Maps SQLite and D1 constraint failures to stable domain errors. */
-export function sqliteWriteError(error: unknown, pageCreation: boolean, runtime: string): never {
+export function sqliteWriteError(
+  error: unknown,
+  singletonCreation: boolean,
+  runtime: string,
+): never {
   if (error instanceof DomainError) throw error;
   const message = error instanceof Error ? error.message : "";
   if (
-    pageCreation &&
+    singletonCreation &&
     (message.includes("content_entries_singleton_idx") ||
       message.includes("UNIQUE constraint failed: content_entries.model_key"))
   ) {
     throw new DomainError(
       "CONTENT_MODEL_CARDINALITY_CONFLICT",
-      "A page model already has its singleton entry.",
+      "A page or global model already has its singleton entry.",
     );
   }
   if (message.includes("UNIQUE constraint failed: published_routes.path")) {

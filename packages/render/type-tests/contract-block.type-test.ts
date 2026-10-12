@@ -1,6 +1,6 @@
 // Test-only: proves the public contract DTOs need no mapping before rendering.
 // It lives outside `src`, so the render package itself never imports contracts.
-import type { ContentBlockDto } from "@lacecms/contracts";
+import type { ContentBlockDto, PublicBlockDto } from "@lacecms/contracts";
 import { builtInBlocks, defineBlock, field } from "@lacecms/content";
 import type { SafeRichTextDocument } from "@lacecms/content";
 import { defineBlockMap, parseBlock, prepareBlocks } from "../src/index.js";
@@ -14,6 +14,8 @@ type Expect<Value extends true> = Value;
 
 declare const contractBlock: ContentBlockDto;
 const renderable: RenderableBlock = contractBlock;
+declare const publicBlock: PublicBlockDto;
+const publicRenderable: RenderableBlock = publicBlock;
 
 declare const contractEntry: { readonly blocks: ContentBlockDto[]; id: string; modelKey: string };
 const entry: RenderableEntry = contractEntry;
@@ -34,11 +36,43 @@ const bannerData = parseBlock(banner, renderable, {
 });
 type BannerCount = Expect<Equal<typeof bannerData.count, number>>;
 
+type HeroSettings = Expect<Equal<BlockProps<typeof builtInBlocks.hero>["settings"], Readonly<{}>>>;
+type HeroAnchor = Expect<
+  Equal<BlockProps<typeof builtInBlocks.hero>["anchor"], string | undefined>
+>;
+
+const styled = defineBlock({
+  fields: { title: field.text() },
+  settings: {
+    columns: field.number({ defaultValue: 2 }),
+    layout: field.select({ defaultValue: "wide", options: ["wide", "narrow"] }),
+  },
+  type: "styled",
+  version: 1,
+});
+type StyledSettings = BlockProps<typeof styled>["settings"];
+type StyledLayout = Expect<Equal<StyledSettings["layout"], "wide" | "narrow">>;
+type StyledColumns = Expect<Equal<StyledSettings["columns"], number>>;
+type StyledKeys = Expect<Equal<keyof StyledSettings, "columns" | "layout">>;
+
 const blocks = defineBlockMap({
   banner: { component: "BannerComponent", definition: banner },
   hero: { component: "HeroComponent", definition: builtInBlocks.hero },
+  styled: { component: "StyledComponent", definition: styled },
 });
 type MapComponent = Expect<Equal<(typeof blocks)["hero"]["component"], "HeroComponent">>;
 const prepared = prepareBlocks(blocks, entry, (id) => id);
 
-export type TypeTests = [HeroHeading, HeroBody, BannerCount, MapComponent, typeof prepared];
+export type TypeTests = [
+  HeroHeading,
+  HeroBody,
+  BannerCount,
+  MapComponent,
+  HeroSettings,
+  HeroAnchor,
+  StyledLayout,
+  StyledColumns,
+  StyledKeys,
+  typeof prepared,
+  typeof publicRenderable,
+];

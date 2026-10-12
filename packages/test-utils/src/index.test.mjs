@@ -43,7 +43,7 @@ import {
   MediaUseCases,
   sanitizeMediaFilename,
 } from "@lacecms/application";
-import { defineCollection, defineConfig, definePage } from "@lacecms/config";
+import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 test("exports its package identity", () => expect(packageName).toBe("@lacecms/test-utils"));
 
@@ -1157,10 +1157,17 @@ async function lifecycleFixture() {
         route: "/blog/:slug",
         version: 1,
       }),
+      defineGlobal({
+        blocks: ["asset"],
+        fields: { logo: field.media(), siteName: field.text({ required: true }) },
+        key: "settings",
+        label: "Site settings",
+        version: 1,
+      }),
     ],
   });
   const store = new InMemoryContentStore();
-  for (const id of ["media-1", "media-2"]) {
+  for (const id of ["media-1", "media-2", "media-3"]) {
     await store.createMedia({
       createdAt: unixMilliseconds(1),
       createdBy: admin.id,
@@ -1188,8 +1195,136 @@ async function lifecycleFixture() {
     slug,
     title,
   });
-  return { post, store, useCases };
+  return { config, post, store, useCases };
 }
+
+async function syncedGlobal(config, store) {
+  const prepared = await prepareConfigurationSynchronization({
+    models: config.content,
+    state: store,
+  });
+  await applyPreparedConfigurationSynchronization({
+    clock: new DeterministicClock(unixMilliseconds(5)),
+    ids: new DeterministicIdGenerator("sync"),
+    models: config.content,
+    prepared,
+    target: store,
+  });
+  const page = await store.list({
+    limit: 10,
+    listFields: [],
+    modelKey: contentModelKey("settings"),
+    sort: "-updatedAt",
+  });
+  return page.items[0].id;
+}
+
+test("runs the global lifecycle as a route-less singleton", async () => {
+  const { config, store, useCases } = await lifecycleFixture();
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const id = await syncedGlobal(config, store);
+  const synced = await useCases.load({ actor: admin, entryId: id });
+  expect(synced).toMatchObject({
+    draft: {
+      blocks: [],
+      revision: 1,
+      title: "Site settings",
+      updatedBy: { id: "system:content-sync" },
+    },
+    model: { key: "settings", kind: "global" },
+  });
+  expect(synced.draft).not.toHaveProperty("slug");
+
+  const values = (overrides = {}) => ({
+    blocks: [
+      {
+        data: { image: "media-2" },
+        key: blockKey("banner"),
+        position: 1000,
+        schemaVersion: 1,
+        type: "asset",
+      },
+    ],
+    fields: { logo: "media-1", siteName: "Lace" },
+    title: "Anything",
+    ...overrides,
+  });
+  await expect(
+    useCases.save({ actor: viewer, entryId: id, expectedRevision: 1, ...values() }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  await expect(
+    useCases.save({ actor: editor, entryId: id, expectedRevision: 1, ...values({ slug: "x" }) }),
+  ).rejects.toThrow(/slug/u);
+  const saved = await useCases.save({
+    actor: editor,
+    entryId: id,
+    expectedRevision: 1,
+    ...values(),
+  });
+  expect(saved.draft).toMatchObject({ revision: 2, title: "Site settings" });
+
+  await expect(
+    useCases.create({ actor: admin, modelKey: "settings", ...values() }),
+  ).rejects.toMatchObject({ code: "CONTENT_MODEL_CARDINALITY_CONFLICT" });
+  for (const operation of [
+    () => useCases.delete({ actor: admin, entryId: id, expectedRevision: 2 }),
+    () => useCases.duplicate({ actor: admin, entryId: id }),
+  ]) {
+    await expect(operation()).rejects.toMatchObject({ code: "CONTENT_PAGE_SINGLETON" });
+  }
+
+  await expect(
+    useCases.publish({ actor: editor, entryId: id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  const version = await store.publishedContentVersion();
+  const published = await useCases.publish({ actor: admin, entryId: id, expectedRevision: 2 });
+  expect(published.build).toEqual({ status: "queued", targetVersion: version + 1 });
+  expect(await store.publishedContentVersion()).toBe(version + 1);
+  const read = await store.loadPublicGlobal(contentModelKey("settings"));
+  expect(read.entry.published).toMatchObject({
+    fields: { siteName: "Lace" },
+    title: "Site settings",
+  });
+  expect(read.media.map((item) => item.id)).toEqual(["media-1", "media-2"]);
+  expect(await store.loadPublicGlobal(contentModelKey("home"))).toBeNull();
+  expect(await store.loadPublicGlobal(contentModelKey("posts"))).toBeNull();
+  expect(await store.loadPublicMedia("media-1")).toMatchObject({ id: "media-1" });
+  const exported = await store.exportBuildContent();
+  expect(exported.entries).toEqual([]);
+  expect(exported.globals.map((item) => item.entry.id)).toEqual([id]);
+  expect(await store.loadPublic("/")).toBeNull();
+  expect(
+    (await store.listPublic({ limit: 10, modelKey: contentModelKey("settings") })).items,
+  ).toEqual([]);
+
+  await useCases.save({
+    actor: editor,
+    entryId: id,
+    expectedRevision: 2,
+    ...values({ fields: { logo: "media-3", siteName: "Changed" } }),
+  });
+  const reverted = await useCases.revertDraft({ actor: editor, entryId: id, expectedRevision: 3 });
+  expect(reverted.draft).toMatchObject({ fields: { siteName: "Lace" }, revision: 4 });
+  expect(await store.publishedContentVersion()).toBe(version + 1);
+
+  await expect(
+    useCases.unpublish({
+      actor: editor,
+      entryId: id,
+      expectedPublishedSnapshotId: published.entry.published.id,
+    }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  const unpublished = await useCases.unpublish({
+    actor: admin,
+    entryId: id,
+    expectedPublishedSnapshotId: published.entry.published.id,
+  });
+  expect(unpublished.build).toEqual({ status: "queued", targetVersion: version + 2 });
+  expect(await store.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
+  expect((await store.exportBuildContent()).globals).toEqual([]);
+  expect(await store.loadPublicMedia("media-1")).toBeNull();
+  expect(unpublished.entry.draft.revision).toBe(4);
+});
 
 test("unpublishes guarded publications idempotently and keeps the draft", async () => {
   const { post, store, useCases } = await lifecycleFixture();
@@ -2171,4 +2306,579 @@ test("in-memory public reads expose published values and published media only", 
     expect(value.entry.draft.title).toBe("Original");
     expect(JSON.stringify(value)).not.toContain("DRAFT ONLY");
   }
+});
+
+async function seoConfig({ posts = {}, notes = {} } = {}) {
+  return defineConfig({
+    content: [
+      defineCollection({
+        fields: { cover: field.media(), summary: field.textarea() },
+        key: "posts",
+        route: "/blog/:slug",
+        seo: { description: "summary", image: "cover" },
+        version: 1,
+        ...posts,
+      }),
+      defineCollection({
+        fields: { summary: field.text() },
+        key: "notes",
+        route: "/notes/:slug",
+        version: 1,
+        ...notes,
+      }),
+    ],
+  });
+}
+
+async function seoFixture(prefix = "seo") {
+  const config = await seoConfig();
+  const store = new InMemoryContentStore();
+  for (const id of ["media-1", "media-2"]) {
+    await store.createMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      height: 1,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      storageKey: `media/${id}.png`,
+      width: 1,
+    });
+  }
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(10)),
+    config: config.runtime,
+    content: store,
+    idGenerator: new DeterministicIdGenerator(prefix),
+    media: store,
+  });
+  const sync = async (models) => {
+    const prepared = await prepareConfigurationSynchronization({ models, state: store });
+    if (!prepared.plan.isValid) return prepared;
+    await applyPreparedConfigurationSynchronization({
+      clock: new DeterministicClock(unixMilliseconds(20)),
+      ids: new DeterministicIdGenerator(`${prefix}-sync`),
+      models,
+      prepared,
+      target: store,
+    });
+    return prepared;
+  };
+  await sync(config.runtime.content);
+  return { config, store, sync, useCases };
+}
+
+const seoPost = (title, slug, seo) => ({
+  blocks: [],
+  fields: { summary: title },
+  ...(seo === undefined ? {} : { seo }),
+  slug,
+  title,
+});
+
+test("content use cases carry the SEO group through save, publish, revert and duplicate", async () => {
+  const { store, useCases } = await seoFixture();
+  const viewer = { id: actorId("viewer"), role: "viewer" };
+  const created = await useCases.create({
+    actor: editor,
+    modelKey: "posts",
+    ...seoPost("A", "a", {
+      canonical: " https://example.com/a ",
+      image: "media-1",
+      noindex: false,
+      title: "  Hello  ",
+    }),
+  });
+  expect(created.draft.seo).toEqual({
+    canonical: "https://example.com/a",
+    image: "media-1",
+    title: "Hello",
+  });
+  expect(store.mediaReferences(created.draft.id)).toEqual([
+    { fieldPath: "image", mediaId: "media-1", sourceKey: "$seo" },
+  ]);
+  const { entry: published } = await useCases.publish({
+    actor: admin,
+    entryId: created.id,
+    expectedRevision: 1,
+  });
+  expect(published.published.seo).toEqual(created.draft.seo);
+  expect(store.mediaReferences(published.published.id)).toEqual([
+    { fieldPath: "image", mediaId: "media-1", sourceKey: "$seo" },
+  ]);
+  const publicEntry = await store.loadPublic("/blog/a");
+  expect(publicEntry.entry.published.seo).toEqual(created.draft.seo);
+  expect(publicEntry.media.map((media) => media.id)).toEqual(["media-1"]);
+  expect(await store.loadPublicMedia(mediaId("media-1"))).not.toBeNull();
+  expect(
+    (await store.loadMediaUsage({ limit: 50, mediaId: mediaId("media-1") }))[0].locations,
+  ).toEqual([{ field: "image", source: "seo", states: ["draft", "published"] }]);
+
+  const cleared = await useCases.save({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+    ...seoPost("A", "a"),
+  });
+  expect(cleared.draft).not.toHaveProperty("seo");
+  expect(store.mediaReferences(cleared.draft.id)).toEqual([]);
+
+  await expect(
+    useCases.revertDraft({ actor: viewer, entryId: created.id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  const reverted = await useCases.revertDraft({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 2,
+  });
+  expect(reverted.draft.seo).toEqual(created.draft.seo);
+  expect(store.mediaReferences(reverted.draft.id)).toEqual([
+    { fieldPath: "image", mediaId: "media-1", sourceKey: "$seo" },
+  ]);
+
+  const copy = await useCases.duplicate({ actor: editor, entryId: created.id });
+  expect(copy.draft.seo).toEqual(created.draft.seo);
+  expect(store.mediaReferences(copy.draft.id)).toEqual([
+    { fieldPath: "image", mediaId: "media-1", sourceKey: "$seo" },
+  ]);
+  await expect(
+    useCases.save({
+      actor: viewer,
+      entryId: created.id,
+      expectedRevision: 3,
+      ...seoPost("A", "a", { title: "x" }),
+    }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+});
+
+test("content use cases refuse SEO for models without it and unavailable SEO images", async () => {
+  const { store, useCases } = await seoFixture();
+  let writes = 0;
+  const create = store.create.bind(store);
+  store.create = async (input) => {
+    writes++;
+    return create(input);
+  };
+  await expect(
+    useCases.create({ actor: editor, modelKey: "notes", ...seoPost("N", "n", { title: "x" }) }),
+  ).rejects.toMatchObject({
+    issues: [{ code: "seo_not_allowed", path: ["seo"] }],
+  });
+  await expect(
+    useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...seoPost("P", "p", { canonical: "/relative" }),
+    }),
+  ).rejects.toMatchObject({
+    issues: [{ code: "invalid_canonical_url", path: ["seo", "canonical"] }],
+  });
+  await expect(
+    useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...seoPost("P", "p", { image: "media-missing" }),
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(writes).toBe(0);
+  const note = await useCases.create({
+    actor: editor,
+    modelKey: "notes",
+    ...seoPost("N", "n", null),
+  });
+  expect(note.draft).not.toHaveProperty("seo");
+});
+
+test("the SEO image counts toward the media-reference limit", async () => {
+  const config = await defineConfig({
+    blocks: [defineBlock({ fields: { image: field.media() }, type: "asset", version: 1 })],
+    content: [
+      defineCollection({
+        blocks: ["asset"],
+        key: "posts",
+        route: "/blog/:slug",
+        seo: true,
+        version: 1,
+      }),
+    ],
+  });
+  let reads = 0;
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(1)),
+    config: config.runtime,
+    content: new InMemoryContentStore(),
+    idGenerator: new DeterministicIdGenerator("seo-refs"),
+    media: {
+      loadMedia: async () => null,
+      loadMediaMany: async () => {
+        reads++;
+        return [];
+      },
+    },
+  });
+  const blocks = Array.from({ length: 200 }, (_, index) => ({
+    data: { image: "same-id" },
+    key: `block-${index}`,
+    position: (index + 1) * 1000,
+    schemaVersion: 1,
+    type: "asset",
+  }));
+  await expect(
+    useCases.create({
+      actor: editor,
+      blocks,
+      fields: {},
+      modelKey: "posts",
+      seo: { image: "same-id" },
+      title: "Too many references",
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(reads).toBe(0);
+});
+
+test("the publication fingerprint covers the SEO group", async () => {
+  const fingerprints = [];
+  for (const seo of [undefined, { title: "Hello" }]) {
+    const { store, useCases } = await seoFixture("fingerprint");
+    const publish = store.publish.bind(store);
+    store.publish = async (input) => {
+      fingerprints.push(input.idempotency.fingerprint);
+      return publish(input);
+    };
+    const created = await useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...seoPost("A", "a", seo),
+    });
+    await useCases.publish({
+      actor: admin,
+      entryId: created.id,
+      expectedRevision: 1,
+      idempotencyKey: "publish-1",
+    });
+  }
+  expect(fingerprints).toHaveLength(2);
+  expect(fingerprints[0]).not.toBe(fingerprints[1]);
+});
+
+test("synchronization enables, refuses, prunes and remaps SEO", async () => {
+  const { store, sync, useCases } = await seoFixture();
+  const first = await useCases.create({
+    actor: editor,
+    modelKey: "posts",
+    ...seoPost("A", "a", { image: "media-1", title: "A" }),
+  });
+  await useCases.publish({ actor: admin, entryId: first.id, expectedRevision: 1 });
+  await useCases.create({
+    actor: editor,
+    modelKey: "posts",
+    ...seoPost("B", "b", { description: "B" }),
+  });
+  await useCases.create({ actor: editor, modelKey: "notes", ...seoPost("N", "n") });
+
+  // Enabling SEO on a populated model is compatible.
+  const enabled = await sync(
+    (await seoConfig({ notes: { seo: true, version: 2 } })).runtime.content,
+  );
+  expect(enabled.plan.diagnostics).toEqual([]);
+  expect(
+    enabled.plan.operations.find((operation) => operation.model.key === "notes").evolution.changes,
+  ).toMatchObject([{ class: "compatible", kind: "seo-enabled", target: "seo" }]);
+
+  // A mapping-only change is projection-only and advances public state.
+  const version = await store.publishedContentVersion();
+  const remapped = await sync(
+    (await seoConfig({ notes: { seo: true, version: 2 }, posts: { seo: true } })).runtime.content,
+  );
+  expect(remapped.plan.operations).toMatchObject([
+    { action: "label-update", model: { key: "posts" } },
+  ]);
+  expect(await store.publishedContentVersion()).toBe(version + 1);
+
+  // Disabling SEO with stored values needs the hint.
+  const refused = await sync(
+    (await seoConfig({ notes: { seo: true, version: 2 }, posts: { seo: false, version: 2 } }))
+      .runtime.content,
+  );
+  expect(refused.plan.isValid).toBe(false);
+  expect(refused.plan.diagnostics).toMatchObject([
+    { affectedCount: 3, code: "SEO_REMOVAL_HAS_DATA", modelKey: "posts" },
+  ]);
+  expect(refused.plan.diagnostics[0].message).toMatch(/draft=2, published=1/u);
+  expect((await useCases.load({ actor: admin, entryId: first.id })).draft.seo).toEqual({
+    image: "media-1",
+    title: "A",
+  });
+
+  // The hint prunes every SEO group and SEO media reference of the model.
+  const before = await store.publishedContentVersion();
+  const pruned = await sync(
+    (
+      await seoConfig({
+        notes: { seo: true, version: 2 },
+        posts: { removedSeo: true, seo: false, version: 2 },
+      })
+    ).runtime.content,
+  );
+  expect(pruned.plan.isValid).toBe(true);
+  const after = await useCases.load({ actor: admin, entryId: first.id });
+  expect(after.draft).not.toHaveProperty("seo");
+  expect(after.published).not.toHaveProperty("seo");
+  expect(after.draft.revision).toBe(1);
+  expect(store.mediaReferences(after.draft.id)).toEqual([]);
+  expect(store.mediaReferences(after.published.id)).toEqual([]);
+  expect(await store.loadMediaUsage({ limit: 50, mediaId: mediaId("media-1") })).toEqual([]);
+  expect(await store.publishedContentVersion()).toBe(before + 1);
+
+  // Disabling without data needs no hint, and a leftover hint is inert.
+  const disabled = await sync(
+    (
+      await seoConfig({
+        notes: { version: 3 },
+        posts: { removedSeo: true, seo: false, version: 2 },
+      })
+    ).runtime.content,
+  );
+  expect(disabled.plan).toMatchObject({ diagnostics: [], isValid: true });
+});
+
+const panelBlock = defineBlock({
+  fields: { heading: field.text({ required: true }), image: field.media() },
+  settings: {
+    align: field.select({ defaultValue: "left", options: ["left", "center"] }),
+    boxed: field.boolean({ defaultValue: false }),
+  },
+  type: "panel",
+  version: 1,
+});
+
+async function envelopeFixture(prefix = "envelope") {
+  const config = await defineConfig({
+    blocks: [panelBlock],
+    content: [
+      defineCollection({ blocks: ["panel"], key: "posts", route: "/blog/:slug", version: 1 }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  for (const id of ["media-1", "media-2"]) {
+    await store.createMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      height: 1,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      storageKey: `media/${id}.png`,
+      width: 1,
+    });
+  }
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(10)),
+    config: config.runtime,
+    content: store,
+    idGenerator: new DeterministicIdGenerator(prefix),
+    media: store,
+  });
+  const prepared = await prepareConfigurationSynchronization({
+    models: config.runtime.content,
+    state: store,
+  });
+  await applyPreparedConfigurationSynchronization({
+    clock: new DeterministicClock(unixMilliseconds(5)),
+    ids: new DeterministicIdGenerator(`${prefix}-sync`),
+    models: config.runtime.content,
+    prepared,
+    target: store,
+  });
+  return { store, useCases };
+}
+
+const panel = (key, position, envelope = {}, data = { heading: key }) => ({
+  data,
+  key,
+  position,
+  schemaVersion: 1,
+  type: "panel",
+  ...envelope,
+});
+
+const envelopePost = (blocks) => ({ blocks, fields: {}, slug: "a", title: "A" });
+
+test("content use cases carry block envelopes through save, publish, revert and duplicate", async () => {
+  const { store, useCases } = await envelopeFixture();
+  const created = await useCases.create({
+    actor: editor,
+    modelKey: "posts",
+    ...envelopePost([
+      panel("b1", 1000, {
+        anchor: "pricing",
+        className: " wide  wide ",
+        settings: { boxed: true },
+      }),
+      panel("b2", 2000, { hidden: true }, { image: "media-2" }),
+      panel("b3", 3000, {}, { heading: "Shown", image: "media-1" }),
+    ]),
+  });
+  const [first, hidden, plain] = created.draft.blocks;
+  expect(first).toMatchObject({
+    anchor: "pricing",
+    className: "wide",
+    hidden: false,
+    settings: { align: "left", boxed: true },
+  });
+  // Omitted envelope values take their defaults.
+  expect(plain).toMatchObject({ hidden: false, settings: { align: "left", boxed: false } });
+  expect(plain).not.toHaveProperty("anchor");
+  expect(hidden).toMatchObject({ data: { image: "media-2" }, hidden: true });
+  // Hidden-block media stays referenced.
+  expect(store.mediaReferences(created.draft.id)).toEqual([
+    { fieldPath: "image", mediaId: "media-2", sourceKey: "b2" },
+    { fieldPath: "image", mediaId: "media-1", sourceKey: "b3" },
+  ]);
+
+  // The hidden block lacks its required heading, yet publication succeeds.
+  const { entry: published } = await useCases.publish({
+    actor: admin,
+    entryId: created.id,
+    expectedRevision: 1,
+  });
+  expect(published.published.blocks).toEqual(created.draft.blocks);
+  const publicEntry = await store.loadPublic("/blog/a");
+  expect(publicEntry.entry.published.blocks.map((block) => block.key)).toEqual(["b1", "b3"]);
+  expect(publicEntry.media.map((media) => media.id)).toEqual(["media-1"]);
+  expect(await store.loadPublicMedia(mediaId("media-2"))).toBeNull();
+  expect(await store.loadPublicMedia(mediaId("media-1"))).not.toBeNull();
+
+  const unhidden = await useCases.save({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 1,
+    ...envelopePost([
+      panel("b1", 1000, { settings: { align: "center" } }),
+      panel("b2", 2000, {}, { image: "media-2" }),
+    ]),
+  });
+  expect(unhidden.draft.blocks[0]).not.toHaveProperty("anchor");
+  await expect(
+    useCases.publish({ actor: admin, entryId: created.id, expectedRevision: 2 }),
+  ).rejects.toMatchObject({
+    issues: [{ code: "missing_required_field", path: ["blocks", 1, "data", "heading"] }],
+  });
+  expect((await store.loadPublic("/blog/a")).entry.published.id).toBe(published.published.id);
+
+  const reverted = await useCases.revertDraft({
+    actor: editor,
+    entryId: created.id,
+    expectedRevision: 2,
+  });
+  expect(reverted.draft.blocks).toEqual(published.published.blocks);
+
+  const copy = await useCases.duplicate({ actor: editor, entryId: created.id });
+  expect(copy.draft.blocks.map(({ key: _key, ...rest }) => rest)).toEqual(
+    reverted.draft.blocks.map(({ key: _key, ...rest }) => rest),
+  );
+  expect(copy.draft.blocks.map((block) => block.key)).not.toContain("b1");
+});
+
+test("content use cases refuse invalid block envelopes before writing", async () => {
+  const { store, useCases } = await envelopeFixture();
+  let writes = 0;
+  const create = store.create.bind(store);
+  store.create = async (input) => {
+    writes++;
+    return create(input);
+  };
+  const refused = async (blocks, issue) =>
+    expect(
+      useCases.create({ actor: editor, modelKey: "posts", ...envelopePost(blocks) }),
+    ).rejects.toMatchObject({ issues: [issue] });
+  await refused([panel("b1", 1000, { anchor: "faq" }), panel("b2", 2000, { anchor: "faq" })], {
+    code: "duplicate_block_anchor",
+    path: ["blocks", 1, "anchor"],
+  });
+  await refused([panel("b1", 1000, { anchor: "FAQ" })], {
+    code: "invalid_block_anchor",
+    path: ["blocks", 0, "anchor"],
+  });
+  await refused([panel("b1", 1000, { settings: { width: 2 } })], {
+    code: "unknown_field",
+    path: ["blocks", 0, "settings", "width"],
+  });
+  await expect(
+    useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...envelopePost([panel("b1", 1000, { hidden: true }, { image: "media-missing" })]),
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(writes).toBe(0);
+});
+
+test("hidden-block media counts toward the media-reference limit", async () => {
+  const config = await defineConfig({
+    blocks: [
+      defineBlock({
+        fields: { cover: field.media(), image: field.media() },
+        type: "pair",
+        version: 1,
+      }),
+    ],
+    content: [
+      defineCollection({ blocks: ["pair"], key: "posts", route: "/blog/:slug", version: 1 }),
+    ],
+  });
+  let reads = 0;
+  const useCases = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(1)),
+    config: config.runtime,
+    content: new InMemoryContentStore(),
+    idGenerator: new DeterministicIdGenerator("envelope-refs"),
+    media: {
+      loadMedia: async () => null,
+      loadMediaMany: async () => {
+        reads++;
+        return [];
+      },
+    },
+  });
+  // 101 blocks, every one hidden, hold 202 references.
+  const blocks = Array.from({ length: 101 }, (_, index) => ({
+    data: { cover: "same-id", image: "same-id" },
+    hidden: true,
+    key: `block-${index}`,
+    position: (index + 1) * 1000,
+    schemaVersion: 1,
+    type: "pair",
+  }));
+  await expect(
+    useCases.create({ actor: editor, blocks, fields: {}, modelKey: "posts", title: "Many" }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(reads).toBe(0);
+});
+
+test("the publication fingerprint covers the block envelope", async () => {
+  const fingerprints = [];
+  for (const hidden of [false, true]) {
+    const { store, useCases } = await envelopeFixture("envelope-fingerprint");
+    const publish = store.publish.bind(store);
+    store.publish = async (input) => {
+      fingerprints.push(input.idempotency.fingerprint);
+      return publish(input);
+    };
+    const created = await useCases.create({
+      actor: editor,
+      modelKey: "posts",
+      ...envelopePost([panel("b1", 1000, { hidden })]),
+    });
+    await useCases.publish({
+      actor: admin,
+      entryId: created.id,
+      expectedRevision: 1,
+      idempotencyKey: "publish-1",
+    });
+  }
+  expect(fingerprints).toHaveLength(2);
+  expect(fingerprints[0]).not.toBe(fingerprints[1]);
 });

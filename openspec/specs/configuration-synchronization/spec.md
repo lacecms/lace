@@ -212,12 +212,13 @@ drafts, published snapshots and blocks.
 
 ### Requirement: Synchronization creates page singletons and advances public projection state
 The system SHALL create one draft-only singleton entry for every newly created
-page model in the same guarded atomic operation as its model identity. That
-entry SHALL use the configured model defaults, an empty block list, a `NULL`
-slug, the model label (or its stable key when no optional label is configured)
-as its title, and `system:content-sync` as its audit actor; it MAY omit
-required model fields until publication. Collections SHALL NOT receive an entry
-from synchronization. If one or more committed operations change a serializable
+page model and every newly created global model in the same guarded atomic
+operation as its model identity. That entry SHALL use the configured model
+defaults, an empty block list, a `NULL` slug, the model label (or its stable
+key when no optional label is configured) as its title, and
+`system:content-sync` as its audit actor; it MAY omit required model fields
+until publication. Collections SHALL NOT receive an entry from
+synchronization. If one or more committed operations change a serializable
 configuration projection visible to public consumers or rewrite a published
 snapshot, the operation SHALL increment the global published-state version and
 create or coalesce exactly one pending site-build request for that version in
@@ -230,6 +231,14 @@ baselines SHALL NOT advance the version or enqueue build work.
   configured defaults, empty blocks, `NULL` slug, model-label title, and
   `system:content-sync` audit values
 
+#### Scenario: New global receives one system draft
+- **WHEN** synchronization creates a global model that has no persisted
+  identity
+- **THEN** it commits the model with kind `global` and exactly one unpublished
+  singleton draft entry with the configured defaults, empty blocks, `NULL`
+  slug, model-label title, and `system:content-sync` audit values, and no
+  published route
+
 #### Scenario: Projection-changing apply coalesces build work
 - **WHEN** an atomic synchronization applies one or more operations that change
   a public configuration projection while a pending unlocked site-build request
@@ -238,7 +247,7 @@ baselines SHALL NOT advance the version or enqueue build work.
   site-build request targeting the new version
 
 #### Scenario: Failed page creation rolls back the identity update
-- **WHEN** a new page model cannot create its singleton draft during
+- **WHEN** a new page or global model cannot create its singleton draft during
   synchronization
 - **THEN** neither the model identity nor any public-state or outbox change is
   committed
@@ -298,3 +307,78 @@ preparation fail before any scan or write.
 - **WHEN** preparation receives a registry that lacks a block type a
   configured model allows
 - **THEN** preparation fails before reading snapshots and nothing is written
+
+### Requirement: Synchronization refuses kind changes between all model kinds
+The planner SHALL treat a change of a stored model's kind between `page`,
+`collection` and `global` as an incompatible change that permits no apply, both
+for a model matched by key and for a `renamedFrom` rename whose former and new
+kinds differ. A global removal SHALL follow the same rule as any model
+removal: it is blocked while the stored model has entries, so a synchronized
+global cannot be removed while its singleton exists.
+
+#### Scenario: A page becomes a global
+- **WHEN** a stored page model `settings` is configured as a global with the
+  same key
+- **THEN** the plan reports an incompatible kind change and apply is refused
+  without writing
+
+#### Scenario: A rename changes the kind
+- **WHEN** a new global declares `renamedFrom` naming a stored collection
+- **THEN** the plan is invalid with the rename-kind diagnostic
+
+#### Scenario: A configured global is removed
+- **WHEN** a stored global with its singleton entry is absent from
+  configuration
+- **THEN** the plan marks the removal blocked by existing entries
+
+### Requirement: Synchronization classifies enabling and disabling SEO
+Synchronization SHALL treat enabling `seo` on a page or collection as a
+compatible structural change. It is applied without touching stored
+snapshots, and like every structural change it requires a version increase.
+Synchronization SHALL treat disabling `seo` as a destructive structural
+change:
+
+- when no draft or published snapshot of the model holds an SEO group, it is
+  applied;
+- when snapshots hold SEO groups and the model does not declare
+  `removedSeo: true`, the plan is refused with diagnostic
+  `SEO_REMOVAL_HAS_DATA`, which counts the draft and published holders, names
+  up to 20 of them and tells the operator to declare `removedSeo: true`;
+- with the hint, apply clears the SEO group of every snapshot of the model and
+  deletes their `$seo` media references in the same guarded mutation that
+  records the model. It does not change revisions, audit actors or
+  timestamps.
+
+A `removedSeo` hint on a model whose baseline did not enable SEO SHALL be
+inert. Changing a fallback mapping or `seoDefaults` SHALL be a projection-only
+change that needs no version increase and advances the published version like
+other projection changes. Evidence for these decisions SHALL come from the
+same bounded snapshot scan as other data-dependent decisions, and apply SHALL
+reject the plan when a snapshot changed after planning.
+
+#### Scenario: Enable SEO on a populated model
+- **WHEN** `posts` with published entries gains `seo: true` and a version
+  increase
+- **THEN** the plan applies, stored snapshots are unchanged and the baseline
+  records SEO enabled
+
+#### Scenario: Refuse disabling SEO with data and no hint
+- **WHEN** `posts` drops `seo` with a version increase while two drafts and one
+  published snapshot hold SEO groups
+- **THEN** the plan is refused with `SEO_REMOVAL_HAS_DATA`, reports two drafts
+  and one published snapshot, and nothing is written
+
+#### Scenario: Prune SEO with the hint
+- **WHEN** the same change declares `removedSeo: true` and sync applies
+- **THEN** no snapshot of `posts` holds an SEO group or a `$seo` media
+  reference, revisions are unchanged and the published version advances once
+
+#### Scenario: Disable SEO without data
+- **WHEN** `notes` drops `seo` with a version increase and no snapshot holds an
+  SEO group
+- **THEN** the plan applies without the hint
+
+#### Scenario: A mapping change needs no version bump
+- **WHEN** only the `seo.description` mapping of `posts` changes
+- **THEN** the plan updates the projection without a version increase, and
+  applying it advances the published version

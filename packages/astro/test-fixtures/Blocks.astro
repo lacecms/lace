@@ -1,0 +1,13 @@
+---
+import LaceBlocks from "../src/LaceBlocks.astro";
+import type { BlockMap, RenderableEntry } from "@lacecms/render";
+
+interface Props {
+  readonly blocks: BlockMap;
+  readonly entry: RenderableEntry;
+}
+
+const { blocks, entry } = Astro.props;
+---
+
+<main><LaceBlocks blocks={blocks} entry={entry} mediaUrl={(id: string) => id} /></main>

@@ -547,8 +547,15 @@ async function nodeJourney(context) {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Published rich text" }] }],
   };
+  // The hero carries an anchor and an editor class; a hidden quote is stored and
+  // published but must never reach the built site.
   const blocks = [
-    { type: "hero", data: { heading: "Published hero", image: mediaId } },
+    {
+      type: "hero",
+      anchor: "intro",
+      className: "hero--wide",
+      data: { heading: "Published hero", image: mediaId },
+    },
     { type: "richText", data: { content: richText } },
     {
       type: "image",
@@ -559,6 +566,7 @@ async function nodeJourney(context) {
       type: "cta",
       data: { heading: "Published call to action", actionLabel: "Home", actionUrl: "/" },
     },
+    { type: "quote", hidden: true, data: { quote: "Hidden acceptance quote" } },
   ].map((block, index) => {
     const schemaVersion = blockVersions.get(block.type);
     if (schemaVersion === undefined) throw new Error(`edit: posts does not allow ${block.type}`);
@@ -637,9 +645,14 @@ async function nodeJourney(context) {
     if (!html.includes(`data-lace-block="${type}"`))
       throw new Error(`astro-build: missing ${type}`);
   }
+  if (!/<section class="hero hero--wide" [^>]*\bid="intro"/u.test(html))
+    throw new Error("astro-build: hero anchor or editor class missing");
+  const hiddenKey = blocks.find((block) => block.hidden === true)?.key ?? "";
+  if (html.includes("Hidden acceptance quote") || html.includes(hiddenKey))
+    throw new Error("astro-build: hidden block rendered");
   if (html.includes(buildToken)) throw new Error("astro-build: exposed build token");
   console.info(
-    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish and Astro build passed",
+    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish with block envelopes and Astro build passed",
   );
   return { base, cookie, png, entryId, mediaId, blocks, buildToken, token, password, email };
 }
@@ -971,45 +984,81 @@ async function starterJourney(project) {
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
   );
   exported.entries = exported.entries.slice(0, 2);
+  exported.globals = [
+    {
+      blocks: [],
+      fields: {
+        description: "Acceptance site description",
+        image: "hero-media",
+        siteName: "Acceptance Studio",
+        tagline: "Built from the packed starter",
+      },
+      id: "settings-entry",
+      modelKey: "settings",
+      publishedAt: "2026-09-20T00:00:00.000Z",
+    },
+  ];
+  // The starter's SEO mappings: posts fall back to `summary`, settings holds the defaults.
+  exported.seo = {
+    defaults: {
+      description: "description",
+      image: "image",
+      modelKey: "settings",
+      siteName: "siteName",
+      titleTemplate: null,
+    },
+    models: {
+      home: { description: null, image: null },
+      posts: { description: "summary", image: null },
+    },
+  };
+  const siteUrl = "https://starter.example/";
   const token = `lace_build_${randomBytes(16).toString("hex")}`;
   secretValues.add(token);
-  let requests = 0;
-  const server = createHttpServer((request, response) => {
-    requests++;
-    if (
-      request.url !== "/api/v1/public/build-export" ||
-      request.headers.authorization !== `Bearer ${token}`
-    ) {
-      response.writeHead(403, { "content-type": "application/json" });
-      response.end(JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }));
-      return;
-    }
-    response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
-    response.end(JSON.stringify(exported));
-  });
-  await new Promise((done, fail) => {
-    server.once("error", fail);
-    server.listen(0, "127.0.0.1", done);
-  });
-  try {
-    await run("starter-build", "pnpm", ["build"], {
-      cwd: project,
-      env: {
-        ASTRO_TELEMETRY_DISABLED: "1",
-        LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
-        LACE_BUILD_TOKEN: token,
-        LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
-      },
+  const pages = ["site/dist/index.html", "site/dist/blog/first-post/index.html"];
+  const build = async (label, body, siteEnvironment) => {
+    let requests = 0;
+    const server = createHttpServer((request, response) => {
+      requests++;
+      if (
+        request.url !== "/api/v1/public/build-export" ||
+        request.headers.authorization !== `Bearer ${token}`
+      ) {
+        response.writeHead(403, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }),
+        );
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
+      response.end(JSON.stringify(body));
     });
-  } finally {
-    await new Promise((done) => server.close(done));
-  }
-  if (requests !== 1) throw new Error(`starter-build: expected one export read, saw ${requests}`);
+    await new Promise((done, fail) => {
+      server.once("error", fail);
+      server.listen(0, "127.0.0.1", done);
+    });
+    try {
+      await run(label, "pnpm", ["build"], {
+        cwd: project,
+        env: {
+          ASTRO_TELEMETRY_DISABLED: "1",
+          LACE_API_BASE_URL: `http://127.0.0.1:${server.address().port}/`,
+          LACE_BUILD_TOKEN: token,
+          LACE_PUBLIC_BASE_URL: "https://public.example/lace/",
+          LACE_SITE_INDEXING: "",
+          ...siteEnvironment,
+        },
+      });
+    } finally {
+      await new Promise((done) => server.close(done));
+    }
+    if (requests !== 1) throw new Error(`${label}: expected one export read, saw ${requests}`);
+    return Promise.all(pages.map((page) => readFile(join(project, page), "utf8")));
+  };
+
+  const published = await build("starter-build", exported, { LACE_BUILD_SITE_URL: siteUrl });
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
-  const html = [
-    await readFile(join(project, "site/dist/index.html"), "utf8"),
-    await readFile(join(project, "site/dist/blog/first-post/index.html"), "utf8"),
-  ].join("\n");
+  const html = published.join("\n");
   for (const type of ["hero", "richText", "image", "quote", "cta"]) {
     if (!html.includes(`data-lace-block="${type}"`))
       throw new Error(`starter-build: missing ${type}`);
@@ -1023,8 +1072,78 @@ async function starterJourney(project) {
     !html.includes('<img alt="A durable media URL" data-lace-part="media" height="600"')
   )
     throw new Error("starter-build: resolved media alt text, dimensions or focal point missing");
+  // The fixture home hero links to the anchored, classed call to action.
+  if (
+    !published[0].includes('<a href="#get-started">See how to start</a>') ||
+    !published[0].includes(
+      '<aside class="cta cta--highlight" data-lace-block="cta" data-lace-block-key="home-cta" id="get-started">',
+    ) ||
+    published[0].split('id="get-started"').length !== 2
+  )
+    throw new Error("starter-build: block anchor, editor class or in-page link missing");
+  for (const page of published) {
+    if (
+      !page.includes('<a class="site-name" href="/">Acceptance Studio</a>') ||
+      !page.includes('<p class="site-tagline">Built from the packed starter</p>')
+    )
+      throw new Error("starter-build: published settings global missing from the site header");
+  }
+  const [home, post] = published;
+  if (
+    !home.includes("<title>Lace starter | Acceptance Studio</title>") ||
+    !home.includes('<meta content="Acceptance site description" name="description">') ||
+    !home.includes(`<link href="${siteUrl}" rel="canonical">`) ||
+    !home.includes(
+      '<meta content="https://public.example/lace/api/v1/public/media/hero-media" property="og:image">',
+    )
+  )
+    throw new Error("starter-build: home head metadata from the settings defaults missing");
+  if (
+    !post.includes(
+      '<meta content="How the reference site renders published posts." name="description">',
+    ) ||
+    !post.includes('<meta content="article" property="og:type">') ||
+    !post.includes(`<link href="${siteUrl}blog/first-post" rel="canonical">`)
+  )
+    throw new Error("starter-build: post head metadata missing");
+  const sitemap = await readFile(join(project, "site/dist/sitemap.xml"), "utf8");
+  if (
+    !sitemap.includes(`<loc>${siteUrl}</loc>`) ||
+    !sitemap.includes(`<loc>${siteUrl}blog/first-post</loc>`) ||
+    sitemap.split("<loc>").length !== 3
+  )
+    throw new Error("starter-build: sitemap.xml does not list the home page and the post");
+  if (
+    (await readFile(join(project, "site/dist/robots.txt"), "utf8")) !==
+    `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}sitemap.xml\n`
+  )
+    throw new Error("starter-build: robots.txt does not name the sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
-  console.info("Packed starter installed, typechecked and built all five blocks");
+
+  // Without a published global the header falls back to the layout's static values.
+  const { globals: _globals, ...withoutGlobals } = exported;
+  for (const page of await build("starter-build-without-globals", withoutGlobals, {
+    LACE_BUILD_SITE_URL: "",
+  })) {
+    if (
+      !page.includes('<a class="site-name" href="/">Lace starter</a>') ||
+      page.includes('<p class="site-tagline">') ||
+      page.includes("Acceptance Studio")
+    )
+      throw new Error("starter-build-without-globals: static site header fallback missing");
+    if (!page.includes("<title>") || page.includes('rel="canonical"') || page.includes("og:url"))
+      throw new Error("starter-build-without-globals: head metadata without a site URL is wrong");
+  }
+  if (await stat(join(project, "site/dist/sitemap.xml")).catch(() => undefined))
+    throw new Error("starter-build-without-globals: sitemap.xml written without a site URL");
+  if (
+    (await readFile(join(project, "site/dist/robots.txt"), "utf8")) !== "User-agent: *\nAllow: /\n"
+  )
+    throw new Error("starter-build-without-globals: robots.txt is not allow-all without a sitemap");
+  await scanTree(join(project, "site/dist"), secretValues, "starter static output");
+  console.info(
+    "Packed starter installed, typechecked and built all five blocks, block anchors and SEO output with and without a published global and site URL",
+  );
 }
 
 async function environmentPreparation(project) {

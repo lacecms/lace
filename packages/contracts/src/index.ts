@@ -1,10 +1,20 @@
-import { canonicalizeJson, defineBlock, field, toBlockMetadata } from "@lacecms/content";
+import {
+  canonicalizeJson,
+  defineBlock,
+  field,
+  isBlockAnchor,
+  normalizeBlockClassName,
+  toBlockMetadata,
+} from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
 import {
   BlockOrderError,
   DomainError,
+  isCanonicalUrl,
   isMediaFocalCoordinate,
+  MAX_SEO_CANONICAL_LENGTH,
   normalizeMediaText,
+  normalizeSeoText,
   unixMilliseconds,
   siteBuildFailureReasons,
   siteBuildProviderStages,
@@ -21,6 +31,7 @@ import type {
   ContentModelRoute,
   ContentSnapshot,
   DomainErrorCode,
+  EntrySeo,
   MediaFocalPoint,
   SiteBuildProviderStage,
   SiteBuildState,
@@ -143,6 +154,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     "description",
     "fields",
     "label",
+    "settings",
     "type",
     "version",
   ]);
@@ -156,6 +168,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     (value.label !== undefined && typeof value.label !== "string") ||
     (value.description !== undefined && typeof value.description !== "string") ||
     !isFieldMetadataMap(value.fields) ||
+    (value.settings !== undefined && !isFieldMetadataMap(value.settings)) ||
     (value.defaultValue !== undefined && !isJsonObject(value.defaultValue))
   ) {
     return false;
@@ -166,6 +179,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
       ...(value.description === undefined ? {} : { description: value.description }),
       fields: value.fields,
       ...(value.label === undefined ? {} : { label: value.label }),
+      ...(value.settings === undefined ? {} : { settings: value.settings }),
       type: value.type,
       version: value.version,
     });
@@ -181,7 +195,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
 function hasValidListFields<
   Value extends {
     readonly fields: FieldMetadataMapDto;
-    readonly kind: "collection" | "page";
+    readonly kind: ContentModelKind;
     readonly listFields?: readonly string[] | undefined;
   },
 >(value: Value): boolean {
@@ -192,6 +206,17 @@ function hasValidListFields<
     new Set(value.listFields).size === value.listFields.length &&
     value.listFields.every((key) => Object.hasOwn(value.fields, key))
   );
+}
+
+/** A global is route-less: it carries neither a page path nor a collection route. */
+function hasGlobalRouting<
+  Value extends {
+    readonly kind: ContentModelKind;
+    readonly path?: string | undefined;
+    readonly route?: string | undefined;
+  },
+>(value: Value): boolean {
+  return value.kind !== "global" || (value.path === undefined && value.route === undefined);
 }
 
 function hasMatchingBlockDefinitions<
@@ -251,6 +276,7 @@ export function versionFromEntityTag(value: string): number {
 export const contentModelRouteSchema = v.union([
   v.strictObject({ kind: v.literal("page"), key: identifierSchema, path: v.string() }),
   v.strictObject({ kind: v.literal("collection"), key: identifierSchema, route: v.string() }),
+  v.strictObject({ kind: v.literal("global"), key: identifierSchema }),
 ]);
 
 export const actorSchema = v.strictObject({
@@ -258,12 +284,157 @@ export const actorSchema = v.strictObject({
   role: v.picklist(["admin", "editor", "viewer"]),
 });
 
-export const contentBlockSchema = v.strictObject({
+export {
+  isBlockAnchor,
+  MAX_BLOCK_ANCHOR_LENGTH,
+  MAX_BLOCK_CLASS_NAME_LENGTH,
+  MAX_BLOCK_CLASS_TOKENS,
+  normalizeBlockClassName,
+} from "@lacecms/content";
+
+/**
+ * Presentation values shared by admin and public blocks. Omitted settings
+ * parse as `{}`; the API always sends them.
+ */
+/** A block settings record of JSON values. */
+export type BlockSettingsDto = Readonly<Record<string, unknown>>;
+
+/**
+ * Block settings; a missing value parses as `{}`. The schema is typed as a
+ * plain record because a default over the recursive JSON object type exceeds
+ * TypeScript's instantiation depth.
+ */
+const blockSettingsSchema = v.optional(
+  v.custom<BlockSettingsDto>(isJsonObject),
+  (): BlockSettingsDto => ({}),
+);
+
+const blockEnvelopeEntries = {
+  anchor: v.optional(
+    v.pipe(
+      v.string(),
+      v.check(
+        (value: string) => isBlockAnchor(value),
+        "An anchor must start with a lowercase letter and use only lowercase letters, digits and hyphens, up to 64 characters.",
+      ),
+    ),
+  ),
+  className: v.optional(
+    v.pipe(
+      v.string(),
+      v.check(
+        (value: string) => normalizeBlockClassName(value) !== undefined,
+        "A class name must hold 1 to 16 valid class tokens, up to 256 characters.",
+      ),
+    ),
+  ),
+  settings: blockSettingsSchema,
+};
+
+const blockIdentityEntries = {
   data: jsonObjectSchema,
   key: identifierSchema,
   position: nonNegativeIntegerSchema,
   schemaVersion: v.pipe(v.number(), v.integer(), v.minValue(1)),
   type: identifierSchema,
+};
+
+/** An admin block; omitted envelope values default (visible, no anchor or class). */
+export const contentBlockSchema = v.strictObject({
+  ...blockIdentityEntries,
+  ...blockEnvelopeEntries,
+  hidden: v.optional(v.boolean(), false),
+});
+
+/** A delivered block: hidden blocks are never public, so there is no `hidden` key. */
+export const publicBlockSchema = v.strictObject({
+  ...blockIdentityEntries,
+  ...blockEnvelopeEntries,
+});
+
+export {
+  isCanonicalUrl,
+  MAX_SEO_CANONICAL_LENGTH,
+  MAX_SEO_DESCRIPTION_LENGTH,
+  MAX_SEO_TITLE_LENGTH,
+  normalizeSeoText,
+} from "@lacecms/domain";
+
+/** Collapses whitespace runs and trims a string value; anything else, or blank text, is absent. */
+export function seoText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\s+/gu, " ").trim();
+  return text === "" ? undefined : text;
+}
+
+/** The site default values that shape an entry's search title. */
+export interface SeoTitleDefaults {
+  readonly siteName?: string | undefined;
+  readonly titleTemplate?: string | undefined;
+}
+
+/**
+ * Formats an entry title for search results (ADR 0011): a title template
+ * applies only when it contains `%s`, which is replaced literally; otherwise
+ * `{title} | {siteName}`, or the bare title without a site name.
+ */
+export function formatSeoTitle(title: string, defaults: SeoTitleDefaults | undefined): string {
+  const template = seoText(defaults?.titleTemplate);
+  // A function replacer keeps `$&` and similar sequences in titles literal.
+  if (template?.includes("%s") === true) return template.replace("%s", () => title);
+  const siteName = seoText(defaults?.siteName);
+  return siteName === undefined ? title : `${title} | ${siteName}`;
+}
+
+/**
+ * The SEO group of an entry of an SEO-enabled model as clients read it:
+ * every value is present, `null` when unset.
+ */
+export const seoValueSchema = v.strictObject({
+  canonical: v.nullable(
+    v.pipe(
+      v.string(),
+      v.check((value: string) => isCanonicalUrl(value), "Invalid canonical URL."),
+    ),
+  ),
+  description: v.nullable(v.pipe(v.string(), v.minLength(1))),
+  image: v.nullable(identifierSchema),
+  noindex: v.boolean(),
+  title: v.nullable(v.pipe(v.string(), v.minLength(1))),
+});
+
+function seoTextSchema(kind: "description" | "title") {
+  return v.nullable(
+    v.pipe(
+      v.string(),
+      v.check(
+        (value) => normalizeSeoText(value, kind) !== undefined,
+        kind === "title"
+          ? "An SEO title must be single-line plain text of at most 200 characters."
+          : "An SEO description must be single-line plain text of at most 500 characters.",
+      ),
+    ),
+  );
+}
+
+/** A submitted SEO group: each value is optional, and `null` or empty text clears it. */
+export const seoInputSchema = v.strictObject({
+  canonical: v.optional(
+    v.nullable(
+      v.pipe(
+        v.string(),
+        v.maxLength(MAX_SEO_CANONICAL_LENGTH + 64),
+        v.check(
+          (value) => value.trim().length === 0 || isCanonicalUrl(value.trim()),
+          "A canonical URL must be an absolute http or https URL without credentials or fragment.",
+        ),
+      ),
+    ),
+  ),
+  description: v.optional(seoTextSchema("description")),
+  image: v.optional(v.nullable(identifierSchema)),
+  noindex: v.optional(v.boolean()),
+  title: v.optional(seoTextSchema("title")),
 });
 
 const snapshotFields = {
@@ -273,6 +444,8 @@ const snapshotFields = {
   fields: jsonObjectSchema,
   id: identifierSchema,
   revision: nonNegativeIntegerSchema,
+  /** Present for entries of models with SEO enabled. */
+  seo: v.optional(seoValueSchema),
   slug: v.optional(identifierSchema),
   title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
   updatedAt: isoTimestampSchema,
@@ -405,6 +578,8 @@ export const contentEntryListQuerySchema = v.object({
 const editableDraftFields = {
   blocks: v.array(contentBlockSchema),
   fields: jsonObjectSchema,
+  /** Absent or `null` stores no SEO values; refused for a model without SEO. */
+  seo: v.optional(v.nullable(seoInputSchema)),
   slug: v.optional(identifierSchema),
   title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
 };
@@ -430,6 +605,17 @@ export const duplicateContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
 });
 
+const modelSeoSchema = v.strictObject({
+  description: v.nullable(identifierSchema),
+  image: v.nullable(identifierSchema),
+});
+const seoDefaultsSchema = v.strictObject({
+  description: v.nullable(identifierSchema),
+  image: v.nullable(identifierSchema),
+  siteName: identifierSchema,
+  titleTemplate: v.nullable(identifierSchema),
+});
+
 export const contentModelSchema = v.pipe(
   v.strictObject({
     blockDefinitions: v.optional(v.array(blockMetadataSchema)),
@@ -437,15 +623,25 @@ export const contentModelSchema = v.pipe(
     description: v.optional(v.string()),
     fields: fieldMetadataMapSchema,
     key: identifierSchema,
-    kind: v.picklist(["collection", "page"]),
+    kind: v.picklist(["collection", "global", "page"]),
     label: v.optional(v.string()),
     listFields: v.optional(v.array(identifierSchema)),
     path: v.optional(v.string()),
     route: v.optional(v.string()),
+    /** SEO fallback fields of a page or collection with SEO enabled. */
+    seo: v.optional(modelSeoSchema),
+    /** Site SEO defaults mapped by the one global that declares them. */
+    seoDefaults: v.optional(seoDefaultsSchema),
     version: v.pipe(v.number(), v.integer(), v.minValue(1)),
   }),
   v.check(hasMatchingBlockDefinitions, "Block definitions must match the model's allowed blocks."),
   v.check(hasValidListFields, "List fields must name distinct fields of a collection."),
+  v.check(hasGlobalRouting, "A global model carries no path or route."),
+  v.check(
+    (model) =>
+      model.kind === "global" ? model.seo === undefined : model.seoDefaults === undefined,
+    "Only pages and collections carry seo, and only a global carries seoDefaults.",
+  ),
 );
 export const contentModelListSchema = v.strictObject({ items: v.array(contentModelSchema) });
 
@@ -743,12 +939,14 @@ export const mediaFocalPointSchema = v.strictObject({
 
 /** One published entry as public consumers see it; no draft or editorial data. */
 export const publicEntrySchema = v.strictObject({
-  blocks: v.array(contentBlockSchema),
+  blocks: v.array(publicBlockSchema),
   fields: jsonObjectSchema,
   id: identifierSchema,
   modelKey: identifierSchema,
   path: v.string(),
   publishedAt: isoTimestampSchema,
+  /** Stored SEO values of an entry of an SEO-enabled model; absent otherwise. */
+  seo: v.optional(seoValueSchema),
   slug: v.optional(identifierSchema),
   title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
 });
@@ -774,6 +972,20 @@ export const publicMediaDictionarySchema = v.pipe(
   ),
 );
 
+/** One published route-less global; no path, slug, title, draft, or editorial data. */
+export const publicGlobalSchema = v.strictObject({
+  blocks: v.array(publicBlockSchema),
+  fields: jsonObjectSchema,
+  id: identifierSchema,
+  modelKey: identifierSchema,
+  publishedAt: isoTimestampSchema,
+});
+
+export const publicGlobalContentSchema = v.strictObject({
+  global: publicGlobalSchema,
+  media: publicMediaDictionarySchema,
+});
+
 export const publicContentEntrySchema = v.strictObject({
   entry: publicEntrySchema,
   media: publicMediaDictionarySchema,
@@ -783,9 +995,27 @@ export const publicContentListSchema = v.strictObject({
   media: publicMediaDictionarySchema,
   nextCursor: v.optional(opaqueCursorSchema),
 });
+/**
+ * SEO configuration a site resolver needs: the fallback fields of every
+ * SEO-enabled model and the global that maps site defaults.
+ */
+export const exportSeoSchema = v.strictObject({
+  defaults: v.nullable(
+    v.strictObject({
+      ...seoDefaultsSchema.entries,
+      modelKey: identifierSchema,
+    }),
+  ),
+  models: v.record(identifierSchema, modelSeoSchema),
+});
+
 export const buildExportSchema = v.strictObject({
   entries: v.array(publicEntrySchema),
+  /** Always sent by the API; exports produced before globals existed omit it. */
+  globals: v.optional(v.array(publicGlobalSchema), []),
   media: publicMediaDictionarySchema,
+  /** Always sent by the API; exports produced before SEO existed omit it. */
+  seo: v.optional(exportSeoSchema, { defaults: null, models: {} }),
   version: nonNegativeIntegerSchema,
 });
 
@@ -818,6 +1048,11 @@ export const mediaUsageLocationSchema = v.variant("source", [
   v.strictObject({
     field: identifierSchema,
     source: v.literal("field"),
+    states: mediaUsageStatesSchema,
+  }),
+  v.strictObject({
+    field: v.literal("image"),
+    source: v.literal("seo"),
     states: mediaUsageStatesSchema,
   }),
   v.strictObject({
@@ -1021,11 +1256,18 @@ export type ContentEntrySummaryDto = v.InferOutput<typeof contentEntrySummarySch
 export type ContentModelDto = v.InferOutput<typeof contentModelSchema>;
 export type ContentModelListDto = v.InferOutput<typeof contentModelListSchema>;
 export type ContentSnapshotDto = v.InferOutput<typeof contentSnapshotSchema>;
+export type SeoValueDto = v.InferOutput<typeof seoValueSchema>;
+export type SeoInputDto = v.InferOutput<typeof seoInputSchema>;
+export type ModelSeoDto = v.InferOutput<typeof modelSeoSchema>;
+export type SeoDefaultsDto = v.InferOutput<typeof seoDefaultsSchema>;
 export type ContentBlockDto = v.InferOutput<typeof contentBlockSchema>;
+export type PublicBlockDto = v.InferOutput<typeof publicBlockSchema>;
 export type PublicEntryDto = v.InferOutput<typeof publicEntrySchema>;
 export type PublicMediaDto = v.InferOutput<typeof publicMediaSchema>;
 export type PublicMediaDictionaryDto = v.InferOutput<typeof publicMediaDictionarySchema>;
 export type PublicContentEntryDto = v.InferOutput<typeof publicContentEntrySchema>;
+export type PublicGlobalDto = v.InferOutput<typeof publicGlobalSchema>;
+export type PublicGlobalContentDto = v.InferOutput<typeof publicGlobalContentSchema>;
 export type PublicContentListDto = v.InferOutput<typeof publicContentListSchema>;
 export type BuildExportDto = v.InferOutput<typeof buildExportSchema>;
 export type MediaMetadataDto = v.InferOutput<typeof mediaMetadataSchema>;
@@ -1046,22 +1288,64 @@ export type ContractValidationIssue = v.InferOutput<typeof contractValidationIss
 
 /** Maps a portable route without importing configuration or persistence types. */
 export function toContentModelRouteDto(route: ContentModelRoute) {
-  return route.kind === "page"
-    ? { kind: "page" as const, key: route.key, path: route.path }
-    : { kind: "collection" as const, key: route.key, route: route.route };
+  switch (route.kind) {
+    case "page":
+      return { kind: "page" as const, key: route.key, path: route.path };
+    case "collection":
+      return { kind: "collection" as const, key: route.key, route: route.route };
+    case "global":
+      return { kind: "global" as const, key: route.key };
+    default:
+      return route satisfies never;
+  }
 }
 
 export function toContentBlockDto(block: ContentBlock): ContentBlockDto {
+  return { ...toPublicBlockDto(block), hidden: block.hidden };
+}
+
+/** Maps a delivered block; callers leave hidden blocks out first. */
+export function toPublicBlockDto(block: ContentBlock): PublicBlockDto {
   return {
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
     data: block.data,
     key: block.key,
     position: block.position,
     schemaVersion: block.schemaVersion,
+    settings: block.settings,
     type: block.type,
   };
 }
 
-export function toContentSnapshotDto(snapshot: ContentSnapshot): ContentSnapshotDto {
+/** The delivered blocks of a published snapshot, ordered by position, without hidden ones. */
+function publicBlocks(blocks: readonly ContentBlock[]): PublicBlockDto[] {
+  return blocks
+    .filter((block) => !block.hidden)
+    .sort((left, right) => left.position - right.position)
+    .map(toPublicBlockDto);
+}
+
+/** Maps a stored SEO group to the complete client shape with `null` for unset values. */
+export function toSeoDto(seo: EntrySeo | undefined): SeoValueDto {
+  return {
+    canonical: seo?.canonical ?? null,
+    description: seo?.description ?? null,
+    image: seo?.image ?? null,
+    noindex: seo?.noindex === true,
+    title: seo?.title ?? null,
+  };
+}
+
+/** Whether an entry's model enables SEO, which decides if its DTOs carry `seo`. */
+export interface SeoMappingOptions {
+  readonly seo?: boolean;
+}
+
+export function toContentSnapshotDto(
+  snapshot: ContentSnapshot,
+  options: SeoMappingOptions = {},
+): ContentSnapshotDto {
   const base = {
     blocks: snapshot.blocks.map(toContentBlockDto),
     createdAt: toIsoTimestamp(snapshot.createdAt),
@@ -1069,6 +1353,7 @@ export function toContentSnapshotDto(snapshot: ContentSnapshot): ContentSnapshot
     fields: snapshot.fields,
     id: snapshot.id,
     revision: snapshot.revision,
+    ...(options.seo === true ? { seo: toSeoDto(snapshot.seo) } : {}),
     ...(snapshot.slug === undefined ? {} : { slug: snapshot.slug }),
     title: snapshot.title,
     updatedAt: toIsoTimestamp(snapshot.updatedAt),
@@ -1077,15 +1362,18 @@ export function toContentSnapshotDto(snapshot: ContentSnapshot): ContentSnapshot
   return snapshot.state === "draft" ? { ...base, state: "draft" } : { ...base, state: "published" };
 }
 
-export function toContentEntryDto(entry: ContentEntry): ContentEntryDto {
+export function toContentEntryDto(
+  entry: ContentEntry,
+  options: SeoMappingOptions = {},
+): ContentEntryDto {
   return {
-    draft: toContentSnapshotDto(entry.draft) as v.InferOutput<typeof draftSnapshotSchema>,
+    draft: toContentSnapshotDto(entry.draft, options) as v.InferOutput<typeof draftSnapshotSchema>,
     id: entry.id,
     model: toContentModelRouteDto(entry.model),
     ...(entry.published === undefined
       ? {}
       : {
-          published: toContentSnapshotDto(entry.published) as v.InferOutput<
+          published: toContentSnapshotDto(entry.published, options) as v.InferOutput<
             typeof publishedSnapshotSchema
           >,
         }),
@@ -1096,9 +1384,10 @@ export function toContentEntryDto(entry: ContentEntry): ContentEntryDto {
 export function toAdminContentEntryDto(
   entry: ContentEntry,
   updatedBy: { readonly displayName: string; readonly id: string },
+  options: SeoMappingOptions = {},
 ): AdminContentEntryDto {
   return {
-    ...toContentEntryDto(entry),
+    ...toContentEntryDto(entry, options),
     updatedBy: { displayName: updatedBy.displayName, id: updatedBy.id },
   };
 }
@@ -1110,6 +1399,7 @@ export function toPublishContentEntryResultDto(input: {
     | Readonly<{ readonly status: "not-dispatched" }>;
   readonly entry: ContentEntry;
   readonly publication: "published" | "replayed";
+  readonly seo?: boolean;
   readonly updatedBy: { readonly displayName: string; readonly id: string };
 }): PublishContentEntryResultDto {
   return {
@@ -1117,7 +1407,7 @@ export function toPublishContentEntryResultDto(input: {
       input.build.status === "queued"
         ? { status: "queued", targetVersion: input.build.targetVersion }
         : { status: input.build.status },
-    entry: toAdminContentEntryDto(input.entry, input.updatedBy),
+    entry: toAdminContentEntryDto(input.entry, input.updatedBy, { seo: input.seo === true }),
     publication: input.publication,
   };
 }
@@ -1128,6 +1418,7 @@ export function toUnpublishContentEntryResultDto(input: {
     | Readonly<{ readonly status: "queued"; readonly targetVersion: number }>
     | Readonly<{ readonly status: "not-dispatched" }>;
   readonly entry: ContentEntry;
+  readonly seo?: boolean;
   readonly unpublication: "replayed" | "unpublished";
   readonly updatedBy: { readonly displayName: string; readonly id: string };
 }): UnpublishContentEntryResultDto {
@@ -1136,7 +1427,7 @@ export function toUnpublishContentEntryResultDto(input: {
       input.build.status === "queued"
         ? { status: "queued", targetVersion: input.build.targetVersion }
         : { status: input.build.status },
-    entry: toAdminContentEntryDto(input.entry, input.updatedBy),
+    entry: toAdminContentEntryDto(input.entry, input.updatedBy, { seo: input.seo === true }),
     unpublication: input.unpublication,
   };
 }
@@ -1188,6 +1479,11 @@ export type MediaUsageLocationDtoSource =
       readonly states: readonly ("draft" | "published")[];
     }
   | {
+      readonly field: "image";
+      readonly source: "seo";
+      readonly states: readonly ("draft" | "published")[];
+    }
+  | {
       readonly blockKey: string;
       readonly blockType: string;
       readonly field: string;
@@ -1215,13 +1511,15 @@ export function toMediaDetailDto(media: MediaDetailDtoSource, url: string): Medi
       locations: entry.locations.map((location) =>
         location.source === "field"
           ? { field: location.field, source: "field" as const, states: [...location.states] }
-          : {
-              blockKey: location.blockKey,
-              blockType: location.blockType,
-              field: location.field,
-              source: "block" as const,
-              states: [...location.states],
-            },
+          : location.source === "seo"
+            ? { field: "image" as const, source: "seo" as const, states: [...location.states] }
+            : {
+                blockKey: location.blockKey,
+                blockType: location.blockType,
+                field: location.field,
+                source: "block" as const,
+                states: [...location.states],
+              },
       ),
       modelKey: entry.modelKey,
       ...(entry.slug === undefined ? {} : { slug: entry.slug }),
@@ -1350,20 +1648,45 @@ export interface PublicMediaSource {
 export type PublicMediaUrl = (mediaId: string) => string;
 
 /** Maps the published snapshot of an entry; the draft is never read. */
-export function toPublicEntryDto(entry: ContentEntry, path: string): PublicEntryDto {
+export function toPublicEntryDto(
+  entry: ContentEntry,
+  path: string,
+  options: SeoMappingOptions = {},
+): PublicEntryDto {
   const snapshot = entry.published;
   if (snapshot === undefined) throw new TypeError("A public entry requires a published snapshot.");
   return {
-    blocks: [...snapshot.blocks]
-      .sort((left, right) => left.position - right.position)
-      .map(toContentBlockDto),
+    blocks: publicBlocks(snapshot.blocks),
     fields: snapshot.fields,
     id: entry.id,
     modelKey: entry.model.key,
     path,
     publishedAt: toIsoTimestamp(snapshot.createdAt),
+    ...(options.seo === true ? { seo: toSeoDto(snapshot.seo) } : {}),
     ...(snapshot.slug === undefined ? {} : { slug: snapshot.slug }),
     title: snapshot.title,
+  };
+}
+
+/** Keys of the models whose public entries carry `seo`. */
+export interface PublicSeoOptions {
+  readonly seoModels?: ReadonlySet<string>;
+}
+
+function publicEntryOptions(entry: ContentEntry, options: PublicSeoOptions): SeoMappingOptions {
+  return { seo: options.seoModels?.has(entry.model.key) === true };
+}
+
+/** Maps the published snapshot of a global; the draft and its title are never read. */
+export function toPublicGlobalDto(entry: ContentEntry): PublicGlobalDto {
+  const snapshot = entry.published;
+  if (snapshot === undefined) throw new TypeError("A public global requires a published snapshot.");
+  return {
+    blocks: publicBlocks(snapshot.blocks),
+    fields: snapshot.fields,
+    id: entry.id,
+    modelKey: entry.model.key,
+    publishedAt: toIsoTimestamp(snapshot.createdAt),
   };
 }
 
@@ -1399,9 +1722,10 @@ export function toPublicMediaDictionary(
 export function toPublicContentEntryDto(
   value: PublicEntrySource,
   urlFor: PublicMediaUrl,
+  options: PublicSeoOptions = {},
 ): PublicContentEntryDto {
   return {
-    entry: toPublicEntryDto(value.entry, value.path),
+    entry: toPublicEntryDto(value.entry, value.path, publicEntryOptions(value.entry, options)),
     media: toPublicMediaDictionary(value.media, urlFor),
   };
 }
@@ -1409,9 +1733,12 @@ export function toPublicContentEntryDto(
 export function toPublicContentListDto(
   value: { readonly items: readonly PublicEntrySource[]; readonly nextCursor?: string },
   urlFor: PublicMediaUrl,
+  options: PublicSeoOptions = {},
 ): PublicContentListDto {
   return {
-    items: value.items.map(({ entry, path }) => toPublicEntryDto(entry, path)),
+    items: value.items.map(({ entry, path }) =>
+      toPublicEntryDto(entry, path, publicEntryOptions(entry, options)),
+    ),
     media: toPublicMediaDictionary(
       value.items.flatMap((item) => item.media),
       urlFor,
@@ -1420,18 +1747,55 @@ export function toPublicContentListDto(
   };
 }
 
+/** A published global and the media its publication references. */
+export interface PublicGlobalSource {
+  readonly entry: ContentEntry;
+  readonly media: readonly PublicMediaSource[];
+}
+
+export function toPublicGlobalContentDto(
+  value: PublicGlobalSource,
+  urlFor: PublicMediaUrl,
+): PublicGlobalContentDto {
+  return {
+    global: toPublicGlobalDto(value.entry),
+    media: toPublicMediaDictionary(value.media, urlFor),
+  };
+}
+
 export interface BuildExportSource {
   readonly entries: readonly PublicEntrySource[];
+  readonly globals?: readonly PublicGlobalSource[];
   readonly version: number;
 }
 
-export function toBuildExportDto(value: BuildExportSource, urlFor: PublicMediaUrl): BuildExportDto {
+/** The export's SEO configuration section. */
+export type ExportSeoDto = v.InferOutput<typeof exportSeoSchema>;
+
+export function toBuildExportDto(
+  value: BuildExportSource,
+  urlFor: PublicMediaUrl,
+  seo: ExportSeoDto = { defaults: null, models: {} },
+): BuildExportDto {
+  const globals = value.globals ?? [];
+  const seoModels = new Set(Object.keys(seo.models));
   return {
-    entries: value.entries.map(({ entry, path }) => toPublicEntryDto(entry, path)),
+    entries: value.entries.map(({ entry, path }) =>
+      toPublicEntryDto(entry, path, publicEntryOptions(entry, { seoModels })),
+    ),
+    globals: globals.map(({ entry }) => toPublicGlobalDto(entry)),
     media: toPublicMediaDictionary(
-      value.entries.flatMap((item) => item.media),
+      [...value.entries.flatMap((item) => item.media), ...globals.flatMap((item) => item.media)],
       urlFor,
     ),
+    seo: {
+      defaults: seo.defaults === null ? null : { ...seo.defaults },
+      models: Object.fromEntries(
+        Object.keys(seo.models)
+          .sort()
+          .map((key) => [key, { ...seo.models[key]! }]),
+      ),
+    },
     version: value.version,
   };
 }
@@ -1447,7 +1811,31 @@ export interface ContentModelSource {
   readonly listFields?: readonly string[];
   readonly path?: string;
   readonly route?: string;
+  readonly seo?: { readonly description?: string; readonly image?: string };
+  readonly seoDefaults?: {
+    readonly description?: string;
+    readonly image?: string;
+    readonly siteName: string;
+    readonly titleTemplate?: string;
+  };
   readonly version: number;
+}
+
+/** Maps a model's SEO fallback fields with `null` for unmapped values. */
+export function toModelSeoDto(seo: NonNullable<ContentModelSource["seo"]>): ModelSeoDto {
+  return { description: seo.description ?? null, image: seo.image ?? null };
+}
+
+/** Maps a site SEO defaults mapping with `null` for unmapped optional values. */
+export function toSeoDefaultsDto(
+  defaults: NonNullable<ContentModelSource["seoDefaults"]>,
+): SeoDefaultsDto {
+  return {
+    description: defaults.description ?? null,
+    image: defaults.image ?? null,
+    siteName: defaults.siteName,
+    titleTemplate: defaults.titleTemplate ?? null,
+  };
 }
 
 export function toContentModelDto(
@@ -1466,6 +1854,10 @@ export function toContentModelDto(
     ...(model.listFields === undefined ? {} : { listFields: [...model.listFields] }),
     ...(model.path === undefined ? {} : { path: model.path }),
     ...(model.route === undefined ? {} : { route: model.route }),
+    ...(model.seo === undefined ? {} : { seo: toModelSeoDto(model.seo) }),
+    ...(model.seoDefaults === undefined
+      ? {}
+      : { seoDefaults: toSeoDefaultsDto(model.seoDefaults) }),
     version: model.version,
   };
 }
@@ -1515,7 +1907,7 @@ const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
   CONTENT_INVALID_STATE: "The requested content operation is invalid.",
   CONTENT_MODEL_CARDINALITY_CONFLICT: "The content model cannot accept another entry.",
   CONTENT_NOT_PUBLISHED: "The entry is not published.",
-  CONTENT_PAGE_SINGLETON: "Page entries are defined by configuration.",
+  CONTENT_PAGE_SINGLETON: "Page and global entries are defined by configuration.",
   CONTENT_PUBLISHED_IMMUTABLE: "Published content cannot be modified.",
   CONTENT_REVISION_CONFLICT: "The draft was modified by another request.",
   CONTENT_ROUTE_CONFLICT: "The public route is already in use.",

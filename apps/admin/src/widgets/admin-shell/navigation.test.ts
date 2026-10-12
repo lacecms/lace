@@ -5,6 +5,7 @@ import { breadcrumbsFor, navigationGroups } from "./navigation.js";
 const models = [
   { key: "home", kind: "page" as const, label: "Home" },
   { key: "posts", kind: "collection" as const },
+  { key: "settings", kind: "global" as const, label: "Site settings" },
 ];
 
 const labels = (groups: ReturnType<typeof navigationGroups>) =>
@@ -14,6 +15,7 @@ test("navigation groups follow configured models and the role matrix", () => {
   expect(labels(navigationGroups(sessionFor({ id: "user-1", role: "admin" }), models))).toEqual([
     ["Pages", ["Home"]],
     ["Collections", ["posts"]],
+    ["Site", ["Site settings"]],
     ["Library", ["Media", "Builds"]],
     ["Admin", ["Users", "Settings"]],
   ]);
@@ -21,8 +23,16 @@ test("navigation groups follow configured models and the role matrix", () => {
     expect(labels(navigationGroups(sessionFor({ id: "user-1", role: role }), models))).toEqual([
       ["Pages", ["Home"]],
       ["Collections", ["posts"]],
+      ["Site", ["Site settings"]],
       ["Library", ["Media", "Builds"]],
     ]);
+  expect(
+    labels(navigationGroups(sessionFor({ id: "user-1", role: "editor" }), models.slice(0, 2))),
+  ).toEqual([
+    ["Pages", ["Home"]],
+    ["Collections", ["posts"]],
+    ["Library", ["Media", "Builds"]],
+  ]);
   expect(labels(navigationGroups(sessionFor({ id: "user-1", role: "editor" })))).toEqual([
     ["Library", ["Media", "Builds"]],
   ]);
@@ -89,5 +99,13 @@ test("breadcrumbs locate each screen without entry identifiers", () => {
       routeId: entryRoute,
     }),
   ).toEqual([{ label: "Content", to: "/content" }, { label: "Home" }]);
+  expect(
+    breadcrumbsFor({
+      entryTitle: "Site settings",
+      models,
+      params: { entryId: "settings-1", modelKey: "settings" },
+      routeId: entryRoute,
+    }),
+  ).toEqual([{ label: "Content", to: "/content" }, { label: "Site settings" }]);
   expect(breadcrumbsFor({ params: {}, routeId: "__root__" })).toEqual([]);
 });

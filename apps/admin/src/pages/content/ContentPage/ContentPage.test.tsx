@@ -4,6 +4,7 @@ import {
   draftEntry,
   entry,
   entryList,
+  models,
   renderRoute,
   stubClient as client,
   staticSessionSource,
@@ -140,4 +141,65 @@ test("one failing model summary stays local and viewers see the same summaries",
   expect(await main().findByRole("link", { name: "home" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Create entry/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Delete/ })).not.toBeInTheDocument();
+});
+
+test("the Site section summarizes globals without a path and guides a missing sync", async () => {
+  const settings = {
+    blocks: [],
+    description: "Name and tagline shown on every page.",
+    fields: {},
+    key: "settings",
+    kind: "global" as const,
+    label: "Site settings",
+    version: 1,
+  };
+  const source = staticSessionSource({ id: "viewer-1", role: "viewer" });
+  renderRoute(
+    "/content",
+    source,
+    client({
+      listEntries: async (key) =>
+        key === "settings"
+          ? entryList([
+              {
+                ...entry,
+                id: "settings-1",
+                modelKey: "settings",
+                status: "changed",
+                title: "Site settings",
+                updatedBy: { displayName: "Ada Editor", id: "editor-1" },
+              },
+            ])
+          : Promise.reject(new AdminClientError({ message: "API unavailable" })),
+      listModels: async () => ({ items: [...models.items, settings] }),
+    }),
+  );
+  const site = within(await screen.findByRole("region", { name: "Site" }));
+  expect(await site.findByRole("link", { name: "Site settings" })).toHaveAttribute(
+    "href",
+    "/admin/content/settings/settings-1",
+  );
+  expect(site.getByText("Name and tagline shown on every page.")).toBeInTheDocument();
+  expect(site.getByText("Changed")).toBeInTheDocument();
+  expect(site.getByText(/Ada Editor/)).toBeInTheDocument();
+  expect(site.queryByText(/^\//)).not.toBeInTheDocument();
+  expect(site.queryByText("settings-1")).not.toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "home is unavailable" })).toBeInTheDocument();
+  expect(main().getByText(/site-wide globals/)).toBeInTheDocument();
+
+  document.body.replaceChildren();
+  renderRoute(
+    "/content",
+    source,
+    client({
+      listEntries: async () => entryList(),
+      listModels: async () => ({ items: [settings] }),
+    }),
+  );
+  expect(
+    await screen.findByRole("heading", { name: "Site settings draft missing" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/This global has no editable draft yet.*pnpm content:sync/),
+  ).toBeInTheDocument();
 });

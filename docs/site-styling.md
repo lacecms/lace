@@ -81,3 +81,11 @@ and existing classes such as `hero`, `rich-text`, and `cta` are implementation
 details. This contract changes CSS targeting only; changing the structure or
 behavior of a block still requires editing its Astro renderer. Automatically
 generated HTML `id` attributes are not part of the contract.
+
+Editors can also give a block an in-page anchor and an extra class name in
+Admin. The block root then carries `id="<anchor>"` and the class name after
+its own classes, for example `<aside class="cta cta--highlight" … id="get-started">`
+in the reference fixture, and links such as `#get-started` jump to it. These
+values are content that editors change, not part of the `data-lace-*`
+contract; style an editor class only when the site offers it on purpose.
+Hidden blocks are never rendered.

@@ -12,12 +12,14 @@ import {
 } from "./index.js";
 
 function Harness({
+  annotation,
   definition,
   error,
   notice,
   placeholder,
   wrap = (children) => children,
 }: {
+  readonly annotation?: string;
   readonly definition: FieldDefinition;
   readonly error?: string;
   readonly notice?: ReactNode;
@@ -30,6 +32,7 @@ function Harness({
   return wrap(
     <>
       <FieldRenderer
+        annotation={annotation}
         control={form.control}
         definition={definition}
         error={error}
@@ -128,4 +131,22 @@ test("a notice describes the control for writers and is hidden when view only", 
   );
   expect(screen.queryByText("No alt text.")).toBeNull();
   expect(screen.getByRole("textbox", { name: "Hero Image" })).not.toHaveAccessibleDescription();
+});
+
+test("an annotation is shown to every user and describes the control", () => {
+  render(
+    <Harness
+      annotation="Site name used in search and social titles."
+      definition={{ description: "Shown in the header.", required: false, type: "text" }}
+      wrap={(children) => (
+        <FieldRendererProvider readOnly renderers={{}}>
+          {children}
+        </FieldRendererProvider>
+      )}
+    />,
+  );
+  expect(screen.getByText("Site name used in search and social titles.")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
+    "Shown in the header. Site name used in search and social titles.",
+  );
 });

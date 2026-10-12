@@ -615,3 +615,61 @@ test("keeps plans without hints free of hinted write fields", async () => {
   expect(json).not.toMatch(/renames|fieldRemovals|blockRemovals|hinted|"from"/u);
   expect(configurationSyncContentWrites(prepared.plan.operations[0], after)).toEqual([]);
 });
+
+test("classifies enabling and disabling SEO and collects SEO holders", async () => {
+  const plain = await posts();
+  const enabled = await posts({ seo: { description: "summary" }, version: 2 });
+  expect(diffContentModelStructures(plain.structure, enabled.structure)).toEqual([
+    { class: "compatible", kind: "seo-enabled", scope: "model", target: "seo" },
+  ]);
+  expect(diffContentModelStructures(enabled.structure, plain.structure)).toEqual([
+    { class: "destructive", kind: "seo-disabled", scope: "model", target: "seo" },
+  ]);
+  const disabled = diffContentModelStructures(enabled.structure, plain.structure, {
+    removedSeo: true,
+  });
+  expect(disabled).toEqual([
+    { class: "destructive", hinted: true, kind: "seo-disabled", scope: "model", target: "seo" },
+  ]);
+  const remapped = await posts({ seo: true, version: 2 });
+  expect(remapped.structureHash).toBe(enabled.structureHash);
+
+  const accumulator = createSnapshotEvidenceAccumulator({
+    changes: disabled,
+    fields: plain.fields,
+    fingerprint: "f",
+    modelKey: "posts",
+  });
+  accumulator.add([
+    { ...snapshot(1, "draft", {}), hasSeo: true },
+    { ...snapshot(2, "draft", {}), hasSeo: false },
+    { ...snapshot(3, "published", {}), hasSeo: true },
+  ]);
+  expect(accumulator.result().seoHolders).toEqual({
+    draft: 1,
+    published: 1,
+    snapshots: [
+      { entryId: "entry-1", state: "draft", title: "Title 1" },
+      { entryId: "entry-3", state: "published", title: "Title 3" },
+    ],
+  });
+  const none = createSnapshotEvidenceAccumulator({
+    changes: [],
+    fields: plain.fields,
+    fingerprint: "f",
+    modelKey: "posts",
+  });
+  expect(none.result()).not.toHaveProperty("seoHolders");
+
+  const operation = {
+    action: "version-update",
+    evolution: {
+      backfills: [],
+      changes: [],
+      seoRemoval: true,
+      snapshots: { draft: 1, published: 1 },
+    },
+    model: { key: "posts" },
+  };
+  expect(configurationSyncContentWrites(operation, plain)).toEqual([{ action: "remove-seo" }]);
+});

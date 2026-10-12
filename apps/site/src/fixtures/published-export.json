@@ -14,6 +14,23 @@
                     }
                   ],
                   "type": "paragraph"
+                },
+                {
+                  "content": [
+                    {
+                      "marks": [
+                        {
+                          "attrs": {
+                            "href": "#get-started"
+                          },
+                          "type": "link"
+                        }
+                      ],
+                      "text": "See how to start",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
                 }
               ],
               "type": "doc"
@@ -30,6 +47,8 @@
           "type": "hero"
         },
         {
+          "anchor": "get-started",
+          "className": "cta--highlight",
           "data": {
             "actionLabel": "Get started",
             "actionUrl": "https://lace.example/docs",
@@ -65,6 +84,13 @@
       "modelKey": "home",
       "path": "/",
       "publishedAt": "2026-09-20T00:00:00.000Z",
+      "seo": {
+        "canonical": null,
+        "description": null,
+        "image": null,
+        "noindex": false,
+        "title": null
+      },
       "title": "Lace starter"
     },
     {
@@ -155,6 +181,7 @@
           "type": "richText"
         },
         {
+          "className": "full-bleed",
           "data": {
             "alt": "A durable media URL",
             "caption": "Media is served by Lace.",
@@ -185,6 +212,13 @@
       "modelKey": "posts",
       "path": "/blog/first-post",
       "publishedAt": "2026-09-20T00:00:00.000Z",
+      "seo": {
+        "canonical": null,
+        "description": "How the reference site renders published posts.",
+        "image": "post-media",
+        "noindex": false,
+        "title": "Release notes & <updates>"
+      },
       "slug": "first-post",
       "title": "First published post"
     },
@@ -205,6 +239,13 @@
       "modelKey": "about",
       "path": "/about",
       "publishedAt": "2026-09-20T00:00:00.000Z",
+      "seo": {
+        "canonical": "https://lace.example.org/about",
+        "description": null,
+        "image": null,
+        "noindex": false,
+        "title": null
+      },
       "title": "About Lace"
     },
     {
@@ -236,8 +277,30 @@
       "modelKey": "notes",
       "path": "/notes/first-note",
       "publishedAt": "2026-09-20T00:00:00.000Z",
+      "seo": {
+        "canonical": null,
+        "description": null,
+        "image": null,
+        "noindex": true,
+        "title": null
+      },
       "slug": "first-note",
       "title": "First published note"
+    }
+  ],
+  "globals": [
+    {
+      "blocks": [],
+      "fields": {
+        "siteName": "Lace Journal",
+        "tagline": "Notes from the reference site",
+        "description": "The reference site of the Lace CMS.",
+        "image": "hero-media",
+        "titleTemplate": "%s · Lace Journal"
+      },
+      "id": "settings-entry",
+      "modelKey": "settings",
+      "publishedAt": "2026-09-20T00:00:00.000Z"
     }
   ],
   "media": {
@@ -273,6 +336,33 @@
       "mimeType": "image/jpeg",
       "url": "https://cms.example.test/lace/api/v1/public/media/post-media",
       "width": 800
+    }
+  },
+  "seo": {
+    "defaults": {
+      "description": "description",
+      "image": "image",
+      "modelKey": "settings",
+      "siteName": "siteName",
+      "titleTemplate": "titleTemplate"
+    },
+    "models": {
+      "about": {
+        "description": null,
+        "image": null
+      },
+      "home": {
+        "description": null,
+        "image": null
+      },
+      "notes": {
+        "description": "summary",
+        "image": null
+      },
+      "posts": {
+        "description": null,
+        "image": null
+      }
     }
   },
   "version": 7

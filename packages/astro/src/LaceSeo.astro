@@ -1,0 +1,40 @@
+---
+import type { ResolvedSeo } from "@lacecms/sdk";
+
+interface Props {
+  readonly seo: ResolvedSeo;
+  /** The Open Graph type; posts and articles pass `article`. */
+  readonly type?: "article" | "website";
+}
+
+// Head metadata only: every value is escaped by Astro and absent values emit nothing.
+const { seo, type = "website" } = Astro.props;
+const image = seo.image;
+---
+
+<title>{seo.title}</title>
+{seo.description === undefined ? null : <meta content={seo.description} name="description" />}
+{seo.canonical === undefined ? null : <link href={seo.canonical} rel="canonical" />}
+{seo.robots === undefined ? null : <meta content={seo.robots} name="robots" />}
+<meta content={seo.title} property="og:title" />
+{
+  seo.description === undefined ? null : (
+    <meta content={seo.description} property="og:description" />
+  )
+}
+<meta content={type} property="og:type" />
+{seo.canonical === undefined ? null : <meta content={seo.canonical} property="og:url" />}
+{seo.siteName === undefined ? null : <meta content={seo.siteName} property="og:site_name" />}
+{image === undefined ? null : <meta content={image.url} property="og:image" />}
+{
+  image?.width === null || image?.width === undefined ? null : (
+    <meta content={String(image.width)} property="og:image:width" />
+  )
+}
+{
+  image?.height === null || image?.height === undefined ? null : (
+    <meta content={String(image.height)} property="og:image:height" />
+  )
+}
+{image === undefined ? null : <meta content={image.alt} property="og:image:alt" />}
+<meta content={image === undefined ? "summary" : "summary_large_image"} name="twitter:card" />

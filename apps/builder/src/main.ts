@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { createBuilderHandler } from "./server.js";
 import { FixedCommandBuilder } from "./runner.js";
+import { parseSiteOutputSettings } from "./settings.js";
 
 const secret = process.env.LACE_BUILDER_SECRET;
 const apiBaseUrl = process.env.LACE_API_BASE_URL;
@@ -9,6 +10,8 @@ if (secret === undefined || apiBaseUrl === undefined || buildToken === undefined
   throw new Error(
     "Missing builder configuration: LACE_BUILDER_SECRET, LACE_API_BASE_URL, and LACE_BUILD_TOKEN are required.",
   );
+
+const siteOutput = parseSiteOutputSettings(process.env);
 
 const builder = new FixedCommandBuilder({
   sourceRoot: "/source",
@@ -21,6 +24,7 @@ const builder = new FixedCommandBuilder({
   ...(process.env.LACE_PUBLIC_BASE_URL === undefined
     ? {}
     : { publicBaseUrl: process.env.LACE_PUBLIC_BASE_URL }),
+  ...siteOutput,
 });
 const handler = createBuilderHandler({ secret, build: (request) => builder.build(request) });
 const server = createServer((request, response) => {

@@ -15,12 +15,16 @@ import { SelectedMedia } from "../SelectedMedia/index.js";
 export function MediaPicker({
   fieldKey,
   id,
+  label: givenLabel,
   onChange,
   readOnly = false,
   value,
 }: Pick<FieldRendererProps, "fieldKey" | "onChange" | "value"> &
-  Partial<Pick<FieldRendererProps, "id" | "readOnly">>) {
-  const label = fieldLabel(fieldKey, undefined);
+  Partial<Pick<FieldRendererProps, "id" | "readOnly">> & {
+    /** Names the control in its actions and dialog; defaults to the field key's label. */
+    readonly label?: string;
+  }) {
+  const label = givenLabel ?? fieldLabel(fieldKey, undefined);
   const mediaId = typeof value === "string" ? value : undefined;
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<MediaMetadataDto | undefined>();

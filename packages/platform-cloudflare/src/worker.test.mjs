@@ -306,7 +306,13 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
     ).response.status,
   ).toBe(404);
   const models = await fixture.call("/api/v1/admin/content-models");
-  expect(models.body.items.map((model) => model.key)).toEqual(["about", "home", "notes", "posts"]);
+  expect(models.body.items.map((model) => model.key)).toEqual([
+    "about",
+    "home",
+    "notes",
+    "posts",
+    "settings",
+  ]);
 
   const uploaded = await upload(fixture);
   expect(uploaded.response.status).toBe(201);

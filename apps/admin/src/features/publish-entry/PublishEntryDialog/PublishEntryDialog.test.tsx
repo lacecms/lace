@@ -5,17 +5,29 @@ import { expect, test, vi } from "vitest";
 import { buildDispatchDescription, publicationBuildDescription } from "../build-dispatch.js";
 import { PublishEntryDialog } from "./index.js";
 
-function Harness({ onConfirm, pending = false }: { onConfirm: () => void; pending?: boolean }) {
+function Harness({
+  kind,
+  onConfirm,
+  pending = false,
+  unsavedChanges = false,
+}: {
+  kind?: "collection" | "global" | "page";
+  onConfirm: () => void;
+  pending?: boolean;
+  unsavedChanges?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <PublishEntryDialog
       disabled={false}
+      kind={kind}
       onConfirm={onConfirm}
       onOpenChange={setOpen}
       open={open}
       pending={pending}
-      publicPath="/posts/first-post"
+      publicPath={kind === "global" ? undefined : "/posts/first-post"}
       revision={4}
+      unsavedChanges={unsavedChanges}
     />
   );
 }
@@ -33,6 +45,25 @@ test("confirms publication only from the explained dialog", async () => {
   expect(confirm).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Confirm publication" }));
   expect(confirm).toHaveBeenCalledTimes(1);
+});
+
+test("a global's confirmation names site content and its reach to every page", async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<Harness kind="global" onConfirm={vi.fn()} />);
+  await user.click(screen.getByRole("button", { name: "Publish" }));
+  expect(
+    screen.getByRole("dialog", { name: "Publish this site content?" }),
+  ).toHaveAccessibleDescription(
+    "Draft revision 4 becomes the public version. It affects every page that shows it after the next site build. A later draft save will not change it.",
+  );
+  unmount();
+  render(<Harness kind="global" onConfirm={vi.fn()} unsavedChanges />);
+  await user.click(screen.getByRole("button", { name: "Save and publish" }));
+  expect(
+    screen.getByRole("dialog", { name: "Save and publish this site content?" }),
+  ).toHaveAccessibleDescription(
+    "Your unsaved changes are saved as a new draft revision, which then becomes the public version. It affects every page that shows it after the next site build. If the draft cannot be saved, nothing is published.",
+  );
 });
 
 test("cancelling the dialog closes it without confirming", async () => {

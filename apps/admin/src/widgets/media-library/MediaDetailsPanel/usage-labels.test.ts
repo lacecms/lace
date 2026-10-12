@@ -24,3 +24,12 @@ test("usage locations name the field, block type, and snapshot states", () => {
     }),
   ).toBe("Gallery block · Image field · Draft");
 });
+
+test("SEO image usages name the SEO image and their states", () => {
+  expect(usageLocationLabel({ field: "image", source: "seo", states: ["published"] })).toBe(
+    "SEO image · Published",
+  );
+  expect(
+    usageLocationLabel({ field: "image", source: "seo", states: ["draft", "published"] }),
+  ).toBe("SEO image · Draft and published");
+});

@@ -41,6 +41,8 @@ Set these for `astro dev` and `astro build` (for example in the site's ignored
 | `LACE_BUILD_TOKEN`                | Read-only build token created in Admin Settings                                     |
 | `LACE_PUBLIC_BASE_URL`            | Browser-facing API origin for media URLs (defaults to `LACE_API_BASE_URL`)          |
 | `LACE_EXPECTED_PUBLISHED_VERSION` | Optional; the Compose builder sets it so a build fails if content changes mid-build |
+| `LACE_BUILD_SITE_URL`             | Optional public site base URL; enables canonical URLs, `og:url` and `sitemap.xml`   |
+| `LACE_SITE_INDEXING`              | Optional `on` (default) or `off`; `off` keeps staging builds out of search engines  |
 
 The token is read only in server code and never reaches the browser.
 
@@ -113,6 +115,53 @@ For a custom block, export its `defineBlock` value from a module that
 `pnpm exec lace add block <type> --site ..` to scaffold a typed component with
 the styling hooks and register it in the block map.
 
+Editors can give a block an in-page anchor, an extra CSS class name and the
+settings its definition declares, and can hide it. Components also receive
+`anchor` and `className` when the block has them, and `settings` with every
+declared default applied. Place the anchor as the `id` of the component's root
+element and merge the class name into its `class`; Astro leaves out an
+`undefined` attribute, so a block without them renders unchanged:
+
+```astro
+---
+import type { BlockProps } from "@lacecms/render";
+import type * as definitions from "../../../cms/lace.blocks";
+
+type Props = BlockProps<typeof definitions.banner>;
+
+const { anchor, block, className, data, settings } = Astro.props;
+---
+
+<section class:list={["banner", `banner--${settings.tone}`, className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+  <p data-lace-part="message">{data.message}</p>
+</section>
+```
+
+Declare settings beside the fields with the `select`, `boolean`, `number` or
+`text` builders, each with a `defaultValue`; `settings` is then typed with
+every declared key present. Settings are part of the block definition, so
+adding or changing one needs a version increase and a migration, which
+receives and returns `{ data, settings }`:
+
+```ts
+export const banner = defineBlock({
+  type: "banner",
+  version: 1,
+  fields: { message: field.text({ required: true }) },
+  settings: {
+    tone: field.select({ options: ["info", "warning"], defaultValue: "info" }),
+  },
+});
+```
+
+Anchors are unique within one entry, so a link such as `#pricing` in a URL or
+rich-text field reaches the block on that entry's page; keep anchors distinct
+yourself when a page renders blocks of several entries, such as a global. A
+hidden block stays in Admin and in the published entry but is never delivered:
+the build export leaves it out and `LaceBlocks` never renders it. An invalid
+anchor, class name or settings value fails the build with
+`invalid_block_envelope` and its block.
+
 ## 6. Render a page and a collection
 
 Read entries from the published site by path, or by model and slug. Your
@@ -175,7 +224,140 @@ The collection route reads the entry by slug on each render, so `astro dev`
 shows publications to existing routes on reload; restart `astro dev` after a
 new or renamed slug.
 
-## 7. Customize rich text
+## 7. Read site-wide content (globals)
+
+A global is a configuration-defined model with exactly one entry and no URL,
+such as site settings. Declare it in `cms/lace.config.ts`:
+
+```ts
+defineGlobal({
+  key: "settings",
+  version: 1,
+  label: "Site settings",
+  fields: {
+    siteName: field.text({ label: "Site name", required: true }),
+    tagline: field.text({ label: "Tagline" }),
+  },
+});
+```
+
+Run configuration sync, then edit and publish it from the Site group in Admin.
+Publishing a global requests a site build, because any page may show it.
+`site.global(key)` returns the published global from the same build export, or
+`undefined` while it has never been published, so keep static fallbacks. Its
+`fields` are untyped JSON; check each value before use, as in this
+`SiteHeader.astro` component:
+
+```astro
+---
+import type { PublishedSite } from "@lacecms/sdk";
+
+interface Props {
+  readonly site: PublishedSite;
+}
+
+const { site } = Astro.props;
+const settings = site.global("settings")?.fields ?? {};
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() !== "" ? value : undefined;
+const siteName = text(settings.siteName) ?? "My site";
+const tagline = text(settings.tagline);
+---
+
+<header>
+  <a href={import.meta.env.BASE_URL}>{siteName}</a>
+  {tagline === undefined ? null : <p>{tagline}</p>}
+</header>
+```
+
+Pass the `site` your page already loaded down to the header
+(`<SiteHeader site={site} />`, or through your layout's props) instead of
+calling `getSite()` again. A published global's
+`media(id)` and `image(id, usageAlt?)` resolve media like an entry's.
+
+## 8. Add SEO metadata, a sitemap and robots.txt
+
+Opt routable models into per-entry SEO in `cms/lace.config.ts` with
+`seo: true`, or name fallback fields with
+`seo: { description: "excerpt", image: "cover" }`; raise the model version and
+run configuration sync. One global may map site-wide defaults from its own
+fields:
+
+```ts
+defineGlobal({
+  key: "settings",
+  version: 2,
+  label: "Site settings",
+  fields: {
+    siteName: field.text({ label: "Site name", required: true }),
+    description: field.textarea({ label: "Site description" }),
+    image: field.media({ label: "Share image" }),
+  },
+  seoDefaults: { siteName: "siteName", description: "description", image: "image" },
+});
+```
+
+`site.seo(entry)` resolves the head metadata: the SEO title, otherwise the
+entry title through the title template (default `%s | {siteName}`); the SEO
+description, then the model's mapped field, then the site default; the same
+chain for the image (image media only); the SEO canonical, otherwise
+`LACE_BUILD_SITE_URL` plus the entry path. Render it in your layout's `<head>`
+with the adapter's head component, which also writes Open Graph and
+`twitter:card` tags; pass `type="article"` for posts:
+
+```astro
+---
+import LaceSeo from "@lacecms/astro/LaceSeo.astro";
+import type { PublishedEntry, PublishedSite } from "@lacecms/sdk";
+
+interface Props {
+  readonly entry: PublishedEntry;
+  readonly site: PublishedSite;
+  readonly type?: "article" | "website";
+}
+
+const { entry, site, type } = Astro.props;
+---
+
+<head>
+  <meta charset="utf-8" />
+  <LaceSeo seo={site.seo(entry)} type={type} />
+</head>
+```
+
+Add two endpoints next to your pages. A `sitemap.xml.ts` page lists every
+indexable published entry with `lastmod` from its publication time; pass
+`{ include: (entry) => ... }` to keep only entries your site has routes for:
+
+```ts
+import { sitemapResponse } from "@lacecms/astro";
+import { getSite } from "../lib/lace";
+
+export async function GET(): Promise<Response> {
+  return sitemapResponse(await getSite());
+}
+```
+
+A `robots.txt.ts` page allows everything and names the sitemap:
+
+```ts
+import { robotsResponse } from "@lacecms/astro";
+import { getSite } from "../lib/lace";
+
+export async function GET(): Promise<Response> {
+  return robotsResponse(await getSite());
+}
+```
+
+Without `LACE_BUILD_SITE_URL` the build warns, writes no `sitemap.xml`, and
+pages have no canonical URL or `og:url`. With `LACE_SITE_INDEXING=off` every
+page is marked `noindex, nofollow` and `robots.txt` disallows everything.
+Entries marked _noindex_ in Admin get `noindex, follow` and are left out of the
+sitemap. Crawlers read `robots.txt` only at the host root, so a site served
+under a path must publish its robots rules at the root itself; one sitemap
+holds at most 50,000 URLs.
+
+## 9. Customize rich text
 
 `<RichText>` renders only the shared Lace allowlist and never raw HTML. Pass
 `components` to replace the element for a node or mark; an override receives
@@ -197,11 +379,13 @@ const { element } = Astro.props;
 <RichText components={{ link: ExternalLink }} document={document} />
 ```
 
-## 8. Style through the hooks
+## 10. Style through the hooks
 
 Target `data-lace-model`, `data-lace-entry`, `data-lace-block`,
 `data-lace-block-key` and `data-lace-part`; tag names and incidental classes are
-not part of the contract:
+not part of the contract. A block's `id` and its editor class name are content
+that editors choose and change, so style them only for classes you offer
+editors on purpose (and keep those classes in any CSS purge safelist):
 
 ```css
 /* Style Lace content only through the public data-lace-* hooks. */
@@ -213,7 +397,7 @@ not part of the contract:
 }
 ```
 
-## 9. Build
+## 11. Build
 
 ```sh
 pnpm astro build

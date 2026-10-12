@@ -1,0 +1,9 @@
+---
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps;
+
+const { anchor, block, className, settings } = Astro.props;
+---
+
+<section class:list={["envelope", className]} data-lace-block={block.type} data-lace-block-key={block.key} data-layout={String(settings.layout ?? "")} id={anchor}>{block.key}</section>

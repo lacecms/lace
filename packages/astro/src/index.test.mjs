@@ -2,8 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { LacePublishedSiteError, createPublishedSiteLoader } from "@lacecms/sdk";
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
-import { afterEach, expect, test } from "vitest";
-import { createAstroSiteLoader } from "../dist/index.js";
+import { afterEach, expect, test, vi } from "vitest";
+import { createAstroSiteLoader, robotsResponse, sitemapResponse } from "../dist/index.js";
 
 const token = "lace_build_astro-secret-token";
 const env = Object.freeze({
@@ -110,16 +110,26 @@ test("evaluating the server module in a browser fails", async () => {
   await expect(import("../dist/index.js?browser")).rejects.toThrow(/server-only/u);
 });
 
-test("the adapter exports only its server module and the two generic components", async () => {
+test("the adapter exports only its server module and the generic components", async () => {
   const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-  expect(Object.keys(manifest.exports)).toEqual([".", "./LaceBlocks.astro", "./RichText.astro"]);
+  expect(Object.keys(manifest.exports)).toEqual([
+    ".",
+    "./LaceBlocks.astro",
+    "./LaceSeo.astro",
+    "./RichText.astro",
+  ]);
   expect(manifest.files).toEqual(["dist"]);
   expect(manifest.peerDependencies).toEqual({ astro: "^7.3.1" });
   expect(Object.keys(manifest.dependencies).sort()).toEqual(["@lacecms/render", "@lacecms/sdk"]);
   const components = (await readdir(new URL("./", import.meta.url))).filter((name) =>
     name.endsWith(".astro"),
   );
-  expect(components.sort()).toEqual(["LaceBlocks.astro", "RichText.astro", "RichTextNodes.astro"]);
+  expect(components.sort()).toEqual([
+    "LaceBlocks.astro",
+    "LaceSeo.astro",
+    "RichText.astro",
+    "RichTextNodes.astro",
+  ]);
 });
 
 async function listen(server) {
@@ -235,4 +245,50 @@ test.each([
     await close(proxy);
     await close(origin);
   }
+});
+
+async function fixtureSite(extra = {}) {
+  return createAstroSiteLoader({ env: { ...env, ...extra }, fetch: exportServer().fetch })();
+}
+
+test("the sitemap response carries the SDK sitemap with an XML content type", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const site = await fixtureSite({ LACE_BUILD_SITE_URL: "https://site.example/" });
+    const response = sitemapResponse(site, { include: (entry) => entry.path === "/" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/xml; charset=utf-8");
+    const xml = await response.text();
+    expect(xml).toContain("<loc>https://site.example/</loc>");
+    expect(xml.match(/<loc>/gu)).toHaveLength(1);
+    expect(warn).not.toHaveBeenCalled();
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test("without a site URL the sitemap response has no body and warns once", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const response = sitemapResponse(await fixtureSite());
+    expect(response.status).toBe(404);
+    expect(response.body).toBeNull();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0][0]).toMatch(/LACE_BUILD_SITE_URL is not set: sitemap\.xml/u);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test("the robots response carries the SDK robots text", async () => {
+  const response = robotsResponse(
+    await fixtureSite({ LACE_BUILD_SITE_URL: "https://site.example/", LACE_SITE_INDEXING: "on" }),
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  expect(await response.text()).toBe(
+    "User-agent: *\nAllow: /\n\nSitemap: https://site.example/sitemap.xml\n",
+  );
+  const closed = robotsResponse(await fixtureSite({ LACE_SITE_INDEXING: "off" }));
+  expect(await closed.text()).toBe("User-agent: *\nDisallow: /\n");
 });

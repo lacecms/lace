@@ -13,6 +13,8 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   buildExportSchema,
+  publicGlobalContentSchema,
+  toPublicGlobalContentDto,
   publicContentEntrySchema,
   publicContentListSchema,
   publicMediaDictionarySchema,
@@ -72,6 +74,8 @@ import {
   siteBuildSchema,
   toBuildExportDto,
   toAdminContentEntryDto,
+  seoInputSchema,
+  toSeoDto,
   toContentEntryDto,
   toContentModelDto,
   toIsoTimestamp,
@@ -82,6 +86,10 @@ import {
   transportError,
   validationError,
   versionFromEntityTag,
+  formatSeoTitle,
+  isCanonicalUrl as contractsIsCanonicalUrl,
+  normalizeSeoText as contractsNormalizeSeoText,
+  seoText,
 } from "../dist/index.js";
 
 test("operational status requires a bounded engine release", () => {
@@ -272,9 +280,11 @@ const timestamp = unixMilliseconds(1_735_689_600_000);
 const actor = { id: actorId("actor-1"), role: "admin" };
 const block = {
   data: { heading: "Welcome" },
+  hidden: false,
   key: blockKey("hero-1"),
   position: 1_000,
   schemaVersion: 1,
+  settings: {},
   type: "hero",
 };
 const draft = {
@@ -453,7 +463,11 @@ describe("shared REST contract DTOs", () => {
     expect(v.parse(createContentEntryRequestSchema, createRequest)).toMatchObject({
       title: "Welcome",
     });
-    expect(v.parse(saveDraftRequestSchema, draftRequest)).toEqual(draftRequest);
+    // Omitted envelope values parse to their defaults.
+    expect(v.parse(saveDraftRequestSchema, draftRequest)).toEqual({
+      ...draftRequest,
+      blocks: [{ ...draftRequest.blocks[0], hidden: false, settings: {} }],
+    });
     expect(v.parse(publishContentEntryRequestSchema, { expectedRevision: 4 })).toEqual({
       expectedRevision: 4,
     });
@@ -603,7 +617,7 @@ describe("shared REST transport conventions", () => {
       body: {
         error: {
           code: "CONTENT_PAGE_SINGLETON",
-          message: "Page entries are defined by configuration.",
+          message: "Page and global entries are defined by configuration.",
         },
       },
       status: 409,
@@ -783,6 +797,390 @@ describe("admin entry list contracts", () => {
     ]) {
       expect(v.safeParse(contentModelListSchema, { items: [invalid] }).success).toBe(false);
     }
+  });
+
+  test("global models, entries, public globals, and exports have explicit contracts", () => {
+    const fields = { siteName: { required: true, type: "text" } };
+    const global = { blocks: [], fields, key: "settings", kind: "global", version: 1 };
+    const dto = toContentModelDto(global);
+    expect(dto).not.toHaveProperty("path");
+    expect(dto).not.toHaveProperty("route");
+    expect(v.parse(contentModelListSchema, { items: [dto] })).toEqual({ items: [dto] });
+    for (const invalid of [
+      { ...global, path: "/settings" },
+      { ...global, route: "/settings/:slug" },
+      { ...global, listFields: ["siteName"] },
+      { ...global, kind: "singleton" },
+    ]) {
+      expect(v.safeParse(contentModelListSchema, { items: [invalid] }).success).toBe(false);
+    }
+
+    const globalEntry = {
+      ...entry,
+      id: contentEntryId("settings"),
+      model: { key: "settings", kind: "global" },
+    };
+    const entryDto = toContentEntryDto(globalEntry);
+    expect(entryDto.model).toEqual({ key: "settings", kind: "global" });
+    expect(v.parse(contentEntrySchema, entryDto)).toEqual(entryDto);
+    expect(
+      v.safeParse(contentEntrySchema, {
+        ...entryDto,
+        model: { key: "settings", kind: "global", path: "/" },
+      }).success,
+    ).toBe(false);
+
+    const urlFor = (id) => mediaUrl("https://lace.example/", id);
+    const publicDto = toPublicGlobalContentDto(
+      { entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] },
+      urlFor,
+    );
+    expect(publicDto.global).toEqual({
+      blocks: published.blocks.map(({ hidden: _hidden, ...value }) => value),
+      fields: published.fields,
+      id: "settings",
+      modelKey: "settings",
+      publishedAt: toIsoTimestamp(timestamp),
+    });
+    expect(Object.keys(publicDto.media)).toEqual(["media-1"]);
+    expect(v.parse(publicGlobalContentSchema, publicDto)).toEqual(publicDto);
+    for (const extra of [{ path: "/" }, { draft: {} }, { title: "Settings" }, { slug: "x" }]) {
+      expect(
+        v.safeParse(publicGlobalContentSchema, {
+          ...publicDto,
+          global: { ...publicDto.global, ...extra },
+        }).success,
+      ).toBe(false);
+    }
+
+    const exportDto = toBuildExportDto(
+      {
+        entries: [
+          { entry, media: [{ id: "media-2", mimeType: "image/png" }], path: "/blog/welcome" },
+        ],
+        globals: [{ entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] }],
+        version: 3,
+      },
+      urlFor,
+    );
+    expect(exportDto.globals.map((item) => item.modelKey)).toEqual(["settings"]);
+    expect(Object.keys(exportDto.media)).toEqual(["media-1", "media-2"]);
+    expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
+    const { globals: _globals, ...legacy } = exportDto;
+    expect(v.parse(buildExportSchema, legacy).globals).toEqual([]);
+  });
+
+  test("block envelopes have explicit admin, request, public and metadata contracts", () => {
+    const shown = {
+      ...block,
+      anchor: "pricing",
+      className: "wide md:w-1/2",
+      settings: { align: "center" },
+    };
+    const hiddenBlock = { ...block, hidden: true, key: blockKey("hero-2"), position: 2_000 };
+    const envelopeEntry = {
+      ...entry,
+      draft: { ...draft, blocks: [shown, hiddenBlock] },
+      published: { ...published, blocks: [hiddenBlock, shown] },
+    };
+    const admin = toContentEntryDto(envelopeEntry);
+    expect(admin.draft.blocks).toEqual([
+      {
+        anchor: "pricing",
+        className: "wide md:w-1/2",
+        data: { heading: "Welcome" },
+        hidden: false,
+        key: "hero-1",
+        position: 1_000,
+        schemaVersion: 1,
+        settings: { align: "center" },
+        type: "hero",
+      },
+      {
+        data: { heading: "Welcome" },
+        hidden: true,
+        key: "hero-2",
+        position: 2_000,
+        schemaVersion: 1,
+        settings: {},
+        type: "hero",
+      },
+    ]);
+    expect(v.parse(contentEntrySchema, admin)).toEqual(admin);
+
+    const urlFor = (id) => mediaUrl("https://lace.example/", id);
+    const publicDto = toPublicContentEntryDto(
+      { entry: envelopeEntry, media: [], path: "/blog/welcome" },
+      urlFor,
+    );
+    expect(publicDto.entry.blocks).toEqual([
+      {
+        anchor: "pricing",
+        className: "wide md:w-1/2",
+        data: { heading: "Welcome" },
+        key: "hero-1",
+        position: 1_000,
+        schemaVersion: 1,
+        settings: { align: "center" },
+        type: "hero",
+      },
+    ]);
+    expect(v.parse(publicContentEntrySchema, publicDto)).toEqual(publicDto);
+    const { settings: _settings, ...legacyBlock } = publicDto.entry.blocks[0];
+    expect(
+      v.parse(publicContentEntrySchema, {
+        ...publicDto,
+        entry: { ...publicDto.entry, blocks: [legacyBlock] },
+      }).entry.blocks[0].settings,
+    ).toEqual({});
+    expect(
+      v.safeParse(publicContentEntrySchema, {
+        ...publicDto,
+        entry: { ...publicDto.entry, blocks: [{ ...publicDto.entry.blocks[0], hidden: false }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      toPublicContentListDto(
+        { items: [{ entry: envelopeEntry, media: [], path: "/a" }] },
+        urlFor,
+      ).items[0].blocks.map((value) => value.key),
+    ).toEqual(["hero-1"]);
+    expect(
+      toBuildExportDto(
+        { entries: [{ entry: envelopeEntry, media: [], path: "/a" }], version: 1 },
+        urlFor,
+      ).entries[0].blocks.map((value) => value.key),
+    ).toEqual(["hero-1"]);
+
+    const request = {
+      blocks: [{ data: {}, key: "hero-1", position: 1_000, schemaVersion: 1, type: "hero" }],
+      fields: {},
+      title: "Welcome",
+    };
+    const withBlock = (envelope) => ({
+      ...request,
+      blocks: [{ ...request.blocks[0], ...envelope }],
+    });
+    expect(
+      v.parse(
+        saveDraftRequestSchema,
+        withBlock({ anchor: "faq-2", className: " a  b ", hidden: true, settings: { x: 1 } }),
+      ).blocks[0],
+    ).toMatchObject({ anchor: "faq-2", className: " a  b ", hidden: true, settings: { x: 1 } });
+    for (const invalid of [
+      { hidden: "yes" },
+      { anchor: "Top" },
+      { anchor: "" },
+      { className: "a<b" },
+      { className: "" },
+      { settings: [] },
+      { visible: true },
+    ]) {
+      expect(
+        v.safeParse(saveDraftRequestSchema, withBlock(invalid)).success,
+        JSON.stringify(invalid),
+      ).toBe(false);
+    }
+
+    const metadata = {
+      fields: {},
+      settings: {
+        align: {
+          defaultValue: "left",
+          options: ["left", "center"],
+          required: false,
+          type: "select",
+        },
+      },
+      type: "panel",
+      version: 1,
+    };
+    expect(v.parse(blockMetadataSchema, metadata)).toEqual(metadata);
+    for (const settings of [
+      { image: { defaultValue: "m", required: false, type: "media" } },
+      { size: { required: false, type: "number" } },
+      {},
+    ]) {
+      expect(
+        v.safeParse(blockMetadataSchema, { ...metadata, settings }).success,
+        JSON.stringify(settings),
+      ).toBe(false);
+    }
+  });
+
+  test("SEO values have explicit admin, request, public, model and export contracts", () => {
+    const seo = { image: mediaId("media-1"), noindex: true, title: "Hello" };
+    const seoEntry = {
+      ...entry,
+      draft: { ...entry.draft, seo },
+      published: { ...published, seo: { canonical: "https://example.com/a" } },
+    };
+    const full = {
+      canonical: null,
+      description: null,
+      image: "media-1",
+      noindex: true,
+      title: "Hello",
+    };
+    expect(toSeoDto(undefined)).toEqual({
+      canonical: null,
+      description: null,
+      image: null,
+      noindex: false,
+      title: null,
+    });
+    const admin = toAdminContentEntryDto(
+      seoEntry,
+      { displayName: "Ada", id: "editor-1" },
+      { seo: true },
+    );
+    expect(admin.draft.seo).toEqual(full);
+    expect(admin.published.seo).toMatchObject({
+      canonical: "https://example.com/a",
+      noindex: false,
+    });
+    expect(v.parse(adminContentEntrySchema, admin)).toEqual(admin);
+    expect(toContentEntryDto(seoEntry).draft).not.toHaveProperty("seo");
+    expect(
+      v.safeParse(contentEntrySchema, {
+        ...toContentEntryDto(seoEntry),
+        draft: { ...toContentEntryDto(seoEntry).draft, seo: { ...full, canonical: "/a" } },
+      }).success,
+    ).toBe(false);
+
+    const request = { blocks: [], fields: {}, title: "Post" };
+    expect(v.parse(saveDraftRequestSchema, { ...request, seo: null }).seo).toBeNull();
+    expect(
+      v.parse(createContentEntryRequestSchema, {
+        ...request,
+        seo: { canonical: "https://example.com/a?x=1", description: "", noindex: false },
+      }).seo,
+    ).toEqual({ canonical: "https://example.com/a?x=1", description: "", noindex: false });
+    for (const invalid of [
+      { canonical: "/a" },
+      { canonical: "https://user:pass@example.com/" },
+      { canonical: "https://example.com/#top" },
+      { title: 5 },
+      { title: "x".repeat(201) },
+      { description: "a\nb" },
+      { description: "x".repeat(501) },
+      { keywords: "x" },
+      { noindex: "yes" },
+      { image: "" },
+    ]) {
+      const result = v.safeParse(saveDraftRequestSchema, { ...request, seo: invalid });
+      expect(result.success, JSON.stringify(invalid)).toBe(false);
+      expect(v.safeParse(seoInputSchema, invalid).success).toBe(false);
+    }
+
+    const urlFor = (id) => mediaUrl("https://lace.example/", id);
+    const source = { entry: seoEntry, media: [], path: "/blog/welcome" };
+    const enabled = toPublicContentEntryDto(source, urlFor, { seoModels: new Set(["posts"]) });
+    expect(enabled.entry.seo).toMatchObject({ canonical: "https://example.com/a", title: null });
+    expect(v.parse(publicContentEntrySchema, enabled)).toEqual(enabled);
+    expect(toPublicContentEntryDto(source, urlFor).entry).not.toHaveProperty("seo");
+    expect(
+      toPublicContentListDto({ items: [source] }, urlFor, { seoModels: new Set(["posts"]) })
+        .items[0].seo,
+    ).toMatchObject({ canonical: "https://example.com/a" });
+
+    const fields = {
+      cover: { required: false, type: "media" },
+      summary: { required: false, type: "textarea" },
+    };
+    const model = toContentModelDto({
+      blocks: [],
+      fields,
+      key: "posts",
+      kind: "collection",
+      route: "/blog/:slug",
+      seo: { description: "summary" },
+      version: 1,
+    });
+    expect(model.seo).toEqual({ description: "summary", image: null });
+    const defaults = toContentModelDto({
+      blocks: [],
+      fields: { siteName: { required: true, type: "text" } },
+      key: "settings",
+      kind: "global",
+      seoDefaults: { siteName: "siteName" },
+      version: 1,
+    });
+    expect(defaults.seoDefaults).toEqual({
+      description: null,
+      image: null,
+      siteName: "siteName",
+      titleTemplate: null,
+    });
+    expect(v.parse(contentModelListSchema, { items: [model, defaults] }).items).toHaveLength(2);
+    for (const invalid of [
+      { ...defaults, seo: { description: null, image: null } },
+      { ...model, seoDefaults: defaults.seoDefaults },
+    ]) {
+      expect(v.safeParse(contentModelListSchema, { items: [invalid] }).success).toBe(false);
+    }
+
+    const exportSeo = {
+      defaults: { ...defaults.seoDefaults, modelKey: "settings" },
+      models: { posts: { description: "summary", image: null } },
+    };
+    const exportDto = toBuildExportDto(
+      {
+        entries: [{ entry: seoEntry, media: [], path: "/blog/welcome" }],
+        globals: [
+          {
+            entry: {
+              ...seoEntry,
+              id: contentEntryId("settings"),
+              model: { key: "settings", kind: "global" },
+            },
+            media: [],
+          },
+        ],
+        version: 4,
+      },
+      urlFor,
+      exportSeo,
+    );
+    expect(exportDto.seo).toEqual(exportSeo);
+    expect(exportDto.entries[0].seo).toMatchObject({ canonical: "https://example.com/a" });
+    expect(exportDto.globals[0]).not.toHaveProperty("seo");
+    expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
+    const { seo: _seo, ...legacy } = exportDto;
+    expect(v.parse(buildExportSchema, legacy).seo).toEqual({ defaults: null, models: {} });
+    expect(
+      v.safeParse(buildExportSchema, {
+        ...exportDto,
+        globals: [{ ...exportDto.globals[0], seo: toSeoDto(undefined) }],
+      }).success,
+    ).toBe(false);
+    expect(toBuildExportDto({ entries: [], version: 1 }, urlFor).seo).toEqual({
+      defaults: null,
+      models: {},
+    });
+
+    expect(
+      v.parse(mediaDetailSchema.entries.usage, [
+        {
+          entryId: "e1",
+          locations: [{ field: "image", source: "seo", states: ["published"] }],
+          modelKey: "posts",
+          status: "published",
+          title: "Hello",
+        },
+      ]),
+    ).toHaveLength(1);
+    expect(
+      v.safeParse(mediaDetailSchema.entries.usage, [
+        {
+          entryId: "e1",
+          locations: [{ field: "cover", source: "seo", states: ["published"] }],
+          modelKey: "posts",
+          status: "published",
+          title: "Hello",
+        },
+      ]).success,
+    ).toBe(false);
   });
 
   test("validates media list queries, uploader summaries, and bounded usage details", () => {
@@ -1205,15 +1603,26 @@ describe("media metadata contracts", async () => {
 
 describe("public delivery DTOs", () => {
   const blocks = [
-    { data: { text: "Second" }, key: blockKey("b"), position: 1, schemaVersion: 1, type: "quote" },
+    {
+      data: { text: "Second" },
+      hidden: false,
+      key: blockKey("b"),
+      position: 1,
+      schemaVersion: 1,
+      settings: {},
+      type: "quote",
+    },
     {
       data: { media: "media-b" },
+      hidden: false,
       key: blockKey("a"),
       position: 0,
       schemaVersion: 2,
+      settings: {},
       type: "image",
     },
   ];
+  const delivered = ({ hidden: _hidden, ...value }) => value;
   const publicEntry = {
     ...entry,
     draft: { ...draft, title: "DRAFT ONLY" },
@@ -1238,7 +1647,7 @@ describe("public delivery DTOs", () => {
     );
     expect(v.parse(publicContentEntrySchema, dto)).toEqual(dto);
     expect(dto.entry).toEqual({
-      blocks: [blocks[1], blocks[0]],
+      blocks: [delivered(blocks[1]), delivered(blocks[0])],
       fields: draft.fields,
       id: "entry-1",
       modelKey: "posts",
@@ -1309,5 +1718,34 @@ describe("public delivery DTOs", () => {
     expect(() =>
       v.parse(publicMediaDictionarySchema, { "media-b": { ...dto.media["media-b"], alt: "" } }),
     ).toThrow();
+  });
+});
+
+describe("shared SEO text rules", () => {
+  test("seoText collapses whitespace and drops blank or non-text values", () => {
+    expect(seoText("  Hello \n  world ")).toBe("Hello world");
+    expect(seoText("   ")).toBeUndefined();
+    expect(seoText(42)).toBeUndefined();
+    expect(seoText(undefined)).toBeUndefined();
+  });
+
+  test("formatSeoTitle applies the title template rule", () => {
+    expect(formatSeoTitle("Hello", { siteName: "Lace" })).toBe("Hello | Lace");
+    expect(formatSeoTitle("Hello", { siteName: "Lace", titleTemplate: "%s — Notes" })).toBe(
+      "Hello — Notes",
+    );
+    expect(formatSeoTitle("$& costs", { titleTemplate: "%s · Shop" })).toBe("$& costs · Shop");
+    expect(formatSeoTitle("Hello", { siteName: "Lace", titleTemplate: "Notes" })).toBe(
+      "Hello | Lace",
+    );
+    expect(formatSeoTitle("Hello", { siteName: "  " })).toBe("Hello");
+    expect(formatSeoTitle("Hello", undefined)).toBe("Hello");
+  });
+
+  test("re-exports the domain SEO predicates", () => {
+    expect(contractsIsCanonicalUrl("https://example.com/a")).toBe(true);
+    expect(contractsIsCanonicalUrl("/a")).toBe(false);
+    expect(contractsNormalizeSeoText("a\nb", "title")).toBeUndefined();
+    expect(contractsNormalizeSeoText("  ", "title")).toBeNull();
   });
 });

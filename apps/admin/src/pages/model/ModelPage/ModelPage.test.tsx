@@ -20,6 +20,30 @@ test("routes collections to their entry list and pages back to the landing route
   renderRoute("/content/home", editor);
   expect(await screen.findByRole("heading", { name: "home" })).toBeInTheDocument();
   expect(screen.getByText("Open this page from the content landing route.")).toBeInTheDocument();
+
+  document.body.replaceChildren();
+  renderRoute(
+    "/content/settings",
+    editor,
+    stubClient({
+      listModels: async () => ({
+        items: [
+          {
+            blocks: [],
+            fields: {},
+            key: "settings",
+            kind: "global",
+            label: "Site settings",
+            version: 1,
+          },
+        ],
+      }),
+    }),
+  );
+  expect(await screen.findByRole("heading", { name: "Site settings" })).toBeInTheDocument();
+  expect(screen.getByText("Open this global from the content landing route.")).toBeInTheDocument();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Create entry/ })).not.toBeInTheDocument();
 });
 
 test("reports unknown models and failed model loads without an entry list", async () => {

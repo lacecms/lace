@@ -5,10 +5,10 @@ import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.cta>;
 
-const { block, context, data } = Astro.props;
+const { anchor, block, className, context, data } = Astro.props;
 ---
 
-<aside class="cta" data-lace-block={block.type} data-lace-block-key={block.key}>
+<aside class:list={["cta", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   <h2 data-lace-part="heading">{data.heading}</h2>
   {data.body !== undefined && <div data-lace-part="body"><RichText context={{ block: context, fieldPath: ["body"] }} document={data.body} /></div>}
   <a data-lace-part="action" href={data.actionUrl}>{data.actionLabel}</a>

@@ -16,6 +16,7 @@ import {
   SiteBuildUseCases,
 } from "@lacecms/application";
 import type {
+  CompleteDraftInput,
   DeferTask,
   EmailSender,
   InvitationIssueResult,
@@ -75,6 +76,7 @@ import {
   opaqueCursorSchema,
   publishContentEntryResultSchema,
   publicContentEntrySchema,
+  publicGlobalContentSchema,
   publicContentListSchema,
   publishContentEntryRequestSchema,
   resolveExpectedRevision,
@@ -83,7 +85,10 @@ import {
   setupStateSchema,
   toAdminContentEntryDto,
   toBuildExportDto,
+  toModelSeoDto,
+  toSeoDefaultsDto,
   toPublicContentEntryDto,
+  toPublicGlobalContentDto,
   toPublicContentListDto,
   toSiteBuildRecordDto,
   toContentModelDto,
@@ -118,7 +123,12 @@ import {
   MultipartParseError,
   parseMultipartRequest,
 } from "@mjackson/multipart-parser";
-import type { ClassifiedError, ContractValidationIssue } from "@lacecms/contracts";
+import type {
+  ClassifiedError,
+  ContentBlockDto,
+  ContractValidationIssue,
+  ExportSeoDto,
+} from "@lacecms/contracts";
 import { toJsonSchema } from "@valibot/to-json-schema";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
@@ -145,13 +155,49 @@ interface ServerModelBase {
   readonly version: number;
 }
 
+interface ServerModelSeo {
+  readonly description?: string;
+  readonly image?: string;
+}
+
+interface ServerSeoDefaults {
+  readonly description?: string;
+  readonly image?: string;
+  readonly siteName: string;
+  readonly titleTemplate?: string;
+}
+
 type ServerContentModel =
   | (ServerModelBase & {
       readonly kind: "collection";
       readonly listFields?: readonly string[];
       readonly route: string;
+      readonly seo?: ServerModelSeo;
     })
-  | (ServerModelBase & { readonly kind: "page"; readonly path: string });
+  | (ServerModelBase & { readonly kind: "global"; readonly seoDefaults?: ServerSeoDefaults })
+  | (ServerModelBase & {
+      readonly kind: "page";
+      readonly path: string;
+      readonly seo?: ServerModelSeo;
+    });
+
+/**
+ * A request block as use-case input; the contract has already checked that
+ * its settings are a JSON object and its envelope values are well formed.
+ */
+function blockInput(block: ContentBlockDto): CompleteDraftInput["blocks"][number] {
+  return {
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
+    data: block.data,
+    hidden: block.hidden,
+    key: block.key as never,
+    position: block.position,
+    schemaVersion: block.schemaVersion,
+    settings: block.settings as CompleteDraftInput["blocks"][number]["data"],
+    type: block.type,
+  };
+}
 
 interface ServerBlockMetadata {
   readonly type: string;
@@ -376,6 +422,14 @@ function pageModel(
   return model?.kind === "page" ? model : undefined;
 }
 
+function globalModel(
+  config: ServerConfig,
+  key: string,
+): Extract<ServerContentModel, { readonly kind: "global" }> | undefined {
+  const model = contentModel(config, key);
+  return model?.kind === "global" ? model : undefined;
+}
+
 function collectionModel(
   config: ServerConfig,
   key: string,
@@ -459,9 +513,32 @@ function modelDto(config: ServerConfig, model: ServerContentModel) {
     ...(model.kind === "collection" && model.listFields !== undefined
       ? { listFields: model.listFields }
       : {}),
-    ...(model.kind === "page" ? { path: model.path } : { route: model.route }),
+    ...(model.kind === "page" ? { path: model.path } : {}),
+    ...(model.kind === "collection" ? { route: model.route } : {}),
+    ...(model.kind !== "global" && model.seo !== undefined ? { seo: model.seo } : {}),
+    ...(model.kind === "global" && model.seoDefaults !== undefined
+      ? { seoDefaults: model.seoDefaults }
+      : {}),
     version: model.version,
   });
+}
+
+/** The export's SEO section: fallback fields of SEO-enabled models and the defaults global. */
+function exportSeo(config: ServerConfig): ExportSeoDto {
+  const models: Record<string, { description: string | null; image: string | null }> = {};
+  let defaults: ExportSeoDto["defaults"] = null;
+  for (const model of [...config.content].sort((left, right) =>
+    left.key < right.key ? -1 : left.key > right.key ? 1 : 0,
+  )) {
+    if (model.kind === "global") {
+      if (model.seoDefaults !== undefined) {
+        defaults = { ...toSeoDefaultsDto(model.seoDefaults), modelKey: model.key };
+      }
+    } else if (model.seo !== undefined) {
+      models[model.key] = toModelSeoDto(model.seo);
+    }
+  }
+  return { defaults, models };
 }
 
 function publicPath(value: string): string {
@@ -635,6 +712,9 @@ export function createLaceApp(input: LaceAppInput): Hono {
     app.all("/api/auth/*", (context) => auth.fetch(context.req.raw));
   }
 
+  const seoSection = exportSeo(input.config);
+  const seoModels: ReadonlySet<string> = new Set(Object.keys(seoSection.models));
+
   async function actor(context: {
     readonly req: { readonly raw: Request };
     get(key: string): unknown;
@@ -658,6 +738,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         actor: resolvedActor,
         actorId: entry.draft.updatedBy.id,
       }),
+      { seo: seoSection.models[entry.model.key] !== undefined },
     );
   }
 
@@ -1745,13 +1826,14 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const body = context.req.valid("json") as v.InferOutput<
         typeof createContentEntryRequestSchema
       >;
-      const { blocks, fields, slug, title } = body;
+      const { blocks, fields, seo, slug, title } = body;
       const resolvedActor = await actor(context);
       const entry = await input.content.create({
         actor: resolvedActor,
         modelKey,
-        blocks: blocks.map((block) => ({ ...block, key: block.key as never })),
+        blocks: blocks.map(blockInput),
         fields,
+        ...(seo === undefined ? {} : { seo }),
         ...(slug === undefined ? {} : { slug }),
         title,
       });
@@ -1806,10 +1888,11 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const resolvedActor = await actor(context);
       const entry = await input.content.save({
         actor: resolvedActor,
-        blocks: body.blocks.map((block) => ({ ...block, key: block.key as never })),
+        blocks: body.blocks.map(blockInput),
         entryId: context.req.param("entryId") as never,
         expectedRevision: revision(body, context.req.raw),
         fields: body.fields,
+        ...(body.seo === undefined ? {} : { seo: body.seo }),
         ...(body.slug === undefined ? {} : { slug: body.slug }),
         title: body.title,
       });
@@ -1850,6 +1933,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         publishContentEntryResultSchema,
         toPublishContentEntryResultDto({
           ...published,
+          seo: seoSection.models[published.entry.model.key] !== undefined,
           updatedBy: await input.content.describeActor({
             actor: resolvedActor,
             actorId: published.entry.draft.updatedBy.id,
@@ -1896,6 +1980,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         unpublishContentEntryResultSchema,
         toUnpublishContentEntryResultDto({
           ...unpublished,
+          seo: seoSection.models[unpublished.entry.model.key] !== undefined,
           updatedBy: await input.content.describeActor({
             actor: resolvedActor,
             actorId: unpublished.entry.draft.updatedBy.id,
@@ -1985,6 +2070,29 @@ export function createLaceApp(input: LaceAppInput): Hono {
   );
 
   app.get(
+    "/api/v1/public/globals/:modelKey",
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicGlobalContentSchema) } },
+          description: "Published global",
+        },
+      },
+      summary: "Read a published global",
+      tags: ["public"],
+    }),
+    validator("param", modelKeyParams, validationHook),
+    async (context) => {
+      const model = globalModel(input.config, context.req.param("modelKey"));
+      if (model === undefined) return notFound();
+      const global = await input.publicContent.loadPublicGlobal(model.key as never);
+      return global === null
+        ? notFound()
+        : response(publicGlobalContentSchema, toPublicGlobalContentDto(global, publicMediaUrl()));
+    },
+  );
+
+  app.get(
     "/api/v1/public/pages/:modelKey",
     describeRoute({
       responses: {
@@ -2003,7 +2111,10 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.publicContent.loadPublic(model.path);
       return entry === null
         ? notFound()
-        : response(publicContentEntrySchema, toPublicContentEntryDto(entry, publicMediaUrl()));
+        : response(
+            publicContentEntrySchema,
+            toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
+          );
     },
   );
 
@@ -2027,7 +2138,10 @@ export function createLaceApp(input: LaceAppInput): Hono {
         modelKey: model.key as never,
         ...pagination(context.req.raw),
       });
-      return response(publicContentListSchema, toPublicContentListDto(page, publicMediaUrl()));
+      return response(
+        publicContentListSchema,
+        toPublicContentListDto(page, publicMediaUrl(), { seoModels }),
+      );
     },
   );
 
@@ -2061,7 +2175,10 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.publicContent.loadPublic(path);
       return entry === null
         ? notFound()
-        : response(publicContentEntrySchema, toPublicContentEntryDto(entry, publicMediaUrl()));
+        : response(
+            publicContentEntrySchema,
+            toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
+          );
     },
   );
 
@@ -2094,7 +2211,10 @@ export function createLaceApp(input: LaceAppInput): Hono {
       const entry = await input.publicContent.loadPublic(path);
       return entry === null
         ? notFound()
-        : response(publicContentEntrySchema, toPublicContentEntryDto(entry, publicMediaUrl()));
+        : response(
+            publicContentEntrySchema,
+            toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
+          );
     },
   );
 
@@ -2137,9 +2257,14 @@ export function createLaceApp(input: LaceAppInput): Hono {
           return new Response(null, { headers: { etag }, status: 304 });
       }
       const buildExport = await input.publicContent.exportBuildContent();
-      return response(buildExportSchema, toBuildExportDto(buildExport, publicMediaUrl()), 200, {
-        etag: entityTagForVersion(buildExport.version),
-      });
+      return response(
+        buildExportSchema,
+        toBuildExportDto(buildExport, publicMediaUrl(), seoSection),
+        200,
+        {
+          etag: entityTagForVersion(buildExport.version),
+        },
+      );
     },
   );
 

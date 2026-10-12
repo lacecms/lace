@@ -2,7 +2,8 @@ import { defineBlock, field } from "./index.js";
 import type {
   BlockDataValues,
   BlockMigration,
-  JsonObject,
+  BlockMigrationInput,
+  BlockSettingsValues,
   FieldDefinition,
   FieldDefinitionVisitor,
   FieldIsRequired,
@@ -42,7 +43,10 @@ const hero = defineBlock({
 const versionedHero = defineBlock({
   fields: { heading: field.text({ required: true }) },
   migrations: {
-    2: ({ title, ...rest }) => ({ ...rest, heading: title ?? "" }),
+    2: ({ data: { title, ...rest }, settings }) => ({
+      data: { ...rest, heading: title ?? "" },
+      settings,
+    }),
   },
   type: "hero",
   version: 2,
@@ -50,10 +54,36 @@ const versionedHero = defineBlock({
 type _migration = Expect<
   Equal<NonNullable<typeof versionedHero.migrations>[number], BlockMigration>
 >;
-type _migrationInput = Expect<Equal<Parameters<BlockMigration>[0], JsonObject>>;
+type _migrationInput = Expect<Equal<Parameters<BlockMigration>[0], BlockMigrationInput>>;
 
 // @ts-expect-error migrations must return JSON object data synchronously.
-defineBlock({ fields: {}, migrations: { 2: async () => ({}) }, type: "async", version: 2 });
+defineBlock({
+  fields: {},
+  migrations: { 2: async () => ({ data: {} }) },
+  type: "async",
+  version: 2,
+});
+// @ts-expect-error migrations return `{data, settings?}`, not bare data.
+defineBlock({ fields: {}, migrations: { 2: () => 1 }, type: "bare", version: 2 });
+
+const panel = defineBlock({
+  fields: {},
+  settings: {
+    align: field.select({ defaultValue: "left", options: ["left", "center"] as const }),
+    boxed: field.boolean({ defaultValue: false }),
+  },
+  type: "panel",
+  version: 1,
+});
+type _settings = Expect<
+  Equal<
+    BlockSettingsValues<NonNullable<typeof panel.settings>>,
+    Readonly<{ align: "center" | "left"; boxed: boolean }>
+  >
+>;
+type _noSettings = Expect<
+  Equal<typeof hero.settings, undefined | Readonly<Record<never, FieldDefinition>>>
+>;
 
 type _text = Expect<Equal<FieldValue<typeof text>, string>>;
 type _textarea = Expect<Equal<FieldValue<typeof textarea>, string>>;

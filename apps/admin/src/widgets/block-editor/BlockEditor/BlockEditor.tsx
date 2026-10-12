@@ -21,9 +21,9 @@ import { BLOCK_MESSAGES, type DraftEditorValues } from "../../../entities/conten
 import { Button } from "../../../shared/ui/Button/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { AddBlockMenu } from "../AddBlockMenu/index.js";
-import { BlockCard } from "../BlockCard/index.js";
+import { BlockCard, type BlockTab } from "../BlockCard/index.js";
 import { RemovedBlockNotice } from "../RemovedBlockNotice/index.js";
-import { blockLabel, type BlockDefinitionDto } from "../block-presentation.js";
+import { blockLabel, defaultSettings, type BlockDefinitionDto } from "../block-presentation.js";
 
 interface RemovedBlock {
   readonly block: ContentBlockDto;
@@ -39,13 +39,19 @@ export function BlockEditor({
   control,
   errors,
   getValues,
+  linkBase,
   model,
+  readOnly = false,
 }: {
   readonly control: Control<DraftEditorValues, unknown, DraftEditorValues>;
   /** Per-block errors by index, plus `root` for the block list as a whole. */
   readonly errors: Record<string, Record<string, unknown>> | undefined;
   readonly getValues: UseFormGetValues<DraftEditorValues>;
+  /** The entry's absolute site URL, when the site URL and the entry path are known. */
+  readonly linkBase?: string | undefined;
   readonly model: ContentModelDto;
+  /** Viewers see each block's settings read only, without tabs. */
+  readonly readOnly?: boolean;
 }) {
   const { fields, insert, move, remove } = useFieldArray({
     control,
@@ -53,6 +59,9 @@ export function BlockEditor({
     keyName: "formId",
   });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  // Tab selection is kept by block key so it survives reorders and saves.
+  const [tabs, setTabs] = useState<ReadonlyMap<string, BlockTab>>(() => new Map());
+  const [announcement, setAnnouncement] = useState("");
   const [activeKey, setActiveKey] = useState<string>();
   const [focusKey, setFocusKey] = useState<string>();
   const [removed, setRemoved] = useState<RemovedBlock>();
@@ -120,16 +129,21 @@ export function BlockEditor({
   };
   const insertDefinition = (index: number, definition: BlockDefinitionDto) =>
     insertBlock(index, {
+      anchor: "",
+      className: "",
       data: structuredClone(definition.defaultValue ?? {}) as ContentBlockDto["data"],
+      hidden: false,
       key: ulid(),
       position: Math.max(0, ...fields.map((block) => block.position)) + 1_024,
       schemaVersion: definition.version,
+      settings: defaultSettings(definition),
       type: definition.type,
     });
   const duplicate = (index: number) => {
-    const block = getValues(`blocks.${index}`);
+    // An anchor is unique within the entry, so the copy starts without one.
     insertBlock(index + 1, {
-      ...structuredClone(block),
+      ...structuredClone(getValues(`blocks.${index}`)),
+      anchor: "",
       key: ulid(),
       position: Math.max(0, ...fields.map((item) => item.position)) + 1_024,
     });
@@ -212,10 +226,13 @@ export function BlockEditor({
         error={error}
         index={index}
         key={block.formId}
+        linkBase={linkBase}
         onActivate={() => setActiveKey(block.key)}
+        onAnnounce={setAnnouncement}
         onDuplicate={() => duplicate(index)}
         onMove={(target) => moveBlock(index, target)}
         onRemove={() => removeBlock(index, definition)}
+        onTabChange={(tab) => setTabs((current) => new Map(current).set(block.key, tab))}
         onToggleCollapsed={() =>
           setCollapsed((current) => {
             const next = new Set(current);
@@ -224,6 +241,8 @@ export function BlockEditor({
             return next;
           })
         }
+        readOnly={readOnly}
+        tab={tabs.get(block.key) ?? "content"}
         total={fields.length}
       />,
     );
@@ -235,6 +254,9 @@ export function BlockEditor({
       <h2 className="m-0 text-lg font-semibold outline-hidden" id="blocks-title" tabIndex={-1}>
         Blocks
       </h2>
+      <p className="sr-only" role="status">
+        {announcement}
+      </p>
       {listError === undefined ? undefined : (
         <p className={`${fieldErrorClass} text-xs`} role="alert">
           {listError}

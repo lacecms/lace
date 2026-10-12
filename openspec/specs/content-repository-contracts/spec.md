@@ -126,3 +126,124 @@ bounded, chunked statements and SHALL NOT read media per entry.
 - **WHEN** an entry is published and its draft changes
 - **THEN** the in-memory fake's public reads expose only published values, like
   the Node and D1 repositories
+
+### Requirement: Repository contract fixtures cover global models
+The shared repository contract SHALL configure a global model and SHALL verify
+on Node SQLite and D1 that: synchronization creates its singleton draft with
+the page-singleton rules; a second entry for it is refused with
+`CONTENT_MODEL_CARDINALITY_CONFLICT`; publishing it creates a published
+snapshot and no published route, advances the published-state version and
+coalesces one build; republishing replaces the snapshot; unpublishing removes
+the snapshot and leaves the draft; reverting copies the publication into the
+draft without a version change; and an injected failure at any publication or
+unpublication checkpoint leaves the global, version and build state unchanged.
+A public global read by model key SHALL return the published global with the
+active media its published snapshot references, and nothing for an unpublished
+global, an unknown key or a page or collection key. Public path reads,
+collection lists and the export `entries` SHALL never contain a global, the
+export SHALL list published globals ordered by model key, and the public media
+read SHALL serve media referenced only by a published global. The in-memory
+repository fake SHALL satisfy the same global rules, and its public media read
+SHALL accept media referenced by any current published snapshot.
+
+#### Scenario: A global is published and read
+- **WHEN** the contract synchronizes the `settings` global, saves a draft that
+  references one media item and publishes it
+- **THEN** the public global read returns its fields, blocks, publication time
+  and that media item, no published route exists for the entry, and the
+  published-state version advanced by one
+
+#### Scenario: Globals stay out of routed reads
+- **WHEN** a page, a collection entry and a global are published
+- **THEN** path reads and collection lists never return the global, the export
+  lists the page and collection entry under `entries` and the global under
+  `globals`, and the export media covers all three
+
+#### Scenario: A global is unpublished
+- **WHEN** the published global is unpublished with its current snapshot ID
+- **THEN** the public global read returns nothing, the export has no globals,
+  the draft is unchanged and the published-state version advanced
+
+#### Scenario: Media used only by a global is public
+- **WHEN** a media item is referenced only by a published global
+- **THEN** the public media read returns it on both runtimes and in the fake
+
+### Requirement: Repository contract fixtures cover the SEO group
+The shared repository contract suite SHALL include an SEO-enabled model and
+SHALL prove the following on the in-memory fake, Node SQLite and D1:
+
+- create, save, publish, revert and duplicate persist and copy the SEO group
+  exactly;
+- save replaces the draft's `$seo` media reference;
+- publication copies it to the published snapshot;
+- revert and duplicate copy it to the new draft;
+- an SEO image blocks media deletion with `MEDIA_IN_USE`;
+- an SEO image counts in `usageCount` and appears in media usage with source
+  `seo` and field `image`;
+- an image referenced only by a published SEO group is served by the public
+  media read and appears in the media dictionary of public reads and the
+  build export;
+- an image referenced only by a draft SEO group is not served and does not
+  appear there;
+- a hinted synchronization that disables SEO clears every group and `$seo`
+  reference of the model atomically, and leaves other models untouched;
+- block migrations and field renames or removals during synchronization leave
+  SEO groups and `$seo` references unchanged.
+
+#### Scenario: SEO survives the publication lifecycle
+- **WHEN** a draft with an SEO group and image is saved, published, edited,
+  and reverted on each runtime
+- **THEN** each read returns the expected group and reference rows
+
+#### Scenario: SEO image protects media
+- **WHEN** media is referenced only by a draft SEO image and its deletion is
+  requested
+- **THEN** deletion fails with `MEDIA_IN_USE` and the media detail lists one
+  `seo`/`image` location in the draft
+
+#### Scenario: SEO image in public media
+- **WHEN** an entry whose published SEO group names `media-2`, used nowhere
+  else, is read publicly and exported
+- **THEN** `media-2` is in each media dictionary and the public media read
+  serves it
+
+#### Scenario: Hinted prune is atomic
+- **WHEN** a hinted SEO removal fails at an injected checkpoint
+- **THEN** every snapshot keeps its SEO group and references, and a retry
+  prunes them all
+
+### Requirement: Repository contract fixtures cover the block envelope
+The shared repository contract suite SHALL include a block type that declares
+settings and SHALL prove the following on the in-memory fake, Node SQLite and
+D1:
+
+- create, save, publish, revert and duplicate persist and copy each block's
+  anchor, class name, hidden flag and settings exactly;
+- a block migration during synchronization rewrites settings and keeps the
+  anchor, class name and hidden flag;
+- a hidden block's media references are stored, block media deletion with
+  `MEDIA_IN_USE` and appear in media usage;
+- public page, collection, slug, path and global reads and the build export
+  leave hidden blocks out of `blocks`;
+- media referenced only by hidden blocks of a published snapshot are left out
+  of the media dictionaries and are not served by the public media read, while
+  media also referenced by a visible block, a field or the SEO group stay in
+  them;
+- the stored anchor uniqueness holds per snapshot, so a draft and its
+  published copy may share anchors.
+
+#### Scenario: The envelope survives the publication lifecycle
+- **WHEN** a draft with an anchored, class-named, hidden block with settings is
+  saved, published, edited and reverted on each runtime
+- **THEN** each read returns the expected envelope values
+
+#### Scenario: Hidden blocks are not delivered
+- **WHEN** a published entry holds a visible block and a hidden image block
+  whose media is used nowhere else, and it is read publicly and exported
+- **THEN** each response lists only the visible block, the hidden block's media
+  is in no media dictionary, and the public media read does not serve it
+
+#### Scenario: Hidden-block media is protected
+- **WHEN** deletion is requested for media referenced only by a hidden block
+  of a published snapshot
+- **THEN** deletion fails with `MEDIA_IN_USE`

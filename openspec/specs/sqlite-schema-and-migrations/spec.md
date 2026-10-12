@@ -31,19 +31,19 @@ to the architecture-defined values.
 - **THEN** the database rejects the write and leaves valid stored state intact
 
 ### Requirement: Persistence constraints preserve content and dispatch invariants
-The schema SHALL enforce one page entry per model through partial uniqueness,
-one globally owned published path, unique media storage keys, one idempotency
-record per scope/key, and at most one unclaimed pending site-build request. It
-SHALL represent outbox dispatcher leases with nullable owner and timestamp
-fields. Required foreign keys and actions SHALL cascade entry/snapshot removal
-to blocks, media-reference projections, and published routes; restrict deletion
-of a model with entries or media with references; set entry snapshot pointers to
-NULL when their snapshot is deleted; and cascade a content-model key update to
-entries.
+The schema SHALL enforce one entry per page or global model through partial
+uniqueness, one globally owned published path, unique media storage keys, one
+idempotency record per scope/key, and at most one unclaimed pending site-build
+request. It SHALL represent outbox dispatcher leases with nullable owner and
+timestamp fields. Required foreign keys and actions SHALL cascade entry/snapshot
+removal to blocks, media-reference projections, and published routes; restrict
+deletion of a model with entries or media with references; set entry snapshot
+pointers to NULL when their snapshot is deleted; and cascade a content-model key
+update to entries.
 
 #### Scenario: Conflicting singleton or public route is rejected
-- **WHEN** writes attempt to create a second singleton entry for one page model
-  or assign an already-owned published path to another entry
+- **WHEN** writes attempt to create a second singleton entry for one page or
+  global model or assign an already-owned published path to another entry
 - **THEN** the conflicting write is rejected by a uniqueness constraint
 
 #### Scenario: Referential cleanup and protection are enforced
@@ -236,3 +236,84 @@ Node SQLite and D1, and SHALL leave every existing row with all four columns
 #### Scenario: The database refuses over-long text
 - **WHEN** a statement stores an `alt` value of 1,001 characters
 - **THEN** the statement fails with a check-constraint error
+
+### Requirement: Content-model kinds include global through a guarded table rebuild
+The `content_models.kind` check SHALL accept exactly `page`, `collection` and
+`global`. Migration `0007` SHALL widen the check on an existing database by
+rebuilding `content_models` inside the migration transaction with deferred
+foreign-key enforcement: it SHALL copy every column of every stored model
+unchanged, keep the primary key, the version check and the
+`content_entries.model_key` foreign key with its key-update cascade and delete
+restriction, and leave every entry, snapshot, block, route, media reference and
+published-state row unchanged. The same migration SQL SHALL apply on Node
+SQLite and D1. The explicit Node migrator SHALL apply pending migrations with
+foreign-key enforcement suspended on its connection, SHALL run a foreign-key
+integrity check before restoring enforcement, and SHALL fail without reporting
+success when the check finds a violation. Connections that serve the
+application SHALL keep foreign-key enforcement on.
+
+#### Scenario: Upgrade a populated database
+- **WHEN** a database at migration `0006` holding page and collection models,
+  their entries, published snapshots, routes and media references is migrated on
+  Node or D1
+- **THEN** migration `0007` completes, every stored row is unchanged, a
+  `global` model can be inserted, and an unsupported kind is still rejected
+
+#### Scenario: Foreign keys survive the rebuild
+- **WHEN** the migrated database deletes a model that has entries, renames a
+  model key, or inserts an entry naming an unknown model
+- **THEN** the deletion and the unknown reference are rejected and the key
+  update cascades to the model's entries
+
+#### Scenario: Node migration verifies referential integrity
+- **WHEN** the Node migrator finishes applying pending migrations
+- **THEN** it runs the foreign-key integrity check, restores enforcement on the
+  connection, and reports the installed versions only when no violation exists
+
+### Requirement: Content snapshots store an optional SEO group
+`content_snapshots` SHALL have a nullable `seo_json` column that holds the
+normalized SEO group as a JSON object, or `NULL` when the snapshot has none.
+Migration `0008` SHALL add the column with one additive `ALTER TABLE … ADD`
+on Node SQLite and D1. The migration SHALL not rebuild a table, backfill rows
+or change any existing row, index or foreign key. The checked-in migration
+inventory SHALL list the migration.
+
+#### Scenario: Upgrade a populated database
+- **WHEN** a database at migration `0007` holding pages, collection entries,
+  published snapshots, blocks and media references is migrated to `0008` on
+  Node SQLite or D1
+- **THEN** every existing row is unchanged, every existing snapshot has
+  `seo_json` `NULL`, and foreign keys still hold
+
+#### Scenario: Store a snapshot with an SEO group
+- **WHEN** a snapshot is inserted with an SEO group after the migration
+- **THEN** reading it back returns the same group
+
+### Requirement: Content blocks store the block envelope
+`content_blocks` SHALL have the columns `anchor` (nullable text), `class_name`
+(nullable text), `hidden` (integer, not null, default `0`, constrained to `0`
+or `1`) and `settings_json` (text, not null, default `'{}'`). A partial unique
+index SHALL make `(snapshot_id, anchor)` unique for rows whose `anchor` is not
+`NULL`. Migration `0009` SHALL add the columns with additive
+`ALTER TABLE … ADD` statements and create the index on Node SQLite and D1. It
+SHALL not rebuild a table, backfill rows through the application or change any
+existing foreign key. Existing blocks SHALL read as visible, without an anchor
+or class name, with `{}` settings. The checked-in migration inventory SHALL
+list the migration.
+
+#### Scenario: Upgrade a populated database
+- **WHEN** a database at migration `0008` holding drafts, published snapshots,
+  blocks and media references is migrated to `0009` on Node SQLite or D1
+- **THEN** every existing block keeps its key, type, position, version and
+  data, has `anchor` and `class_name` `NULL`, `hidden` `0` and
+  `settings_json` `'{}'`, and foreign keys still hold
+
+#### Scenario: The database rejects a duplicate anchor
+- **WHEN** two blocks of the same snapshot are written with the same anchor
+  directly, bypassing validation
+- **THEN** the write fails on the unique index, while the same anchor in a
+  different snapshot is accepted
+
+#### Scenario: The database rejects an invalid hidden value
+- **WHEN** a block row is written with `hidden` `2`
+- **THEN** the write fails on the column constraint

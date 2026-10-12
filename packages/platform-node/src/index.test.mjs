@@ -992,12 +992,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(7);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(10);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(7);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(10);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1088,7 +1088,9 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       expect(() => insertEntry.run("home-2", "home", 1, "admin", 1, 1)).toThrow();
       expect(() =>
         database.connection
-          .prepare("insert into content_blocks values (?, ?, ?, ?, ?, ?, ?, ?)")
+          .prepare(
+            "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+          )
           .run("missing", "block", "hero", 1000, 1, "{}", 1, 1),
       ).toThrow();
 
@@ -1125,7 +1127,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       insertEntry.run("post-1", "posts", null, "admin", 1, 1);
       insertEntry.run("post-2", "posts", null, "admin", 1, 1);
       const insertSnapshot = database.connection.prepare(
-        "insert into content_snapshots values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
       insertSnapshot.run("post-1-draft", "post-1", 1, null, "First", "{}", 1, 1, 1, "admin");
       insertSnapshot.run("post-2-draft", "post-2", 1, null, "Second", "{}", 1, 1, 1, "admin");
@@ -1184,7 +1186,9 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       database.connection.prepare("delete from media where id = ?").run("media-1");
 
       database.connection
-        .prepare("insert into content_blocks values (?, ?, ?, ?, ?, ?, ?, ?)")
+        .prepare(
+          "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
         .run("post-2-draft", "block-1", "hero", 1000, 1, "{}", 1, 1);
       database.connection.prepare("delete from content_entries where id = ?").run("post-2");
       expect(
@@ -1298,10 +1302,11 @@ test("bounds Node build-export queries and selects the entry-list index", async 
           { media: [{ id: "media-1" }], path: "/blog/post-a" },
           { media: [{ id: "media-1" }], path: "/blog/post-b" },
         ],
+        globals: [],
         version: 2,
       });
-      // Routes, snapshots, blocks, referenced media, and the version.
-      expect(statements.length).toBeLessThanOrEqual(5);
+      // Routes, globals, snapshots, blocks, referenced media, and the version.
+      expect(statements.length).toBeLessThanOrEqual(6);
       const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
       expect(
         database.connection
