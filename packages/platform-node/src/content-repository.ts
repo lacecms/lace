@@ -1,5 +1,6 @@
 import {
   actorDisplayName,
+  configurationSyncSnapshotRewrites,
   DISPATCHER_LEASE_DURATION_MS,
   SITE_BUILD_DEBOUNCE_MS,
   dispatcherEventId,
@@ -26,6 +27,7 @@ import type {
   ContentEntryReadPort,
   ApplyConfigurationSyncBlockMigrationsInput,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncSnapshotRewrite,
   ConfigurationSyncMigrationCounts,
   ConfigurationSyncMigrationPage,
   ConfigurationSyncMigrationScanInput,
@@ -103,6 +105,8 @@ import {
   assertMigrationPageSize,
   configurationSyncMigrationStatements,
   configurationSyncWriteStatements,
+  configurationSyncSnapshotRewriteStatements,
+  SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
   syncMigrationPage,
   syncMigrationSnapshotIds,
@@ -262,7 +266,9 @@ export class NodeContentRepository
     )) {
       blockRows.push(
         ...(this.connection
-          .prepare(`${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")})`)
+          .prepare(
+            `${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")}) order by snapshot_id, position`,
+          )
           .all(...group) as readonly SyncBlockRow[]),
       );
     }
@@ -475,6 +481,42 @@ export class NodeContentRepository
               expected.projectionHash,
             );
           if (updated.changes !== 1) failure("Configuration synchronization plan is stale.");
+          if (
+            (operation.action === "version-update" || operation.action === "rename") &&
+            operation.evolution?.recursiveFields
+          ) {
+            const replacements: ConfigurationSyncSnapshotRewrite[] = [];
+            let after = "";
+            while (true) {
+              const rows = this.connection
+                .prepare(SYNC_FIELD_REWRITE_ROWS_SQL)
+                .all(
+                  operation.model.key,
+                  after,
+                ) as readonly import("@lacecms/db").SyncFieldRewriteRow[];
+              replacements.push(
+                ...configurationSyncSnapshotRewrites(
+                  configuration.fields,
+                  operation.evolution.changes,
+                  rows.map((row) => ({
+                    id: row.id,
+                    fields: parseObject(row.fields_json, "Snapshot fields"),
+                    state: row.state,
+                  })),
+                ),
+              );
+              if (rows.length < 100) break;
+              after = rows.at(-1)!.id;
+            }
+            const statements = configurationSyncSnapshotRewriteStatements(
+              replacements,
+              operation.model.key,
+            );
+            for (const [index, statement] of statements.entries()) {
+              this.checkpoint(`sync.model.rewrite-fields.${index}`);
+              this.connection.prepare(statement.sql).run(...statement.params);
+            }
+          }
           for (const write of configurationSyncContentWrites(operation, configuration)) {
             this.checkpoint(`sync.model.${write.action}`);
             for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {

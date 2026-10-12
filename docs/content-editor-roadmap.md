@@ -958,7 +958,7 @@ archived on 2026-10-12. Definitions,
 normalization, budgets, metadata/OpenAPI, recursive media traversal, guarded
 migration scans, SDK/render compatibility and read-only admin inspection are
 covered. Storage remains in the existing JSON columns; no DB migration was added.
-CE7B/CE7C/CE7D have not been started or pre-created.
+At CE7A completion, CE7B/CE7C/CE7D had not been started or pre-created.
 
 Passing verification:
 
@@ -986,6 +986,11 @@ Passing verification:
 
 ### Session CE7B — Nested schema evolution and synchronization
 
+**Status:** implemented on 2026-10-12 in
+[`ce07b-nested-schema-evolution`](../openspec/changes/archive/2026-10-12-ce07b-nested-schema-evolution/proposal.md),
+with apply explicitly authorized. Accepted specs were synchronized and the change
+was archived on 2026-10-12. CE7C/CE7D remain separate and unimplemented.
+
 - Extend CE1's canonical structure comparison recursively. Child display
   metadata is projection-only; nested structural changes are explicit and
   retain model/block version requirements. Preserve keys in stored defaults
@@ -1010,6 +1015,41 @@ on both runtimes; nested media rename/removal updates usage correctly;
 invalid/over-budget migrations and unhinted destructive changes are refused;
 repeated sync and interrupted block migration remain safe. Reports identify
 model, snapshot and nested schema path.
+
+**Implementation evidence (2026-10-12):**
+
+- Recursive configuration hints, ancestor pairing, defaults, tightening and
+  concrete diagnostics are shared by preparation and final persistence.
+- Composite JSON and complete `$fields` references use exact parameterized
+  payloads in the existing guarded final transaction/batch. Scalar SQL fast
+  paths remain. No staging tables or SQL migration were added.
+- Shared contracts run on file-backed/in-memory SQLite and local D1: nested
+  parent/child moves, media removal/usage, missing-parent defaults, tightening,
+  multi-page scans, stale saves, injected rollback, combined model/block
+  budgets, interrupted migration with pending nested backfills and no-op reruns.
+- A permanent local D1 batch fixture rewrites 251 snapshots with 198 field media
+  locations each (49,698 references), preserving two other reference sources per
+  snapshot. It checks JSON types, audits, guards, rollback and replay; chunks
+  require at most 15 statements in one batch. A separate D1 test changes media
+  references between the final reread and execution and confirms no final writes.
+- Application reports retain the 20-snapshot cap and full counts. The CLI nested
+  fixture proves both valid and invalid `--check` runs write nothing and preserves
+  existing pending/blocked/current exit behavior.
+- Operator examples, recovery, media-default rules and matching backup/rollback
+  guidance are documented in [configuration synchronization](configuration-synchronization.md#ce7b-nested-schema-evolution).
+
+Passing verification:
+
+- Content/config/application/db/memory-double tests: 64 / 54 / 83 / 16 / 45.
+- Shared repository contracts: 142 SQLite tests (two runtimes), 71 local D1
+  tests. D1 adapter/bulk tests add 9 cases (80 D1 tests total); CLI commands add
+  6 tests, including Node/D1 operation and the nested no-write check.
+- Content/config type tests and root `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check` passed. Existing builder/DB lint warnings remain non-failing;
+  the changed production code introduces none.
+- `pnpm exec openspec validate ce07b-nested-schema-evolution --type change --strict`
+  passed. SQL migration inventory remains unchanged. All four updated accepted
+  capabilities passed strict validation before archive.
 
 ### Session CE7C — Generic group and list editing
 

@@ -674,7 +674,7 @@ test("classifies enabling and disabling SEO and collects SEO holders", async () 
   expect(configurationSyncContentWrites(operation, plain)).toEqual([{ action: "remove-seo" }]);
 });
 
-test("CE7A composite introduction and explicit nested evolution refusals", async () => {
+test("composite adoption preserves compatibility and requires evidence for nested evolution", async () => {
   const root = field.group({ fields: { title: field.text({ label: "Title" }) } });
   const before = await posts();
   const added = await posts({ version: 2, fields: { ...before.fields, root } });
@@ -703,9 +703,7 @@ test("CE7A composite introduction and explicit nested evolution refusals", async
       storedModels: [storedFrom(added)],
     });
     expect(plan.isValid).toBe(false);
-    expect(plan.diagnostics.some((item) => item.code === "COMPOSITE_EVOLUTION_UNSUPPORTED")).toBe(
-      true,
-    );
+    expect(plan.diagnostics.some((item) => item.code === "SNAPSHOT_EVIDENCE_STALE")).toBe(true);
   }
   const display = await posts({
     version: 2,
@@ -726,7 +724,7 @@ test("CE7A composite introduction and explicit nested evolution refusals", async
     planConfigurationSynchronization({
       models: [defaultAddition],
       storedModels: [storedFrom(before)],
-    }).diagnostics.some((item) => item.code === "COMPOSITE_EVOLUTION_UNSUPPORTED"),
+    }).diagnostics.some((item) => item.code === "SNAPSHOT_EVIDENCE_STALE"),
   ).toBe(true);
   const listBefore = await posts({ fields: { list: field.list({ item: field.text() }) } });
   const listAfter = await posts({
@@ -737,6 +735,452 @@ test("CE7A composite introduction and explicit nested evolution refusals", async
     planConfigurationSynchronization({
       models: [listAfter],
       storedModels: [storedFrom(listBefore)],
-    }).diagnostics.some((item) => item.code === "COMPOSITE_EVOLUTION_UNSUPPORTED"),
+    }).diagnostics.some((item) => item.code === "SNAPSHOT_EVIDENCE_STALE"),
   ).toBe(true);
+});
+
+test("nested evolution pairs ancestors before child hints and retains inert hints", async () => {
+  const before = await posts({
+    fields: {
+      links: field.list({
+        item: field.group({
+          fields: {
+            headline: field.text({ maxLength: 100 }),
+            legacy: field.text(),
+          },
+        }),
+      }),
+    },
+  });
+  const after = await posts({
+    version: 2,
+    fields: {
+      cards: field.list({
+        renamedFrom: "links",
+        maxItems: 10,
+        item: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline", maxLength: 80 }),
+            caption: field.text({ defaultValue: "Caption" }),
+          },
+        }),
+      }),
+    },
+    removedFields: ["/cards/*/legacy"],
+  });
+  expect(validateStructureHints(before.structure, after)).toEqual([]);
+  const changes = diffContentModelStructures(before.structure, after.structure, after);
+  expect(changes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ target: "cards", kind: "field-renamed", from: "links" }),
+      expect.objectContaining({ target: "cards", class: "validated", properties: ["maxItems"] }),
+      expect.objectContaining({
+        target: "/cards/*/title",
+        kind: "field-renamed",
+        from: "/cards/*/headline",
+      }),
+      expect.objectContaining({
+        target: "/cards/*/title",
+        class: "validated",
+        properties: ["maxLength"],
+      }),
+      expect.objectContaining({ target: "/cards/*/legacy", kind: "field-removed", hinted: true }),
+      expect.objectContaining({ target: "/cards/*/caption", kind: "field-added", backfill: true }),
+    ]),
+  );
+  expect(validateStructureHints(after.structure, after)).toEqual([]);
+  expect(diffContentModelStructures(after.structure, after.structure, after)).toEqual([]);
+});
+
+test("nested hint validation refuses source ambiguity and invalid traversal", async () => {
+  const baseline = await posts({
+    fields: {
+      links: field.list({
+        item: field.group({
+          fields: {
+            title: field.text(),
+            headline: field.text(),
+          },
+        }),
+      }),
+    },
+  });
+  expect(
+    validateStructureHints(baseline.structure, {
+      renamedFields: { "/links/*/title": "/links/*/headline" },
+    }),
+  ).toEqual([{ target: "/links/*/title", from: "/links/*/headline", kind: "target-exists" }]);
+  expect(
+    validateStructureHints(baseline.structure, {
+      renamedFields: { "/new/*/title": "/new/*/headline" },
+    })[0].kind,
+  ).toBe("source-missing");
+  expect(
+    validateStructureHints(baseline.structure, { removedFields: ["/links/title"] })[0].kind,
+  ).toBe("source-missing");
+});
+
+test("nested scalar items and type changes are classified without composite fallback", async () => {
+  const before = await posts({
+    fields: { tags: field.list({ item: field.text({ maxLength: 100 }) }) },
+  });
+  const tightened = await posts({
+    version: 2,
+    fields: { tags: field.list({ item: field.text({ maxLength: 80 }) }) },
+  });
+  expect(diffContentModelStructures(before.structure, tightened.structure)).toEqual([
+    expect.objectContaining({ target: "/tags/*", class: "validated", properties: ["maxLength"] }),
+  ]);
+  const changed = await posts({
+    version: 2,
+    fields: { tags: field.list({ item: field.number() }) },
+  });
+  expect(diffContentModelStructures(before.structure, changed.structure)).toEqual([
+    expect.objectContaining({ target: "/tags/*", class: "breaking", kind: "field-type-changed" }),
+  ]);
+});
+
+test("recursive field transforms keep presence, values, arrays and media paths", async () => {
+  const { transformConfigurationSyncFields } = await import("../dist/index.js");
+  const before = await posts({
+    fields: {
+      links: field.list({
+        item: field.group({ fields: { headline: field.text(), legacy: field.media() } }),
+      }),
+      profile: field.group({ fields: { name: field.text() } }),
+    },
+  });
+  const after = await posts({
+    version: 2,
+    fields: {
+      cards: field.list({
+        renamedFrom: "links",
+        item: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline" }),
+            caption: field.text({ defaultValue: "Caption" }),
+          },
+        }),
+      }),
+      profile: field.group({
+        fields: { name: field.text(), caption: field.text({ defaultValue: "Profile" }) },
+      }),
+    },
+    removedFields: ["/cards/*/legacy"],
+  });
+  const changes = diffContentModelStructures(before.structure, after.structure, after);
+  const original = {
+    links: [
+      { headline: "One", legacy: "media-1" },
+      { headline: "Two", caption: "Explicit" },
+    ],
+  };
+  const result = transformConfigurationSyncFields(after.fields, changes, original, "published");
+  expect(result.fields).toEqual({
+    cards: [
+      { title: "One", caption: "Caption" },
+      { title: "Two", caption: "Explicit" },
+    ],
+  });
+  expect(original.links[0]).toHaveProperty("headline");
+  expect(result.fields).not.toHaveProperty("profile");
+  expect(result.references).toEqual([]);
+  expect(result.backfills).toEqual({ "/cards/*/caption": "/fields/cards/0/caption" });
+  const empty = transformConfigurationSyncFields(after.fields, changes, { profile: {} }, "draft");
+  expect(empty.fields).toEqual({ profile: { caption: "Profile" } });
+});
+
+test("recursive media backfills, per-item collisions and tightening carry concrete paths", async () => {
+  const { transformConfigurationSyncFields } = await import("../dist/index.js");
+  const before = await posts({
+    fields: {
+      links: field.list({
+        item: field.group({ fields: { headline: field.text(), image: field.media() } }),
+      }),
+    },
+  });
+  const after = await posts({
+    version: 2,
+    fields: {
+      links: field.list({
+        minItems: 2,
+        maxItems: 10,
+        item: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline", maxLength: 2 }),
+            image: field.media({ defaultValue: "media-2" }),
+          },
+        }),
+      }),
+    },
+  });
+  const changes = diffContentModelStructures(before.structure, after.structure, after);
+  const result = transformConfigurationSyncFields(
+    after.fields,
+    changes,
+    { links: [{ headline: "Long" }, { title: "Occupied", image: "media-1" }] },
+    "published",
+  );
+  expect(result.holders["/links/*/title"]).toBe("/fields/links/1/title");
+  expect(result.violations["/links/*/title"]).toBe("/fields/links/0/title");
+  expect(result.mediaBackfills["/links/*/image"]).toBe("/fields/links/0/image");
+  expect(result.references.map((r) => r.fieldPath)).toEqual(["/links/0/image", "/links/1/image"]);
+  const draft = transformConfigurationSyncFields(after.fields, changes, { links: [] }, "draft");
+  expect(draft.violations).toEqual({});
+  const published = transformConfigurationSyncFields(
+    after.fields,
+    changes,
+    { links: [] },
+    "published",
+  );
+  expect(published.violations).toEqual({ links: "/fields/links" });
+});
+
+test("composite defaults normalize descendants and nested media relocates with parent rename", async () => {
+  const { transformConfigurationSyncFields } = await import("../dist/index.js");
+  const before = await posts({
+    fields: { links: field.list({ item: field.group({ fields: { image: field.media() } }) }) },
+  });
+  const after = await posts({
+    version: 2,
+    fields: {
+      cards: field.list({
+        renamedFrom: "links",
+        item: field.group({ fields: { image: field.media() } }),
+      }),
+      profile: field.group({
+        fields: { portrait: field.media({ defaultValue: "media-2" }) },
+        defaultValue: {},
+      }),
+    },
+  });
+  const changes = diffContentModelStructures(before.structure, after.structure, after);
+  const result = transformConfigurationSyncFields(
+    after.fields,
+    changes,
+    { links: [{ image: "media-1" }] },
+    "draft",
+  );
+  expect(result.references).toEqual([
+    { fieldPath: "/cards/0/image", mediaId: "media-1" },
+    { fieldPath: "/profile/portrait", mediaId: "media-2" },
+  ]);
+  expect(result.mediaBackfills).toEqual({ profile: "/fields/profile" });
+  const present = transformConfigurationSyncFields(
+    after.fields,
+    changes,
+    { links: [], profile: {} },
+    "draft",
+  );
+  expect(present.mediaBackfills).toEqual({});
+  expect(present.fields.profile).toEqual({});
+});
+
+test("recursive plans apply satisfied tightening and refuse named violating occurrences", async () => {
+  const before = await posts({
+    fields: { links: field.list({ item: field.group({ fields: { title: field.text() } }) }) },
+  });
+  const after = await posts({
+    version: 2,
+    fields: {
+      links: field.list({
+        maxItems: 2,
+        item: field.group({
+          fields: {
+            title: field.text({ maxLength: 3 }),
+            caption: field.text({ defaultValue: "Caption" }),
+          },
+        }),
+      }),
+    },
+  });
+  const changes = diffContentModelStructures(before.structure, after.structure);
+  const accumulator = createSnapshotEvidenceAccumulator({
+    changes,
+    fields: after.fields,
+    fingerprint: "f",
+    modelKey: "posts",
+  });
+  accumulator.add([
+    {
+      entryId: "entry",
+      snapshotId: "snapshot",
+      state: "published",
+      revision: 1,
+      title: "Entry",
+      blocks: [],
+      fields: { links: [{ title: "Too long" }] },
+    },
+  ]);
+  const plan = planConfigurationSynchronization({
+    models: [after],
+    storedModels: [
+      storedFrom(before, {
+        draftSnapshotCount: 0,
+        publishedSnapshotCount: 1,
+        snapshotFingerprint: "f",
+      }),
+    ],
+    evidence: { posts: accumulator.result() },
+  });
+  expect(plan.isValid).toBe(false);
+  expect(plan.diagnostics).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: "CONSTRAINT_VIOLATED",
+        fieldKey: "/links/*/title",
+        snapshots: [expect.objectContaining({ path: "/fields/links/0/title" })],
+      }),
+    ]),
+  );
+});
+
+test("nested tightening preserves draft minima and unrelated published absence", async () => {
+  const { transformConfigurationSyncFields } = await import("../dist/index.js");
+  const before = await posts({
+    fields: {
+      required: field.text({ required: true }),
+      profile: field.group({ fields: { name: field.text() } }),
+      rows: field.list({ item: field.text() }),
+    },
+  });
+  const after = await posts({
+    version: 2,
+    fields: {
+      required: field.text({ required: true }),
+      profile: field.group({
+        fields: { name: field.text({ required: true }), added: field.text({ required: true }) },
+      }),
+      rows: field.list({ item: field.text(), minItems: 2, maxItems: 3 }),
+    },
+  });
+  const changes = diffContentModelStructures(before.structure, after.structure);
+  expect(
+    transformConfigurationSyncFields(after.fields, changes, { profile: {}, rows: [] }, "draft")
+      .violations,
+  ).toEqual({});
+  expect(
+    transformConfigurationSyncFields(after.fields, changes, { profile: {}, rows: [] }, "published")
+      .violations,
+  ).toEqual({ "/profile/name": "/fields/profile/name", rows: "/fields/rows" });
+  expect(
+    transformConfigurationSyncFields(after.fields, changes, { rows: ["a", "b"] }, "published")
+      .violations,
+  ).toEqual({});
+  expect(
+    transformConfigurationSyncFields(
+      after.fields,
+      changes,
+      { profile: { name: "x" }, rows: ["a", "b"] },
+      "published",
+    ).violations,
+  ).toEqual({});
+  expect(
+    transformConfigurationSyncFields(after.fields, changes, { rows: ["a", "b", "c", "d"] }, "draft")
+      .violations,
+  ).toEqual({ rows: "/fields/rows" });
+});
+
+test("nested reports count snapshots once, cap evidence and retain schema/value paths", async () => {
+  const before = await posts({
+    fields: { links: field.list({ item: field.group({ fields: { title: field.text() } }) }) },
+  });
+  const make = (reverse) =>
+    posts({
+      version: 2,
+      fields: {
+        links: field.list({
+          item: field.group({
+            fields: Object.fromEntries(
+              reverse
+                ? [
+                    ["caption", field.text()],
+                    ["title", field.text({ maxLength: 2 })],
+                  ]
+                : [
+                    ["title", field.text({ maxLength: 2 })],
+                    ["caption", field.text()],
+                  ],
+            ),
+          }),
+        }),
+      },
+    });
+  const stored = [storedFrom(before, { draftSnapshotCount: 26, publishedSnapshotCount: 0 })];
+  const snapshots = Array.from({ length: 26 }, (_, index) =>
+    snapshot(index, "draft", { links: [{ title: "long" }, { title: "also long" }] }),
+  );
+  const first = await prepareConfigurationSynchronization({
+    models: [await make(false)],
+    state: port(stored, snapshots),
+  });
+  const second = await prepareConfigurationSynchronization({
+    models: [await make(true)],
+    state: port(stored, snapshots),
+  });
+  expect(first.report.json).toBe(second.report.json);
+  expect(first.report.text).toBe(second.report.text);
+  const finding = first.plan.diagnostics.find((value) => value.code === "CONSTRAINT_VIOLATED");
+  expect(finding).toMatchObject({ schemaPath: "/links/*/title", affectedCount: 26 });
+  expect(finding.snapshots).toHaveLength(20);
+  expect(finding.snapshots[0].path).toBe("/fields/links/0/title");
+  expect(first.report.text).toContain("… and 6 more");
+  expect(first.report.check.exitCode).not.toBe(0);
+});
+
+test("prospective nested values enforce aggregate list, media and JSON boundaries", async () => {
+  const fields = (
+    await posts({
+      fields: {
+        rows: field.list({ item: field.text() }),
+        profile: field.group({ fields: { image: field.media() } }),
+      },
+    })
+  ).fields;
+  const blockFields = { kept: { rows: fields.rows } };
+  const run = (count, references = 0, text = "") => {
+    const accumulator = createSnapshotEvidenceAccumulator({
+      fields,
+      blockFields,
+      changes: [],
+      fingerprint: "f",
+      modelKey: "posts",
+    });
+    accumulator.add([
+      {
+        ...snapshot(1, "published", {
+          rows: Array(count).fill("x"),
+          profile: { image: "m" },
+          ...(text ? { text } : {}),
+        }),
+        blocks: Array.from({ length: 4 }, (_, index) => ({
+          key: String(index),
+          type: "kept",
+          schemaVersion: 1,
+          hidden: true,
+          data: { rows: Array(100).fill("b") },
+        })),
+        references: Array.from({ length: references }, (_, index) => ({
+          sourceKey: "block",
+          mediaId: "m",
+          fieldPath: String(index),
+        })),
+      },
+    ]);
+    return accumulator.result();
+  };
+  expect(run(100, 199).oversized.count).toBe(0);
+  expect(run(101).oversized.count).toBe(1);
+  expect(run(100, 200).oversized.count).toBe(1);
+  expect(run(100, 0, "x".repeat(1_000_000)).oversized.count).toBe(1);
+});
+
+test("schema hint lookup uses own field keys even for constructor", async () => {
+  const before = await posts({ fields: { title: field.text() } });
+  expect(
+    validateStructureHints(before.structure, { renamedFields: { constructor: "title" } }),
+  ).toEqual([]);
+  expect(
+    validateStructureHints(before.structure, { renamedFields: { missing: "constructor" } }),
+  ).toEqual([{ target: "missing", from: "constructor", kind: "source-missing" }]);
 });

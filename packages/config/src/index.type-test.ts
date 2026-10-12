@@ -89,3 +89,20 @@ const invalidNestedModelValues: ModelFieldValues<typeof compositePage.fields> = 
   cards: [{ kind: "three" }],
 };
 void [nestedModelValues, invalidNestedModelValues];
+
+const nestedRenameModel = definePage({
+  key: "nested-renames",
+  path: "/nested-renames",
+  version: 2,
+  fields: {
+    links: field.list({
+      item: field.group({
+        fields: {
+          title: field.text({ renamedFrom: "headline", required: true }),
+        },
+      }),
+    }),
+  },
+  removedFields: ["/links/*/legacy"],
+});
+void nestedRenameModel;

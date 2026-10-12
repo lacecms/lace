@@ -718,14 +718,24 @@ recursively; child keys and default-value keys named label/description stay
 structural. Scalar-only encodings/hashes stay stable. Collection listFields,
 SEO mappings and block settings retain their existing scalar restrictions.
 
-During CE7A, new models, unchanged composites, nested display-only changes and
-version-bumped optional root composite additions without defaults can sync.
-Other structural model-field changes involving composites on populated models
-are explicitly refused pending CE7B recursive evolution; nested rename/removal
-hint syntax is not yet supported. Scalar CE1 rules stay unchanged. Versioned
-block migrations can produce composites but must check the resulting complete
-snapshot list budget, including unchanged fields/blocks, before each guarded
-unit. Unrelated published required fields retain their existing grandfathering.
+CE7B extends CE1 synchronization recursively to group children and list items.
+Named model children use sibling-key `renamedFrom`; `removedFields` accepts
+schema pointers such as `/links/*/legacy`, with `*` addressing every item.
+Root hints remain compatible. Ancestors are paired before descendants; no
+cross-parent moves, indexed hints or implicit type conversions are supported.
+Defaults fill absent keys only in present containers or containers introduced
+by their own applicable default. Present values and list order/length remain.
+Actual media-bearing backfills are refused, including descendant defaults.
+Nested tightening uses draft/published semantics and rejects offending data.
+
+Preparation checks the combined prospective model/block snapshot, including
+hidden and unchanged blocks, JSON limits, 500 list elements and 200 media
+locations. Unrelated published required absence remains grandfathered. Block
+data changes still use versioned migrations: each resumable unit must also
+satisfy limits in its actual intermediate state. Nested model JSON and rebuilt
+`$fields` media references commit in the guarded final mutation, preserving
+snapshot revisions/audit fields and the existing final version/build behavior.
+Reports distinguish schema wildcard paths from concrete indexed value paths.
 
 ### Initial built-in blocks
 
@@ -2857,8 +2867,8 @@ CE7A adds group/list variants to exhaustive TypeScript consumers. Upgrade
 engine/admin/site dependencies together before adoption. No database migration
 or scalar data rewrite is required. After storing composites, rollback to a
 scalar-only engine needs matching configuration/database backup or an explicit
-validated conversion. CE7A's temporary sync and admin restrictions are described
-in section 8 and section 17; CE7B/CE7C expand them separately.
+validated conversion. Recursive schema evolution is described in section 8;
+admin authoring restrictions remain in section 17 until CE7C expands the editor.
 
 Compatibility exists at three boundaries:
 

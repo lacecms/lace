@@ -304,9 +304,11 @@ Adopt compatible engine, bundled admin, contracts, SDK and site/render packages
 together before declaring or storing composites. Older consumers may reject
 the new metadata or fail to validate/render nested data. The CE7A admin shows
 composites as read-only JSON and preserves them during scalar edits and
-lifecycle commands; generic authoring follows in CE7C. Populated composite
-model evolution is restricted until CE7B. Registry/starter adoption follows in
-CE7D; existing built-in blocks keep their flat schemas.
+lifecycle commands; generic authoring follows in CE7C. CE7B supports recursive
+model evolution with sibling rename hints, wildcard removal pointers and
+validated defaults/constraints. Deploy the CE7B engine before adopting nested
+hints; older engines reject them. Registry/starter adoption follows in CE7D;
+existing built-in blocks keep their flat schemas.
 
 There is no database migration or automatic down-conversion. After storing
 composites, rollback to an older engine/site requires restoring a compatible

@@ -934,3 +934,5 @@ export function requireContentReader(actor: Actor): void {
 }
 
 export { CompleteImageContainerInspector } from "./image-container.js";
+
+export * from "./configuration-fields.js";

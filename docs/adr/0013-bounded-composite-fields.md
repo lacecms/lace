@@ -1,6 +1,6 @@
 # ADR 0013: Bounded composite fields
 
-- Status: accepted for CE7A implementation
+- Status: accepted for CE7A and CE7B implementation
 - Date: 2026-10-12
 
 ## Context
@@ -32,8 +32,13 @@ Recursively strip display metadata only at descriptor positions; preserve
 content/default keys. Scalar hashes and data encodings stay unchanged. Settings,
 listFields and SEO mappings retain scalar allowlists.
 
-CE7A safely introduces composites but refuses populated model composite
-rewrites pending CE7B (except optional root additions without defaults).
+CE7B extends evolution recursively with sibling-key rename hints and removal
+schema pointers (`/links/*/legacy`). Defaults preserve absent containers and
+present values; actual media-bearing backfills remain forbidden. Prepare checks
+combined model/block budgets and each actual block migration intermediate.
+Model JSON and complete model-field references commit in the guarded final
+mutation without editorial revision/audit changes. Block migrations retain
+resumable guarded units and one final version/build transition.
 Admin inspection is read-only until CE7C. Gallery/Navigation and starter
 adoption remain CE7D. No database migration is needed.
 

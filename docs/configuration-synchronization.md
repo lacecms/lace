@@ -288,13 +288,82 @@ hashes. Nested descriptor labels/descriptions affect the display projection;
 field keys and defaults, including data keys called `label` or `description`,
 remain structural.
 
-Until CE7B, populated models accept unchanged composites, display-only edits,
-and a version-bumped optional root composite addition with no default. Other
-composite field changes (including removal, rename, constraints or defaults)
-are explicitly refused with `COMPOSITE_EVOLUTION_UNSUPPORTED`; nested
-`renamedFrom` hints are rejected. Empty/new models can adopt composite fields.
-Block data continues to evolve through explicit block versions and migrations.
-Migration planning counts all resulting lists in model fields and blocks,
-including unchanged and hidden blocks, before writing. A migration may move
-existing media IDs into nested locations but cannot introduce an ID that was
-not referenced by that snapshot.
+## CE7B nested schema evolution
+
+Populated models can evolve group children and list items recursively. Increase
+the model version for structural changes. Changes to block data still require a
+block version increase and executable migrations.
+
+Named children accept `renamedFrom` with the former sibling key. `removedFields`
+accepts schema pointers; `*` traverses every item of a list. For example, when
+`links` previously contained `headline`, `photo` and `legacy`:
+
+```ts
+fields: {
+  cards: field.list({
+    renamedFrom: "links",
+    item: field.group({
+      fields: {
+        title: field.text({ renamedFrom: "headline" }),
+        image: field.media({ renamedFrom: "photo" }),
+        caption: field.text({ defaultValue: "Untitled" }),
+      },
+    }),
+  }),
+},
+removedFields: ["/cards/*/legacy"],
+```
+
+Ancestor renames run first. Removal pointers use configured ancestor names,
+so this removes `legacy` from each former `links` item. Root hints retain their
+existing syntax; `/title` and `title` identify the same root field. Indices,
+cross-parent moves, item-level hints and overlapping removals are rejected.
+Keep hints until every environment has synchronized; retained applied hints
+are inert. Hints are absent from field projections and configuration hashes.
+
+Added or changed defaults fill absent named keys inside present containers.
+An absent parent stays absent unless its own applicable default creates it.
+An empty object or array overrides its container default. Explicit values and
+list order/length stay unchanged. A changed item default does not merge into
+existing list items. Actual backfills containing media are refused, including
+media supplied by descendant defaults; unused defaults do not cause refusal.
+Introduce such media through ordinary content edits instead.
+
+Tightening checks every present occurrence. Draft minima remain permissive;
+published required/minimum constraints are checked when tightened. New required
+children without defaults and unrelated existing required absences retain their
+sync compatibility; the next publication enforces the current schema. Sync never
+truncates lists or converts scalar/composite types. Remove an unhinted-loss
+refusal by restoring the field or declaring its deliberate removal; resolve a
+rename collision by editing the conflicting content before retrying.
+
+Preparation composes model transformations, block removals and migrated block
+outputs, including retained hidden blocks. The final state must fit JSON caps,
+500 list elements and 200 media locations per snapshot. Every resumable block
+migration unit must also fit with the actual model fields it writes alongside;
+a later model removal cannot excuse an unsafe intermediate state. Migration
+outputs can move existing media but cannot introduce previously unreferenced IDs.
+
+`--check` performs the same evaluation without writes. Nested changes report
+`schemaPath` such as `/cards/*/title`, and refusals name concrete paths such as
+`/fields/cards/2/title`. Reports count a snapshot once per finding and show at
+most 20 named snapshots plus the full count.
+
+Composite fields and complete `$fields` reference replacements commit together
+with the baseline and public version/build work: one SQLite transaction on Node,
+one guarded D1 batch on Cloudflare. Exact payloads are parameterized and packed
+into JSON chunks of at most 1.5 MB; they use three statements per chunk and the
+existing D1 binding/query budget checks. Capacity failures happen before batch
+execution. No staging table or SQL migration is needed. Rewrites preserve
+snapshot revisions, timestamps, actors, title, slug, SEO and retained block
+references. Concurrent edits/reference changes invalidate the guarded plan;
+failed final writes roll back the entire final mutation.
+
+Deploy the updated engine before adopting nested hints. Take matching content
+and configuration backups before destructive sync. Removing hints does not undo
+rewrites; restoring an older engine after adoption requires a matching backup or
+an explicitly tested conversion. A block-migration interruption can leave safely
+committed units under the old baseline/public version. Retry with the same
+configuration: completed blocks are skipped, remaining blocks are migrated and
+model backfills commit only in the successful final mutation. CE7C's editor and
+CE7D's Gallery/Navigation adoption remain separate.

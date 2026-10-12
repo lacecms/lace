@@ -801,3 +801,89 @@ test("whole configuration composite hashes preserve data keys called label and d
   expect(first.projectionHash).not.toBe(display.projectionHash);
   expect(first.structureHash).not.toBe(changed.structureHash);
 });
+
+test("nested hints normalize to schema addresses and never enter projections", async () => {
+  const model = defineCollection({
+    key: "links",
+    route: "/links/:slug",
+    version: 2,
+    fields: {
+      cards: field.list({
+        renamedFrom: "links",
+        item: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline" }),
+            label: field.text({ defaultValue: "label" }),
+          },
+        }),
+      }),
+    },
+    removedFields: ["/cards/*/legacy"],
+  });
+  expect(model.renamedFields).toEqual({ cards: "links", "/cards/*/title": "/cards/*/headline" });
+  const config = await defineConfig({ blocks: [], content: [model] });
+  expect(config.runtime.content[0].fields.cards.item.fields.title).not.toHaveProperty(
+    "renamedFrom",
+  );
+  expect(config.public.content[0].fields.cards.item.fields.label.defaultValue).toBe("label");
+  expect(JSON.stringify(config.public)).not.toContain("renamedFrom");
+});
+
+for (const removedFields of [
+  ["title", "/title"],
+  ["/links/0/legacy"],
+  ["/links/*"],
+  ["links", "/links/*/legacy"],
+]) {
+  test(`invalid nested removal hints ${JSON.stringify(removedFields)}`, () => {
+    expect(() => postModel({ removedFields })).toThrow(/removedFields/u);
+  });
+}
+
+test("nested sibling hint conflicts are refused", () => {
+  expect(() =>
+    postModel({
+      fields: {
+        profile: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline" }),
+            headline: field.text(),
+          },
+        }),
+      },
+    }),
+  ).toThrow(/configured field/u);
+  expect(() =>
+    postModel({
+      fields: {
+        links: field.list({
+          item: field.group({
+            fields: {
+              title: field.text({ renamedFrom: "headline" }),
+            },
+          }),
+        }),
+      },
+      removedFields: ["/links/*/headline"],
+    }),
+  ).toThrow(/rename source/u);
+});
+
+test("removal paths reject non-string values without coercion", () => {
+  for (const value of [null, undefined, true, false, 1, {}, []])
+    expect(() =>
+      defineCollection({ key: "posts", route: "/blog/:slug", version: 1, removedFields: [value] }),
+    ).toThrow();
+});
+
+test("hint lookup does not treat inherited constructor as a configured field", () => {
+  expect(
+    defineCollection({
+      key: "posts",
+      route: "/blog/:slug",
+      version: 1,
+      fields: { title: field.text({ renamedFrom: "constructor" }) },
+      removedFields: ["other"],
+    }).renamedFields,
+  ).toEqual({ title: "constructor" });
+});

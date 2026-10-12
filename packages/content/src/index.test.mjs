@@ -985,10 +985,12 @@ test("composite defaults are portable, detached and draft-compatible", () => {
   expect(() => field.group({ fields: { title: field.text() }, defaultValue: getter })).toThrow(
     /accessor/u,
   );
-  expect(() => field.group({ fields: { title: field.text({ renamedFrom: "old" }) } })).toThrow(
-    /nested hints/u,
+  expect(() =>
+    field.group({ fields: { title: field.text({ renamedFrom: "old" }) } }),
+  ).not.toThrow();
+  expect(() => field.list({ item: field.text({ renamedFrom: "old" }) })).toThrow(
+    /list item descriptors/u,
   );
-  expect(() => field.list({ item: field.text({ renamedFrom: "old" }) })).toThrow(/nested hints/u);
 });
 
 test("composite absence, explicit empties and publication minima", () => {
@@ -1184,4 +1186,14 @@ test("media traversal distinguishes groups, list indices and legacy paths", () =
   ]);
   expect(decodeFieldPath("cover")).toEqual(["cover"]);
   expect(decodeFieldPath("/images/0/image")).toEqual(["images", 0, "image"]);
+});
+
+test("nested model hints remain portable while block hints are rejected", () => {
+  const links = field.list({
+    item: field.group({ fields: { title: field.text({ renamedFrom: "headline" }) } }),
+  });
+  expect(JSON.parse(JSON.stringify(links)).item.fields.title.renamedFrom).toBe("headline");
+  expect(() => defineBlock({ type: "links", version: 1, fields: { links } })).toThrow(
+    /renamedFrom/u,
+  );
 });

@@ -156,7 +156,7 @@ List bounds SHALL be integers with effective defaults 0 and 100 and satisfy
 validation of present values, safety and maxima; missing required descendants
 and publication minima SHALL be permitted. Invalid defaults, children, unknown
 options and non-portable values SHALL fail with descriptive descriptor paths.
-Nested rename hints SHALL be rejected pending the nested-evolution contract.
+Named child descriptors SHALL accept sibling-key `renamedFrom` hints for model-field synchronization. A list item descriptor itself SHALL NOT carry `renamedFrom`, because items have no field key. Block definitions SHALL reject rename hints anywhere in data or settings; block changes use versioned migrations. Model normalization SHALL extract child hints recursively before producing public or runtime field metadata.
 
 #### Scenario: Depth boundary
 - **WHEN** alternating list/group branches have six and seven containers respectively
@@ -177,3 +177,11 @@ Nested rename hints SHALL be rejected pending the nested-evolution contract.
 #### Scenario: Partial default
 - **WHEN** a group default is `{}` and the group has a required child without a default
 - **THEN** definition succeeds as a draft starting value and publication still requires the child
+
+#### Scenario: Named child rename
+- **WHEN** a model list of groups defines `title: field.text({ renamedFrom: "headline" })` in its item fields
+- **THEN** the definition is accepted and the hint affects synchronization only, without changing inferred values
+
+#### Scenario: Unnamed item or block hint
+- **WHEN** a list item descriptor itself carries `renamedFrom`, or block data contains a named descendant with a rename hint
+- **THEN** definition normalization rejects it with the descriptor path

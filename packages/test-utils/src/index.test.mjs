@@ -2962,3 +2962,86 @@ test("nested media traversal enforces location limits, batches IDs and preserves
       .fields,
   ).toEqual(input.fields);
 });
+
+test("memory nested synchronization preserves audits and rebuilds media usage", async () => {
+  const store = new InMemoryContentStore();
+  const configuration = (version) =>
+    defineConfig({
+      blocks: [],
+      content: [
+        defineCollection({
+          key: "posts",
+          route: "/blog/:slug",
+          version,
+          blocks: [],
+          fields: {
+            profile: field.group({
+              fields:
+                version === 1
+                  ? { image: field.media() }
+                  : {
+                      photo: field.media({ renamedFrom: "image" }),
+                      caption: field.text({ defaultValue: "Caption" }),
+                    },
+            }),
+          },
+        }),
+      ],
+    });
+  const sync = async (config) =>
+    applyPreparedConfigurationSynchronization({
+      clock: new DeterministicClock(unixMilliseconds(10)),
+      ids: new DeterministicIdGenerator("nested"),
+      models: config.runtime.content,
+      prepared: await prepareConfigurationSynchronization({
+        models: config.runtime.content,
+        state: store,
+      }),
+      target: store,
+    });
+  await sync(await configuration(1));
+  store.registerMedia({
+    createdAt: unixMilliseconds(1),
+    createdBy: editor.id,
+    filename: "image.png",
+    id: mediaId("m"),
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    storageKey: "m",
+    updatedAt: unixMilliseconds(1),
+  });
+  const initial = entry({
+    id: "nested",
+    model: { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" },
+    slug: "nested",
+  });
+  await store.create({
+    entry: {
+      ...initial,
+      draft: { ...initial.draft, blocks: [], fields: { profile: { image: "m" } } },
+    },
+    mediaReferences: [{ sourceKey: "$fields", fieldPath: "/profile/image", mediaId: mediaId("m") }],
+  });
+  await store.publish({
+    entryId: contentEntryId("nested"),
+    expectedRevision: 1,
+    publishedAt: unixMilliseconds(2),
+    publishedBy: admin,
+    publishedSnapshotId: contentSnapshotId("nested-published"),
+  });
+  const before = await store.load({ entryId: contentEntryId("nested") });
+  const next = await configuration(2);
+  expect((await sync(next)).status).toBe("applied");
+  const after = await store.load({ entryId: contentEntryId("nested") });
+  for (const state of ["draft", "published"]) {
+    expect(after[state].fields).toEqual({ profile: { photo: "m", caption: "Caption" } });
+    expect(after[state].revision).toBe(before[state].revision);
+    expect(after[state].updatedAt).toBe(before[state].updatedAt);
+    expect(after[state].updatedBy).toEqual(before[state].updatedBy);
+  }
+  expect(
+    (await store.loadMediaUsage({ mediaId: mediaId("m"), limit: 10 }))[0].locations,
+  ).toContainEqual({ source: "field", field: "/profile/photo", states: ["draft", "published"] });
+  expect((await sync(next)).status).toBe("noop");
+});

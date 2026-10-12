@@ -843,11 +843,6 @@ function normalizeDescriptor(
       for (const [key, child] of Object.entries(children)) {
         if (!FIELD_KEY_PATTERN.test(key))
           fail(`${path}.fields.${key}`, "must be a valid field key.");
-        if (Object.hasOwn(descriptorRecord(child, `${path}.fields.${key}`), "renamedFrom"))
-          fail(
-            `${path}.fields.${key}.renamedFrom`,
-            "nested hints are not supported; block data uses block versions.",
-          );
         Object.defineProperty(output, key, {
           value: normalizeDescriptor(
             child,
@@ -866,7 +861,7 @@ function normalizeDescriptor(
       if (Object.hasOwn(child, "renamedFrom"))
         fail(
           `${path}.item.renamedFrom`,
-          "nested hints are not supported; block data uses block versions.",
+          "list item descriptors have no field key and cannot be renamed.",
         );
       result.item = normalizeDescriptor(item, `${path}.item`, depth + 1, 0, ancestors);
       const min = readOptionalFiniteNumber(normalized, "minItems", true);
@@ -1634,13 +1629,18 @@ function normalizeBlockFields(value: unknown, name = "fields"): ModelFieldDefini
     if (!FIELD_KEY_PATTERN.test(key)) {
       blockFail(`${name}.${key} must be a valid field key.`);
     }
-    if (isRecord(definition) && Object.hasOwn(definition, "renamedFrom")) {
-      blockFail(
-        `${name}.${key} must not declare renamedFrom; block data changes use block versions.`,
-      );
-    }
     try {
-      fields[key] = toFieldMetadata(definition as FieldDefinition);
+      const metadata = toFieldMetadata(definition as FieldDefinition);
+      const rejectHints = (field: FieldDefinition, path: string): void => {
+        if (Object.hasOwn(field, "renamedFrom"))
+          blockFail(`${path} must not declare renamedFrom; block data changes use block versions.`);
+        if (field.type === "group")
+          for (const [childKey, child] of Object.entries(field.fields))
+            rejectHints(child, `${path}.fields.${childKey}`);
+        if (field.type === "list") rejectHints(field.item, `${path}.item`);
+      };
+      rejectHints(metadata, `${name}.${key}`);
+      fields[key] = metadata;
     } catch (error) {
       if (error instanceof FieldConfigurationError) {
         blockFail(`${name}.${key} must be a field definition.`);
@@ -2415,3 +2415,5 @@ export function validateEntryAggregate(
     title: input.title,
   });
 }
+
+export { parseSchemaPath, encodeSchemaPath, schemaFieldAt } from "./schema-path.js";

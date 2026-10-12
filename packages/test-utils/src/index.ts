@@ -1,5 +1,7 @@
 import {
   actorDisplayName,
+  transformConfigurationSyncFields,
+  configurationSyncFieldChanges,
   ALLOWED_MEDIA_MIME_TYPES,
   DISPATCHER_LEASE_DURATION_MS,
   MAX_MEDIA_USAGE_ENTRIES,
@@ -93,6 +95,7 @@ import type {
 } from "@lacecms/application";
 import {
   DomainError,
+  mediaId,
   assertEntryCreationAllowed,
   assertPublicPathAvailable,
   contentSnapshotId,
@@ -580,6 +583,12 @@ export class InMemoryContentStore
           );
           const snapshots = entries.flatMap(entrySnapshots);
           const updatedAt = snapshots.map((snapshot) => snapshot.updatedAt);
+          const references = snapshots.flatMap((snapshot) =>
+            (this.references.get(snapshot.id) ?? []).map((reference) => ({
+              ...reference,
+              createdAt: snapshot.updatedAt,
+            })),
+          );
           return Object.freeze({
             ...clone(model),
             draftSnapshotCount: entries.length,
@@ -590,6 +599,16 @@ export class InMemoryContentStore
               snapshots.reduce((sum, snapshot) => sum + snapshot.revision, 0),
               updatedAt.reduce((sum, value) => sum + value, 0),
               updatedAt.length === 0 ? 0 : Math.max(...updatedAt),
+              references.length,
+              references.reduce((sum, reference) => sum + reference.createdAt, 0),
+              references.reduce(
+                (sum, reference) =>
+                  sum +
+                  reference.sourceKey.length +
+                  reference.fieldPath.length +
+                  reference.mediaId.length,
+                0,
+              ),
             ].join(":"),
           });
         })
@@ -608,13 +627,19 @@ export class InMemoryContentStore
       .filter((entry) => entry.model.key === input.modelKey)
       .flatMap((entry) =>
         entrySnapshots(entry).map((snapshot) => ({
-          blocks: snapshot.blocks.map(({ key, schemaVersion, type }: ContentBlock) => ({
-            key,
-            schemaVersion,
-            type,
-          })),
+          blocks: snapshot.blocks.map(
+            ({ key, schemaVersion, type, data, settings, hidden }: ContentBlock) => ({
+              data: clone(data),
+              settings: clone(settings),
+              hidden,
+              key,
+              schemaVersion,
+              type,
+            }),
+          ),
           entryId: entry.id,
           fields: clone(snapshot.fields),
+          references: clone(this.references.get(snapshot.id) ?? []),
           hasSeo: snapshot.seo !== undefined,
           revision: snapshot.revision,
           snapshotId: snapshot.id,
@@ -832,6 +857,54 @@ export class InMemoryContentStore
         operation.action === "version-update" || operation.action === "rename"
           ? operation.evolution
           : undefined;
+      if (evolution?.recursiveFields) {
+        const definitions = currentModel.fields;
+        const changes = configurationSyncFieldChanges(evolution.changes);
+        const removed = new Set(evolution.blockRemovals ?? []);
+        for (const [entryId, entry] of nextEntries) {
+          if (entry.model.key !== operation.model.key) continue;
+          function rewrite(snapshot: DraftSnapshot): DraftSnapshot;
+          function rewrite(snapshot: PublishedSnapshot): PublishedSnapshot;
+          function rewrite(
+            snapshot: DraftSnapshot | PublishedSnapshot,
+          ): DraftSnapshot | PublishedSnapshot {
+            const result = transformConfigurationSyncFields(
+              definitions,
+              changes,
+              snapshot.fields,
+              snapshot.state,
+            );
+            const kept = (nextReferences.get(snapshot.id) ?? []).filter(
+              (reference) =>
+                reference.sourceKey !== "$fields" &&
+                !snapshot.blocks.some(
+                  (block) => removed.has(block.type) && block.key === reference.sourceKey,
+                ),
+            );
+            nextReferences.set(snapshot.id, [
+              ...kept,
+              ...result.references.map((reference) => ({
+                ...reference,
+                mediaId: mediaId(reference.mediaId),
+                sourceKey: "$fields" as const,
+              })),
+            ]);
+            return Object.freeze({
+              ...snapshot,
+              fields: result.fields,
+              blocks: snapshot.blocks.filter((block) => !removed.has(block.type)),
+            });
+          }
+          nextEntries.set(
+            entryId,
+            Object.freeze({
+              ...entry,
+              draft: rewrite(entry.draft),
+              ...(entry.published === undefined ? {} : { published: rewrite(entry.published) }),
+            }),
+          );
+        }
+      }
       if (evolution?.seoRemoval === true) {
         for (const [entryId, entry] of nextEntries) {
           if (entry.model.key !== operation.model.key) continue;
@@ -858,7 +931,9 @@ export class InMemoryContentStore
           );
         }
       }
-      for (const backfill of configurationSyncBackfills(operation, currentModel)) {
+      for (const backfill of evolution?.recursiveFields
+        ? []
+        : configurationSyncBackfills(operation, currentModel)) {
         const value = JSON.parse(backfill.json) as JsonValue;
         for (const [entryId, entry] of nextEntries) {
           if (entry.model.key !== operation.model.key) continue;

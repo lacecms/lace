@@ -111,13 +111,17 @@ function store(baseline, entries, options = {}) {
     async readConfigurationSyncSnapshots() {
       return {
         items: snapshots().map(({ entry, snapshot }) => ({
-          blocks: snapshot.blocks.map(({ key, schemaVersion, type }) => ({
+          blocks: snapshot.blocks.map(({ key, schemaVersion, type, data, settings, hidden }) => ({
+            data,
+            settings,
+            hidden,
             key,
             schemaVersion,
             type,
           })),
           entryId: entry.entryId,
-          fields: {},
+          fields: snapshot.fields,
+          references: snapshot.references,
           revision: snapshot.revision,
           snapshotId: snapshot.snapshotId,
           state: snapshot.state,
@@ -769,4 +773,59 @@ test("checks complete resulting composite budgets and nested prior-media locatio
       context,
     ).findings,
   ).toMatchObject([{ kind: "invalid", reference: { reason: "media_not_previously_referenced" } }]);
+});
+
+test("a later model removal cannot make an unsafe migration intermediate acceptable", async () => {
+  const other = defineBlock({
+    type: "other",
+    version: 1,
+    fields: { rows: field.list({ item: field.text() }) },
+  });
+  const beforeBlock = defineBlock({ type: "note", version: 1, fields: { body: field.text() } });
+  const afterBlock = defineBlock({
+    type: "note",
+    version: 2,
+    fields: { rows: field.list({ item: field.text() }) },
+    migrations: { 2: () => ({ data: { rows: ["new"] } }) },
+  });
+  const make = (note, version) =>
+    defineConfig({
+      blocks: [note, other],
+      content: [
+        defineCollection({
+          key: "posts",
+          route: "/blog/:slug",
+          version,
+          blocks: ["note", "other"],
+          ...(version === 2 ? { removedFields: ["rows"] } : {}),
+          fields: version === 1 ? { rows: field.list({ item: field.text() }) } : {},
+        }),
+      ],
+    });
+  const before = await make(beforeBlock, 1);
+  const after = await make(afterBlock, 2);
+  const draft = snap("d", "draft", 1, [
+    block("b1", { body: "old" }),
+    ...Array.from({ length: 4 }, (_, index) => ({
+      ...block(`b${index + 2}`, { rows: Array(100).fill("x") }),
+      type: "other",
+      hidden: true,
+    })),
+  ]);
+  draft.fields = { rows: Array(100).fill("x") };
+  const state = store(before.runtime.content[0], [{ entryId: "e", draft }]);
+  const prepared = await prepareConfigurationSynchronization({
+    models: after.runtime.content,
+    blocks: after.runtime.blocks,
+    state,
+  });
+  expect(prepared.plan.isValid).toBe(false);
+  expect(prepared.plan.diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "BLOCK_MIGRATION_INVALID",
+      snapshots: [expect.objectContaining({ reason: "too_many_list_items" })],
+    }),
+  );
+  expect(state.writes).toEqual([]);
+  expect(state.finals).toEqual([]);
 });
