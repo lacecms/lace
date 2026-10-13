@@ -11,7 +11,7 @@ import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 const blockFiles = [
   "lace.site.json",
   "src/lace/blocks.ts",
-  ...["Cta", "Hero", "Image", "Quote", "RichText"].map(
+  ...["Cta", "Gallery", "Hero", "Image", "Navigation", "Quote", "RichText"].map(
     (name) => `src/components/lace/${name}Block.astro`,
   ),
 ];
@@ -306,10 +306,11 @@ export async function existingSiteJourney(parent, operations) {
   }
 
   const blocks = (html) => [...html.matchAll(/data-lace-block="([^"]+)"/gu)].map((m) => m[1]);
-  if (JSON.stringify(blocks(home)) !== JSON.stringify(["hero", "cta"]))
-    throw new Error("existing-build: home blocks differ");
-  if (JSON.stringify(blocks(article)) !== JSON.stringify(["richText", "image", "quote"]))
-    throw new Error("existing-build: article blocks differ");
+  // The shared fixture adds local navigation on home and a gallery to the post.
+  if (JSON.stringify(blocks(home)) !== JSON.stringify(["hero", "navigation", "cta"]))
+    throw new Error(`existing-build: home blocks differ: ${blocks(home).join(", ")}`);
+  if (JSON.stringify(blocks(article)) !== JSON.stringify(["richText", "image", "quote", "gallery"]))
+    throw new Error(`existing-build: article blocks differ: ${blocks(article).join(", ")}`);
   console.info("Acceptance: existing-styling-hooks");
   for (const hook of [
     'data-lace-model="home"',
