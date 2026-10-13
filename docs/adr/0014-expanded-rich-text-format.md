@@ -1,7 +1,7 @@
 # ADR 0014: Expanded shared rich-text format
 
 Date: 2026-10-13
-Status: Accepted for CE8A implementation
+Status: Accepted; CE8A format and CE8B authoring implemented
 
 ## Context
 

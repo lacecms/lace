@@ -1,16 +1,18 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
+import { RichTextBubbleMenu } from "../RichTextBubbleMenu/index.js";
 import { RichTextToolbar } from "../RichTextToolbar/index.js";
 import {
   RICH_TEXT_PLACEHOLDER,
   richTextExtensions,
+  richTextDocument,
   type RichTextShortcutHandlers,
 } from "../rich-text-extensions.js";
 
 const surfaceClass =
   "grid gap-2 rounded-lg border border-input bg-background p-2 has-[[aria-invalid=true]]:border-destructive";
 const contentClass =
-  "min-h-32 rounded-sm px-1 py-1 font-normal [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_a]:text-primary [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5";
+  "min-h-32 rounded-sm px-1 py-1 font-normal [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_h4]:text-sm [&_h4]:font-semibold [&_hr]:my-4 [&_hr]:border-border [&_pre]:whitespace-pre-wrap [&_pre]:rounded-sm [&_pre]:bg-muted [&_pre]:p-3 [&_a]:text-primary [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5";
 
 function surfaceAttributes({
   describedBy,
@@ -75,7 +77,7 @@ export function RichTextEditor({
     extensions,
     immediatelyRender: false,
     onBlur,
-    onUpdate: ({ editor: updated }) => onChange(updated.getJSON()),
+    onUpdate: ({ editor: updated }) => onChange(richTextDocument(updated.getJSON())),
   });
   const attributesKey = JSON.stringify(attributes);
   useEffect(() => {
@@ -85,7 +87,7 @@ export function RichTextEditor({
   useEffect(() => {
     if (editor === null || value === undefined) return;
     const next = JSON.stringify(value);
-    if (JSON.stringify(editor.getJSON()) !== next)
+    if (JSON.stringify(richTextDocument(editor.getJSON())) !== next)
       editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
   useEffect(() => {
@@ -95,13 +97,16 @@ export function RichTextEditor({
   return (
     <div className={surfaceClass}>
       {readOnly ? undefined : (
-        <RichTextToolbar
-          editor={editor}
-          focusRef={focusToolbar}
-          label={label}
-          linkOpen={linkOpen}
-          onLinkOpenChange={setLinkOpen}
-        />
+        <>
+          <RichTextBubbleMenu editor={editor} label={label} onLink={() => setLinkOpen(true)} />
+          <RichTextToolbar
+            editor={editor}
+            focusRef={focusToolbar}
+            label={label}
+            linkOpen={linkOpen}
+            onLinkOpenChange={setLinkOpen}
+          />
+        </>
       )}
       <EditorContent editor={editor} />
     </div>

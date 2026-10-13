@@ -2603,21 +2603,22 @@ An insert control between adjacent blocks and an Add block button after the list
 
 Keyboard and pointer drag reordering stay on dnd-kit. The screen-reader announcements name blocks by label and position, never by key.
 
-CE8A expands shared validation and public rendering before the admin produces
-the new format. Until CE8B updates Tiptap extensions and serialization, the
-existing editor must not be used to edit documents containing the expanded
-features: it cannot preserve them. CE8B adds H4, rules, plain code blocks,
-new-tab/nofollow link switches and a selection bubble menu alongside the fixed
-toolbar; the controls described below are the current baseline.
+CE8B enables the CE8A shared format in every rich-text field, including
+recursive model and block leaves: H1–H4, horizontal rules, plain code blocks
+and independent new-tab/nofollow link switches. A compact selection bubble
+menu supplements the complete fixed toolbar. Plain code preserves whitespace
+and accepts no marks or language attributes. Ordinary paste follows the shared
+safe document rules; dedicated Word/Google Docs cleanup remains deferred.
 
 Each editable rich-text field has a fixed toolbar named after the field. It holds the following controls:
 
-- a text style menu (Paragraph, Heading 1–3);
+- a text style menu (Paragraph, Heading 1–4);
 - Bold, Italic, Strike, and Code toggles;
 - Bulleted list, Numbered list, and Quote toggles;
+- a plain Code block toggle and Insert horizontal rule action;
 - a Link control.
 
-The toggles report their pressed state for the selection. The toolbar is one tab stop with arrow-key movement, `Alt+F10` moves focus from the text to it, and Escape returns. Tooltips and `aria-keyshortcuts` name each shortcut. The editor adds undo and redo and keeps Tiptap's mark, list, heading, and Markdown shortcuts. `⌘K`/`Ctrl+K` opens the link popover, which applies only URLs that pass the shared allowlist and says which forms are permitted. The Tiptap schema declares only allowlisted attributes: links carry `href` and lists carry nothing. Every document the editor produces therefore passes the shared validator. Empty fields show a placeholder, also exposed as `aria-placeholder`. Viewers get neither the toolbar nor the placeholder.
+The toggles report their pressed state for the selection. The toolbar is one tab stop with arrow-key movement, `Alt+F10` moves focus from the text to it, and Escape returns. Tooltips and `aria-keyshortcuts` name each shortcut. The editor adds undo and redo and keeps Tiptap's mark, list, heading, and Markdown shortcuts. `⌘K`/`Ctrl+K` opens the link popover, which applies only URLs that pass the shared allowlist and says which forms are permitted. The Tiptap schema declares only allowlisted attributes: links carry `href` and optional `target: "_blank"` / `rel: "nofollow"`, with unchecked options omitted; lists and code blocks carry no attributes. The link popover retains the selected range while its URL and switches have focus, and permits applying, updating and removing the link. Rendering derives `noopener noreferrer`, never stores those tokens. The selection bubble offers Bold, Italic, Strike, inline Code and Link without taking focus when it appears, and disappears for collapsed selections, hidden/unfocused editors and viewers. Plain code offers no marks or links. Every document the editor produces therefore passes the shared validator. Empty fields show a placeholder, also exposed as `aria-placeholder`. Viewers get neither the toolbar nor the placeholder.
 
 Validation problems appear where they occur. Field messages are sentences such as "Enter at least 5 characters." A block card shows its block-level problems and a "Has problems" marker: a type that is not allowed, a stale version, a key problem, data for an undefined field, or a value for an undeclared setting. Anchor, class name, and declared setting problems are shown on their Settings controls; activating one in the summary selects the Settings tab first. Summary entries name hidden blocks as hidden. A problem only publication reports (a required field) in a block that is now hidden is listed last as not blocking publication and is not counted, because publication validates hidden blocks in draft mode; every other problem in a hidden block blocks Save as usual. A block whose type the model no longer allows still renders, so it can be removed. When Save is blocked, or the server rejects a save or publish, a summary above the title takes focus. It counts the problems and links each one, in reading order, to its control or block card. The admin maps server JSON Pointers, including deep rich-text paths, to the same locations. Issues it cannot place are listed as text.
 

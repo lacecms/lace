@@ -84,6 +84,8 @@ catalog:
   sharp: ^0.35.5
   semver: 7.8.5
   "@mjackson/multipart-parser": ^0.10.1
+  "@tiptap/extension-code-block": 3.31.3
+  "@tiptap/extension-horizontal-rule": 3.31.3
 
 allowBuilds:
   better-sqlite3: true

@@ -1,7 +1,8 @@
 import type { Editor } from "@tiptap/core";
 import { isSafeUrl } from "@lacecms/content";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { Switch } from "../../../shared/ui/Switch/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/Popover/index.js";
@@ -23,12 +24,19 @@ export function LinkPopover({
   readonly open: boolean;
 }) {
   const id = useId();
+  const selection = useRef(editor.state.selection);
+  const [newTab, setNewTab] = useState(false);
+  const [nofollow, setNofollow] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string>();
   const [linked, setLinked] = useState(false);
   useEffect(() => {
     if (!open) return;
-    const href = editor.getAttributes("link").href as unknown;
+    selection.current = editor.state.selection;
+    const attributes = editor.getAttributes("link");
+    const href = attributes.href as unknown;
+    setNewTab(attributes.target === "_blank");
+    setNofollow(attributes.rel === "nofollow");
     setValue(typeof href === "string" ? href : "");
     setError(undefined);
     setLinked(editor.isActive("link"));
@@ -40,18 +48,23 @@ export function LinkPopover({
       setError(LINK_URL_MESSAGE);
       return;
     }
+    if (!editor.isEditable || editor.isActive("codeBlock")) return;
+    editor.commands.setTextSelection({ from: selection.current.from, to: selection.current.to });
+    const attrs = { href, target: newTab ? "_blank" : null, rel: nofollow ? "nofollow" : null };
     if (editor.state.selection.empty && !editor.isActive("link")) {
       editor
         .chain()
         .focus()
-        .insertContent({ marks: [{ attrs: { href }, type: "link" }], text: href, type: "text" })
+        .insertContent({ marks: [{ attrs, type: "link" }], text: href, type: "text" })
         .run();
     } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+      editor.chain().focus().extendMarkRange("link").setLink(attrs).run();
     }
     onOpenChange(false);
   };
   const removeLink = () => {
+    if (!editor.isEditable) return;
+    editor.commands.setTextSelection({ from: selection.current.from, to: selection.current.to });
     editor.chain().focus().extendMarkRange("link").unsetLink().run();
     onOpenChange(false);
   };
@@ -89,6 +102,20 @@ export function LinkPopover({
           placeholder="https://"
           value={value}
         />
+        <label
+          className="flex items-center justify-between gap-3 text-sm"
+          htmlFor={`${id}-new-tab`}
+        >
+          Open in a new tab
+          <Switch id={`${id}-new-tab`} checked={newTab} onCheckedChange={setNewTab} />
+        </label>
+        <label
+          className="flex items-center justify-between gap-3 text-sm"
+          htmlFor={`${id}-nofollow`}
+        >
+          nofollow
+          <Switch id={`${id}-nofollow`} checked={nofollow} onCheckedChange={setNofollow} />
+        </label>
         {error === undefined ? undefined : (
           <p className={`${fieldErrorClass} text-xs`} id={`${id}-error`} role="alert">
             {error}

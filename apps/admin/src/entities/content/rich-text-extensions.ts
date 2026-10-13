@@ -1,7 +1,9 @@
-import { Extension, mergeAttributes, type Extensions } from "@tiptap/core";
+import { Extension, mergeAttributes, type JSONContent, type Extensions } from "@tiptap/core";
 import Blockquote from "@tiptap/extension-blockquote";
 import Bold from "@tiptap/extension-bold";
 import BulletList from "@tiptap/extension-bullet-list";
+import CodeBlock from "@tiptap/extension-code-block";
+import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import Code from "@tiptap/extension-code";
 import Document from "@tiptap/extension-document";
 import HardBreak from "@tiptap/extension-hard-break";
@@ -20,27 +22,64 @@ import { isSafeUrl } from "@lacecms/content";
 export const RICH_TEXT_PLACEHOLDER = "Write something…";
 
 /** The heading levels permitted by the shared rich-text allowlist. */
-export const HEADING_LEVELS = [1, 2, 3] as const;
+export const HEADING_LEVELS = [1, 2, 3, 4] as const;
 export type HeadingLevel = (typeof HEADING_LEVELS)[number];
 
-/**
- * A link mark whose only attribute is `href`. Tiptap's default link also
- * serializes `target`, `rel`, `class`, and `title`, which the shared
- * rich-text validator rejects.
- */
+/** Only document attributes supported by the shared rich-text contract. */
 const SafeLink = Link.extend({
   addAttributes() {
     return {
       href: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute("href") },
+      target: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute("target") === "_blank" ? "_blank" : null,
+      },
+      rel: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          (element.getAttribute("rel") ?? "").split(/\s+/u).includes("nofollow")
+            ? "nofollow"
+            : null,
+      },
     };
   },
 }).configure({
   autolink: false,
-  HTMLAttributes: { rel: "noopener noreferrer nofollow", target: null },
+  HTMLAttributes: { rel: null, target: null },
   isAllowedUri: (href) => isSafeUrl(href),
   linkOnPaste: false,
   openOnClick: false,
   protocols: ["http", "https", "mailto", "tel"],
+});
+
+/** Strip only editor-default absent attributes, never unsupported present values. */
+export function richTextDocument(node: JSONContent): JSONContent {
+  return {
+    ...node,
+    ...(node.content ? { content: node.content.map(richTextDocument) } : {}),
+    ...(node.marks
+      ? {
+          marks: node.marks.map((mark) => {
+            if (mark.type !== "link" || !mark.attrs) return mark;
+            return {
+              ...mark,
+              attrs: Object.fromEntries(
+                Object.entries(mark.attrs).filter(
+                  ([key, value]) => !((key === "target" || key === "rel") && value == null),
+                ),
+              ),
+            };
+          }),
+        }
+      : {}),
+  };
+}
+
+const SafeCodeBlock = CodeBlock.extend({
+  addAttributes() {
+    return {};
+  },
 });
 
 /** An ordered list without the `start` and `type` attributes the allowlist forbids. */
@@ -69,6 +108,7 @@ function editorShortcuts(handlers: { readonly current: RichTextShortcutHandlers 
           return true;
         },
         "Mod-k": () => {
+          if (!this.editor.isEditable || this.editor.isActive("codeBlock")) return false;
           handlers.current.openLink();
           return true;
         },
@@ -94,6 +134,8 @@ export function richTextExtensions(handlers: {
     ListItem,
     Blockquote,
     HardBreak,
+    HorizontalRule,
+    SafeCodeBlock,
     Bold,
     Italic,
     Strike,

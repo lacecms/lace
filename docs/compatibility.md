@@ -356,10 +356,12 @@ must support the expanded grammar, and overrides must forward validated link
 attributes. A codeBlock override is called for both described pre/code elements,
 following the existing per-element override contract.
 
-CE8A verifies the shared format and public rendering only. The current admin
-editor cannot preserve the expanded format until CE8B updates its extensions
-and serializer. Do not edit expanded documents through that editor or enable
-new-format authoring in a production release containing CE8A alone.
+CE8B updates the admin extensions and serializer to preserve and author this
+format in every field, including recursive leaves. Use the fixed toolbar or
+selection menu; Link provides independent new-tab/nofollow switches. See
+[rich-text authoring](rich-text-authoring.md). CE8A alone still cannot preserve
+expanded documents in its older admin; deploy CE8B together with its common
+format/rendering dependencies before enabling expanded authoring.
 
 An older engine or site renderer can reject documents using new features. To
 roll back after expanded content is stored, restore a backup predating it or

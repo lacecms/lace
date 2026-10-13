@@ -3,6 +3,8 @@ import { useEditorState } from "@tiptap/react";
 import {
   BoldIcon,
   CodeIcon,
+  SquareCodeIcon,
+  MinusIcon,
   ItalicIcon,
   LinkIcon,
   ListIcon,
@@ -55,9 +57,17 @@ export function formatShortcut(
   };
 }
 
-type Toggle = "blockquote" | "bold" | "bulletList" | "code" | "italic" | "orderedList" | "strike";
+export type Toggle =
+  | "codeBlock"
+  | "blockquote"
+  | "bold"
+  | "bulletList"
+  | "code"
+  | "italic"
+  | "orderedList"
+  | "strike";
 
-const toggles: readonly {
+export const richTextToggles: readonly {
   readonly icon: LucideIcon;
   readonly keys: readonly string[];
   readonly label: string;
@@ -113,6 +123,13 @@ const toggles: readonly {
     name: "blockquote",
     run: (editor) => editor.chain().focus().toggleBlockquote().run(),
   },
+  {
+    icon: SquareCodeIcon,
+    keys: ["Mod", "Alt", "C"],
+    label: "Code block",
+    name: "codeBlock",
+    run: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+  },
 ];
 
 type TextStyle = "paragraph" | `heading-${HeadingLevel}`;
@@ -122,11 +139,11 @@ function readToolbarState(editor: Editor) {
     editor.isActive("heading", { level: candidate }),
   );
   return {
-    active: Object.fromEntries(toggles.map(({ name }) => [name, editor.isActive(name)])) as Record<
-      Toggle,
-      boolean
-    >,
+    active: Object.fromEntries(
+      richTextToggles.map(({ name }) => [name, editor.isActive(name)]),
+    ) as Record<Toggle, boolean>,
     link: editor.isActive("link"),
+    plainCode: editor.isActive("codeBlock"),
     textStyle: (level === undefined ? "paragraph" : `heading-${level}`) as TextStyle,
   };
 }
@@ -177,7 +194,7 @@ export function RichTextToolbar({
   const [current, setCurrent] = useState(0);
   const apple = isApplePlatform();
   focusRef.current = () => items.current[current]?.focus();
-  const count = toggles.length + 2;
+  const count = richTextToggles.length + 3;
   const item = (index: number) => ({
     onFocus: () => setCurrent(index),
     ref: (element: HTMLElement | null) => {
@@ -199,9 +216,13 @@ export function RichTextToolbar({
               ? count - 1
               : undefined;
     if (next !== undefined) {
+      let target = next;
+      const direction = event.key === "ArrowLeft" || event.key === "End" ? -1 : 1;
+      while (items.current[target]?.hasAttribute("disabled"))
+        target = (target + direction + count) % count;
       event.preventDefault();
-      setCurrent(next);
-      items.current[next]?.focus();
+      setCurrent(target);
+      items.current[target]?.focus();
       return;
     }
     if (event.key === "Escape") {
@@ -256,7 +277,7 @@ export function RichTextToolbar({
           </SelectContent>
         </Select>
         <span aria-hidden className="mx-1 h-5 w-px bg-border" />
-        {toggles.map((toggle, index) => {
+        {richTextToggles.map((toggle, index) => {
           const shortcut = formatShortcut([toggle.keys], apple);
           const Icon = toggle.icon;
           return (
@@ -265,6 +286,9 @@ export function RichTextToolbar({
                 aria-keyshortcuts={shortcut.aria}
                 aria-label={toggle.label}
                 aria-pressed={state.active[toggle.name]}
+                disabled={
+                  state.plainCode && ["bold", "italic", "strike", "code"].includes(toggle.name)
+                }
                 className="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
                 onClick={() => toggle.run(editor)}
                 size="icon-sm"
@@ -276,6 +300,15 @@ export function RichTextToolbar({
             </ToolbarTooltip>
           );
         })}
+        <Button
+          aria-label="Insert horizontal rule"
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          size="icon-sm"
+          variant="ghost"
+          {...item(count - 2)}
+        >
+          <MinusIcon aria-hidden />
+        </Button>
         <Tooltip>
           <LinkPopover editor={editor} onOpenChange={onLinkOpenChange} open={linkOpen}>
             <TooltipTrigger asChild>
@@ -283,6 +316,7 @@ export function RichTextToolbar({
                 aria-keyshortcuts={linkShortcut.aria}
                 aria-label="Link"
                 aria-pressed={state.link}
+                disabled={state.plainCode}
                 className="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
                 size="icon-sm"
                 variant="ghost"
