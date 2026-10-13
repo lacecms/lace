@@ -11,7 +11,7 @@ export async function consumer34bSecurity({ base, cookie, png }) {
   const statusResponse = await invoke("/api/v1/admin/settings/status");
   assert.equal(statusResponse.status, 200);
   const status = await statusResponse.json();
-  assert.equal(status.engineVersion, "0.1.0-alpha.4", "exact installed CMS release differs");
+  assert.equal(status.engineVersion, "0.1.0-alpha.5", "exact installed CMS release differs");
   const anonymous = await fetch(new URL("/api/v1/admin/settings/status", base));
   assert.equal(anonymous.status, 403);
   console.info("34C exact consumer: running CMS release and administrator boundary passed");

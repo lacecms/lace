@@ -6,10 +6,10 @@
     "build": "astro build"
   },
   "dependencies": {
-    "@lacecms/astro": "0.1.0-alpha.4",
-    "@lacecms/content": "0.1.0-alpha.4",
-    "@lacecms/render": "0.1.0-alpha.4",
-    "@lacecms/sdk": "0.1.0-alpha.4",
+    "@lacecms/astro": "0.1.0-alpha.5",
+    "@lacecms/content": "0.1.0-alpha.5",
+    "@lacecms/render": "0.1.0-alpha.5",
+    "@lacecms/sdk": "0.1.0-alpha.5",
     "astro": "7.3.1"
   }
 }

@@ -503,7 +503,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("link", { name: "Settings", exact: true })
       .click();
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
-    await visible(tab.getByText("0.1.0-alpha.4", { exact: true }), "cloudflare-cms-release");
+    await visible(tab.getByText("0.1.0-alpha.5", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
     // Keep both publications together for build coalescing. Browser assertions
     // are complete: drain requests, then stop polling before the API journey.

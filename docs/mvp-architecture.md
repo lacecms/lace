@@ -2995,6 +2995,12 @@ scalar-only engine needs matching configuration/database backup or an explicit
 validated conversion. Recursive schema evolution is described in section 8;
 admin authoring restrictions remain in section 17 until CE7C expands the editor.
 
+The selected alpha.5 release packages the completed CE1–CE9 changes. Upgrade
+all Lace dependencies together, apply forward database migrations explicitly,
+and review the public-contract and backup/rollback boundaries in
+[alpha.5 release notes](./alpha-5-release-notes.md). No automatic database
+downgrade is promised.
+
 Compatibility exists at three boundaries:
 
 1. Database schema version.
@@ -3097,7 +3103,10 @@ The implementation plan uses these resolved defaults:
   `0.17.0`, npm publication recorded 2026-10-07) are published and immutable;
   `0.1.0-alpha.4` (template `0.20.0`) package publication and real VPS/Cloudflare
   application testing, restore, upgrade, credential rotation and build recovery
-  were owner-confirmed on 2026-10-10; beta/stable approval remains separate;
+  were owner-confirmed on 2026-10-10. The next selected candidate is
+  `0.1.0-alpha.5` (template `0.29.0`) on `next`; fresh artifact acceptance and
+  owner-operated deployment checks remain distinct from historical alpha.4
+  evidence. Beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
 

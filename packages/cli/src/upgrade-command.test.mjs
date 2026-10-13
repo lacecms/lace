@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { TEMPLATE_VERSION } from "../../create-lace/dist/index.js";
 import { parseUpgradeArguments } from "../dist/upgrade-command.js";
 import { upgradeHash } from "../dist/upgrade-input.js";
 
@@ -105,7 +106,7 @@ describe("upgrade CLI", () => {
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(JSON.parse(result.stdout).guidance).toContain("treated as starter mode");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      expect(manifest.templateVersion).toBe("0.27.0");
+      expect(manifest.templateVersion).toBe(TEMPLATE_VERSION);
       expect(manifest.site).toEqual({ mode: "starter", path: "site" });
       expect(Object.keys(manifest)).toEqual(["schemaVersion", "templateVersion", "site", "files"]);
       expect(await readFile(join(project, "docs/lace-operations.md"), "utf8")).toBe(
@@ -134,7 +135,7 @@ describe("upgrade CLI", () => {
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
       expect(manifest.site).toEqual(site);
-      expect(manifest.templateVersion).toBe("0.27.0");
+      expect(manifest.templateVersion).toBe(TEMPLATE_VERSION);
       expect(Object.keys(manifest.files).some((path) => path.startsWith("site/"))).toBe(false);
       expect(await readdir(project)).not.toContain("site");
       expect(await outside()).toEqual(before);
@@ -179,7 +180,7 @@ describe("upgrade CLI", () => {
       const result = cli(args, root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain("worker/wrangler.jsonc");
       expect(outcome.guidance).toContain("No Cloudflare resource");
       const files = await readdir(project);
@@ -190,7 +191,7 @@ describe("upgrade CLI", () => {
         );
       expect(await readdir(join(project, "worker"))).not.toContain("wrangler.jsonc");
       const upgraded = JSON.parse(await readFile(manifestPath, "utf8"));
-      expect(upgraded.templateVersion).toBe("0.27.0");
+      expect(upgraded.templateVersion).toBe(TEMPLATE_VERSION);
       expect(upgraded.files).not.toHaveProperty("wrangler.jsonc");
       expect(upgraded.files["worker/index.ts"]?.owner).toBe("managed");
       expect(await snapshot(join(project, "site"))).toEqual(before);
@@ -220,7 +221,7 @@ describe("upgrade CLI", () => {
       const result = cli(args, root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain("guidance only");
       for (const path of guides)
         expect(await readFile(join(project, path), "utf8")).toBe(
@@ -232,7 +233,9 @@ describe("upgrade CLI", () => {
       expect(await readFile(join(project, "worker/wrangler.jsonc"), "utf8")).toBe(config);
       expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
       expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe("0.27.0");
+      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
+        TEMPLATE_VERSION,
+      );
     },
     integrationTimeout,
   );
@@ -246,7 +249,7 @@ describe("upgrade CLI", () => {
       const managed = ["package.json", ".env.example", "docs/lace-operations.md"];
       for (const path of managed) {
         const previous = (await readFile(join(project, path), "utf8")).replaceAll(
-          "0.1.0-alpha.4",
+          "0.1.0-alpha.5",
           "0.1.0-alpha.1",
         );
         await writeFile(join(project, path), previous);
@@ -278,7 +281,7 @@ describe("upgrade CLI", () => {
       await writeFile(
         join(project, "docs/lace-operations.md"),
         (await readFile(join(template, "docs/lace-operations.md"), "utf8")).replaceAll(
-          "0.1.0-alpha.4",
+          "0.1.0-alpha.5",
           "0.1.0-alpha.1",
         ),
       );
@@ -286,7 +289,7 @@ describe("upgrade CLI", () => {
       const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain(
         "Template 0.14.0: release coordinates and one operating rule",
       );
@@ -297,6 +300,8 @@ describe("upgrade CLI", () => {
         "Template 0.17.0: release coordinates for Lace 0.1.0-alpha.3",
       );
       expect(outcome.guidance).toContain("pnpm --dir site add @lacecms/astro@0.1.0-alpha.4");
+      expect(outcome.guidance).toContain("Template 0.29.0: alpha.5 release coordinates");
+      expect(outcome.guidance).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.5");
       expect(outcome.guidance).toContain(
         "Database: Lace 0.1.0-alpha.3 engines require migration 0003_site_build_outcomes",
       );
@@ -330,7 +335,9 @@ describe("upgrade CLI", () => {
       expect(await readFile(join(project, ".env"), "utf8")).toBe(environment);
       expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
       expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe("0.27.0");
+      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
+        TEMPLATE_VERSION,
+      );
     },
     integrationTimeout,
   );
@@ -375,7 +382,7 @@ describe("upgrade CLI", () => {
       const result = cli(args, root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain("lace add block --all");
       for (const path of ["docs/lace-astro-site.md", "docs/lace-operations.md"])
         expect(await readFile(join(project, path), "utf8")).toBe(
@@ -424,7 +431,7 @@ describe("upgrade CLI", () => {
       const result = cli(args, root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain("@lacecms/astro");
       expect(outcome.guidance).toContain("Delete site/src/lib/site-data.ts");
       expect(outcome.guidance).toContain("docs/lace-astro-site.md");
@@ -458,7 +465,7 @@ describe("upgrade CLI", () => {
       const result = cli(args, root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain("Cache-Control: no-cache");
       expect(outcome.guidance).toContain("revalidate the build export with its ETag");
       expect(await readFile(join(project, "deploy/nginx.conf"), "utf8")).toContain(
@@ -489,10 +496,12 @@ describe("upgrade CLI", () => {
       const result = cli(args, root);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe("0.27.0");
+      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       expect(outcome.guidance).toContain("compatible freshly built");
       expect(outcome.guidance).toContain("LACE_BUILD_SOURCE_ROOT");
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe("0.27.0");
+      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
+        TEMPLATE_VERSION,
+      );
       expect(await readFile(join(project, "docker-compose.yml"), "utf8")).toContain(
         "create_host_path: false",
       );
