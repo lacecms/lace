@@ -514,7 +514,7 @@ async function nodeJourney(context) {
     headers: { cookie },
   });
   const modelNames = models.body?.items?.map((item) => item.key);
-  if (JSON.stringify(modelNames) !== JSON.stringify(["home", "posts"])) {
+  if (JSON.stringify(modelNames) !== JSON.stringify(["home", "navigation", "posts", "settings"])) {
     throw new Error(`api: generated config mismatch: ${JSON.stringify(modelNames)}`);
   }
   const homeEntries = await request(base, "/api/v1/admin/models/home/entries", {
@@ -565,6 +565,11 @@ async function nodeJourney(context) {
     {
       type: "cta",
       data: { heading: "Published call to action", actionLabel: "Home", actionUrl: "/" },
+    },
+    { type: "gallery", data: { title: "Published gallery", images: [{ media: mediaId }] } },
+    {
+      type: "navigation",
+      data: { name: "Published navigation", links: [{ label: "Home", url: "/" }] },
     },
     { type: "quote", hidden: true, data: { quote: "Hidden acceptance quote" } },
   ].map((block, index) => {

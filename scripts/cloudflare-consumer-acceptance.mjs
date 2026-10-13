@@ -460,12 +460,15 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const create = tab.getByRole("dialog", { name: "Create entry" });
     await create.getByRole("textbox", { name: "Title" }).fill("Cloudflare published title");
     await create.getByRole("button", { name: "Create entry" }).click();
+    // CE9 also gives the creation dialog a Slug input. Wait for it to close
+    // before editing the entry so this locator cannot target the old dialog.
+    await create.waitFor({ state: "hidden", timeout: 30_000 });
     // Creating an entry opens it in the editor.
     await visible(
-      tab.getByRole("textbox", { name: "Slug" }),
+      main.getByRole("textbox", { name: "Slug", exact: true }),
       "cloudflare-browser-create-opens-editor",
     );
-    await tab.getByRole("textbox", { name: "Slug" }).fill("cloudflare");
+    await main.getByRole("textbox", { name: "Slug", exact: true }).fill("cloudflare");
     await tab.getByRole("textbox", { name: "Summary" }).fill("Cloudflare summary");
     await tab.getByRole("button", { name: "Add block" }).click();
     await tab
@@ -569,6 +572,11 @@ export async function cloudflareConsumerJourney(parent, operations) {
     secretValues.add(buildToken);
     const exportHeaders = { authorization: `Bearer ${buildToken}` };
     const published = await json(base, "api/v1/public/build-export", { headers: exportHeaders });
+    const publishedPost = published.entries?.find((entry) => entry.modelKey === "posts");
+    if (publishedPost?.slug !== "cloudflare")
+      throw new Error(
+        `cloudflare-publication: expected slug cloudflare, got ${JSON.stringify(publishedPost?.slug)}`,
+      );
     const build = async (stage) => {
       await run(stage, "pnpm", ["build"], {
         cwd: project,
@@ -891,6 +899,6 @@ async function login(base, email, password, secretValues) {
 async function expectModels(base, cookie) {
   const models = await json(base, "api/v1/admin/content-models", { headers: { cookie } });
   const keys = models?.items?.map((item) => item.key);
-  if (JSON.stringify(keys) !== JSON.stringify(["home", "posts"]))
+  if (JSON.stringify(keys) !== JSON.stringify(["home", "navigation", "posts", "settings"]))
     throw new Error(`cloudflare-config: unexpected models ${JSON.stringify(keys)}`);
 }
