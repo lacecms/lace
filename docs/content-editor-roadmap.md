@@ -1,9 +1,9 @@
 # Lace Content and Editor Roadmap
 
 > Active roadmap. Started 2026-10-10 after the MVP roadmap was archived.
-> Waves 1 and 2 are done. Wave 3 starts with the detailed CE7 plan, ready
-> for just-in-time OpenSpec proposals. CE8 and CE9 remain draft until CE7 is
-> implemented. Wave 4 remains an ordered backlog.
+> Waves 1–3 are done. Wave 4 is the final planned wave: CE8 and CE9 are
+> detailed for just-in-time OpenSpec proposals in four session units. Further
+> capabilities remain a separate backlog.
 
 ## 1. Purpose and source of truth
 
@@ -123,11 +123,11 @@ The findings that motivate this roadmap. File references are to the state of
 | 2 | CE4 | SEO metadata and site defaults | A3 | L | done |
 | 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | L | done |
 | 3 | CE7 | Group/list fields, Gallery and Navigation blocks | A6 | L | done |
-| 3 | CE8 | Rich-text editor expansion | B1 | — | draft |
-| 3 | CE9 | Field layout and form UX | B2 | — | draft |
-| 4 | CE10 | Entry references and internal links | A7 | — | backlog |
-| 4 | CE11 | Responsive images | C3 | — | backlog |
-| 4 | CE12 | Bounded revision history | C1 | — | backlog |
+| 4 | CE8 | Rich-text editor expansion | B1 | M | planned |
+| 4 | CE9 | Field layout and form UX | B2 | M | planned |
+| Later | CE10 | Entry references and internal links | A7 | — | backlog |
+| Later | CE11 | Responsive images | C3 | — | backlog |
+| Later | CE12 | Bounded revision history | C1 | — | backlog |
 
 Dependency order inside wave 1: **CE1 → CE2 → CE3**. CE2 does not depend on
 CE1 technically and may run in parallel. CE3 depends on CE1 because making
@@ -139,10 +139,12 @@ neither technically; it runs last by owner choice, but it must land before
 beta because it changes the stored and public block contract. Database
 migration numbers are assigned when each session is proposed.
 
-Wave 3 begins with **CE7A → CE7B → CE7C → CE7D**. CE8 and CE9
-are draft topics, not implementation-ready steps; detail them after CE7 is
-implemented and verified. Create only the next selected session's OpenSpec
-change, never all four in advance.
+Wave 3 completed **CE7A → CE7B → CE7C → CE7D**. Wave 4 follows
+**CE8A → CE8B → CE9A → CE9B**. CE8 completes the shared rich-text
+format and editing tools before CE9 organizes the forms. Create only the
+next selected session's OpenSpec change, never all four in advance. Planning
+does not authorize implementation; each apply still requires an explicit
+owner request.
 
 ## 5. Wave 1 — detailed steps
 
@@ -789,11 +791,10 @@ the generated-project acceptance passes.
 editing settings and keyboard access to the tabs; the accessibility
 acceptance in architecture section 17 holds.
 
-## 7. Wave 3 — structured fields and editor improvements
+## 7. Wave 3 — structured fields
 
-Only CE7 is detailed and selected for just-in-time proposals. CE8 and CE9
-remain draft and will be specified after CE7 implementation, using its actual
-editor behavior and verification results.
+CE7A–CE7D are complete and archived. Their generic recursive forms, Gallery
+and Navigation establish the baseline for the final editor wave below.
 
 ## Step CE7 — Group and repeatable list fields
 
@@ -1172,35 +1173,217 @@ changes; archiving remains an explicit owner action.
 
 CE7 does not add nested blocks, heterogeneous list item types, references,
 custom React block editors, conditional visibility, configurable form tabs,
-new rich-text features or responsive image generation. After CE7 completes,
-review its actual forms before detailing CE8 and CE9.
+new rich-text features or responsive image generation. CE7 is complete;
+CE8 and CE9 are planned in wave 4 against its recursive editor baseline.
 
-## Step CE8 — Rich-text expansion (draft)
+## 8. Wave 4 — rich text and form UX
 
-**Status:** draft. Detail after CE7 implementation; no session split or
-implementation-ready scope is approved yet.
+The final planned wave contains CE8 and CE9, each split into two session
+units. The owner approved this scope on 2026-10-13 after CE7 completion.
+Word/Google Docs paste cleanup and conditional forms are deferred to the
+later backlog; neither is a wave-completion requirement.
 
-Candidate topics from B1: configurable heading sets (proposed default H2–H4),
-horizontal rule, code block, link `target`/`rel`, bubble menu, Word/Google Docs
-paste cleanup and per-field node/mark allowlists. Existing H1–H3 content needs
-an explicit compatibility policy; the proposed default is not permission to
-rewrite or reject it. Tables remain a later candidate.
+## Step CE8 — Rich-text expansion
 
-## Step CE9 — Field layout and form UX (draft)
+**Status:** planned; create CE8A's OpenSpec proposal just in time.
 
-**Status:** draft. Detail after CE7 implementation; no session split or
-implementation-ready scope is approved yet.
+**Goal:** every rich-text field supports one shared set of useful authoring
+features, safely from the admin through publication to Astro rendering.
 
-Candidate topics from B2: required markers, placeholders, character counters,
-visual groups/tabs (Content / SEO / Settings), declarative conditional
-visibility and automatic slug suggestions for new entries. Visual grouping
-must be distinguished from CE7's stored data groups. Visibility/value retention,
-validation and slug-generation policies remain to be decided.
+**Size:** M (two session units).
 
-## 8. Later waves — backlog
+### Owner decisions (2026-10-13)
 
-Wave 4 items remain ordered but not detailed. Expand each with owner decisions
-when selected; CE8 and CE9 draft topics are recorded above.
+1. All rich-text fields use the same supported feature set, including leaves
+   inside CE7 groups/lists and block data. Do not add per-field node/mark
+   allowlists or configurable heading sets.
+2. Preserve H1–H3 and add H4. Existing documents remain valid without heading
+   rewrites, destructive normalization or a new default that excludes H1.
+3. Add horizontal rules and plain code blocks. Code preserves whitespace and
+   line breaks; syntax highlighting and language selection are out of scope.
+4. Each rich-text link offers its URL, an **Open in a new tab** switch and a
+   **nofollow** switch. These are per-link document attributes, not settings
+   of the field or Astro layout. Ordinary URL fields remain strings.
+5. An unchecked new-tab switch uses the current browsing context; a checked
+   switch stores `target: "_blank"`. The renderer automatically adds
+   `noopener noreferrer` for a new tab and merges `nofollow` when requested.
+   Accept only the supported target/rel forms, not arbitrary attributes or
+   arbitrary rel tokens. Existing href-only links retain their behavior.
+6. Add a small selection bubble menu for common formatting and link actions.
+   Keep the fixed toolbar, keyboard shortcuts and an accessible route to every
+   action; the bubble menu is an additional entry point.
+7. Keep ordinary Tiptap paste behavior. Dedicated Word/Google Docs cleanup,
+   source-specific normalization and compatibility testing move to backlog.
+   This deferral does not weaken the shared document/URL safety rules.
+
+### Architecture and capability changes
+
+Update architecture sections 11 and 17 before implementation: the explicit
+shared rich-text contract gains H4, horizontal rules, code blocks and the
+limited link attributes; the toolbar gains the corresponding actions.
+
+`@lacecms/content` remains the source of document validation and URL safety.
+`@lacecms/render` reuses it and describes safe elements; `@lacecms/astro`
+renders the description. The admin produces that same format. No site-local
+allowlist copies, raw HTML support or arbitrary styles are introduced.
+
+Affected capabilities include content validation, field-descriptor defaults,
+render core, Astro adapter and admin draft editing. Carry upgrade guidance
+for the expanded format: once new nodes/attributes are stored, an older
+engine/site renderer may reject them. No database migration or automatic
+rewrite of existing documents is planned; CE8A confirms the exact contract
+and release/adoption requirements.
+
+### Session CE8A — Shared document format and rendering
+
+- Extend shared types and validation for H4, horizontal rules, plain code
+  blocks and the limited link target/rel attributes. Validate rich-text
+  defaults through the same rules; preserve existing valid documents.
+- Extend the render core and Astro rich-text output together. Escape text,
+  preserve code whitespace and generate safe link attributes with independent
+  new-tab and nofollow behavior.
+- Verify validation/rendering agreement, rejection of unsupported attributes
+  and unsafe URLs, and nested rich-text use without changing CE7 budgets or
+  draft/publication semantics.
+- Update architecture/specs, public-format compatibility guidance and
+  reference rendering fixtures. Keep this independently verifiable before
+  the admin starts producing the expanded format.
+
+**Acceptance:** existing H1–H3 and href-only documents still validate and
+render; H4, rules, code and all four new-tab/nofollow combinations render
+correctly through Astro. Unsafe URLs/attributes fail through the shared
+validator, and code is emitted as escaped text with preserved whitespace.
+
+### Session CE8B — Authoring tools and product verification
+
+- Add H4, horizontal-rule and code-block actions to the fixed toolbar and
+  corresponding editor extensions. Available buttons, shortcuts and editor
+  output follow the single CE8A format in every rich-text field.
+- Extend the link popover with new-tab and nofollow switches, including
+  editing/removing existing links and retaining selection while controls
+  have focus. Add the selection bubble menu without losing the fixed
+  toolbar's keyboard navigation or read-only behavior.
+- Verify undo/redo, save/reload, publish and Astro delivery for new features,
+  including fields inside groups/lists and state retention across list
+  moves, disclosures and block tabs. Ordinary paste still produces safe
+  documents, without a dedicated Word/Google Docs cleanup commitment.
+- Update authoring documentation, reference/starter examples and upgrade
+  instructions for consumers of the common renderer. Run focused browser
+  and accessibility checks plus the standard completion checks.
+
+**Acceptance:** authors can create, change and remove every new feature;
+links retain both switches after save/reload, and published output matches
+those choices. Keyboard users can reach all actions, viewers cannot edit,
+and existing content is not silently dropped when opened in Tiptap.
+
+## Step CE9 — Field layout and form UX
+
+**Status:** planned; follows CE8.
+
+**Goal:** make long and nested forms easier to understand and navigate without
+changing their stored data shape or content lifecycle.
+
+**Size:** M (two session units).
+
+### Owner decisions (2026-10-13)
+
+1. Add configurable placeholders, consistent required markers and clear
+   constraint guidance. These apply to supported controls at every CE7 depth.
+   Required/minimum constraints retain their existing publication-only
+   semantics; a required marker does not make an incomplete draft unsavable.
+2. Text/textarea counters show current character usage and declared limits.
+   Distinguish enforced limits from advisory SEO recommendations; reuse the
+   shared validation's character-counting semantics.
+3. Code-first form metadata may organize fields into visual sections/tabs
+   and specify their order. A visual section is not a `field.group`: it does
+   not create a JSON object, move values or alter their paths.
+4. Preserve the special behavior of existing SEO and block Content/Settings
+   controls. Switching tabs must preserve values and local editor state;
+   validation summaries reveal the correct tab and nested control.
+5. Suggest a slug from the title for new collection entries until the author
+   first edits the slug manually. Later title changes do not overwrite a
+   manually chosen slug or change an existing entry's slug. Server route
+   validation remains authoritative; suggestions do not guarantee uniqueness.
+6. Conditional visibility is excluded. Plan it later as a complete system
+   together with conditional validation, dependency rules, value retention
+   and publication behavior, including nested groups and list items.
+
+### Architecture and capability changes
+
+Update architecture sections 8 and 17 for serializable presentation metadata,
+form navigation and slug suggestions. Field/config definitions project the
+metadata to the admin through normal contracts; no executable callbacks or
+custom React forms are required.
+
+Presentation-only changes affect the projection hash, not the structural
+hash, and require no content migration or structural model-version bump.
+Keep public content values and CE7 paths unchanged. Define the exact metadata
+syntax, supported nesting and invalid-reference checks in the corresponding
+just-in-time proposals; this roadmap does not prescribe an unverified DSL.
+
+Affected capabilities include field descriptors, content-model configuration,
+configuration synchronization, REST metadata and admin draft editing.
+
+### Session CE9A — Field metadata and guidance
+
+- Define and project configurable placeholders as portable display metadata,
+  retaining current behavior where omitted. Preserve inherited SEO/media
+  explanations rather than obscuring them with generic placeholders.
+- Standardize required markers, accessible descriptions and constraint hints
+  across applicable controls, including nested groups/lists and read-only
+  inspection. Do not change default application or draft validation rules.
+- Add text/textarea character counters using shared count semantics and
+  declared bounds; keep advisory SEO counters distinguishable from hard
+  limits and avoid noisy announcements on every keystroke.
+- Verify metadata normalization/projection, unchanged structural hashes and
+  content values, nested control behavior and accessibility. Document the
+  configuration options and author-facing guidance.
+
+**Acceptance:** applicable nested controls show their configured placeholders,
+required state and accurate counters; guidance agrees with validation, and
+incomplete drafts remain savable. Metadata-only edits neither rewrite content
+nor require a structural model-version bump.
+
+### Session CE9B — Form organization and slug suggestions
+
+- Define serializable layout metadata for visual sections, tabs and field
+  order in model/block forms, including supported CE7 nesting. Reject invalid
+  field references and ambiguous placement; fields without layout metadata
+  retain a predictable default layout.
+- Render the layout without changing stored data, materializing absent
+  containers or losing rich-text/media/list state. Reuse existing SEO and
+  block settings behavior. Validation indicators and summary links select
+  the appropriate tab, open ancestor disclosures and focus the exact control.
+- Suggest slugs for new collection entries while the slug remains automatic;
+  stop on manual editing and preserve existing slugs. Define normalization,
+  non-Latin/empty-title behavior and conflict feedback in the proposal rather
+  than silently inventing route or transliteration rules during apply.
+- Verify keyboard navigation, nested error recovery, narrow screens,
+  read-only behavior and save/discard/conflict flows. Update configuration
+  examples, reference/starter guidance and compatibility documentation as
+  applicable; complete the standard quality checks.
+
+**Acceptance:** forms can be organized without changing saved/public JSON;
+tabs retain editing state and errors remain reachable. New-entry suggestions
+follow the title until manual override, existing slugs remain stable, and
+route conflicts receive the normal server feedback.
+
+### Completion and boundaries
+
+Wave 4 completes after CE8A, CE8B, CE9A and CE9B are implemented and verified,
+with architecture/spec updates, documentation and the standard root checks
+and strict OpenSpec validation for each change. Archive remains an explicit
+owner action. Create only the next session's proposal when selected.
+
+The wave does not add per-field rich-text restrictions, tables, rich-text
+images, code syntax highlighting, Word/Google Docs cleanup, conditional forms,
+entry references, responsive image generation or revision history.
+
+## 9. Later capabilities — backlog
+
+These items are outside the final planned wave. CE10–CE12 retain their relative
+order; the two deferred editor topics require separate scope/session planning
+when selected and do not yet have an implementation order or new CE numbers.
 
 - **CE10 Entry references and internal links (A7):** reference fields and
   `entry:<id>` links in URL fields and rich text, resolved to paths at build
@@ -1212,13 +1395,24 @@ when selected; CE8 and CE9 draft topics are recorded above.
   published versions with restore. Requires changing the MVP exclusion of
   revision history.
 
+- **Word/Google Docs paste cleanup (deferred from CE8/B1):** normalize source
+  markup into supported rich text, preserve meaningful text/lists/links and
+  remove unsupported styling and unsafe attributes. Define loss handling and
+  test representative clipboard samples. Document-file import, tables and
+  image import are separate scope decisions, not implied by this item.
+- **Conditional forms (deferred from CE9/B2):** design declarative visibility
+  together with conditional validation, dependencies/cycles, hidden-value
+  retention and public delivery. Cover groups, per-item list scope, defaults,
+  server enforcement and reachable validation errors; do not ship a partial
+  visibility-only mechanism as CE9.
+
 Further candidates, not yet ordered: scheduled publication (C2, an MVP
 exclusion), bulk list actions and field-value filters, media folders and tags,
 token-protected draft preview, trash for deleted entries, and an early
 decision on whether localized content will ever be supported, because locales
 would affect snapshot and route keys.
 
-## 9. Session log
+## 10. Session log
 
 Record each completed session here: date, OpenSpec change name, outcome and
 any decision that changed this document.
@@ -1244,3 +1438,4 @@ any decision that changed this document.
 | 2026-10-12 | CE6B | `ce06b-block-rendering-delivery` | The render core skips hidden blocks before resolving them (so a hidden block of an unknown type, an old version or with invalid data never fails a build), and block props gain `anchor`, the normalized `className` and `settings` typed from the definition (`BlockSettingsOf`, defaults applied); `parseBlockEnvelope` re-checks envelopes that bypass the SDK and fails with `invalid_block_envelope` and the field path. `RenderableBlock` members admit `undefined` because Valibot types optional DTO keys that way. `LaceBlocks` passes the envelope without a wrapper and is now rendered in tests through Astro's container API. Registry revisions `cta` 2, `hero` 3, `image` 4, `quote` 2 and `richText` 2 put the anchor on the root `id` and the class name after the component's own classes (`class:list`), with unchanged markup without an envelope; custom scaffolds follow the same convention. The reference fixture links `#get-started` to the anchored, classed home call to action, and the packed starter acceptance asserts it; the Node journey adds an anchored hero and a hidden quote. Template `0.26.0` ships the components, the `0009` upgrade steps (rollback restores the backup once envelopes exist, because an older engine would deliver hidden blocks), the migration signature break and `lace add block --all` adoption; the managed guides document the props, declared settings, per-entry anchor uniqueness and the hidden-block rule. |
 | 2026-10-12 | CE6C | `ce06c-admin-block-envelope` | Expanded block cards get *Content* and *Settings* tabs (both panels force-mounted, arrow/Home/End selection, problem markers in tab names, selection kept per block key). *Settings* edits the anchor with live format and per-entry uniqueness checks (hidden blocks included) and *Copy link* (the entry's site URL plus `#anchor` when the build site URL and path are known, otherwise `#anchor`), the *Hide on site* switch, declared settings through the field controls and *CSS classes* with the shared class-name rule. Hidden cards are muted (muted background, dashed border) with a *Hidden* badge in the accessible name; the card menu offers Hide block / Show block with a status announcement, and the header shows `#anchor`. Anchor and class name are strings in form state and blank values are not sent; cleared settings fall back to their defaults. Envelope issue paths map to the Settings controls, and the summary opens the Settings tab before focusing one. Viewers get a read-only *Settings* section without tabs. Decisions added: only publication-only problems (a required field) in hidden blocks are non-blocking and uncounted in the summary; draft problems in hidden blocks still block saving (roadmap wording corrected). CE6 and wave 2 complete. |
 | 2026-10-13 | CE7D | `ce07d-gallery-navigation-site-examples` | Built-in `gallery` (optional title; `images` list, default `[]`, 1–50 items of media with optional alt/caption overrides, item label `caption`) and `navigation` (optional accessible `name`; `links` list, default `[]`, 1–20 items of label, optional URL and up to 20 `children` with label and URL) join `builtInBlocks` at version 1 without settings; configurations that do not register them keep their hashes. Registry items `gallery` and `navigation` (revision 1) render a `section.gallery` of figures through the image describer (item alt, media alt, `""`; caption fallback; dimensions, focal point, `loading="lazy"`) and a `nav.navigation` whose parents with children are native `<details>`/`<summary>` disclosures starting with the parent URL, with `aria-current="page"` on root-relative links to the current page; components ship no styles or scripts. `LaceBlocks` renders a published global (tested). The reference configuration allows all seven built-ins (`home` 5, `about` 4, `posts` 5, `notes` 4) and adds a `navigation` global rendered by `BaseLayout` in the header with static fallback links while unpublished; the fixture adds a submenu navigation global, a post gallery and home-page local navigation. Template `0.27.0`: starter `home`/`posts` version 2 with seven blocks, the `navigation` global, layout fallback, grid and narrow-screen CSS in `global.css`, managed-guide sections (blocks, global-in-layout, model-level groups/lists, limits, evolution) and manual adoption instructions (no migration). The packed starter and cross-runtime Node/Worker journeys verify gallery alt fallbacks, header navigation and draft isolation. Decisions added: both blocks are built-ins; the inherited-alt admin hint stays top-level; the cross-runtime model-list expectation now includes globals (stale since CE5B); `check-boundaries` cannot scan a `#` inside a regular-expression literal in `.astro` frontmatter. CE7 complete. |
+| 2026-10-13 | — | — | Wave 4 planned after CE7 completion: CE8A → CE8B → CE9A → CE9B. One shared rich-text feature set (H1–H4, horizontal rules, plain code blocks, per-link new-tab/nofollow, bubble menu); no per-field restrictions. CE9 covers placeholders, required guidance, counters, visual layout and new-entry slug suggestions. Word/Google Docs cleanup and complete conditional forms move to later backlog alongside CE10–CE12. No OpenSpec change created or implementation authorized by this planning update. |
