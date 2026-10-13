@@ -155,3 +155,21 @@ test("date and datetime helpers never shift days across time zones", () => {
   expect(openableUrl("javascript:alert(1)")).toBeUndefined();
   expect(openableUrl("not a url")).toBeUndefined();
 });
+
+test.each([false, true])(
+  "composite controls render labelled lists for every role (%s)",
+  (readOnly) => {
+    render(
+      <Harness
+        readOnly={readOnly}
+        definition={{ type: "list", required: false, item: { type: "text", required: false } }}
+        initial={["Saved"]}
+      />,
+    );
+    expect(screen.getByRole("list", { name: "Value" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Value item 1" })).toHaveValue("Saved");
+    if (readOnly) expect(screen.queryByRole("button", { name: "Add Value item" })).toBeNull();
+    else expect(screen.getByRole("button", { name: "Add Value item" })).toBeEnabled();
+    expect(value()).toBe('["Saved"]');
+  },
+);

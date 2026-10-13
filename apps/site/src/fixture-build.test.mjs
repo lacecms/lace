@@ -12,6 +12,11 @@ const fixture = JSON.parse(
   readFileSync(new URL("./fixtures/published-export.json", import.meta.url), "utf8"),
 );
 
+// The entry scope only: the layout renders the navigation global in the header.
+function entryScope(html) {
+  return html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+}
+
 function outputFiles(directory = join(siteRoot, "dist")) {
   return readdirSync(directory, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
@@ -54,6 +59,7 @@ test("the fixture build emits published static routes without CMS access", () =>
       home,
       [
         ["hero", "home-hero"],
+        ["navigation", "home-navigation"],
         ["cta", "home-cta"],
       ],
     ],
@@ -63,6 +69,7 @@ test("the fixture build emits published static routes without CMS access", () =>
         ["richText", "post-rich-text"],
         ["image", "post-image"],
         ["quote", "post-quote"],
+        ["gallery", "post-gallery"],
       ],
     ],
     [about, [["hero", "about-hero"]]],
@@ -75,23 +82,98 @@ test("the fixture build emits published static routes without CMS access", () =>
     ],
   ]) {
     const roots = [
-      ...html.matchAll(
-        /<(?:section|figure|blockquote|aside)\b[^>]*data-lace-block="([^"]+)"[^>]*data-lace-block-key="([^"]+)"/gu,
+      ...entryScope(html).matchAll(
+        /<(?:section|figure|blockquote|aside|nav)\b[^>]*data-lace-block="([^"]+)"[^>]*data-lace-block-key="([^"]+)"/gu,
       ),
     ].map((match) => [match[1], match[2]]);
     expect(roots).toEqual(expected);
   }
 
   for (const [html, expected] of [
-    [home, ["eyebrow", "heading", "body", "media", "action", "heading", "body", "action"]],
-    [post, ["content", "media", "caption", "text", "attribution"]],
+    [
+      home,
+      // Hero, local navigation, call to action.
+      [
+        "eyebrow",
+        "heading",
+        "body",
+        "media",
+        "action",
+        "list",
+        "item",
+        "link",
+        "heading",
+        "body",
+        "action",
+      ],
+    ],
+    [
+      post,
+      // Rich text, image, quote, gallery with two items.
+      [
+        "content",
+        "media",
+        "caption",
+        "text",
+        "attribution",
+        "title",
+        "items",
+        "item",
+        "media",
+        "caption",
+        "item",
+        "media",
+        "caption",
+      ],
+    ],
     [about, ["heading"]],
     [note, ["text", "attribution", "media"]],
   ]) {
-    expect([...html.matchAll(/data-lace-part="([^"]+)"/gu)].map((match) => match[1])).toEqual(
-      expected,
-    );
+    expect(
+      [...entryScope(html).matchAll(/data-lace-part="([^"]+)"/gu)].map((match) => match[1]),
+    ).toEqual(expected);
   }
+  // Every built-in block renders inside some entry scope.
+  expect(
+    new Set(
+      [home, post, about, note].flatMap((html) =>
+        [...entryScope(html).matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1]),
+      ),
+    ),
+  ).toEqual(new Set(["cta", "gallery", "hero", "image", "navigation", "quote", "richText"]));
+
+  // The published navigation global renders in every header, with the current
+  // route marked; the static fallback is not emitted.
+  for (const [html, current] of [
+    [home, '<a aria-current="page" data-lace-part="link" href="/">Home</a>'],
+    [about, '<a aria-current="page" data-lace-part="link" href="/about">About</a>'],
+    [post, '<a aria-current="page" data-lace-part="link" href="/blog/first-post">First post</a>'],
+    [note, '<a aria-current="page" data-lace-part="link" href="/notes/first-note">First note</a>'],
+  ]) {
+    const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+    expect(header).toContain(
+      '<nav aria-label="Main" class="navigation" data-lace-block="navigation" data-lace-block-key="site-navigation">',
+    );
+    expect(header).toContain(
+      '<li data-lace-part="item"><details data-lace-part="submenu"><summary data-lace-part="toggle">Writing</summary><ul data-lace-part="children">',
+    );
+    expect(header).toContain(current);
+    expect(header.match(/aria-current=/gu)).toHaveLength(1);
+    expect(html).not.toContain('class="site-nav"');
+  }
+
+  // Local navigation in page content links to an anchored block on the same page.
+  expect(entryScope(home)).toContain(
+    '<nav aria-label="On this page" class="navigation" data-lace-block="navigation" data-lace-block-key="home-navigation"><ul data-lace-part="list"><li data-lace-part="item"><a data-lace-part="link" href="#get-started">Get started</a></li></ul></nav>',
+  );
+
+  // Gallery items use their own alt text and caption, then the media's.
+  expect(post).toContain(
+    '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery"><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" role="list">' +
+      '<li data-lace-part="item"><figure><img alt="Media library description" data-lace-part="media" height="600" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800"><figcaption data-lace-part="caption">Media library caption</figcaption></figure></li>' +
+      '<li data-lace-part="item"><figure><img alt="A quiet desk" data-lace-part="media" height="480" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/note-media" width="640"><figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
+      "</ul></section>",
+  );
 
   expect(home).toMatch(
     /<main data-lace-model="home" data-lace-entry="home-entry"><section class="hero" data-lace-block="hero" data-lace-block-key="home-hero">.*?<h1 data-lace-part="heading">/su,
@@ -104,6 +186,7 @@ test("the fixture build emits published static routes without CMS access", () =>
   // classes, and an in-page link reaches the anchored block.
   expect(home).toContain('<a href="#get-started">See how to start</a>');
   expect(home.match(/\bid="get-started"/gu)).toHaveLength(1);
+  expect(home.match(/href="#get-started"/gu)).toHaveLength(2);
   expect(home).toContain(
     '<aside class="cta cta--highlight" data-lace-block="cta" data-lace-block-key="home-cta" id="get-started">',
   );
@@ -259,7 +342,7 @@ test("a live build reads one export, keeps the token out of output and rejects u
     for (const file of outputFiles()) expect(readFileSync(file, "utf8")).not.toContain(token);
     expect(home).toContain(">Lace Journal</a>");
 
-    // An export without a published settings global falls back to static values.
+    // An export without published globals falls back to static values.
     served = structuredClone(fixture);
     delete served.globals;
     calls = 0;
@@ -274,6 +357,11 @@ test("a live build reads one export, keeps the token out of output and rejects u
       expect(html).toContain('<a class="site-name" href="/">Lace reference site</a>');
       expect(html).not.toContain(`<p class="site-tagline">`);
       expect(html).not.toContain("Lace Journal");
+      const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+      expect(header).toContain(
+        '<nav aria-label="Main" class="site-nav"><ul><li><a href="/">Home</a></li><li><a href="/about">About</a></li></ul></nav>',
+      );
+      expect(header).not.toContain("data-lace-block");
     }
 
     served = structuredClone(fixture);
@@ -292,7 +380,7 @@ test("a live build reads one export, keeps the token out of output and rejects u
     served = structuredClone(fixture);
     delete served.media["note-media"];
     await expect(build()).rejects.toThrow(
-      /block note-image of model notes entry first-note-entry: media note-media is not among the entry's resolved media/u,
+      /block (?:note-image of model notes entry first-note-entry|post-gallery of model posts entry first-post-entry): media note-media is not among the entry's resolved media/u,
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));

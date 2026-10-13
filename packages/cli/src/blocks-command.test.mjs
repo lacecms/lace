@@ -23,7 +23,8 @@ const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
 const generator = fileURLToPath(new URL("../../create-lace/dist/bin.js", import.meta.url));
 const workspace = fileURLToPath(new URL("../../../", import.meta.url));
 const starterSite = join(workspace, "packages/create-lace/templates/site");
-const builtIns = ["cta", "hero", "image", "quote", "richText"];
+const builtIns = ["cta", "gallery", "hero", "image", "navigation", "quote", "richText"];
+const earlierBuiltIns = ["cta", "hero", "image", "quote", "richText"];
 const integrationTimeout = 60_000;
 const roots = [];
 afterEach(async () => {
@@ -121,7 +122,9 @@ describe("installation into an independent Astro site", () => {
     await installPackages(site);
     const result = await run(root, builtIns);
     expect(result).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED", exitCode: 0 });
-    expect(result.data.items.map((item) => item.status)).toEqual(Array(5).fill("added"));
+    expect(result.data.items.map((item) => item.status)).toEqual(
+      Array(builtIns.length).fill("added"),
+    );
     expect(result.data.packages.command).toBeNull();
     for (const path of [
       "lace.site.json",
@@ -156,6 +159,39 @@ describe("installation into an independent Astro site", () => {
     const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
     expect(Object.keys(lock.items)).toEqual(["cta", "hero"]);
     expect(lock.blockMapSha256).toBe(sha256(await readFile(join(site, "src/lace/blocks.ts"))));
+  });
+
+  test("gallery and navigation join a site holding the five earlier built-ins", async () => {
+    const root = await tempRoot();
+    const site = await astroSite(root);
+    await run(root, earlierBuiltIns);
+    const earlier = await Promise.all(
+      earlierBuiltIns.map((type) =>
+        readFile(
+          join(site, `src/components/lace/${type[0].toUpperCase()}${type.slice(1)}Block.astro`),
+        ),
+      ),
+    );
+    const result = await run(root, ["gallery", "navigation"]);
+    expect(result.data.items.map((item) => [item.name, item.status])).toEqual([
+      ["gallery", "added"],
+      ["navigation", "added"],
+    ]);
+    const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
+    expect(Object.keys(lock.items)).toEqual(builtIns);
+    expect(lock.items.gallery.revision).toBe(1);
+    expect(lock.items.navigation.revision).toBe(1);
+    const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
+    expect(map).toBe(await readFile(join(starterSite, "src/lace/blocks.ts"), "utf8"));
+    for (const [index, type] of earlierBuiltIns.entries())
+      expect(
+        (
+          await readFile(
+            join(site, `src/components/lace/${type[0].toUpperCase()}${type.slice(1)}Block.astro`),
+          )
+        ).equals(earlier[index]),
+        type,
+      ).toBe(true);
   });
 
   test("dependencies are installed with the requested item", async () => {
@@ -402,9 +438,11 @@ describe("site and framework validation", () => {
   test("unknown block types list the available types", async () => {
     const root = await tempRoot();
     await astroSite(root);
-    await expect(runAddBlockCommand(["gallery"], { cwd: root })).rejects.toMatchObject({
+    await expect(runAddBlockCommand(["carousel"], { cwd: root })).rejects.toMatchObject({
       code: "BLOCK_USAGE",
-      message: expect.stringContaining("Available: cta, hero, image, quote, richText."),
+      message: expect.stringContaining(
+        "Available: cta, gallery, hero, image, navigation, quote, richText.",
+      ),
     });
   });
 });

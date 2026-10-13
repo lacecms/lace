@@ -68,7 +68,7 @@ function block(key, data, schemaVersion = 1, envelope = {}) {
 }
 
 function snap(id, state, revision, blocks, references = []) {
-  return { blocks, references, revision, snapshotId: id, state, title: `Title ${id}` };
+  return { blocks, fields: {}, references, revision, snapshotId: id, state, title: `Title ${id}` };
 }
 
 /** In-memory synchronization store with guarded block-migration writes. */
@@ -111,13 +111,17 @@ function store(baseline, entries, options = {}) {
     async readConfigurationSyncSnapshots() {
       return {
         items: snapshots().map(({ entry, snapshot }) => ({
-          blocks: snapshot.blocks.map(({ key, schemaVersion, type }) => ({
+          blocks: snapshot.blocks.map(({ key, schemaVersion, type, data, settings, hidden }) => ({
+            data,
+            settings,
+            hidden,
             key,
             schemaVersion,
             type,
           })),
           entryId: entry.entryId,
-          fields: {},
+          fields: snapshot.fields,
+          references: snapshot.references,
           revision: snapshot.revision,
           snapshotId: snapshot.snapshotId,
           state: snapshot.state,
@@ -674,4 +678,154 @@ test("migrates version 1 built-in image blocks to version 2 without changing the
   }
   expect(state.entries[0].draft.revision).toBe(3);
   expect(state.entries[0].published.revision).toBe(3);
+});
+
+test("checks complete resulting composite budgets and nested prior-media locations", () => {
+  const migrated = defineBlock({
+    type: "note",
+    version: 2,
+    fields: {
+      images: field.list({ item: field.media() }),
+    },
+    migrations: { 2: ({ data }) => ({ data: { images: data.images } }) },
+  });
+  const unchanged = defineBlock({
+    type: "other",
+    version: 1,
+    fields: {
+      rows: field.list({ item: field.text() }),
+    },
+  });
+  const definitions = new Map([["note", migrated]]);
+  const context = {
+    fields: { rows: field.list({ item: field.text() }) },
+    blocks: new Map([
+      ["note", migrated],
+      ["other", unchanged],
+    ]),
+  };
+  const snapshot = (extra) => ({
+    ...snap(
+      "d",
+      "draft",
+      1,
+      [
+        block("b1", { images: ["m1"] }),
+        ...Array.from({ length: 4 }, (_, i) => ({
+          ...block(`b${i + 2}`, { rows: Array(100).fill("x") }),
+          type: "other",
+          hidden: true,
+        })),
+      ],
+      [{ fieldPath: "old", mediaId: "m1", sourceKey: "b1" }],
+    ),
+    fields: { rows: Array(99 + extra).fill("x") },
+  });
+  const valid = planEntryMigration(
+    { entryId: "e", draft: snapshot(0) },
+    definitions,
+    "system:content-sync",
+    context,
+  );
+  expect(valid.findings).toEqual([]);
+  expect(valid.unit.snapshots[0].references).toEqual([
+    { fieldPath: "/images/0", mediaId: "m1", sourceKey: "b1" },
+  ]);
+  const invalid = planEntryMigration(
+    { entryId: "e", draft: snapshot(1) },
+    definitions,
+    "system:content-sync",
+    context,
+  );
+  expect(invalid.unit).toBeUndefined();
+  expect(invalid.findings).toMatchObject([
+    { kind: "invalid", reference: { reason: "too_many_list_items" } },
+  ]);
+  const defaulted = defineBlock({
+    type: "note",
+    version: 2,
+    fields: {
+      images: field.list({ item: field.media(), defaultValue: ["m1", "m1"] }),
+    },
+    migrations: { 2: () => ({ data: {} }) },
+  });
+  expect(
+    planEntryMigration(
+      { entryId: "e", draft: snapshot(0) },
+      new Map([["note", defaulted]]),
+      "system:content-sync",
+      {
+        ...context,
+        blocks: new Map([
+          ["note", defaulted],
+          ["other", unchanged],
+        ]),
+      },
+    ).findings,
+  ).toMatchObject([{ kind: "invalid", reference: { reason: "too_many_list_items" } }]);
+  const foreign = snapshot(0);
+  foreign.blocks[0].data.images = ["m2"];
+  expect(
+    planEntryMigration(
+      { entryId: "e", draft: foreign },
+      definitions,
+      "system:content-sync",
+      context,
+    ).findings,
+  ).toMatchObject([{ kind: "invalid", reference: { reason: "media_not_previously_referenced" } }]);
+});
+
+test("a later model removal cannot make an unsafe migration intermediate acceptable", async () => {
+  const other = defineBlock({
+    type: "other",
+    version: 1,
+    fields: { rows: field.list({ item: field.text() }) },
+  });
+  const beforeBlock = defineBlock({ type: "note", version: 1, fields: { body: field.text() } });
+  const afterBlock = defineBlock({
+    type: "note",
+    version: 2,
+    fields: { rows: field.list({ item: field.text() }) },
+    migrations: { 2: () => ({ data: { rows: ["new"] } }) },
+  });
+  const make = (note, version) =>
+    defineConfig({
+      blocks: [note, other],
+      content: [
+        defineCollection({
+          key: "posts",
+          route: "/blog/:slug",
+          version,
+          blocks: ["note", "other"],
+          ...(version === 2 ? { removedFields: ["rows"] } : {}),
+          fields: version === 1 ? { rows: field.list({ item: field.text() }) } : {},
+        }),
+      ],
+    });
+  const before = await make(beforeBlock, 1);
+  const after = await make(afterBlock, 2);
+  const draft = snap("d", "draft", 1, [
+    block("b1", { body: "old" }),
+    ...Array.from({ length: 4 }, (_, index) => ({
+      ...block(`b${index + 2}`, { rows: Array(100).fill("x") }),
+      type: "other",
+      hidden: true,
+    })),
+  ]);
+  draft.fields = { rows: Array(100).fill("x") };
+  const state = store(before.runtime.content[0], [{ entryId: "e", draft }]);
+  const prepared = await prepareConfigurationSynchronization({
+    models: after.runtime.content,
+    blocks: after.runtime.blocks,
+    state,
+  });
+  expect(prepared.plan.isValid).toBe(false);
+  expect(prepared.plan.diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "BLOCK_MIGRATION_INVALID",
+      snapshots: [expect.objectContaining({ reason: "too_many_list_items" })],
+    }),
+  );
+  expect(state.writes).toEqual([]);
+  expect(state.finals).toEqual([]);
 });

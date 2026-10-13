@@ -122,7 +122,7 @@ The findings that motivate this roadmap. File references are to the state of
 | 2 | CE5 | Global singletons (settings, navigation, footer) | A8 | M | done |
 | 2 | CE4 | SEO metadata and site defaults | A3 | L | done |
 | 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | L | done |
-| 3 | CE7 | Group/list fields, Gallery and Navigation blocks | A6 | L | planned |
+| 3 | CE7 | Group/list fields, Gallery and Navigation blocks | A6 | L | done |
 | 3 | CE8 | Rich-text editor expansion | B1 | — | draft |
 | 3 | CE9 | Field layout and form UX | B2 | — | draft |
 | 4 | CE10 | Entry references and internal links | A7 | — | backlog |
@@ -797,7 +797,7 @@ editor behavior and verification results.
 
 ## Step CE7 — Group and repeatable list fields
 
-**Status:** planned.
+**Status:** done (CE7A–CE7D archived; CE7D on 2026-10-13).
 
 **Goal:** models and blocks can describe bounded structured objects and
 repeatable values, with typed configuration, safe nested media, automatic
@@ -910,6 +910,12 @@ do not assign a migration number in advance.
 
 ### Session CE7A — Composite field definitions and end-to-end data contract
 
+**Status:** done (archived 2026-10-12) in
+[`ce07a-composite-field-data-contract`](../openspec/changes/archive/2026-10-12-ce07a-composite-field-data-contract/proposal.md)
+on the shared Wave 3 branch `codex/content-editor-wave-3`. Implementation was explicitly authorized on 2026-10-12. The proposal includes safe read-only admin inspection
+until CE7C and explicit sync refusals for unsupported composite evolution until
+CE7B; those sessions retain their own scope.
+
 - Add typed `field.group` and `field.list` builders, recursive portable
   descriptors and exhaustive consumers. Preserve field inference through
   nested objects and arrays; reject cyclic definitions, malformed children
@@ -945,7 +951,45 @@ lifecycle operations and disappear from usage only when no stored reference
 remains. Public output resolves nested media consistently on both runtimes.
 Scalar-only configuration and content retain their existing behavior.
 
+**Implementation evidence (2026-10-12):** CE7A is implemented on
+`codex/content-editor-wave-3`; all 23 OpenSpec tasks are complete. Its 14 delta
+requirements were synchronized into 11 main capabilities, and the change was
+archived on 2026-10-12. Definitions,
+normalization, budgets, metadata/OpenAPI, recursive media traversal, guarded
+migration scans, SDK/render compatibility and read-only admin inspection are
+covered. Storage remains in the existing JSON columns; no DB migration was added.
+At CE7A completion, CE7B/CE7C/CE7D had not been started or pre-created.
+
+Passing verification:
+
+- `pnpm --filter @lacecms/{content,config,contracts,application,server,sdk,render,test-utils} test`
+  (each package run separately): 63 / 46 / 70 / 71 / 79 / 85 / 79 / 44 tests.
+- `pnpm --filter @lacecms/content type-test`,
+  `pnpm --filter @lacecms/config type-test`, and
+  `pnpm --filter @lacecms/render typecheck` preserve nested inference and rejected values.
+- Node shared repository suite: 134 tests across file and in-memory SQLite.
+  D1 shared repository + budget suites: 74 tests under local Miniflare/workerd.
+  These cover nested references, route/global/export filtering, metadata builds,
+  lifecycle copies, guarded rollback, 500/501 migration totals, unchanged/hidden
+  data, sync refusal without writes and resumable scalar regressions.
+- Focused admin field controls, draft preservation, editor validation/summary and
+  usage labels: 44 tests. Maximal D1 create/save/publish uses one batch per mutation,
+  with 200 blocks, 200 nested media locations and 500 elements, within 50 queries
+  and 100 binds per statement.
+- `pnpm openapi:generate` and `pnpm openapi:check`: generated artifact is deterministic.
+  The check used a temporary Git index containing the planned artifact because
+  the script also requires no artifact diff against the index; the user's index
+  was untouched.
+- Root `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and
+  `pnpm exec openspec validate ce07a-composite-field-data-contract --type change --strict`.
+  Existing lint warnings outside this change remain non-failing.
+
 ### Session CE7B — Nested schema evolution and synchronization
+
+**Status:** implemented on 2026-10-12 in
+[`ce07b-nested-schema-evolution`](../openspec/changes/archive/2026-10-12-ce07b-nested-schema-evolution/proposal.md),
+with apply explicitly authorized. Accepted specs were synchronized and the change
+was archived on 2026-10-12. CE7C/CE7D remain separate delivery units; CE7C implementation is recorded below.
 
 - Extend CE1's canonical structure comparison recursively. Child display
   metadata is projection-only; nested structural changes are explicit and
@@ -972,7 +1016,47 @@ invalid/over-budget migrations and unhinted destructive changes are refused;
 repeated sync and interrupted block migration remain safe. Reports identify
 model, snapshot and nested schema path.
 
+**Implementation evidence (2026-10-12):**
+
+- Recursive configuration hints, ancestor pairing, defaults, tightening and
+  concrete diagnostics are shared by preparation and final persistence.
+- Composite JSON and complete `$fields` references use exact parameterized
+  payloads in the existing guarded final transaction/batch. Scalar SQL fast
+  paths remain. No staging tables or SQL migration were added.
+- Shared contracts run on file-backed/in-memory SQLite and local D1: nested
+  parent/child moves, media removal/usage, missing-parent defaults, tightening,
+  multi-page scans, stale saves, injected rollback, combined model/block
+  budgets, interrupted migration with pending nested backfills and no-op reruns.
+- A permanent local D1 batch fixture rewrites 251 snapshots with 198 field media
+  locations each (49,698 references), preserving two other reference sources per
+  snapshot. It checks JSON types, audits, guards, rollback and replay; chunks
+  require at most 15 statements in one batch. A separate D1 test changes media
+  references between the final reread and execution and confirms no final writes.
+- Application reports retain the 20-snapshot cap and full counts. The CLI nested
+  fixture proves both valid and invalid `--check` runs write nothing and preserves
+  existing pending/blocked/current exit behavior.
+- Operator examples, recovery, media-default rules and matching backup/rollback
+  guidance are documented in [configuration synchronization](configuration-synchronization.md#ce7b-nested-schema-evolution).
+
+Passing verification:
+
+- Content/config/application/db/memory-double tests: 64 / 54 / 83 / 16 / 45.
+- Shared repository contracts: 142 SQLite tests (two runtimes), 71 local D1
+  tests. D1 adapter/bulk tests add 9 cases (80 D1 tests total); CLI commands add
+  6 tests, including Node/D1 operation and the nested no-write check.
+- Content/config type tests and root `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check` passed. Existing builder/DB lint warnings remain non-failing;
+  the changed production code introduces none.
+- `pnpm exec openspec validate ce07b-nested-schema-evolution --type change --strict`
+  passed. SQL migration inventory remains unchanged. All four updated accepted
+  capabilities passed strict validation before archive.
+
 ### Session CE7C — Generic group and list editing
+
+**Status:** implemented, synchronized into the three accepted capabilities and
+archived on 2026-10-12 as
+[`ce07c-generic-group-list-editing`](../openspec/changes/archive/2026-10-12-ce07c-generic-group-list-editing/). Configuration/editor behavior and rollback guidance are
+in [Composite fields](composite-fields.md). CE7D remains separate and unimplemented.
 
 - Render groups as labelled fieldsets with descriptions and nested controls.
   Render lists as labelled repeatable items, supporting Add, Remove,
@@ -1000,7 +1084,54 @@ media selection, item duplication/removal/reordering, collapsed error focus,
 limits and conflict recovery without lost values. Keyboard-only operation and
 accessibility audits meet architecture section 17; viewers cannot mutate data.
 
+**Verification evidence (2026-10-12):**
+
+- Content descriptor tests: 65 passed plus content type tests; contracts: 71
+  passed; config: 55 passed; focused application configuration evolution: 28
+  passed. Existing descriptor/hash fixtures remain pinned. `pnpm openapi:check`
+  reproduced the checked-in generation using a temporary Git index/object store
+  for the intentional uncommitted OpenAPI delta; the real index was untouched.
+- Admin suite: 166 files / 705 tests passed. Following final focus and pending
+  control fixes, the affected editor/block components passed a further 83 tests;
+  another 22 SEO/block-card tests passed after final permission/pending-request
+  guards.
+  Composite-focused coverage includes absence/empty containers, defaults,
+  detached copies, identical item identity, transient scalar clears, recursive
+  errors, explicit 100/101 and 499/500/501 boundaries, hidden blocks and rich-text
+  exclusion. Descriptor-aware serialization also covers a group whose `type`
+  child contains `doc` without confusing it with a rich-text document.
+- Playwright: 37 scenarios passed across `composites.e2e.ts`, `editor.e2e.ts`,
+  `block-envelope.e2e.ts`, `seo.e2e.ts` and `entry-actions.e2e.ts`. CE7C fixtures
+  cover page/collection/global fields, block data, pointer and nested keyboard
+  sorting/cancellation, scalar insertion, media selection/upload, rich text,
+  limits, delayed saves, conflict JSON/reload and exact nested focus through
+  block tabs/disclosures. Axe passed for editor and viewer forms in light/dark
+  themes at 375px without globally disabled rules; no horizontal overflow.
+  The final pending-control changes passed the 20-scenario composites/envelope/SEO
+  subset again. The envelope keyboard harness waits for menu closure/focus return
+  before starting the next action.
+- Root typecheck, Oxlint/boundary/color checks, Oxfmt and strict validation of
+  `ce07c-generic-group-list-editing` all passed. No SQL
+  migration or persisted list-item envelope was added. The documented descriptor
+  example passed shared metadata normalization and nested publication validation.
+- Browser fixtures mock the API; this is editor acceptance and shared-contract
+  verification, not a new deployed Node/Cloudflare or owner-site acceptance run.
+  Gallery/Navigation definitions, shipped layouts and starter adoption remain CE7D.
+
 ### Session CE7D — Gallery, Navigation and shipped site examples
+
+**Status:** done (archived 2026-10-13) in
+[`ce07d-gallery-navigation-site-examples`](../openspec/changes/archive/2026-10-13-ce07d-gallery-navigation-site-examples/proposal.md)
+on `codex/content-editor-wave-3`, with apply explicitly authorized. Decisions: both blocks are built-ins in
+`builtInBlocks`; a navigation parent with children is a native
+`<details>`/`<summary>` disclosure whose submenu starts with the parent's own
+URL (no JavaScript; no Escape/outside-click closing); root-relative links to the
+current page get `aria-current="page"`; components ship no styles (the grid and
+narrow-screen navigation CSS live in the site stylesheets and the managed
+guide); the layout falls back to static links only while the `navigation`
+global is unpublished; the reference fixture's local navigation sits on the home
+page (the about page keeps envelope-free blocks for CE6B); the CE3B
+inherited-alt hint is not extended to list items. Starter template `0.27.0`.
 
 - Add Gallery and Navigation definitions and Astro source components to the
   registry, reference site and starter, with matching schemas and components.
@@ -1112,3 +1243,4 @@ any decision that changed this document.
 | 2026-10-12 | CE6A | `ce06a-block-envelope-contract` | Stored blocks gain an envelope `{anchor?, className?, hidden, settings}` beside their data in `content_blocks` (migration `0009`, additive `ALTER … ADD` with constant defaults and a partial unique index on `(snapshot_id, anchor)`); every block copy and write lists the columns on Node and D1 (D1 binds the envelope as one JSON value per row, so a 200-block save stays at 32 queries). Rules live in `@lacecms/content`: anchor `^[a-z][a-z0-9-]{0,63}$` unique within the entry (hidden blocks included, `duplicate_block_anchor`), class name of 1–16 tokens normalized to single spaces (≤ 256 characters, utility syntax allowed), boolean `hidden`, settings validated with defaults (`unknown_field` under `/blocks/<i>/settings`). `defineBlock({ settings })` accepts `select`/`boolean`/`number`/`text` settings with required defaults; they enter block metadata only when declared, so existing hashes are unchanged. Block migrations take and return `{data, settings?}`; sync validates migrated settings and keeps anchor, class and hidden flag. Publication and sync migrations validate hidden blocks in draft mode; public responses, globals and the build export leave hidden blocks out (repository projection and contracts), and media used only by hidden blocks leave the public dictionary and media route while keeping usage and the deletion guard. Admin block DTOs always carry `hidden` and `settings`, requests default omitted envelope values, public blocks carry no `hidden` and parse a missing `settings` as `{}`; SDK `PublishedBlock` is the public block DTO. The admin keeps loaded envelopes, starts new blocks with setting defaults and drops the anchor from duplicated blocks ([ADR 0012](adr/0012-block-envelope.md)). Decisions added: the custom CSS class is an envelope field (decision 5); contracts type settings as a plain record (a Valibot default over the recursive JSON type exceeds TypeScript's depth); the CE1C migration signature change is recorded as breaking in `compatibility.md`. |
 | 2026-10-12 | CE6B | `ce06b-block-rendering-delivery` | The render core skips hidden blocks before resolving them (so a hidden block of an unknown type, an old version or with invalid data never fails a build), and block props gain `anchor`, the normalized `className` and `settings` typed from the definition (`BlockSettingsOf`, defaults applied); `parseBlockEnvelope` re-checks envelopes that bypass the SDK and fails with `invalid_block_envelope` and the field path. `RenderableBlock` members admit `undefined` because Valibot types optional DTO keys that way. `LaceBlocks` passes the envelope without a wrapper and is now rendered in tests through Astro's container API. Registry revisions `cta` 2, `hero` 3, `image` 4, `quote` 2 and `richText` 2 put the anchor on the root `id` and the class name after the component's own classes (`class:list`), with unchanged markup without an envelope; custom scaffolds follow the same convention. The reference fixture links `#get-started` to the anchored, classed home call to action, and the packed starter acceptance asserts it; the Node journey adds an anchored hero and a hidden quote. Template `0.26.0` ships the components, the `0009` upgrade steps (rollback restores the backup once envelopes exist, because an older engine would deliver hidden blocks), the migration signature break and `lace add block --all` adoption; the managed guides document the props, declared settings, per-entry anchor uniqueness and the hidden-block rule. |
 | 2026-10-12 | CE6C | `ce06c-admin-block-envelope` | Expanded block cards get *Content* and *Settings* tabs (both panels force-mounted, arrow/Home/End selection, problem markers in tab names, selection kept per block key). *Settings* edits the anchor with live format and per-entry uniqueness checks (hidden blocks included) and *Copy link* (the entry's site URL plus `#anchor` when the build site URL and path are known, otherwise `#anchor`), the *Hide on site* switch, declared settings through the field controls and *CSS classes* with the shared class-name rule. Hidden cards are muted (muted background, dashed border) with a *Hidden* badge in the accessible name; the card menu offers Hide block / Show block with a status announcement, and the header shows `#anchor`. Anchor and class name are strings in form state and blank values are not sent; cleared settings fall back to their defaults. Envelope issue paths map to the Settings controls, and the summary opens the Settings tab before focusing one. Viewers get a read-only *Settings* section without tabs. Decisions added: only publication-only problems (a required field) in hidden blocks are non-blocking and uncounted in the summary; draft problems in hidden blocks still block saving (roadmap wording corrected). CE6 and wave 2 complete. |
+| 2026-10-13 | CE7D | `ce07d-gallery-navigation-site-examples` | Built-in `gallery` (optional title; `images` list, default `[]`, 1–50 items of media with optional alt/caption overrides, item label `caption`) and `navigation` (optional accessible `name`; `links` list, default `[]`, 1–20 items of label, optional URL and up to 20 `children` with label and URL) join `builtInBlocks` at version 1 without settings; configurations that do not register them keep their hashes. Registry items `gallery` and `navigation` (revision 1) render a `section.gallery` of figures through the image describer (item alt, media alt, `""`; caption fallback; dimensions, focal point, `loading="lazy"`) and a `nav.navigation` whose parents with children are native `<details>`/`<summary>` disclosures starting with the parent URL, with `aria-current="page"` on root-relative links to the current page; components ship no styles or scripts. `LaceBlocks` renders a published global (tested). The reference configuration allows all seven built-ins (`home` 5, `about` 4, `posts` 5, `notes` 4) and adds a `navigation` global rendered by `BaseLayout` in the header with static fallback links while unpublished; the fixture adds a submenu navigation global, a post gallery and home-page local navigation. Template `0.27.0`: starter `home`/`posts` version 2 with seven blocks, the `navigation` global, layout fallback, grid and narrow-screen CSS in `global.css`, managed-guide sections (blocks, global-in-layout, model-level groups/lists, limits, evolution) and manual adoption instructions (no migration). The packed starter and cross-runtime Node/Worker journeys verify gallery alt fallbacks, header navigation and draft isolation. Decisions added: both blocks are built-ins; the inherited-alt admin hint stays top-level; the cross-runtime model-list expectation now includes globals (stale since CE5B); `check-boundaries` cannot scan a `#` inside a regular-expression literal in `.astro` frontmatter. CE7 complete. |

@@ -149,7 +149,7 @@ Successful setup consumes the setup token. It is not a password or build token. 
 
 ## Publish and build the editable site
 
-In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media and select them in image/hero blocks. Both Home and Posts support `hero`, `richText`, `image`, `quote` and `cta`. For a blog page create a Posts entry, set a valid slug/title, save and publish. Editors can save drafts; publication requires an admin.
+In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media and select them in image/hero blocks. Both Home and Posts support `hero`, `richText`, `image`, `quote`, `cta`, `gallery` and `navigation`. Publish the Navigation entry in the Site group to replace the static header link with your own site navigation. For a blog page create a Posts entry, set a valid slug/title, save and publish. Editors can save drafts; publication requires an admin.
 
 ```bash
 pnpm dev
@@ -165,12 +165,12 @@ pnpm typecheck
 
 ## Connect and build the existing site
 
-In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media and select them in image/hero blocks. Both Home and Posts support `hero`, `richText`, `image`, `quote` and `cta`. For a blog page create a Posts entry, set a valid slug/title, save and publish. Editors can save drafts; publication requires an admin.
+In Admin open Home, set its title, add blocks, save and publish as the admin. Upload images through Media and select them in image/hero blocks. Both Home and Posts support `hero`, `richText`, `image`, `quote`, `cta`, `gallery` and `navigation`. Publish the Navigation entry in the Site group to replace the static header link with your own site navigation. For a blog page create a Posts entry, set a valid slug/title, save and publish. Editors can save drafts; publication requires an admin.
 
 The site at `{{SITE_PATH}}` reads published content through the Lace site packages. Connect it once, in this order:
 
 1. Install `@lacecms/sdk`, `@lacecms/astro`, `@lacecms/render` and `@lacecms/content` in the site at the release version of this project's Lace packages, then run `pnpm install` there so its `pnpm-lock.yaml` is committed and reproducible.
-2. From this CMS directory, run `pnpm exec lace add block --all --site {{SITE_PATH}}`. It installs the five built-in block components, the block map and `lace.site.json` into the site, never edits its `package.json`, and reports edited files as conflicts instead of overwriting them.
+2. From this CMS directory, run `pnpm exec lace add block --all --site {{SITE_PATH}}`. It installs the built-in block components, the block map and `lace.site.json` into the site, never edits its `package.json`, and reports edited files as conflicts instead of overwriting them.
 3. Create the server-only loader file and your routes as described in [Connect an existing Astro site](lace-astro-site.md).
 4. Build with this project's root scripts (`pnpm dev` and `pnpm build` run Astro in `{{SITE_PATH}}`) or with the Compose builder, whose defaults select that site (see [Selecting the build site](#selecting-the-build-site)).
 
@@ -368,7 +368,7 @@ Style your site with its own stylesheets. Stable hooks are `data-lace-model`, `d
 }
 ```
 
-Block keys are unique within an entry, so scope instance selectors by entry. Built-in parts: hero `eyebrow`, `heading`, `body`, `media`, `action`; richText `content`; image `media`, `caption`; quote `text`, `attribution`; cta `heading`, `body`, `action`. Optional parts are absent when their content is absent. A block's `id` (its in-page anchor) and its editor class name are content that editors set in Admin, not part of the `data-lace-*` styling contract; style an editor class only when you offer it on purpose. Hidden blocks are never rendered.
+Block keys are unique within an entry, so scope instance selectors by entry. Built-in parts: hero `eyebrow`, `heading`, `body`, `media`, `action`; richText `content`; image `media`, `caption`; quote `text`, `attribution`; cta `heading`, `body`, `action`; gallery `title`, `items`, `item`, `media`, `caption`; navigation `list`, `item`, `link`, `label`, `submenu`, `toggle`, `children`. The navigation global renders in the layout header, outside `data-lace-entry`; select it with `header [data-lace-block="navigation"]`. Optional parts are absent when their content is absent. A block's `id` (its in-page anchor) and its editor class name are content that editors set in Admin, not part of the `data-lace-*` styling contract; style an editor class only when you offer it on purpose. Hidden blocks are never rendered.
 
 <!-- lace-site: end -->
 
@@ -570,7 +570,7 @@ LACE_BUILD_SITE_LABEL="Public site"
 
 The selected root must contain its regular `package.json` and `pnpm-lock.yaml`; a selected workspace package needs the root `pnpm-workspace.yaml` and must belong to that installation. Mount an independent site's own lockfile root rather than choose a package with a separate nested lockfile. Astro must be a direct dependency/dev dependency of the selected package. Paths cannot be absolute inside `/source`, escape with `..`, contain symlinks or select source/configuration directories as output. `.` is permitted only for the site directory. Existing output, dependencies, Git, environment credentials and nested CMS `.lace/data` are filtered from scratch copies.
 
-An existing site requires the Lace site packages, a server-only loader file, user-owned routes, the block map and block components. Follow [Connect an existing Astro site](lace-astro-site.md): it keeps one validated export per static build, expected published-version validation, draft isolation, all five built-in blocks, safe rich text/URLs and public media origins. Build-site selection does not install components or modify your existing source (run `pnpm exec lace add block --all --site <path>` from the CMS directory for the block components), and `create-lace init .` still requires an empty target. Install compatible dependencies and commit a reproducible pnpm lockfile in the selected root before building.
+An existing site requires the Lace site packages, a server-only loader file, user-owned routes, the block map and block components. Follow [Connect an existing Astro site](lace-astro-site.md): it keeps one validated export per static build, expected published-version validation, draft isolation, the built-in blocks, safe rich text/URLs and public media origins. Build-site selection does not install components or modify your existing source (run `pnpm exec lace add block --all --site <path>` from the CMS directory for the block components), and `create-lace init .` still requires an empty target. Install compatible dependencies and commit a reproducible pnpm lockfile in the selected root before building.
 
 The image runs frozen installation followed by direct `pnpm --dir <selected-site> exec astro build --outDir <selected-output>`. Custom package build/prebuild scripts are not selected. Only static Astro output is served; SSR/server output, incomplete output, linked files, frozen-install failure and version mismatch fail the build. The trusted site configuration and normal dependency hooks still execute during installation/Astro compilation. There is no custom command or extra environment forwarding interface.
 

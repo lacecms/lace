@@ -589,7 +589,7 @@ text without a link. The summary SHALL replace the generic failure message for
 validation rejections. It SHALL update as problems are resolved and disappear
 when none remain.
 
-A problem that only publication reports (a field required for publication)
+A problem that only publication reports (a field required for publication or a list below minItems)
 and that belongs to a block that is hidden SHALL be listed after the other
 problems as not blocking publication, SHALL NOT be counted among the problems
 to fix, and SHALL be shown on its control with the same note. When only such
@@ -610,9 +610,13 @@ The editor SHALL map server JSON Pointer issue paths as follows:
   that block.
 - `/blocks` maps to the block list.
 
-A deeper pointer below a field or setting, such as a path into a rich-text
-document, SHALL map to that field or setting. Mapping SHALL preserve the
-writer's complete local draft and dirty state.
+Pointers through composite fields SHALL traverse declared group keys and
+in-range list indices to the exact leaf or container control. Unknown children
+and out-of-range indices SHALL remain unlinked summary text. A deeper pointer
+inside a scalar field or setting, such as a rich-text document, SHALL map to
+that field or setting. Activation SHALL reveal every containing disclosure and
+the block's appropriate tab before focus. Mapping SHALL preserve the writer's
+complete local draft and dirty state.
 
 #### Scenario: Local validation blocks a save
 - **WHEN** a writer saves a draft whose second block has a text field below its
@@ -1239,3 +1243,152 @@ keep its envelope unchanged.
 - **WHEN** an editor opens a draft whose blocks have no anchor and no class
   name, and switches a block to its Settings tab without editing
 - **THEN** the draft is not marked unsaved
+
+### Requirement: Composite fields support recursive generic authoring
+The editor SHALL render groups as labelled fieldsets with descriptions and
+nested controls and lists as labelled ordered repeatable items in every model
+kind and block data. Scalar, media and rich-text leaves SHALL use the existing
+controls and authorization rules. Group absence SHALL be distinguishable from
+present `{}`, and list absence from present `[]`. Opening or collapsing a
+field SHALL NOT materialize data, apply defaults or dirty the form. Writers
+SHALL be able to create an absent group/list, clear a named field to absence,
+and retain explicit empty objects/arrays. Defaults SHALL follow the shared
+recursive contract. Clearing an item leaf SHALL NOT create a null/undefined
+list slot: scalar items are removed through Remove. An incomplete group item
+SHALL remain a valid draft starting point.
+
+#### Scenario: Nested controls across content kinds
+- **WHEN** a writer opens model or block fields containing a group with a nested list of groups and media/rich-text leaves
+- **THEN** every value has a labelled editable control using the existing picker and safe rich-text toolbar
+
+#### Scenario: Absence and explicit emptiness
+- **WHEN** a writer creates an absent optional group, leaves it empty, creates an empty list and saves
+- **THEN** the payload contains explicit {} and [], subject to declared child defaults, without synthesizing unrelated optional containers
+
+#### Scenario: Clear a field with a default
+- **WHEN** a writer clears a named nested field and saves
+- **THEN** the field is omitted from the payload and the confirmed normalized response applies its declared default exactly as the shared validation contract requires
+
+#### Scenario: Read-only inspection
+- **WHEN** a viewer opens composite data
+- **THEN** every nested value is inspectable and disclosures are operable, while editing, picker/upload, Add, Remove, Duplicate and reorder actions are unavailable
+
+### Requirement: List operations preserve item content and editing identity
+Writers SHALL be able to Add, Remove, Duplicate, Move up/down and reorder by
+pointer or keyboard drag within each list, including scalar lists. Add SHALL
+use a detached declared item default, otherwise a draft-valid group with child
+defaults or a draft-valid scalar starting value. When a scalar has no valid
+empty starting value, Add SHALL request a value and commit only when valid;
+cancel SHALL leave the list unchanged. Duplicate SHALL insert an independent
+deep copy immediately after the source. Remove SHALL affect only its item.
+Move boundary actions SHALL be disabled; cancelled drag SHALL preserve order.
+Actions SHALL name the list, item and position accessibly and announce results.
+Focus after insertion SHALL reach the new item, after removal the next item,
+then the previous item, then Add for an empty list; move focus SHALL follow
+the item. Nested lists SHALL reorder only within their own list.
+
+Complex items and groups SHALL be collapsible with summaries, item counts and
+problem indicators. Summaries SHALL use nonblank itemLabel text when declared,
+otherwise the first useful text/textarea, rich-text plain text, URL/select,
+then a generic media-selected label, then Empty item. Summaries SHALL collapse
+whitespace, truncate long text and never expose media IDs or raw rich-text JSON.
+Accessible names SHALL include current one-based position to disambiguate
+identical items. Moves and collapse SHALL preserve local values, field errors,
+media state and rich-text editor state/selection where applicable. UI item
+identity SHALL be independent of values and array positions, detached on
+Duplicate, and excluded from saves, copied JSON and public responses.
+
+#### Scenario: Duplicate then edit nested content
+- **WHEN** a writer duplicates a group with a nested link list and changes the duplicate's URL
+- **THEN** the original stays unchanged, the duplicate follows it and saved JSON contains ordinary arrays/objects without UI IDs
+
+#### Scenario: Equal scalar values have distinct editing identities
+- **WHEN** a writer reorders two equal scalar items and then removes one
+- **THEN** only the selected item's editing state is removed and the remaining item retains its state
+
+#### Scenario: Move and collapse a rich-text item
+- **WHEN** an item with edited rich text, media selection and a field error moves and is collapsed then reopened
+- **THEN** those values, selection where applicable and error remain associated with that item
+
+#### Scenario: Scalar insertion requires a value
+- **WHEN** a number list has no item default and min 10, and a writer chooses Add
+- **THEN** the editor requests a valid number before insertion, and cancellation leaves the array unchanged
+
+#### Scenario: Nested keyboard reordering
+- **WHEN** a keyboard user reorders a child-list item and cancels a second drag
+- **THEN** only the child list changes, the second drag leaves its order intact, focus is visible and positions are announced without internal IDs
+
+### Requirement: Composite editing explains normalized list budgets
+Each list SHALL show its count and effective maximum and any publication
+minimum. The editor SHALL show entry-wide usage against 500 elements, counting
+normalized defaults and all nested list lengths across model fields and block
+data including hidden blocks. Growing actions, including Add, Duplicate and
+container creation, SHALL preflight the prospective normalized snapshot and
+be disabled with an accessible explanation when a list maximum or aggregate
+budget would be exceeded. Block Add/Duplicate and nested default
+materialization SHALL obey the same budget gate. Removal, collapse and moves
+SHALL remain possible to recover. Required/minimum issues SHALL be labelled
+as publication-only and SHALL NOT prevent saving otherwise-valid drafts;
+maxima, wrong present values and payload-size failures SHALL block draft save.
+The server SHALL remain authoritative for validation and authorization.
+
+#### Scenario: Nested duplication exhausts the entry budget
+- **WHEN** current usage is 490 and duplicating an item would add one outer item and ten inner items
+- **THEN** Duplicate is unavailable with a limit explanation and the draft remains unchanged
+
+#### Scenario: Exact budget and list boundaries
+- **WHEN** a prospective edit results in exactly 500 total elements and no list exceeds its maximum, or results in 501 or a list above its maximum
+- **THEN** the first is allowed and the latter actions are prevented, including contributions from hidden blocks and defaults
+
+#### Scenario: Publication-only minimum
+- **WHEN** an incomplete group or list below minItems is saved
+- **THEN** Save succeeds if all present values are valid, and publication guidance distinguishes the missing required/minimum values from draft-blocking errors
+
+### Requirement: Recursive validation reaches exact visible controls
+Local and server validation SHALL preserve exact group-key/list-index paths
+and show errors at the matching scalar or container control. Rich-text-internal
+paths SHALL target their enclosing rich-text field. Summary entries SHALL
+follow existing editor reading order with nested descriptor order and list
+position order, use readable labels/one-based positions and distinguish
+publication-only problems. Activating a nested problem SHALL select the
+relevant block tab, reveal the block and every containing disclosure, then
+focus and scroll to the exact control; a container problem SHALL focus its
+labelled container. Hidden-block required/minimum publication issues SHALL
+remain non-blocking as in the accepted hidden-block contract. Unresolvable
+paths SHALL remain summary text without a guessed leaf target. After structural
+edits, local issues SHALL be recomputed and server issues for surviving items
+SHALL follow their UI identity; removed-item issues SHALL disappear. Old
+asynchronous responses SHALL NOT attach indexed issues to different items.
+
+#### Scenario: Reveal a nested invalid URL
+- **WHEN** the server reports /blocks/0/data/links/2/url and its block and item are collapsed
+- **THEN** activating the summary opens Content, the block and all containing disclosures and focuses item 3's URL with its accessible error
+
+#### Scenario: Container and unknown paths
+- **WHEN** validation reports list_too_short at /fields/links and another issue under an unknown child
+- **THEN** the list issue targets the list container and the unknown issue stays visible without a misleading focus link
+
+#### Scenario: Errors follow surviving items
+- **WHEN** an item with a server error moves from position 3 to position 1 and another item is removed
+- **THEN** its error remains on that same item at position 1 and errors belonging to the removed item disappear
+
+### Requirement: Composite authoring preserves draft lifecycle recovery
+Initialization, scalar edits, save normalization, dirty comparison, discard,
+reload, unsaved-navigation guards, save shortcuts, revert, block duplication
+and entry lifecycle actions SHALL retain complete recursive values and order,
+including {} and []. Local clear sentinels SHALL be removed only from named
+fields and never used to filter or shift list indices. View-only disclosures
+and summaries SHALL NOT create unsaved changes. A revision conflict or failed
+save/publish SHALL preserve the complete local draft; Copy my JSON SHALL
+contain content only with no transient item identities. Save success SHALL
+use the returned normalized draft as baseline. Pending mutations SHALL prevent
+structural edits or reconcile response paths to the exact submitted item
+identities, so indexed server errors cannot refer to a changed array.
+
+#### Scenario: Conflict after nested edits
+- **WHEN** a writer edits and reorders nested data and Save receives a revision conflict
+- **THEN** local content and order remain available, Copy my JSON includes every nested value and no UI IDs, and explicit reload adopts the server draft
+
+#### Scenario: Save and discard remain predictable
+- **WHEN** a writer saves nested edits, edits them again and discards
+- **THEN** the confirmed normalized draft is restored, explicit empty containers survive and the form is clean

@@ -17,7 +17,11 @@ import { PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFieldArray, type Control, type UseFormGetValues } from "react-hook-form";
 import { ulid } from "ulid";
-import { BLOCK_MESSAGES, type DraftEditorValues } from "../../../entities/content/index.js";
+import {
+  BLOCK_MESSAGES,
+  useCompositeEditing,
+  type DraftEditorValues,
+} from "../../../entities/content/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { AddBlockMenu } from "../AddBlockMenu/index.js";
@@ -53,6 +57,7 @@ export function BlockEditor({
   /** Viewers see each block's settings read only, without tabs. */
   readonly readOnly?: boolean;
 }) {
+  const { growthProblem, busy } = useCompositeEditing();
   const { fields, insert, move, remove } = useFieldArray({
     control,
     name: "blocks",
@@ -123,6 +128,16 @@ export function BlockEditor({
     });
   };
   const insertBlock = (index: number, block: ContentBlockDto) => {
+    if (
+      readOnly ||
+      busy ||
+      growthProblem("blocks", [
+        ...getValues("blocks").slice(0, index),
+        block,
+        ...getValues("blocks").slice(index),
+      ])
+    )
+      return;
     setRemoved(undefined);
     insert(index, block, { shouldFocus: false });
     reveal(block.key);
@@ -149,11 +164,13 @@ export function BlockEditor({
     });
   };
   const moveBlock = (from: number, to: number) => {
+    if (readOnly || busy) return;
     if (to < 0 || to >= fields.length || from === to) return;
     setRemoved(undefined);
     move(from, to);
   };
   const removeBlock = (index: number, definition: BlockDefinitionDto) => {
+    if (readOnly || busy) return;
     const block = structuredClone(getValues(`blocks.${index}`));
     remove(index);
     setRemoved({ block, index, label: blockLabel(definition) });
@@ -178,7 +195,7 @@ export function BlockEditor({
     );
   const items: ReactNode[] = [];
   fields.forEach((block, index) => {
-    if (index > 0 && definitions.length > 0) {
+    if (!readOnly && index > 0 && definitions.length > 0) {
       items.push(
         <div
           className="group relative flex h-5 items-center justify-center"
@@ -190,6 +207,14 @@ export function BlockEditor({
           />
           <AddBlockMenu
             definitions={definitions}
+            unavailable={(definition) =>
+              busy
+                ? "A request is in progress."
+                : growthProblem("blocks", [
+                    ...getValues("blocks"),
+                    { data: definition.defaultValue ?? {}, type: definition.type },
+                  ])
+            }
             onChoose={(definition) => insertDefinition(index, definition)}
           >
             <Button
@@ -229,6 +254,11 @@ export function BlockEditor({
         linkBase={linkBase}
         onActivate={() => setActiveKey(block.key)}
         onAnnounce={setAnnouncement}
+        duplicateProblem={growthProblem("blocks", [
+          ...getValues("blocks"),
+          getValues(`blocks.${index}`),
+        ])}
+        busy={busy}
         onDuplicate={() => duplicate(index)}
         onMove={(target) => moveBlock(index, target)}
         onRemove={() => removeBlock(index, definition)}
@@ -285,13 +315,21 @@ export function BlockEditor({
           </div>
         </SortableContext>
       </DndContext>
-      {definitions.length === 0 ? undefined : (
+      {readOnly || definitions.length === 0 ? undefined : (
         <div className="grid justify-items-start gap-2">
           {fields.length === 0 && removed === undefined ? (
             <p className="m-0 text-sm text-muted-foreground">No blocks yet.</p>
           ) : undefined}
           <AddBlockMenu
             definitions={definitions}
+            unavailable={(definition) =>
+              busy
+                ? "A request is in progress."
+                : growthProblem("blocks", [
+                    ...getValues("blocks"),
+                    { data: definition.defaultValue ?? {}, type: definition.type },
+                  ])
+            }
             onChoose={(definition) => insertDefinition(fields.length, definition)}
           >
             <Button ref={addButton} variant="outline">

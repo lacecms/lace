@@ -162,6 +162,30 @@ the build export leaves it out and `LaceBlocks` never renders it. An invalid
 anchor, class name or settings value fails the build with
 `invalid_block_envelope` and its block.
 
+Two built-in blocks hold repeatable content in group and list fields; editors
+fill them with the generic Add, Remove, Duplicate and reorder controls and must
+add at least one item before publishing:
+
+- `gallery` has an optional `title` and up to 50 `images`, each with `media`,
+  an optional `alt` and an optional `caption`. `GalleryBlock.astro` renders a
+  `<section class="gallery">` with a list of figures. Each image uses
+  `image(item.media, item.alt)`, so its alt text falls back to the media item's
+  alt text and then to `""`; the caption falls back to the media caption. Images
+  carry `width`, `height`, the focal-point `object-position` and
+  `loading="lazy"`.
+- `navigation` has an optional `name` (the `aria-label` of its `<nav>`; name
+  every navigation when a page has several) and up to 20 `links`, each with a
+  `label`, an optional `url` and up to 20 `children` (one submenu level). A
+  link without children is an `<a>`, or plain text without a URL. A link with
+  children becomes a `<details>`/`<summary>` disclosure that opens with Enter,
+  Space, a click or a tap without JavaScript; its own URL, if it has one, is
+  the first link of the submenu. A root-relative link to the current page gets
+  `aria-current="page"`. The disclosure does not close on Escape or on an
+  outside click; add a script to your copy of the component if you need that.
+
+Links use the URL rules of every `url` field: `/path`, `#anchor`,
+`https://…`, `mailto:` or `tel:`.
+
 ## 6. Render a page and a collection
 
 Read entries from the published site by path, or by model and slug. Your
@@ -275,7 +299,118 @@ Pass the `site` your page already loaded down to the header
 calling `getSite()` again. A published global's
 `media(id)` and `image(id, usageAlt?)` resolve media like an entry's.
 
-## 8. Add SEO metadata, a sitemap and robots.txt
+A global can also allow blocks. Site-wide navigation is a global that allows
+only the `navigation` block:
+
+```ts
+defineGlobal({
+  key: "navigation",
+  version: 1,
+  label: "Navigation",
+  description: "Links shown in the header of every page.",
+  blocks: ["navigation"],
+});
+```
+
+Render its published blocks with `LaceBlocks` and the same block map as your
+pages, and keep static links until it is published. A published global without
+blocks renders no navigation:
+
+```astro
+---
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
+import type { PublishedSite } from "@lacecms/sdk";
+import { blocks } from "../lace/blocks";
+
+interface Props {
+  readonly site: PublishedSite;
+}
+
+const { site } = Astro.props;
+const navigation = site.global("navigation");
+---
+
+{navigation === undefined ? (
+  <nav aria-label="Main" class="site-nav">
+    <ul>
+      <li><a href={import.meta.env.BASE_URL}>Home</a></li>
+    </ul>
+  </nav>
+) : (
+  <LaceBlocks blocks={blocks} entry={navigation} mediaUrl={site.mediaUrl} />
+)}
+```
+
+The header changes only when Navigation is published and the site rebuilt;
+saved drafts stay out of the build. The same block can also be added to a
+page's content for local navigation, such as links to `#anchor` targets on that
+page; it shows its own links, not the global's. Anchors of global blocks are not
+checked against the anchors of the page, so leave the site navigation without
+an anchor.
+
+## 8. Group and list fields in your models
+
+Models and block definitions can describe structured content with
+`field.group` (one object with named child fields) and `field.list` (an ordered
+array whose items share one field, a scalar or a group). For example, a page
+with a team section:
+
+```ts
+definePage({
+  key: "about",
+  version: 2,
+  path: "/about",
+  fields: {
+    contact: field.group({
+      label: "Contact",
+      fields: {
+        email: field.text({ label: "Email" }),
+        phone: field.text({ label: "Phone" }),
+      },
+    }),
+    team: field.list({
+      label: "Team",
+      itemLabel: "name",
+      maxItems: 12,
+      item: field.group({
+        fields: {
+          name: field.text({ label: "Name", required: true }),
+          photo: field.media({ label: "Photo" }),
+          links: field.list({ label: "Links", item: field.url() }),
+        },
+      }),
+    }),
+  },
+});
+```
+
+Your route reads them from `entry.fields` as plain JSON (check each value, as
+for globals), and `entry.image(id, usageAlt?)` resolves nested media.
+`itemLabel` names the child field shown as each item's summary in Admin.
+
+Limits are enforced by the API and shown in the editor:
+
+- a list holds at most 100 items, or its lower `maxItems`; `minItems` and
+  required children apply only when publishing;
+- one entry holds at most 500 list items in total, counting every list in its
+  fields and in all of its blocks (hidden blocks and nested lists included):
+  10 groups with 20 links each count 210;
+- a field branch has at most six groups and lists, at most two groups directly
+  inside each other, and no list directly inside a list (put it in a group);
+- nested values count toward the existing JSON size limits and the
+  200-media-reference limit of an entry.
+
+Changing these fields later follows the configuration sync rules: raise the
+model version; added children and defaults fill existing items; a child
+renamed in place declares `renamedFrom` with its former key, and a removed
+child is listed in the model's `removedFields` as a pointer where `*` stands
+for every list item (`"/team/*/photo"`); tightening a limit is refused while
+stored content exceeds it, and sync never truncates a list. Block data changes
+still need a block version and a migration. Media used in
+nested fields appears in the Media library usage list and cannot be deleted
+while referenced. See the operations guide for sync and backups.
+
+## 9. Add SEO metadata, a sitemap and robots.txt
 
 Opt routable models into per-entry SEO in `cms/lace.config.ts` with
 `seo: true`, or name fallback fields with
@@ -357,7 +492,7 @@ sitemap. Crawlers read `robots.txt` only at the host root, so a site served
 under a path must publish its robots rules at the root itself; one sitemap
 holds at most 50,000 URLs.
 
-## 9. Customize rich text
+## 10. Customize rich text
 
 `<RichText>` renders only the shared Lace allowlist and never raw HTML. Pass
 `components` to replace the element for a node or mark; an override receives
@@ -379,7 +514,7 @@ const { element } = Astro.props;
 <RichText components={{ link: ExternalLink }} document={document} />
 ```
 
-## 10. Style through the hooks
+## 11. Style through the hooks
 
 Target `data-lace-model`, `data-lace-entry`, `data-lace-block`,
 `data-lace-block-key` and `data-lace-part`; tag names and incidental classes are
@@ -397,7 +532,69 @@ editors on purpose (and keep those classes in any CSS purge safelist):
 }
 ```
 
-## 11. Build
+The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`;
+the navigation exposes `list`, `item`, `link`, `label`, `submenu`, `toggle` and
+`children`. Neither component ships styles. This CSS lays galleries out as an
+adaptive grid that crops images around their focal point, and navigation as a
+vertical list on narrow screens and a row with dropdown submenus from `48rem`:
+
+```css
+:where([data-lace-block="gallery"]) [data-lace-part="items"] {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:where([data-lace-block="gallery"]) figure {
+  margin: 0;
+}
+:where([data-lace-block="gallery"]) [data-lace-part="media"] {
+  aspect-ratio: 4 / 3;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+:where([data-lace-block="navigation"]) ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:where([data-lace-block="navigation"]) [data-lace-part="list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+:where([data-lace-block="navigation"]) [data-lace-part="children"] {
+  display: grid;
+  gap: 0.25rem;
+  margin-block-start: 0.5rem;
+  padding-inline-start: 1rem;
+}
+@media (min-width: 48rem) {
+  :where([data-lace-block="navigation"]) [data-lace-part="list"] {
+    flex-flow: row wrap;
+    gap: 0.5rem 1.5rem;
+  }
+  :where([data-lace-block="navigation"]) [data-lace-part="submenu"] {
+    position: relative;
+  }
+  :where([data-lace-block="navigation"]) [data-lace-part="children"] {
+    background: Canvas;
+    border: 1px solid;
+    inset-block-start: 100%;
+    inset-inline-start: 0;
+    min-width: 12rem;
+    padding: 0.75rem;
+    position: absolute;
+    z-index: 1;
+  }
+}
+```
+
+## 12. Build
 
 ```sh
 pnpm astro build

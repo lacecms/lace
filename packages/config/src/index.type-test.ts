@@ -64,3 +64,45 @@ defineCollection({
 void listed;
 void page;
 void collection;
+
+const compositePage = definePage({
+  key: "composite",
+  path: "/composite",
+  version: 1,
+  fields: {
+    cards: field.list({
+      item: field.group({
+        fields: {
+          kind: field.select({ options: ["one", "two"] as const, required: true }),
+          title: field.text(),
+        },
+      }),
+      required: true,
+    }),
+  },
+});
+const nestedModelValues: ModelFieldValues<typeof compositePage.fields> = {
+  cards: [{ kind: "one" }],
+};
+const invalidNestedModelValues: ModelFieldValues<typeof compositePage.fields> = {
+  // @ts-expect-error nested model select remains narrow.
+  cards: [{ kind: "three" }],
+};
+void [nestedModelValues, invalidNestedModelValues];
+
+const nestedRenameModel = definePage({
+  key: "nested-renames",
+  path: "/nested-renames",
+  version: 2,
+  fields: {
+    links: field.list({
+      item: field.group({
+        fields: {
+          title: field.text({ renamedFrom: "headline", required: true }),
+        },
+      }),
+    }),
+  },
+  removedFields: ["/links/*/legacy"],
+});
+void nestedRenameModel;

@@ -31,6 +31,8 @@ The supported parts are:
 | `image` | `media`, `caption` |
 | `quote` | `text`, `attribution` |
 | `cta` | `heading`, `body`, `action` |
+| `gallery` | `title`, `items`, `item`, `media`, `caption` |
+| `navigation` | `list`, `item`, `link`, `label`, `submenu`, `toggle`, `children` |
 
 An optional part is absent when the published block has no value for it. For
 example, a `hero` without an image has no `data-lace-part="media"` element.
@@ -89,3 +91,22 @@ in the reference fixture, and links such as `#get-started` jump to it. These
 values are content that editors change, not part of the `data-lace-*`
 contract; style an editor class only when the site offers it on purpose.
 Hidden blocks are never rendered.
+
+## Gallery and navigation
+
+Neither component ships styles. `site.css` lays galleries out as an adaptive
+grid (`repeat(auto-fill, minmax(min(14rem, 100%), 1fr))`) whose images use
+`aspect-ratio: 4 / 3` and `object-fit: cover`, so the focal point set in Media
+decides the crop through the rendered `object-position`. Navigation is a
+vertical list below `48rem` with submenus shown inline, and a wrapping row with
+absolutely positioned dropdown submenus from `48rem`; submenus open through the
+native `<details>` disclosure. The current page's link carries
+`aria-current="page"`, which the stylesheet makes bold.
+
+The site-wide navigation comes from the `navigation` global and is rendered in
+the layout header, outside `[data-lace-entry]`. Select it with
+`.site-header [data-lace-block="navigation"]`, or style navigation inside page
+content with `[data-lace-entry] [data-lace-block="navigation"]`. While the
+global is unpublished the header shows the static `.site-nav` fallback from
+`BaseLayout.astro`, which shares the same list rules.
+

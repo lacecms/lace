@@ -219,3 +219,46 @@ test("settings problems follow content fields and hidden-block publication probl
     })[0]?.blocking,
   ).toBe(true);
 });
+
+test("nested parent and child problems keep readable reading order and hidden minimum exemptions", () => {
+  const list = {
+    type: "list",
+    required: false,
+    item: {
+      type: "group",
+      required: false,
+      fields: { url: { type: "url", label: "Address", required: false } },
+    },
+  } as const;
+  const nested = {
+    ...model,
+    fields: { links: list },
+    blockDefinitions: [{ ...model.blockDefinitions[0]!, fields: { links: list } }],
+  };
+  const problems = validationProblems({
+    model: nested,
+    blocks: [{ ...block("A"), hidden: true }],
+    errors: {
+      blocks: {
+        0: {
+          data: {
+            links: {
+              message: "Minimum",
+              type: "publication",
+              0: { url: { message: "Invalid URL", type: "validate" } },
+            },
+          },
+        },
+      },
+      fields: { links: [{ url: { message: "Rejected", type: "server" } }] },
+    } as never,
+  });
+  expect(problems.map((problem) => problem.message)).toEqual([
+    "Invalid URL",
+    "Rejected",
+    "Minimum",
+  ]);
+  expect(problems[0]!.target).toEqual({ kind: "control", id: "field-blocks-0-data-links-0-url" });
+  expect(problems[1]!.label).toBe("Address in Item 1 in Links");
+  expect(problems[2]!.blocking).toBe(false);
+});

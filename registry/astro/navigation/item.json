@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "navigation",
+  "framework": "astro",
+  "blockType": "navigation",
+  "blockVersion": 1,
+  "revision": 1,
+  "requires": {
+    "@lacecms/astro": "0.1.0-alpha.4",
+    "@lacecms/render": "0.1.0-alpha.4"
+  },
+  "files": [
+    {
+      "source": "NavigationBlock.astro",
+      "target": "NavigationBlock.astro",
+      "role": "component"
+    }
+  ],
+  "dependencies": []
+}

@@ -6,6 +6,8 @@ import {
   MAX_BLOCK_CLASS_TOKENS,
   MAX_SLUG_LENGTH,
   MAX_TITLE_LENGTH,
+  MAX_JSON_BYTES,
+  canonicalJsonByteLength,
   normalizeBlockClassName,
   validateFieldValue,
   validateRichTextDocument,
@@ -13,6 +15,13 @@ import {
 import type { BlockMetadata, FieldMetadata, JsonObject } from "@lacecms/content";
 import type { ContentBlockDto, ContentModelDto, ContractValidationIssue } from "@lacecms/contracts";
 import type { FieldErrors, Resolver } from "react-hook-form";
+import {
+  cleanValue,
+  fieldStartingValues,
+  record,
+  readPath,
+  snapshotBudget,
+} from "./composite-values.js";
 import { SEO_MESSAGES, seoProblems, type SeoFormValues, type SeoKey } from "./seo.js";
 
 export interface DraftEditorValues {
@@ -113,7 +122,7 @@ function richTextProblem(value: unknown): string {
  */
 export function fieldProblem(definition: FieldMetadata, value: unknown): string | undefined {
   try {
-    validateFieldValue(definition, value);
+    validateFieldValue(definition, value, [], "draft");
     return undefined;
   } catch (caught) {
     if (!(caught instanceof ContentValidationError)) throw caught;
@@ -138,6 +147,9 @@ export function fieldProblem(definition: FieldMetadata, value: unknown): string 
       return "Choose on or off.";
     case "richText":
       return richTextProblem(value);
+    case "group":
+    case "list":
+      return "This composite contains an invalid value. Review the saved JSON and the validation details.";
   }
 }
 
@@ -158,6 +170,9 @@ export function serverIssueMessage(
     Partial<Pick<ContractValidationIssue, "path">>,
   field?: { readonly definition: FieldMetadata; readonly value: unknown },
 ): string {
+  if (field?.definition.type === "group" || field?.definition.type === "list") {
+    return `${sentence(issue.message)}${issue.path === undefined ? "" : ` (${issue.path})`}`;
+  }
   switch (issue.code) {
     case "invalid_field_value": {
       const local = field === undefined ? undefined : fieldProblem(field.definition, field.value);
@@ -216,6 +231,39 @@ function error(message: string): { readonly message: string; readonly type: "val
   return { message, type: "validate" };
 }
 
+/** Collect every descendant problem, retaining parent and child locations together. */
+export function recursiveFieldErrors(
+  definition: FieldMetadata,
+  raw: unknown,
+): Record<string, unknown> {
+  const value = cleanValue(raw, definition);
+  const result: Record<string, unknown> = {};
+  if (value === undefined || value === null) return result;
+  if (definition.type === "group" && record(value)) {
+    for (const key of Object.keys(value))
+      if (!Object.hasOwn(definition.fields, key))
+        result[key] = error("This field is not defined by the model.");
+    for (const [key, child] of Object.entries(definition.fields)) {
+      const issues = recursiveFieldErrors(child, value[key]);
+      if (Object.keys(issues).length) result[key] = issues;
+    }
+  } else if (definition.type === "list" && Array.isArray(value)) {
+    if (value.length > (definition.maxItems ?? 100))
+      Object.assign(result, error(`Use no more than ${definition.maxItems ?? 100} items.`));
+    Array.from(value).forEach((item, index) => {
+      const issues =
+        item === undefined || item === null
+          ? error("Enter a value or remove this item.")
+          : recursiveFieldErrors(definition.item, item);
+      if (Object.keys(issues).length) result[index] = issues;
+    });
+  } else {
+    const problem = fieldProblem(definition, value);
+    if (problem) Object.assign(result, error(problem));
+  }
+  return result;
+}
+
 function fieldErrors(
   model: ContentModelDto,
   values: DraftEditorValues,
@@ -231,12 +279,12 @@ function fieldErrors(
   )
     errors.slug = error(`Slug must not exceed ${MAX_SLUG_LENGTH} characters.`);
 
-  const fieldIssues: Record<string, { readonly message: string; readonly type: "validate" }> = {};
+  const fieldIssues: Record<string, unknown> = {};
   for (const [key, definition] of Object.entries(model.fields)) {
     const value = values.fields[key];
     if (value === undefined || value === null) continue;
-    const problem = fieldProblem(definition as FieldMetadata, value);
-    if (problem !== undefined) fieldIssues[key] = error(problem);
+    const issues = recursiveFieldErrors(definition, value);
+    if (Object.keys(issues).length) fieldIssues[key] = issues;
   }
   if (Object.keys(fieldIssues).length > 0) errors.fields = fieldIssues;
   if (values.seo !== undefined) {
@@ -277,6 +325,30 @@ function fieldErrors(
     if (Object.keys(issues).length > 0) blockIssues[index] = issues;
   }
   if (Object.keys(blockIssues).length > 0) errors.blocks = blockIssues;
+  const budget = snapshotBudget(model, values);
+  if (budget.problem) errors.fields = { ...fieldIssues, root: error(budget.problem) };
+  if (
+    canonicalJsonByteLength(withoutCleared(values.fields, model.fields) as never) > MAX_JSON_BYTES
+  )
+    errors.fields = {
+      ...(errors.fields as object),
+      root: error("Model fields exceed the content size limit."),
+    };
+  for (const [index, block] of values.blocks.entries())
+    if (
+      canonicalJsonByteLength(
+        withoutCleared(
+          block.data,
+          model.blockDefinitions?.find((definition) => definition.type === block.type)?.fields,
+        ) as never,
+      ) > MAX_JSON_BYTES
+    ) {
+      blockIssues[index] = {
+        ...(blockIssues[index] as object),
+        block: error("Block data exceeds the content size limit."),
+      };
+      errors.blocks = blockIssues;
+    }
   return errors as FieldErrors<DraftEditorValues>;
 }
 
@@ -285,19 +357,16 @@ export function undefinedDataMessage(key: string): string {
   return `This block has data for the undefined field “${key}”.`;
 }
 
-function validateBlockData(
-  definition: BlockMetadata,
-  data: JsonObject,
-): Record<string, { readonly message: string; readonly type: "validate" }> {
-  const issues: Record<string, { readonly message: string; readonly type: "validate" }> = {};
+function validateBlockData(definition: BlockMetadata, data: JsonObject): Record<string, unknown> {
+  const issues: Record<string, unknown> = {};
   for (const key of Object.keys(data)) {
     if (!Object.hasOwn(definition.fields, key)) issues[key] = error(undefinedDataMessage(key));
   }
   for (const [key, fieldDefinition] of Object.entries(definition.fields)) {
     const value = data[key];
     if (value === undefined || value === null) continue;
-    const problem = fieldProblem(fieldDefinition, value);
-    if (problem !== undefined) issues[key] = error(problem);
+    const nested = recursiveFieldErrors(fieldDefinition, value);
+    if (Object.keys(nested).length) issues[key] = nested;
   }
   return issues;
 }
@@ -320,10 +389,15 @@ function validateBlockSettings(
   return issues;
 }
 
-function withoutCleared<Value>(record: Record<string, Value>): Record<string, Value> {
+function withoutCleared<Value>(
+  record: Record<string, Value>,
+  fields?: Readonly<Record<string, FieldMetadata>>,
+): Record<string, Value> {
   return Object.fromEntries(
-    Object.entries(record).filter(([, value]) => value !== null && value !== undefined),
-  );
+    Object.entries(record)
+      .filter(([, value]) => value !== null && value !== undefined)
+      .map(([key, value]) => [key, cleanValue(value, fields?.[key])]),
+  ) as Record<string, Value>;
 }
 
 /**
@@ -333,7 +407,10 @@ function withoutCleared<Value>(record: Record<string, Value>): Record<string, Va
  * `null`s, so the server applies a cleared setting's default. A blank anchor or
  * class name means the block has none.
  */
-export function withoutClearedValues(values: DraftEditorValues): DraftEditorValues {
+export function withoutClearedValues(
+  values: DraftEditorValues,
+  model?: ContentModelDto,
+): DraftEditorValues {
   return {
     ...values,
     blocks: values.blocks.map(({ anchor, className, ...block }) => {
@@ -342,11 +419,14 @@ export function withoutClearedValues(values: DraftEditorValues): DraftEditorValu
         ...block,
         ...(anchor === undefined || anchor === "" ? {} : { anchor }),
         ...(trimmedClassName === "" ? {} : { className: trimmedClassName }),
-        data: withoutCleared(block.data) as ContentBlockDto["data"],
+        data: withoutCleared(
+          block.data,
+          model?.blockDefinitions?.find((definition) => definition.type === block.type)?.fields,
+        ) as ContentBlockDto["data"],
         settings: withoutCleared(block.settings) as ContentBlockDto["settings"],
       };
     }),
-    fields: withoutCleared(values.fields),
+    fields: withoutCleared(values.fields, model?.fields),
   };
 }
 
@@ -360,9 +440,19 @@ export function validateDraftValues(
 /** Builds the local draft-mode resolver from validated, serializable model metadata. */
 export function createDraftResolver(
   model: ContentModelDto,
+  transient?: () => readonly { readonly name: string; readonly message: string }[],
 ): Resolver<DraftEditorValues, unknown, DraftEditorValues> {
   return async (values) => {
     const errors = fieldErrors(model, values);
+    for (const issue of transient?.() ?? []) {
+      const parts = issue.name.split(".");
+      let target = errors as Record<string, unknown>;
+      parts.slice(0, -1).forEach((part) => {
+        if (!record(target[part])) target[part] = {};
+        target = target[part] as Record<string, unknown>;
+      });
+      target[parts.at(-1)!] = error(issue.message);
+    }
     return Object.keys(errors).length === 0
       ? { errors: {}, values }
       : ({ errors, values: {} } as never);
@@ -374,13 +464,7 @@ export function initialModelFieldValues(
   model: ContentModelDto,
   fields: JsonObject,
 ): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(model.fields).map(([key, definition]) => [
-      key,
-      fields[key] ??
-        (Object.hasOwn(definition, "defaultValue") ? definition.defaultValue : undefined),
-    ]),
-  );
+  return fieldStartingValues(model.fields, fields);
 }
 
 /** A form location that a server validation issue can be shown at. */
@@ -408,6 +492,31 @@ const seoKeys: ReadonlySet<string> = new Set<SeoKey>([
 
 const fieldKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/u;
 
+function nestedLocation(
+  definition: FieldMetadata,
+  parts: readonly string[],
+  prefix: string,
+  value: unknown,
+): string | undefined {
+  if (!parts.length || (definition.type !== "group" && definition.type !== "list")) return prefix;
+  const [part, ...rest] = parts;
+  if (definition.type === "group" && Object.hasOwn(definition.fields, part!))
+    return nestedLocation(
+      definition.fields[part!]!,
+      rest,
+      `${prefix}.${part}`,
+      readPath(value, [part!]),
+    );
+  if (
+    definition.type === "list" &&
+    /^(0|[1-9]\d*)$/u.test(part!) &&
+    Array.isArray(value) &&
+    Number(part) < value.length
+  )
+    return nestedLocation(definition.item, rest, `${prefix}.${part}`, value[Number(part)]);
+  return undefined;
+}
+
 /**
  * Maps a server JSON Pointer to the form location that shows it. Pointers
  * below a field (for example into a rich-text document) map to the field.
@@ -416,6 +525,7 @@ export function issueLocation(
   path: string,
   model: ContentModelDto,
   blocks: readonly ContentBlockDto[],
+  fields?: Record<string, unknown>,
 ): IssueLocation | undefined {
   if (!path.startsWith("/")) return undefined;
   const segments = path.slice(1).split("/").map(unescapePointer);
@@ -432,7 +542,12 @@ export function issueLocation(
     return second !== undefined &&
       fieldKeyPattern.test(second) &&
       Object.hasOwn(model.fields, second)
-      ? `fields.${second}`
+      ? (nestedLocation(
+          model.fields[second]!,
+          segments.slice(2),
+          `fields.${second}`,
+          fields?.[second],
+        ) as IssueLocation | undefined)
       : undefined;
   }
   if (root !== "blocks") return undefined;
@@ -461,7 +576,18 @@ export function issueLocation(
   }
   if (third !== "data") return undefined;
   if (fourth === undefined) return `blocks.${index}.block`;
-  return fieldKeyPattern.test(fourth) ? `blocks.${index}.data.${fourth}` : `blocks.${index}.block`;
+  const definition = model.blockDefinitions?.find((item) => item.type === blocks[index]?.type)
+    ?.fields[fourth];
+  if (!definition)
+    return fieldKeyPattern.test(fourth)
+      ? `blocks.${index}.data.${fourth}`
+      : `blocks.${index}.block`;
+  return nestedLocation(
+    definition,
+    segments.slice(4),
+    `blocks.${index}.data.${fourth}`,
+    blocks[index]?.data[fourth],
+  ) as IssueLocation | undefined;
 }
 
 /** The descriptor of the field an issue location names, when it names one. */
@@ -470,14 +596,25 @@ export function locationField(
   model: ContentModelDto,
   blocks: readonly ContentBlockDto[],
 ): FieldMetadata | undefined {
-  if (location.startsWith("fields."))
-    return model.fields[location.slice("fields.".length)] as FieldMetadata | undefined;
-  const match = /^blocks\.(\d+)\.(data|settings)\.(.+)$/u.exec(location);
-  if (match === null) return undefined;
-  const block = blocks[Number(match[1])];
-  const definition = model.blockDefinitions?.find((item) => item.type === block?.type);
-  const descriptors = match[2] === "settings" ? definition?.settings : definition?.fields;
-  return descriptors?.[match[3] ?? ""] as FieldMetadata | undefined;
+  const parts = location.split(".");
+  let definition: FieldMetadata | undefined;
+  let remaining: string[];
+  if (parts[0] === "fields") {
+    definition = model.fields[parts[1]!];
+    remaining = parts.slice(2);
+  } else {
+    const block = blocks[Number(parts[1])];
+    const registered = model.blockDefinitions?.find((item) => item.type === block?.type);
+    definition = (parts[2] === "settings" ? registered?.settings : registered?.fields)?.[parts[3]!];
+    remaining = parts.slice(4);
+  }
+  for (const part of remaining) {
+    if (definition?.type === "group") definition = definition.fields[part];
+    else if (definition?.type === "list" && /^(0|[1-9]\d*)$/u.test(part))
+      definition = definition.item;
+    else return undefined;
+  }
+  return definition;
 }
 
 /** ULID is the browser-created stable identity format for a block snapshot. */

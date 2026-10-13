@@ -641,7 +641,7 @@ async function nodeJourney(context) {
     throw new Error("astro-build: published content missing from generated site");
   }
   await verifyRenderedMedia(html, base, png);
-  for (const type of ["hero", "richText", "image", "quote", "cta"]) {
+  for (const type of ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"]) {
     if (!html.includes(`data-lace-block="${type}"`))
       throw new Error(`astro-build: missing ${type}`);
   }
@@ -984,7 +984,10 @@ async function starterJourney(project) {
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
   );
   exported.entries = exported.entries.slice(0, 2);
+  // The fixture navigation global has a submenu; the post holds a gallery.
+  const navigation = exported.globals.find((global) => global.modelKey === "navigation");
   exported.globals = [
+    navigation,
     {
       blocks: [],
       fields: {
@@ -1088,7 +1091,38 @@ async function starterJourney(project) {
     )
       throw new Error("starter-build: published settings global missing from the site header");
   }
+  const header = (page) => page.slice(page.indexOf("<header"), page.indexOf("</header>"));
+  for (const [page, current] of [
+    [published[0], '<a aria-current="page" data-lace-part="link" href="/">Home</a>'],
+    [
+      published[1],
+      '<a aria-current="page" data-lace-part="link" href="/blog/first-post">First post</a>',
+    ],
+  ]) {
+    const top = header(page);
+    if (
+      !top.includes(
+        '<nav aria-label="Main" class="navigation" data-lace-block="navigation" data-lace-block-key="site-navigation">',
+      ) ||
+      !top.includes(
+        '<details data-lace-part="submenu"><summary data-lace-part="toggle">Writing</summary>',
+      ) ||
+      !top.includes(current) ||
+      top.split("aria-current=").length !== 2 ||
+      page.includes('class="site-nav"')
+    )
+      throw new Error("starter-build: published navigation global missing from the site header");
+  }
   const [home, post] = published;
+  if (
+    !post.includes(
+      '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery">',
+    ) ||
+    post.split('<li data-lace-part="item"><figure>').length !== 3 ||
+    !post.includes('<img alt="Media library description" data-lace-part="media"') ||
+    !post.includes('<img alt="A quiet desk" data-lace-part="media"')
+  )
+    throw new Error("starter-build: gallery figures or their effective alt text missing");
   if (
     !home.includes("<title>Lace starter | Acceptance Studio</title>") ||
     !home.includes('<meta content="Acceptance site description" name="description">') ||
@@ -1131,6 +1165,14 @@ async function starterJourney(project) {
       page.includes("Acceptance Studio")
     )
       throw new Error("starter-build-without-globals: static site header fallback missing");
+    const top = page.slice(page.indexOf("<header"), page.indexOf("</header>"));
+    if (
+      !top.includes(
+        '<nav aria-label="Main" class="site-nav"><ul><li><a href="/">Home</a></li></ul></nav>',
+      ) ||
+      top.includes("data-lace-block")
+    )
+      throw new Error("starter-build-without-globals: static navigation fallback missing");
     if (!page.includes("<title>") || page.includes('rel="canonical"') || page.includes("og:url"))
       throw new Error("starter-build-without-globals: head metadata without a site URL is wrong");
   }
@@ -1142,7 +1184,7 @@ async function starterJourney(project) {
     throw new Error("starter-build-without-globals: robots.txt is not allow-all without a sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
   console.info(
-    "Packed starter installed, typechecked and built all five blocks, block anchors and SEO output with and without a published global and site URL",
+    "Packed starter installed, typechecked and built every built-in block, block anchors, site navigation and SEO output with and without published globals and a site URL",
   );
 }
 

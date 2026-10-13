@@ -1,5 +1,8 @@
 import {
   defineBlockRegistry,
+  parseSchemaPath,
+  encodeSchemaPath,
+  schemaFieldAt,
   MAX_SLUG_LENGTH,
   sha256CanonicalJson,
   toBlockMetadata,
@@ -320,23 +323,31 @@ function normalizeFields<Fields extends FieldMap>(
 
   const normalized: Record<string, FieldDefinition> = {};
   const renamedFields: Record<string, string> = {};
-  for (const [key, definition] of Object.entries(value)) {
-    if (!FIELD_KEY_PATTERN.test(key)) {
-      fail(`fields.${key} must be a valid field key.`);
-    }
-    if (definition === null || typeof definition !== "object" || Array.isArray(definition)) {
-      fail(`fields.${key} must be a field definition.`);
-    }
-    const { renamedFrom, ...metadata } = toFieldMetadata(definition as FieldDefinition) as {
-      readonly renamedFrom?: unknown;
-    } & FieldDefinition;
+  const extract = (definition: FieldDefinition, path: readonly string[]): FieldDefinition => {
+    const { renamedFrom, ...metadata } = definition as FieldDefinition & {
+      readonly renamedFrom?: string;
+    };
     if (renamedFrom !== undefined) {
-      if (typeof renamedFrom !== "string" || !FIELD_KEY_PATTERN.test(renamedFrom)) {
-        fail(`fields.${key}.renamedFrom must be a valid field key.`);
-      }
-      renamedFields[key] = renamedFrom;
+      const address = encodeSchemaPath(path);
+      renamedFields[address] = encodeSchemaPath([...path.slice(0, -1), renamedFrom]);
     }
-    normalized[key] = metadata as FieldDefinition;
+    if (metadata.type === "group")
+      return {
+        ...metadata,
+        fields: Object.fromEntries(
+          Object.entries(metadata.fields).map(([key, child]) => [
+            key,
+            extract(child, [...path, key]),
+          ]),
+        ),
+      };
+    if (metadata.type === "list")
+      return { ...metadata, item: extract(metadata.item, [...path, "*"]) as typeof metadata.item };
+    return metadata;
+  };
+  for (const [key, definition] of Object.entries(value)) {
+    if (!FIELD_KEY_PATTERN.test(key)) fail(`fields.${key} must be a valid field key.`);
+    normalized[key] = extract(toFieldMetadata(definition as FieldDefinition), [key]);
   }
   return { fields: deepFreeze(normalized) as Fields, renamedFields };
 }
@@ -359,6 +370,30 @@ function normalizeKeyList(
   return [...seen].sort();
 }
 
+function normalizeRemovedFields(value: readonly string[] | undefined): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail("removedFields must be an array of keys.");
+  const paths = value
+    .map((path) => {
+      try {
+        const parts = parseSchemaPath(path);
+        if (parts.at(-1) === "*") fail("removedFields must name a field, not a list item.");
+        return encodeSchemaPath(parts);
+      } catch {
+        fail("removedFields must contain valid keys or schema paths.");
+      }
+    })
+    .sort();
+  for (let index = 0; index < paths.length; index++) {
+    const path = paths[index]!;
+    if (paths.indexOf(path) !== index) fail(`removedFields contains duplicate key "${path}".`);
+    const prefix = `/${parseSchemaPath(path).join("/")}/`;
+    if (paths.some((other) => `/${parseSchemaPath(other).join("/")}`.startsWith(prefix)))
+      fail(`removedFields contains overlapping path "${path}".`);
+  }
+  return paths;
+}
+
 /** Rejects synchronization hints that contradict the model's own configuration. */
 function assertSynchronizationHints(
   modelKey: string,
@@ -373,7 +408,7 @@ function assertSynchronizationHints(
     if (former === key) {
       fail(`model "${modelKey}" field "${key}" is renamed from its own key.`);
     }
-    if (Object.hasOwn(fields, former)) {
+    if (schemaFieldAt(fields, parseSchemaPath(former)) !== undefined) {
       fail(`model "${modelKey}" field "${key}" is renamed from configured field "${former}".`);
     }
     const other = sources.get(former);
@@ -383,7 +418,7 @@ function assertSynchronizationHints(
     sources.set(former, key);
   }
   for (const key of removedFields) {
-    if (Object.hasOwn(fields, key)) {
+    if (schemaFieldAt(fields, parseSchemaPath(key)) !== undefined) {
       fail(`model "${modelKey}" removedFields lists configured field "${key}".`);
     }
     if (sources.has(key)) {
@@ -504,7 +539,7 @@ function normalizeCommonModel<Fields extends FieldMap>(
 
   const blocks = normalizeBlocks(input.blocks);
   const { fields, renamedFields } = normalizeFields(input.fields);
-  const removedFields = normalizeKeyList(input.removedFields, "removedFields", FIELD_KEY_PATTERN);
+  const removedFields = normalizeRemovedFields(input.removedFields);
   const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_KEY_PATTERN);
   assertSynchronizationHints(
     input.key,
@@ -880,10 +915,20 @@ function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
   return JSON.parse(JSON.stringify(rest)) as MutableJsonObject;
 }
 
+function fieldDefinitionStructure(definition: JsonValue): MutableJsonObject {
+  const result = withoutDisplayProperties(definition);
+  if (result.type === "group") result.fields = fieldMapStructure(result.fields);
+  if (result.type === "list") {
+    delete result.itemLabel;
+    if (result.item !== undefined) result.item = fieldDefinitionStructure(result.item);
+  }
+  return result;
+}
+
 function fieldMapStructure(fields: JsonValue | undefined): MutableJsonObject {
   const structure: MutableJsonObject = {};
   for (const [key, definition] of Object.entries((fields ?? {}) as JsonObject)) {
-    structure[key] = withoutDisplayProperties(definition);
+    structure[key] = fieldDefinitionStructure(definition);
   }
   return structure;
 }
@@ -1009,11 +1054,33 @@ export async function defineConfig<const Models extends readonly ContentModelDef
     blocks,
     content: hashModels.map(omitListFields),
   } as unknown as JsonValue;
+  // Preserve scalar-only global hashes; composite identity visits descriptor positions
+  // so content/default keys named label or description remain structural.
   const publicProjection: PublicConfigProjection = {
     blocks,
     content: deepFreeze(publicModels),
     projectionHash: await sha256CanonicalJson(projection),
-    structureHash: await sha256CanonicalJson(omitDisplayMetadata(structure)),
+    structureHash: await sha256CanonicalJson(
+      [...blocks, ...publicModels].some((definition) =>
+        Object.values(definition.fields).some(
+          (field) => field.type === "group" || field.type === "list",
+        ),
+      )
+        ? {
+            blocks: blocks.map((block) => ({
+              ...withoutDisplayProperties(block as unknown as JsonValue),
+              fields: fieldMapStructure(block.fields as unknown as JsonValue),
+              ...(block.settings === undefined
+                ? {}
+                : { settings: fieldMapStructure(block.settings as unknown as JsonValue) }),
+            })),
+            content: hashModels.map((model) => ({
+              ...withoutDisplayProperties(omitListFields(model)),
+              fields: fieldMapStructure((model as JsonObject).fields),
+            })),
+          }
+        : omitDisplayMetadata(structure),
+    ),
   };
   const normalized: NormalizedConfig<Models> = {
     ...publicProjection,

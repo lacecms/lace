@@ -10,6 +10,7 @@ import {
 } from "@lacecms/application";
 import type {
   ConfigurationSyncContentWrite,
+  ConfigurationSyncSnapshotRewrite,
   ContentEntryListValues,
   ContentEntrySort,
   ContentEntryStatus,
@@ -327,6 +328,7 @@ export interface StoredModelStateRow {
 }
 
 export interface SyncSnapshotRow {
+  readonly references_json?: string;
   readonly entry_id: string;
   readonly fields_json: string;
   /** 1 when the snapshot holds an SEO group. */
@@ -338,6 +340,9 @@ export interface SyncSnapshotRow {
 }
 
 export interface SyncBlockRow {
+  readonly settings_json?: string;
+  readonly data_json?: string;
+  readonly hidden?: number;
   readonly block_key: string;
   readonly block_type: string;
   readonly schema_version: number;
@@ -481,10 +486,14 @@ const VALID_BASELINE_SQL =
   "case when m.structure_json_hash = m.structure_hash then m.structure_json end";
 /**
  * Snapshot count, revision sum, update-time sum, and latest update time of a
- * model's snapshots. Every save, publication, and deletion changes it.
+ * model's snapshots plus reference projection activity. Saves/publication/deletion
+ * are revision guarded; reference counts/timestamps/lengths also detect projection changes.
  */
 const SNAPSHOT_FINGERPRINT_SQL = `(select count(*) || ':' || coalesce(sum(s.revision), 0) || ':' ||
-          coalesce(sum(s.updated_at), 0) || ':' || coalesce(max(s.updated_at), 0)
+          coalesce(sum(s.updated_at), 0) || ':' || coalesce(max(s.updated_at), 0) || ':' ||
+          (select count(*) || ':' || coalesce(sum(r.created_at),0) || ':' || coalesce(sum(length(r.source_key)+length(r.field_path)+length(r.media_id)),0)
+             from content_media_references r join content_snapshots rs on rs.id=r.snapshot_id
+             join content_entries re on re.id=rs.entry_id where re.model_key=m.key)
      from content_snapshots s join content_entries x on x.id = s.entry_id
     where x.model_key = m.key)`;
 export const STORED_MODEL_STATE_SQL = `select m.key, m.kind, m.config_version as version, m.structure_hash, m.projection_hash,
@@ -514,6 +523,7 @@ export const STORED_MODEL_BASELINES_SQL = `select m.key, ${VALID_BASELINE_SQL} a
 /** Binds model key, exclusive snapshot-ID cursor, and page limit. */
 export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title, s.fields_json,
         s.seo_json is not null as has_seo,
+        (select coalesce(json_group_array(json_object('sourceKey',r.source_key,'fieldPath',r.field_path,'mediaId',r.media_id)), '[]') from content_media_references r where r.snapshot_id=s.id) as references_json,
         case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
    from content_snapshots s
    join content_entries e on e.id = s.entry_id
@@ -523,7 +533,7 @@ export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title,
   limit ?`;
 /** Block summaries for a list of snapshot IDs; append the placeholders. */
 export const SYNC_BLOCKS_SQL =
-  "select snapshot_id, block_key, block_type, schema_version from content_blocks where snapshot_id in";
+  "select snapshot_id, block_key, block_type, schema_version, data_json, settings_json, hidden from content_blocks where snapshot_id in";
 const BACKFILL_FIELD_KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
 
 /**
@@ -637,10 +647,17 @@ export function syncSnapshotPage(
   blockRows: readonly SyncBlockRow[],
   limit: number,
 ): ConfigurationSyncSnapshotPage {
-  const blocks = new Map<string, { key: string; schemaVersion: number; type: string }[]>();
+  const blocks = new Map<string, ConfigurationSyncSnapshot["blocks"][number][]>();
   for (const row of blockRows) {
     const list = blocks.get(row.snapshot_id) ?? [];
-    list.push({ key: row.block_key, schemaVersion: row.schema_version, type: row.block_type });
+    list.push({
+      key: row.block_key,
+      schemaVersion: row.schema_version,
+      type: row.block_type,
+      data: parseObject(row.data_json ?? "{}", "Block data"),
+      settings: parseObject(row.settings_json ?? "{}", "Block settings"),
+      hidden: row.hidden === 1,
+    });
     blocks.set(row.snapshot_id, list);
   }
   const items: ConfigurationSyncSnapshot[] = rows.map((row) =>
@@ -648,6 +665,9 @@ export function syncSnapshotPage(
       blocks: Object.freeze(blocks.get(row.id) ?? []),
       entryId: row.entry_id,
       fields: parseObject(row.fields_json, "Snapshot fields"),
+      references: JSON.parse(row.references_json ?? "[]") as NonNullable<
+        ConfigurationSyncSnapshot["references"]
+      >,
       hasSeo: row.has_seo === 1,
       revision: row.revision,
       snapshotId: row.id,
@@ -677,14 +697,14 @@ export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.p
   limit ?`;
 /** Snapshot heads for a list of snapshot IDs; append the placeholders. */
 export const SYNC_MIGRATION_SNAPSHOTS_SQL =
-  "select id, revision, title from content_snapshots where id in";
+  "select id, revision, title, fields_json from content_snapshots where id in";
 /**
- * Blocks of a list of snapshot IDs with data and settings only for target types. Binds the
+ * Blocks of a list of snapshot IDs with all data for list budgets and settings only for target types. Binds the
  * target type JSON array first; append the snapshot placeholders and the order.
  */
 export const SYNC_MIGRATION_BLOCKS_SQL = `with target(type) as (select value from json_each(?))
  select snapshot_id, block_key, block_type, position, schema_version, hidden,
-        case when block_type in (select type from target) then data_json end as data_json,
+        data_json,
         case when block_type in (select type from target) then settings_json end as settings_json
    from content_blocks where snapshot_id in`;
 /** Media references of a list of snapshot IDs; append the placeholders. */
@@ -698,6 +718,7 @@ export interface SyncMigrationEntryRow {
 }
 
 export interface SyncMigrationSnapshotRow {
+  readonly fields_json: string;
   readonly id: string;
   readonly revision: number;
   readonly title: string;
@@ -706,7 +727,7 @@ export interface SyncMigrationSnapshotRow {
 export interface SyncMigrationBlockRow {
   readonly block_key: string;
   readonly block_type: string;
-  readonly data_json: string | null;
+  readonly data_json: string;
   readonly hidden: number;
   readonly position: number;
   readonly schema_version: number;
@@ -766,7 +787,7 @@ export function syncMigrationPage(
     const list = blocks.get(row.snapshot_id) ?? [];
     list.push(
       Object.freeze({
-        ...(row.data_json === null ? {} : { data: parseObject(row.data_json, "Block data") }),
+        data: parseObject(row.data_json, "Block data"),
         hidden: row.hidden === 1,
         key: row.block_key,
         position: row.position,
@@ -805,6 +826,7 @@ export function syncMigrationPage(
     if (row === undefined) return undefined;
     return Object.freeze({
       blocks: Object.freeze(blocks.get(row.id) ?? []),
+      fields: parseObject(row.fields_json, "Snapshot fields"),
       references: Object.freeze(references.get(row.id) ?? []),
       revision: row.revision,
       snapshotId: row.id,
@@ -1751,4 +1773,67 @@ export function sqliteWriteError(
     failure("Media is unavailable for reference.");
   }
   throw new DomainError("CONTENT_INVALID_STATE", `${runtime} content write failed.`);
+}
+
+/** Parameterized bulk replacements; all returned statements belong to one guarded final mutation. */
+export function configurationSyncSnapshotRewriteStatements(
+  rows: readonly ConfigurationSyncSnapshotRewrite[],
+  modelKey: string,
+): readonly ConfigurationSyncWriteStatement[] {
+  const chunks: string[] = [];
+  const encoder = new TextEncoder();
+  let parts: string[] = [];
+  let bytes = 2;
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (ids.has(row.id)) failure("Duplicate synchronization snapshot replacement.");
+    ids.add(row.id);
+    const json = JSON.stringify(row);
+    const size = encoder.encode(json).length;
+    if (size + 2 > 1_500_000)
+      failure("Synchronization snapshot replacement exceeds payload capacity.");
+    if (parts.length > 0 && bytes + size + 1 > 1_500_000) {
+      chunks.push(`[${parts.join(",")}]`);
+      parts = [];
+      bytes = 2;
+    }
+    parts.push(json);
+    bytes += size + 1;
+  }
+  if (parts.length > 0) chunks.push(`[${parts.join(",")}]`);
+  return chunks.flatMap((json) => [
+    {
+      params: [json, json, modelKey],
+      sql: `update content_snapshots set fields_json =
+      (select value -> 'fields' from json_each(?) where value ->> 'id' = content_snapshots.id)
+      where id in (select value ->> 'id' from json_each(?))
+      and entry_id in (select id from content_entries where model_key = ?)`,
+    },
+    {
+      params: [json, modelKey],
+      sql: `delete from content_media_references
+      where source_key = '$fields' and snapshot_id in (select value ->> 'id' from json_each(?))
+      and snapshot_id in (select s.id from content_snapshots s join content_entries e on e.id = s.entry_id where e.model_key = ?)`,
+    },
+    {
+      params: [json, modelKey],
+      sql: `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
+      select s.id, '$fields', r.value ->> 'fieldPath', r.value ->> 'mediaId', s.updated_at
+      from json_each(?) p join content_snapshots s on s.id = p.value ->> 'id'
+      join content_entries e on e.id = s.entry_id, json_each(p.value -> 'references') r
+      where e.model_key = ?`,
+    },
+  ]);
+}
+
+/** Binds model key and exclusive snapshot-ID cursor; at most 100 current snapshots. */
+export const SYNC_FIELD_REWRITE_ROWS_SQL = `select s.id, s.fields_json,
+  case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
+  from content_snapshots s join content_entries e on e.id=s.entry_id
+  where e.model_key=? and s.id>? and s.id in (e.draft_snapshot_id,e.published_snapshot_id)
+  order by s.id limit 100`;
+export interface SyncFieldRewriteRow {
+  readonly id: string;
+  readonly fields_json: string;
+  readonly state: "draft" | "published";
 }

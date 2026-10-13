@@ -1,5 +1,6 @@
 import {
   actorDisplayName,
+  configurationSyncSnapshotRewrites,
   ALLOWED_MEDIA_MIME_TYPES,
   DISPATCHER_LEASE_DURATION_MS,
   dispatcherEventId,
@@ -23,6 +24,7 @@ import type {
   CompleteDispatcherLeaseInput,
   ApplyConfigurationSyncBlockMigrationsInput,
   ConfigurationSyncApplyPort,
+  ConfigurationSyncSnapshotRewrite,
   ConfigurationSyncMigrationCounts,
   ConfigurationSyncMigrationPage,
   ConfigurationSyncMigrationScanInput,
@@ -108,6 +110,8 @@ import {
   assertMigrationPageSize,
   configurationSyncMigrationStatements,
   configurationSyncWriteStatements,
+  configurationSyncSnapshotRewriteStatements,
+  SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
   syncMigrationPage,
   syncMigrationSnapshotIds,
@@ -342,7 +346,7 @@ export class D1ContentRepository
     )) {
       blockRows.push(
         ...(await this.all<SyncBlockRow>(
-          `${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")})`,
+          `${SYNC_BLOCKS_SQL} (${group.map(() => "?").join(", ")}) order by snapshot_id, position`,
           ...group,
         )),
       );
@@ -1277,6 +1281,41 @@ export class D1ContentRepository
         expected.projectionHash,
         token,
       );
+      if (
+        (operation.action === "version-update" || operation.action === "rename") &&
+        operation.evolution?.recursiveFields
+      ) {
+        const replacements: ConfigurationSyncSnapshotRewrite[] = [];
+        let after = "";
+        while (true) {
+          const rows = await this.all<import("@lacecms/db").SyncFieldRewriteRow>(
+            SYNC_FIELD_REWRITE_ROWS_SQL,
+            previousKey,
+            after,
+          );
+          replacements.push(
+            ...configurationSyncSnapshotRewrites(
+              configuration.fields,
+              operation.evolution.changes,
+              rows.map((row) => ({
+                id: row.id,
+                fields: parseObject(row.fields_json, "Snapshot fields"),
+                state: row.state,
+              })),
+            ),
+          );
+          if (rows.length < 100) break;
+          after = rows.at(-1)!.id;
+        }
+        const statements = configurationSyncSnapshotRewriteStatements(
+          replacements,
+          operation.model.key,
+        );
+        for (const [index, statement] of statements.entries()) {
+          batch.checkpoint(`sync.model.rewrite-fields.${index}`);
+          batch.add(`${statement.sql} and ${GUARD_SQL}`, ...statement.params, token);
+        }
+      }
       for (const write of configurationSyncContentWrites(operation, configuration)) {
         batch.checkpoint(`sync.model.${write.action}`);
         for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {

@@ -49,6 +49,10 @@ import {
   contentEntryListQuerySchema,
   contentEntryListSchema,
   contentModelListSchema,
+  fieldMetadataSchema,
+  fieldMetadataMapSchema,
+  blockMetadataSchema,
+  contentMetadataOpenApi,
   managedUserListSchema,
   managedUserSchema,
   mediaDetailSchema,
@@ -132,11 +136,31 @@ import type {
 import { toJsonSchema } from "@valibot/to-json-schema";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
+import type { GenerateSpecOptions } from "hono-openapi";
 import { describeRoute, loadVendor, openAPIRouteHandler, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import { emailDeliveryStatus } from "./email.js";
 
-loadVendor("valibot", { toJSONSchema: toJsonSchema as never });
+loadVendor("valibot", {
+  toJSONSchema: ((
+    schema: Parameters<typeof toJsonSchema>[0],
+    config: Parameters<typeof toJsonSchema>[1],
+  ) =>
+    toJsonSchema(schema, {
+      ...config,
+      overrideSchema: ({ valibotSchema }) => {
+        const name =
+          valibotSchema === fieldMetadataSchema
+            ? "FieldDefinition"
+            : valibotSchema === fieldMetadataMapSchema
+              ? "FieldMetadataMap"
+              : valibotSchema === blockMetadataSchema
+                ? "BlockMetadata"
+                : undefined;
+        return name === undefined ? undefined : { $ref: `#/components/schemas/${name}` };
+      },
+    })) as never,
+});
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -2274,6 +2298,11 @@ export function createLaceApp(input: LaceAppInput): Hono {
       documentation: {
         info: { title: input.environment.openApiTitle, version: input.environment.engineVersion },
         openapi: "3.1.0",
+        components: {
+          schemas: contentMetadataOpenApi as NonNullable<
+            NonNullable<GenerateSpecOptions["documentation"]["components"]>["schemas"]
+          >,
+        },
       },
     }),
   );

@@ -26,12 +26,41 @@ export function canonicalSite(site, cover) {
         type,
         position,
         schemaVersion,
-        data:
-          type === "image"
-            ? { ...data, media: data.media === cover ? "<cover>" : data.media }
-            : data,
+        data: canonicalBlockData(type, data, cover),
       })),
     }));
+}
+/** Media IDs of image and gallery blocks become the documented `<cover>` placeholder. */
+function canonicalBlockData(type, data, cover) {
+  const media = (id) => (id === cover ? "<cover>" : id);
+  if (type === "image") return { ...data, media: media(data.media) };
+  if (type === "gallery")
+    return { ...data, images: data.images.map((item) => ({ ...item, media: media(item.media) })) };
+  return data;
+}
+/** Published globals keyed by model, with the same block projection as entries. */
+export function canonicalGlobals(site, cover) {
+  return Object.fromEntries(
+    expected.globals.map((modelKey) => {
+      const global = site.global(modelKey);
+      return [
+        modelKey,
+        global === undefined
+          ? null
+          : {
+              modelKey: global.modelKey,
+              fields: global.fields,
+              blocks: global.blocks.map(({ key, type, position, schemaVersion, data }) => ({
+                key,
+                type,
+                position,
+                schemaVersion,
+                data: canonicalBlockData(type, data, cover),
+              })),
+            },
+      ];
+    }),
+  );
 }
 /** Resolved media of the published site with the runtime origin and media ID removed. */
 export function canonicalMedia(site, cover, publicBase) {
@@ -74,7 +103,7 @@ export async function apiJourney(f) {
   );
   assert.deepEqual(
     models.items.map((model) => model.key),
-    expected.models,
+    [...expected.models, ...expected.globals].sort(),
   );
   for (const role of ["editor", "viewer"]) {
     for (const path of [
@@ -191,11 +220,26 @@ export async function apiJourney(f) {
   const replay = await publish(saved, "34a-home");
   assert.equal(replay.publication, "replayed");
   assert.equal(replay.build.status, "not-dispatched");
+  // Nested media in a gallery: one item overrides the alt text, one inherits it.
   const about = await save(abouts.items[0].id, {
     expectedRevision: 1,
     title: "Published about",
     fields: {},
-    blocks: [],
+    blocks: [
+      {
+        key: "gallery-one",
+        type: "gallery",
+        schemaVersion: 1,
+        position: 1000,
+        data: {
+          title: "Published gallery",
+          images: [
+            { media: cover.id, alt: "Gallery cover", caption: "Gallery caption" },
+            { media: cover.id },
+          ],
+        },
+      },
+    ],
   });
   await publish(about, "34a-about");
   const createPost = (slug, title) =>
@@ -213,6 +257,45 @@ export async function apiJourney(f) {
   await publish(alpha, "34a-alpha");
   const beta = await createPost("beta", "Published beta");
   await publish(beta, "34a-beta");
+  report("published navigation global and an unpublished navigation draft");
+  const navigations = await json(
+    "/api/v1/admin/models/navigation/entries",
+    admin,
+    200,
+    contracts.contentEntryListSchema,
+  );
+  const navigationEntry = await json(
+    `/api/v1/admin/entries/${navigations.items[0].id}`,
+    admin,
+    200,
+    contracts.adminContentEntrySchema,
+  );
+  const navigationBlock = (blogLabel) => ({
+    key: "navigation-one",
+    type: "navigation",
+    schemaVersion: 1,
+    position: 1000,
+    data: {
+      name: "Main",
+      links: [
+        { label: "Home", url: "/" },
+        { label: blogLabel, children: [{ label: "Alpha", url: "/blog/alpha" }] },
+      ],
+    },
+  });
+  const navigation = await save(navigationEntry.id, {
+    expectedRevision: navigationEntry.draft.revision,
+    title: navigationEntry.draft.title,
+    fields: {},
+    blocks: [navigationBlock("Blog")],
+  });
+  await publish(navigation, "34a-navigation");
+  await save(navigation.id, {
+    expectedRevision: navigation.draft.revision,
+    title: navigation.draft.title,
+    fields: {},
+    blocks: [navigationBlock("DRAFT ONLY NAV")],
+  });
   const duplicate = await createPost("alpha", "UNPUBLISHED ROUTE CONFLICT");
   const conflict = await json(
     `/api/v1/admin/entries/${duplicate.id}/publish`,
@@ -277,9 +360,9 @@ export async function apiJourney(f) {
   const exportedResponse = await f.call("/api/v1/public/build-export", { headers: authorization });
   assert.equal(exportedResponse.status, 200);
   const exported = parse(contracts.buildExportSchema, await exportedResponse.json());
-  assert.equal(exported.version, 5);
+  assert.equal(exported.version, 6);
   const tag = exportedResponse.headers.get("etag");
-  assert.equal(tag, '"5"');
+  assert.equal(tag, '"6"');
   for (const etag of [tag, `W/${tag}`]) {
     const unchanged = await f.call("/api/v1/public/build-export", {
       headers: { ...authorization, "if-none-match": etag },
@@ -324,7 +407,8 @@ export async function apiJourney(f) {
     200,
     contracts.mediaDetailSchema,
   );
-  assert.equal(used.usageCount, 1);
+  // The home image and the about gallery's nested items reference the cover.
+  assert.equal(used.usageCount, 2);
   report("safe failed build and retry receipt");
   // Exhaust the existing retry budget with controlled local time availability.
   for (let attempt = 0; attempt < 12; attempt++) await f.dispatch();
@@ -343,7 +427,7 @@ export async function apiJourney(f) {
     202,
     contracts.buildQueueReceiptSchema,
   );
-  assert.equal(retry.targetVersion, 5);
+  assert.equal(retry.targetVersion, 6);
   for (const role of ["editor", "viewer"])
     await denied("/api/v1/admin/builds", { cookie: f.cookies[role], method: "POST", json: {} });
   const site = await createPublishedSiteLoader({
@@ -358,6 +442,8 @@ export async function apiJourney(f) {
     }
   const canonical = canonicalSite(site, cover.id);
   assert.deepEqual(canonical, expected.site);
+  const globals = canonicalGlobals(site, cover.id);
+  assert.deepEqual(globals, expected.publishedGlobals);
   assert.deepEqual(canonicalMedia(site, cover.id, "https://media.34a.test/"), expected.media);
-  return { token: issued.token, cover: cover.id, homeId: home.id, canonical };
+  return { token: issued.token, cover: cover.id, homeId: home.id, canonical, globals };
 }

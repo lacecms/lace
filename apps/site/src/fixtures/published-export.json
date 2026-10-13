@@ -47,6 +47,21 @@
           "type": "hero"
         },
         {
+          "data": {
+            "links": [
+              {
+                "label": "Get started",
+                "url": "#get-started"
+              }
+            ],
+            "name": "On this page"
+          },
+          "key": "home-navigation",
+          "position": 1,
+          "schemaVersion": 1,
+          "type": "navigation"
+        },
+        {
           "anchor": "get-started",
           "className": "cta--highlight",
           "data": {
@@ -74,7 +89,7 @@
             "heading": "Ready for your content"
           },
           "key": "home-cta",
-          "position": 1,
+          "position": 2,
           "schemaVersion": 1,
           "type": "cta"
         }
@@ -201,6 +216,25 @@
           "position": 2,
           "schemaVersion": 1,
           "type": "quote"
+        },
+        {
+          "data": {
+            "images": [
+              {
+                "media": "post-media"
+              },
+              {
+                "alt": "A quiet desk",
+                "caption": "The note desk",
+                "media": "note-media"
+              }
+            ],
+            "title": "From the studio"
+          },
+          "key": "post-gallery",
+          "position": 3,
+          "schemaVersion": 1,
+          "type": "gallery"
         }
       ],
       "fields": {
@@ -289,6 +323,46 @@
     }
   ],
   "globals": [
+    {
+      "blocks": [
+        {
+          "data": {
+            "links": [
+              {
+                "label": "Home",
+                "url": "/"
+              },
+              {
+                "label": "About",
+                "url": "/about"
+              },
+              {
+                "children": [
+                  {
+                    "label": "First post",
+                    "url": "/blog/first-post"
+                  },
+                  {
+                    "label": "First note",
+                    "url": "/notes/first-note"
+                  }
+                ],
+                "label": "Writing"
+              }
+            ],
+            "name": "Main"
+          },
+          "key": "site-navigation",
+          "position": 0,
+          "schemaVersion": 1,
+          "type": "navigation"
+        }
+      ],
+      "fields": {},
+      "id": "navigation-entry",
+      "modelKey": "navigation",
+      "publishedAt": "2026-09-20T00:00:00.000Z"
+    },
     {
       "blocks": [],
       "fields": {

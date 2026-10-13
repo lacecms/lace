@@ -8,6 +8,87 @@ import { runCommand } from "../dist/commands.js";
 const cwd = resolve(import.meta.dirname, "../../..");
 const command = (name, check = false) => ({ command: name, target: "node", check, json: true });
 
+test("nested sync check reports schema/value paths without writes", async () => {
+  const root = join(cwd, ".lace-acceptance");
+  await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, "cli-nested-sync-"));
+  const environment = { databasePath: join(directory, "lace.sqlite") };
+  const project = async (name, version, child) => {
+    const path = join(directory, name);
+    await mkdir(path);
+    await writeFile(
+      join(path, "lace.config.ts"),
+      `import { defineConfig, defineCollection } from '@lacecms/config'; import { field } from '@lacecms/content'; export default await defineConfig({blocks:[],content:[defineCollection({key:'posts',route:'/blog/:slug',version:${version},blocks:[],fields:{links:field.list({item:field.group({fields:{${child}}})})}})]});`,
+    );
+    return path;
+  };
+  const sql = (statement, ...params) => {
+    const database = openNodeDatabase(environment.databasePath);
+    try {
+      const prepared = database.connection.prepare(statement);
+      return prepared.reader ? prepared.all(...params) : prepared.run(...params);
+    } finally {
+      database.connection.close();
+    }
+  };
+  const state = () =>
+    [
+      "content_models",
+      "content_snapshots",
+      "content_media_references",
+      "published_state",
+      "outbox_events",
+    ].map((table) => sql(`select * from ${table} order by 1`));
+  try {
+    const old = await project("old", 1, "headline:field.text()");
+    await runCommand(command("db migrate"), environment, old);
+    await runCommand(command("content sync"), environment, old);
+    sql(
+      "insert into content_entries(id,model_key,created_by,created_at,updated_at) values('e','posts','editor',1,1)",
+    );
+    sql(
+      "insert into content_snapshots(id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values('s','e',1,'Nested',?,1,1,1,'editor')",
+      JSON.stringify({ links: [{ headline: "Long title" }] }),
+    );
+    sql("update content_entries set draft_snapshot_id='s' where id='e'");
+    const invalid = await project(
+      "invalid",
+      2,
+      "title:field.text({renamedFrom:'headline',maxLength:2})",
+    );
+    const before = state();
+    const blocked = await runCommand(command("content sync", true), environment, invalid);
+    expect(blocked.code).toBe("SYNC_PENDING");
+    expect(blocked.exitCode).toBe(2);
+    expect(blocked.data.isValid).toBe(false);
+    expect((await runCommand(command("content sync"), environment, invalid)).code).toBe(
+      "SYNC_BLOCKED",
+    );
+    expect(blocked.message).toContain("/links/*/title");
+    expect(blocked.message).toContain("/fields/links/0/title");
+    expect(blocked.data.diagnostics).toContainEqual(
+      expect.objectContaining({ schemaPath: "/links/*/title" }),
+    );
+    expect(state()).toEqual(before);
+    const valid = await project("valid", 2, "title:field.text({renamedFrom:'headline'})");
+    expect((await runCommand(command("content sync", true), environment, valid)).code).toBe(
+      "SYNC_PENDING",
+    );
+    expect(state()).toEqual(before);
+    expect((await runCommand(command("content sync"), environment, valid)).code).toBe(
+      "SYNC_APPLIED",
+    );
+    expect(JSON.parse(sql("select fields_json from content_snapshots")[0].fields_json)).toEqual({
+      links: [{ title: "Long title" }],
+    });
+    expect((await runCommand(command("content sync", true), environment, valid)).code).toBe(
+      "SYNC_CURRENT",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test("operational Node migration, no-write check, sync, and bootstrap", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lace-cli-commands-"));
   const environment = { databasePath: join(directory, "lace.sqlite") };

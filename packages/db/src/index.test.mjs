@@ -11,6 +11,7 @@ import {
   packageName,
   checkedInMigrations,
   configurationSyncMigrationStatements,
+  configurationSyncSnapshotRewriteStatements,
   configurationSyncWriteStatements,
   mediaMetadata,
   mediaMetadataUpdateParams,
@@ -465,15 +466,15 @@ test("maps migration scan rows into ordered entries", () => {
       { draft_snapshot_id: "d2", id: "e2", published_snapshot_id: null },
     ],
     [
-      { id: "d1", revision: 2, title: "One" },
-      { id: "p1", revision: 2, title: "One" },
-      { id: "d2", revision: 1, title: "Two" },
+      { id: "d1", fields_json: "{}", revision: 2, title: "One" },
+      { id: "p1", fields_json: "{}", revision: 2, title: "One" },
+      { id: "d2", fields_json: "{}", revision: 1, title: "Two" },
     ],
     [
       {
         block_key: "b2",
         block_type: "hero",
-        data_json: null,
+        data_json: "{}",
         hidden: 1,
         position: 2,
         schema_version: 1,
@@ -505,7 +506,7 @@ test("maps migration scan rows into ordered entries", () => {
       settings: { tone: "dark" },
       type: "note",
     },
-    { hidden: true, key: "b2", position: 2, schemaVersion: 1, type: "hero" },
+    { data: {}, hidden: true, key: "b2", position: 2, schemaVersion: 1, type: "hero" },
   ]);
   expect(page.items[0].published.references).toEqual([
     { fieldPath: "image", mediaId: "m1", sourceKey: "b1" },
@@ -513,6 +514,7 @@ test("maps migration scan rows into ordered entries", () => {
   expect(page.items[1]).toEqual({
     draft: {
       blocks: [],
+      fields: {},
       references: [],
       revision: 1,
       snapshotId: "d2",
@@ -630,4 +632,57 @@ test("maps stored block envelopes and drops hidden blocks from public entries", 
   });
   expect(projected.published.blocks.map((block) => block.key)).toEqual(["b1"]);
   expect(projected.draft.blocks.map((block) => block.key)).toEqual(["b1"]);
+});
+
+test("exact snapshot rewrite binds IDs/paths, preserves JSON types and other sources", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec(`create table content_entries(id text primary key, model_key text);
+      create table content_snapshots(id text primary key, entry_id text, fields_json text, revision integer, updated_at integer);
+      create table content_media_references(snapshot_id text, source_key text, field_path text, media_id text, created_at integer);
+      insert into content_entries values('e','posts'),('other','elsewhere');
+      insert into content_snapshots values('s','e','{}',7,42),('outside','other','{}',7,42);
+      insert into content_media_references values('s','$fields','old','old',1),('s','$seo','image','keep',1),('s','block','image','keep',1);`);
+    const row = {
+      id: "s",
+      fields: { nested: { bool: true, number: 1.5, array: [null, "x", {}] } },
+      references: [{ fieldPath: "/nested/image", mediaId: "media'quoted" }],
+    };
+    const statements = configurationSyncSnapshotRewriteStatements(
+      [row, { ...row, id: "outside" }, { ...row, id: "s'); drop table content_snapshots; --" }],
+      "posts",
+    );
+    expect(statements).toHaveLength(3);
+    for (const statement of statements) database.prepare(statement.sql).run(...statement.params);
+    expect(
+      JSON.parse(
+        database.prepare("select fields_json from content_snapshots where id='s'").get()
+          .fields_json,
+      ),
+    ).toEqual(row.fields);
+    expect(
+      database.prepare("select revision,updated_at from content_snapshots where id='s'").get(),
+    ).toEqual({ revision: 7, updated_at: 42 });
+    expect(
+      database.prepare("select fields_json from content_snapshots where id='outside'").get()
+        .fields_json,
+    ).toBe("{}");
+    expect(
+      database
+        .prepare(
+          "select source_key,field_path,media_id from content_media_references order by source_key",
+        )
+        .all(),
+    ).toEqual([
+      { source_key: "$fields", field_path: "/nested/image", media_id: "media'quoted" },
+      { source_key: "$seo", field_path: "image", media_id: "keep" },
+      { source_key: "block", field_path: "image", media_id: "keep" },
+    ]);
+    expect(() => configurationSyncSnapshotRewriteStatements([row, row], "posts")).toThrow(
+      /Duplicate/,
+    );
+    expect(configurationSyncSnapshotRewriteStatements([], "posts")).toEqual([]);
+  } finally {
+    database.close();
+  }
 });

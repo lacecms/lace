@@ -51,8 +51,10 @@ test("the bundled registry matches the repository registry and lists the built-i
   const loaded = await loadRegistry();
   expect(frameworkItems(loaded, "astro").map((item) => item.name)).toEqual([
     "cta",
+    "gallery",
     "hero",
     "image",
+    "navigation",
     "quote",
     "richText",
   ]);

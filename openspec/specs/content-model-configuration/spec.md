@@ -13,17 +13,18 @@ The system SHALL let configuration code define page and collection models with
 stable lowercase kebab-case keys, a positive integer version, optional display
 label and description, typed field descriptors, allowed block-type keys, an
 optional explicit `renamedFrom` key, and the optional temporary
-synchronization hints `removedFields` (field keys) and `removedBlocks` (block
-types). A model field MAY declare a field-level `renamedFrom` hint naming its
-former field key. A page SHALL contain one fixed path; a collection SHALL
+synchronization hints `removedFields` (root field keys or nested schema paths)
+and `removedBlocks` (block types). A model field MAY declare a field-level
+`renamedFrom` hint naming its former sibling field key. A page SHALL contain one fixed path; a collection SHALL
 contain one route pattern. The configuration result SHALL preserve field value
 inference, reject malformed definitions, reject duplicate model keys and
 duplicate `renamedFrom` sources, and reject every allowed block type not
 present in the supplied block registry. It SHALL reject a field rename hint
-that names the field's own key, a configured field key, or a former key that
-another field of the model also names. It SHALL reject a `removedFields` entry
-that is not a valid field key, is repeated, is a configured field key, or is a
-field rename source, and a `removedBlocks` entry that is not a valid block
+that names the field's own key, a configured sibling field key, or a former key that
+another field of the same sibling map also names. It SHALL reject a
+`removedFields` entry that is not a valid root key or nested schema path, is
+repeated after normalization, is a configured field address, or is a field
+rename source, and a `removedBlocks` entry that is not a valid block
 type, is repeated, or is an allowed block type of the model. A removed block
 type need not be registered. All `renamedFrom`, `removedFields` and
 `removedBlocks` values SHALL be treated as temporary metadata for an explicit
@@ -111,11 +112,13 @@ allowed blocks, with the `label` and `description` display properties removed
 only from the model, from each field definition, from each block definition,
 and from each block field definition. Field keys, block field keys, and keys
 inside default values SHALL be preserved even when they are named `label` or
-`description`. Structural hashes SHALL exclude a collection's `listFields`
+`description` or `itemLabel`. A list descriptor's optional `itemLabel` SHALL also be removed only at descriptor positions;
+field keys and default-value keys named `itemLabel` SHALL remain structural.
+Structural hashes SHALL exclude a collection's `listFields`
 presentation metadata and the temporary synchronization hints (`renamedFrom`
 on a model or a field, `removedFields`, `removedBlocks`); projection hashes
 SHALL include the complete serializable normalized definition, including
-`listFields`, except those hints. Normalized field definitions SHALL NOT
+`listFields` and list `itemLabel`, except those hints. Normalized field definitions SHALL NOT
 contain the field `renamedFrom` hint. Each runtime model SHALL carry its
 temporary hints, its detached canonical structure and, when it differs from
 the structural hash, the structural hash produced by the earlier rule that
@@ -330,3 +333,77 @@ any value other than `true`.
 #### Scenario: Reject the hint while SEO is enabled
 - **WHEN** a model declares both `seo: true` and `removedSeo: true`
 - **THEN** configuration normalization fails
+
+### Requirement: Composite metadata and identity remain portable and compatible
+Pages, collections and globals SHALL accept validated composites in their model
+fields and block data. The runtime and public projections SHALL retain recursive
+metadata. Structural identity SHALL exclude display labels/descriptions and list `itemLabel` at every
+descriptor position and preserve child keys and all default-value keys, including
+`label`, `description` and `itemLabel`. Nested display-only changes SHALL be projection-only.
+Scalar-only configurations SHALL keep their hashes and encodings. Collection
+listFields and SEO mappings SHALL remain restricted to their existing supported
+root scalar fields; composites and nested paths SHALL be refused there.
+
+#### Scenario: Nested display change
+- **WHEN** only a group child's label or list item's description changes
+- **THEN** the structural hash stays equal and the projection hash changes
+
+#### Scenario: Content keys remain structural
+- **WHEN** a child field named `label` or a default object property named `description` changes
+- **THEN** the structural hash changes and the key remains in the canonical structure
+
+#### Scenario: Scalar hash compatibility
+- **WHEN** the pre-CE7A scalar-only configuration fixtures are normalized
+- **THEN** their canonical values, structural hashes and projection hashes remain unchanged
+
+#### Scenario: Scalar-only presentation options
+- **WHEN** listFields or an SEO fallback mapping names a group, list or nested path
+- **THEN** configuration refuses the option before startup
+
+### Requirement: Nested model synchronization hints use schema paths
+Model field normalization SHALL accept `renamedFrom` on every named root or group child field, including group children reached through lists. It SHALL name a former sibling key, never a path or index. Internal rename mappings SHALL use root keys for root fields and absolute schema pointers for descendants. Model `removedFields` SHALL accept legacy root keys and absolute schema pointers whose named segments obey the field-key grammar and whose `*` segment selects every list item. `/links/*/legacy` SHALL select `legacy` in every group item of `links`; `/profile/legacy` SHALL select a group child. `/title` and `title` SHALL normalize to the same root address. An item itself SHALL NOT be a removal target.
+
+Hints SHALL be temporary synchronization input, recursively absent from admin/public field metadata, runtime field descriptors, structural identity and projection identity; runtime model synchronization mappings SHALL retain them. Duplicate normalized paths, configured removal targets, shared rename sources within one sibling map, self-renames and rename-source/removal overlap SHALL fail before startup. Invalid path grammar, indices, misplaced wildcards and cross-parent rename paths SHALL be rejected. Removal paths SHALL be resolved against the paired baseline/configuration during planning; a valid path absent from the baseline SHALL be inert, while traversing a known non-container or using `*` at a known non-list SHALL be invalid.
+
+Nested removal paths SHALL use configured ancestor names. The planner SHALL map renamed ancestors to baseline names before evaluating child hints. Overlapping ancestor/descendant removals SHALL be rejected as redundant; a removal below a renamed ancestor SHALL be permitted. Nested hints on a newly added ancestor SHALL be rejected because there is no former sibling context. Already-applied hints SHALL be inert under the existing baseline rules.
+
+#### Scenario: Rename and remove in every list item
+- **WHEN** `links` has group children `title` renamed from `headline` and omits `legacy`, and the model declares `removedFields: ["/links/*/legacy"]`
+- **THEN** normalization retains the two synchronization paths, strips the child hint from all projected descriptors and leaves data/default keys intact
+
+#### Scenario: Preserve root compatibility
+- **WHEN** a model uses the existing root `renamedFrom` and `removedFields: ["legacy"]` syntax
+- **THEN** its normalized hints and scalar configuration hashes remain compatible
+
+#### Scenario: Reject ambiguous addresses
+- **WHEN** hints use `/links/0/title`, `/links/*`, `profile.title`, a cross-parent rename, duplicate `title` and `/title` removals or a rename source also removed
+- **THEN** normalization refuses the hints and names the offending path
+
+#### Scenario: Parent and child rename
+- **WHEN** `cards` is renamed from `links` and its child `title` is renamed from `headline`, with removal `/cards/*/legacy`
+- **THEN** planning pairs the ancestors first and resolves both child operations against former `links` items
+
+#### Scenario: Repeat with retained hints
+- **WHEN** synchronization already applied those nested hints and an unrelated structural change is planned
+- **THEN** the retained hints do not repeat the rewrite or cause a missing-source diagnostic
+
+### Requirement: List item labels are projection-only metadata
+Valid list `itemLabel` metadata SHALL survive runtime, admin and public metadata
+projection in model fields and block data at any permitted depth. Adding,
+changing or removing it SHALL change projection identity only, without a
+model/block version bump, content migration or content write. Structural
+canonicalization SHALL remove it only at list descriptor positions, preserving
+field keys and default data named `itemLabel`. Configurations without this
+option SHALL retain existing encodings and hashes.
+
+#### Scenario: Display change inside block data
+- **WHEN** a block's nested group-valued list changes itemLabel from title to caption without a version change
+- **THEN** model and whole-configuration structural hashes remain equal, projection hashes change and synchronization accepts a projection-only update
+
+#### Scenario: Preserve content keys
+- **WHEN** a group child named itemLabel changes its constraints or a default object's itemLabel value changes
+- **THEN** structural identity changes and those keys remain in the canonical structure
+
+#### Scenario: Existing configuration compatibility
+- **WHEN** scalar and composite fixtures without itemLabel are normalized
+- **THEN** their existing hashes and metadata encodings remain unchanged

@@ -1,4 +1,6 @@
 import type { ContentBlockDto, ContentModelDto } from "@lacecms/contracts";
+import type { FieldMetadata } from "@lacecms/content";
+import { locationField } from "./editor-form.js";
 import type { FieldErrors } from "react-hook-form";
 import { fieldLabel } from "./draft.js";
 import type { DraftEditorValues } from "./editor-form.js";
@@ -70,6 +72,67 @@ export function blockLevelProblems(
     }
   }
   return messages;
+}
+
+function recursiveProblems(
+  definition: FieldMetadata | undefined,
+  value: unknown,
+  name: string,
+  label: string,
+  hidden = false,
+): ValidationProblem[] {
+  if (value === null || typeof value !== "object") return [];
+  const entries = value as Record<string, unknown>;
+  const problems: ValidationProblem[] = [];
+  const message = messageOf(value);
+  if (message)
+    problems.push({
+      blocking: !(hidden && isPublicationOnly(value)),
+      id: name,
+      label,
+      message,
+      target: definition
+        ? { kind: "control", id: fieldControlId(name as `fields.${string}`) }
+        : undefined,
+    });
+  if (definition?.type === "group")
+    for (const [key, child] of Object.entries(definition.fields))
+      problems.push(
+        ...recursiveProblems(
+          child,
+          entries[key],
+          `${name}.${key}`,
+          `${fieldLabel(key, child.label)} in ${label}`,
+          hidden,
+        ),
+      );
+  if (definition?.type === "list")
+    for (const key of Object.keys(value)
+      .filter((key) => /^(0|[1-9]\d*)$/u.test(key))
+      .sort((a, b) => Number(a) - Number(b)))
+      problems.push(
+        ...recursiveProblems(
+          definition.item,
+          entries[key],
+          `${name}.${key}`,
+          `Item ${Number(key) + 1} in ${label}`,
+          hidden,
+        ),
+      );
+  if (definition?.type === "group")
+    for (const key of Object.keys(value)) {
+      if (!["message", "type", "ref"].includes(key) && !Object.hasOwn(definition.fields, key))
+        problems.push(
+          ...recursiveProblems(
+            undefined,
+            entries[key],
+            `${name}.${key}`,
+            `${fieldLabel(key, undefined)} in ${label}`,
+            hidden,
+          ),
+        );
+    }
+  return problems;
 }
 
 /**
@@ -156,6 +219,13 @@ export function validationProblems({
       ["envelope-className", "CSS classes", error.className, `blocks.${index}.className`],
     ];
     for (const [id, label, value, name] of controls) {
+      const definition = locationField(name, model, blocks);
+      if (definition?.type === "group" || definition?.type === "list") {
+        problems.push(
+          ...recursiveProblems(definition, value, name, `${label} in ${blockName}`, block.hidden),
+        );
+        continue;
+      }
       const message = messageOf(value);
       if (message === undefined) continue;
       problems.push({
@@ -179,16 +249,37 @@ export function validationProblems({
     });
   const fieldErrors = (errors.fields ?? {}) as Messages;
   for (const [key, field] of Object.entries(model.fields)) {
-    const message = messageOf(fieldErrors[key]);
-    if (message === undefined) continue;
+    if (field.type === "group" || field.type === "list") {
+      problems.push(
+        ...recursiveProblems(
+          field,
+          fieldErrors[key],
+          `fields.${key}`,
+          fieldLabel(key, field.label),
+        ),
+      );
+    } else {
+      const message = messageOf(fieldErrors[key]);
+      if (message)
+        problems.push({
+          blocking: true,
+          id: `field-${key}`,
+          label: fieldLabel(key, field.label),
+          message,
+          target: { id: fieldControlId(`fields.${key}`), kind: "control" },
+        });
+    }
+  }
+  const fieldRoot = messageOf(fieldErrors.root);
+  if (fieldRoot)
     problems.push({
       blocking: true,
-      id: `field-${key}`,
-      label: fieldLabel(key, field.label),
-      message,
-      target: { id: fieldControlId(`fields.${key}`), kind: "control" },
+      id: "fields-root",
+      label: "Fields",
+      message: fieldRoot,
+      target: { kind: "control", id: "entry-fields-title" },
     });
-  }
+
   const seoErrors = (errors.seo ?? {}) as Messages;
   for (const control of SEO_CONTROLS) {
     const message = messageOf(seoErrors[control.key]);

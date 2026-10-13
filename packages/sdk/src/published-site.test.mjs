@@ -727,3 +727,30 @@ test("published blocks carry their envelope and legacy blocks default their sett
     createPublishedSiteLoader({ environment, fetch: hidden.fetch })(),
   ).rejects.toBeInstanceOf(LaceSdkError);
 });
+
+test("published-site preserves nested fields, empty composites and nested media IDs", async () => {
+  const fields = { team: [{ profile: { photo: "portrait" } }], empty: {}, tags: [] };
+  const exported = buildExport(
+    1,
+    [
+      exportEntry({
+        id: "nested",
+        path: "/blog/nested",
+        slug: "nested",
+        fields,
+        blocks: [block("b", 0, { images: ["portrait"] })],
+      }),
+    ],
+    { portrait: mediaItem("portrait") },
+  );
+  exported.globals = [exportGlobal({ fields })];
+  const site = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([exportResponse(exported)]).fetch,
+  })();
+  const entry = site.byPath("/blog/nested");
+  expect(entry.fields).toEqual(fields);
+  expect(entry.blocks[0].data.images).toEqual(["portrait"]);
+  expect(entry.image(entry.fields.team[0].profile.photo)).toMatchObject({ id: "portrait" });
+  expect(site.global("settings").fields).toEqual(fields);
+});

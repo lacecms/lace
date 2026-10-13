@@ -1,5 +1,10 @@
 import type { ContentModelStructure, NormalizedContentModel } from "@lacecms/config";
-import { canonicalizeJson, validateModelFields } from "@lacecms/content";
+import {
+  canonicalizeJson,
+  schemaFieldAt,
+  parseSchemaPath,
+  validateModelFields,
+} from "@lacecms/content";
 import type { BlockDefinition, BlockRegistry, JsonObject, JsonValue } from "@lacecms/content";
 import {
   DomainError,
@@ -29,6 +34,7 @@ import {
 import type {
   ConfigurationSyncEvidence,
   ConfigurationSyncScanRequest,
+  ConfigurationSyncSnapshot,
   ConfigurationSyncSnapshotPage,
   ConfigurationSyncSnapshotReference,
   ModelSnapshotEvidence,
@@ -104,6 +110,7 @@ export interface ConfigurationSyncChange {
   readonly properties?: readonly string[];
   readonly scope: StructuralChange["scope"];
   readonly target: string;
+  readonly schemaPath?: string;
   /** Stored values that do not satisfy a validated change. */
   readonly violations?: number;
 }
@@ -112,6 +119,7 @@ export interface ConfigurationSyncChange {
 export interface ConfigurationSyncEvolution {
   /** Field keys whose configured defaults are written into snapshots lacking them. */
   readonly backfills: readonly string[];
+  readonly recursiveFields?: true;
   /** Hinted block types whose stored blocks are dropped; present when non-empty. */
   readonly blockRemovals?: readonly string[];
   readonly changes: readonly ConfigurationSyncChange[];
@@ -213,6 +221,7 @@ export interface ConfigurationSyncDiagnostic {
   readonly changeClass?: StructuralChangeClass;
   readonly code: ConfigurationSyncDiagnosticCode;
   readonly fieldKey?: string;
+  readonly schemaPath?: string;
   readonly message: string;
   readonly modelKey: ContentModelKey;
   readonly relatedModelKey?: ContentModelKey;
@@ -387,7 +396,12 @@ function diagnostic(
     ...(values.blockType === undefined ? {} : { blockType: values.blockType }),
     ...(values.changeClass === undefined ? {} : { changeClass: values.changeClass }),
     code,
-    ...(values.fieldKey === undefined ? {} : { fieldKey: values.fieldKey }),
+    ...(values.fieldKey === undefined
+      ? {}
+      : {
+          fieldKey: values.fieldKey,
+          ...(values.fieldKey.startsWith("/") ? { schemaPath: values.fieldKey } : {}),
+        }),
     message,
     modelKey: contentModelKey(modelKey),
     ...(values.relatedModelKey === undefined
@@ -462,6 +476,9 @@ function undecidedChange(change: StructuralChange): ConfigurationSyncChange {
     ...(change.properties === undefined ? {} : { properties: change.properties }),
     scope: change.scope,
     target: change.target,
+    ...(change.scope === "field" && change.target.startsWith("/")
+      ? { schemaPath: change.target }
+      : {}),
   });
 }
 
@@ -513,6 +530,13 @@ function decideEvolution(
     context.scanRequests.push(
       Object.freeze({
         changes,
+        blockFields: Object.fromEntries(
+          ((current.structure?.blockDefinitions ?? []) as readonly JsonObject[]).map((block) => [
+            block.type as string,
+            block.fields as unknown as typeof current.fields,
+          ]),
+        ),
+        storedFields: stored.structure?.fields as unknown as typeof current.fields,
         fields: current.fields,
         fingerprint,
         ...(migrations.length === 0 ? {} : { migrations: Object.freeze(migrations) }),
@@ -723,11 +747,38 @@ function decideEvolution(
     if (change.backfill === true) {
       backfill = evidence?.backfills[change.target] ?? Object.freeze({ draft: 0, published: 0 });
       if (total(backfill) > 0) {
-        if (current.fields[change.target]?.type === "media") {
+        const invalidDefault = evidence?.violations[change.target];
+        if (
+          change.class !== "validated" &&
+          invalidDefault !== undefined &&
+          invalidDefault.count > 0
+        )
+          refuse(
+            "CONSTRAINT_VIOLATED",
+            `Model ${modelKey} default for ${change.target} is invalid for stored snapshots.`,
+            {
+              affectedCount: invalidDefault.count,
+              changeClass: change.class,
+              fieldKey,
+              snapshots: invalidDefault.snapshots,
+            },
+          );
+        if (
+          current.fields[change.target]?.type === "media" ||
+          (evidence?.mediaBackfills?.[change.target]?.count ?? 0) > 0
+        ) {
           refuse(
             "MEDIA_DEFAULT_BACKFILL_UNSUPPORTED",
             `Model ${modelKey} declares a default for media field ${change.target}, which cannot be backfilled into ${total(backfill)} snapshots; remove the default or add the field without one.`,
-            { affectedCount: total(backfill), changeClass: change.class, fieldKey },
+            {
+              affectedCount: total(backfill),
+              changeClass: change.class,
+              fieldKey,
+              ...(evidence?.mediaBackfills?.[change.target] === undefined ||
+              (current.fields[change.target]?.type === "media" && !change.target.startsWith("/"))
+                ? {}
+                : { snapshots: evidence.mediaBackfills[change.target]!.snapshots }),
+            },
           );
         } else {
           backfills.push(change.target);
@@ -746,6 +797,9 @@ function decideEvolution(
         ...(change.properties === undefined ? {} : { properties: change.properties }),
         scope: change.scope,
         target: change.target,
+        ...(change.scope === "field" && change.target.startsWith("/")
+          ? { schemaPath: change.target }
+          : {}),
         ...(violations === undefined ? {} : { violations }),
       }),
     );
@@ -753,13 +807,25 @@ function decideEvolution(
   if (evidence !== undefined && evidence.oversized.count > 0) {
     refuse(
       "BACKFILL_EXCEEDS_LIMIT",
-      `Model ${modelKey} field rewrites would push ${evidence.oversized.count} snapshots above the content size limit.`,
-      { affectedCount: evidence.oversized.count, snapshots: evidence.oversized.snapshots },
+      `Model ${modelKey} field rewrites would push ${evidence.oversized.count} snapshots above the content size, list-element or media-reference limit.`,
+      {
+        affectedCount: evidence.oversized.count,
+        snapshots: evidence.oversized.snapshots,
+        fieldKey: changes.find(
+          (change) => change.scope === "field" && change.target.startsWith("/"),
+        )?.target,
+      },
     );
   }
   return {
     evolution: Object.freeze({
       backfills: Object.freeze(backfills.sort()),
+      ...([
+        ...Object.values(current.fields),
+        ...Object.values((stored.structure?.fields ?? {}) as unknown as typeof current.fields),
+      ].some((field) => field.type === "group" || field.type === "list")
+        ? { recursiveFields: true as const }
+        : {}),
       ...(blockRemovals.length === 0 ? {} : { blockRemovals: Object.freeze(blockRemovals.sort()) }),
       changes: Object.freeze(decided),
       ...(fieldRemovals.length === 0 ? {} : { fieldRemovals: Object.freeze(fieldRemovals.sort()) }),
@@ -1131,7 +1197,7 @@ export function configurationSyncBackfills(
 ): readonly { readonly fieldKey: string; readonly json: string }[] {
   if (operation.action !== "version-update" && operation.action !== "rename") return [];
   return (operation.evolution?.backfills ?? []).map((fieldKey) => {
-    const definition = model.fields[fieldKey];
+    const definition = schemaFieldAt(model.fields, parseSchemaPath(fieldKey));
     if (definition?.defaultValue === undefined) {
       throw new DomainError(
         "CONTENT_INVALID_STATE",
@@ -1157,20 +1223,27 @@ export function configurationSyncContentWrites(
   const evolution = operation.evolution;
   if (evolution === undefined) return [];
   return Object.freeze([
-    ...(evolution.renames ?? []).map((rename) =>
+    ...(evolution.recursiveFields ? [] : (evolution.renames ?? [])).map((rename) =>
       Object.freeze({ action: "rename-field" as const, from: rename.from, to: rename.to }),
     ),
-    ...(evolution.fieldRemovals ?? []).map((fieldKey) =>
+    ...(evolution.recursiveFields ? [] : (evolution.fieldRemovals ?? [])).map((fieldKey) =>
       Object.freeze({ action: "remove-field" as const, fieldKey }),
     ),
     ...(evolution.blockRemovals ?? []).map((blockType) =>
       Object.freeze({ action: "remove-block-type" as const, blockType }),
     ),
     ...(evolution.seoRemoval === true ? [Object.freeze({ action: "remove-seo" as const })] : []),
-    ...configurationSyncBackfills(operation, model).map((backfill) =>
-      Object.freeze({ action: "backfill-field" as const, ...backfill }),
+    ...(evolution.recursiveFields ? [] : configurationSyncBackfills(operation, model)).map(
+      (backfill) => Object.freeze({ action: "backfill-field" as const, ...backfill }),
     ),
   ]);
+}
+
+/** Exact prepared model-field replacement, independent of SQL and executable migrations. */
+export interface ConfigurationSyncSnapshotRewrite {
+  readonly id: string;
+  readonly fields: JsonObject;
+  readonly references: readonly { readonly fieldPath: string; readonly mediaId: string }[];
 }
 
 /** Canonical baseline JSON an applied model write stores, or null without a structure. */
@@ -1338,7 +1411,51 @@ async function scanModel(
       limit: CONFIGURATION_SYNC_SCAN_PAGE_SIZE,
       modelKey: contentModelKey(request.modelKey),
     });
-    accumulator.add(page.items);
+    accumulator.add(
+      page.items.map((snapshot): ConfigurationSyncSnapshot => {
+        if (request.migrations === undefined || blocks === undefined) return snapshot;
+        const definitions = migrationDefinitions(blocks, request.migrations);
+        const migrationSnapshot = {
+          blocks: snapshot.blocks.map((block, position) => ({
+            ...block,
+            position,
+            data: block.data ?? {},
+            hidden: block.hidden ?? false,
+          })),
+          fields: snapshot.fields,
+          references: snapshot.references ?? [],
+          revision: snapshot.revision,
+          snapshotId: snapshot.snapshotId,
+          state: snapshot.state,
+          title: snapshot.title,
+        };
+        const planned = planEntryMigration(
+          { entryId: snapshot.entryId, [snapshot.state]: migrationSnapshot },
+          definitions,
+          contentSyncActor.id,
+          {
+            fields: request.storedFields ?? request.fields,
+            blocks: new Map(blocks.blocks.map((block) => [block.type, block])),
+          },
+        );
+        const rewrite = planned.unit?.snapshots[0];
+        if (rewrite === undefined) return snapshot;
+        const rewritten = new Map(rewrite.blocks.map((block) => [block.key, block.data]));
+        return {
+          ...snapshot,
+          blocks: snapshot.blocks.map((block) => ({
+            ...block,
+            data: rewritten.get(block.key) ?? block.data ?? {},
+          })),
+          references: [
+            ...(snapshot.references ?? []).filter(
+              (reference) => !rewritten.has(reference.sourceKey),
+            ),
+            ...rewrite.references,
+          ],
+        };
+      }),
+    );
     after = page.next;
   } while (after !== undefined);
   const evidence = accumulator.result();
@@ -1347,6 +1464,10 @@ async function scanModel(
   const migrations = createMigrationEvidenceAccumulator(
     migrationDefinitions(blocks, request.migrations),
     contentSyncActor.id,
+    {
+      fields: request.storedFields ?? request.fields,
+      blocks: new Map(blocks!.blocks.map((block) => [block.type, block])),
+    },
   );
   do {
     const page = await state.readConfigurationSyncMigrationEntries({
@@ -1503,9 +1624,11 @@ async function migrateStoredBlocks(
     readonly blocks: BlockRegistry | undefined;
     readonly clock: Clock;
     readonly target: ConfigurationSyncApplyPort & ConfigurationSyncStateReadPort;
+    readonly models: readonly NormalizedContentModel[];
   },
   planned: ReturnType<typeof plannedMigrations>,
 ): Promise<ConfigurationSyncMigrationCounts> {
+  const storedModels = await input.target.readConfigurationSyncState();
   let blocks = 0;
   let drafts = 0;
   let published = 0;
@@ -1521,7 +1644,17 @@ async function migrateStoredBlocks(
       });
       const units: ConfigurationSyncEntryMigration[] = [];
       for (const entry of page.items) {
-        const migration = planEntryMigration(entry, definitions, contentSyncActor.id);
+        const model = input.models.find(
+          (model) => model.key === modelKey || model.renamedFrom === modelKey,
+        );
+        const migration = planEntryMigration(entry, definitions, contentSyncActor.id, {
+          fields:
+            (storedModels.find((stored) => stored.key === modelKey)?.structure
+              ?.fields as unknown as NonNullable<typeof model>["fields"]) ??
+            model?.fields ??
+            {},
+          blocks: new Map(input.blocks!.blocks.map((block) => [block.type, block])),
+        });
         if (migration.findings.length > 0) {
           staleSynchronization(
             "Block migration results changed since planning; the synchronization plan is stale.",
@@ -1572,7 +1705,7 @@ export async function applyPreparedConfigurationSynchronization(input: {
   const planned = plannedMigrations(prepared.plan);
   if (planned.length > 0) {
     migrated = await migrateStoredBlocks(
-      { blocks: input.blocks, clock: input.clock, target: input.target },
+      { blocks: input.blocks, clock: input.clock, target: input.target, models: input.models },
       planned,
     );
     prepared = await prepareConfigurationSynchronization({

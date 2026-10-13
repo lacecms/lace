@@ -706,3 +706,214 @@ test("enabling SEO is structural while mappings and defaults are projection-only
   expect(enabledConfig.runtime.content[0].structure.seo).toBe(true);
   // Models without the option keep the hashes pinned by config.projection.fixture.json.
 });
+
+test("composite metadata identity strips only descriptor display properties", async () => {
+  const make = (label, defaultLabel = "value") =>
+    defineConfig({
+      blocks: [],
+      content: [
+        definePage({
+          key: "nested",
+          path: "/nested",
+          version: 1,
+          fields: {
+            cards: field.list({
+              item: field.group({
+                fields: { label: field.text({ label }), description: field.text() },
+                defaultValue: { label: defaultLabel, description: "content" },
+              }),
+            }),
+          },
+        }),
+      ],
+    });
+  const first = await make("First");
+  const display = await make("Second");
+  const content = await make("First", "changed");
+  expect(first.content[0].structureHash).toBe(display.content[0].structureHash);
+  expect(first.content[0].projectionHash).not.toBe(display.content[0].projectionHash);
+  expect(first.content[0].structureHash).not.toBe(content.content[0].structureHash);
+  expect(first.runtime.content[0].structure.fields.cards.item.fields).toHaveProperty("label");
+  expect(first.runtime.content[0].structure.fields.cards.item.defaultValue).toEqual({
+    label: "value",
+    description: "content",
+  });
+  expect(JSON.parse(JSON.stringify(first.public.content[0])).fields.cards.item.type).toBe("group");
+});
+
+test("composites stay out of scalar-only config options and block settings", () => {
+  const fields = {
+    group: field.group({ fields: { child: field.text() } }),
+    list: field.list({ item: field.text(), defaultValue: [] }),
+  };
+  for (const listFields of [["group"], ["list"], ["group.child"]])
+    expect(() =>
+      defineCollection({ key: "nested", version: 1, route: "/nested/:slug", fields, listFields }),
+    ).toThrow();
+  expect(() =>
+    definePage({
+      key: "nested",
+      version: 1,
+      path: "/nested",
+      fields,
+      seo: { description: "group" },
+    }),
+  ).toThrow();
+  expect(() =>
+    defineGlobal({ key: "nested", version: 1, fields, seoDefaults: { siteName: "list" } }),
+  ).toThrow();
+  for (const definition of Object.values(fields))
+    expect(() =>
+      defineBlock({ type: "nested", version: 1, fields: {}, settings: { value: definition } }),
+    ).toThrow(/select, boolean, number or text/u);
+  expect(() =>
+    definePage({
+      key: "bad",
+      path: "/bad",
+      version: 1,
+      fields: { group: { type: "group", fields: { child: { type: "wrong" } } } },
+    }),
+  ).toThrow();
+});
+
+test("whole configuration composite hashes preserve data keys called label and description", async () => {
+  const make = (label, text) =>
+    defineConfig({
+      blocks: [
+        defineBlock({
+          type: "nested",
+          version: 1,
+          fields: {
+            profile: field.group({
+              label,
+              fields: { label: field.text(), description: field.text() },
+              defaultValue: { label: text, description: "data" },
+            }),
+          },
+        }),
+      ],
+      content: [definePage({ key: "home", path: "/", version: 1, blocks: ["nested"] })],
+    });
+  const first = await make("First", "same");
+  const display = await make("Second", "same");
+  const changed = await make("First", "different");
+  expect(first.structureHash).toBe(display.structureHash);
+  expect(first.projectionHash).not.toBe(display.projectionHash);
+  expect(first.structureHash).not.toBe(changed.structureHash);
+});
+
+test("nested hints normalize to schema addresses and never enter projections", async () => {
+  const model = defineCollection({
+    key: "links",
+    route: "/links/:slug",
+    version: 2,
+    fields: {
+      cards: field.list({
+        renamedFrom: "links",
+        item: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline" }),
+            label: field.text({ defaultValue: "label" }),
+          },
+        }),
+      }),
+    },
+    removedFields: ["/cards/*/legacy"],
+  });
+  expect(model.renamedFields).toEqual({ cards: "links", "/cards/*/title": "/cards/*/headline" });
+  const config = await defineConfig({ blocks: [], content: [model] });
+  expect(config.runtime.content[0].fields.cards.item.fields.title).not.toHaveProperty(
+    "renamedFrom",
+  );
+  expect(config.public.content[0].fields.cards.item.fields.label.defaultValue).toBe("label");
+  expect(JSON.stringify(config.public)).not.toContain("renamedFrom");
+});
+
+for (const removedFields of [
+  ["title", "/title"],
+  ["/links/0/legacy"],
+  ["/links/*"],
+  ["links", "/links/*/legacy"],
+]) {
+  test(`invalid nested removal hints ${JSON.stringify(removedFields)}`, () => {
+    expect(() => postModel({ removedFields })).toThrow(/removedFields/u);
+  });
+}
+
+test("nested sibling hint conflicts are refused", () => {
+  expect(() =>
+    postModel({
+      fields: {
+        profile: field.group({
+          fields: {
+            title: field.text({ renamedFrom: "headline" }),
+            headline: field.text(),
+          },
+        }),
+      },
+    }),
+  ).toThrow(/configured field/u);
+  expect(() =>
+    postModel({
+      fields: {
+        links: field.list({
+          item: field.group({
+            fields: {
+              title: field.text({ renamedFrom: "headline" }),
+            },
+          }),
+        }),
+      },
+      removedFields: ["/links/*/headline"],
+    }),
+  ).toThrow(/rename source/u);
+});
+
+test("removal paths reject non-string values without coercion", () => {
+  for (const value of [null, undefined, true, false, 1, {}, []])
+    expect(() =>
+      defineCollection({ key: "posts", route: "/blog/:slug", version: 1, removedFields: [value] }),
+    ).toThrow();
+});
+
+test("hint lookup does not treat inherited constructor as a configured field", () => {
+  expect(
+    defineCollection({
+      key: "posts",
+      route: "/blog/:slug",
+      version: 1,
+      fields: { title: field.text({ renamedFrom: "constructor" }) },
+      removedFields: ["other"],
+    }).renamedFields,
+  ).toEqual({ title: "constructor" });
+});
+
+test("itemLabel changes only projection identity at every descriptor position", async () => {
+  const make = async (itemLabel, data = "stored") => {
+    const cards = field.list({
+      ...(itemLabel === undefined ? {} : { itemLabel }),
+      item: field.group({
+        fields: { title: field.text(), caption: field.text(), itemLabel: field.text() },
+        defaultValue: { itemLabel: data },
+      }),
+    });
+    return defineConfig({
+      blocks: [defineBlock({ type: "cards", version: 1, fields: { cards } })],
+      content: [
+        homeModel({ blocks: ["cards"], fields: { nested: field.group({ fields: { cards } }) } }),
+      ],
+    });
+  };
+  const before = await make(undefined),
+    after = await make("title"),
+    other = await make("caption");
+  for (const config of [after, other]) {
+    expect(config.structureHash).toBe(before.structureHash);
+    expect(config.runtime.content[0].structureHash).toBe(before.runtime.content[0].structureHash);
+    expect(config.projectionHash).not.toBe(before.projectionHash);
+  }
+  expect(
+    after.runtime.content[0].structure.fields.nested.fields.cards.item.defaultValue.itemLabel,
+  ).toBe("stored");
+  expect((await make("title", "changed")).structureHash).not.toBe(after.structureHash);
+});

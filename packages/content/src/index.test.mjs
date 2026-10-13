@@ -12,6 +12,9 @@ import {
   canonicalJsonByteLength,
   canonicalizeJson,
   compileFieldSchema,
+  collectFieldMedia,
+  encodeFieldPath,
+  decodeFieldPath,
   defineBlock,
   defineBlockRegistry,
   effectiveAltText,
@@ -29,6 +32,7 @@ import {
   validateFieldValue,
   validateModelFields,
   validateRichTextDocument,
+  validateSnapshotListBudget,
 } from "../dist/index.js";
 
 const fieldCases = [
@@ -597,8 +601,10 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
   expect(registry.get("hero")).toBe(builtInBlocks.hero);
   expect(toBlockRegistryMetadata(registry).map((block) => block.type)).toEqual([
     "cta",
+    "gallery",
     "hero",
     "image",
+    "navigation",
     "quote",
     "richText",
   ]);
@@ -619,6 +625,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
       label: "Call to action",
       type: "cta",
     },
+    { description: "A grid of images with optional captions.", label: "Gallery", type: "gallery" },
     {
       description: "Large heading with optional text, image, and action.",
       label: "Hero",
@@ -629,6 +636,11 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
         "A single image with an optional caption and alt text that overrides the media alt.",
       label: "Image",
       type: "image",
+    },
+    {
+      description: "A list of links with optional one-level submenus.",
+      label: "Navigation",
+      type: "navigation",
     },
     { description: "A quotation with optional attribution.", label: "Quote", type: "quote" },
     {
@@ -900,10 +912,406 @@ test("image version 2 makes alt text optional and migrates version 1 data unchan
   expect(metadata.fields.alt.required).toBe(false);
 });
 
+test("gallery collects image items that become publishable with one image", () => {
+  const { gallery } = builtInBlocks;
+  expect(gallery.version).toBe(1);
+  expect(gallery.settings).toBeUndefined();
+  expect(validateBlockData(gallery, {}, "draft")).toEqual({ images: [] });
+  expect(issueFrom(() => validateBlockData(gallery, {}, "publish"))).toMatchObject({
+    code: "list_too_short",
+    path: ["images"],
+  });
+  const item = { media: "media-1" };
+  expect(validateBlockData(gallery, { images: [item], title: "Studio" }, "publish")).toEqual({
+    images: [item],
+    title: "Studio",
+  });
+  expect(validateBlockData(gallery, { images: [{ caption: "Draft" }] }, "draft")).toEqual({
+    images: [{ caption: "Draft" }],
+  });
+  expect(
+    issueFrom(() => validateBlockData(gallery, { images: [{ caption: "Draft" }] }, "publish")),
+  ).toMatchObject({ code: "missing_required_field", path: ["images", 0, "media"] });
+  for (const mode of ["draft", "publish"])
+    expect(
+      issueFrom(() => validateBlockData(gallery, { images: Array(51).fill(item) }, mode)),
+    ).toMatchObject({ code: "list_too_long", path: ["images"] });
+  expect(
+    issueFrom(() => validateBlockData(gallery, { images: [{ ...item, width: 3 }] }, "draft")),
+  ).toMatchObject({ code: "unknown_field", path: ["images", 0, "width"] });
+  const metadata = toBlockRegistryMetadata(defineBlockRegistry([gallery]))[0];
+  expect(metadata.fields.images).toMatchObject({
+    defaultValue: [],
+    itemLabel: "caption",
+    maxItems: 50,
+    minItems: 1,
+    type: "list",
+  });
+});
+
+test("navigation allows one submenu level with safe URLs within the list budget", () => {
+  const { navigation } = builtInBlocks;
+  expect(navigation.version).toBe(1);
+  expect(navigation.settings).toBeUndefined();
+  expect(validateBlockData(navigation, {}, "draft")).toEqual({ links: [] });
+  expect(issueFrom(() => validateBlockData(navigation, {}, "publish")).code).toBe("list_too_short");
+  const docs = { children: [{ label: "Guide", url: "/guide" }], label: "Docs" };
+  expect(validateBlockData(navigation, { links: [docs], name: "Main" }, "publish")).toEqual({
+    links: [docs],
+    name: "Main",
+  });
+  expect(
+    issueFrom(() =>
+      validateBlockData(
+        navigation,
+        { links: [{ children: [{ label: "Guide" }], label: "Docs" }] },
+        "publish",
+      ),
+    ),
+  ).toMatchObject({ code: "missing_required_field", path: ["links", 0, "children", 0, "url"] });
+  expect(
+    issueFrom(() =>
+      validateBlockData(
+        navigation,
+        { links: [{ children: [{ label: "Bad", url: "javascript:alert(1)" }], label: "Docs" }] },
+        "draft",
+      ),
+    ).path,
+  ).toEqual(["links", 0, "children", 0, "url"]);
+  const children = Array.from({ length: 20 }, (_, index) => ({
+    label: `Child ${index}`,
+    url: `/child-${index}`,
+  }));
+  const links = Array.from({ length: 20 }, (_, index) => ({ children, label: `Link ${index}` }));
+  expect(validateBlockData(navigation, { links }, "publish").links).toHaveLength(20);
+  const blocks = [{ data: { links }, fields: navigation.fields, path: ["blocks", 0, "data"] }];
+  expect(() => validateSnapshotListBudget({}, {}, blocks)).not.toThrow();
+  const crowded = links.map((link, index) =>
+    index === 3 ? { ...link, children: [...children, { label: "Extra", url: "/extra" }] } : link,
+  );
+  expect(issueFrom(() => validateBlockData(navigation, { links: crowded }, "draft"))).toMatchObject(
+    {
+      code: "list_too_long",
+      path: ["links", 3, "children"],
+    },
+  );
+});
+
 test("effective alt text prefers a non-blank usage alt, then the media alt", () => {
   expect(effectiveAltText("Team at work", "Office")).toBe("Team at work");
   expect(effectiveAltText("   ", "Office")).toBe("Office");
   expect(effectiveAltText(undefined, "Office")).toBe("Office");
   expect(effectiveAltText(undefined, null)).toBe("");
   expect(effectiveAltText("", " ")).toBe("");
+});
+
+function issueFrom(run) {
+  try {
+    run();
+    throw new Error("expected validation failure");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ContentValidationError);
+    return error.issues[0];
+  }
+}
+
+test("composite schema boundaries apply to builders and forged metadata", () => {
+  const chain = (depth) => {
+    let item = { type: "text", required: false };
+    for (let index = depth - 1; index >= 0; index--)
+      item =
+        index % 2 === 0
+          ? { type: "list", item, required: false }
+          : { type: "group", fields: { child: item }, required: false };
+    return item;
+  };
+  expect(toFieldMetadata(chain(6)).type).toBe("list");
+  expect(() => toFieldMetadata(chain(7))).toThrow(/6 containers/u);
+  const g = (child) => ({ type: "group", required: false, fields: { child } });
+  expect(() => toFieldMetadata(g(g(field.text())))).not.toThrow();
+  expect(() => toFieldMetadata(g(g(g(field.text()))))).toThrow(/2 consecutive/u);
+  expect(() =>
+    toFieldMetadata(g(g({ type: "list", item: g(g(field.text())), required: false }))),
+  ).not.toThrow();
+  expect(() => field.list({ item: { type: "list", item: field.text() } })).toThrow(/direct list/u);
+  const cycle = { type: "group", fields: {}, required: false };
+  cycle.fields.child = cycle;
+  expect(() => toFieldMetadata(cycle)).toThrow(/cyclic/u);
+  const shared = field.group({ fields: { title: field.text() } });
+  expect(() => field.group({ fields: { one: shared, two: shared } })).not.toThrow();
+  for (const options of [
+    { minItems: 2, maxItems: 1 },
+    { maxItems: 101 },
+    { minItems: -1 },
+    { maxItems: 1.5 },
+  ])
+    expect(() => field.list({ item: field.text(), ...options })).toThrow(FieldConfigurationError);
+  for (const value of [null, { type: "other" }, { type: "text", bogus: true }])
+    expect(() => field.group({ fields: { child: value } })).toThrow(FieldConfigurationError);
+});
+
+test("composite defaults are portable, detached and draft-compatible", () => {
+  const source = { title: "before", items: ["one"] };
+  const definition = field.group({
+    fields: {
+      title: field.text(),
+      items: field.list({ item: field.text() }),
+      required: field.text({ required: true }),
+    },
+    defaultValue: source,
+  });
+  source.title = "after";
+  source.items.push("two");
+  expect(definition.defaultValue).toEqual({ title: "before", items: ["one"] });
+  expect(Object.isFrozen(definition.defaultValue.items)).toBe(true);
+  expect(() =>
+    field.group({ fields: { href: field.url() }, defaultValue: { href: "javascript:bad" } }),
+  ).toThrow(FieldConfigurationError);
+  expect(() => field.list({ item: field.number(), defaultValue: [NaN] })).toThrow(
+    FieldConfigurationError,
+  );
+  const getter = Object.defineProperty({}, "title", {
+    enumerable: true,
+    get() {
+      throw new Error("getter ran");
+    },
+  });
+  expect(() => field.group({ fields: { title: field.text() }, defaultValue: getter })).toThrow(
+    /accessor/u,
+  );
+  expect(() =>
+    field.group({ fields: { title: field.text({ renamedFrom: "old" }) } }),
+  ).not.toThrow();
+  expect(() => field.list({ item: field.text({ renamedFrom: "old" }) })).toThrow(
+    /list item descriptors/u,
+  );
+});
+
+test("composite absence, explicit empties and publication minima", () => {
+  const group = field.group({
+    fields: {
+      title: field.text({ required: true }),
+      enabled: field.boolean({ defaultValue: false }),
+    },
+    defaultValue: { title: "default" },
+  });
+  const optional = field.group({
+    fields: {
+      title: field.text({ required: true }),
+      enabled: field.boolean({ defaultValue: true }),
+    },
+  });
+  expect(validateModelFields({ optional }, {}, "publish")).toEqual({});
+  expect(validateModelFields({ group }, {}, "publish")).toEqual({
+    group: { title: "default", enabled: false },
+  });
+  expect(validateModelFields({ group }, { group: {} }, "draft")).toEqual({
+    group: { enabled: false },
+  });
+  expect(issueFrom(() => validateModelFields({ group }, { group: {} }, "publish")).path).toEqual([
+    "group",
+    "title",
+  ]);
+  const list = field.list({ item: field.text(), required: true });
+  expect(validateModelFields({ list }, { list: [] }, "publish")).toEqual({ list: [] });
+  expect(validateModelFields({ list }, {}, "draft")).toEqual({});
+  expect(issueFrom(() => validateModelFields({ list }, {}, "publish")).code).toBe(
+    "missing_required_field",
+  );
+  const minimum = field.list({ item: field.text(), minItems: 2, defaultValue: ["one"] });
+  expect(validateModelFields({ minimum }, {}, "draft")).toEqual({ minimum: ["one"] });
+  expect(issueFrom(() => validateModelFields({ minimum }, {}, "publish")).code).toBe(
+    "list_too_short",
+  );
+  expect(validateModelFields({ group }, { group: {} }, "draft")).not.toHaveProperty("group.title");
+});
+
+test("composite exact leaf paths and malformed values", () => {
+  const list = field.list({
+    item: field.group({ fields: { image: field.media(), text: field.text() } }),
+  });
+  const base = ["blocks", 0, "data", "images"];
+  expect(issueFrom(() => validateFieldValue(list, [{}, {}, { image: 42 }], base)).path).toEqual([
+    ...base,
+    2,
+    "image",
+  ]);
+  expect(issueFrom(() => validateFieldValue(list, [{ extra: true }])).code).toBe("unknown_field");
+  for (const value of [null, {}, [null], [undefined], Array(1)])
+    expect(() => validateFieldValue(list, value, [], "draft")).toThrow(ContentValidationError);
+  expect(() => validateFieldValue(field.group({ fields: {} }), null)).toThrow(
+    ContentValidationError,
+  );
+  expect(() =>
+    validateFieldValue(field.list({ item: field.text({ defaultValue: "fallback" }) }), [null]),
+  ).toThrow(ContentValidationError);
+  expect(
+    validateFieldValue(
+      field.list({
+        item: field.group({ fields: { text: field.text({ defaultValue: "default" }) } }),
+      }),
+      [{}],
+    ),
+  ).toEqual([{ text: "default" }]);
+});
+
+test("list and snapshot budgets include defaults, hidden blocks and nested lengths", () => {
+  const scalarList = field.list({ item: field.text() });
+  expect(validateFieldValue(scalarList, Array(100).fill("x"))).toHaveLength(100);
+  expect(issueFrom(() => validateFieldValue(scalarList, Array(101).fill("x"))).code).toBe(
+    "list_too_long",
+  );
+  expect(() =>
+    validateFieldValue(
+      field.list({ item: field.text(), maxItems: 2 }),
+      ["a", "b", "c"],
+      [],
+      "draft",
+    ),
+  ).toThrow(ContentValidationError);
+  const nested = field.list({ item: field.group({ fields: { links: scalarList } }) });
+  expect(
+    validateFieldValue(
+      nested,
+      Array.from({ length: 10 }, () => ({ links: Array(20).fill("x") })),
+    ),
+  ).toHaveLength(10);
+  const block = defineBlock({
+    type: "items",
+    version: 1,
+    fields: { list: scalarList, heading: field.text({ required: true }) },
+  });
+  const model = {
+    kind: "page",
+    fields: { one: scalarList, two: scalarList, three: scalarList, four: scalarList },
+    blocks: ["items"],
+  };
+  const input = {
+    kind: "page",
+    title: "Budget",
+    fields: Object.fromEntries(
+      ["one", "two", "three", "four"].map((key) => [key, Array(100).fill("x")]),
+    ),
+    blocks: [
+      {
+        key: "hidden",
+        type: "items",
+        schemaVersion: 1,
+        hidden: true,
+        data: { list: Array(100).fill("x") },
+      },
+    ],
+  };
+  expect(
+    validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish").blocks[0].hidden,
+  ).toBe(true);
+  input.blocks.push({
+    key: "overflow",
+    type: "items",
+    schemaVersion: 1,
+    hidden: true,
+    data: { list: ["x"] },
+  });
+  const issue = issueFrom(() =>
+    validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish"),
+  );
+  expect(issue.code).toBe("too_many_list_items");
+  expect(issue.path).toEqual(["blocks", 1, "data", "list"]);
+  const defaults = Object.fromEntries(
+    Array.from({ length: 6 }, (_, i) => [
+      "list" + i,
+      field.list({ item: field.text(), defaultValue: Array(100).fill("x") }),
+    ]),
+  );
+  expect(issueFrom(() => validateModelFields(defaults, {}, "draft")).code).toBe(
+    "too_many_list_items",
+  );
+});
+
+test("normalized block bytes include composite defaults", () => {
+  const block = defineBlock({
+    type: "large",
+    version: 1,
+    fields: {
+      group: field.group({
+        fields: { text: field.text({ defaultValue: "x".repeat(MAX_JSON_BYTES) }) },
+        defaultValue: {},
+      }),
+    },
+  });
+  expect(() =>
+    validateEntryAggregate(
+      {
+        kind: "page",
+        title: "Bytes",
+        fields: {},
+        blocks: [{ key: "large", type: "large", schemaVersion: 1, data: {} }],
+      },
+      { kind: "page", fields: {}, blocks: ["large"] },
+      defineBlockRegistry([block]),
+      "draft",
+    ),
+  ).toThrow(/UTF-8/u);
+});
+
+test("media traversal distinguishes groups, list indices and legacy paths", () => {
+  const fields = {
+    cover: field.media(),
+    contact: field.group({ fields: { photo: field.media() } }),
+    images: field.list({
+      item: field.group({ fields: { image: field.media(), caption: field.text() } }),
+    }),
+    media: field.list({ item: field.media() }),
+  };
+  const data = {
+    cover: "a",
+    contact: { photo: "b" },
+    images: [{ image: "a", caption: "not-media" }, { image: "b" }],
+    media: ["c"],
+  };
+  expect(
+    collectFieldMedia(fields, data).map(({ mediaId, path }) => [mediaId, encodeFieldPath(path)]),
+  ).toEqual([
+    ["a", "cover"],
+    ["b", "/contact/photo"],
+    ["a", "/images/0/image"],
+    ["b", "/images/1/image"],
+    ["c", "/media/0"],
+  ]);
+  expect(decodeFieldPath("cover")).toEqual(["cover"]);
+  expect(decodeFieldPath("/images/0/image")).toEqual(["images", 0, "image"]);
+});
+
+test("nested model hints remain portable while block hints are rejected", () => {
+  const links = field.list({
+    item: field.group({ fields: { title: field.text({ renamedFrom: "headline" }) } }),
+  });
+  expect(JSON.parse(JSON.stringify(links)).item.fields.title.renamedFrom).toBe("headline");
+  expect(() => defineBlock({ type: "links", version: 1, fields: { links } })).toThrow(
+    /renamedFrom/u,
+  );
+});
+
+test("list itemLabel is portable presentation metadata with validated targets", () => {
+  const item = field.group({
+    fields: {
+      title: field.text(),
+      caption: field.textarea(),
+      url: field.url(),
+      kind: field.select({ options: ["a"] }),
+      image: field.media(),
+    },
+  });
+  for (const itemLabel of ["title", "caption", "url", "kind"]) {
+    const list = field.list({ item, itemLabel });
+    expect(toFieldMetadata(list).itemLabel).toBe(itemLabel);
+    expect(JSON.parse(JSON.stringify(list)).itemLabel).toBe(itemLabel);
+    expect(validateFieldValue(list, [{ title: "Hello" }], [], "draft")).toEqual([
+      { title: "Hello" },
+    ]);
+  }
+  for (const itemLabel of ["missing", "title.child", "image", 1, null])
+    expect(() => field.list({ item, itemLabel })).toThrow(/itemLabel/);
+  expect(() => field.list({ item: field.text(), itemLabel: "title" })).toThrow(/itemLabel/);
+  expect(() => toFieldMetadata({ ...field.text(), itemLabel: "title" })).toThrow();
 });

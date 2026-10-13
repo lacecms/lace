@@ -1,13 +1,10 @@
 /**
- * Bubbles from a control inside a hidden tab panel to ask the region that
- * owns the tabs to show that panel synchronously, so the control can take
- * focus right after.
+ * Bubbles from a control to synchronously expand enclosing disclosures and
+ * show its block tab before focus moves to it.
  */
 export const REVEAL_CONTROL_EVENT = "lace:reveal-control";
 
-/** Asks the owner of a hidden tab panel around `element` to show it. */
+/** Asks enclosing disclosure and tab owners to reveal `element`. */
 export function revealControl(element: HTMLElement): void {
-  const panel = element.closest<HTMLElement>('[role="tabpanel"]');
-  if (panel === null || !panel.hidden) return;
   element.dispatchEvent(new Event(REVEAL_CONTROL_EVENT, { bubbles: true }));
 }

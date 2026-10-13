@@ -291,3 +291,46 @@ Refreshes must resolve current stable releases from the listed sources, run the
 disposable smoke check on the selected Node LTS, update the catalog and lockfile
 together, and record the new selection date. Framework major upgrades require
 test and migration review, as required by the architecture dependency policy.
+
+## Composite field adoption (CE7A)
+
+Composite definitions add recursive `group`/`list` metadata while preserving the
+existing content JSON envelopes, media usage DTOs and database schema. Scalar
+configuration hashes and scalar media paths are unchanged. Nested media paths
+use relative RFC 6901 pointers such as `/images/0/image`; indices stored in
+pointers are zero-based.
+
+Adopt compatible engine, bundled admin, contracts, SDK and site/render packages
+together before declaring or storing composites. Older consumers may reject
+the new metadata or fail to validate/render nested data. The CE7A admin shows
+composites as read-only JSON and preserves them during scalar edits and
+lifecycle commands; generic authoring follows in CE7C. CE7B supports recursive
+model evolution with sibling rename hints, wildcard removal pointers and
+validated defaults/constraints. Deploy the CE7B engine before adopting nested
+hints; older engines reject them. Registry/starter adoption followed in CE7D
+(below); existing built-in blocks keep their flat schemas.
+
+There is no database migration or automatic down-conversion. After storing
+composites, rollback to an older engine/site requires restoring a compatible
+backup of data and configuration as well as packages. Keep that backup before
+adoption and test the site build against the same definitions.
+
+## Gallery and Navigation (CE7D)
+
+`@lacecms/content` adds the built-in `gallery` and `navigation` blocks
+(version 1, composite data, no settings) to `builtInBlocks`; the five earlier
+built-ins are unchanged, and configurations that do not register the new
+blocks keep their hashes. The registry adds the `gallery` and `navigation`
+Astro items at revision 1. There is no database migration, REST, export or SDK
+change.
+
+A configuration that registers the new blocks needs the content package of
+the same release on the API, admin and site; older packages do not define
+them. Template `0.27.0` registers all seven blocks in new starters, allows them
+in `home` and `posts` (version 2), declares a `navigation` global rendered by
+`BaseLayout` with a static fallback and adds the gallery and navigation CSS.
+Existing projects adopt this by hand: `lace add block gallery navigation`,
+configuration and model version changes, configuration sync, publication of
+the global and the layout change (see the 0.27.0 upgrade instructions). To roll
+back, remove the blocks from the models with `removedBlocks` while entries use
+them, or restore the backup taken before sync.

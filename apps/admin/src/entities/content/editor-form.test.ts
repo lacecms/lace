@@ -484,3 +484,88 @@ describe("block envelope validation", () => {
     ).toBe(undeclaredSettingMessage("size"));
   });
 });
+
+test("composites survive initialization and clearing while validating in draft mode", () => {
+  const compositeModel = {
+    ...model,
+    fields: {
+      profile: {
+        type: "group",
+        required: false,
+        fields: { name: { type: "text", required: true } },
+      },
+      items: { type: "list", required: true, minItems: 1, item: { type: "url", required: false } },
+    },
+  } satisfies ContentModelDto;
+  const fields = { profile: {}, items: [] };
+  expect(initialModelFieldValues(compositeModel, fields)).toEqual(fields);
+  expect(withoutClearedValues({ fields, blocks: [], title: "Draft" }).fields).toEqual(fields);
+  expect(validateDraftValues(compositeModel, { fields, blocks: [], title: "Draft" })).toEqual({});
+  expect(fieldProblem(compositeModel.fields.items, ["javascript:bad"])).toContain("invalid value");
+  expect(issueLocation("/fields/profile/name", compositeModel, [])).toBe("fields.profile.name");
+  expect(
+    serverIssueMessage(
+      {
+        code: "missing_required_field",
+        message: "Missing required value",
+        path: "/fields/profile/name",
+      },
+      { definition: compositeModel.fields.profile, value: {} },
+    ),
+  ).toContain("/fields/profile/name");
+});
+
+test("nested local failures and server paths target exact controls without dropping sibling problems", () => {
+  const nested = {
+    ...model,
+    fields: {
+      links: {
+        type: "list",
+        required: false,
+        item: {
+          type: "group",
+          required: false,
+          fields: {
+            url: { type: "url", required: true },
+            body: { type: "richText", required: false },
+          },
+        },
+      },
+    },
+  } satisfies ContentModelDto;
+  const fields = { links: [{ url: "javascript:bad" }, { url: "https://example.test" }] };
+  expect(validateDraftValues(nested, { title: "Title", fields, blocks: [] })).toMatchObject({
+    fields: { links: { 0: { url: { message: expect.stringContaining("Enter a URL") } } } },
+  });
+  expect(issueLocation("/fields/links/0/url", nested, [], fields)).toBe("fields.links.0.url");
+  expect(issueLocation("/fields/links/2/url", nested, [], fields)).toBeUndefined();
+  expect(issueLocation("/fields/links/0/unknown", nested, [], fields)).toBeUndefined();
+  expect(issueLocation("/fields/links/0/body/content/0", nested, [], fields)).toBe(
+    "fields.links.0.body",
+  );
+  expect(locationField("fields.links.0.url", nested, [])).toMatchObject({ type: "url" });
+});
+
+test("serialization uses descriptors for groups that resemble rich-text JSON", () => {
+  const model = {
+    fields: {
+      group: {
+        type: "group",
+        required: false,
+        fields: {
+          type: { type: "text", required: false },
+          cleared: { type: "text", required: false },
+          body: { type: "richText", required: false },
+        },
+      },
+    },
+    blockDefinitions: [],
+  } as unknown as ContentModelDto;
+  const body = { type: "doc", content: [] };
+  expect(
+    withoutClearedValues(
+      { title: "Title", blocks: [], fields: { group: { type: "doc", cleared: null, body } } },
+      model,
+    ).fields,
+  ).toEqual({ group: { type: "doc", body } });
+});

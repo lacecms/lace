@@ -2442,3 +2442,52 @@ test("block envelopes travel through admin, public and export contracts", async 
     key: "b2",
   });
 });
+
+test("composite metadata and content round trip with precise nested validation pointers", async () => {
+  const { app } = await fixture({
+    maxBodyBytes: 4096,
+    models: [
+      defineCollection({
+        key: "posts",
+        version: 1,
+        route: "/blog/:slug",
+        blocks: [],
+        fields: {
+          team: field.list({
+            item: field.group({ fields: { url: field.url({ required: true }) } }),
+          }),
+          empty: field.group({ fields: {} }),
+        },
+      }),
+    ],
+  });
+  const input = {
+    title: "Nested",
+    slug: "nested",
+    blocks: [],
+    fields: { team: [{ url: "/ok" }], empty: {} },
+  };
+  const created = await json(app, "/api/v1/admin/models/posts/entries", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  expect(created.response.status).toBe(201);
+  expect(created.body.draft.fields).toEqual(input.fields);
+  const invalid = await json(app, "/api/v1/admin/models/posts/entries", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...input, fields: { team: [{ url: "javascript:bad" }] } }),
+  });
+  expect(invalid.response.status).toBe(422);
+  expect(invalid.body.error.details.issues).toContainEqual(
+    expect.objectContaining({ path: "/fields/team/0/url" }),
+  );
+  const openApi = (await json(app, "/api/v1/openapi.json")).body;
+  expect(
+    openApi.components.schemas.GroupFieldDefinition.properties.fields.additionalProperties.$ref,
+  ).toBe("#/components/schemas/FieldDefinition");
+  expect(openApi.components.schemas.ListFieldDefinition.properties.item.oneOf).toContainEqual({
+    $ref: "#/components/schemas/GroupFieldDefinition",
+  });
+});

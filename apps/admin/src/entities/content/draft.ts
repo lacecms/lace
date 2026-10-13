@@ -10,6 +10,7 @@ import {
   withoutClearedValues,
   type DraftEditorValues,
 } from "./editor-form.js";
+import { fieldStartingValues } from "./composite-values.js";
 import { seoFormValues, seoInput } from "./seo.js";
 
 /** Form values for an entry draft, with block defaults filled from the block definitions. */
@@ -22,12 +23,7 @@ export function draftValues(model: ContentModelDto, entry: ContentEntryDto): Dra
       if (definition === undefined) return block;
       return {
         ...block,
-        data: Object.fromEntries(
-          Object.entries(definition.fields).map(([key, field]) => [
-            key,
-            block.data[key] ?? ("defaultValue" in field ? field.defaultValue : undefined),
-          ]),
-        ) as ContentBlockDto["data"],
+        data: fieldStartingValues(definition.fields, block.data) as ContentBlockDto["data"],
       };
     }),
     fields: initialModelFieldValues(model, entry.draft.fields),
@@ -72,8 +68,8 @@ export function orderedDraftBlocks(blocks: readonly ContentBlockDto[]): ContentB
 }
 
 /** Canonical JSON of the local draft so an author can keep it during a conflict. */
-export function localDraftJson(draft: DraftEditorValues): string {
-  const values = withoutClearedValues(draft);
+export function localDraftJson(draft: DraftEditorValues, model?: ContentModelDto): string {
+  const values = withoutClearedValues(draft, model);
   return canonicalizeJson({
     blocks: orderedDraftBlocks(values.blocks),
     fields: values.fields,

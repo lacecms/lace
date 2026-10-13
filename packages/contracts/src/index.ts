@@ -1,7 +1,7 @@
 import {
   canonicalizeJson,
   defineBlock,
-  field,
+  normalizeFieldDefinition,
   isBlockAnchor,
   normalizeBlockClassName,
   toBlockMetadata,
@@ -50,21 +50,49 @@ const idempotencyKeyPattern = /^[\x21-\x7e]{1,255}$/u;
 const jsonPointerPattern = /^(?:\/(?:[^~/]|~[01])*)*$/u;
 
 function isJsonValue(value: unknown): value is JsonValue {
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string" ||
-    (typeof value === "number" && Number.isFinite(value))
-  ) {
-    return true;
+  const ancestors = new WeakSet<object>();
+  const pending: { value: unknown; exit?: boolean }[] = [{ value }];
+  while (pending.length > 0) {
+    const next = pending.pop()!;
+    const current = next.value;
+    if (
+      current === null ||
+      typeof current === "boolean" ||
+      typeof current === "string" ||
+      (typeof current === "number" && Number.isFinite(current))
+    )
+      continue;
+    if (typeof current !== "object") return false;
+    if (next.exit) {
+      ancestors.delete(current);
+      continue;
+    }
+    if (ancestors.has(current)) return false;
+    const array = Array.isArray(current);
+    if (
+      !array &&
+      Object.getPrototypeOf(current) !== null &&
+      Object.getPrototypeOf(current) !== Object.prototype
+    )
+      return false;
+    if (Object.getOwnPropertySymbols(current).length > 0) return false;
+    const descriptors = Object.getOwnPropertyDescriptors(current);
+    if (
+      array &&
+      Array.from({ length: current.length }, (_, index) => Object.hasOwn(descriptors, index)).some(
+        (present) => !present,
+      )
+    )
+      return false;
+    ancestors.add(current);
+    pending.push({ value: current, exit: true });
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (array && key === "length") continue;
+      if (!descriptor.enumerable || !("value" in descriptor)) return false;
+      pending.push({ value: descriptor.value });
+    }
   }
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  if (typeof value !== "object") return false;
-  const prototype = Object.getPrototypeOf(value);
-  return (
-    (prototype === null || prototype === Object.prototype) &&
-    Object.values(value).every(isJsonValue)
-  );
+  return true;
 }
 
 function isJsonObject(value: unknown): value is JsonObject {
@@ -104,34 +132,10 @@ export type IdempotencyKey = v.InferOutput<typeof idempotencyKeySchema>;
 export type FieldMetadataMapDto = Readonly<Record<string, FieldMetadata>>;
 
 function isFieldMetadata(value: unknown): value is FieldMetadata {
-  if (!isJsonObject(value) || typeof value.type !== "string") return false;
-  const { type, ...options } = value;
   try {
-    const normalized =
-      type === "boolean"
-        ? field.boolean(options)
-        : type === "date"
-          ? field.date(options)
-          : type === "datetime"
-            ? field.datetime(options)
-            : type === "media"
-              ? field.media(options)
-              : type === "number"
-                ? field.number(options)
-                : type === "richText"
-                  ? field.richText(options)
-                  : type === "select"
-                    ? field.select(options as { readonly options: readonly [string, ...string[]] })
-                    : type === "text"
-                      ? field.text(options)
-                      : type === "textarea"
-                        ? field.textarea(options)
-                        : type === "url"
-                          ? field.url(options)
-                          : undefined;
+    const normalized = normalizeFieldDefinition(value);
     return (
-      normalized !== undefined &&
-      canonicalizeJson(value) === canonicalizeJson(normalized as unknown as JsonValue)
+      canonicalizeJson(value as JsonValue) === canonicalizeJson(normalized as unknown as JsonValue)
     );
   } catch {
     return false;
@@ -140,9 +144,17 @@ function isFieldMetadata(value: unknown): value is FieldMetadata {
 
 function isFieldMetadataMap(value: unknown): value is FieldMetadataMapDto {
   return (
-    isJsonObject(value) &&
-    Object.entries(value).every(
-      ([key, definition]) => /^[A-Za-z][A-Za-z0-9]*$/u.test(key) && isFieldMetadata(definition),
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) &&
+    Object.getOwnPropertySymbols(value).length === 0 &&
+    Object.entries(Object.getOwnPropertyDescriptors(value)).every(
+      ([key, descriptor]) =>
+        /^[A-Za-z][A-Za-z0-9]*$/u.test(key) &&
+        descriptor.enumerable &&
+        "value" in descriptor &&
+        isFieldMetadata(descriptor.value),
     )
   );
 }
@@ -204,7 +216,13 @@ function hasValidListFields<
     value.kind === "collection" &&
     value.listFields.length > 0 &&
     new Set(value.listFields).size === value.listFields.length &&
-    value.listFields.every((key) => Object.hasOwn(value.fields, key))
+    value.listFields.every(
+      (key) =>
+        Object.hasOwn(value.fields, key) &&
+        ["text", "textarea", "number", "boolean", "select", "date", "datetime", "url"].includes(
+          value.fields[key]!.type,
+        ),
+    )
   );
 }
 
@@ -1996,3 +2014,5 @@ export function validationError(issues: readonly ContractValidationIssue[]): Cla
     status: 422,
   };
 }
+
+export { contentMetadataOpenApi } from "./field-openapi.js";

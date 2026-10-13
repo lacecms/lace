@@ -1,3 +1,4 @@
+import { field } from "@lacecms/content";
 import {
   DomainError,
   BlockOrderError,
@@ -56,6 +57,7 @@ import {
   entityTagForVersion,
   entityTagSchema,
   fieldMetadataMapSchema,
+  fieldMetadataSchema,
   fromIsoTimestamp,
   idempotencyKeySchema,
   isoTimestampSchema,
@@ -1748,4 +1750,63 @@ describe("shared SEO text rules", () => {
     expect(contractsNormalizeSeoText("a\nb", "title")).toBeUndefined();
     expect(contractsNormalizeSeoText("  ", "title")).toBeNull();
   });
+});
+
+test("composite metadata and content round-trip with nested issue pointers", () => {
+  const cards = field.list({
+    item: field.group({ fields: { title: field.text({ required: true }), media: field.media() } }),
+  });
+  expect(v.safeParse(fieldMetadataMapSchema, { cards }).success).toBe(true);
+  expect(
+    v.safeParse(fieldMetadataMapSchema, {
+      cards: { ...cards, item: { ...cards.item, fields: { invalid: { type: "wrong" } } } },
+    }).success,
+  ).toBe(false);
+  let deep = field.text();
+  for (let i = 0; i < 4; i++)
+    deep = {
+      type: "list",
+      required: false,
+      item: { type: "group", required: false, fields: { child: deep } },
+    };
+  expect(v.safeParse(fieldMetadataMapSchema, { deep }).success).toBe(false);
+  const failure = validationError([
+    {
+      code: "invalid_field_value",
+      message: "Invalid value.",
+      path: "/blocks/0/data/images/2/image",
+    },
+  ]);
+  expect(failure.status).toBe(422);
+  expect(failure.body.error.details.issues[0].path).toBe("/blocks/0/data/images/2/image");
+});
+
+test("cyclic and accessor-backed forged metadata are refused without evaluation", () => {
+  const cyclic = { type: "group", required: false, fields: {} };
+  cyclic.fields.child = cyclic;
+  expect(v.safeParse(fieldMetadataSchema, cyclic).success).toBe(false);
+  expect(
+    v.safeParse(blockMetadataSchema, { type: "cyclic", version: 1, fields: { child: cyclic } })
+      .success,
+  ).toBe(false);
+  const accessor = {};
+  Object.defineProperty(accessor, "child", {
+    enumerable: true,
+    get() {
+      throw new Error("executed accessor");
+    },
+  });
+  expect(v.safeParse(fieldMetadataMapSchema, accessor).success).toBe(false);
+});
+
+test("list label metadata survives recursive contracts and invalid targets fail", () => {
+  const cards = field.list({
+    itemLabel: "title",
+    item: field.group({ fields: { title: field.text(), image: field.media() } }),
+  });
+  expect(v.parse(fieldMetadataMapSchema, { cards }).cards.itemLabel).toBe("title");
+  for (const itemLabel of ["image", "absent", "title.child", 1])
+    expect(v.safeParse(fieldMetadataMapSchema, { cards: { ...cards, itemLabel } }).success).toBe(
+      false,
+    );
 });

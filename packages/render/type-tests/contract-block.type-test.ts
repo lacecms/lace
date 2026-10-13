@@ -76,3 +76,20 @@ export type TypeTests = [
   typeof prepared,
   typeof publicRenderable,
 ];
+
+const nested = defineBlock({
+  type: "nested",
+  version: 1,
+  fields: {
+    rows: field.list({
+      required: true,
+      item: field.group({
+        fields: { tone: field.select({ required: true, options: ["light", "dark"] }) },
+      }),
+    }),
+  },
+});
+type NestedTone = Expect<
+  Equal<BlockProps<typeof nested>["data"]["rows"][number]["tone"], "light" | "dark">
+>;
+export type CompositeTypeTests = [NestedTone];

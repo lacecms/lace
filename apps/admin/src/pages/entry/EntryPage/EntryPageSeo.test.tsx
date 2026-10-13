@@ -249,3 +249,37 @@ test.each([
     expect(screen.queryByRole("region", { name: "SEO" })).not.toBeInTheDocument();
   },
 );
+
+test("viewers cannot mutate native SEO controls while inspecting the recursive editor", async () => {
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
+    seoClient(),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  const card = within(screen.getByRole("region", { name: "SEO" }));
+  for (const control of card.getAllByRole("textbox")) expect(control).toBeDisabled();
+  expect(card.getByRole("switch", { name: "Hide from search engines" })).toBeDisabled();
+  expect(card.queryByRole("button", { name: "Choose media for SEO image" })).toBeNull();
+});
+
+test("pending saves lock native SEO controls together with composite fields", async () => {
+  const user = userEvent.setup();
+  let release!: (value: AdminContentEntryDto) => void;
+  const response = new Promise<AdminContentEntryDto>((resolve) => {
+    release = resolve;
+  });
+  const saveDraft = vi.fn(() => response);
+  renderRoute("/content/posts/entry-1", editor, seoClient({ saveDraft }));
+  await openPost(user);
+  await user.type(screen.getByRole("textbox", { name: "SEO title" }), "Changed");
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(saveDraft).toHaveBeenCalledOnce());
+  expect(screen.getByRole("textbox", { name: "SEO title" })).toBeDisabled();
+  expect(screen.getByRole("switch", { name: "Hide from search engines" })).toBeDisabled();
+  release({
+    ...post({ title: "Changed" }),
+    draft: { ...post({ title: "Changed" }).draft, revision: 2 },
+  });
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "SEO title" })).toBeEnabled());
+});

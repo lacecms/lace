@@ -33,3 +33,18 @@ test("SEO image usages name the SEO image and their states", () => {
     usageLocationLabel({ field: "image", source: "seo", states: ["draft", "published"] }),
   ).toBe("SEO image · Draft and published");
 });
+
+test("nested pointers show one-based items without changing stored paths", () => {
+  expect(usageLocationLabel({ field: "/team/0/photo", source: "field", states: ["draft"] })).toBe(
+    "Team · Item 1 · Photo field · Draft",
+  );
+  expect(
+    usageLocationLabel({
+      blockKey: "b",
+      blockType: "gallery",
+      field: "/images/12",
+      source: "block",
+      states: ["published"],
+    }),
+  ).toBe("Gallery block · Images · Item 13 field · Published");
+});

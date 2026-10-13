@@ -410,11 +410,15 @@ fresh project and moving configuration manually.
 
 The `create-lace` starter is the single source of what users receive: minimal
 `home` and `posts` pages, a `settings` global (`siteName`, `tagline`), a
-layout, global styles, the five built-in registry blocks, `lace.site.json`, the
-block map file, and the loader file. Each page passes the published site to the
-layout, which renders a site header from `site.global("settings")` and falls
-back to static values while the global is unpublished; navigation stays static
-until a list field exists. It contains no tests, fixtures, or
+`navigation` global that allows only the `navigation` block, a layout, global
+styles, the seven built-in registry blocks, `lace.site.json`, the block map
+file, and the loader file. Each page passes the published site to the layout,
+which renders a site header from `site.global("settings")` and the published
+`navigation` global's blocks through `LaceBlocks` and the block map, falling
+back to static values and a static Home link while either global is
+unpublished (a published navigation global without visible blocks renders no
+navigation). Gallery and navigation layout CSS lives in the site stylesheet; the
+components carry no styles or scripts. It contains no tests, fixtures, or
 engine-development routes.
 
 `apps/site` is the engine development playground and integration fixture. It may
@@ -678,10 +682,77 @@ Reference fields are not part of the MVP. The field-definition discriminated
 union and validation visitor must be exhaustive so that a reference variant can
 be introduced later without changing existing field encodings.
 
+### Bounded composite fields (CE7A)
+
+`field.group({ fields, ...common })` describes a plain object;
+`field.list({ item, minItems?, maxItems?, ...common })` describes an ordered
+array of one scalar or group definition. Both are available in model fields
+and block data, with recursive portable metadata and nested value inference.
+They create no nested blocks, routes, item IDs or independent lifecycle.
+See [ADR 0013](adr/0013-bounded-composite-fields.md).
+
+A definition branch permits six group/list containers and two consecutive
+groups. A list resets the consecutive-group count, never total depth, and may
+not directly contain another list. Scalars, root maps and rich-text nodes do
+not count. Definitions must be finite, detached JSON; malformed children,
+cycles, unsafe composite defaults and non-portable values fail before startup.
+List bounds are integers with effective defaults 0/100 and
+`0 ≤ minItems ≤ maxItems ≤ 100`.
+
+Absence selects a declared default, then recursively validates it. An absent
+optional container without a default stays absent, even when descendants have
+defaults or required flags. Present `{}` and `[]` override container defaults;
+child defaults apply inside present groups/items. Required means presence:
+a required empty list is publishable unless minItems is positive. Drafts may
+omit required descendants or fall below minItems; publication enforces both.
+Wrong present types, null, unknown children and sparse/undefined list elements
+fail in both modes. Composite defaults may be incomplete draft starting values;
+scalar descriptor default compatibility stays unchanged.
+
+Each normalized snapshot has at most 500 list elements, summed across fields
+and all block data, including hidden blocks. Nested lengths count independently
+(10 categories with 20 links each consume 210). Draft/published budgets are
+separate. Defaults count; rich-text arrays and block arrays do not. Fields and
+each block retain the normalized JSON byte cap; nested media retain the
+200-reference cap. Errors identify exact key/index paths. Hidden blocks use
+draft required/minimum checks even on publication, but all maximums apply.
+
+Canonical identity strips display metadata only at descriptor positions,
+recursively; child keys and default-value keys named label/description stay
+structural. Scalar-only encodings/hashes stay stable. Collection listFields,
+SEO mappings and block settings retain their existing scalar restrictions.
+
+CE7B extends CE1 synchronization recursively to group children and list items.
+Named model children use sibling-key `renamedFrom`; `removedFields` accepts
+schema pointers such as `/links/*/legacy`, with `*` addressing every item.
+Root hints remain compatible. Ancestors are paired before descendants; no
+cross-parent moves, indexed hints or implicit type conversions are supported.
+Defaults fill absent keys only in present containers or containers introduced
+by their own applicable default. Present values and list order/length remain.
+Actual media-bearing backfills are refused, including descendant defaults.
+Nested tightening uses draft/published semantics and rejects offending data.
+
+Preparation checks the combined prospective model/block snapshot, including
+hidden and unchanged blocks, JSON limits, 500 list elements and 200 media
+locations. Unrelated published required absence remains grandfathered. Block
+data changes still use versioned migrations: each resumable unit must also
+satisfy limits in its actual intermediate state. Nested model JSON and rebuilt
+`$fields` media references commit in the guarded final mutation, preserving
+snapshot revisions/audit fields and the existing final version/build behavior.
+Reports distinguish schema wildcard paths from concrete indexed value paths.
+
+CE7C list descriptors optionally declare `itemLabel`, naming an immediate
+text, textarea, select or URL child of a group item. It is portable presentation
+metadata only: exclude it from structural identity at list descriptor positions,
+include it in projection identity and preserve content/default keys of that name.
+Changing it needs no version bump or migration. Summaries use plain text and
+never display media IDs. CE7D ships Gallery and Navigation built on these
+descriptors.
+
 ### Initial built-in blocks
 
-The starter and browser editor ship with five blocks. They use only the public
-field DSL and do not receive special database treatment:
+The starter and browser editor ship with seven blocks. They use only the public
+field DSL, declare no settings and do not receive special database treatment:
 
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
@@ -690,7 +761,17 @@ field DSL and do not receive special database treatment:
   media item's alt text, and optional caption. Version 1 required the alt
   text; the version 2 migration returns the stored data unchanged;
 - `quote`: required quote text and optional attribution;
-- `cta`: required heading, optional body, required action label, and required URL.
+- `cta`: required heading, optional body, required action label, and required URL;
+- `gallery` (CE7D): optional title and an `images` list (default `[]`, at
+  least one item to publish, at most 50) of groups with required media,
+  optional alt text and optional caption that override the media item's;
+- `navigation` (CE7D): optional accessible `name` and a `links` list (default
+  `[]`, at least one to publish, at most 20) of groups with a required label,
+  an optional URL and an optional `children` list (at most 20) of groups with a
+  required label and URL. The registry component renders a parent with
+  children as a native `<details>` disclosure whose submenu starts with the
+  parent's own URL, and marks a root-relative link to the current page with
+  `aria-current="page"`.
 
 Projects may define additional blocks in `lace.config.ts`. Custom blocks use the
 generic metadata-driven admin form in the MVP; custom React admin editors are
@@ -921,7 +1002,8 @@ content_snapshots
 └── updated_by          TEXT NOT NULL
 ```
 
-`fields_json` contains model-specific structured fields. `seo_json` holds the
+`fields_json` contains model-specific structured fields, including composite
+objects/arrays without item envelopes or separate value tables. `seo_json` holds the
 normalized SEO group (section 8) as a JSON object, or `NULL` when the snapshot
 has none; an all-empty group is never stored. Save, publication, revert and
 duplication copy it with the rest of the snapshot. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
@@ -971,7 +1053,9 @@ settings.
 
 `block_key` is stable across draft and published copies. The composite primary key allows a published snapshot to be copied using one `INSERT ... SELECT` statement without generating new per-row IDs.
 
-Block-specific data remains JSON and is validated by the block registry. A block type does not receive a dedicated SQL table or columns.
+Block-specific data, including bounded groups/lists, remains JSON and is
+validated by the block registry. Composite data does not expand the settings
+allowlist. A block type does not receive a dedicated SQL table or columns.
 
 ### 9.5 Block ordering and nesting
 
@@ -1052,7 +1136,13 @@ PRIMARY KEY(snapshot_id, source_key, field_path)
 
 `source_key` is `$fields` for snapshot fields, `$seo` (with `field_path`
 `image`) for the SEO image, or the stable block key for block data. Block keys
-never start with `$`. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
+never start with `$`. Root scalar media paths remain their field keys. Nested
+locations use RFC 6901 pointers relative to their source (`/images/0/image`),
+with field keys for groups and zero-based list indices. Saves atomically rebuild
+the complete projection after list reorders/removals; lifecycle copies retain
+nested JSON and references, remapping duplicated block source keys. Usage
+locations carry these paths; hidden-only media remains protected but excluded
+from public delivery. An index on `media_id` makes deletion checks bounded. Draft saves rebuild
 the draft snapshot's reference projection in the same atomic mutation;
 publication copies it with `INSERT ... SELECT`. A media item may be selected only
 while its status is `active`.
@@ -1289,6 +1379,10 @@ Inputs include:
 - authenticated actor;
 - optional idempotency key.
 
+Publication recursively validates composite required descendants/minItems and
+normalized list/media/byte budgets. Revert and duplicate copy composites with
+the existing snapshot/reference rules.
+
 Publication first loads the draft, blocks, active configuration, and current
 published pointer, then validates the complete candidate without writing. A
 hidden block is validated in draft mode, so an unfinished block can be
@@ -1391,6 +1485,10 @@ The block registry maps each `block_type` to:
 - optional default data;
 - optional declared settings;
 - optional migration functions.
+
+`defineBlock({ fields })` accepts bounded composite data with inferred nested
+objects/arrays and portable metadata; rename hints remain forbidden at every
+block-data depth.
 
 `defineBlock({ settings })` declares presentational settings, separate from
 the block content, with the field builders limited to `select`, `boolean`,
@@ -1642,6 +1740,13 @@ preserve the same snapshot-revision invariant.
 
 ### Contract rules
 
+Composite metadata describes recursive group/list alternatives in REST and
+OpenAPI. Values remain plain objects/arrays with media IDs in every admin/public
+entry, global and export contract. Nested validation issues use precise JSON
+Pointers such as `/blocks/0/data/images/2/image`; usage `field` carries a nested
+relative pointer or an unchanged scalar key. SDK parsing preserves nested data
+and resolves nested media through the existing published dictionaries/helpers.
+
 - Requests and responses use shared Valibot runtime schemas.
 - Hono request validation uses `@hono/standard-validator`, keeping route integration based on Standard Schema rather than a validator-specific Hono API.
 - Database rows are never exposed directly as API DTOs.
@@ -1790,7 +1895,10 @@ framework and never reads `process.env` or `import.meta.env` itself.
 
 ### 13.3 Render core
 
-`@lacecms/render` depends only on `@lacecms/content`.
+`@lacecms/render` depends only on `@lacecms/content`. Composite parsing reuses
+shared publish validation, defaults and standalone block budgets; component
+props preserve nested inference and errors retain numeric item paths. It does
+not claim to validate fields/hidden blocks absent from its rendering input.
 
 - `BlockContext` identifies a block in errors: `modelKey`, `entryId`, `blockKey`.
 - `parseBlock(definition, block, context)` validates `block.data` with
@@ -1923,6 +2031,10 @@ own classes in the root `class` (`class:list={["hero", className]}`, or
 attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
+Built-in components carry no `<style>` or `<script>`: presentation stays in the
+site stylesheet. The registry ships `gallery` and `navigation` (CE7D) besides
+the five earlier items; every Lace-maintained site installs all seven.
+
 ### 13.6 Framework selection
 
 Registry items, `lace.site.json`, and adapters are keyed by framework. `astro`
@@ -1995,6 +2107,16 @@ if (post === undefined) return new Response(null, { status: 404 });
 ---
 
 <LaceBlocks entry={post} blocks={blocks} mediaUrl={site.mediaUrl} />
+```
+
+A layout renders a global's blocks the same way, for example the published
+`navigation` global in the site header, with a static fallback while it is
+unpublished (`LaceBlocks` accepts a published global as its entry):
+
+```astro
+{navigation === undefined
+  ? <nav aria-label="Main"><a href={import.meta.env.BASE_URL}>Home</a></nav>
+  : <LaceBlocks entry={navigation} blocks={blocks} mediaUrl={site.mediaUrl} />}
 ```
 
 Layout head and site files (user-owned):
@@ -2355,6 +2477,21 @@ connections always keep foreign keys on.
 
 ## 17. Admin application
 
+CE7C authors groups and lists recursively through labelled fieldsets and
+repeatable controls, reusing scalar, media and rich-text controls. Lists support
+Add, Remove, Duplicate, Move up/down and isolated keyboard/pointer sorting.
+Groups and complex items collapse without unmounting editing state; viewers
+can operate disclosures but cannot mutate values. UI item identities are
+transient sidecars and never enter stored or public JSON. Explicit absence,
+empty objects/arrays and shared recursive defaults retain their meanings.
+Counts and prospective growth gates include normalized defaults, nested lists
+and hidden blocks in the 500-element entry budget. Required/minimum guidance
+is publication-only. Exact recursive errors open block tabs and all ancestor
+disclosures before focusing the leaf/container. Pending lifecycle requests
+lock content mutations so indexed errors cannot land on another item.
+Save/discard, dirty checks, conflict JSON and lifecycle copies retain all
+composite values; no list slots are silently removed during serialization.
+
 The admin is a client-rendered React SPA with no SSR requirement.
 
 Core client stack:
@@ -2673,6 +2810,13 @@ Automated dependency update tooling may open version-update pull requests, but f
 
 ## 20. Testing strategy
 
+Composite verification covers typed depth-six fixtures, schema bounds 6/7 and
+2/3, list-of-list refusal, values 100/101 and snapshot totals 500/501, defaults,
+hidden data, exact paths, byte/media limits and scalar hash regressions. Shared
+fake/SQLite/D1 contracts cover lifecycle copies, reordered/removed media,
+atomic failures, concurrency, migration totals and public filtering; D1 retains
+100-bind and 50-query maximum-save budgets without per-item queries.
+
 ### Unit tests
 
 Unit tests cover pure domain and application behavior:
@@ -2762,6 +2906,13 @@ Operationally important admin information:
 
 ## 22. Migration and compatibility policy
 
+CE7A adds group/list variants to exhaustive TypeScript consumers. Upgrade
+engine/admin/site dependencies together before adoption. No database migration
+or scalar data rewrite is required. After storing composites, rollback to a
+scalar-only engine needs matching configuration/database backup or an explicit
+validated conversion. Recursive schema evolution is described in section 8;
+admin authoring restrictions remain in section 17 until CE7C expands the editor.
+
 Compatibility exists at three boundaries:
 
 1. Database schema version.
@@ -2848,7 +2999,8 @@ The implementation plan uses these resolved defaults:
 - `better-sqlite3` for the Node adapter;
 - Tailwind CSS over Lace design tokens and shadcn/ui-generated, Lace-owned
   admin components on Radix UI primitives;
-- the `hero`, `richText`, `image`, `quote`, and `cta` built-in blocks;
+- the `hero`, `richText`, `image`, `quote`, and `cta` built-in blocks (CE7D
+  later adds `gallery` and `navigation`);
 - no reference fields in the MVP;
 - no-op cache by default and optional KV only after the uncached path is correct;
 - a first-party fixed-command VPS builder rather than an arbitrary command or

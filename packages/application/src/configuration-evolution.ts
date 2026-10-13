@@ -1,10 +1,13 @@
+import { transformConfigurationSyncFields } from "./configuration-fields.js";
 import type { ContentModelStructure } from "@lacecms/config";
 import {
   ContentValidationError,
+  validateSnapshotListBudget,
+  parseSchemaPath,
+  encodeSchemaPath,
   MAX_JSON_BYTES,
   canonicalJsonByteLength,
   canonicalizeJson,
-  validateFieldValue,
 } from "@lacecms/content";
 import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
 import type {
@@ -52,6 +55,7 @@ export interface StructuralChange {
   readonly properties?: readonly string[];
   readonly scope: "block" | "field" | "model";
   readonly target: string;
+  readonly schemaPath?: string;
   /** Baseline and configured block versions of a `block-definition-changed` change. */
   readonly version?: { readonly from: number; readonly to: number };
 }
@@ -103,9 +107,17 @@ export interface ConfigurationSyncSnapshotFindings {
 /** One current draft or published snapshot read for a data-dependent sync decision. */
 export interface ConfigurationSyncSnapshot {
   readonly blocks: readonly {
+    readonly data?: JsonObject;
+    readonly settings?: JsonObject;
+    readonly hidden?: boolean;
     readonly key: string;
     readonly schemaVersion: number;
     readonly type: string;
+  }[];
+  readonly references?: readonly {
+    readonly sourceKey: string;
+    readonly fieldPath: string;
+    readonly mediaId: string;
   }[];
   readonly entryId: string;
   readonly fields: JsonObject;
@@ -132,6 +144,7 @@ export interface SnapshotHolders extends SnapshotStateCounts {
 /** Facts derived from one scan of a model's snapshots for a fixed fingerprint. */
 export interface ModelSnapshotEvidence {
   readonly backfills: Readonly<Record<string, SnapshotStateCounts>>;
+  readonly mediaBackfills?: Readonly<Record<string, ConfigurationSyncSnapshotFindings>>;
   /** Snapshots holding removed or changed block types. */
   readonly blockHolders: Readonly<Record<string, SnapshotHolders>>;
   /** Snapshots holding removed fields, rename sources, and rename targets. */
@@ -152,6 +165,8 @@ export type ConfigurationSyncEvidence = Readonly<Record<string, ModelSnapshotEvi
 /** A model whose snapshots must be scanned before its changes can be decided. */
 export interface ConfigurationSyncScanRequest {
   readonly changes: readonly StructuralChange[];
+  readonly blockFields?: Readonly<Record<string, Readonly<Record<string, FieldDefinition>>>>;
+  readonly storedFields?: Readonly<Record<string, FieldDefinition>>;
   readonly fields: Readonly<Record<string, FieldDefinition>>;
   readonly fingerprint: string;
   /** Block types whose stale blocks are migrated in memory; present when non-empty. */
@@ -165,6 +180,10 @@ export const CONFIGURATION_SYNC_SCAN_PAGE_SIZE = 100;
 export const CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT = 20;
 
 const FIELD_PROPERTIES = new Set([
+  "fields",
+  "item",
+  "minItems",
+  "maxItems",
   "defaultValue",
   "max",
   "maxLength",
@@ -228,6 +247,10 @@ function compareField(key: string, before: JsonObject, after: JsonObject): Struc
   if (before.type !== after.type) {
     return [{ class: "breaking", kind: "field-type-changed", scope: "field", target: key }];
   }
+  if (after.type === "list") {
+    before = { ...before, minItems: before.minItems ?? 0, maxItems: before.maxItems ?? 100 };
+    after = { ...after, minItems: after.minItems ?? 0, maxItems: after.maxItems ?? 100 };
+  }
   const properties = new Set([...Object.keys(before), ...Object.keys(after)]);
   const unsupported = [...properties]
     .filter((name) => !FIELD_PROPERTIES.has(name) && !same(before[name], after[name]))
@@ -248,6 +271,8 @@ function compareField(key: string, before: JsonObject, after: JsonObject): Struc
   // Any tightened property makes the whole field change `validated`.
   let tightened = false;
   const bounds: readonly [string, typeof lowerBoundChange][] = [
+    ["minItems", lowerBoundChange],
+    ["maxItems", upperBoundChange],
     ["minLength", lowerBoundChange],
     ["maxLength", upperBoundChange],
     ["min", lowerBoundChange],
@@ -324,49 +349,62 @@ export function diffContentModelStructures(
   hints: StructureHints = {},
 ): readonly StructuralChange[] {
   const changes: StructuralChange[] = [];
-  const beforeFields = record(baseline.fields);
-  const afterFields = record(target.fields);
-  const renames = applicableRenames(beforeFields, afterFields, hints);
-  const renamedSources = new Set(renames.values());
-  const removedFields = new Set(hints.removedFields ?? []);
   const removedBlocks = new Set(hints.removedBlocks ?? []);
-  for (const key of Object.keys(afterFields)) {
-    const after = record(afterFields[key]);
-    const former = renames.get(key);
-    if (former !== undefined) {
+  const compareDefinition = (
+    path: readonly string[],
+    before: JsonObject,
+    after: JsonObject,
+  ): void => {
+    const address = encodeSchemaPath(path);
+    changes.push(...compareField(address, before, after));
+    if (before.type !== after.type) return;
+    if (after.type === "group") compareMap(path, record(before.fields), record(after.fields));
+    if (after.type === "list")
+      compareDefinition([...path, "*"], record(before.item), record(after.item));
+  };
+  const compareMap = (parent: readonly string[], before: JsonObject, after: JsonObject): void => {
+    const sources = new Set<string>();
+    for (const key of Object.keys(after)) {
+      const path = [...parent, key];
+      const address = encodeSchemaPath(path);
+      const hint = hints.renamedFields?.[address];
+      const former = hint === undefined ? undefined : parseSchemaPath(hint).at(-1);
+      const renamed =
+        former !== undefined && Object.hasOwn(before, former) && !Object.hasOwn(before, key);
+      const old = renamed ? former : key;
+      if (renamed) {
+        sources.add(old);
+        changes.push({
+          class: "destructive",
+          from: encodeSchemaPath([...parent, old]),
+          kind: "field-renamed",
+          scope: "field",
+          target: address,
+        });
+      }
+      if (!Object.hasOwn(before, old)) {
+        changes.push({
+          ...(Object.hasOwn(record(after[key]), "defaultValue") ? { backfill: true } : {}),
+          class: "compatible",
+          kind: "field-added",
+          scope: "field",
+          target: address,
+        });
+      } else compareDefinition(path, record(before[old]), record(after[key]));
+    }
+    for (const key of Object.keys(before)) {
+      if (Object.hasOwn(after, key) || sources.has(key)) continue;
+      const address = encodeSchemaPath([...parent, key]);
       changes.push({
         class: "destructive",
-        from: former,
-        kind: "field-renamed",
-        scope: "field",
-        target: key,
-      });
-      changes.push(...compareField(key, record(beforeFields[former]), after));
-      continue;
-    }
-    if (!Object.hasOwn(beforeFields, key)) {
-      changes.push({
-        ...(Object.hasOwn(after, "defaultValue") ? { backfill: true } : {}),
-        class: "compatible",
-        kind: "field-added",
-        scope: "field",
-        target: key,
-      });
-      continue;
-    }
-    changes.push(...compareField(key, record(beforeFields[key]), after));
-  }
-  for (const key of Object.keys(beforeFields)) {
-    if (!Object.hasOwn(afterFields, key) && !renamedSources.has(key)) {
-      changes.push({
-        class: "destructive",
-        ...(removedFields.has(key) ? { hinted: true as const } : {}),
+        ...(hints.removedFields?.includes(address) ? { hinted: true as const } : {}),
         kind: "field-removed",
         scope: "field",
-        target: key,
+        target: address,
       });
     }
-  }
+  };
+  compareMap([], record(baseline.fields), record(target.fields));
 
   const beforeBlocks = stringList(baseline.blocks);
   const afterBlocks = stringList(target.blocks);
@@ -464,44 +502,64 @@ export function diffContentModelStructures(
   return Object.freeze(changes.sort(compareChanges).map((change) => Object.freeze(change)));
 }
 
-/**
- * Rename hints that apply to a baseline: the former key is a baseline field and
- * the new key is configured but not a baseline field.
- */
-function applicableRenames(
-  beforeFields: JsonObject,
-  afterFields: JsonObject,
+/** Resolve a configured schema address through applicable ancestor rename pairs. */
+function baselineFieldAt(
+  baseline: ContentModelStructure,
+  path: readonly string[],
   hints: StructureHints,
-): Map<string, string> {
-  const renames = new Map<string, string>();
-  for (const [key, former] of Object.entries(hints.renamedFields ?? {})) {
-    if (
-      Object.hasOwn(afterFields, key) &&
-      Object.hasOwn(beforeFields, former) &&
-      !Object.hasOwn(beforeFields, key)
-    ) {
-      renames.set(key, former);
+): FieldDefinition | undefined {
+  let fields = record(baseline.fields) as unknown as Readonly<Record<string, FieldDefinition>>;
+  let current: FieldDefinition | undefined;
+  for (let index = 0; index < path.length; index++) {
+    const part = path[index]!;
+    if (part === "*") {
+      if (current === undefined) return undefined;
+      if (current.type !== "list") throw new Error("Wildcard does not address a list.");
+      current = current.item;
+    } else {
+      if (index > 0) {
+        if (current === undefined) return undefined;
+        if (current.type !== "group") throw new Error("Named child does not address a group.");
+        fields = current.fields;
+      }
+      const address = encodeSchemaPath(path.slice(0, index + 1));
+      const former = hints.renamedFields?.[address];
+      const source = former === undefined ? undefined : parseSchemaPath(former).at(-1);
+      const key =
+        index < path.length - 1 &&
+        source !== undefined &&
+        Object.hasOwn(fields, source) &&
+        !Object.hasOwn(fields, part)
+          ? source
+          : part;
+      current = Object.hasOwn(fields, key) ? fields[key] : undefined;
     }
   }
-  return renames;
+  return current;
 }
 
-/**
- * Lists field rename hints that contradict a baseline: both keys are baseline
- * fields, or neither is. A hint whose new key alone is in the baseline was
- * already applied and is inert.
- */
+/** Validate nested hints in paired ancestor contexts, preserving inert applied hints. */
 export function validateStructureHints(
   baseline: ContentModelStructure,
   hints: StructureHints,
 ): readonly StructureHintIssue[] {
-  const fields = record(baseline.fields);
   const issues: StructureHintIssue[] = [];
   for (const [target, from] of Object.entries(hints.renamedFields ?? {})) {
-    const hasSource = Object.hasOwn(fields, from);
-    const hasTarget = Object.hasOwn(fields, target);
-    if (hasSource && hasTarget) issues.push({ from, kind: "target-exists", target });
-    if (!hasSource && !hasTarget) issues.push({ from, kind: "source-missing", target });
+    try {
+      const hasSource = baselineFieldAt(baseline, parseSchemaPath(from), hints) !== undefined;
+      const hasTarget = baselineFieldAt(baseline, parseSchemaPath(target), hints) !== undefined;
+      if (hasSource && hasTarget) issues.push({ from, kind: "target-exists", target });
+      if (!hasSource && !hasTarget) issues.push({ from, kind: "source-missing", target });
+    } catch {
+      issues.push({ from, kind: "source-missing", target });
+    }
+  }
+  for (const target of hints.removedFields ?? []) {
+    try {
+      baselineFieldAt(baseline, parseSchemaPath(target), hints);
+    } catch {
+      issues.push({ from: target, kind: "source-missing", target });
+    }
   }
   return Object.freeze(
     issues
@@ -538,11 +596,20 @@ interface MutableFindings {
   snapshots: ConfigurationSyncSnapshotReference[];
 }
 
-function addFinding(findings: MutableFindings, snapshot: ConfigurationSyncSnapshot): void {
+function addFinding(
+  findings: MutableFindings,
+  snapshot: ConfigurationSyncSnapshot,
+  path?: string,
+): void {
   findings.count += 1;
   if (findings.snapshots.length < CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT) {
     findings.snapshots.push(
-      Object.freeze({ entryId: snapshot.entryId, state: snapshot.state, title: snapshot.title }),
+      Object.freeze({
+        entryId: snapshot.entryId,
+        state: snapshot.state,
+        title: snapshot.title,
+        ...(path === undefined ? {} : { path }),
+      }),
     );
   }
 }
@@ -576,11 +643,20 @@ function emptyHolders(): MutableHolders {
   return { draft: 0, published: 0, snapshots: [] };
 }
 
-function addHolder(holders: MutableHolders, snapshot: ConfigurationSyncSnapshot): void {
+function addHolder(
+  holders: MutableHolders,
+  snapshot: ConfigurationSyncSnapshot,
+  path?: string,
+): void {
   holders[snapshot.state] += 1;
   if (holders.snapshots.length < CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT) {
     holders.snapshots.push(
-      Object.freeze({ entryId: snapshot.entryId, state: snapshot.state, title: snapshot.title }),
+      Object.freeze({
+        entryId: snapshot.entryId,
+        state: snapshot.state,
+        title: snapshot.title,
+        ...(path === undefined ? {} : { path }),
+      }),
     );
   }
 }
@@ -603,16 +679,6 @@ function freezeHolders(
   );
 }
 
-function conforms(definition: FieldDefinition, value: JsonValue): boolean {
-  try {
-    validateFieldValue(definition, value);
-    return true;
-  } catch (error) {
-    if (error instanceof ContentValidationError) return false;
-    throw error;
-  }
-}
-
 /** Folds bounded snapshot pages into the evidence one scan request needs. */
 export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScanRequest): {
   add(snapshots: readonly ConfigurationSyncSnapshot[]): void;
@@ -623,6 +689,7 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
   const blockHolders: Record<string, MutableHolders> = {};
   const backfills: Record<string, { draft: number; published: number }> = {};
   const violations: Record<string, MutableFindings> = {};
+  const mediaBackfills: Record<string, MutableFindings> = {};
   const oversized: MutableFindings = { count: 0, snapshots: [] };
   const removedFields = new Set<string>();
   const renames = new Map<string, string>();
@@ -639,7 +706,7 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
     }
     if (change.scope === "block" && change.class !== "compatible") blockTypes.add(change.target);
     if (change.backfill === true) backfilled.add(change.target);
-    if (change.class === "validated") validated.set(change.target, change);
+    if (change.class === "validated" || change.backfill) validated.set(change.target, change);
   }
   for (const key of [...removedFields, ...renames.keys(), ...renames.values()]) {
     fieldHolders[key] = emptyHolders();
@@ -653,50 +720,88 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
       for (const snapshot of page) {
         snapshots[snapshot.state] += 1;
         if (seoHolders !== undefined && snapshot.hasSeo === true) addHolder(seoHolders, snapshot);
-        for (const [key, holders] of Object.entries(fieldHolders)) {
-          if (Object.hasOwn(snapshot.fields, key)) addHolder(holders, snapshot);
-        }
         const types = new Set(snapshot.blocks.map((block) => block.type));
         for (const type of blockTypes) {
           if (types.has(type)) addHolder(blockHolders[type]!, snapshot);
         }
-        // Apply order matches the synchronization writes: rename, prune, backfill.
-        const transformed: Record<string, JsonValue> = { ...snapshot.fields };
-        let grown = false;
-        for (const [key, former] of renames) {
-          if (!Object.hasOwn(snapshot.fields, former)) continue;
-          transformed[key] = snapshot.fields[former]!;
-          delete transformed[former];
-          grown = true;
-        }
-        for (const key of removedFields) delete transformed[key];
-        for (const key of backfilled) {
-          const definition = request.fields[key];
-          if (Object.hasOwn(transformed, key) || definition?.defaultValue === undefined) continue;
-          transformed[key] = definition.defaultValue as JsonValue;
-          grown = true;
+        const transformed = transformConfigurationSyncFields(
+          request.fields,
+          request.changes,
+          snapshot.fields,
+          snapshot.state,
+        );
+        for (const [key, path] of Object.entries(transformed.holders))
+          if (fieldHolders[key] !== undefined)
+            addHolder(fieldHolders[key]!, snapshot, key.startsWith("/") ? path : undefined);
+        for (const [key] of Object.entries(transformed.backfills))
           increment(backfills, key, snapshot.state);
+        for (const [key, path] of Object.entries(transformed.mediaBackfills)) {
+          const finding = (mediaBackfills[key] ??= { count: 0, snapshots: [] });
+          addFinding(finding, snapshot, path);
         }
-        if (grown && canonicalJsonByteLength(transformed) > MAX_JSON_BYTES) {
-          addFinding(oversized, snapshot);
+        let overLimit = canonicalJsonByteLength(transformed.fields) > MAX_JSON_BYTES;
+        let limitPath: string | undefined;
+        const removedTypes = new Set(
+          request.changes
+            .filter((change) => change.kind === "block-type-removed")
+            .map((change) => change.target),
+        );
+        const retained = snapshot.blocks.filter((block) => !removedTypes.has(block.type));
+        const oversizedBlock = retained.findIndex(
+          (block) => canonicalJsonByteLength(block.data ?? {}) > MAX_JSON_BYTES,
+        );
+        if (oversizedBlock >= 0) {
+          overLimit = true;
+          limitPath = `/blocks/${oversizedBlock}/data`;
         }
-        for (const [key, change] of validated) {
-          const definition = request.fields[key];
-          if (definition === undefined) continue;
-          const value = transformed[key];
-          const violates =
-            value === undefined
-              ? snapshot.state === "published" &&
-                definition.required &&
-                change.properties?.includes("required") === true
-              : !conforms(definition, value);
-          if (violates) addFinding(violations[key]!, snapshot);
+        try {
+          validateSnapshotListBudget(
+            request.fields,
+            transformed.fields,
+            retained.map((block, index) => ({
+              fields: request.blockFields?.[block.type] ?? {},
+              data: block.data ?? {},
+              path: ["blocks", index, "data"],
+            })),
+          );
+        } catch (error) {
+          if (!(error instanceof ContentValidationError)) throw error;
+          overLimit = true;
+          limitPath = error.issues[0]?.path.map(String).join("/");
+          if (limitPath !== undefined) limitPath = `/${limitPath}`;
         }
+        const keptReferences = (snapshot.references ?? []).filter(
+          (reference) =>
+            reference.sourceKey !== "$fields" &&
+            !(
+              reference.sourceKey === "$seo" &&
+              request.changes.some((change) => change.kind === "seo-disabled")
+            ) &&
+            !snapshot.blocks.some(
+              (block) => removedTypes.has(block.type) && block.key === reference.sourceKey,
+            ),
+        );
+        if (keptReferences.length + transformed.references.length > 200) overLimit = true;
+        if (overLimit) addFinding(oversized, snapshot, limitPath);
+        for (const [key, path] of Object.entries(transformed.violations))
+          addFinding(violations[key]!, snapshot, key.startsWith("/") ? path : undefined);
       }
     },
     result() {
       return Object.freeze({
         backfills: freezeCounts(backfills),
+        ...(Object.keys(mediaBackfills).length === 0
+          ? {}
+          : {
+              mediaBackfills: Object.freeze(
+                Object.fromEntries(
+                  Object.entries(mediaBackfills).map(([key, finding]) => [
+                    key,
+                    freezeFindings(finding),
+                  ]),
+                ),
+              ),
+            }),
         blockHolders: freezeHolders(blockHolders),
         fieldHolders: freezeHolders(fieldHolders),
         fingerprint: request.fingerprint,

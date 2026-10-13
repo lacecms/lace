@@ -436,9 +436,9 @@ function UnavailableMediaField() {
   );
 }
 
-/** The built-in control for every field type; the registry may override any of them. */
+/** Scalar controls reused by the recursive field renderer. */
 export const builtInRenderers: Record<
-  FieldDefinition["type"],
+  Exclude<FieldDefinition["type"], "group" | "list">,
   ComponentType<FieldRendererProps>
 > = {
   boolean: BooleanField,

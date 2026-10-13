@@ -7,6 +7,11 @@
       "manifest": "astro/cta/item.json"
     },
     {
+      "name": "gallery",
+      "framework": "astro",
+      "manifest": "astro/gallery/item.json"
+    },
+    {
       "name": "hero",
       "framework": "astro",
       "manifest": "astro/hero/item.json"
@@ -15,6 +20,11 @@
       "name": "image",
       "framework": "astro",
       "manifest": "astro/image/item.json"
+    },
+    {
+      "name": "navigation",
+      "framework": "astro",
+      "manifest": "astro/navigation/item.json"
     },
     {
       "name": "quote",
