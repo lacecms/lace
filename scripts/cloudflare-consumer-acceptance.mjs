@@ -490,7 +490,6 @@ export async function cloudflareConsumerJourney(parent, operations) {
       "cloudflare-browser-publish",
     );
     const cookie = await login(base, email, password, secretValues);
-    await consumer34bSecurity({ base, cookie, png });
     // The starter needs the synchronized home page published as well.
     const homes = await json(base, "api/v1/admin/models/home/entries", { headers: { cookie } });
     const homeId = homes?.items?.[0]?.id;
@@ -519,10 +518,17 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const pending = await waitBuild(base, cookie, (build) => build.error !== undefined, 30_000);
     if (pending.status !== "pending" || !/trigger_unavailable/u.test(pending.error ?? ""))
       throw new Error(`cloudflare-hook-unavailable: unexpected build ${JSON.stringify(pending)}`);
-    if (hook.calls.length !== 1)
-      throw new Error(
-        `cloudflare-hook-unavailable: expected one hook call, saw ${hook.calls.length}`,
-      );
+    // Post-commit dispatch can make the first failed attempt before the
+    // explicit scheduled call retries it. Coalescing promises one durable
+    // build, not one HTTP attempt while its hook is unavailable.
+    const failedCalls = hook.calls.length;
+    const pendingHistory = await json(base, "api/v1/admin/site-builds", { headers: { cookie } });
+    if (
+      failedCalls < 1 ||
+      pendingHistory.items?.length !== 1 ||
+      pendingHistory.items[0].id !== pending.id
+    )
+      throw new Error("cloudflare-hook-unavailable: publications did not coalesce into one build");
 
     const ready = doctor("ready", "ready", { LACE_BUILD_TOKEN: "present-but-unverified" });
     if (
@@ -546,7 +552,8 @@ export async function cloudflareConsumerJourney(parent, operations) {
         `cloudflare-hook-recovered: untracked accepted hook must be accepted, not ${accepted.status}`,
       );
     if (
-      hook.calls.length !== 2 ||
+      accepted.id !== pending.id ||
+      hook.calls.length !== failedCalls + 1 ||
       hook.calls.some(
         (call) =>
           call.method !== "POST" ||
@@ -560,6 +567,11 @@ export async function cloudflareConsumerJourney(parent, operations) {
       await json(base, "api/v1/admin/site-builds", { headers: { cookie } }),
     );
     assertSecretFree(history, [hook.url], "build history");
+
+    // Keep the publications adjacent and complete hook recovery before the
+    // negative mutation probes: successful probes also trigger post-commit
+    // dispatch and must not claim a publication during this coalescing check.
+    await consumer34bSecurity({ base, cookie, png });
 
     console.info("Acceptance: cloudflare-astro-build");
     const issued = await json(base, "api/v1/admin/api-tokens", {
