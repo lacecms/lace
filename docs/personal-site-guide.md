@@ -576,7 +576,7 @@ HTML статический, но картинки в данном пример�
 
 ## Исходники, на которых основан гайд
 
-- `docs/mvp-architecture.md`, `docs/mvp-implementation-roadmap.md`;
+- `docs/mvp-architecture.md`, `docs/archive/mvp-implementation-roadmap.md`;
 - `openspec/specs/project-generator/spec.md`, `generated-project-acceptance/spec.md`, `public-sdk/spec.md`, `configuration-synchronization/spec.md`, `operational-cli/spec.md`;
 - `packages/create-lace/templates/`, `packages/create-lace/README.md`, `packages/cli/README.md`;
 - `scripts/generated-project-acceptance.mjs`, `apps/builder/src/runner.ts`;

@@ -7,7 +7,7 @@
   [section 9.7](../mvp-architecture.md#97-media),
   [section 12](../mvp-architecture.md#12-rest-api) and
   [section 16](../mvp-architecture.md#16-database-portability-and-d1-constraints)
-- Related: [content and editor roadmap](../content-editor-roadmap.md) step CE4,
+- Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE4,
   OpenSpec change `ce04a-seo-data-contract`
 
 ## Context

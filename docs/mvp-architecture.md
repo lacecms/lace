@@ -143,7 +143,9 @@ Authority order is:
 1. `docs/mvp-architecture.md` for product scope and architectural invariants;
 2. `openspec/specs/**` for detailed, accepted capability behavior;
 3. active OpenSpec change artifacts for the proposed delta;
-4. `docs/mvp-implementation-roadmap.md` for sequence and session boundaries.
+4. `backlog.md` for future work; completed delivery order and session boundaries
+   are preserved in `docs/archive/content-editor-roadmap.md` and
+   `docs/archive/mvp-implementation-roadmap.md`.
 
 Lower levels may add detail but may not contradict a higher level silently.
 

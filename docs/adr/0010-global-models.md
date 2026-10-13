@@ -8,7 +8,7 @@
   [section 12](../mvp-architecture.md#12-rest-api),
   [section 13.2](../mvp-architecture.md#132-published-site-loader) and
   [section 16](../mvp-architecture.md#16-database-portability-and-d1-constraints)
-- Related: [content and editor roadmap](../content-editor-roadmap.md) step CE5,
+- Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE5,
   OpenSpec change `ce05a-global-kind-storage-delivery`
 
 ## Context

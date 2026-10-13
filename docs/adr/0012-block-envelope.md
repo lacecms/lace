@@ -8,7 +8,7 @@
   [section 10](../mvp-architecture.md#10-content-publication),
   [section 11](../mvp-architecture.md#11-block-registry-and-rich-text) and
   [section 12](../mvp-architecture.md#12-rest-api)
-- Related: [content and editor roadmap](../content-editor-roadmap.md) step CE6,
+- Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE6,
   OpenSpec change `ce06a-block-envelope-contract`
 
 ## Context
