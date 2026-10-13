@@ -17,9 +17,10 @@ const { components, nodes } = Astro.props;
     if (Override !== undefined)
       return <Override element={node}><Astro.self components={components} nodes={node.children} /></Override>;
     if (node.tag === "br") return <br />;
+    if (node.tag === "hr") return <hr />;
     const Tag = node.tag;
     return node.tag === "a" ? (
-      <a href={node.attributes.href}><Astro.self components={components} nodes={node.children} /></a>
+      <a href={node.attributes.href} target={node.attributes.target} rel={node.attributes.rel}><Astro.self components={components} nodes={node.children} /></a>
     ) : (
       <Tag><Astro.self components={components} nodes={node.children} /></Tag>
     );

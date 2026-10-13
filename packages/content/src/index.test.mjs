@@ -1315,3 +1315,115 @@ test("list itemLabel is portable presentation metadata with validated targets", 
   expect(() => field.list({ item: field.text(), itemLabel: "title" })).toThrow(/itemLabel/);
   expect(() => toFieldMetadata({ ...field.text(), itemLabel: "title" })).toThrow();
 });
+
+const plainCode = {
+  content: [{ text: "\t  <script>&\nline two\n", type: "text" }],
+  type: "codeBlock",
+};
+const expandedDocument = {
+  content: [
+    ...[1, 2, 3, 4].map((level) => ({ attrs: { level }, type: "heading" })),
+    { type: "horizontalRule" },
+    plainCode,
+    { type: "codeBlock" },
+    { content: [], type: "codeBlock" },
+    { content: [plainCode, { type: "horizontalRule" }], type: "blockquote" },
+    {
+      content: [{ content: [plainCode, { type: "horizontalRule" }], type: "listItem" }],
+      type: "bulletList",
+    },
+    ...[{}, { target: "_blank" }, { rel: "nofollow" }, { rel: "nofollow", target: "_blank" }].map(
+      (attrs) => ({
+        content: [
+          {
+            marks: [{ attrs: { href: "/safe", ...attrs }, type: "link" }],
+            text: "Link",
+            type: "text",
+          },
+        ],
+        type: "paragraph",
+      }),
+    ),
+  ],
+  type: "doc",
+};
+
+test("expanded and existing rich text keeps its exact content and all four link choices", () => {
+  expect(validateRichTextDocument(expandedDocument)).toBe(expandedDocument);
+});
+
+const unsupportedRichNodes = [
+  { attrs: { level: 5 }, type: "heading" },
+  { attrs: { language: null }, type: "codeBlock" },
+  { attrs: { language: "js" }, ...plainCode },
+  { content: [{ marks: [], text: "x", type: "text" }], type: "codeBlock" },
+  { content: [{ marks: [{ type: "bold" }], text: "x", type: "text" }], type: "codeBlock" },
+  { content: [{ type: "hardBreak" }], type: "codeBlock" },
+  { content: [{ type: "paragraph" }], type: "codeBlock" },
+  { content: null, type: "codeBlock" },
+  { content: [], type: "horizontalRule" },
+  { attrs: {}, type: "horizontalRule" },
+  { content: [plainCode], type: "paragraph" },
+  ...[
+    { target: "_self" },
+    { target: null },
+    { target: "" },
+    { rel: null },
+    { rel: "" },
+    { rel: "noopener" },
+    { rel: "noreferrer" },
+    { rel: "nofollow noopener" },
+    { onclick: "alert(1)" },
+    { href: "javascript:alert(1)", target: "_blank", rel: "nofollow" },
+  ].map((attrs) => ({
+    content: [
+      { marks: [{ attrs: { href: "/safe", ...attrs }, type: "link" }], text: "Link", type: "text" },
+    ],
+    type: "paragraph",
+  })),
+];
+
+test.each(unsupportedRichNodes)("rejects unsupported expanded rich-text input %#", (node) => {
+  const document = { content: [node], type: "doc" };
+  expect(() => validateRichTextDocument(document)).toThrow(ContentValidationError);
+  expect(() => field.richText({ defaultValue: document })).toThrow(FieldConfigurationError);
+});
+
+test.each(["draft", "publish"])(
+  "expanded nested defaults and block data share %s validation",
+  (mode) => {
+    const input = structuredClone(expandedDocument);
+    const body = field.richText({ defaultValue: input, required: true });
+    input.content.length = 0;
+    expect(body.defaultValue).toEqual(expandedDocument);
+    expect(Object.isFrozen(body.defaultValue.content)).toBe(true);
+    const fields = { sections: field.list({ item: field.group({ fields: { body } }) }) };
+    const values = { sections: [{}] };
+    const expected = { sections: [{ body: expandedDocument }] };
+    expect(validateModelFields(fields, values, mode)).toEqual(expected);
+    const definition = defineBlock({ fields, type: "expanded", version: 1 });
+    expect(validateBlockData(definition, values, mode)).toEqual(expected);
+    const unsafe = { content: [unsupportedRichNodes[1]], type: "doc" };
+    expect(
+      issueFrom(() => validateModelFields(fields, { sections: [{ body: unsafe }] }, mode)).path,
+    ).toEqual(["sections", 0, "body"]);
+  },
+);
+
+test("rich-text nodes do not consume composite list budget and required semantics stay unchanged", () => {
+  const document = { content: Array(501).fill(plainCode), type: "doc" };
+  const fields = {
+    sections: field.list({
+      item: field.group({ fields: { body: field.richText({ required: true }) } }),
+    }),
+  };
+  const values = { sections: [{ body: document }] };
+  expect(() => validateSnapshotListBudget(fields, values, [])).not.toThrow();
+  expect(validateModelFields(fields, { sections: [{}] }, "draft")).toEqual({ sections: [{}] });
+  expect(() => validateModelFields(fields, { sections: [{}] }, "publish")).toThrow(
+    ContentValidationError,
+  );
+  expect(() =>
+    validateModelFields(fields, { sections: Array(101).fill({ body: document }) }, "draft"),
+  ).toThrow(ContentValidationError);
+});

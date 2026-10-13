@@ -123,7 +123,7 @@ The findings that motivate this roadmap. File references are to the state of
 | 2 | CE4 | SEO metadata and site defaults | A3 | L | done |
 | 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | L | done |
 | 3 | CE7 | Group/list fields, Gallery and Navigation blocks | A6 | L | done |
-| 4 | CE8 | Rich-text editor expansion | B1 | M | planned |
+| 4 | CE8 | Rich-text editor expansion | B1 | M | in progress |
 | 4 | CE9 | Field layout and form UX | B2 | M | planned |
 | Later | CE10 | Entry references and internal links | A7 | — | backlog |
 | Later | CE11 | Responsive images | C3 | — | backlog |
@@ -1185,7 +1185,7 @@ later backlog; neither is a wave-completion requirement.
 
 ## Step CE8 — Rich-text expansion
 
-**Status:** planned; create CE8A's OpenSpec proposal just in time.
+**Status:** CE8A implemented and verified (`ce08a-shared-document-format-rendering`, active); CE8B planned.
 
 **Goal:** every rich-text field supports one shared set of useful authoring
 features, safely from the admin through publication to Astro rendering.
@@ -1253,6 +1253,17 @@ and release/adoption requirements.
 render; H4, rules, code and all four new-tab/nofollow combinations render
 correctly through Astro. Unsafe URLs/attributes fail through the shared
 validator, and code is emitted as escaped text with preserved whitespace.
+
+CE8A verification (2026-10-13): shared content types/validator and defaults,
+render descriptions and actual Astro output cover H4, void rules, plain code
+with escaped text and exact whitespace, independent new-tab/nofollow choices,
+negative attribute/URL cases and nested field/block use. The reference fixture
+covers the expanded output in static and live-export builds. Content (92),
+render (101), Astro (37) and reference builds (3) pass, along with content public
+type tests, root typecheck, Oxlint, Oxfmt and strict change validation. No database
+migration, document rewrite or block-version bump. ADR 0014 and compatibility
+guidance record coordinated upgrades and the interim admin limitation until
+CE8B; this session does not enable expanded authoring in the current editor.
 
 ### Session CE8B — Authoring tools and product verification
 
@@ -1439,3 +1450,4 @@ any decision that changed this document.
 | 2026-10-12 | CE6C | `ce06c-admin-block-envelope` | Expanded block cards get *Content* and *Settings* tabs (both panels force-mounted, arrow/Home/End selection, problem markers in tab names, selection kept per block key). *Settings* edits the anchor with live format and per-entry uniqueness checks (hidden blocks included) and *Copy link* (the entry's site URL plus `#anchor` when the build site URL and path are known, otherwise `#anchor`), the *Hide on site* switch, declared settings through the field controls and *CSS classes* with the shared class-name rule. Hidden cards are muted (muted background, dashed border) with a *Hidden* badge in the accessible name; the card menu offers Hide block / Show block with a status announcement, and the header shows `#anchor`. Anchor and class name are strings in form state and blank values are not sent; cleared settings fall back to their defaults. Envelope issue paths map to the Settings controls, and the summary opens the Settings tab before focusing one. Viewers get a read-only *Settings* section without tabs. Decisions added: only publication-only problems (a required field) in hidden blocks are non-blocking and uncounted in the summary; draft problems in hidden blocks still block saving (roadmap wording corrected). CE6 and wave 2 complete. |
 | 2026-10-13 | CE7D | `ce07d-gallery-navigation-site-examples` | Built-in `gallery` (optional title; `images` list, default `[]`, 1–50 items of media with optional alt/caption overrides, item label `caption`) and `navigation` (optional accessible `name`; `links` list, default `[]`, 1–20 items of label, optional URL and up to 20 `children` with label and URL) join `builtInBlocks` at version 1 without settings; configurations that do not register them keep their hashes. Registry items `gallery` and `navigation` (revision 1) render a `section.gallery` of figures through the image describer (item alt, media alt, `""`; caption fallback; dimensions, focal point, `loading="lazy"`) and a `nav.navigation` whose parents with children are native `<details>`/`<summary>` disclosures starting with the parent URL, with `aria-current="page"` on root-relative links to the current page; components ship no styles or scripts. `LaceBlocks` renders a published global (tested). The reference configuration allows all seven built-ins (`home` 5, `about` 4, `posts` 5, `notes` 4) and adds a `navigation` global rendered by `BaseLayout` in the header with static fallback links while unpublished; the fixture adds a submenu navigation global, a post gallery and home-page local navigation. Template `0.27.0`: starter `home`/`posts` version 2 with seven blocks, the `navigation` global, layout fallback, grid and narrow-screen CSS in `global.css`, managed-guide sections (blocks, global-in-layout, model-level groups/lists, limits, evolution) and manual adoption instructions (no migration). The packed starter and cross-runtime Node/Worker journeys verify gallery alt fallbacks, header navigation and draft isolation. Decisions added: both blocks are built-ins; the inherited-alt admin hint stays top-level; the cross-runtime model-list expectation now includes globals (stale since CE5B); `check-boundaries` cannot scan a `#` inside a regular-expression literal in `.astro` frontmatter. CE7 complete. |
 | 2026-10-13 | — | — | Wave 4 planned after CE7 completion: CE8A → CE8B → CE9A → CE9B. One shared rich-text feature set (H1–H4, horizontal rules, plain code blocks, per-link new-tab/nofollow, bubble menu); no per-field restrictions. CE9 covers placeholders, required guidance, counters, visual layout and new-entry slug suggestions. Word/Google Docs cleanup and complete conditional forms move to later backlog alongside CE10–CE12. No OpenSpec change created or implementation authorized by this planning update. |
+| 2026-10-13 | CE8A | `ce08a-shared-document-format-rendering` | Implemented shared H4/rules/plain-code types, validation/defaults and framework-neutral/Astro rendering. Stored links accept only href plus optional target `_blank` and rel `nofollow`; rendering derives `noopener noreferrer` and independently merges nofollow. Existing documents retain their format; nested budgets and draft/publication rules stay unchanged. 233 focused tests, content type tests and all required root checks pass. ADR 0014 and compatibility guidance cover coordinated adoption and rollback; admin extensions and preservation of expanded documents remain CE8B. Change remains active pending explicit synchronization/archive. |

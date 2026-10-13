@@ -917,15 +917,26 @@ function normalizeDescriptor(
 /** A mark permitted in Lace rich-text documents. */
 export type SafeRichTextMark =
   | { readonly type: "bold" | "code" | "italic" | "strike" }
-  | { readonly attrs: { readonly href: string }; readonly type: "link" };
+  | {
+      readonly attrs: {
+        readonly href: string;
+        readonly target?: "_blank";
+        readonly rel?: "nofollow";
+      };
+      readonly type: "link";
+    };
 
 /** A node permitted in Lace rich-text documents. */
 export type SafeRichTextNode =
-  | { readonly type: "hardBreak" }
+  | { readonly type: "hardBreak" | "horizontalRule" }
+  | {
+      readonly content?: readonly { readonly text: string; readonly type: "text" }[];
+      readonly type: "codeBlock";
+    }
   | { readonly marks?: readonly SafeRichTextMark[]; readonly text: string; readonly type: "text" }
   | { readonly content?: readonly SafeRichTextNode[]; readonly type: "paragraph" }
   | {
-      readonly attrs: { readonly level: 1 | 2 | 3 };
+      readonly attrs: { readonly level: 1 | 2 | 3 | 4 };
       readonly content?: readonly SafeRichTextNode[];
       readonly type: "heading";
     }
@@ -1034,7 +1045,13 @@ function assertMarks(value: unknown, path: readonly ValidationPathSegment[]): vo
       if (!isRecord(mark.attrs)) {
         invalid([...markPath, "attrs"], "invalid_link_attributes", "must be an object.");
       }
-      assertExactKeys(mark.attrs, ["href"], [], [...markPath, "attrs"]);
+      assertExactKeys(mark.attrs, ["href"], ["target", "rel"], [...markPath, "attrs"]);
+      if (Object.hasOwn(mark.attrs, "target") && mark.attrs.target !== "_blank") {
+        invalid([...markPath, "attrs", "target"], "invalid_link_target", 'must be "_blank".');
+      }
+      if (Object.hasOwn(mark.attrs, "rel") && mark.attrs.rel !== "nofollow") {
+        invalid([...markPath, "attrs", "rel"], "invalid_link_rel", 'must be "nofollow".');
+      }
       if (!isSafeUrl(mark.attrs.href)) {
         invalid([...markPath, "attrs", "href"], "unsafe_url", "must be an approved URL.");
       }
@@ -1088,8 +1105,21 @@ function assertRichTextNode(
     return;
   }
 
-  if (value.type === "hardBreak") {
+  if (value.type === "hardBreak" || value.type === "horizontalRule") {
     assertExactKeys(value, ["type"], [], path);
+    return;
+  }
+
+  if (value.type === "codeBlock") {
+    assertExactKeys(value, ["type"], ["content"], path);
+    if (Object.hasOwn(value, "content")) {
+      assertRichTextChildren(value.content, [...path, "content"], ["text"]);
+      for (const [index, child] of (
+        value.content as readonly Record<string, unknown>[]
+      ).entries()) {
+        assertExactKeys(child, ["type", "text"], [], [...path, "content", index]);
+      }
+    }
     return;
   }
 
@@ -1107,8 +1137,13 @@ function assertRichTextNode(
       invalid([...path, "attrs"], "invalid_heading_attributes", "must be an object.");
     }
     assertExactKeys(value.attrs, ["level"], [], [...path, "attrs"]);
-    if (value.attrs.level !== 1 && value.attrs.level !== 2 && value.attrs.level !== 3) {
-      invalid([...path, "attrs", "level"], "invalid_heading_level", "must be 1, 2, or 3.");
+    if (
+      value.attrs.level !== 1 &&
+      value.attrs.level !== 2 &&
+      value.attrs.level !== 3 &&
+      value.attrs.level !== 4
+    ) {
+      invalid([...path, "attrs", "level"], "invalid_heading_level", "must be 1, 2, 3, or 4.");
     }
     if (Object.hasOwn(value, "content")) {
       assertRichTextChildren(value.content, [...path, "content"], ["hardBreak", "text"]);
@@ -1127,7 +1162,7 @@ function assertRichTextNode(
     assertRichTextChildren(
       value.content,
       [...path, "content"],
-      ["bulletList", "orderedList", "paragraph"],
+      ["bulletList", "orderedList", "paragraph", "horizontalRule", "codeBlock"],
     );
     return;
   }
@@ -1137,7 +1172,7 @@ function assertRichTextNode(
     assertRichTextChildren(
       value.content,
       [...path, "content"],
-      ["bulletList", "orderedList", "paragraph"],
+      ["bulletList", "orderedList", "paragraph", "horizontalRule", "codeBlock"],
     );
     return;
   }
@@ -1154,7 +1189,15 @@ export function validateRichTextDocument(value: unknown): SafeRichTextDocument {
   assertRichTextChildren(
     value.content,
     ["content"],
-    ["blockquote", "bulletList", "heading", "orderedList", "paragraph"],
+    [
+      "blockquote",
+      "bulletList",
+      "heading",
+      "orderedList",
+      "paragraph",
+      "horizontalRule",
+      "codeBlock",
+    ],
   );
   return value as unknown as SafeRichTextDocument;
 }

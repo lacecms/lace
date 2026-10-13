@@ -334,3 +334,34 @@ configuration and model version changes, configuration sync, publication of
 the global and the layout change (see the 0.27.0 upgrade instructions). To roll
 back, remove the blocks from the models with `removedBlocks` while entries use
 them, or restore the backup taken before sync.
+
+## CE8A shared rich-text format
+
+CE8A adds H4, horizontal rules, plain code blocks and independent link new-tab
+and nofollow attributes. Existing H1–H3 and href-only JSON stays valid without
+rewrites, database migrations or block schema-version changes.
+
+Stored links use `href` plus optional `target: "_blank"` and `rel: "nofollow"`.
+Omit a switch's attribute when unchecked; null, empty strings, other targets
+and other rel tokens are rejected. Renderers add `noopener noreferrer` for a
+new tab and append `nofollow` when requested. Ordinary URL fields stay strings.
+Code blocks contain only unmarked text, without a language attribute, and render
+as escaped `pre`/`code` preserving spaces, tabs and line breaks. Empty blocks
+are valid. Rules and code are allowed at root and inside list items/blockquote.
+
+Upgrade CMS packages and site `@lacecms/content`, `@lacecms/render` and
+`@lacecms/astro` together before storing expanded documents. Sites using the
+common RichText component need no copied block-source update; custom renderers
+must support the expanded grammar, and overrides must forward validated link
+attributes. A codeBlock override is called for both described pre/code elements,
+following the existing per-element override contract.
+
+CE8A verifies the shared format and public rendering only. The current admin
+editor cannot preserve the expanded format until CE8B updates its extensions
+and serializer. Do not edit expanded documents through that editor or enable
+new-format authoring in a production release containing CE8A alone.
+
+An older engine or site renderer can reject documents using new features. To
+roll back after expanded content is stored, restore a backup predating it or
+explicitly remove the new features before downgrade; never silently strip or
+normalize existing content. See [ADR 0014](adr/0014-expanded-rich-text-format.md).

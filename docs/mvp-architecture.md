@@ -1543,7 +1543,24 @@ defineBlock({
 Tiptap JSON is stored only inside rich-text field or rich-text block data. The entire page must not become one Tiptap document.
 
 The allowed Tiptap node and mark set is explicit and shared by validation and
-rendering. Links permit only `https:`, `http:`, `mailto:`, `tel:`, root-relative,
+rendering. Nodes are doc, paragraph, text, heading (H1–H4), bulletList,
+orderedList, listItem, blockquote, hardBreak, horizontalRule and codeBlock;
+marks are bold, italic, strike, code and link. Rules have no attributes or
+children. Plain code blocks have optional content containing only unmarked text
+nodes (no language attribute); empty blocks are valid. Text preserves spaces,
+tabs and newlines. Rules and code blocks are allowed at the document root and
+inside list items and blockquotes; other nesting rules stay unchanged.
+Link attributes are exactly required href and optional target `_blank` and rel
+`nofollow`; absence means the current browsing context and no nofollow. Null,
+empty strings, other targets and other rel tokens are invalid. The renderer adds
+`noopener noreferrer` for `_blank`, followed by `nofollow` when present. Stored
+JSON never needs these generated safety tokens. Ordinary URL fields stay strings.
+All rich-text fields and defaults, including composite leaves and block data,
+share this format, without field-specific feature sets or CE7 budget changes.
+Existing H1–H3 and href-only documents keep their meaning. See
+[ADR 0014](adr/0014-expanded-rich-text-format.md).
+
+Links permit only `https:`, `http:`, `mailto:`, `tel:`, root-relative,
 and fragment URLs. Raw HTML nodes, scriptable URL schemes, inline event handlers,
 and arbitrary style attributes are rejected. The allowlist and URL rules have one
 implementation in `@lacecms/content`; the render core's `describeRichText`
@@ -1982,6 +1999,10 @@ no client scripts, and requires no Astro integration. Override components for
   by node or mark name, and optional `context`. It renders the
   `describeRichText` tree with Astro's escaping and never uses `set:html`;
   overrides receive only the validated element and its rendered children.
+  Rules render as void `hr`, H4 as `h4`, and plain code as `pre` containing
+  `code` with escaped text and unchanged whitespace. Links emit only validated
+  href/target and renderer-derived rel. Both pre/code elements originate from
+  codeBlock for the existing per-element override contract.
 
 ### 13.5 Block registry and `lace add block`
 
@@ -2581,6 +2602,13 @@ Each card's actions menu offers Move up, Move down, Duplicate, Hide block or Sho
 An insert control between adjacent blocks and an Add block button after the list open the same popover. It lists the model's allowed blocks with icon, label, and description, and it has a text filter.
 
 Keyboard and pointer drag reordering stay on dnd-kit. The screen-reader announcements name blocks by label and position, never by key.
+
+CE8A expands shared validation and public rendering before the admin produces
+the new format. Until CE8B updates Tiptap extensions and serialization, the
+existing editor must not be used to edit documents containing the expanded
+features: it cannot preserve them. CE8B adds H4, rules, plain code blocks,
+new-tab/nofollow link switches and a selection bubble menu alongside the fixed
+toolbar; the controls described below are the current baseline.
 
 Each editable rich-text field has a fixed toolbar named after the field. It holds the following controls:
 

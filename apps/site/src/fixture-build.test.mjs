@@ -216,6 +216,17 @@ test("the fixture build emits published static routes without CMS access", () =>
   // The stored SEO title replaces the entry title in the head.
   expect(post).not.toContain("First published post");
   expect(post).toContain("Content belongs in the CMS");
+  expect(post).toContain(
+    "<h4>Expanded rich text</h4><hr><pre><code>\t  &lt;example&gt; &amp;\n  line two\n</code></pre>",
+  );
+  expect(post).toContain('<a href="/rich-text-0">Link choice 0</a>');
+  expect(post).toContain(
+    '<a href="/rich-text-1" target="_blank" rel="noopener noreferrer">Link choice 1</a>',
+  );
+  expect(post).toContain('<a href="/rich-text-2" rel="nofollow">Link choice 2</a>');
+  expect(post).toContain(
+    '<a href="/rich-text-3" target="_blank" rel="noopener noreferrer nofollow">Link choice 3</a>',
+  );
   expect(about).toContain("Built with Lace");
   expect(note).toContain("Notes render from the published export.");
   // Without block or media alt text the image keeps an empty alt attribute, which
