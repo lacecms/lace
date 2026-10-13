@@ -121,9 +121,12 @@ function editorShortcuts(handlers: { readonly current: RichTextShortcutHandlers 
  * The editor schema: exactly the shared allowlist of nodes, marks, heading
  * levels, and link forms, plus history, placeholders, and Lace shortcuts.
  */
-export function richTextExtensions(handlers: {
-  readonly current: RichTextShortcutHandlers;
-}): Extensions {
+export function richTextExtensions(
+  handlers: {
+    readonly current: RichTextShortcutHandlers;
+  },
+  placeholder?: { readonly current: string | undefined },
+): Extensions {
   return [
     Document,
     Paragraph,
@@ -144,9 +147,10 @@ export function richTextExtensions(handlers: {
     UndoRedo,
     Placeholder.configure({
       placeholder: ({ node }) =>
-        node.type.name === "heading"
+        placeholder?.current ??
+        (node.type.name === "heading"
           ? `Heading ${String(node.attrs.level)}`
-          : RICH_TEXT_PLACEHOLDER,
+          : RICH_TEXT_PLACEHOLDER),
     }),
     editorShortcuts(handlers),
   ];

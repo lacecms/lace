@@ -251,3 +251,13 @@ const invalidRichText: SafeRichTextDocument = {
   type: "doc",
 };
 void invalidRichText;
+
+const promptedText = field.text({ required: true, placeholder: "Title" });
+const promptedChoice = field.select({ options: ["a", "b"] as const, placeholder: "Choose" });
+const promptLiteral: "Title" = promptedText.placeholder;
+const promptValue: FieldValue<typeof promptedChoice> = "a";
+void promptLiteral;
+void promptValue;
+// @ts-expect-error A placeholder does not widen select values.
+const invalidPromptValue: FieldValue<typeof promptedChoice> = "c";
+void invalidPromptValue;

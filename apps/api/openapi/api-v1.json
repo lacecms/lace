@@ -45,6 +45,9 @@
                       "minimum": 0,
                       "type": "integer"
                     },
+                    "placeholder": {
+                      "type": "string"
+                    },
                     "required": {
                       "type": "boolean"
                     },
@@ -72,6 +75,9 @@
                     },
                     "min": {
                       "type": "number"
+                    },
+                    "placeholder": {
+                      "type": "string"
                     },
                     "required": {
                       "type": "boolean"
@@ -125,6 +131,9 @@
                       "type": "array",
                       "uniqueItems": true
                     },
+                    "placeholder": {
+                      "type": "string"
+                    },
                     "required": {
                       "type": "boolean"
                     },
@@ -173,6 +182,9 @@
                 "minimum": 0,
                 "type": "integer"
               },
+              "placeholder": {
+                "type": "string"
+              },
               "required": {
                 "type": "boolean"
               },
@@ -203,6 +215,9 @@
                 "minimum": 0,
                 "type": "integer"
               },
+              "placeholder": {
+                "type": "string"
+              },
               "required": {
                 "type": "boolean"
               },
@@ -223,6 +238,9 @@
                 "type": "string"
               },
               "label": {
+                "type": "string"
+              },
+              "placeholder": {
                 "type": "string"
               },
               "required": {
@@ -252,6 +270,9 @@
               },
               "min": {
                 "type": "number"
+              },
+              "placeholder": {
+                "type": "string"
               },
               "required": {
                 "type": "boolean"
@@ -349,6 +370,9 @@
                 "type": "array",
                 "uniqueItems": true
               },
+              "placeholder": {
+                "type": "string"
+              },
               "required": {
                 "type": "boolean"
               },
@@ -369,6 +393,9 @@
                 "type": "string"
               },
               "label": {
+                "type": "string"
+              },
+              "placeholder": {
                 "type": "string"
               },
               "required": {
@@ -483,6 +510,9 @@
                     "minimum": 0,
                     "type": "integer"
                   },
+                  "placeholder": {
+                    "type": "string"
+                  },
                   "required": {
                     "type": "boolean"
                   },
@@ -513,6 +543,9 @@
                     "minimum": 0,
                     "type": "integer"
                   },
+                  "placeholder": {
+                    "type": "string"
+                  },
                   "required": {
                     "type": "boolean"
                   },
@@ -533,6 +566,9 @@
                     "type": "string"
                   },
                   "label": {
+                    "type": "string"
+                  },
+                  "placeholder": {
                     "type": "string"
                   },
                   "required": {
@@ -562,6 +598,9 @@
                   },
                   "min": {
                     "type": "number"
+                  },
+                  "placeholder": {
+                    "type": "string"
                   },
                   "required": {
                     "type": "boolean"
@@ -659,6 +698,9 @@
                     "type": "array",
                     "uniqueItems": true
                   },
+                  "placeholder": {
+                    "type": "string"
+                  },
                   "required": {
                     "type": "boolean"
                   },
@@ -679,6 +721,9 @@
                     "type": "string"
                   },
                   "label": {
+                    "type": "string"
+                  },
+                  "placeholder": {
                     "type": "string"
                   },
                   "required": {

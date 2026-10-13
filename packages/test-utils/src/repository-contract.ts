@@ -5596,5 +5596,63 @@ contract(
   },
 );
 
+contract(
+  "CE9A placeholder-only sync preserves populated snapshots and stale guards",
+  async (runtime, expect) => {
+    const make = async (placeholder?: string) =>
+      (
+        await defineConfig({
+          content: [
+            defineCollection({
+              key: "posts",
+              route: "/posts/:slug",
+              version: 1,
+              fields: {
+                nested: field.group({
+                  fields: {
+                    title: field.text({ ...(placeholder === undefined ? {} : { placeholder }) }),
+                  },
+                }),
+              },
+            }),
+          ],
+        })
+      ).runtime.content;
+    const original = await make();
+    const { repository, sql } = await runtime.open({
+      resolveModel: syncResolver(original),
+      nextId: sequence("guidance"),
+    });
+    await applySync(repository, original, 10);
+    const created = entry("guidance-entry", "posts", {
+      updatedAt: 15,
+      slug: "guidance",
+      fields: { nested: { title: "Stored" } },
+    });
+    await repository.create({ entry: created, mediaReferences: [] });
+    await repository.publish(publish("guidance-entry", 1, 20));
+    const before = await repository.load({ entryId: created.id });
+    for (const [index, placeholder] of ["Title", "New title", undefined].entries()) {
+      const models = await make(placeholder);
+      expect(models[0]!.structureHash).toBe(original[0]!.structureHash);
+      const plan = await prepareConfigurationSynchronization({ models, state: repository });
+      expect(plan.plan.operations).toMatchObject([{ action: "label-update" }]);
+      await applySync(repository, models, 30 + index, plan);
+      expect(await repository.load({ entryId: created.id })).toEqual(before);
+    }
+    const models = await make("Stale");
+    const plan = await prepareConfigurationSynchronization({ models, state: repository });
+    await sql.run(
+      "update content_models set projection_hash = ? where key = ?",
+      "concurrent",
+      "posts",
+    );
+    await expect(applySync(repository, models, 40, plan)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    expect(await repository.load({ entryId: created.id })).toEqual(before);
+  },
+);
+
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   Object.freeze(cases);

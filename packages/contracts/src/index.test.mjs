@@ -1810,3 +1810,29 @@ test("list label metadata survives recursive contracts and invalid targets fail"
       false,
     );
 });
+
+test("CE9A recursive metadata preserves placeholders and rejects misplaced prompts", () => {
+  const fields = {
+    group: field.group({
+      fields: { tags: field.list({ item: field.text({ placeholder: "Tag" }) }) },
+    }),
+  };
+  expect(v.parse(fieldMetadataMapSchema, JSON.parse(JSON.stringify(fields)))).toEqual(fields);
+  const block = {
+    type: "card",
+    version: 1,
+    fields,
+    settings: { tone: field.text({ defaultValue: "normal", placeholder: "Tone" }) },
+  };
+  expect(v.parse(blockMetadataSchema, JSON.parse(JSON.stringify(block)))).toEqual(block);
+  for (const invalid of [
+    { type: "media", required: false, placeholder: "Bad" },
+    { type: "text", required: false, placeholder: 3 },
+  ]) {
+    expect(
+      v.safeParse(fieldMetadataMapSchema, {
+        group: { type: "group", required: false, fields: { value: invalid } },
+      }).success,
+    ).toBe(false);
+  }
+});

@@ -19,12 +19,14 @@ function surfaceAttributes({
   id,
   invalid,
   label,
+  placeholder,
   readOnly,
 }: {
   readonly describedBy: string | undefined;
   readonly id: string;
   readonly invalid: boolean;
   readonly label: string;
+  readonly placeholder?: string | undefined;
   readonly readOnly: boolean;
 }): Record<string, string> {
   return {
@@ -35,7 +37,9 @@ function surfaceAttributes({
     role: "textbox",
     ...(describedBy === undefined ? {} : { "aria-describedby": describedBy }),
     ...(invalid ? { "aria-invalid": "true" } : {}),
-    ...(readOnly ? { "aria-readonly": "true" } : { "aria-placeholder": RICH_TEXT_PLACEHOLDER }),
+    ...(readOnly
+      ? { "aria-readonly": "true" }
+      : { "aria-placeholder": placeholder ?? RICH_TEXT_PLACEHOLDER }),
   };
 }
 
@@ -48,6 +52,7 @@ export function RichTextEditor({
   id,
   invalid = false,
   label,
+  placeholder,
   onBlur,
   onChange,
   readOnly = false,
@@ -57,6 +62,7 @@ export function RichTextEditor({
   readonly id: string;
   readonly invalid?: boolean;
   readonly label: string;
+  readonly placeholder?: string | undefined;
   readonly onBlur: () => void;
   readonly onChange: (value: unknown) => void;
   readonly readOnly?: boolean;
@@ -68,8 +74,10 @@ export function RichTextEditor({
     focusToolbar: () => focusToolbar.current?.(),
     openLink: () => setLinkOpen(true),
   });
-  const [extensions] = useState(() => richTextExtensions(handlers));
-  const attributes = surfaceAttributes({ describedBy, id, invalid, label, readOnly });
+  const prompt = useRef(placeholder);
+  prompt.current = placeholder;
+  const [extensions] = useState(() => richTextExtensions(handlers, prompt));
+  const attributes = surfaceAttributes({ describedBy, id, invalid, label, placeholder, readOnly });
   const editor = useEditor({
     content: value ?? { content: [{ type: "paragraph" }], type: "doc" },
     editable: !readOnly,
@@ -79,6 +87,10 @@ export function RichTextEditor({
     onBlur,
     onUpdate: ({ editor: updated }) => onChange(richTextDocument(updated.getJSON())),
   });
+  useEffect(() => {
+    if (editor && !editor.isDestroyed)
+      editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false));
+  }, [editor, placeholder]);
   const attributesKey = JSON.stringify(attributes);
   useEffect(() => {
     if (editor === null || editor.isDestroyed) return;

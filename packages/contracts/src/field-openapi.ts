@@ -24,6 +24,9 @@ const scalar = (type: (typeof scalarTypes)[number]) => ({
   properties: {
     ...common,
     type: { const: type },
+    ...(["text", "textarea", "url", "number", "select", "richText"].includes(type)
+      ? { placeholder: { type: "string" } }
+      : {}),
     defaultValue: {
       type:
         type === "number"

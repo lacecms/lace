@@ -173,3 +173,89 @@ test.each([false, true])(
     expect(value()).toBe('["Saved"]');
   },
 );
+
+test.each(["text", "textarea", "url", "number", "select"] as const)(
+  "CE9A configured placeholder reaches %s without creating a value",
+  (type) => {
+    render(
+      <Harness
+        definition={
+          type === "select"
+            ? { type, required: false, options: ["a"], placeholder: "Prompt" }
+            : { type, required: false, placeholder: "Prompt" }
+        }
+      />,
+    );
+    const control = screen.getByRole(
+      type === "number" ? "spinbutton" : type === "select" ? "combobox" : "textbox",
+    );
+    if (type === "select") expect(control).toHaveTextContent("Prompt");
+    else expect(control).toHaveAttribute("placeholder", "Prompt");
+    expect(value()).toBe("null");
+  },
+);
+
+test("CE9A raw counts and bounds remain readable for viewers and do not truncate", async () => {
+  const user = userEvent.setup();
+  const definition = {
+    type: "text",
+    required: true,
+    placeholder: "Short",
+    minLength: 2,
+    maxLength: 3,
+  } as const;
+  const { unmount } = render(<Harness definition={definition} />);
+  const input = screen.getByRole("textbox");
+  expect(input).not.toHaveAttribute("required");
+  expect(input).not.toHaveAttribute("maxlength");
+  await user.type(input, " 😀 ");
+  expect(input).toHaveValue(" 😀 ");
+  expect(input).toHaveAccessibleDescription(
+    "Required for publication only. When provided, enter at least 2 characters. Limit: 3 characters. 4 characters",
+  );
+  const counter = document.getElementById("field-fields-value-count")!;
+  expect(counter.closest("[aria-live], [role=status], [role=alert]")).toBeNull();
+  unmount();
+  render(<Harness definition={definition} initial=" 😀 " readOnly />);
+  expect(screen.getByRole("textbox")).toHaveAccessibleDescription(
+    /Required for publication only.*4 characters/u,
+  );
+});
+
+test("CE9A nested group/list guidance follows current values after moves", async () => {
+  const user = userEvent.setup();
+  render(
+    <Harness
+      definition={{
+        type: "group",
+        required: true,
+        fields: {
+          tags: {
+            type: "list",
+            required: true,
+            minItems: 2,
+            maxItems: 5,
+            item: { type: "text", required: false, placeholder: "Tag" },
+          },
+          ready: { type: "boolean", required: true },
+        },
+      }}
+      initial={{ tags: ["a", "long"] }}
+    />,
+  );
+  expect(screen.getByRole("switch")).toHaveAccessibleDescription("Required for publication only.");
+  const first = screen.getByRole("textbox", { name: "Tags item 1" });
+  expect(first).toHaveAttribute("placeholder", "Tag");
+  expect(first).toHaveAccessibleDescription("1 characters");
+  expect(screen.getByRole("group", { name: "Tags" })).toHaveAccessibleDescription(
+    /Minimum 2 items for publication only.*Limit: 5 items/u,
+  );
+  await user.click(screen.getByRole("button", { name: "Move down Tags item 1" }));
+  expect(screen.getByRole("textbox", { name: "Tags item 1" })).toHaveValue("long");
+  expect(screen.getByRole("textbox", { name: "Tags item 1" })).toHaveAccessibleDescription(
+    "4 characters",
+  );
+  for (const element of document.querySelectorAll("[aria-describedby]"))
+    for (const id of element.getAttribute("aria-describedby")!.split(" "))
+      expect(document.getElementById(id), id).not.toBeNull();
+});

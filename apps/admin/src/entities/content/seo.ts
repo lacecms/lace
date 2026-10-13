@@ -78,10 +78,7 @@ export function seoInput(values: SeoFormValues): SeoSaveInput {
   };
 }
 
-/** The number of code points the API limits count: those of the trimmed text. */
-export function seoTextLength(value: string): number {
-  return [...value.trim()].length;
-}
+export { seoTextLength } from "@lacecms/content";
 
 function textProblem(value: string, kind: "description" | "title"): string | undefined {
   if (normalizeSeoText(value, kind) !== undefined) return undefined;

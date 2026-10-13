@@ -682,6 +682,15 @@ Reference fields are not part of the MVP. The field-definition discriminated
 union and validation visitor must be exhaustive so that a reference variant can
 be introduced later without changing existing field encodings.
 
+### Field guidance metadata (CE9A)
+
+Text, textarea, URL, number, select and rich-text fields accept an optional
+string `placeholder`, including nested model/block fields and scalar list
+items. An empty string suppresses the generic prompt; omission preserves it.
+Other kinds reject the option. Descriptor placeholders are projection-only:
+structural identity excludes them without removing content/default keys named
+`placeholder`. Updating them needs no model-version bump or content rewrite.
+
 ### Bounded composite fields (CE7A)
 
 `field.group({ fields, ...common })` describes a plain object;
@@ -2512,6 +2521,15 @@ disclosures before focusing the leaf/container. Pending lifecycle requests
 lock content mutations so indexed errors cannot land on another item.
 Save/discard, dirty checks, conflict JSON and lifecycle copies retain all
 composite values; no list slots are silently removed during serialization.
+
+CE9A displays required markers with publication-only explanations, associated
+configured descriptions and applicable text, numeric and list bounds throughout
+recursive forms and viewer inspection. Ordinary text/textarea counters count raw
+UTF-16 units, matching their existing validators; SEO counts trimmed Unicode code
+points and labels 60/160 as recommendations separately from hard limits. Counts
+are not live announcements. Inherited SEO/media guidance takes precedence over
+configured generic prompts. Guidance never materializes absent values or blocks
+otherwise valid incomplete draft saves.
 
 The admin is a client-rendered React SPA with no SSR requirement.
 

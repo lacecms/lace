@@ -217,7 +217,11 @@ test("fixed toolbar creates H4, code and rules; history, paste and removal stay 
   await page.goto("/admin/content/posts/entry-1");
   const body = page.locator('[id^="field-fields-"][role="textbox"]').first();
   const toolbar = page.getByRole("toolbar", { name: "Body formatting", exact: true }).nth(1);
-  await body.fill("Authoring");
+  // Replace through the editor's selection command; browser fill can leave atomic rules behind.
+  await body.click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.insertText("Authoring");
+  await expect(body.locator("hr")).toHaveCount(0);
   await toolbar.getByRole("combobox", { name: "Text style" }).click();
   await page.getByRole("option", { name: "Heading 4", exact: true }).click();
   await expect(body.locator("h4")).toHaveText("Authoring");

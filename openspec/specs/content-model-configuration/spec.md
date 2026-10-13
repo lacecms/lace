@@ -112,8 +112,9 @@ allowed blocks, with the `label` and `description` display properties removed
 only from the model, from each field definition, from each block definition,
 and from each block field definition. Field keys, block field keys, and keys
 inside default values SHALL be preserved even when they are named `label` or
-`description` or `itemLabel`. A list descriptor's optional `itemLabel` SHALL also be removed only at descriptor positions;
+`description`, `itemLabel` or `placeholder`. A list descriptor's optional `itemLabel` SHALL also be removed only at descriptor positions;
 field keys and default-value keys named `itemLabel` SHALL remain structural.
+The optional `placeholder` SHALL be removed only at descriptor positions, recursively in model fields, block data and block settings; placeholders SHALL remain in projection hashes. Field keys and default-value keys named `placeholder` SHALL remain structural. Configurations omitting placeholders SHALL retain their prior hashes.
 Structural hashes SHALL exclude a collection's `listFields`
 presentation metadata and the temporary synchronization hints (`renamedFrom`
 on a model or a field, `removedFields`, `removedBlocks`); projection hashes
@@ -165,7 +166,7 @@ order.
 
 #### Scenario: Structural hash is stable for configurations without such keys
 - **WHEN** a configuration has no field, block field, or default-value key
-  named `label` or `description`
+  named `label` or `description` and no descriptor placeholder
 - **THEN** each model's structural hash equals the hash produced by the earlier
   rule and the runtime model carries no pre-change hash
 
@@ -180,6 +181,14 @@ order.
   list-field containers are modified after configuration normalization
 - **THEN** the normalized definitions, projections, and hashes remain unchanged
   and cannot be mutated through their returned values
+
+#### Scenario: Placeholder changes only projection identity
+- **WHEN** otherwise identical configurations differ only in a supported placeholder at any nested model or block data/settings leaf
+- **THEN** their model and whole-configuration structural hashes match, their projection hashes differ and no version increase is required
+
+#### Scenario: Content keys named placeholder stay structural
+- **WHEN** a field key or a key inside a default value is named placeholder and its structure or value changes
+- **THEN** the canonical structure retains it and the structural hash changes
 
 ### Requirement: Collection list fields
 The system SHALL let a collection definition declare an optional ordered

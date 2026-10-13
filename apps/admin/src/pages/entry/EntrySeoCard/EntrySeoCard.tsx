@@ -1,3 +1,4 @@
+import { MAX_SEO_TITLE_LENGTH, MAX_SEO_DESCRIPTION_LENGTH } from "@lacecms/contracts";
 import type { ContentModelDto } from "@lacecms/contracts";
 import { TriangleAlert } from "lucide-react";
 import { Controller, useWatch, type Control } from "react-hook-form";
@@ -104,7 +105,7 @@ function SeoTextControl({
         </span>
       )}
       <p className="m-0 text-xs text-muted-foreground" id={ids.count}>
-        {`${count} / ${recommended} characters`}
+        {`${count} / ${recommended} characters (recommended). Limit: ${kind === "title" ? MAX_SEO_TITLE_LENGTH : MAX_SEO_DESCRIPTION_LENGTH} characters.`}
       </p>
       {long ? (
         <p

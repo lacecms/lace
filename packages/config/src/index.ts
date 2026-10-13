@@ -917,12 +917,26 @@ function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
 
 function fieldDefinitionStructure(definition: JsonValue): MutableJsonObject {
   const result = withoutDisplayProperties(definition);
+  delete result.placeholder;
   if (result.type === "group") result.fields = fieldMapStructure(result.fields);
   if (result.type === "list") {
     delete result.itemLabel;
     if (result.item !== undefined) result.item = fieldDefinitionStructure(result.item);
   }
   return result;
+}
+
+function fieldMapWithoutPlaceholders(fields: JsonValue | undefined): MutableJsonObject {
+  return Object.fromEntries(
+    Object.entries((fields ?? {}) as JsonObject).map(([key, value]) => {
+      const result = JSON.parse(JSON.stringify(value)) as MutableJsonObject;
+      delete result.placeholder;
+      if (result.type === "group") result.fields = fieldMapWithoutPlaceholders(result.fields);
+      if (result.type === "list" && result.item !== undefined)
+        result.item = fieldMapWithoutPlaceholders({ item: result.item }).item!;
+      return [key, result];
+    }),
+  );
 }
 
 function fieldMapStructure(fields: JsonValue | undefined): MutableJsonObject {
@@ -949,6 +963,9 @@ export function contentModelStructure(
     (definition) => ({
       ...withoutDisplayProperties(definition),
       fields: fieldMapStructure(definition.fields),
+      ...(definition.settings === undefined
+        ? {}
+        : { settings: fieldMapWithoutPlaceholders(definition.settings) }),
     }),
   );
   return deepFreeze(structure) as ContentModelStructure;
@@ -1079,7 +1096,22 @@ export async function defineConfig<const Models extends readonly ContentModelDef
               fields: fieldMapStructure((model as JsonObject).fields),
             })),
           }
-        : omitDisplayMetadata(structure),
+        : omitDisplayMetadata({
+            ...(structure as JsonObject),
+            blocks: blocks.map((block) => ({
+              ...block,
+              fields: fieldMapWithoutPlaceholders(block.fields as unknown as JsonValue),
+              ...(block.settings === undefined
+                ? {}
+                : {
+                    settings: fieldMapWithoutPlaceholders(block.settings as unknown as JsonValue),
+                  }),
+            })),
+            content: hashModels.map((model) => ({
+              ...(omitListFields(model) as JsonObject),
+              fields: fieldMapWithoutPlaceholders((model as JsonObject).fields),
+            })),
+          } as unknown as JsonValue),
     ),
   };
   const normalized: NormalizedConfig<Models> = {

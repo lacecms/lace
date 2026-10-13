@@ -66,3 +66,6 @@ and common-renderer block sources need no replacement. For a custom renderer,
 implement the same grammar and forward validated target/rel attributes. An older
 engine may reject new documents; rollback requires compatible backup or an
 explicit validated conversion. See [compatibility](compatibility.md#ce8a-shared-rich-text-format).
+
+For configurable placeholders, required markers and text counters, see
+[field guidance](field-guidance.md).

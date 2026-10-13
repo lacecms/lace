@@ -66,12 +66,16 @@ describe("counters and soft warnings", () => {
     renderInRouter(<Harness />);
     const title = await screen.findByRole("textbox", { name: "SEO title" });
     await user.type(title, "x".repeat(60));
-    expect(screen.getByText("60 / 60 characters")).toBeInTheDocument();
+    expect(
+      screen.getByText("60 / 60 characters (recommended). Limit: 200 characters."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/may shorten titles/u)).not.toBeInTheDocument();
     await user.type(title, "y");
-    expect(screen.getByText("61 / 60 characters")).toBeInTheDocument();
+    expect(
+      screen.getByText("61 / 60 characters (recommended). Limit: 200 characters."),
+    ).toBeInTheDocument();
     expect(title).toHaveAccessibleDescription(
-      "61 / 60 characters Search results may shorten titles longer than 60 characters.",
+      "61 / 60 characters (recommended). Limit: 200 characters. Search results may shorten titles longer than 60 characters.",
     );
     await user.type(title, "{Backspace}{Backspace}");
     expect(screen.queryByText(/may shorten titles/u)).not.toBeInTheDocument();
@@ -80,7 +84,9 @@ describe("counters and soft warnings", () => {
 
   test("warns about descriptions above 160 characters", async () => {
     renderInRouter(<Harness seo={{ description: "d".repeat(180) }} />);
-    expect(await screen.findByText("180 / 160 characters")).toBeInTheDocument();
+    expect(
+      await screen.findByText("180 / 160 characters (recommended). Limit: 500 characters."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Search results may shorten descriptions longer than 160 characters."),
     ).toBeInTheDocument();

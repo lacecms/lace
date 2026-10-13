@@ -40,14 +40,19 @@ export interface CommonFieldOptions<Value> {
   readonly required?: boolean;
 }
 
+/** A prompt on controls with an editable empty text surface. */
+export interface PlaceholderFieldOptions<Value> extends CommonFieldOptions<Value> {
+  readonly placeholder?: string;
+}
+
 /** String-length constraints supported by text and textarea fields. */
-export interface StringFieldOptions extends CommonFieldOptions<string> {
+export interface StringFieldOptions extends PlaceholderFieldOptions<string> {
   readonly maxLength?: number;
   readonly minLength?: number;
 }
 
 /** Numeric bounds supported by number fields. */
-export interface NumberFieldOptions extends CommonFieldOptions<number> {
+export interface NumberFieldOptions extends PlaceholderFieldOptions<number> {
   readonly max?: number;
   readonly min?: number;
 }
@@ -59,12 +64,12 @@ export type BooleanFieldOptions = CommonFieldOptions<boolean>;
 export type StringValueFieldOptions = CommonFieldOptions<string>;
 
 /** Options supported by a safe Tiptap rich-text field. */
-export interface RichTextFieldOptions extends CommonFieldOptions<SafeRichTextDocument> {}
+export interface RichTextFieldOptions extends PlaceholderFieldOptions<SafeRichTextDocument> {}
 
 /** Options supported by select fields. */
-export interface SelectFieldOptions<Choices extends readonly string[]> extends CommonFieldOptions<
-  NoInfer<Choices[number]>
-> {
+export interface SelectFieldOptions<
+  Choices extends readonly string[],
+> extends PlaceholderFieldOptions<NoInfer<Choices[number]>> {
   readonly options: Choices;
 }
 
@@ -85,7 +90,8 @@ type PropertyFrom<Options, Key extends string> = Key extends keyof Options
 type DefaultFrom<Options> = PropertyFrom<Options, "defaultValue">;
 
 type LabelAndDescriptionFrom<Options> = PropertyFrom<Options, "label"> &
-  PropertyFrom<Options, "description">;
+  PropertyFrom<Options, "description"> &
+  PropertyFrom<Options, "placeholder">;
 
 type CommonDefinition<Type extends FieldType, Options> = {
   readonly required: RequiredFrom<Options>;
@@ -128,8 +134,9 @@ export type DatetimeFieldDefinition<
 > = CommonDefinition<"datetime", Options>;
 
 /** A URL-field descriptor. */
-export type UrlFieldDefinition<Options extends StringValueFieldOptions = StringValueFieldOptions> =
-  CommonDefinition<"url", Options>;
+export type UrlFieldDefinition<
+  Options extends PlaceholderFieldOptions<string> = PlaceholderFieldOptions<string>,
+> = CommonDefinition<"url", Options>;
 
 /** A media-field descriptor that stores a media identifier. */
 export type MediaFieldDefinition<
@@ -454,6 +461,9 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
     definition.description = description;
   }
 
+  const placeholder = readOptionalString(options, "placeholder");
+  if (placeholder !== undefined) definition.placeholder = placeholder;
+
   const renamedFrom = readOptionalString(options, "renamedFrom");
   if (renamedFrom !== undefined) {
     if (!RENAMED_FROM_PATTERN.test(renamedFrom)) {
@@ -503,6 +513,7 @@ function buildStringField<Type extends "text" | "textarea", Options extends Stri
     "label",
     "maxLength",
     "minLength",
+    "placeholder",
     "required",
   ]);
   const definition: Record<string, unknown> = { type };
@@ -526,8 +537,8 @@ function buildStringField<Type extends "text" | "textarea", Options extends Stri
     options,
     (value) =>
       typeof value === "string" &&
-      (minLength === undefined || value.length >= minLength) &&
-      (maxLength === undefined || value.length <= maxLength),
+      (minLength === undefined || textLength(value) >= minLength) &&
+      (maxLength === undefined || textLength(value) <= maxLength),
     "must be a string that conforms to the declared length constraints.",
   );
 
@@ -541,7 +552,13 @@ function buildStringValueField<
   Options extends StringValueFieldOptions,
 >(type: Type, input: Options | undefined): FieldDefinition {
   const options = normalizeOptions(input ?? {});
-  assertAllowedOptions(options, ["defaultValue", "description", "label", "required"]);
+  assertAllowedOptions(options, [
+    "defaultValue",
+    "description",
+    "label",
+    "required",
+    ...(type === "url" ? ["placeholder"] : []),
+  ]);
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
   addDefault(definition, options, (value) => typeof value === "string", "must be a string.");
@@ -608,7 +625,13 @@ export const field = {
     options?: Options,
   ): RichTextFieldDefinition<Options> {
     const normalized = normalizeOptions(options ?? {});
-    assertAllowedOptions(normalized, ["defaultValue", "description", "label", "required"]);
+    assertAllowedOptions(normalized, [
+      "defaultValue",
+      "description",
+      "label",
+      "required",
+      "placeholder",
+    ]);
     const definition: Record<string, unknown> = { type: "richText" };
     addCommonOptions(definition, normalized);
     addDefault(
@@ -629,6 +652,7 @@ export const field = {
       "defaultValue",
       "description",
       "label",
+      "placeholder",
       "max",
       "min",
       "required",
@@ -699,6 +723,7 @@ export const field = {
       "description",
       "label",
       "options",
+      "placeholder",
       "required",
     ]);
     const rawChoices = normalized.options;
@@ -734,7 +759,7 @@ export const field = {
   },
 
   /** Define a URL string field; URL protocol validation is added in Session 2B. */
-  url<const Options extends StringValueFieldOptions = StringValueFieldOptions>(
+  url<const Options extends PlaceholderFieldOptions<string> = PlaceholderFieldOptions<string>>(
     options?: Options,
   ): UrlFieldDefinition<Options> {
     return buildStringValueField("url", options) as UrlFieldDefinition<Options>;
@@ -1294,12 +1319,12 @@ function isFieldValue(definition: FieldDefinition, value: unknown): boolean {
       typeof value === "string" && fieldDefinition.options.includes(value),
     text: (fieldDefinition) =>
       typeof value === "string" &&
-      (fieldDefinition.minLength === undefined || value.length >= fieldDefinition.minLength) &&
-      (fieldDefinition.maxLength === undefined || value.length <= fieldDefinition.maxLength),
+      (fieldDefinition.minLength === undefined || textLength(value) >= fieldDefinition.minLength) &&
+      (fieldDefinition.maxLength === undefined || textLength(value) <= fieldDefinition.maxLength),
     textarea: (fieldDefinition) =>
       typeof value === "string" &&
-      (fieldDefinition.minLength === undefined || value.length >= fieldDefinition.minLength) &&
-      (fieldDefinition.maxLength === undefined || value.length <= fieldDefinition.maxLength),
+      (fieldDefinition.minLength === undefined || textLength(value) >= fieldDefinition.minLength) &&
+      (fieldDefinition.maxLength === undefined || textLength(value) <= fieldDefinition.maxLength),
     url: () => isSafeUrl(value),
   });
 }
@@ -2549,3 +2574,13 @@ export function validateEntryAggregate(
 }
 
 export { parseSchemaPath, encodeSchemaPath, schemaFieldAt } from "./schema-path.js";
+
+/** Raw UTF-16 units: the existing text/textarea length contract, without trimming. */
+export function textLength(value: string): number {
+  return value.length;
+}
+
+/** Trimmed Unicode code points: the existing SEO title/description contract. */
+export function seoTextLength(value: string): number {
+  return [...value.trim()].length;
+}

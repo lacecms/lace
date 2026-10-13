@@ -1337,6 +1337,8 @@ configuration synchronization, REST metadata and admin draft editing.
 
 ### Session CE9A — Field metadata and guidance
 
+Completed in `ce09a-field-metadata-guidance` (14/14 tasks); verification covers portable metadata, unchanged structural identity, SQLite/D1 synchronization, actual API lifecycle, recursive guidance/counters and browser accessibility. See the [verification record](../openspec/changes/archive/2026-10-13-ce09a-field-metadata-guidance/verification.md).
+
 - Define and project configurable placeholders as portable display metadata,
   retaining current behavior where omitted. Preserve inherited SEO/media
   explanations rather than obscuring them with generic placeholders.
@@ -1453,3 +1455,4 @@ any decision that changed this document.
 | 2026-10-13 | CE8A | `ce08a-shared-document-format-rendering` | Implemented shared H4/rules/plain-code types, validation/defaults and framework-neutral/Astro rendering. Stored links accept only href plus optional target `_blank` and rel `nofollow`; rendering derives `noopener noreferrer` and independently merges nofollow. Existing documents retain their format; nested budgets and draft/publication rules stay unchanged. 233 focused tests, content type tests and all required root checks pass. ADR 0014 and compatibility guidance cover coordinated adoption and rollback; admin extensions and preservation of expanded documents remain CE8B. Change remains active pending explicit synchronization/archive. |
 
 | 2026-10-13 | CE8B | `ce08b-rich-text-authoring` | Implemented H1–H4, horizontal rules, plain code blocks, independent new-tab/nofollow switches and a selection bubble menu in every rich-text leaf. Omission-only serialization preserves the strict shared format and stable editor/history state. 33 focused editor/component tests, 30 browser scenarios (including focused WCAG checks), real SQLite-backed Node save/read/publish/export → Astro integration, 3 reference build tests and 48 block-source parity tests pass. Required root checks and strict OpenSpec validation pass. CE8A and CE8B deltas synchronized and both changes archived at the owner’s request; no migration, document rewrite or release publication. |
+| 2026-10-13 | CE9A | `ce09a-field-metadata-guidance` | Field metadata and guidance implemented and verified: supported placeholders, publication-only required guidance, declared constraints, raw text counters and distinct SEO recommendations; projection-only sync preserves draft/published values. 14/14 tasks, 729 admin unit tests and 26 focused browser cases verified, root quality gates passed. CE9B remains separate. |

@@ -367,3 +367,10 @@ An older engine or site renderer can reject documents using new features. To
 roll back after expanded content is stored, restore a backup predating it or
 explicitly remove the new features before downgrade; never silently strip or
 normalize existing content. See [ADR 0014](adr/0014-expanded-rich-text-format.md).
+
+## Field guidance metadata (CE9A)
+
+Upgrade engine/contracts/admin together before configuring `placeholder`. Older
+engines reject the option. No content or database migration is required; remove
+placeholder options before rollback. Ordinary text length stays raw UTF-16 and
+SEO stays trimmed code points. See [field guidance](field-guidance.md).

@@ -1,4 +1,4 @@
-import { ContentValidationError } from "@lacecms/content";
+import { ContentValidationError, seoTextLength } from "@lacecms/content";
 import type { Brand } from "./index.js";
 
 export const MAX_SEO_TITLE_LENGTH = 200;
@@ -32,7 +32,7 @@ export function normalizeSeoText(value: string, kind: SeoTextKind): string | nul
   if (text.length === 0) return null;
   if (/\p{Cc}|\p{Cs}/u.test(text)) return undefined;
   const limit = kind === "title" ? MAX_SEO_TITLE_LENGTH : MAX_SEO_DESCRIPTION_LENGTH;
-  return [...text].length > limit ? undefined : text;
+  return seoTextLength(text) > limit ? undefined : text;
 }
 
 /** The subset of the WHATWG URL API used here; compiles without DOM or Node types. */

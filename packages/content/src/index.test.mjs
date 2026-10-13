@@ -1427,3 +1427,62 @@ test("rich-text nodes do not consume composite list budget and required semantic
     validateModelFields(fields, { sections: Array(101).fill({ body: document }) }, "draft"),
   ).toThrow(ContentValidationError);
 });
+
+test("CE9A placeholders are portable, exact, kind-specific and recursive", () => {
+  for (const type of ["text", "textarea", "url", "number", "richText", "select"]) {
+    const options = type === "select" ? { options: ["a"] } : {};
+    for (const placeholder of ["Prompt <plain>", ""]) {
+      const definition = field[type]({ ...options, placeholder });
+      expect(toFieldMetadata(JSON.parse(JSON.stringify(definition))).placeholder).toBe(placeholder);
+    }
+    expect(field[type](options)).not.toHaveProperty("placeholder");
+    for (const placeholder of [3, null, {}, () => "unsafe"]) {
+      expect(() => field[type]({ ...options, placeholder })).toThrow();
+      expect(() => toFieldMetadata({ type, required: false, ...options, placeholder })).toThrow();
+    }
+  }
+  for (const type of ["boolean", "date", "datetime", "media", "group", "list"]) {
+    const options =
+      type === "group" ? { fields: {} } : type === "list" ? { item: field.text() } : {};
+    expect(() => field[type]({ ...options, placeholder: "ignored?" })).toThrow(/placeholder/u);
+    expect(() =>
+      toFieldMetadata({ type, required: false, ...options, placeholder: "bad" }),
+    ).toThrow(/placeholder/u);
+  }
+  const nested = field.list({
+    item: field.group({
+      fields: {
+        title: field.text({ placeholder: "Title", required: true }),
+        tags: field.list({ item: field.text({ placeholder: "Tag" }) }),
+      },
+    }),
+  });
+  expect(toFieldMetadata(nested).item.fields.tags.item.placeholder).toBe("Tag");
+  const forged = JSON.parse(JSON.stringify(nested));
+  forged.item.fields.title.placeholder = 3;
+  expect(() => toFieldMetadata(forged)).toThrow(/item.fields.title/u);
+  const accessor = {
+    type: "text",
+    required: false,
+    get placeholder() {
+      throw Error("executed");
+    },
+  };
+  expect(() => toFieldMetadata(accessor)).toThrow(/data property/u);
+});
+
+test("CE9A shared counts retain ordinary UTF-16 and SEO trimmed code points", async () => {
+  const { textLength, seoTextLength } = await import("../dist/index.js");
+  for (const [text, raw, seo] of [
+    ["", 0, 0],
+    [" 😀 ", 4, 1],
+    ["e\u0301", 2, 2],
+  ]) {
+    expect(textLength(text)).toBe(raw);
+    expect(seoTextLength(text)).toBe(seo);
+    expect(() =>
+      validateFieldValue(field.text({ minLength: raw, maxLength: raw }), text),
+    ).not.toThrow();
+    if (raw > 0) expect(() => field.text({ maxLength: raw - 1, defaultValue: text })).toThrow();
+  }
+});
