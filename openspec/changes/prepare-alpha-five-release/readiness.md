@@ -49,3 +49,26 @@ were changed and no registry mutation was attempted.
 A clean source commit, immutable package/image preparation and exact-artifact
 consumer acceptance are the next gates. No publication or remote deployment
 has occurred.
+
+## Final preparation result — 2026-10-14
+
+**Prepared and locally accepted; publication and real deployment approval remain separate.**
+
+- Candidate: `0.1.0-alpha.5` / `next`, ownership template `0.29.0`.
+- Artifact source: `1ab14e2b17c5ca32c7e481032c95360b7437c993` (clean, preview false).
+- Source fingerprint: `3581e3ad47a16e1d77e2330cef22ccd13d607a4d50cc6544728c3e22f6d42206`.
+- Inventory: `.release-artifacts/alpha-5/inventory.json`; SHA-256 `0698761857cf33fd1b149f3f3864cdd856b78f3e5ea7e643c0a57d46f8edf1b6`.
+- Complete inventory: fifteen tarballs and API/builder images for both linux/amd64 and linux/arm64; every platform smoke passed.
+- Independent `release:verify`: passed; saved archives were never rebuilt or replaced.
+- `acceptance:release`: passed all fifteen journeys, including Node/browser, publication visibility, existing Astro, Cloudflare/Pages tracking, legacy template upgrades, block order, weak ETags, builder diagnostics, credentials and packed restore/rotation.
+- Full consumer journey platform: `linux/arm64`. Both image platforms have preparation smoke coverage; this does not claim two-platform end-to-end coverage.
+- Acceptance harness revision: `2ca8fbd0e0e0f75a6f14e65601435d5c8a9f852a`. After packaging, only the harness changed: Site/globals expectations, Gallery/Navigation test data, a CE9 dialog/Slug locator race, and a hook-attempt count assumption replaced with one durable build and same-build recovery assertions. No shipping package/image bytes changed.
+- Final source regression: 40/40 workspace tasks passed (cached repetition of the successful complete run), plus 27 root files / 156 tests. Typecheck, lint, formatting, OpenAPI and 73 OpenSpec items passed.
+- Portable receipt: [alpha-5-acceptance.json](../../../docs/alpha-5-acceptance.json). Full logs, audit/license inventory, registry checks and prior failed harness attempts are retained under `.release-artifacts/alpha-5/evidence/`.
+
+The npm session returned E401 during read-only rights checks. Authenticated npm
+and GHCR publishing rights must be checked by the owner before any live action.
+Real alpha.5 VPS/Cloudflare delta checks remain pending; alpha.4 confirmations
+are historical and were not relabeled. No npm publish, GHCR push, remote release
+creation or real deployment was performed. This completes preparation and the
+local acceptance handoff, not the separate owner release gate.

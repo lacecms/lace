@@ -1,9 +1,9 @@
 # Alpha.5 release preparation and upgrade notes
 
 Selected candidate: `0.1.0-alpha.5`, npm channel `next`, ownership template
-`0.29.0`. Preparation is in progress. Publication, exact-artifact acceptance
-and real deployment results are recorded separately; this document does not
-announce availability. See [release preparation](./alpha-release.md) and
+`0.29.0`. Local preparation and exact-artifact acceptance passed on
+2026-10-14. Publication and real deployment approval remain separate; this
+document does not announce availability. See [release preparation](./alpha-release.md) and
 [owner verification](./real-application-verification.md).
 
 ## Changes since alpha.4
@@ -100,9 +100,20 @@ origin with replacement secrets and production hooks disabled before validation.
 
 ## Candidate evidence and owner handoff
 
-Source checks, immutable artifact inventory and exact-artifact acceptance remain
-pending until their results are recorded. The preparation baseline is in
-[the change readiness record](../openspec/changes/prepare-alpha-five-release/readiness.md).
+Source checks and exact-artifact acceptance passed. The complete inventory is
+`.release-artifacts/alpha-5/inventory.json`, built from clean source
+`1ab14e2b17c5ca32c7e481032c95360b7437c993`. It contains fifteen package archives and
+API/builder images for linux/amd64 and linux/arm64, with both-platform smoke
+checks. The full consumer journeys ran on linux/arm64; see the
+[portable acceptance receipt](./alpha-5-acceptance.json) for source identity,
+checksums, image IDs and fifteen passed journeys. These are local image IDs,
+not remote registry digests. The audit policy passed with 851 license records
+and the existing braces/esbuild tooling dispositions (one high and one moderate
+advisory, no critical advisory).
+
+The [change readiness record](../openspec/changes/prepare-alpha-five-release/readiness.md)
+links preparation and verification evidence. npm rights inspection returned
+E401; authenticate and verify npm/GHCR publishing rights before publication.
 Historical alpha.4 owner confirmations on 2026-10-10 remain valid for that
 baseline and do not certify alpha.5. Recheck affected real VPS/Cloudflare upgrade,
 content/build, backup/restore and recovery scenarios against the selected

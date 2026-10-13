@@ -9,8 +9,8 @@ were not separately verified by this documentation update.
 The owner also confirmed completion of real VPS/Cloudflare application testing
 and recovery/upgrade checks; see the [owner status](./real-application-verification.md#owner-confirmed-status--2026-10-10).
 The next selected candidate is `0.1.0-alpha.5`, ownership template `0.29.0`,
-on npm channel `next`. It is not published or deployment-verified by this
-selection. Preparation and acceptance never publish; the commands below target
+on npm channel `next`. Local preparation and exact-artifact acceptance passed on 2026-10-14; it is
+not published or real-deployment-verified by these local checks. Preparation and acceptance never publish; the commands below target
 alpha.5. Published alpha.1–alpha.4 remain immutable and cannot be prepared again
 as new candidates. See [alpha.5 release notes](./alpha-5-release-notes.md) for
 upgrade boundaries and candidate evidence.
