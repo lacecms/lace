@@ -3,12 +3,18 @@
   "framework": "astro",
   "componentsDir": "src/components/lace",
   "blockMap": "src/lace/blocks.ts",
-  "blockMapSha256": "fe99316d998d116c2bce9a233090465ae80f8bfb17db7066170bb761682d8598",
+  "blockMapSha256": "fa5c30bc1d07e5e853ea029fac37c9ba02dcaabe870365d4d8d2dc1af81a7a3e",
   "items": {
     "cta": {
       "revision": 2,
       "files": {
         "src/components/lace/CtaBlock.astro": "42fe89c754c00daffed4e89860a2ac455c91d63f2fe6c387ad4e305721d60ec0"
+      }
+    },
+    "gallery": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/GalleryBlock.astro": "442888d455440437a5816f08e455c69d8f0ba605a012b52fb29612d1f970ca68"
       }
     },
     "hero": {
@@ -21,6 +27,12 @@
       "revision": 4,
       "files": {
         "src/components/lace/ImageBlock.astro": "004e0ee6a85bc37a8d0b5d84a1b6b82ac844a2e96183fb95227a39d8b59cbfc5"
+      }
+    },
+    "navigation": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/NavigationBlock.astro": "81aeee6342765d2d4554eafc03484c14d59b82c6761e1626a3006fae09e45ec7"
       }
     },
     "quote": {

@@ -1,0 +1,28 @@
+---
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.gallery>;
+
+const { anchor, block, className, data, image } = Astro.props;
+const title = data.title?.trim() === "" ? undefined : data.title;
+// Each item's own alt text and caption override the media item's.
+const items = data.images.map((item) => {
+  const media = image(item.media, item.alt);
+  return { caption: item.caption ?? media.caption, media };
+});
+---
+
+<section class:list={["gallery", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+  {title !== undefined && <h2 data-lace-part="title">{title}</h2>}
+  <ul data-lace-part="items" role="list">
+    {items.map(({ caption, media }) => (
+      <li data-lace-part="item">
+        <figure>
+          <img alt={media.alt} data-lace-part="media" height={media.height} loading="lazy" src={media.src} style={media.objectPosition === undefined ? undefined : { "object-position": media.objectPosition }} width={media.width} />
+          {caption !== undefined && <figcaption data-lace-part="caption">{caption}</figcaption>}
+        </figure>
+      </li>
+    ))}
+  </ul>
+</section>

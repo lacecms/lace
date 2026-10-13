@@ -1,7 +1,14 @@
 {
   "models": ["about", "home", "notes", "posts"],
-  "denied": { "status": 403, "code": "AUTHORIZATION_DENIED" },
-  "conflict": { "status": 409, "code": "CONTENT_REVISION_CONFLICT" },
+  "globals": ["navigation", "settings"],
+  "denied": {
+    "status": 403,
+    "code": "AUTHORIZATION_DENIED"
+  },
+  "conflict": {
+    "status": 409,
+    "code": "CONTENT_REVISION_CONFLICT"
+  },
   "routes": ["/", "/about", "/blog/alpha", "/blog/beta"],
   "media": {
     "<cover>": {
@@ -26,14 +33,19 @@
           "type": "hero",
           "position": 1000,
           "schemaVersion": 1,
-          "data": { "heading": "Published hero" }
+          "data": {
+            "heading": "Published hero"
+          }
         },
         {
           "key": "image-one",
           "type": "image",
           "position": 2000,
           "schemaVersion": 2,
-          "data": { "media": "<cover>", "alt": "Published cover" }
+          "data": {
+            "media": "<cover>",
+            "alt": "Published cover"
+          }
         }
       ]
     },
@@ -42,14 +54,36 @@
       "modelKey": "about",
       "title": "Published about",
       "fields": {},
-      "blocks": []
+      "blocks": [
+        {
+          "key": "gallery-one",
+          "type": "gallery",
+          "position": 1000,
+          "schemaVersion": 1,
+          "data": {
+            "title": "Published gallery",
+            "images": [
+              {
+                "media": "<cover>",
+                "alt": "Gallery cover",
+                "caption": "Gallery caption"
+              },
+              {
+                "media": "<cover>"
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "path": "/blog/alpha",
       "modelKey": "posts",
       "slug": "alpha",
       "title": "Published alpha",
-      "fields": { "publishedAt": "2026-10-07" },
+      "fields": {
+        "publishedAt": "2026-10-07"
+      },
       "blocks": []
     },
     {
@@ -57,8 +91,43 @@
       "modelKey": "posts",
       "slug": "beta",
       "title": "Published beta",
-      "fields": { "publishedAt": "2026-10-07" },
+      "fields": {
+        "publishedAt": "2026-10-07"
+      },
       "blocks": []
     }
-  ]
+  ],
+  "publishedGlobals": {
+    "navigation": {
+      "modelKey": "navigation",
+      "fields": {},
+      "blocks": [
+        {
+          "key": "navigation-one",
+          "type": "navigation",
+          "position": 1000,
+          "schemaVersion": 1,
+          "data": {
+            "name": "Main",
+            "links": [
+              {
+                "label": "Home",
+                "url": "/"
+              },
+              {
+                "label": "Blog",
+                "children": [
+                  {
+                    "label": "Alpha",
+                    "url": "/blog/alpha"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "settings": null
+  }
 }

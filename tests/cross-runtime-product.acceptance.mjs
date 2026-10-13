@@ -13,7 +13,7 @@ test("34A both real compositions satisfy shared API, Astro and browser expectati
       const seed = await apiJourney(f);
       const astro = await astroJourney(f, seed);
       await browserJourney(f, resolve("."));
-      results.push({ canonical: seed.canonical, astro });
+      results.push({ canonical: seed.canonical, globals: seed.globals, astro });
     } finally {
       await f.close();
     }

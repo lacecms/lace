@@ -32,6 +32,7 @@ import {
   validateFieldValue,
   validateModelFields,
   validateRichTextDocument,
+  validateSnapshotListBudget,
 } from "../dist/index.js";
 
 const fieldCases = [
@@ -600,8 +601,10 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
   expect(registry.get("hero")).toBe(builtInBlocks.hero);
   expect(toBlockRegistryMetadata(registry).map((block) => block.type)).toEqual([
     "cta",
+    "gallery",
     "hero",
     "image",
+    "navigation",
     "quote",
     "richText",
   ]);
@@ -622,6 +625,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
       label: "Call to action",
       type: "cta",
     },
+    { description: "A grid of images with optional captions.", label: "Gallery", type: "gallery" },
     {
       description: "Large heading with optional text, image, and action.",
       label: "Hero",
@@ -632,6 +636,11 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
         "A single image with an optional caption and alt text that overrides the media alt.",
       label: "Image",
       type: "image",
+    },
+    {
+      description: "A list of links with optional one-level submenus.",
+      label: "Navigation",
+      type: "navigation",
     },
     { description: "A quotation with optional attribution.", label: "Quote", type: "quote" },
     {
@@ -901,6 +910,91 @@ test("image version 2 makes alt text optional and migrates version 1 data unchan
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
   expect(metadata).toMatchObject({ type: "image", version: 2 });
   expect(metadata.fields.alt.required).toBe(false);
+});
+
+test("gallery collects image items that become publishable with one image", () => {
+  const { gallery } = builtInBlocks;
+  expect(gallery.version).toBe(1);
+  expect(gallery.settings).toBeUndefined();
+  expect(validateBlockData(gallery, {}, "draft")).toEqual({ images: [] });
+  expect(issueFrom(() => validateBlockData(gallery, {}, "publish"))).toMatchObject({
+    code: "list_too_short",
+    path: ["images"],
+  });
+  const item = { media: "media-1" };
+  expect(validateBlockData(gallery, { images: [item], title: "Studio" }, "publish")).toEqual({
+    images: [item],
+    title: "Studio",
+  });
+  expect(validateBlockData(gallery, { images: [{ caption: "Draft" }] }, "draft")).toEqual({
+    images: [{ caption: "Draft" }],
+  });
+  expect(
+    issueFrom(() => validateBlockData(gallery, { images: [{ caption: "Draft" }] }, "publish")),
+  ).toMatchObject({ code: "missing_required_field", path: ["images", 0, "media"] });
+  for (const mode of ["draft", "publish"])
+    expect(
+      issueFrom(() => validateBlockData(gallery, { images: Array(51).fill(item) }, mode)),
+    ).toMatchObject({ code: "list_too_long", path: ["images"] });
+  expect(
+    issueFrom(() => validateBlockData(gallery, { images: [{ ...item, width: 3 }] }, "draft")),
+  ).toMatchObject({ code: "unknown_field", path: ["images", 0, "width"] });
+  const metadata = toBlockRegistryMetadata(defineBlockRegistry([gallery]))[0];
+  expect(metadata.fields.images).toMatchObject({
+    defaultValue: [],
+    itemLabel: "caption",
+    maxItems: 50,
+    minItems: 1,
+    type: "list",
+  });
+});
+
+test("navigation allows one submenu level with safe URLs within the list budget", () => {
+  const { navigation } = builtInBlocks;
+  expect(navigation.version).toBe(1);
+  expect(navigation.settings).toBeUndefined();
+  expect(validateBlockData(navigation, {}, "draft")).toEqual({ links: [] });
+  expect(issueFrom(() => validateBlockData(navigation, {}, "publish")).code).toBe("list_too_short");
+  const docs = { children: [{ label: "Guide", url: "/guide" }], label: "Docs" };
+  expect(validateBlockData(navigation, { links: [docs], name: "Main" }, "publish")).toEqual({
+    links: [docs],
+    name: "Main",
+  });
+  expect(
+    issueFrom(() =>
+      validateBlockData(
+        navigation,
+        { links: [{ children: [{ label: "Guide" }], label: "Docs" }] },
+        "publish",
+      ),
+    ),
+  ).toMatchObject({ code: "missing_required_field", path: ["links", 0, "children", 0, "url"] });
+  expect(
+    issueFrom(() =>
+      validateBlockData(
+        navigation,
+        { links: [{ children: [{ label: "Bad", url: "javascript:alert(1)" }], label: "Docs" }] },
+        "draft",
+      ),
+    ).path,
+  ).toEqual(["links", 0, "children", 0, "url"]);
+  const children = Array.from({ length: 20 }, (_, index) => ({
+    label: `Child ${index}`,
+    url: `/child-${index}`,
+  }));
+  const links = Array.from({ length: 20 }, (_, index) => ({ children, label: `Link ${index}` }));
+  expect(validateBlockData(navigation, { links }, "publish").links).toHaveLength(20);
+  const blocks = [{ data: { links }, fields: navigation.fields, path: ["blocks", 0, "data"] }];
+  expect(() => validateSnapshotListBudget({}, {}, blocks)).not.toThrow();
+  const crowded = links.map((link, index) =>
+    index === 3 ? { ...link, children: [...children, { label: "Extra", url: "/extra" }] } : link,
+  );
+  expect(issueFrom(() => validateBlockData(navigation, { links: crowded }, "draft"))).toMatchObject(
+    {
+      code: "list_too_long",
+      path: ["links", 3, "children"],
+    },
+  );
 });
 
 test("effective alt text prefers a non-blank usage alt, then the media alt", () => {

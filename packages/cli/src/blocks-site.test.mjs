@@ -14,7 +14,7 @@ import {
 } from "../dist/blocks-site.js";
 
 const starter = new URL("../../create-lace/templates/site/", import.meta.url);
-const builtIns = ["cta", "hero", "image", "quote", "richText"];
+const builtIns = ["cta", "gallery", "hero", "image", "navigation", "quote", "richText"];
 const builtInEntries = builtIns.map((type) => ({
   type,
   component: `src/components/lace/${type[0].toUpperCase()}${type.slice(1)}Block.astro`,

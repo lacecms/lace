@@ -107,6 +107,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
     expect(models.body.items.map((model) => model.key)).toEqual([
       "about",
       "home",
+      "navigation",
       "notes",
       "posts",
       "settings",

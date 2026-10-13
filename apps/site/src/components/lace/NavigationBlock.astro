@@ -1,0 +1,36 @@
+---
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.navigation>;
+
+const { anchor, block, className, data } = Astro.props;
+const name = data.name?.trim() === "" ? undefined : data.name;
+const path = (value: string) => (value.length > 1 && value.endsWith("/") ? value.slice(0, -1) : value);
+const currentPath = path(Astro.url.pathname);
+// Only a root-relative link without a query or fragment can name the current page.
+const current = (url: string | undefined) =>
+  url !== undefined && url.startsWith("/") && !url.startsWith("//") && !url.includes("?") && !url.includes("#") && path(url) === currentPath ? "page" : undefined;
+---
+
+<nav aria-label={name} class:list={["navigation", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+  <ul data-lace-part="list">
+    {data.links.map((link) => (
+      <li data-lace-part="item">
+        {link.children !== undefined && link.children.length > 0 ? (
+          <details data-lace-part="submenu">
+            <summary data-lace-part="toggle">{link.label}</summary>
+            <ul data-lace-part="children">
+              {link.url !== undefined && <li data-lace-part="item"><a aria-current={current(link.url)} data-lace-part="link" href={link.url}>{link.label}</a></li>}
+              {link.children.map((child) => <li data-lace-part="item"><a aria-current={current(child.url)} data-lace-part="link" href={child.url}>{child.label}</a></li>)}
+            </ul>
+          </details>
+        ) : link.url !== undefined ? (
+          <a aria-current={current(link.url)} data-lace-part="link" href={link.url}>{link.label}</a>
+        ) : (
+          <span data-lace-part="label">{link.label}</span>
+        )}
+      </li>
+    ))}
+  </ul>
+</nav>

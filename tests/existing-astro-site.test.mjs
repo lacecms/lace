@@ -17,7 +17,7 @@ const lace = join(workspace, "packages/cli/dist/bin.js");
 const blockFiles = [
   "lace.site.json",
   "src/lace/blocks.ts",
-  ...["Cta", "Hero", "Image", "Quote", "RichText"].map(
+  ...["Cta", "Gallery", "Hero", "Image", "Navigation", "Quote", "RichText"].map(
     (name) => `src/components/lace/${name}Block.astro`,
   ),
 ];
@@ -45,7 +45,15 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   await Promise.all(blockFiles.map((path) => rm(join(site, path))));
   const added = await exec(
     process.execPath,
-    [lace, "add", "block", "cta", "hero", "image", "quote", "richText", "--site", "site", "--json"],
+    [
+      lace,
+      "add",
+      "block",
+      ...["cta", "gallery", "hero", "image", "navigation", "quote", "richText"],
+      "--site",
+      "site",
+      "--json",
+    ],
     { cwd: root },
   );
   expect(JSON.parse(added.stdout)).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED" });
@@ -91,8 +99,8 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   const article = await readFile(join(site, "dist/articles/first-post/index.html"), "utf8");
   const blocks = (html) =>
     [...html.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1]);
-  expect(blocks(home)).toEqual(["hero", "cta"]);
-  expect(blocks(article)).toEqual(["richText", "image", "quote"]);
+  expect(blocks(home)).toEqual(["hero", "navigation", "cta"]);
+  expect(blocks(article)).toEqual(["richText", "image", "quote", "gallery"]);
   expect(home).toContain('<main data-lace-model="home" data-lace-entry="home-entry">');
   expect(home).toContain('<a href="/articles/first-post/">First published post</a>');
   expect(home).toContain("https://cms.example/lace/api/v1/public/media/hero-media");

@@ -410,11 +410,15 @@ fresh project and moving configuration manually.
 
 The `create-lace` starter is the single source of what users receive: minimal
 `home` and `posts` pages, a `settings` global (`siteName`, `tagline`), a
-layout, global styles, the five built-in registry blocks, `lace.site.json`, the
-block map file, and the loader file. Each page passes the published site to the
-layout, which renders a site header from `site.global("settings")` and falls
-back to static values while the global is unpublished; navigation stays static
-until a list field exists. It contains no tests, fixtures, or
+`navigation` global that allows only the `navigation` block, a layout, global
+styles, the seven built-in registry blocks, `lace.site.json`, the block map
+file, and the loader file. Each page passes the published site to the layout,
+which renders a site header from `site.global("settings")` and the published
+`navigation` global's blocks through `LaceBlocks` and the block map, falling
+back to static values and a static Home link while either global is
+unpublished (a published navigation global without visible blocks renders no
+navigation). Gallery and navigation layout CSS lives in the site stylesheet; the
+components carry no styles or scripts. It contains no tests, fixtures, or
 engine-development routes.
 
 `apps/site` is the engine development playground and integration fixture. It may
@@ -742,12 +746,13 @@ text, textarea, select or URL child of a group item. It is portable presentation
 metadata only: exclude it from structural identity at list descriptor positions,
 include it in projection identity and preserve content/default keys of that name.
 Changing it needs no version bump or migration. Summaries use plain text and
-never display media IDs. Gallery/Navigation remain CE7D.
+never display media IDs. CE7D ships Gallery and Navigation built on these
+descriptors.
 
 ### Initial built-in blocks
 
-The starter and browser editor ship with five blocks. They use only the public
-field DSL and do not receive special database treatment:
+The starter and browser editor ship with seven blocks. They use only the public
+field DSL, declare no settings and do not receive special database treatment:
 
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
@@ -756,7 +761,17 @@ field DSL and do not receive special database treatment:
   media item's alt text, and optional caption. Version 1 required the alt
   text; the version 2 migration returns the stored data unchanged;
 - `quote`: required quote text and optional attribution;
-- `cta`: required heading, optional body, required action label, and required URL.
+- `cta`: required heading, optional body, required action label, and required URL;
+- `gallery` (CE7D): optional title and an `images` list (default `[]`, at
+  least one item to publish, at most 50) of groups with required media,
+  optional alt text and optional caption that override the media item's;
+- `navigation` (CE7D): optional accessible `name` and a `links` list (default
+  `[]`, at least one to publish, at most 20) of groups with a required label,
+  an optional URL and an optional `children` list (at most 20) of groups with a
+  required label and URL. The registry component renders a parent with
+  children as a native `<details>` disclosure whose submenu starts with the
+  parent's own URL, and marks a root-relative link to the current page with
+  `aria-current="page"`.
 
 Projects may define additional blocks in `lace.config.ts`. Custom blocks use the
 generic metadata-driven admin form in the MVP; custom React admin editors are
@@ -2016,6 +2031,10 @@ own classes in the root `class` (`class:list={["hero", className]}`, or
 attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
+Built-in components carry no `<style>` or `<script>`: presentation stays in the
+site stylesheet. The registry ships `gallery` and `navigation` (CE7D) besides
+the five earlier items; every Lace-maintained site installs all seven.
+
 ### 13.6 Framework selection
 
 Registry items, `lace.site.json`, and adapters are keyed by framework. `astro`
@@ -2088,6 +2107,16 @@ if (post === undefined) return new Response(null, { status: 404 });
 ---
 
 <LaceBlocks entry={post} blocks={blocks} mediaUrl={site.mediaUrl} />
+```
+
+A layout renders a global's blocks the same way, for example the published
+`navigation` global in the site header, with a static fallback while it is
+unpublished (`LaceBlocks` accepts a published global as its entry):
+
+```astro
+{navigation === undefined
+  ? <nav aria-label="Main"><a href={import.meta.env.BASE_URL}>Home</a></nav>
+  : <LaceBlocks entry={navigation} blocks={blocks} mediaUrl={site.mediaUrl} />}
 ```
 
 Layout head and site files (user-owned):
@@ -2970,7 +2999,8 @@ The implementation plan uses these resolved defaults:
 - `better-sqlite3` for the Node adapter;
 - Tailwind CSS over Lace design tokens and shadcn/ui-generated, Lace-owned
   admin components on Radix UI primitives;
-- the `hero`, `richText`, `image`, `quote`, and `cta` built-in blocks;
+- the `hero`, `richText`, `image`, `quote`, and `cta` built-in blocks (CE7D
+  later adds `gallery` and `navigation`);
 - no reference fields in the MVP;
 - no-op cache by default and optional KV only after the uncached path is correct;
 - a first-party fixed-command VPS builder rather than an arbitrary command or

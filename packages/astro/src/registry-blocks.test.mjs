@@ -1,0 +1,188 @@
+import { builtInBlocks } from "@lacecms/content";
+import { defineBlockMap } from "@lacecms/render";
+import { experimental_AstroContainer as AstroContainer } from "astro/container";
+import { expect, test } from "vitest";
+// The registry sources exactly as `lace add block` installs them.
+import GalleryBlock from "../../../registry/astro/gallery/GalleryBlock.astro";
+import NavigationBlock from "../../../registry/astro/navigation/NavigationBlock.astro";
+import Blocks from "../test-fixtures/Blocks.astro";
+
+const blocks = defineBlockMap({
+  gallery: { component: GalleryBlock, definition: builtInBlocks.gallery },
+  navigation: { component: NavigationBlock, definition: builtInBlocks.navigation },
+});
+
+const media = {
+  bare: {
+    alt: null,
+    caption: null,
+    focalPoint: null,
+    height: null,
+    url: "https://media.example/bare.png",
+    width: null,
+  },
+  studio: {
+    alt: "Media alt",
+    caption: "Media caption",
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: 600,
+    url: "https://media.example/studio.png",
+    width: 800,
+  },
+};
+
+function block(type, data, overrides = {}) {
+  return { data, key: `${type}-1`, position: 0, schemaVersion: 1, type, ...overrides };
+}
+
+async function render(entryBlocks, { path = "/", ...entry } = {}) {
+  const container = await AstroContainer.create();
+  return container.renderToString(Blocks, {
+    props: {
+      blocks,
+      entry: {
+        blocks: entryBlocks,
+        id: "entry-1",
+        media: (id) => media[id],
+        modelKey: "home",
+        ...entry,
+      },
+    },
+    request: new Request(`https://site.example${path}`),
+  });
+}
+
+const navigation = {
+  links: [
+    { label: "Home", url: "/" },
+    {
+      children: [
+        { label: "Guide", url: "/guide" },
+        { label: "API", url: "https://api.example/" },
+      ],
+      label: "Docs",
+      url: "/docs",
+    },
+    { children: [{ label: "About", url: "/about" }], label: "Company" },
+  ],
+  name: "Main",
+};
+
+test("gallery items follow the media alt and caption fallbacks", async () => {
+  const html = await render([
+    block("gallery", {
+      images: [{ alt: "Override", media: "studio" }, { media: "bare" }],
+      title: "Studio",
+    }),
+  ]);
+  expect(html).toBe(
+    [
+      '<main><section class="gallery" data-lace-block="gallery" data-lace-block-key="gallery-1">',
+      '<h2 data-lace-part="title">Studio</h2>',
+      '<ul data-lace-part="items" role="list">',
+      '<li data-lace-part="item"><figure><img alt="Override" data-lace-part="media" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
+      // Astro writes an empty alt text as a bare attribute.
+      '<li data-lace-part="item"><figure><img alt data-lace-part="media" loading="lazy" src="https://media.example/bare.png"></figure></li>',
+      "</ul></section></main>",
+    ].join(""),
+  );
+});
+
+test("a gallery item caption overrides the media caption", async () => {
+  const html = await render([
+    block("gallery", { images: [{ caption: "Item caption", media: "studio" }] }),
+  ]);
+  expect(html).toContain('alt="Media alt"');
+  expect(html).toContain('<figcaption data-lace-part="caption">Item caption</figcaption>');
+  expect(html).not.toContain("Media caption");
+});
+
+test("a gallery without a title carries its anchor and class name", async () => {
+  const html = await render([
+    block("gallery", { images: [{ media: "bare" }] }, { anchor: "photos", className: "wide" }),
+  ]);
+  expect(html).toContain(
+    '<section class="gallery wide" data-lace-block="gallery" data-lace-block-key="gallery-1" id="photos">',
+  );
+  expect(html).not.toContain('data-lace-part="title"');
+});
+
+test("navigation renders links and one-level submenu disclosures", async () => {
+  const html = await render([block("navigation", navigation)]);
+  expect(html).toBe(
+    [
+      '<main><nav aria-label="Main" class="navigation" data-lace-block="navigation" data-lace-block-key="navigation-1">',
+      '<ul data-lace-part="list">',
+      '<li data-lace-part="item"><a aria-current="page" data-lace-part="link" href="/">Home</a></li>',
+      '<li data-lace-part="item"><details data-lace-part="submenu"><summary data-lace-part="toggle">Docs</summary><ul data-lace-part="children">',
+      '<li data-lace-part="item"><a data-lace-part="link" href="/docs">Docs</a></li>',
+      '<li data-lace-part="item"><a data-lace-part="link" href="/guide">Guide</a></li>',
+      '<li data-lace-part="item"><a data-lace-part="link" href="https://api.example/">API</a></li>',
+      "</ul></details></li>",
+      '<li data-lace-part="item"><details data-lace-part="submenu"><summary data-lace-part="toggle">Company</summary><ul data-lace-part="children">',
+      '<li data-lace-part="item"><a data-lace-part="link" href="/about">About</a></li>',
+      "</ul></details></li>",
+      "</ul></nav></main>",
+    ].join(""),
+  );
+});
+
+test("navigation marks only a root-relative link to the current page", async () => {
+  const html = await render(
+    [
+      block("navigation", {
+        links: [
+          { label: "About", url: "/about" },
+          { label: "Team", url: "/about#team" },
+          { label: "Absolute", url: "https://site.example/about" },
+          { label: "Query", url: "/about?tab=1" },
+        ],
+      }),
+    ],
+    { path: "/about/" },
+  );
+  expect(html.match(/aria-current="page"/gu)).toHaveLength(1);
+  expect(html).toContain('<a aria-current="page" data-lace-part="link" href="/about">About</a>');
+});
+
+test("an unnamed navigation has no accessible name and a label-only link is text", async () => {
+  const html = await render([
+    block("navigation", { links: [{ label: "Sections" }, { children: [], label: "Empty" }] }),
+  ]);
+  expect(html).not.toContain("aria-label");
+  expect(html).toContain('<span data-lace-part="label">Sections</span>');
+  expect(html).toContain('<span data-lace-part="label">Empty</span>');
+  expect(html).not.toContain("<details");
+});
+
+test("a layout renders a published global's visible blocks in order", async () => {
+  const html = await render(
+    [
+      block(
+        "navigation",
+        { links: [{ label: "First", url: "/first" }] },
+        { key: "a", position: 1 },
+      ),
+      block("navigation", { links: [{ label: "Hidden", url: "/x" }] }, { hidden: true, key: "b" }),
+      block("navigation", { links: [{ label: "Second", url: "/second" }] }, { key: "c" }),
+    ],
+    { id: "navigation-entry", modelKey: "navigation", publishedAt: "2026-10-13T00:00:00.000Z" },
+  );
+  expect([...html.matchAll(/data-lace-block-key="([^"]+)"/gu)].map((match) => match[1])).toEqual([
+    "a",
+    "c",
+  ]);
+  expect(html).not.toContain("Hidden");
+});
+
+test("a global block without a renderer fails with the global's identity", async () => {
+  await expect(
+    render([block("carousel", {}, { key: "c" })], {
+      id: "navigation-entry",
+      modelKey: "navigation",
+    }),
+  ).rejects.toMatchObject({
+    code: "unknown_block_type",
+    context: { blockKey: "c", entryId: "navigation-entry", modelKey: "navigation" },
+  });
+});

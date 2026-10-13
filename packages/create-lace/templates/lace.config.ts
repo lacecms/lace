@@ -8,23 +8,25 @@ export default await defineConfig({
     builtInBlocks.image,
     builtInBlocks.quote,
     builtInBlocks.cta,
+    builtInBlocks.gallery,
+    builtInBlocks.navigation,
   ],
   content: [
     definePage({
       key: "home",
-      version: 1,
+      version: 2,
       label: "Home",
       path: "/",
-      blocks: ["hero", "richText", "image", "quote", "cta"],
+      blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
       seo: true,
     }),
     defineCollection({
       key: "posts",
-      version: 1,
+      version: 2,
       label: "Posts",
       route: "/blog/:slug",
       fields: { summary: field.text() },
-      blocks: ["hero", "richText", "image", "quote", "cta"],
+      blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
       seo: { description: "summary" },
     }),
     defineGlobal({
@@ -39,6 +41,13 @@ export default await defineConfig({
         image: field.media({ label: "Share image" }),
       },
       seoDefaults: { siteName: "siteName", description: "description", image: "image" },
+    }),
+    defineGlobal({
+      key: "navigation",
+      version: 1,
+      label: "Navigation",
+      description: "Links shown in the header of every page.",
+      blocks: ["navigation"],
     }),
   ],
 });

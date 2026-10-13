@@ -2,15 +2,19 @@
 import { builtInBlocks } from "@lacecms/content";
 import { defineBlockMap } from "@lacecms/render";
 import CtaBlock from "../components/lace/CtaBlock.astro";
+import GalleryBlock from "../components/lace/GalleryBlock.astro";
 import HeroBlock from "../components/lace/HeroBlock.astro";
 import ImageBlock from "../components/lace/ImageBlock.astro";
+import NavigationBlock from "../components/lace/NavigationBlock.astro";
 import QuoteBlock from "../components/lace/QuoteBlock.astro";
 import RichTextBlock from "../components/lace/RichTextBlock.astro";
 
 export const blocks = defineBlockMap({
   cta: { definition: builtInBlocks.cta, component: CtaBlock },
+  gallery: { definition: builtInBlocks.gallery, component: GalleryBlock },
   hero: { definition: builtInBlocks.hero, component: HeroBlock },
   image: { definition: builtInBlocks.image, component: ImageBlock },
+  navigation: { definition: builtInBlocks.navigation, component: NavigationBlock },
   quote: { definition: builtInBlocks.quote, component: QuoteBlock },
   richText: { definition: builtInBlocks.richText, component: RichTextBlock },
 });

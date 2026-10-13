@@ -174,6 +174,7 @@ test("the checked-in project configuration creates editable page and global draf
       expect(await repository.readConfigurationSyncState()).toMatchObject([
         { key: "about", entryCount: 1, draftSnapshotCount: 1 },
         { key: "home", entryCount: 1, draftSnapshotCount: 1 },
+        { key: "navigation", entryCount: 1, draftSnapshotCount: 1 },
         { key: "notes", entryCount: 0 },
         { key: "posts", entryCount: 0 },
         { key: "settings", entryCount: 1, draftSnapshotCount: 1 },

@@ -36,3 +36,79 @@ main {
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+
+/* Gallery: an adaptive grid; the focal point positions each cropped image. */
+:where([data-lace-block="gallery"]) [data-lace-part="items"] {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:where([data-lace-block="gallery"]) figure {
+  margin: 0;
+}
+:where([data-lace-block="gallery"]) [data-lace-part="media"] {
+  aspect-ratio: 4 / 3;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
+/* Navigation: a vertical list on narrow screens, a row with dropdowns from 48rem. */
+:where([data-lace-block="navigation"], .site-nav) ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:where([data-lace-block="navigation"]) [data-lace-part="list"],
+:where(.site-nav) > ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+:where([data-lace-block="navigation"]) a,
+:where([data-lace-block="navigation"]) summary {
+  overflow-wrap: anywhere;
+}
+:where([data-lace-block="navigation"]) [data-lace-part="toggle"] {
+  cursor: pointer;
+}
+:where([data-lace-block="navigation"]) [data-lace-part="children"] {
+  display: grid;
+  gap: 0.25rem;
+  margin-block-start: 0.5rem;
+  padding-inline-start: 1rem;
+}
+:where([data-lace-block="navigation"]) [aria-current="page"] {
+  font-weight: 700;
+}
+.site-header > nav {
+  flex-basis: 100%;
+}
+@media (min-width: 48rem) {
+  :where([data-lace-block="navigation"]) [data-lace-part="list"],
+  :where(.site-nav) > ul {
+    flex-flow: row wrap;
+    gap: 0.5rem 1.5rem;
+  }
+  :where([data-lace-block="navigation"]) [data-lace-part="submenu"] {
+    position: relative;
+  }
+  :where([data-lace-block="navigation"]) [data-lace-part="children"] {
+    background: Canvas;
+    border: 1px solid;
+    inset-block-start: 100%;
+    inset-inline-start: 0;
+    min-width: 12rem;
+    padding: 0.75rem;
+    position: absolute;
+    z-index: 1;
+  }
+  .site-header > nav {
+    flex-basis: auto;
+    margin-inline-start: auto;
+  }
+}

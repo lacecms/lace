@@ -165,7 +165,7 @@ test("block maps are frozen", () => {
   expect(Object.isFrozen(map.hero)).toBe(true);
 });
 
-test.each(["gallery", "constructor", "toString", "__proto__"])(
+test.each(["carousel", "constructor", "toString", "__proto__"])(
   "resolving the unmapped type %s fails with block identifiers",
   (type) => {
     const map = defineBlockMap({ hero: { component: "Hero", definition: builtInBlocks.hero } });
@@ -321,7 +321,7 @@ test("prepareBlocks skips hidden blocks and keeps the order of the visible ones"
 });
 
 test.each([
-  ["an unknown type", block("gallery", {}, { hidden: true, key: "g" })],
+  ["an unknown type", block("carousel", {}, { hidden: true, key: "g" })],
   ["an older version", block("hero", { heading: "Old" }, { hidden: true, schemaVersion: 0 })],
   ["invalid data", block("hero", {}, { hidden: true })],
   ["an invalid envelope", block("hero", { heading: "x" }, { anchor: "Bad", hidden: true })],
@@ -401,7 +401,7 @@ test("prepareBlocks fails on a block the site cannot render", () => {
   const error = captureError(() =>
     prepareBlocks(
       map,
-      { blocks: [block("gallery", {}, { key: "g" })], id: "entry-9", modelKey: "home" },
+      { blocks: [block("carousel", {}, { key: "g" })], id: "entry-9", modelKey: "home" },
       () => "",
     ),
   );

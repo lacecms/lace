@@ -1,4 +1,4 @@
-import { defineBlock, field } from "./index.js";
+import { builtInBlocks, defineBlock, field } from "./index.js";
 import type {
   BlockDataValues,
   BlockMigration,
@@ -183,3 +183,24 @@ const labelOption: string = labelledItems.itemLabel;
 // @ts-expect-error presentation metadata does not widen the item content type
 const badLabelledValue: FieldValue<typeof labelledItems> = [{ kind: "other" }];
 void [labelledValues, labelOption, badLabelledValue];
+
+type GalleryData = BlockDataValues<typeof builtInBlocks.gallery.fields>;
+const galleryData: GalleryData = {
+  images: [{ media: "media-1" }, { alt: "Override", caption: "Studio", media: "media-2" }],
+  title: "Studio",
+};
+// @ts-expect-error gallery items require media.
+const galleryWithoutMedia: GalleryData = { images: [{ caption: "No image" }] };
+type NavigationData = BlockDataValues<typeof builtInBlocks.navigation.fields>;
+const navigationData: NavigationData = {
+  links: [
+    { label: "Home", url: "/" },
+    { children: [{ label: "Guide", url: "/guide" }], label: "Docs" },
+  ],
+  name: "Main",
+};
+// @ts-expect-error submenu links require a URL.
+const childWithoutUrl: NavigationData = {
+  links: [{ children: [{ label: "Guide" }], label: "Docs" }],
+};
+void [galleryData, galleryWithoutMedia, navigationData, childWithoutUrl];

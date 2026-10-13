@@ -25,7 +25,7 @@ export async function astroJourney(f, seed) {
         LACE_API_BASE_URL: f.origin,
         LACE_BUILD_TOKEN: seed.token,
         LACE_PUBLIC_BASE_URL: "https://media.34a.test/",
-        LACE_EXPECTED_PUBLISHED_VERSION: "5",
+        LACE_EXPECTED_PUBLISHED_VERSION: "6",
       },
     });
     assertSecretFree(built.stdout + built.stderr, secrets, `${f.kind} Astro build diagnostics`);
@@ -51,7 +51,10 @@ export async function astroJourney(f, seed) {
       const entry = expected.site.find((entry) => entry.path === path);
       assert.ok(entry, `unexpected route ${path}`);
       assert.ok(html.includes(entry.title), `${path} published title absent`);
-      const keys = [...html.matchAll(/data-lace-block-key="([^"]+)"/gu)].map((m) => m[1]);
+      // Entry blocks live in the entry scope; the header holds the navigation global.
+      const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+      const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+      const keys = [...main.matchAll(/data-lace-block-key="([^"]+)"/gu)].map((m) => m[1]);
       assert.deepEqual(
         keys,
         entry.blocks.map((b) => b.key),
@@ -64,15 +67,29 @@ export async function astroJourney(f, seed) {
         assert.equal(match[1], seed.cover, "unexpected media reference");
         manifest.media.push("<cover>");
       }
-      for (const [tag] of html.matchAll(/<img\b[^>]*>/gu)) {
-        // The image block's own alt text and the resolved 1×1 dimensions.
-        assert.match(tag, /\salt="Published cover"/u, `${path} effective alt text`);
+      assert.ok(
+        header.includes(
+          '<nav aria-label="Main" class="navigation" data-lace-block="navigation" data-lace-block-key="navigation-one">',
+        ) &&
+          header.includes('<summary data-lace-part="toggle">Blog</summary>') &&
+          header.includes('href="/blog/alpha">Alpha</a>'),
+        `${path} published navigation global`,
+      );
+      // Effective alt text (block or item alt, else the cover's empty alt) and 1×1 dimensions.
+      const alts = [];
+      for (const [tag] of main.matchAll(/<img\b[^>]*>/gu)) {
+        alts.push(/\salt="([^"]*)"/u.exec(tag)?.[1] ?? (/\salt[\s>]/u.test(tag) ? "" : null));
         assert.match(tag, /\sheight="1"/u, `${path} image height`);
         assert.match(tag, /\swidth="1"/u, `${path} image width`);
       }
+      assert.deepEqual(
+        alts,
+        { "/": ["Published cover"], "/about": ["Gallery cover", ""] }[path] ?? [],
+        `${path} effective alt text`,
+      );
     }
     assert.deepEqual(manifest.routes.sort(), expected.routes);
-    assert.deepEqual(manifest.media, ["<cover>"]);
+    assert.deepEqual(manifest.media, ["<cover>", "<cover>", "<cover>"]);
     return manifest;
   } finally {
     await rm(directory, { recursive: true, force: true });

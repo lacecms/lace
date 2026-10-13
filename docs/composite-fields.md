@@ -29,6 +29,37 @@ const links = field.list({
 });
 ```
 
+Model fields use the same builders. A page with a contact group and a team list:
+
+```ts
+definePage({
+  key: "about",
+  version: 2,
+  path: "/about",
+  fields: {
+    contact: field.group({
+      label: "Contact",
+      fields: { email: field.text(), phone: field.text() },
+    }),
+    team: field.list({
+      label: "Team",
+      itemLabel: "name",
+      maxItems: 12,
+      item: field.group({
+        fields: {
+          name: field.text({ required: true }),
+          photo: field.media(),
+          links: field.list({ item: field.url() }),
+        },
+      }),
+    }),
+  },
+});
+```
+
+Site code reads these values from `entry.fields` as plain JSON and resolves nested
+media with `entry.image(id, usageAlt?)`.
+
 `itemLabel` optionally names an immediate text, textarea, select or URL child
 of a group item. It changes the editor summary only; it does not change stored
 values, structural configuration hashes or schema versions. Update it if its
@@ -85,9 +116,89 @@ revision conflicts retain local values; Copy my JSON contains complete content,
 and Reload server draft explicitly adopts the server version. Discard and revert
 reset transient editing identities along with their baseline.
 
+## Shipped examples: Gallery and Navigation (CE7D)
+
+`builtInBlocks.gallery` and `builtInBlocks.navigation` are defined with these
+builders only and are edited with the generic controls above:
+
+```ts
+gallery: defineBlock({
+  type: "gallery",
+  version: 1,
+  fields: {
+    title: field.text(),
+    images: field.list({
+      defaultValue: [],
+      minItems: 1,
+      maxItems: 50,
+      itemLabel: "caption",
+      item: field.group({
+        fields: {
+          media: field.media({ required: true }),
+          alt: field.text(), // overrides the media item's alt text
+          caption: field.text(), // overrides the media item's caption
+        },
+      }),
+    }),
+  },
+}),
+navigation: defineBlock({
+  type: "navigation",
+  version: 1,
+  fields: {
+    name: field.text(), // the <nav> accessible name
+    links: field.list({
+      defaultValue: [],
+      minItems: 1,
+      maxItems: 20,
+      itemLabel: "label",
+      item: field.group({
+        fields: {
+          label: field.text({ required: true }),
+          url: field.url(),
+          children: field.list({
+            maxItems: 20,
+            itemLabel: "label",
+            item: field.group({
+              fields: {
+                label: field.text({ required: true }),
+                url: field.url({ required: true }),
+              },
+            }),
+          }),
+        },
+      }),
+    }),
+  },
+}),
+```
+
+A new block starts with an empty list, so editors can add items immediately;
+publication requires at least one. Gallery nests two containers and Navigation
+four; a full navigation (20 links with 20 children each) counts 420 of the 500
+list elements an entry may hold, and a full gallery 50 of its 200 media
+references. Gallery media appear in Media usage and are protected from deletion
+like any media field. Gallery and Navigation `alt`/`caption` overrides are
+plain fields; the "Uses media alt" hint of the top-level `image` block is not
+shown inside list items, so the field descriptions explain the fallback.
+
+The starter and reference site declare a route-less `navigation` global that
+allows only the Navigation block; `BaseLayout.astro` renders its published
+blocks in the header with `LaceBlocks` and shows static links until it is
+published. Saving a draft of the global does not change the site; publishing
+it requests a build. The registry components and site CSS are described in
+[Styling the public site](site-styling.md#gallery-and-navigation). Evolving
+these or your own composites follows
+[configuration synchronization](configuration-synchronization.md#ce7b-nested-schema-evolution):
+model fields evolve with version bumps and hints, block data with block
+versions and migrations.
+
+## Compatibility
+
 No database migration, persisted item envelope or new public JSON format is
 introduced by CE7C. Older CE7A/CE7B engines understand the existing composite data,
 but remove `itemLabel` from configuration before rolling back to a version that
 does not support that metadata. Older scalar-only versions need a matching
-backup or an explicit data conversion. Gallery/Navigation definitions and
-shipped site/starter adoption are separate CE7D work.
+backup or an explicit data conversion. CE7D adds no migration either; a
+configuration that registers Gallery or Navigation needs the content package of
+the same release.

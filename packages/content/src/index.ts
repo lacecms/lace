@@ -2057,6 +2057,35 @@ export const builtInBlocks = deepFreeze({
     type: "cta",
     version: 1,
   }),
+  gallery: defineBlock({
+    description: "A grid of images with optional captions.",
+    fields: {
+      images: field.list({
+        defaultValue: [],
+        item: field.group({
+          fields: {
+            alt: field.text({
+              description: "Leave empty to use the media item's alt text.",
+              label: "Alt text",
+            }),
+            caption: field.text({
+              description: "Leave empty to use the media item's caption.",
+              label: "Caption",
+            }),
+            media: field.media({ label: "Image", required: true }),
+          },
+        }),
+        itemLabel: "caption",
+        label: "Images",
+        maxItems: 50,
+        minItems: 1,
+      }),
+      title: field.text({ label: "Title" }),
+    },
+    label: "Gallery",
+    type: "gallery",
+    version: 1,
+  }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",
     fields: {
@@ -2084,6 +2113,45 @@ export const builtInBlocks = deepFreeze({
     migrations: { 2: (block) => block },
     type: "image",
     version: 2,
+  }),
+  navigation: defineBlock({
+    description: "A list of links with optional one-level submenus.",
+    fields: {
+      links: field.list({
+        defaultValue: [],
+        item: field.group({
+          fields: {
+            children: field.list({
+              item: field.group({
+                fields: {
+                  label: field.text({ label: "Label", required: true }),
+                  url: field.url({ label: "URL", required: true }),
+                },
+              }),
+              itemLabel: "label",
+              label: "Submenu links",
+              maxItems: 20,
+            }),
+            label: field.text({ label: "Label", required: true }),
+            url: field.url({
+              description: "Optional when the link has submenu links.",
+              label: "URL",
+            }),
+          },
+        }),
+        itemLabel: "label",
+        label: "Links",
+        maxItems: 20,
+        minItems: 1,
+      }),
+      name: field.text({
+        description: "Read by screen readers, for example Main or On this page.",
+        label: "Navigation name",
+      }),
+    },
+    label: "Navigation",
+    type: "navigation",
+    version: 1,
   }),
   quote: defineBlock({
     description: "A quotation with optional attribution.",

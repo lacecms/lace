@@ -309,6 +309,7 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
   expect(models.body.items.map((model) => model.key)).toEqual([
     "about",
     "home",
+    "navigation",
     "notes",
     "posts",
     "settings",

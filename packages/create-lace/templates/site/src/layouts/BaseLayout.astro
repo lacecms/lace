@@ -1,6 +1,8 @@
 ---
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
 import LaceSeo from "@lacecms/astro/LaceSeo.astro";
 import type { PublishedEntry, PublishedSite } from "@lacecms/sdk";
+import { blocks } from "../lace/blocks";
 import "../styles/global.css";
 
 interface Props {
@@ -19,6 +21,10 @@ const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value : undefined;
 const siteName = text(settings.siteName) ?? "Lace starter";
 const tagline = text(settings.tagline);
+// Site-wide links come from the published `navigation` global; the static link
+// stands in until it is published in Admin.
+const navigation = site.global("navigation");
+const base = import.meta.env.BASE_URL;
 ---
 
 <!doctype html>
@@ -31,8 +37,17 @@ const tagline = text(settings.tagline);
   </head>
   <body>
     <header class="site-header">
-      <a class="site-name" href={import.meta.env.BASE_URL}>{siteName}</a>
+      <a class="site-name" href={base}>{siteName}</a>
       {tagline === undefined ? null : <p class="site-tagline">{tagline}</p>}
+      {navigation === undefined ? (
+        <nav aria-label="Main" class="site-nav">
+          <ul>
+            <li><a href={base}>Home</a></li>
+          </ul>
+        </nav>
+      ) : (
+        <LaceBlocks blocks={blocks} entry={navigation} mediaUrl={site.mediaUrl} />
+      )}
     </header>
     <main data-lace-model={entry.modelKey} data-lace-entry={entry.id}><slot /></main>
   </body>
