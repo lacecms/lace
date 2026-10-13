@@ -14,7 +14,7 @@
 
 ## 3. Exact artifact acceptance and handoff
 
-- [ ] 3.1 Recheck alpha.5 npm/image coordinate availability and publishing rights as read-only evidence, then capture an authorized reviewed clean source commit; verify the selected source revision and clean status before preparation without deleting published history.
+- [x] 3.1 Recheck alpha.5 npm/image coordinate availability and publishing rights as read-only evidence, then capture an authorized reviewed clean source commit; verify the selected source revision and clean status before preparation without deleting published history.
 - [ ] 3.2 Run frozen-lockfile release preparation to a distinct `.release-artifacts/alpha-5` destination (or a documented unique retry path); verify the complete eligible inventory contains fifteen archives and API/builder images for both linux/amd64 and linux/arm64 with passing platform smoke checks.
 - [ ] 3.3 Run independent `release:verify` and `acceptance:release` against that exact inventory; verify package checksums, image identifiers, source revision and all consumer acceptance results are recorded without rebuilding or reusing alpha.4 output.
 - [ ] 3.4 Update the readiness handoff with immutable inventory location, source revision, checksums, verification/acceptance evidence and remaining owner-operated real deployment/publication prerequisites; verify the report distinguishes prepared artifacts from full release readiness and no remote publication/deployment occurred.
