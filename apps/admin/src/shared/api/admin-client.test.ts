@@ -607,10 +607,17 @@ test("sends collection mutations with credentialed JSON requests", async () => {
     model: { key: "posts", kind: "collection", route: "/posts/:slug" },
     updatedBy: { displayName: "editor@lace.test", id: "editor-1" },
   };
-  const fetcher = vi.fn(async () => Response.json(entry, { status: 201 }));
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+    Response.json(entry, { status: 201 }),
+  );
   const client = createAdminClient(fetcher);
 
   await expect(client.createEntry("posts", "First post")).resolves.toMatchObject({ id: "entry-1" });
+  expect(JSON.parse(fetcher.mock.calls[0]![1]?.body as string)).not.toHaveProperty("slug");
+  await client.createEntry("posts", "First post", "first-post");
+  expect(JSON.parse(fetcher.mock.calls[1]![1]?.body as string)).toMatchObject({
+    slug: "first-post",
+  });
   expect(fetcher).toHaveBeenCalledWith(
     "/api/v1/admin/models/posts/entries",
     expect.objectContaining({ credentials: "same-origin", method: "POST" }),

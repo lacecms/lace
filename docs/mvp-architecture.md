@@ -691,6 +691,21 @@ Other kinds reject the option. Descriptor placeholders are projection-only:
 structural identity excludes them without removing content/default keys named
 `placeholder`. Updating them needs no model-version bump or content rewrite.
 
+### Visual form organization (CE9B)
+
+Models, block data and group descriptors accept optional serializable
+`layout: { mode: "sections" | "tabs", groups: [{ key, label, description?, fields }] }`.
+Blocks accept `settingsLayout` for declared settings. References name immediate
+sibling fields only, each at most once; keys are unique field-style identifiers,
+labels are nonempty, and groups and their field lists are nonempty. Invalid
+shapes, unknown properties/references and layout on scalar/list descriptors fail
+before startup. Groups used as list items support layout at every CE7 depth.
+Unlisted fields follow the layout in declaration order. Layout creates no data
+objects or paths, does not change defaults/absence or validation, and excludes
+system title/slug/SEO and block envelope controls. Only projection identity
+includes it; descriptor-aware structural identity preserves content/default keys
+with the same names. Omitted layouts retain previous hashes and metadata.
+
 ### Bounded composite fields (CE7A)
 
 `field.group({ fields, ...common })` describes a plain object;
@@ -2530,6 +2545,24 @@ points and labels 60/160 as recommendations separately from hard limits. Counts
 are not live announcements. Inherited SEO/media guidance takes precedence over
 configured generic prompts. Guidance never materializes absent values or blocks
 otherwise valid incomplete draft saves.
+
+CE9B renders visual sections and accessible tabs at each field-map boundary.
+Inactive panels remain mounted but hidden from focus and accessibility; nested
+rich-text/media/list identity survives navigation and moves. Summary links
+select containing tabs and open all disclosures before focusing the exact
+control. Navigation never materializes absent groups or changes dirty state.
+Viewers can navigate without mutating content; SEO and block Content/Settings
+retain their established behavior. Narrow tab strips remain keyboard accessible.
+
+Collection creation offers an initially automatic editable slug derived from
+title: NFKD, ASCII letters/digits, whitespace/underscore/hyphen collapsed to
+hyphens, lowercase, trimmed boundaries and the existing length limit (trim again
+after truncation). No transliteration or uniqueness promise is made; empty or
+non-Latin suggestions remain empty with manual-entry guidance. Any manual slug
+edit disables suggestions until explicit re-enable. Creation saves a nonempty
+slug atomically and opens a clean editor. Existing entries and slugless
+duplicates never enter automatic mode on load; the editor's explicit opt-in
+suggestions remain available. Server route/conflict rules stay authoritative.
 
 The admin is a client-rendered React SPA with no SSR requirement.
 

@@ -2,11 +2,18 @@ import {
   canonicalizeJson,
   defineBlock,
   normalizeFieldDefinition,
+  normalizeFormLayout,
   isBlockAnchor,
   normalizeBlockClassName,
   toBlockMetadata,
 } from "@lacecms/content";
-import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
+import type {
+  BlockMetadata,
+  FormLayout,
+  FieldMetadata,
+  JsonObject,
+  JsonValue,
+} from "@lacecms/content";
 import {
   BlockOrderError,
   DomainError,
@@ -167,6 +174,8 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     "fields",
     "label",
     "settings",
+    "layout",
+    "settingsLayout",
     "type",
     "version",
   ]);
@@ -191,6 +200,10 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
       ...(value.description === undefined ? {} : { description: value.description }),
       fields: value.fields,
       ...(value.label === undefined ? {} : { label: value.label }),
+      ...(value.layout === undefined ? {} : { layout: value.layout as unknown as FormLayout }),
+      ...(value.settingsLayout === undefined
+        ? {}
+        : { settingsLayout: value.settingsLayout as unknown as FormLayout }),
       ...(value.settings === undefined ? {} : { settings: value.settings }),
       type: value.type,
       version: value.version,
@@ -623,6 +636,21 @@ export const duplicateContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
 });
 
+function hasValidFormLayout<
+  Value extends { fields: FieldMetadataMapDto; layout?: FormLayout | undefined },
+>(value: Value): boolean {
+  try {
+    const normalized = normalizeFormLayout(value.layout, value.fields);
+    return (
+      normalized === undefined ||
+      canonicalizeJson(normalized as unknown as JsonValue) ===
+        canonicalizeJson(value.layout as unknown as JsonValue)
+    );
+  } catch {
+    return false;
+  }
+}
+
 const modelSeoSchema = v.strictObject({
   description: v.nullable(identifierSchema),
   image: v.nullable(identifierSchema),
@@ -644,6 +672,7 @@ export const contentModelSchema = v.pipe(
     kind: v.picklist(["collection", "global", "page"]),
     label: v.optional(v.string()),
     listFields: v.optional(v.array(identifierSchema)),
+    layout: v.optional(v.custom<FormLayout>((value) => isJsonObject(value))),
     path: v.optional(v.string()),
     route: v.optional(v.string()),
     /** SEO fallback fields of a page or collection with SEO enabled. */
@@ -653,6 +682,7 @@ export const contentModelSchema = v.pipe(
     version: v.pipe(v.number(), v.integer(), v.minValue(1)),
   }),
   v.check(hasMatchingBlockDefinitions, "Block definitions must match the model's allowed blocks."),
+  v.check(hasValidFormLayout, "Layout must place distinct immediate fields in valid groups."),
   v.check(hasValidListFields, "List fields must name distinct fields of a collection."),
   v.check(hasGlobalRouting, "A global model carries no path or route."),
   v.check(
@@ -1827,6 +1857,7 @@ export interface ContentModelSource {
   readonly kind: ContentModelKind;
   readonly label?: string;
   readonly listFields?: readonly string[];
+  readonly layout?: FormLayout;
   readonly path?: string;
   readonly route?: string;
   readonly seo?: { readonly description?: string; readonly image?: string };
@@ -1870,6 +1901,9 @@ export function toContentModelDto(
     kind: model.kind,
     ...(model.label === undefined ? {} : { label: model.label }),
     ...(model.listFields === undefined ? {} : { listFields: [...model.listFields] }),
+    ...(model.layout === undefined
+      ? {}
+      : { layout: normalizeFormLayout(model.layout, model.fields)! }),
     ...(model.path === undefined ? {} : { path: model.path }),
     ...(model.route === undefined ? {} : { route: model.route }),
     ...(model.seo === undefined ? {} : { seo: toModelSeoDto(model.seo) }),

@@ -1,5 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { suggestSlug } from "../../../entities/content/index.js";
+import { MAX_SLUG_LENGTH } from "@lacecms/content";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import {
@@ -35,9 +37,12 @@ export function CreateEntryDialog({
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
+  const [manualSlug, setManualSlug] = useState("");
+  const [automaticSlug, setAutomaticSlug] = useState(true);
+  const slug = automaticSlug ? suggestSlug(title) : manualSlug;
   const trimmedTitle = title.trim();
   const create = useMutation({
-    mutationFn: () => client.createEntry(modelKey, trimmedTitle),
+    mutationFn: () => client.createEntry(modelKey, trimmedTitle, slug === "" ? undefined : slug),
     onSuccess: async (created) => {
       queryClient.setQueryData(adminQueryKeys.entry(created.id), created);
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
@@ -53,6 +58,8 @@ export function CreateEntryDialog({
     setOpen(next);
     if (!next) {
       setTitle("");
+      setManualSlug("");
+      setAutomaticSlug(true);
       create.reset();
     }
   }
@@ -68,7 +75,7 @@ export function CreateEntryDialog({
         <DialogHeader>
           <DialogTitle>Create entry</DialogTitle>
           <DialogDescription>
-            {`Add a draft to ${collectionLabel ?? modelKey}. You can set its slug and fields in the editor.`}
+            {`Add a draft to ${collectionLabel ?? modelKey}. Choose its slug here and edit its fields in the editor.`}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -80,11 +87,40 @@ export function CreateEntryDialog({
         >
           <TextField
             label="Title"
+            disabled={create.isPending}
             maxLength={200}
             onChange={(event) => setTitle(event.currentTarget.value)}
             required
             value={title}
           />
+          <TextField
+            label="Slug"
+            aria-describedby="create-slug-guidance"
+            disabled={create.isPending}
+            maxLength={MAX_SLUG_LENGTH}
+            onChange={(event) => {
+              setManualSlug(event.currentTarget.value);
+              setAutomaticSlug(false);
+            }}
+            value={slug}
+          />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={automaticSlug}
+              disabled={create.isPending}
+              onChange={(event) => {
+                setManualSlug(slug);
+                setAutomaticSlug(event.currentTarget.checked);
+              }}
+            />
+            Suggest from title
+          </label>
+          <p className="text-xs text-muted-foreground" id="create-slug-guidance">
+            {slug === ""
+              ? "Enter a slug manually if the title has no Latin letters or digits. You can also leave it empty for now."
+              : "Use lowercase letters, digits and hyphens. Availability is checked by the server."}
+          </p>
           {create.error === null ? undefined : (
             <ErrorState
               description={errorDescription(create.error)}

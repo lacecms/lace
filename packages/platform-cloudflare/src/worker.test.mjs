@@ -1014,3 +1014,59 @@ test("Worker identity trusts only its ingress and ignores arbitrary provider/for
   await fixture.worker.fetch(invalid, fixture.env, fixture.ctx);
   expect(fixture.runtime.clients.get(invalid)).toBe("0.0.0.0");
 });
+
+test("CE9B real Worker API retains created slugs and duplicate/conflict behavior", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  const metadata = await fixture.call("/api/v1/admin/content-models");
+  expect(metadata.body.items.find((item) => item.key === "posts").layout).toEqual(
+    config.runtime.content.find((item) => item.key === "posts").layout,
+  );
+  const payload = {
+    title: "Café & News",
+    slug: "cafe-news",
+    fields: { publishedAt: "2026-10-14" },
+    blocks: [],
+  };
+  const created = await fixture.call("/api/v1/admin/models/posts/entries", {
+    json: payload,
+    method: "POST",
+  });
+  expect(created.response.status).toBe(201);
+  expect(created.body.draft.slug).toBe("cafe-news");
+  const path = `/api/v1/admin/entries/${created.body.id}`;
+  const saved = await fixture.call(`${path}/draft`, {
+    json: { ...payload, title: "Later", expectedRevision: 1 },
+    method: "PUT",
+  });
+  expect(saved.response.status).toBe(200);
+  expect(saved.body.draft.slug).toBe("cafe-news");
+  const published = await fixture.call(`${path}/publish`, {
+    json: { expectedRevision: saved.body.draft.revision },
+    method: "POST",
+  });
+  expect(published.response.status).toBe(200);
+  const duplicate = await fixture.call(`${path}/duplicate`, { json: {}, method: "POST" });
+  expect(duplicate.response.status).toBe(201);
+  expect(duplicate.body.draft.slug).toBeUndefined();
+  const second = await fixture.call("/api/v1/admin/models/posts/entries", {
+    json: { ...payload, title: "Conflict" },
+    method: "POST",
+  });
+  expect(second.response.status).toBe(201);
+  const conflict = await fixture.call(`/api/v1/admin/entries/${second.body.id}/publish`, {
+    json: { expectedRevision: 1 },
+    method: "POST",
+  });
+  expect(conflict.response.status).toBe(409);
+  expect((await fixture.call(`/api/v1/admin/entries/${second.body.id}`)).body.draft).toEqual(
+    second.body.draft,
+  );
+  const slugless = await fixture.call("/api/v1/admin/models/posts/entries", {
+    json: { title: "Новости", fields: {}, blocks: [] },
+    method: "POST",
+  });
+  expect(slugless.response.status).toBe(201);
+  expect(slugless.body.draft.slug).toBeUndefined();
+  await fixture.settle();
+}, 30_000);

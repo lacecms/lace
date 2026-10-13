@@ -149,8 +149,72 @@ export type SelectFieldDefinition<
   Options extends SelectFieldOptions<Choices> = SelectFieldOptions<Choices>,
 > = CommonDefinition<"select", Options> & { readonly options: Choices };
 
+/** Ordered presentation of immediate sibling fields; never content data. */
+export interface FormLayout<Key extends string = string> {
+  readonly mode: "sections" | "tabs";
+  readonly groups: readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly description?: string;
+    readonly fields: readonly Key[];
+  }[];
+}
+
+/** Validates, detaches and freezes optional sibling layout metadata. */
+export function normalizeFormLayout<Key extends string>(
+  value: unknown,
+  fields: Readonly<Record<Key, unknown>>,
+  path = "layout",
+): FormLayout<Key> | undefined {
+  if (value === undefined) return undefined;
+  const raw = normalizeJsonValue(value, path, new WeakSet<object>());
+  if (
+    !isRecord(raw) ||
+    Object.keys(raw).some((key) => !["mode", "groups"].includes(key)) ||
+    (raw.mode !== "sections" && raw.mode !== "tabs") ||
+    !Array.isArray(raw.groups) ||
+    raw.groups.length === 0
+  )
+    fail(path, "must declare mode sections/tabs and nonempty groups.");
+  const keys = new Set<string>();
+  const placed = new Set<string>();
+  for (const [index, group] of raw.groups.entries()) {
+    const at = `${path}.groups.${index}`;
+    if (
+      !isRecord(group) ||
+      Object.keys(group).some((key) => !["key", "label", "description", "fields"].includes(key)) ||
+      typeof group.key !== "string" ||
+      !FIELD_KEY_PATTERN.test(group.key) ||
+      keys.has(group.key) ||
+      typeof group.label !== "string" ||
+      !group.label.trim() ||
+      (group.description !== undefined && typeof group.description !== "string") ||
+      !Array.isArray(group.fields) ||
+      group.fields.length === 0
+    )
+      fail(at, "must declare a unique key, nonempty label and fields.");
+    keys.add(group.key);
+    for (const key of group.fields) {
+      if (typeof key !== "string" || !Object.hasOwn(fields, key) || placed.has(key))
+        fail(at, `contains unknown or repeated field ${String(key)}.`);
+      placed.add(key);
+    }
+  }
+  return deepFreeze(raw) as unknown as FormLayout<Key>;
+}
+
+/** Sibling field order used by rendering and validation summaries. */
+export function formFieldKeys(
+  fields: Readonly<Record<string, unknown>>,
+  layout?: FormLayout,
+): readonly string[] {
+  const placed = layout?.groups.flatMap((group) => group.fields) ?? [];
+  return [...placed, ...Object.keys(fields).filter((key) => !placed.includes(key))];
+}
+
 /** A finite group of named child descriptors. */
 export interface GroupFieldDefinition {
+  readonly layout?: FormLayout;
   readonly type: "group";
   readonly fields: ModelFieldDefinitions;
   readonly required: boolean;
@@ -574,12 +638,14 @@ export const field = {
         NoInfer<{
           readonly [Key in keyof Options["fields"]]?: DraftFieldValue<Options["fields"][Key]>;
         }>
-      >,
-  ): CommonDefinition<"group", Options> & { readonly fields: Options["fields"] } {
+      > & { readonly layout?: FormLayout<keyof Options["fields"] & string> },
+  ): CommonDefinition<"group", Options> &
+    PropertyFrom<Options, "layout"> & { readonly fields: Options["fields"] } {
     return normalizeCompositeOptions("group", options) as unknown as CommonDefinition<
       "group",
       Options
-    > & { readonly fields: Options["fields"] };
+    > &
+      PropertyFrom<Options, "layout"> & { readonly fields: Options["fields"] };
   },
 
   /** Define an ordered array of scalar or group values. */
@@ -857,7 +923,7 @@ function normalizeDescriptor(
     "required",
     "defaultValue",
     "renamedFrom",
-    ...(type === "group" ? ["fields"] : ["item", "minItems", "maxItems", "itemLabel"]),
+    ...(type === "group" ? ["fields", "layout"] : ["item", "minItems", "maxItems", "itemLabel"]),
   ];
   for (const key of Object.keys(options))
     if (!allowed.includes(key)) fail(`${path}.${key}`, "is not supported by this field type.");
@@ -885,6 +951,8 @@ function normalizeDescriptor(
         });
       }
       result.fields = output;
+      const layout = normalizeFormLayout(options.layout, output, `${path}.layout`);
+      if (layout !== undefined) result.layout = layout;
     } else {
       const child = descriptorRecord(item, `${path}.item`);
       if (child.type === "list") fail(`${path}.item`, "must not be a direct list of lists.");
@@ -1653,6 +1721,8 @@ export interface BlockDefinitionInput<
   readonly defaultValue?: unknown;
   readonly description?: string;
   readonly fields: Fields;
+  readonly layout?: FormLayout<keyof Fields & string>;
+  readonly settingsLayout?: FormLayout<keyof Settings & string>;
   readonly label?: string;
   /** Data and settings migrations from earlier versions, keyed by target version. */
   readonly migrations?: BlockMigrations;
@@ -1688,6 +1758,8 @@ export interface BlockMetadata<
   readonly defaultValue?: BlockDataValues<Fields>;
   readonly description?: string;
   readonly fields: Fields;
+  readonly layout?: FormLayout<keyof Fields & string>;
+  readonly settingsLayout?: FormLayout<keyof Settings & string>;
   readonly label?: string;
   /** Declared settings; absent when the block declares none. */
   readonly settings?: Settings;
@@ -1810,6 +1882,8 @@ export function defineBlock<
         "fields",
         "label",
         "migrations",
+        "layout",
+        "settingsLayout",
         "settings",
         "type",
         "version",
@@ -1840,6 +1914,12 @@ export function defineBlock<
   const fields = normalizeBlockFields(input.fields) as Fields;
   const migrations = normalizeBlockMigrations(input.migrations, input.version);
   const settings = normalizeBlockSettings(input.settings) as Settings | undefined;
+  const layout = normalizeFormLayout(input.layout, fields, `block.${input.type}.layout`);
+  const settingsLayout = normalizeFormLayout(
+    input.settingsLayout,
+    settings ?? {},
+    `block.${input.type}.settingsLayout`,
+  );
   let defaultValue: BlockDataValues<Fields> | undefined;
   if (input.defaultValue !== undefined) {
     try {
@@ -1867,6 +1947,8 @@ export function defineBlock<
     fields,
     ...(input.label === undefined ? {} : { label: input.label }),
     ...(migrations === undefined ? {} : { migrations }),
+    ...(layout === undefined ? {} : { layout }),
+    ...(settingsLayout === undefined ? {} : { settingsLayout }),
     ...(settings === undefined ? {} : { settings }),
     type: input.type,
     validate: (value, mode) => {
@@ -1893,6 +1975,17 @@ export function toBlockMetadata(definition: BlockDefinition): BlockMetadata {
       ]),
     ),
     ...(definition.label === undefined ? {} : { label: definition.label }),
+    ...(definition.layout === undefined
+      ? {}
+      : { layout: normalizeFormLayout(definition.layout, definition.fields)! }),
+    ...(definition.settingsLayout === undefined
+      ? {}
+      : {
+          settingsLayout: normalizeFormLayout(
+            definition.settingsLayout,
+            definition.settings ?? {},
+          )!,
+        }),
     ...(definition.settings === undefined
       ? {}
       : {

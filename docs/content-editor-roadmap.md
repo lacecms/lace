@@ -1,9 +1,8 @@
 # Lace Content and Editor Roadmap
 
-> Active roadmap. Started 2026-10-10 after the MVP roadmap was archived.
-> Waves 1–3 are done. Wave 4 is the final planned wave: CE8 and CE9 are
-> detailed for just-in-time OpenSpec proposals in four session units. Further
-> capabilities remain a separate backlog.
+> All four planned waves completed and archived on 2026-10-14.
+> Started 2026-10-10 after the MVP roadmap was archived. Further capabilities
+> remain a separate backlog.
 
 ## 1. Purpose and source of truth
 
@@ -123,8 +122,8 @@ The findings that motivate this roadmap. File references are to the state of
 | 2 | CE4 | SEO metadata and site defaults | A3 | L | done |
 | 2 | CE6 | Block envelope: anchor, visibility, settings | A2 | L | done |
 | 3 | CE7 | Group/list fields, Gallery and Navigation blocks | A6 | L | done |
-| 4 | CE8 | Rich-text editor expansion | B1 | M | in progress |
-| 4 | CE9 | Field layout and form UX | B2 | M | planned |
+| 4 | CE8 | Rich-text editor expansion | B1 | M | done |
+| 4 | CE9 | Field layout and form UX | B2 | M | done |
 | Later | CE10 | Entry references and internal links | A7 | — | backlog |
 | Later | CE11 | Responsive images | C3 | — | backlog |
 | Later | CE12 | Bounded revision history | C1 | — | backlog |
@@ -1289,7 +1288,7 @@ and existing content is not silently dropped when opened in Tiptap.
 
 ## Step CE9 — Field layout and form UX
 
-**Status:** planned; follows CE8.
+**Status:** done; CE9A and CE9B verified, synchronized and archived. CE9B archived 2026-10-14 with 15/15 tasks complete.
 
 **Goal:** make long and nested forms easier to understand and navigate without
 changing their stored data shape or content lifecycle.
@@ -1358,6 +1357,10 @@ incomplete drafts remain savable. Metadata-only edits neither rewrite content
 nor require a structural model-version bump.
 
 ### Session CE9B — Form organization and slug suggestions
+
+Implemented, verified, synchronized and archived as `2026-10-14-ce09b-form-organization-slug-suggestions` (15/15 tasks);
+see its [verification record](../openspec/changes/archive/2026-10-14-ce09b-form-organization-slug-suggestions/verification.md).
+Automatic slug mode is scoped to the creation dialog; existing editor suggestions remain opt-in.
 
 - Define serializable layout metadata for visual sections, tabs and field
   order in model/block forms, including supported CE7 nesting. Reject invalid
@@ -1456,3 +1459,5 @@ any decision that changed this document.
 
 | 2026-10-13 | CE8B | `ce08b-rich-text-authoring` | Implemented H1–H4, horizontal rules, plain code blocks, independent new-tab/nofollow switches and a selection bubble menu in every rich-text leaf. Omission-only serialization preserves the strict shared format and stable editor/history state. 33 focused editor/component tests, 30 browser scenarios (including focused WCAG checks), real SQLite-backed Node save/read/publish/export → Astro integration, 3 reference build tests and 48 block-source parity tests pass. Required root checks and strict OpenSpec validation pass. CE8A and CE8B deltas synchronized and both changes archived at the owner’s request; no migration, document rewrite or release publication. |
 | 2026-10-13 | CE9A | `ce09a-field-metadata-guidance` | Field metadata and guidance implemented and verified: supported placeholders, publication-only required guidance, declared constraints, raw text counters and distinct SEO recommendations; projection-only sync preserves draft/published values. 14/14 tasks, 729 admin unit tests and 26 focused browser cases verified, root quality gates passed. CE9B remains separate. |
+
+| 2026-10-14 | CE9B | `ce09b-form-organization-slug-suggestions` | Optional serializable `layout` on models, block data and recursive group/list-item forms, plus `settingsLayout` for declared block settings. Ordered visual sections/tabs validate immediate sibling references and duplicate placement, retain unlisted fields afterwards and preserve content paths, absence, values and editing identity. Layout is projection-only; public metadata sync preserves snapshots/revisions/media while advancing published state once and creating/coalescing a build under the accepted sync rule (the initial plan's contrary no-build promise was corrected with owner confirmation). Persistent panels, keyboard tabs, exact nested error reveal, viewer inspection and lifecycle recovery verified. Creation dialog starts with automatic ASCII/NFKD slug suggestions until manual edit; existing entries and duplicates keep explicit opt-in behavior. Template 0.28.0 updates managed guidance and upgrade instructions without DDL. Content/config/contracts, Node/SQLite/D1 and real Node/Worker API checks passed; admin unit suite plus focused lifecycle cases, 42 browser cases and root quality gates passed. Synchronized into five accepted capability specs and archived 2026-10-14 at the owner’s request. All four planned waves are complete. |

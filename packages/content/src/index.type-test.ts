@@ -261,3 +261,21 @@ void promptValue;
 // @ts-expect-error A placeholder does not widen select values.
 const invalidPromptValue: FieldValue<typeof promptedChoice> = "c";
 void invalidPromptValue;
+
+field.group({
+  fields: { title: field.text() },
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["title"] }] },
+});
+field.group({
+  fields: { title: field.text() },
+  // @ts-expect-error Layout references immediate siblings only.
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["unknown"] }] },
+});
+
+defineBlock({
+  type: "layoutTypeTest",
+  version: 1,
+  fields: { title: field.text() },
+  // @ts-expect-error Block data layout references immediate data keys.
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["missing"] }] },
+});

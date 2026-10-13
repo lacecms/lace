@@ -1,4 +1,4 @@
-import { field } from "@lacecms/content";
+import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import {
   DomainError,
   BlockOrderError,
@@ -13,6 +13,7 @@ import {
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
+  contentModelSchema,
   buildExportSchema,
   publicGlobalContentSchema,
   toPublicGlobalContentDto,
@@ -1835,4 +1836,49 @@ test("CE9A recursive metadata preserves placeholders and rejects misplaced promp
       }).success,
     ).toBe(false);
   }
+});
+
+test("CE9B layout metadata round trips and rejects ambiguous references", () => {
+  const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["body"] }] };
+  const fields = {
+    body: field.text(),
+    nested: field.list({ item: field.group({ fields: { body: field.text() }, layout }) }),
+  };
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "layout",
+      version: 1,
+      fields,
+      layout,
+      settings: { body: field.text({ defaultValue: "" }) },
+      settingsLayout: layout,
+    }),
+  );
+  const model = toContentModelDto({
+    key: "layout",
+    kind: "global",
+    version: 1,
+    fields,
+    layout,
+    blocks: ["layout"],
+    blockDefinitions: [block],
+  });
+  const json = JSON.parse(JSON.stringify(model));
+  expect(v.parse(contentModelSchema, json)).toEqual(json);
+  expect(
+    v.safeParse(contentModelSchema, {
+      ...json,
+      layout: { ...layout, groups: [{ ...layout.groups[0], fields: ["missing"] }] },
+    }).success,
+  ).toBe(false);
+  expect(
+    v.safeParse(contentModelSchema, {
+      ...json,
+      layout: { ...layout, groups: [...layout.groups, ...layout.groups] },
+    }).success,
+  ).toBe(false);
+  expect(
+    v.safeParse(blockMetadataSchema, { ...block, settingsLayout: { ...layout, mode: "unknown" } })
+      .success,
+  ).toBe(false);
 });

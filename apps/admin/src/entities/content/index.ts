@@ -68,3 +68,5 @@ export { seoSiteDefaults, useSeoDefaults } from "./seo-defaults.js";
 export { fieldControlId } from "./field-types.js";
 
 export { EntryListBudget, useCompositeEditing } from "./FieldRenderer/index.js";
+
+export { FieldLayout } from "./FieldLayout/index.js";

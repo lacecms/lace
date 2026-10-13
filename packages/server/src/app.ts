@@ -171,6 +171,7 @@ declare module "hono" {
 }
 
 interface ServerModelBase {
+  readonly layout?: import("@lacecms/content").FormLayout;
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: unknown;
@@ -531,6 +532,7 @@ function modelDto(config: ServerConfig, model: ServerContentModel) {
     blocks: model.blocks,
     ...(model.description === undefined ? {} : { description: model.description }),
     fields: model.fields as never,
+    ...(model.layout === undefined ? {} : { layout: model.layout }),
     key: model.key,
     kind: model.kind,
     ...(model.label === undefined ? {} : { label: model.label }),

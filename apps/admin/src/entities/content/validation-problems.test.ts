@@ -262,3 +262,67 @@ test("nested parent and child problems keep readable reading order and hidden mi
   expect(problems[1]!.label).toBe("Address in Item 1 in Links");
   expect(problems[2]!.blocking).toBe(false);
 });
+
+test("CE9B summaries follow visual order at model, group, block and settings boundaries", () => {
+  const layout = {
+    mode: "tabs" as const,
+    groups: [{ key: "second", label: "Second", fields: ["second"] }],
+  };
+  const scalar = { type: "text" as const, required: false };
+  const fields = {
+    first: scalar,
+    second: scalar,
+    nested: {
+      type: "group" as const,
+      required: false,
+      fields: { first: scalar, second: scalar },
+      layout,
+    },
+  };
+  const organized = {
+    ...model,
+    fields,
+    layout,
+    blockDefinitions: [
+      {
+        type: "hero",
+        version: 1,
+        fields,
+        layout,
+        settings: {
+          first: { ...scalar, defaultValue: "" },
+          second: { ...scalar, defaultValue: "" },
+        },
+        settingsLayout: layout,
+      },
+    ],
+  };
+  const errors = {
+    first: { message: "First" },
+    second: { message: "Second" },
+    nested: {
+      first: { message: "First" },
+      second: { message: "Second" },
+    },
+  };
+  const problems = validationProblems({
+    model: organized,
+    blocks: [block("A")],
+    errors: {
+      fields: errors,
+      blocks: { 0: { data: errors, settings: errors } },
+    } as never,
+  });
+  expect(problems.map((problem) => problem.message)).toEqual([
+    "Second",
+    "First",
+    "Second",
+    "First",
+    "Second",
+    "First",
+    "Second",
+    "First",
+    "Second",
+    "First",
+  ]);
+});

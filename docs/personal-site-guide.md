@@ -646,3 +646,7 @@ media-локаций; один ID в двух местах занимает дв
 Обновляй engine/admin и пакеты сайта согласованно. До записи составных значений
 сделай backup: возврат к старой версии требует восстановления совместимых
 данных и конфигурации, автоматического преобразования обратно нет.
+
+
+For visual sections/tabs without changing stored JSON, see
+[form organization and creation-time slug suggestions](form-organization.md).

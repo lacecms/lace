@@ -106,3 +106,11 @@ const nestedRenameModel = definePage({
   removedFields: ["/links/*/legacy"],
 });
 void nestedRenameModel;
+
+// @ts-expect-error Layout fields belong to the model's own field map.
+defineGlobal({
+  key: "layout",
+  version: 1,
+  fields: { title: field.text() },
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["missing"] }] },
+});

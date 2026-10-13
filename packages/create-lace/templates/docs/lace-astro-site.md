@@ -603,3 +603,35 @@ pnpm astro build
 The build fails instead of emitting partial pages when the token is missing or
 rejected, the API is unreachable, a block has no component, or block data or
 rich text breaks the CMS rules.
+
+## Organize admin forms without changing site data
+
+Models, block data and group fields (including list-item groups) can declare
+`layout: { mode: "sections" | "tabs", groups: [{ key, label, description?, fields }] }`.
+For example, alongside a model's `fields: { author: field.text(), excerpt: field.textarea() }`,
+use `layout: { mode: "tabs", groups: [{ key: "copy", label: "Copy", fields: ["excerpt"] },
+{ key: "details", label: "Details", fields: ["author"] }] }`. Each group and
+its field list must be nonempty; keys must be unique field-style identifiers,
+labels nonblank and references immediate siblings with no duplicates or paths.
+Unlisted fields appear afterwards in declaration order. Scalars/lists do not
+accept layout; a list's group item does. A block's `settingsLayout` refers only
+to its declared settings. System title, slug, SEO and block envelope controls
+keep their established placement.
+
+Visual sections/tabs add no data objects, paths or defaults. Sites read the
+same JSON; tabs preserve rich-text/media/list state and validation-summary
+links reveal nested fields. No model/block version increase or database/content
+migration is needed. Synchronize metadata as usual: public version advances
+and a build is requested/coalesced, without changing stored content/revisions.
+Deploy matching content/config/contracts/API/admin packages before adoption;
+remove layout options before rollback to an older engine.
+
+The collection Create entry dialog suggests an ASCII slug from title until
+manual editing (including clearing it); explicitly re-enable Suggest from title
+to resume. NFKD accents are removed (`Café` → `cafe`), separators become hyphens,
+and the maximum is 100 characters with no boundary hyphens. Non-Latin/empty
+titles have no fallback or transliteration; enter a slug manually or draft
+without one. Suggestions do not guarantee uniqueness; publication reports route
+conflicts normally. Creation saves the slug atomically and opens a clean
+editor. Existing entries and duplicates retain their slug until explicitly
+edited or the editor's opt-in suggestion control is enabled.

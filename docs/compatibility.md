@@ -374,3 +374,14 @@ Upgrade engine/contracts/admin together before configuring `placeholder`. Older
 engines reject the option. No content or database migration is required; remove
 placeholder options before rollback. Ordinary text length stays raw UTF-16 and
 SEO stays trimmed code points. See [field guidance](field-guidance.md).
+
+
+## Visual form layouts (CE9B)
+
+Upgrade content/config/contracts/API/admin together before configuring `layout`
+or block `settingsLayout`; older engines reject the options. No content or DDL
+migration is required. Remove layouts and synchronize before rolling back to
+a matching earlier engine/admin. Stored field paths and values, including keys
+named `layout`, are unchanged. Public metadata synchronization still advances
+published state and requests a build. Creation-time slugs are ordinary stored
+slugs and need no conversion. See [form organization](form-organization.md).

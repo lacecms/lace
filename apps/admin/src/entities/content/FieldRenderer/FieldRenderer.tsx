@@ -38,6 +38,7 @@ import { Button } from "../../../shared/ui/Button/index.js";
 import { REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { fieldProblem, recursiveFieldErrors, type DraftEditorValues } from "../editor-form.js";
+import { FieldLayout } from "../FieldLayout/index.js";
 import { fieldGuidance } from "../field-guidance.js";
 import { fieldLabel } from "../draft.js";
 import {
@@ -394,27 +395,37 @@ function ValueNode(props: NodeProps) {
             {createProblem ? <small>{createProblem}</small> : null}
           </>
         ) : (
-          Object.entries(definition.fields).map(([key, child]) => (
-            <ValueNode
-              definition={child}
-              errors={
-                errors?.[key] !== null && typeof errors?.[key] === "object"
-                  ? (errors[key] as Errors)
-                  : undefined
-              }
-              fieldKey={key}
-              key={key}
-              name={`${name}.${key}`}
-              onBlur={onBlur}
-              onChange={(next) => {
-                const copy = { ...value };
-                copy[key] = next === undefined ? null : next;
-                onChange(copy);
-              }}
-              onErrors={onErrors ? (next) => onErrors({ ...errors, [key]: next }) : undefined}
-              value={value[key] === null ? undefined : value[key]}
-            />
-          ))
+          <FieldLayout
+            fields={definition.fields}
+            layout={definition.layout}
+            label={label}
+            errors={errors}
+            hiddenBlock={hidden}
+            renderField={(key) => {
+              const child = definition.fields[key]!;
+              return (
+                <ValueNode
+                  definition={child}
+                  errors={
+                    errors?.[key] !== null && typeof errors?.[key] === "object"
+                      ? (errors[key] as Errors)
+                      : undefined
+                  }
+                  fieldKey={key}
+                  key={key}
+                  name={`${name}.${key}`}
+                  onBlur={onBlur}
+                  onChange={(next) => {
+                    const copy = { ...value };
+                    copy[key] = next === undefined ? null : next;
+                    onChange(copy);
+                  }}
+                  onErrors={onErrors ? (next) => onErrors({ ...errors, [key]: next }) : undefined}
+                  value={value[key] === null ? undefined : value[key]}
+                />
+              );
+            }}
+          />
         )}
         {Object.hasOwn(definition, "defaultValue") ? (
           <small className="text-muted-foreground">

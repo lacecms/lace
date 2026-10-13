@@ -19,6 +19,7 @@ import { isBlockAnchor } from "@lacecms/content";
 import {
   blockLevelProblems,
   FieldRenderer,
+  FieldLayout,
   mediaAltPair,
   PUBLICATION_ISSUE_TYPE,
   type DraftEditorValues,
@@ -185,27 +186,37 @@ export function BlockCard({
     element.addEventListener(REVEAL_CONTROL_EVENT, reveal);
     return () => element.removeEventListener(REVEAL_CONTROL_EVENT, reveal);
   }, []);
-  const contentFields = Object.entries(definition.fields).map(([fieldKey, fieldDefinition]) =>
-    fieldKey === "alt" && mediaKey !== undefined ? (
-      <InheritedAltField
-        alt={data?.alt}
-        control={control}
-        definition={fieldDefinition}
-        error={controlError(error, "data", fieldKey, hiddenOnSite)}
-        key={fieldKey}
-        media={data?.[mediaKey]}
-        name={`blocks.${index}.data.${fieldKey}`}
-      />
-    ) : (
-      <FieldRenderer
-        control={control}
-        definition={fieldDefinition}
-        error={controlError(error, "data", fieldKey, hiddenOnSite)}
-        fieldKey={fieldKey}
-        key={fieldKey}
-        name={`blocks.${index}.data.${fieldKey}`}
-      />
-    ),
+  const contentFields = (
+    <FieldLayout
+      fields={definition.fields}
+      layout={definition.layout}
+      errors={error?.data}
+      hiddenBlock={hiddenOnSite}
+      label="Block content"
+      renderField={(fieldKey) => {
+        const fieldDefinition = definition.fields[fieldKey]!;
+        return fieldKey === "alt" && mediaKey !== undefined ? (
+          <InheritedAltField
+            alt={data?.alt}
+            control={control}
+            definition={fieldDefinition}
+            error={controlError(error, "data", fieldKey, hiddenOnSite)}
+            key={fieldKey}
+            media={data?.[mediaKey]}
+            name={`blocks.${index}.data.${fieldKey}`}
+          />
+        ) : (
+          <FieldRenderer
+            control={control}
+            definition={fieldDefinition}
+            error={controlError(error, "data", fieldKey, hiddenOnSite)}
+            fieldKey={fieldKey}
+            key={fieldKey}
+            name={`blocks.${index}.data.${fieldKey}`}
+          />
+        );
+      }}
+    />
   );
   return (
     <article

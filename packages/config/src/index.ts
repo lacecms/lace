@@ -1,5 +1,6 @@
 import {
   defineBlockRegistry,
+  normalizeFormLayout,
   parseSchemaPath,
   encodeSchemaPath,
   schemaFieldAt,
@@ -14,6 +15,7 @@ import type {
   BlockMetadata,
   BlockRegistry,
   FieldDefinition,
+  FormLayout,
   FieldIsRequired,
   FieldValue,
   JsonObject,
@@ -73,6 +75,7 @@ interface CommonModelInput<Fields extends FieldMap> {
   readonly blocks?: readonly string[];
   readonly description?: string;
   readonly fields?: Fields;
+  readonly layout?: FormLayout<keyof Fields & string>;
   readonly key: string;
   readonly label?: string;
   readonly renamedFrom?: string;
@@ -148,6 +151,7 @@ interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: Fields;
+  readonly layout?: FormLayout<keyof Fields & string>;
   readonly key: string;
   readonly label?: string;
   readonly renamedFrom?: string;
@@ -539,6 +543,7 @@ function normalizeCommonModel<Fields extends FieldMap>(
 
   const blocks = normalizeBlocks(input.blocks);
   const { fields, renamedFields } = normalizeFields(input.fields);
+  const layout = normalizeFormLayout(input.layout, fields, `model.${input.key}.layout`);
   const removedFields = normalizeRemovedFields(input.removedFields);
   const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_KEY_PATTERN);
   assertSynchronizationHints(
@@ -555,6 +560,7 @@ function normalizeCommonModel<Fields extends FieldMap>(
     ...(input.description === undefined ? {} : { description: input.description }),
     fields,
     key: input.key,
+    ...(layout === undefined ? {} : { layout }),
     ...(input.label === undefined ? {} : { label: input.label }),
     ...(input.renamedFrom === undefined ? {} : { renamedFrom: input.renamedFrom }),
     ...(removedBlocks.length === 0 ? {} : { removedBlocks }),
@@ -898,6 +904,7 @@ function omitListFields(model: JsonValue): JsonValue {
   }
   const {
     listFields: _listFields,
+    layout: _layout,
     seo,
     seoDefaults: _seoDefaults,
     ...structure
@@ -907,11 +914,40 @@ function omitListFields(model: JsonValue): JsonValue {
 
 /** The pre-baseline structural value, kept only to recognise legacy stored hashes. */
 function legacyStructureForHash(projection: JsonValue): MutableJsonValue {
-  return omitDisplayMetadata(omitListFields(projection));
+  const strip = (owner: JsonValue): JsonValue => {
+    const result = { ...(owner as JsonObject) };
+    delete result.layout;
+    delete result.settingsLayout;
+    const fieldMap = (map: JsonValue): JsonValue =>
+      Object.fromEntries(
+        Object.entries(map as JsonObject).map(([key, descriptor]) => {
+          const child = { ...(descriptor as JsonObject) };
+          if (child.type === "group") {
+            delete child.layout;
+            child.fields = fieldMap(child.fields!);
+          }
+          if (child.type === "list")
+            child.item = (fieldMap({ item: child.item! }) as JsonObject).item!;
+          return [key, child];
+        }),
+      );
+    if (result.fields) result.fields = fieldMap(result.fields);
+    if (result.settings) result.settings = fieldMap(result.settings);
+    if (Array.isArray(result.blockDefinitions))
+      result.blockDefinitions = result.blockDefinitions.map(strip);
+    return result;
+  };
+  return omitDisplayMetadata(strip(omitListFields(projection)));
 }
 
 function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
-  const { description: _description, label: _label, ...rest } = value as JsonObject;
+  const {
+    description: _description,
+    label: _label,
+    layout: _layout,
+    settingsLayout: _settingsLayout,
+    ...rest
+  } = value as JsonObject;
   return JSON.parse(JSON.stringify(rest)) as MutableJsonObject;
 }
 
@@ -931,7 +967,10 @@ function fieldMapWithoutPlaceholders(fields: JsonValue | undefined): MutableJson
     Object.entries((fields ?? {}) as JsonObject).map(([key, value]) => {
       const result = JSON.parse(JSON.stringify(value)) as MutableJsonObject;
       delete result.placeholder;
-      if (result.type === "group") result.fields = fieldMapWithoutPlaceholders(result.fields);
+      if (result.type === "group") {
+        delete result.layout;
+        result.fields = fieldMapWithoutPlaceholders(result.fields);
+      }
       if (result.type === "list" && result.item !== undefined)
         result.item = fieldMapWithoutPlaceholders({ item: result.item }).item!;
       return [key, result];
@@ -1099,7 +1138,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
         : omitDisplayMetadata({
             ...(structure as JsonObject),
             blocks: blocks.map((block) => ({
-              ...block,
+              ...withoutDisplayProperties(block as unknown as JsonValue),
               fields: fieldMapWithoutPlaceholders(block.fields as unknown as JsonValue),
               ...(block.settings === undefined
                 ? {}
