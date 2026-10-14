@@ -3,7 +3,9 @@ schema: spec-driven
 context: |
   Lace is a single-site, self-hosted headless CMS with a static Astro site.
   Read docs/mvp-architecture.md first for product scope and architecture invariants.
-  Read docs/mvp-implementation-roadmap.md for delivery order and session boundaries.
+  Read backlog.md for future work. Completed delivery order and session boundaries
+  are preserved in docs/archive/content-editor-roadmap.md and
+  docs/archive/mvp-implementation-roadmap.md.
   Accepted capability behavior lives in openspec/specs/**.
   Active change artifacts may refine but must not silently contradict architecture or accepted specs.
   The monorepo uses TypeScript, pnpm workspaces, Turborepo, Oxlint, and Oxfmt.

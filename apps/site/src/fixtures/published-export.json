@@ -185,6 +185,102 @@
                     }
                   ],
                   "type": "blockquote"
+                },
+                {
+                  "attrs": {
+                    "level": 4
+                  },
+                  "content": [
+                    {
+                      "text": "Expanded rich text",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "heading"
+                },
+                {
+                  "type": "horizontalRule"
+                },
+                {
+                  "content": [
+                    {
+                      "text": "\t  <example> &\n  line two\n",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "codeBlock"
+                },
+                {
+                  "content": [
+                    {
+                      "marks": [
+                        {
+                          "attrs": {
+                            "href": "/rich-text-0"
+                          },
+                          "type": "link"
+                        }
+                      ],
+                      "text": "Link choice 0",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                },
+                {
+                  "content": [
+                    {
+                      "marks": [
+                        {
+                          "attrs": {
+                            "href": "/rich-text-1",
+                            "target": "_blank"
+                          },
+                          "type": "link"
+                        }
+                      ],
+                      "text": "Link choice 1",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                },
+                {
+                  "content": [
+                    {
+                      "marks": [
+                        {
+                          "attrs": {
+                            "href": "/rich-text-2",
+                            "rel": "nofollow"
+                          },
+                          "type": "link"
+                        }
+                      ],
+                      "text": "Link choice 2",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                },
+                {
+                  "content": [
+                    {
+                      "marks": [
+                        {
+                          "attrs": {
+                            "href": "/rich-text-3",
+                            "target": "_blank",
+                            "rel": "nofollow"
+                          },
+                          "type": "link"
+                        }
+                      ],
+                      "text": "Link choice 3",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
                 }
               ],
               "type": "doc"

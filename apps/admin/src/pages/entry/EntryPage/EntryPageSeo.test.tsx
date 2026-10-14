@@ -241,10 +241,10 @@ test.each([
     renderRoute("/content/settings/settings-1", staticSessionSource({ id, role }), seoClient());
     await screen.findByRole("heading", { name: "Edit Site settings" });
     expect(screen.getByRole("textbox", { name: "Site name" })).toHaveAccessibleDescription(
-      "Site name used in search and social titles.",
+      "Required for publication only. 4 characters Site name used in search and social titles.",
     );
     expect(screen.getByRole("textbox", { name: "Tagline" })).toHaveAccessibleDescription(
-      "Default description for search and social previews.",
+      "0 characters Default description for search and social previews.",
     );
     expect(screen.queryByRole("region", { name: "SEO" })).not.toBeInTheDocument();
   },

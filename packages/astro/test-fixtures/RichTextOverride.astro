@@ -1,0 +1,6 @@
+---
+import type { RichTextOverrideProps } from "../src/index.js";
+interface Props extends RichTextOverrideProps {}
+const { element } = Astro.props;
+---
+<span data-source={element.source} data-tag={element.tag} data-href={element.attributes.href} data-target={element.attributes.target} data-rel={element.attributes.rel}><slot /></span>

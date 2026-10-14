@@ -82,21 +82,27 @@ test("generates deterministic owned source and hashed managed files", async () =
   // Invitations and password recovery need the additive account-token migration.
   expect(instructions.database.join("\n")).toContain("0004_account_tokens");
   expect(instructions.configuration[0]).toMatch(
-    /^Template 0\.27\.0: Gallery and Navigation.*No database migration.*pnpm exec lace add block gallery navigation.*site\.global\("navigation"\)/u,
+    /Template 0\.29\.0: alpha\.5.*0\.1\.0-alpha\.5.*next.*forward database migrations/u,
   );
   expect(instructions.configuration[1]).toMatch(
-    /^Template 0\.26\.0: block anchors.*id=\{anchor\}.*\{ data, settings \}.*pnpm exec lace add block --all/u,
+    /Template 0\.28\.0.*layout.*no database migration/u,
   );
   expect(instructions.configuration[2]).toMatch(
-    /^Template 0\.25\.0: search and social metadata.*site\.seo\(entry\).*LACE_SITE_INDEXING.*Nothing breaks without adoption/u,
+    /^Template 0\.27\.0: Gallery and Navigation.*No database migration.*pnpm exec lace add block gallery navigation.*site\.global\("navigation"\)/u,
   );
   expect(instructions.configuration[3]).toMatch(
-    /^Template 0\.24\.0: global models.*site\.global\(key\).*upgrade does not add them/u,
+    /^Template 0\.26\.0: block anchors.*id=\{anchor\}.*\{ data, settings \}.*pnpm exec lace add block --all/u,
   );
   expect(instructions.configuration[4]).toMatch(
-    /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
+    /^Template 0\.25\.0: search and social metadata.*site\.seo\(entry\).*LACE_SITE_INDEXING.*Nothing breaks without adoption/u,
+  );
+  expect(instructions.configuration[5]).toMatch(
+    /^Template 0\.24\.0: global models.*site\.global\(key\).*upgrade does not add them/u,
   );
   expect(instructions.configuration[6]).toMatch(
+    /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
+  );
+  expect(instructions.configuration[8]).toMatch(
     /image block is version 2.*raise the version of every model that allows image.*refuses image blocks still stored at version 1/u,
   );
   expect(instructions.configuration.join("\n")).toMatch(
@@ -301,18 +307,18 @@ test("alpha generation selects exact compatible packages and overridable images"
   for (const file of ["package.json", "site/package.json"]) {
     const manifest = JSON.parse(await readFile(join(project.path, file), "utf8"));
     for (const [name, version] of Object.entries(manifest.dependencies)) {
-      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-alpha.4");
+      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-alpha.5");
     }
   }
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
-  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.4");
-  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.4");
-  expect(TEMPLATE_VERSION).toBe("0.27.0");
+  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.5");
+  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.5");
+  expect(TEMPLATE_VERSION).toBe("0.29.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");
   expect(await readFile(join(project.path, "docs/lace-operations.md"), "utf8")).toContain(
-    "pnpm create lace@0.1.0-alpha.4",
+    "pnpm create lace@0.1.0-alpha.5",
   );
 });
 

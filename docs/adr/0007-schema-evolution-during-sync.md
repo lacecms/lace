@@ -6,7 +6,7 @@
   [section 8](../mvp-architecture.md#configuration-projection),
   [section 9.1](../mvp-architecture.md#91-content-models), and
   [section 9.3](../mvp-architecture.md#93-content-snapshots)
-- Related: [content and editor roadmap](../content-editor-roadmap.md) step CE1,
+- Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE1,
   OpenSpec change `ce01a-structure-baseline-compatible-changes`
 
 ## Context

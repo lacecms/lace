@@ -13,6 +13,7 @@ import {
   createDraftResolver,
   draftValues,
   FieldRenderer,
+  FieldLayout,
   EntryListBudget,
   FieldRendererProvider,
   issueLocation,
@@ -667,17 +668,26 @@ export function EntryPage() {
                       )}
                     </div>
                   ) : undefined}
-                  {Object.entries(model.fields).map(([key, definition]) => (
-                    <FieldRenderer
-                      annotation={seoDefaultsAnnotation(model, key)}
-                      control={form.control}
-                      definition={definition}
-                      error={errors?.[key]?.message}
-                      fieldKey={key}
-                      key={key}
-                      name={`fields.${key}`}
-                    />
-                  ))}
+                  <FieldLayout
+                    fields={model.fields}
+                    layout={model.layout}
+                    errors={errors}
+                    label="Entry fields"
+                    renderField={(key) => {
+                      const definition = model.fields[key]!;
+                      return (
+                        <FieldRenderer
+                          annotation={seoDefaultsAnnotation(model, key)}
+                          control={form.control}
+                          definition={definition}
+                          error={errors?.[key]?.message}
+                          fieldKey={key}
+                          key={key}
+                          name={`fields.${key}`}
+                        />
+                      );
+                    }}
+                  />
                 </section>
               ) : undefined}
               {model.seo === undefined ? undefined : (

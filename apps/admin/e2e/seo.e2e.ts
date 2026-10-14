@@ -154,12 +154,16 @@ test("an admin edits SEO values with the keyboard alone", async ({ page }) => {
 
   await tabTo(page, title);
   await page.keyboard.type("A very long search title that keeps going well past sixty chars");
-  await expect(card.getByText("63 / 60 characters")).toBeVisible();
+  await expect(
+    card.getByText("63 / 60 characters (recommended). Limit: 200 characters."),
+  ).toBeVisible();
   await expect(
     card.getByText("Search results may shorten titles longer than 60 characters."),
   ).toBeVisible();
   await retype(page, "Hello from Lace");
-  await expect(card.getByText("15 / 60 characters")).toBeVisible();
+  await expect(
+    card.getByText("15 / 60 characters (recommended). Limit: 200 characters."),
+  ).toBeVisible();
   await expect(card.getByText(/may shorten titles/u)).toHaveCount(0);
   await expect(preview).toContainText("Hello from Lace");
 
@@ -207,10 +211,10 @@ test("the defaults global names the site defaults its fields provide", async ({ 
   await page.goto("/admin/content/settings/settings-1");
   await expect(page.getByRole("heading", { name: "Edit Site settings" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Site name" })).toHaveAccessibleDescription(
-    "Site name used in search and social titles.",
+    "Required for publication only. 4 characters Site name used in search and social titles.",
   );
   await expect(page.getByRole("textbox", { name: "Tagline" })).toHaveAccessibleDescription(
-    "Default description for search and social previews.",
+    "13 characters Default description for search and social previews.",
   );
   await expect(page.getByRole("region", { name: "SEO", exact: true })).toHaveCount(0);
 });

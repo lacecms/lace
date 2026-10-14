@@ -3045,3 +3045,52 @@ test("memory nested synchronization preserves audits and rebuilds media usage", 
   ).toContainEqual({ source: "field", field: "/profile/photo", states: ["draft", "published"] });
   expect((await sync(next)).status).toBe("noop");
 });
+
+test("CE9A fake sync retains populated singleton content when guidance changes", async () => {
+  const store = new InMemoryContentStore();
+  const make = async (placeholder) =>
+    (
+      await defineConfig({
+        content: [
+          definePage({
+            key: "home",
+            path: "/",
+            version: 1,
+            fields: {
+              nested: field.group({
+                defaultValue: { title: "Stored" },
+                fields: {
+                  title: field.text({ ...(placeholder === undefined ? {} : { placeholder }) }),
+                },
+              }),
+            },
+          }),
+        ],
+      })
+    ).runtime.content;
+  const clock = new DeterministicClock(unixMilliseconds(10));
+  const ids = new DeterministicIdGenerator("guidance");
+  let previous;
+  for (const placeholder of [undefined, "Title", "New title", undefined]) {
+    const models = await make(placeholder);
+    const prepared = await prepareConfigurationSynchronization({ models, state: store });
+    await applyPreparedConfigurationSynchronization({
+      clock,
+      ids,
+      models,
+      prepared,
+      target: store,
+    });
+    const item = (
+      await store.list({
+        limit: 1,
+        listFields: [],
+        modelKey: contentModelKey("home"),
+        sort: "-updatedAt",
+      })
+    ).items[0];
+    const loaded = await store.load({ entryId: item.id });
+    if (previous) expect(loaded).toEqual(previous);
+    previous = loaded;
+  }
+});

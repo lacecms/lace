@@ -185,7 +185,7 @@ test("nested list array errors survive group traversal and reveal the scalar", a
   render(<Harness />);
   await user.click(screen.getByRole("button", { name: "Nested issue" }));
   expect(screen.getByRole("textbox", { name: "Children item 1" })).toHaveAccessibleDescription(
-    "Nested child rejected",
+    "5 characters Nested child rejected",
   );
   await user.click(screen.getAllByRole("button", { name: "Collapse Children" })[0]!);
   await user.click(screen.getByRole("button", { name: "Collapse Links item 1" }));

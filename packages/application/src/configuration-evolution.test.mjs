@@ -1206,3 +1206,25 @@ test("itemLabel sync is projection-only without content writes or version change
   expect(after.structureHash).toBe(before.structureHash);
   expect(after.projectionHash).not.toBe(before.projectionHash);
 });
+
+test("CE9B model and nested layouts plan no content writes", async () => {
+  const make = (label) =>
+    posts({
+      fields: {
+        nested: field.group({
+          fields: { title: field.text() },
+          layout: { mode: "tabs", groups: [{ key: "main", label, fields: ["title"] }] },
+        }),
+      },
+      layout: { mode: "sections", groups: [{ key: "main", label, fields: ["nested"] }] },
+    });
+  const before = await make("Before"),
+    after = await make("After");
+  const plan = planConfigurationSynchronization({
+    models: [after],
+    storedModels: [storedFrom(before)],
+  });
+  expect(plan.status).not.toBe("blocked");
+  expect(configurationSyncContentWrites(plan)).toEqual([]);
+  expect(after.structureHash).toBe(before.structureHash);
+});

@@ -143,7 +143,9 @@ Authority order is:
 1. `docs/mvp-architecture.md` for product scope and architectural invariants;
 2. `openspec/specs/**` for detailed, accepted capability behavior;
 3. active OpenSpec change artifacts for the proposed delta;
-4. `docs/mvp-implementation-roadmap.md` for sequence and session boundaries.
+4. `backlog.md` for future work; completed delivery order and session boundaries
+   are preserved in `docs/archive/content-editor-roadmap.md` and
+   `docs/archive/mvp-implementation-roadmap.md`.
 
 Lower levels may add detail but may not contradict a higher level silently.
 
@@ -681,6 +683,30 @@ Reference fields should be anticipated in the DSL design but may be postponed un
 Reference fields are not part of the MVP. The field-definition discriminated
 union and validation visitor must be exhaustive so that a reference variant can
 be introduced later without changing existing field encodings.
+
+### Field guidance metadata (CE9A)
+
+Text, textarea, URL, number, select and rich-text fields accept an optional
+string `placeholder`, including nested model/block fields and scalar list
+items. An empty string suppresses the generic prompt; omission preserves it.
+Other kinds reject the option. Descriptor placeholders are projection-only:
+structural identity excludes them without removing content/default keys named
+`placeholder`. Updating them needs no model-version bump or content rewrite.
+
+### Visual form organization (CE9B)
+
+Models, block data and group descriptors accept optional serializable
+`layout: { mode: "sections" | "tabs", groups: [{ key, label, description?, fields }] }`.
+Blocks accept `settingsLayout` for declared settings. References name immediate
+sibling fields only, each at most once; keys are unique field-style identifiers,
+labels are nonempty, and groups and their field lists are nonempty. Invalid
+shapes, unknown properties/references and layout on scalar/list descriptors fail
+before startup. Groups used as list items support layout at every CE7 depth.
+Unlisted fields follow the layout in declaration order. Layout creates no data
+objects or paths, does not change defaults/absence or validation, and excludes
+system title/slug/SEO and block envelope controls. Only projection identity
+includes it; descriptor-aware structural identity preserves content/default keys
+with the same names. Omitted layouts retain previous hashes and metadata.
 
 ### Bounded composite fields (CE7A)
 
@@ -1543,7 +1569,24 @@ defineBlock({
 Tiptap JSON is stored only inside rich-text field or rich-text block data. The entire page must not become one Tiptap document.
 
 The allowed Tiptap node and mark set is explicit and shared by validation and
-rendering. Links permit only `https:`, `http:`, `mailto:`, `tel:`, root-relative,
+rendering. Nodes are doc, paragraph, text, heading (H1–H4), bulletList,
+orderedList, listItem, blockquote, hardBreak, horizontalRule and codeBlock;
+marks are bold, italic, strike, code and link. Rules have no attributes or
+children. Plain code blocks have optional content containing only unmarked text
+nodes (no language attribute); empty blocks are valid. Text preserves spaces,
+tabs and newlines. Rules and code blocks are allowed at the document root and
+inside list items and blockquotes; other nesting rules stay unchanged.
+Link attributes are exactly required href and optional target `_blank` and rel
+`nofollow`; absence means the current browsing context and no nofollow. Null,
+empty strings, other targets and other rel tokens are invalid. The renderer adds
+`noopener noreferrer` for `_blank`, followed by `nofollow` when present. Stored
+JSON never needs these generated safety tokens. Ordinary URL fields stay strings.
+All rich-text fields and defaults, including composite leaves and block data,
+share this format, without field-specific feature sets or CE7 budget changes.
+Existing H1–H3 and href-only documents keep their meaning. See
+[ADR 0014](adr/0014-expanded-rich-text-format.md).
+
+Links permit only `https:`, `http:`, `mailto:`, `tel:`, root-relative,
 and fragment URLs. Raw HTML nodes, scriptable URL schemes, inline event handlers,
 and arbitrary style attributes are rejected. The allowlist and URL rules have one
 implementation in `@lacecms/content`; the render core's `describeRichText`
@@ -1982,6 +2025,10 @@ no client scripts, and requires no Astro integration. Override components for
   by node or mark name, and optional `context`. It renders the
   `describeRichText` tree with Astro's escaping and never uses `set:html`;
   overrides receive only the validated element and its rendered children.
+  Rules render as void `hr`, H4 as `h4`, and plain code as `pre` containing
+  `code` with escaped text and unchanged whitespace. Links emit only validated
+  href/target and renderer-derived rel. Both pre/code elements originate from
+  codeBlock for the existing per-element override contract.
 
 ### 13.5 Block registry and `lace add block`
 
@@ -2492,6 +2539,33 @@ lock content mutations so indexed errors cannot land on another item.
 Save/discard, dirty checks, conflict JSON and lifecycle copies retain all
 composite values; no list slots are silently removed during serialization.
 
+CE9A displays required markers with publication-only explanations, associated
+configured descriptions and applicable text, numeric and list bounds throughout
+recursive forms and viewer inspection. Ordinary text/textarea counters count raw
+UTF-16 units, matching their existing validators; SEO counts trimmed Unicode code
+points and labels 60/160 as recommendations separately from hard limits. Counts
+are not live announcements. Inherited SEO/media guidance takes precedence over
+configured generic prompts. Guidance never materializes absent values or blocks
+otherwise valid incomplete draft saves.
+
+CE9B renders visual sections and accessible tabs at each field-map boundary.
+Inactive panels remain mounted but hidden from focus and accessibility; nested
+rich-text/media/list identity survives navigation and moves. Summary links
+select containing tabs and open all disclosures before focusing the exact
+control. Navigation never materializes absent groups or changes dirty state.
+Viewers can navigate without mutating content; SEO and block Content/Settings
+retain their established behavior. Narrow tab strips remain keyboard accessible.
+
+Collection creation offers an initially automatic editable slug derived from
+title: NFKD, ASCII letters/digits, whitespace/underscore/hyphen collapsed to
+hyphens, lowercase, trimmed boundaries and the existing length limit (trim again
+after truncation). No transliteration or uniqueness promise is made; empty or
+non-Latin suggestions remain empty with manual-entry guidance. Any manual slug
+edit disables suggestions until explicit re-enable. Creation saves a nonempty
+slug atomically and opens a clean editor. Existing entries and slugless
+duplicates never enter automatic mode on load; the editor's explicit opt-in
+suggestions remain available. Server route/conflict rules stay authoritative.
+
 The admin is a client-rendered React SPA with no SSR requirement.
 
 Core client stack:
@@ -2582,14 +2656,22 @@ An insert control between adjacent blocks and an Add block button after the list
 
 Keyboard and pointer drag reordering stay on dnd-kit. The screen-reader announcements name blocks by label and position, never by key.
 
+CE8B enables the CE8A shared format in every rich-text field, including
+recursive model and block leaves: H1–H4, horizontal rules, plain code blocks
+and independent new-tab/nofollow link switches. A compact selection bubble
+menu supplements the complete fixed toolbar. Plain code preserves whitespace
+and accepts no marks or language attributes. Ordinary paste follows the shared
+safe document rules; dedicated Word/Google Docs cleanup remains deferred.
+
 Each editable rich-text field has a fixed toolbar named after the field. It holds the following controls:
 
-- a text style menu (Paragraph, Heading 1–3);
+- a text style menu (Paragraph, Heading 1–4);
 - Bold, Italic, Strike, and Code toggles;
 - Bulleted list, Numbered list, and Quote toggles;
+- a plain Code block toggle and Insert horizontal rule action;
 - a Link control.
 
-The toggles report their pressed state for the selection. The toolbar is one tab stop with arrow-key movement, `Alt+F10` moves focus from the text to it, and Escape returns. Tooltips and `aria-keyshortcuts` name each shortcut. The editor adds undo and redo and keeps Tiptap's mark, list, heading, and Markdown shortcuts. `⌘K`/`Ctrl+K` opens the link popover, which applies only URLs that pass the shared allowlist and says which forms are permitted. The Tiptap schema declares only allowlisted attributes: links carry `href` and lists carry nothing. Every document the editor produces therefore passes the shared validator. Empty fields show a placeholder, also exposed as `aria-placeholder`. Viewers get neither the toolbar nor the placeholder.
+The toggles report their pressed state for the selection. The toolbar is one tab stop with arrow-key movement, `Alt+F10` moves focus from the text to it, and Escape returns. Tooltips and `aria-keyshortcuts` name each shortcut. The editor adds undo and redo and keeps Tiptap's mark, list, heading, and Markdown shortcuts. `⌘K`/`Ctrl+K` opens the link popover, which applies only URLs that pass the shared allowlist and says which forms are permitted. The Tiptap schema declares only allowlisted attributes: links carry `href` and optional `target: "_blank"` / `rel: "nofollow"`, with unchecked options omitted; lists and code blocks carry no attributes. The link popover retains the selected range while its URL and switches have focus, and permits applying, updating and removing the link. Rendering derives `noopener noreferrer`, never stores those tokens. The selection bubble offers Bold, Italic, Strike, inline Code and Link without taking focus when it appears, and disappears for collapsed selections, hidden/unfocused editors and viewers. Plain code offers no marks or links. Every document the editor produces therefore passes the shared validator. Empty fields show a placeholder, also exposed as `aria-placeholder`. Viewers get neither the toolbar nor the placeholder.
 
 Validation problems appear where they occur. Field messages are sentences such as "Enter at least 5 characters." A block card shows its block-level problems and a "Has problems" marker: a type that is not allowed, a stale version, a key problem, data for an undefined field, or a value for an undeclared setting. Anchor, class name, and declared setting problems are shown on their Settings controls; activating one in the summary selects the Settings tab first. Summary entries name hidden blocks as hidden. A problem only publication reports (a required field) in a block that is now hidden is listed last as not blocking publication and is not counted, because publication validates hidden blocks in draft mode; every other problem in a hidden block blocks Save as usual. A block whose type the model no longer allows still renders, so it can be removed. When Save is blocked, or the server rejects a save or publish, a summary above the title takes focus. It counts the problems and links each one, in reading order, to its control or block card. The admin maps server JSON Pointers, including deep rich-text paths, to the same locations. Issues it cannot place are listed as text.
 
@@ -2913,6 +2995,12 @@ scalar-only engine needs matching configuration/database backup or an explicit
 validated conversion. Recursive schema evolution is described in section 8;
 admin authoring restrictions remain in section 17 until CE7C expands the editor.
 
+The selected alpha.5 release packages the completed CE1–CE9 changes. Upgrade
+all Lace dependencies together, apply forward database migrations explicitly,
+and review the public-contract and backup/rollback boundaries in
+[alpha.5 release notes](./alpha-5-release-notes.md). No automatic database
+downgrade is promised.
+
 Compatibility exists at three boundaries:
 
 1. Database schema version.
@@ -3015,7 +3103,10 @@ The implementation plan uses these resolved defaults:
   `0.17.0`, npm publication recorded 2026-10-07) are published and immutable;
   `0.1.0-alpha.4` (template `0.20.0`) package publication and real VPS/Cloudflare
   application testing, restore, upgrade, credential rotation and build recovery
-  were owner-confirmed on 2026-10-10; beta/stable approval remains separate;
+  were owner-confirmed on 2026-10-10. The next selected candidate is
+  `0.1.0-alpha.5` (template `0.29.0`) on `next`; fresh artifact acceptance and
+  owner-operated deployment checks remain distinct from historical alpha.4
+  evidence. Beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
 

@@ -82,7 +82,9 @@ not conform to the same field kind and declared constraints.
 The content package SHALL validate every supplied default value against the
 field's current descriptor contract during normalization. A rich-text default
 SHALL be a safe shared Tiptap JSON document permitted by the rich-text document
-contract. For descriptor normalization, a date, datetime, URL, and media
+contract, including H4, rules, plain code and the restricted optional link
+attributes. The same shared document validator SHALL govern defaults and
+submitted values at every composite depth. For descriptor normalization, a date, datetime, URL, and media
 default SHALL be a string; text and textarea defaults SHALL observe their
 length bounds; numbers SHALL be finite and observe numeric bounds; booleans and
 selects SHALL match their declared values. Semantic validation of submitted
@@ -106,6 +108,14 @@ runtime content validation.
 - **WHEN** a caller supplies a safe rich-text document default
 - **THEN** the descriptor retains a detached JSON-serializable copy of that
   document
+
+#### Scenario: Expanded nested default
+- **WHEN** a rich-text field in a group or list declares a valid expanded document default
+- **THEN** normalization retains a detached portable copy and subsequent validation uses the same document rules
+
+#### Scenario: Unsafe expanded default
+- **WHEN** a rich-text default supplies a code language, an unsupported target or rel token, or an unsafe link URL
+- **THEN** normalization rejects the default
 
 ### Requirement: Field rename hint option
 Every field builder SHALL accept an optional `renamedFrom` option naming the
@@ -206,3 +216,54 @@ list bounds or stored item shape. No callback or template execution is allowed.
 #### Scenario: Content remains independent of presentation
 - **WHEN** itemLabel changes between two permitted children
 - **THEN** previously valid content remains equally valid with unchanged defaults and no extra stored keys
+
+### Requirement: Portable field placeholders are display metadata
+Text, textarea, URL, number, select and rich-text descriptors SHALL accept optional `placeholder` strings at every supported model, block data and block settings depth, including scalar list items. Normalization and metadata projection SHALL preserve the string exactly, including an empty string, as detached portable JSON. Other descriptor kinds SHALL reject `placeholder`; supported kinds SHALL reject non-string values at every builder and forged-metadata boundary with a descriptive descriptor path. Placeholders SHALL NOT change inferred content value types, defaults, validation or stored values. Omission SHALL add no property.
+
+#### Scenario: Nested portable placeholder
+- **WHEN** a list of groups has a text child with placeholder "Short heading"
+- **THEN** the builder and JSON-round-tripped metadata retain the string and infer the same content value type as without it
+
+#### Scenario: Invalid placeholders fail before use
+- **WHEN** a supported kind carries a number or object placeholder, or a boolean, date, datetime, media, group or list carries any placeholder
+- **THEN** both builder normalization and forged metadata validation reject it with the descriptor path
+
+#### Scenario: Empty and absent placeholders
+- **WHEN** supported descriptors respectively supply an empty placeholder and omit the option
+- **THEN** normalization retains the empty string in the first and no placeholder property in the second, without inserting content or defaults
+
+### Requirement: Field text counts match existing length validation
+Ordinary text and textarea length bounds and counters SHALL measure raw UTF-16 code units without trimming or Unicode normalization. SEO title and description SHALL retain their existing trimmed Unicode code-point measurement. Shared count semantics SHALL preserve these distinct contracts without changing accepted values.
+
+#### Scenario: Whitespace and supplementary characters
+- **WHEN** an ordinary text field contains one space, one supplementary emoji and one space
+- **THEN** its count is four and its length validation uses four, while the same SEO text counts one
+
+#### Scenario: Combining marks remain unchanged
+- **WHEN** a text value contains a letter followed by a combining mark
+- **THEN** ordinary and SEO measurement each count two without silently normalizing the value
+
+### Requirement: Visual field layouts are portable sibling metadata
+A field-map owner SHALL accept optional `layout: { mode: "sections" | "tabs", groups: [{ key, label, description?, fields: [fieldKey, ...] }, ...] }`. Owners SHALL be models, block data, declared block settings (using `settingsLayout`) and group descriptors, including groups used as list items or reached through nested groups/lists at every permitted CE7 depth. The layout SHALL reference only immediate sibling keys; it SHALL NOT move content or change field paths, constraints, defaults, required status or depth/list budgets. Scalar descriptors and list descriptors themselves SHALL NOT accept layout. Omission SHALL retain declaration order. Listed fields SHALL follow group and field-array order; unlisted fields SHALL follow in declaration order, outside the declared sections or tab set, without being hidden.
+
+Group keys SHALL obey the existing field-key grammar and be unique within one layout. Labels SHALL be nonempty after trimming. A supplied description SHALL be a string. A supplied layout SHALL have at least one group and each group at least one field. Unknown properties, malformed shapes, unsupported modes, unknown/non-string references, nested paths and repeated placement anywhere in one layout SHALL be rejected during normalization. TypeScript inputs SHALL restrict field references to the owner's immediate keys. Normalized layouts SHALL be detached, immutable JSON metadata.
+
+#### Scenario: Order sections without creating objects
+- **WHEN** fields `intro`, `body` and `credit` declare two sections listing `body` then `intro`
+- **THEN** their controls follow that order with `credit` afterwards and their data keys remain unchanged
+
+#### Scenario: Layout inside a list item
+- **WHEN** a list's group item declares tabs for its immediate `label` and `url` children
+- **THEN** each item has its own tab navigation without adding a tab key to the item value
+
+#### Scenario: Reject ambiguous or invalid placement
+- **WHEN** layout references an unknown key, a path `profile.name`, a repeated field across groups, a duplicate group key, an empty group or an unsupported property
+- **THEN** normalization rejects the layout with owner/location information before startup
+
+#### Scenario: Reject unsupported descriptor placement
+- **WHEN** a scalar or list descriptor supplies layout, or a block settings layout names a block data field
+- **THEN** normalization rejects the option
+
+#### Scenario: Retain declaration order without layout
+- **WHEN** an existing owner omits layout
+- **THEN** its normalized metadata and field order remain unchanged

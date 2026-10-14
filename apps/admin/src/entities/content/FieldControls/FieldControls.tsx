@@ -85,6 +85,7 @@ function SelectField({
   invalid,
   onBlur,
   onChange,
+  placeholder,
   readOnly,
   value,
 }: FieldRendererProps) {
@@ -110,7 +111,7 @@ function SelectField({
         className="w-full font-normal"
         id={id}
       >
-        <SelectValue placeholder="Select an option" />
+        <SelectValue placeholder={placeholder ?? "Select an option"} />
       </SelectTrigger>
       <SelectContent>
         {definition.required ? undefined : (
@@ -288,6 +289,7 @@ function UrlField({
   label,
   onBlur,
   onChange,
+  placeholder,
   value,
 }: FieldRendererProps) {
   const href = openableUrl(value);
@@ -306,7 +308,7 @@ function UrlField({
           inputMode="url"
           onBlur={onBlur}
           onChange={(event) => onChange(event.currentTarget.value || undefined)}
-          placeholder="https://"
+          placeholder={placeholder ?? "https://"}
           type="url"
           value={typeof value === "string" ? value : ""}
         />
@@ -334,12 +336,14 @@ function RichTextField({
   label,
   onBlur,
   onChange,
+  placeholder,
   readOnly,
   value,
 }: FieldRendererProps) {
   return (
     <RichTextEditor
       {...(describedBy === undefined ? {} : { describedBy })}
+      placeholder={placeholder}
       id={id}
       invalid={invalid}
       label={label}
@@ -352,7 +356,6 @@ function RichTextField({
 }
 
 function TextareaField({
-  definition,
   describedBy,
   id,
   invalid,
@@ -366,8 +369,6 @@ function TextareaField({
       aria-describedby={describedBy}
       aria-invalid={invalid || undefined}
       id={id}
-      maxLength={definition.type === "textarea" ? definition.maxLength : undefined}
-      minLength={definition.type === "textarea" ? definition.minLength : undefined}
       onBlur={onBlur}
       onChange={(event) => onChange(event.currentTarget.value || undefined)}
       placeholder={placeholder}
@@ -378,7 +379,6 @@ function TextareaField({
 }
 
 function TextField({
-  definition,
   describedBy,
   id,
   invalid,
@@ -392,8 +392,6 @@ function TextField({
       aria-describedby={describedBy}
       aria-invalid={invalid || undefined}
       id={id}
-      maxLength={definition.type === "text" ? definition.maxLength : undefined}
-      minLength={definition.type === "text" ? definition.minLength : undefined}
       onBlur={onBlur}
       onChange={(event) => onChange(event.currentTarget.value || undefined)}
       placeholder={placeholder}
@@ -410,6 +408,7 @@ function NumberField({
   invalid,
   onBlur,
   onChange,
+  placeholder,
   value,
 }: FieldRendererProps) {
   return (
@@ -417,6 +416,7 @@ function NumberField({
       aria-describedby={describedBy}
       aria-invalid={invalid || undefined}
       id={id}
+      placeholder={placeholder}
       inputMode="decimal"
       max={definition.type === "number" ? definition.max : undefined}
       min={definition.type === "number" ? definition.min : undefined}

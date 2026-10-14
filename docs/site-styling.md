@@ -39,6 +39,26 @@ example, a `hero` without an image has no `data-lace-part="media"` element.
 Rich-text `body` and `content` parts wrap the safe rendered rich-text nodes;
 style headings or links inside those wrappers with ordinary descendant CSS.
 
+## Expanded rich text
+
+The reference and generated starter RichTextBlock use the common Astro renderer,
+so H4, rules, plain code and link options need no copied component update.
+[Authoring instructions](rich-text-authoring.md) include a starter walkthrough.
+Style them within the existing `content`/`body` wrapper, for example:
+
+```css
+[data-lace-block="richText"] [data-lace-part="content"] pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+[data-lace-block="richText"] [data-lace-part="content"] h4 {
+  margin-block: 1rem 0.5rem;
+}
+```
+
+Retain pre/code whitespace and escaped text. New-tab/no-follow choices belong
+to each document link; the common renderer supplies safe attributes.
+
 ## Examples
 
 Add rules to `apps/site/src/styles/site.css`:

@@ -5,6 +5,7 @@ import {
   classNameProblem,
   fieldControlId,
   FieldRenderer,
+  FieldLayout,
   type DraftEditorValues,
 } from "../../../entities/content/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
@@ -179,16 +180,25 @@ export function BlockSettingsPanel({
           <h4 className="m-0 text-sm font-semibold" id={`${hiddenId}-settings`}>
             Block settings
           </h4>
-          {settings.map(([key, setting]) => (
-            <FieldRenderer
-              control={control}
-              definition={setting}
-              error={settingsError(key)}
-              fieldKey={key}
-              key={key}
-              name={`blocks.${index}.settings.${key}`}
-            />
-          ))}
+          <FieldLayout
+            fields={definition.settings ?? {}}
+            layout={definition.settingsLayout}
+            label="Block settings"
+            errors={error?.settings}
+            renderField={(key) => {
+              const setting = definition.settings![key]!;
+              return (
+                <FieldRenderer
+                  control={control}
+                  definition={setting}
+                  error={settingsError(key)}
+                  fieldKey={key}
+                  key={key}
+                  name={`blocks.${index}.settings.${key}`}
+                />
+              );
+            }}
+          />
         </section>
       )}
       <Controller
@@ -269,16 +279,24 @@ export function BlockSettingsSummary({
           {className === undefined || className.trim() === "" ? "None" : className}
         </dd>
       </dl>
-      {settings.map(([key, setting]) => (
-        <FieldRenderer
-          control={control}
-          definition={setting}
-          error={undefined}
-          fieldKey={key}
-          key={key}
-          name={`blocks.${index}.settings.${key}`}
-        />
-      ))}
+      <FieldLayout
+        fields={definition.settings ?? {}}
+        layout={definition.settingsLayout}
+        label="Block settings"
+        renderField={(key) => {
+          const setting = definition.settings![key]!;
+          return (
+            <FieldRenderer
+              control={control}
+              definition={setting}
+              error={undefined}
+              fieldKey={key}
+              key={key}
+              name={`blocks.${index}.settings.${key}`}
+            />
+          );
+        }}
+      />
     </section>
   );
 }

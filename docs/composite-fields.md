@@ -202,3 +202,6 @@ does not support that metadata. Older scalar-only versions need a matching
 backup or an explicit data conversion. CE7D adds no migration either; a
 configuration that registers Gallery or Navigation needs the content package of
 the same release.
+
+For configurable placeholders, required markers and text counters, see
+[field guidance](field-guidance.md).

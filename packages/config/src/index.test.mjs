@@ -917,3 +917,117 @@ test("itemLabel changes only projection identity at every descriptor position", 
   ).toBe("stored");
   expect((await make("title", "changed")).structureHash).not.toBe(after.structureHash);
 });
+
+test("CE9A placeholders change projection only across scalar/composite and block settings", async () => {
+  for (const composite of [false, true]) {
+    const make = (placeholder, data = "stored") => {
+      const prompt = placeholder === undefined ? {} : { placeholder };
+      const fields = {
+        placeholder: field.text({ ...prompt, defaultValue: data }),
+        ...(composite
+          ? {
+              nested: field.list({
+                item: field.group({
+                  fields: {
+                    title: field.text(prompt),
+                    description: field.text(),
+                    label: field.text(),
+                    itemLabel: field.text(),
+                  },
+                  defaultValue: {
+                    label: "label",
+                    description: "description",
+                    itemLabel: "itemLabel",
+                  },
+                }),
+              }),
+            }
+          : {}),
+      };
+      return defineConfig({
+        blocks: [
+          defineBlock({
+            type: "card",
+            version: 1,
+            fields,
+            settings: { tone: field.text({ ...prompt, defaultValue: "normal", label: "Tone" }) },
+          }),
+        ],
+        content: [homeModel({ blocks: ["card"], fields })],
+      });
+    };
+    const before = await make(undefined);
+    for (const value of ["Title", "", "Different"]) {
+      const after = await make(value);
+      expect(after.structureHash).toBe(before.structureHash);
+      expect(after.runtime.content[0].structureHash).toBe(before.runtime.content[0].structureHash);
+      expect(after.projectionHash).not.toBe(before.projectionHash);
+      expect(after.runtime.content[0].structure.fields.placeholder.defaultValue).toBe("stored");
+      expect((await make(value, "changed")).structureHash).not.toBe(after.structureHash);
+    }
+  }
+});
+
+test("CE9A scalar-only global hashes still exclude collection listFields", async () => {
+  const make = (listFields) => defineConfig({ content: [postModel({ blocks: [], listFields })] });
+  const plain = await make([]);
+  const listed = await make(["author"]);
+  expect(listed.structureHash).toBe(plain.structureHash);
+  expect(listed.projectionHash).not.toBe(plain.projectionHash);
+});
+
+test("CE9B layouts are projection-only at every owner and preserve content keys", async () => {
+  const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["layout"] }] };
+  const make = (enabled, value = "stored") => {
+    const fields = { layout: field.text({ defaultValue: value }) };
+    const group = field.group({
+      fields,
+      ...(enabled ? { layout } : {}),
+      defaultValue: { layout: value },
+    });
+    const block = defineBlock({
+      type: "layoutBlock",
+      version: 1,
+      fields: { ...fields, nested: group },
+      ...(enabled ? { layout, settingsLayout: layout } : {}),
+      settings: { layout: field.text({ defaultValue: value }) },
+    });
+    return defineConfig({
+      blocks: [block],
+      content: [
+        defineCollection({
+          key: "forms",
+          version: 1,
+          route: "/forms/:slug",
+          blocks: [block.type],
+          fields: { ...fields, nested: group },
+          ...(enabled ? { layout } : {}),
+        }),
+      ],
+    });
+  };
+  const before = await make(false);
+  const after = await make(true);
+  expect(after.structureHash).toBe(before.structureHash);
+  expect(after.projectionHash).not.toBe(before.projectionHash);
+  expect(after.runtime.content[0].structureHash).toBe(before.runtime.content[0].structureHash);
+  expect(after.runtime.content[0].structure).toEqual(before.runtime.content[0].structure);
+  expect(after.runtime.content[0].layout).toEqual(layout);
+  expect((await make(true, "changed")).structureHash).not.toBe(after.structureHash);
+  const scalar = async (enabled) =>
+    defineConfig({
+      blocks: [],
+      content: [
+        defineGlobal({
+          key: "settings",
+          version: 1,
+          fields: { layout: field.text() },
+          ...(enabled ? { layout } : {}),
+        }),
+      ],
+    });
+  expect((await scalar(true)).structureHash).toBe((await scalar(false)).structureHash);
+  expect(() =>
+    defineGlobal({ key: "bad", version: 1, fields: { name: field.text() }, layout }),
+  ).toThrow();
+});

@@ -1,4 +1,5 @@
 import type { ContentBlockDto, ContentModelDto } from "@lacecms/contracts";
+import { formFieldKeys } from "@lacecms/content";
 import type { FieldMetadata } from "@lacecms/content";
 import { locationField } from "./editor-form.js";
 import type { FieldErrors } from "react-hook-form";
@@ -96,7 +97,8 @@ function recursiveProblems(
         : undefined,
     });
   if (definition?.type === "group")
-    for (const [key, child] of Object.entries(definition.fields))
+    for (const key of formFieldKeys(definition.fields, definition.layout)) {
+      const child = definition.fields[key]!;
       problems.push(
         ...recursiveProblems(
           child,
@@ -106,6 +108,7 @@ function recursiveProblems(
           hidden,
         ),
       );
+    }
   if (definition?.type === "list")
     for (const key of Object.keys(value)
       .filter((key) => /^(0|[1-9]\d*)$/u.test(key))
@@ -197,21 +200,21 @@ export function validationProblems({
       value: unknown,
       name: Parameters<typeof fieldControlId>[0],
     ])[] = [
-      ...Object.entries(fields).map(
-        ([key, field]) =>
+      ...formFieldKeys(fields, definition?.layout).map(
+        (key) =>
           [
             key,
-            fieldLabel(key, field.label),
+            fieldLabel(key, fields[key]!.label),
             (error.data as Messages | undefined)?.[key],
             `blocks.${index}.data.${key}`,
           ] as const,
       ),
       ["envelope-anchor", "Anchor", error.anchor, `blocks.${index}.anchor`],
-      ...Object.entries(settings).map(
-        ([key, setting]) =>
+      ...formFieldKeys(settings, definition?.settingsLayout).map(
+        (key) =>
           [
             `settings-${key}`,
-            fieldLabel(key, setting.label),
+            fieldLabel(key, settings[key]!.label),
             (error.settings as Messages | undefined)?.[key],
             `blocks.${index}.settings.${key}`,
           ] as const,
@@ -248,7 +251,8 @@ export function validationProblems({
       target: { id: "system-slug", kind: "control" },
     });
   const fieldErrors = (errors.fields ?? {}) as Messages;
-  for (const [key, field] of Object.entries(model.fields)) {
+  for (const key of formFieldKeys(model.fields, model.layout)) {
+    const field = model.fields[key]!;
     if (field.type === "group" || field.type === "list") {
       problems.push(
         ...recursiveProblems(

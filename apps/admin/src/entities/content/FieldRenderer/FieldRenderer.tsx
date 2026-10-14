@@ -28,6 +28,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   MAX_LIST_ITEMS,
+  textLength,
   validateFieldValue,
   type FieldDefinition as Descriptor,
 } from "@lacecms/content";
@@ -37,6 +38,8 @@ import { Button } from "../../../shared/ui/Button/index.js";
 import { REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { fieldProblem, recursiveFieldErrors, type DraftEditorValues } from "../editor-form.js";
+import { FieldLayout } from "../FieldLayout/index.js";
+import { fieldGuidance } from "../field-guidance.js";
 import { fieldLabel } from "../draft.js";
 import {
   fieldControlId,
@@ -207,6 +210,8 @@ function Disclosure({
   label,
   id,
   description,
+  guidance,
+  required,
   error,
   suffix,
 }: {
@@ -214,6 +219,8 @@ function Disclosure({
   readonly label: string;
   readonly id: string;
   readonly description?: string | undefined;
+  readonly guidance?: string | undefined;
+  readonly required?: boolean;
   readonly error?: unknown;
   readonly suffix?: ReactNode;
 }) {
@@ -227,13 +234,28 @@ function Disclosure({
   }, []);
   return (
     <fieldset
-      aria-describedby={`${id}:description${errorMessage(error) ? ` ${id}:error` : ""}`}
+      aria-describedby={
+        [
+          description ? `${id}:description` : undefined,
+          guidance ? `${id}:guidance` : undefined,
+          errorMessage(error) ? `${id}:error` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined
+      }
       className="grid min-w-0 gap-2 rounded-md border border-border p-3"
       id={id}
       ref={ref}
       tabIndex={-1}
     >
-      <legend className="px-1 text-sm font-medium">{label}</legend>
+      <legend className="px-1 text-sm font-medium">
+        {label}
+        {required ? (
+          <span aria-hidden="true" className="ml-1 text-xs text-muted-foreground">
+            Required
+          </span>
+        ) : null}
+      </legend>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           aria-controls={`${id}:body`}
@@ -247,9 +269,16 @@ function Disclosure({
         {suffix}
         {hasProblems(error) ? <span className="text-xs text-destructive">Has problems</span> : null}
       </div>
-      <small className="text-muted-foreground" id={`${id}:description`}>
-        {description}
-      </small>
+      {description ? (
+        <small className="text-muted-foreground" id={`${id}:description`}>
+          {description}
+        </small>
+      ) : null}
+      {guidance ? (
+        <small className="text-muted-foreground" id={`${id}:guidance`}>
+          {guidance}
+        </small>
+      ) : null}
       {errorMessage(error) ? (
         <p className={fieldErrorClass} id={`${id}:error`} role="alert">
           {errorMessage(error)}
@@ -330,6 +359,8 @@ function ValueNode(props: NodeProps) {
     return (
       <Disclosure
         description={definition.description}
+        guidance={fieldGuidance(definition)}
+        required={definition.required}
         error={errors}
         id={id}
         label={label}
@@ -364,27 +395,37 @@ function ValueNode(props: NodeProps) {
             {createProblem ? <small>{createProblem}</small> : null}
           </>
         ) : (
-          Object.entries(definition.fields).map(([key, child]) => (
-            <ValueNode
-              definition={child}
-              errors={
-                errors?.[key] !== null && typeof errors?.[key] === "object"
-                  ? (errors[key] as Errors)
-                  : undefined
-              }
-              fieldKey={key}
-              key={key}
-              name={`${name}.${key}`}
-              onBlur={onBlur}
-              onChange={(next) => {
-                const copy = { ...value };
-                copy[key] = next === undefined ? null : next;
-                onChange(copy);
-              }}
-              onErrors={onErrors ? (next) => onErrors({ ...errors, [key]: next }) : undefined}
-              value={value[key] === null ? undefined : value[key]}
-            />
-          ))
+          <FieldLayout
+            fields={definition.fields}
+            layout={definition.layout}
+            label={label}
+            errors={errors}
+            hiddenBlock={hidden}
+            renderField={(key) => {
+              const child = definition.fields[key]!;
+              return (
+                <ValueNode
+                  definition={child}
+                  errors={
+                    errors?.[key] !== null && typeof errors?.[key] === "object"
+                      ? (errors[key] as Errors)
+                      : undefined
+                  }
+                  fieldKey={key}
+                  key={key}
+                  name={`${name}.${key}`}
+                  onBlur={onBlur}
+                  onChange={(next) => {
+                    const copy = { ...value };
+                    copy[key] = next === undefined ? null : next;
+                    onChange(copy);
+                  }}
+                  onErrors={onErrors ? (next) => onErrors({ ...errors, [key]: next }) : undefined}
+                  value={value[key] === null ? undefined : value[key]}
+                />
+              );
+            }}
+          />
         )}
         {Object.hasOwn(definition, "defaultValue") ? (
           <small className="text-muted-foreground">
@@ -395,10 +436,21 @@ function ValueNode(props: NodeProps) {
       </Disclosure>
     );
   }
+  const guidance = fieldGuidance(definition);
+  const effectivePlaceholder =
+    placeholder ?? ("placeholder" in definition ? definition.placeholder : undefined);
+  const counted = definition.type === "text" || definition.type === "textarea";
+  const marker = definition.required ? (
+    <span aria-hidden="true" className="ml-1 text-xs text-muted-foreground">
+      Required
+    </span>
+  ) : null;
   const Renderer = renderers[definition.type] ?? builtInRenderers[definition.type];
   const describedBy =
     [
       definition.description ? `${id}-description` : undefined,
+      guidance ? `${id}-guidance` : undefined,
+      counted ? `${id}-count` : undefined,
       annotation ? `${id}-annotation` : undefined,
       placeholder ? `${id}-placeholder` : undefined,
       !readOnly && notice ? `${id}-notice` : undefined,
@@ -409,15 +461,26 @@ function ValueNode(props: NodeProps) {
   return (
     <fieldset className="grid min-w-0 gap-1.5 border-0 p-0" disabled={readOnly || busy}>
       {groupedFieldTypes.has(definition.type) ? (
-        <span className="text-sm font-medium">{label}</span>
-      ) : (
-        <label className="text-sm font-medium" htmlFor={id}>
+        <span className="text-sm font-medium">
           {label}
-        </label>
+          {marker}
+        </span>
+      ) : (
+        <div className="flex items-baseline gap-1">
+          <label className="text-sm font-medium" htmlFor={id}>
+            {label}
+          </label>
+          {marker}
+        </div>
       )}
       {definition.description ? (
         <small className="text-xs text-muted-foreground" id={`${id}-description`}>
           {definition.description}
+        </small>
+      ) : null}
+      {guidance ? (
+        <small className="text-xs text-muted-foreground" id={`${id}-guidance`}>
+          {guidance}
         </small>
       ) : null}
       {annotation ? (
@@ -457,10 +520,15 @@ function ValueNode(props: NodeProps) {
           onErrors?.(undefined);
           onChange(next);
         }}
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         readOnly={readOnly || busy}
         value={clearedItem ? undefined : value}
       />
+      {counted ? (
+        <p className="m-0 text-xs text-muted-foreground" id={`${id}-count`}>
+          {textLength(typeof value === "string" && !clearedItem ? value : "")} characters
+        </p>
+      ) : null}
       {placeholder ? (
         <span className="sr-only" id={`${id}-placeholder`}>
           {placeholder}
@@ -471,9 +539,6 @@ function ValueNode(props: NodeProps) {
         <p className={`${fieldErrorClass} text-xs`} id={`${id}-error`} role="alert">
           {message}
         </p>
-      ) : null}
-      {!readOnly && definition.required && (value === undefined || value === null) ? (
-        <small className="text-muted-foreground">Required for publication only.</small>
       ) : null}
     </fieldset>
   );
@@ -615,6 +680,8 @@ function ListNode(
   return (
     <Disclosure
       description={definition.description}
+      guidance={fieldGuidance(definition)}
+      required={definition.required}
       error={errors}
       id={id}
       label={label}

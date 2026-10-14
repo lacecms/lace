@@ -334,3 +334,54 @@ configuration and model version changes, configuration sync, publication of
 the global and the layout change (see the 0.27.0 upgrade instructions). To roll
 back, remove the blocks from the models with `removedBlocks` while entries use
 them, or restore the backup taken before sync.
+
+## CE8A shared rich-text format
+
+CE8A adds H4, horizontal rules, plain code blocks and independent link new-tab
+and nofollow attributes. Existing H1–H3 and href-only JSON stays valid without
+rewrites, database migrations or block schema-version changes.
+
+Stored links use `href` plus optional `target: "_blank"` and `rel: "nofollow"`.
+Omit a switch's attribute when unchecked; null, empty strings, other targets
+and other rel tokens are rejected. Renderers add `noopener noreferrer` for a
+new tab and append `nofollow` when requested. Ordinary URL fields stay strings.
+Code blocks contain only unmarked text, without a language attribute, and render
+as escaped `pre`/`code` preserving spaces, tabs and line breaks. Empty blocks
+are valid. Rules and code are allowed at root and inside list items/blockquote.
+
+Upgrade CMS packages and site `@lacecms/content`, `@lacecms/render` and
+`@lacecms/astro` together before storing expanded documents. Sites using the
+common RichText component need no copied block-source update; custom renderers
+must support the expanded grammar, and overrides must forward validated link
+attributes. A codeBlock override is called for both described pre/code elements,
+following the existing per-element override contract.
+
+CE8B updates the admin extensions and serializer to preserve and author this
+format in every field, including recursive leaves. Use the fixed toolbar or
+selection menu; Link provides independent new-tab/nofollow switches. See
+[rich-text authoring](rich-text-authoring.md). CE8A alone still cannot preserve
+expanded documents in its older admin; deploy CE8B together with its common
+format/rendering dependencies before enabling expanded authoring.
+
+An older engine or site renderer can reject documents using new features. To
+roll back after expanded content is stored, restore a backup predating it or
+explicitly remove the new features before downgrade; never silently strip or
+normalize existing content. See [ADR 0014](adr/0014-expanded-rich-text-format.md).
+
+## Field guidance metadata (CE9A)
+
+Upgrade engine/contracts/admin together before configuring `placeholder`. Older
+engines reject the option. No content or database migration is required; remove
+placeholder options before rollback. Ordinary text length stays raw UTF-16 and
+SEO stays trimmed code points. See [field guidance](field-guidance.md).
+
+
+## Visual form layouts (CE9B)
+
+Upgrade content/config/contracts/API/admin together before configuring `layout`
+or block `settingsLayout`; older engines reject the options. No content or DDL
+migration is required. Remove layouts and synchronize before rolling back to
+a matching earlier engine/admin. Stored field paths and values, including keys
+named `layout`, are unchanged. Public metadata synchronization still advances
+published state and requests a build. Creation-time slugs are ordinary stored
+slugs and need no conversion. See [form organization](form-organization.md).

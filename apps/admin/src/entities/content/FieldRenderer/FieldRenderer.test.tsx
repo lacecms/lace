@@ -57,7 +57,9 @@ test("renders a labelled built-in control described by its help text and error",
 
   const input = screen.getByRole("textbox", { name: "Hero Image" });
   expect(input).toHaveAttribute("id", "field-fields-heroImage");
-  expect(input).toHaveAccessibleDescription("Shown on cards. Required.");
+  expect(input).toHaveAccessibleDescription(
+    "Shown on cards. Required for publication only. Limit: 40 characters. 0 characters Required.",
+  );
   expect(screen.getByRole("alert")).toHaveTextContent("Required.");
   await user.type(input, "Cover");
   expect(screen.getByTestId("value")).toHaveTextContent('"Cover"');
@@ -99,7 +101,9 @@ test("a placeholder is shown in text controls and is part of the description", (
   );
   const input = screen.getByRole("textbox", { name: "Hero Image" });
   expect(input).toHaveAttribute("placeholder", "Uses media alt: Red bicycle");
-  expect(input).toHaveAccessibleDescription("Shown on cards. Uses media alt: Red bicycle");
+  expect(input).toHaveAccessibleDescription(
+    "Shown on cards. 0 characters Uses media alt: Red bicycle",
+  );
 });
 
 test("textarea controls apply the placeholder too", () => {
@@ -115,7 +119,7 @@ test("a notice describes the control for writers and is hidden when view only", 
     <Harness definition={{ required: false, type: "text" }} notice={<p>No alt text.</p>} />,
   );
   expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
-    "No alt text.",
+    "0 characters No alt text.",
   );
   unmount();
   render(
@@ -130,7 +134,9 @@ test("a notice describes the control for writers and is hidden when view only", 
     />,
   );
   expect(screen.queryByText("No alt text.")).toBeNull();
-  expect(screen.getByRole("textbox", { name: "Hero Image" })).not.toHaveAccessibleDescription();
+  expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
+    "0 characters",
+  );
 });
 
 test("an annotation is shown to every user and describes the control", () => {
@@ -147,6 +153,19 @@ test("an annotation is shown to every user and describes the control", () => {
   );
   expect(screen.getByText("Site name used in search and social titles.")).toBeVisible();
   expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
-    "Shown in the header. Site name used in search and social titles.",
+    "Shown in the header. 0 characters Site name used in search and social titles.",
   );
+});
+
+test("CE9A inherited prompts override configured generic text and empty prompts suppress fallback", () => {
+  const { unmount } = render(
+    <Harness
+      definition={{ type: "text", required: false, placeholder: "Generic" }}
+      placeholder="Uses media alt: Cover"
+    />,
+  );
+  expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", "Uses media alt: Cover");
+  unmount();
+  render(<Harness definition={{ type: "url", required: false, placeholder: "" }} />);
+  expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", "");
 });

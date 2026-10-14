@@ -630,5 +630,6 @@ export function suggestSlug(title: string): string {
     .trim()
     .replace(/[\s_-]+/gu, "-")
     .replace(/^-+|-+$/gu, "")
-    .slice(0, MAX_SLUG_LENGTH);
+    .slice(0, MAX_SLUG_LENGTH)
+    .replace(/-+$/u, "");
 }

@@ -106,3 +106,38 @@ test("keyboard shortcuts open the link control and focus the toolbar", async () 
   fireEvent.keyDown(textbox, { ctrlKey: true, key: "k" });
   expect(await screen.findByLabelText("Link URL")).toHaveFocus();
 });
+
+test("CE9A changing a prompt updates decoration and aria without content edits or history loss", async () => {
+  const change = vi.fn();
+  const props = {
+    id: "field-body",
+    label: "Body",
+    onBlur: () => undefined,
+    onChange: change,
+    value: undefined,
+  };
+  const { rerender } = render(<RichTextEditor {...props} placeholder="First" />);
+  const textbox = await screen.findByRole("textbox", { name: "Body" });
+  expect(textbox).toHaveAttribute("aria-placeholder", "First");
+  expect(textbox.querySelector("p")).toHaveAttribute("data-placeholder", "First");
+  rerender(<RichTextEditor {...props} placeholder="Next" />);
+  await waitFor(() =>
+    expect(textbox.querySelector("p")).toHaveAttribute("data-placeholder", "Next"),
+  );
+  expect(change).not.toHaveBeenCalled();
+  const editor = (textbox as HTMLElement & { editor: import("@tiptap/core").Editor }).editor;
+  editor.commands.insertContent("Typed");
+  editor.commands.setTextSelection(3);
+  const calls = change.mock.calls.length;
+  rerender(<RichTextEditor {...props} placeholder="" />);
+  await waitFor(() => expect(textbox).toHaveAttribute("aria-placeholder", ""));
+  expect(screen.getByRole("textbox", { name: "Body" })).toBe(textbox);
+  expect(editor.state.selection.from).toBe(3);
+  expect(change).toHaveBeenCalledTimes(calls);
+  expect(editor.getText()).toBe("Typed");
+  expect(editor.commands.undo()).toBe(true);
+  expect(editor.getText()).toBe("");
+  rerender(<RichTextEditor {...props} placeholder="Hidden" readOnly />);
+  await waitFor(() => expect(textbox).not.toHaveAttribute("aria-placeholder"));
+  expect(textbox.querySelector("[data-placeholder]")).toBeNull();
+});

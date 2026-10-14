@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, expect, test } from "vitest";
-import { richTextExtensions } from "../rich-text-extensions.js";
+import { richTextDocument, richTextExtensions } from "../rich-text-extensions.js";
 import { LinkPopover } from "./index.js";
 
 const editors: Editor[] = [];
@@ -49,7 +49,7 @@ test("links the selection with a safe URL and returns focus to the text", async 
   await user.type(input, "https://example.com{Enter}");
 
   expect(screen.queryByLabelText("Link URL")).toBe(null);
-  expect(editor.getJSON().content?.[0]?.content?.[0]).toEqual({
+  expect(richTextDocument(editor.getJSON()).content?.[0]?.content?.[0]).toEqual({
     marks: [{ attrs: { href: "https://example.com" }, type: "link" }],
     text: "Hello",
     type: "text",
@@ -61,7 +61,7 @@ test("refuses an unsafe URL without changing the document", async () => {
   const user = userEvent.setup();
   const editor = createEditor("<p>Hello</p>");
   editor.commands.selectAll();
-  const before = JSON.stringify(editor.getJSON());
+  const before = JSON.stringify(richTextDocument(editor.getJSON()));
   render(<Harness editor={editor} />);
 
   await user.click(screen.getByRole("button", { name: "Link" }));
@@ -72,7 +72,7 @@ test("refuses an unsafe URL without changing the document", async () => {
     "Links must start with https://, http://, mailto:, tel:, / or #.",
   );
   expect(screen.getByLabelText("Link URL")).toHaveAttribute("aria-invalid", "true");
-  expect(JSON.stringify(editor.getJSON())).toBe(before);
+  expect(JSON.stringify(richTextDocument(editor.getJSON()))).toBe(before);
 });
 
 test("inserts the URL as linked text when nothing is selected", async () => {
@@ -85,7 +85,7 @@ test("inserts the URL as linked text when nothing is selected", async () => {
   await user.type(await screen.findByLabelText("Link URL"), "/docs");
   await user.click(screen.getByRole("button", { name: "Apply" }));
 
-  expect(editor.getJSON().content?.[0]?.content).toEqual([
+  expect(richTextDocument(editor.getJSON()).content?.[0]?.content).toEqual([
     { text: "See", type: "text" },
     { marks: [{ attrs: { href: "/docs" }, type: "link" }], text: "/docs", type: "text" },
   ]);
@@ -101,7 +101,7 @@ test("prefills the current link and removes it", async () => {
   expect(await screen.findByLabelText("Link URL")).toHaveValue("https://old.example");
   await user.click(screen.getByRole("button", { name: "Remove link" }));
 
-  expect(JSON.stringify(editor.getJSON())).not.toContain("link");
+  expect(JSON.stringify(richTextDocument(editor.getJSON()))).not.toContain("link");
 });
 
 test("changes the whole existing link when the cursor is inside it", async () => {
@@ -115,7 +115,7 @@ test("changes the whole existing link when the cursor is inside it", async () =>
   await user.clear(input);
   await user.type(input, "#section{Enter}");
 
-  expect(editor.getJSON().content?.[0]?.content?.[0]).toEqual({
+  expect(richTextDocument(editor.getJSON()).content?.[0]?.content?.[0]).toEqual({
     marks: [{ attrs: { href: "#section" }, type: "link" }],
     text: "Old",
     type: "text",
@@ -126,7 +126,7 @@ test("Escape closes without changing the document", async () => {
   const user = userEvent.setup();
   const editor = createEditor("<p>Hello</p>");
   editor.commands.selectAll();
-  const before = JSON.stringify(editor.getJSON());
+  const before = JSON.stringify(richTextDocument(editor.getJSON()));
   render(<Harness editor={editor} />);
 
   await user.click(screen.getByRole("button", { name: "Link" }));
@@ -134,6 +134,53 @@ test("Escape closes without changing the document", async () => {
   await user.keyboard("{Escape}");
 
   expect(screen.queryByLabelText("Link URL")).toBe(null);
-  expect(JSON.stringify(editor.getJSON())).toBe(before);
+  expect(JSON.stringify(richTextDocument(editor.getJSON()))).toBe(before);
   await waitFor(() => expect(editor.view.dom).toHaveFocus());
 });
+
+test.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])(
+  "link switches round-trip and clear independently: new-tab %s, nofollow %s",
+  async (newTab, nofollow) => {
+    const user = userEvent.setup();
+    const editor = createEditor("<p>Hello world</p>");
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    render(<Harness editor={editor} />);
+    await user.click(screen.getByRole("button", { name: "Link" }));
+    await user.type(await screen.findByLabelText("Link URL"), "/docs");
+    if (newTab) await user.click(screen.getByRole("switch", { name: "Open in a new tab" }));
+    if (nofollow) await user.click(screen.getByRole("switch", { name: "nofollow" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(
+      richTextDocument(editor.getJSON()).content?.[0]?.content?.[0]?.marks?.[0]?.attrs,
+    ).toEqual({
+      href: "/docs",
+      ...(newTab ? { target: "_blank" } : {}),
+      ...(nofollow ? { rel: "nofollow" } : {}),
+    });
+    await waitFor(() => expect(editor.view.dom).toHaveFocus());
+    editor.commands.setTextSelection(2);
+    await user.click(screen.getByRole("button", { name: "Link" }));
+    expect(await screen.findByRole("switch", { name: "Open in a new tab" })).toHaveAttribute(
+      "aria-checked",
+      String(newTab),
+    );
+    expect(screen.getByRole("switch", { name: "nofollow" })).toHaveAttribute(
+      "aria-checked",
+      String(nofollow),
+    );
+    await user.click(screen.getByRole("switch", { name: "Open in a new tab" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(
+      richTextDocument(editor.getJSON()).content?.[0]?.content?.[0]?.marks?.[0]?.attrs,
+    ).toEqual({
+      href: "/docs",
+      ...(!newTab ? { target: "_blank" } : {}),
+      ...(nofollow ? { rel: "nofollow" } : {}),
+    });
+  },
+);

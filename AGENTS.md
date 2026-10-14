@@ -7,7 +7,9 @@ Read these before planning or implementing product work:
 1. `docs/mvp-architecture.md` — product scope and architecture invariants.
 2. `openspec/specs/**` — accepted detailed capability behavior.
 3. The selected active OpenSpec change — the proposed implementation delta.
-4. `docs/mvp-implementation-roadmap.md` — delivery order and session boundaries.
+4. `backlog.md` — future work; `docs/archive/content-editor-roadmap.md` and
+   `docs/archive/mvp-implementation-roadmap.md` preserve completed delivery order
+   and session boundaries.
 
 Never resolve a conflict by silently choosing the lower-authority document.
 

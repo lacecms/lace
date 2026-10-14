@@ -418,3 +418,29 @@ Planning SHALL use bounded pages and fingerprint-bound, JSON-safe scan evidence 
 #### Scenario: Repeated synchronization
 - **WHEN** a nested evolution has been successfully applied and the same configuration and hints are synchronized again
 - **THEN** the plan is a valid no-op with no content writes, revision changes, public-version increment or build request
+
+### Requirement: Placeholder-only synchronization preserves content
+Changing only supported field placeholders SHALL use the existing display/projection update path without a structural model-version increase, default backfill, block migration or draft/published content rewrite. The same behavior SHALL hold on Node and Cloudflare. Existing guarded atomic apply and stale-plan detection SHALL continue to apply.
+
+#### Scenario: Populated model gets new guidance
+- **WHEN** an unchanged-version populated model adds, changes or removes a nested field or allowed block placeholder and synchronization succeeds
+- **THEN** the plan classifies a display-only update, metadata exposes the new guidance and saved draft/published content values and revisions remain unchanged
+
+#### Scenario: Concurrent synchronization invalidates a plan
+- **WHEN** persisted identity changes after a placeholder-only plan is prepared and before it is applied
+- **THEN** existing stale-plan guards refuse the apply without partial metadata or content writes
+
+### Requirement: Form layout synchronization never rewrites content
+Layout-only changes SHALL use the existing guarded projection-only update on Node/SQLite and Cloudflare/D1 with unchanged model/block versions. They SHALL NOT rewrite draft or published snapshots, field or block data/settings, media references or entry revisions. Like other public projection changes, they SHALL advance published-state version once and create or coalesce one pending build request in the same atomic mutation. The existing concurrent-configuration preconditions SHALL remain authoritative; stale plans SHALL fail atomically without content writes. Repeating synchronization after success SHALL produce no further operation.
+
+#### Scenario: Synchronize populated recursive forms
+- **WHEN** a model with draft/published groups, lists, media and block settings changes only layouts
+- **THEN** synchronization updates presentation identity while all content, revisions and references remain unchanged and published state advances once with one pending build request on both runtimes
+
+#### Scenario: Reject stale layout synchronization
+- **WHEN** persisted configuration identity changes after a layout-only plan was created
+- **THEN** application rejects the stale plan without partial updates or content changes
+
+#### Scenario: Repeat the same layout update
+- **WHEN** synchronization reruns after the layout metadata has been applied
+- **THEN** the plan has no operations

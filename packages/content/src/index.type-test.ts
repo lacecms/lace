@@ -199,8 +199,83 @@ const navigationData: NavigationData = {
   ],
   name: "Main",
 };
-// @ts-expect-error submenu links require a URL.
 const childWithoutUrl: NavigationData = {
+  // @ts-expect-error submenu links require a URL.
   links: [{ children: [{ label: "Guide" }], label: "Docs" }],
 };
 void [galleryData, galleryWithoutMedia, navigationData, childWithoutUrl];
+
+const expandedRichText: SafeRichTextDocument = {
+  content: [
+    { attrs: { level: 4 }, type: "heading" },
+    { type: "horizontalRule" },
+    { content: [{ text: "\tcode\n", type: "text" }], type: "codeBlock" },
+    {
+      content: [
+        {
+          marks: [{ attrs: { href: "/", target: "_blank", rel: "nofollow" }, type: "link" }],
+          text: "link",
+          type: "text",
+        },
+      ],
+      type: "paragraph",
+    },
+  ],
+  type: "doc",
+};
+field.richText({ defaultValue: expandedRichText });
+const invalidRichText: SafeRichTextDocument = {
+  content: [
+    // @ts-expect-error unsupported heading level
+    { attrs: { level: 5 }, type: "heading" },
+    // @ts-expect-error plain code has no language attribute
+    { attrs: { language: "js" }, type: "codeBlock" },
+    // @ts-expect-error code children have no marks
+    { content: [{ marks: [], text: "x", type: "text" }], type: "codeBlock" },
+    {
+      content: [
+        {
+          marks: [
+            // @ts-expect-error renderer safety tokens are not stored rel values
+            { attrs: { href: "/", rel: "noopener" }, type: "link" },
+            // @ts-expect-error current-context links omit target
+            { attrs: { href: "/", target: "_self" }, type: "link" },
+          ],
+          text: "x",
+          type: "text",
+        },
+      ],
+      type: "paragraph",
+    },
+  ],
+  type: "doc",
+};
+void invalidRichText;
+
+const promptedText = field.text({ required: true, placeholder: "Title" });
+const promptedChoice = field.select({ options: ["a", "b"] as const, placeholder: "Choose" });
+const promptLiteral: "Title" = promptedText.placeholder;
+const promptValue: FieldValue<typeof promptedChoice> = "a";
+void promptLiteral;
+void promptValue;
+// @ts-expect-error A placeholder does not widen select values.
+const invalidPromptValue: FieldValue<typeof promptedChoice> = "c";
+void invalidPromptValue;
+
+field.group({
+  fields: { title: field.text() },
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["title"] }] },
+});
+field.group({
+  fields: { title: field.text() },
+  // @ts-expect-error Layout references immediate siblings only.
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["unknown"] }] },
+});
+
+defineBlock({
+  type: "layoutTypeTest",
+  version: 1,
+  fields: { title: field.text() },
+  // @ts-expect-error Block data layout references immediate data keys.
+  layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["missing"] }] },
+});

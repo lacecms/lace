@@ -19,6 +19,17 @@ not assert that individual evidence files have been attached.
 This confirmation does not approve a beta or stable release, claim a new
 security audit, or separately verify GHCR publication and both image manifests.
 
+## Alpha.5 handoff — 2026-10-14
+
+The selected next candidate is `0.1.0-alpha.5` / `next`, ownership template
+`0.29.0`. Alpha.5 preparation does not reuse the alpha.4 confirmation as new
+deployment evidence. Recheck scenarios affected by CE1–CE9, especially forward
+migrations 0005–0009, public media, globals/SEO, block visibility/settings,
+composites, rich text and editor forms; validate upgrade and coordinated restore
+against the exact candidate. See [alpha.5 notes](./alpha-5-release-notes.md).
+Real VPS/Cloudflare results and publication remain pending until separately
+recorded by the owner.
+
 ## Purpose and ownership
 
 The release owner follows this plan after Step 34 against a real application

@@ -569,3 +569,14 @@ test("serialization uses descriptors for groups that resemble rich-text JSON", (
     ).fields,
   ).toEqual({ group: { type: "doc", body } });
 });
+
+test.each([
+  ["Café & News", "cafe-news"],
+  ["Hello__World", "hello-world"],
+  ["Новости", ""],
+  ["😀", ""],
+  ["", ""],
+  ["A".repeat(99) + "-rest", "a".repeat(99)],
+])("CE9B normalizes a suggestion for %s", (title, expected) => {
+  expect(suggestSlug(title)).toBe(expected);
+});

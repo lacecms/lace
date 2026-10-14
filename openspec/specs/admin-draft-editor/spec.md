@@ -48,7 +48,7 @@ control, which SHALL also be marked invalid.
 - **THEN** the switch reports that it is on and the next complete-draft save carries `true`
 
 #### Scenario: Client validation prevents an invalid save
-- **WHEN** a writer submits a draft with a missing required value, an invalid
+- **WHEN** a writer submits a draft with an invalid
   select choice, a string or numeric value outside declared bounds, or another
   locally detectable descriptor violation
 - **THEN** the affected control exposes an accessible error and the browser does
@@ -59,6 +59,10 @@ control, which SHALL also be marked invalid.
   not exist, or the entry belongs to another model
 - **THEN** it presents a safe error or not-found state and does not expose an
   editable form using unvalidated metadata
+
+#### Scenario: Incomplete draft remains savable
+- **WHEN** a writer saves an otherwise valid draft with a missing required model or block field
+- **THEN** the draft save is allowed, while publication still applies the existing required-field rules and hidden-block exception
 
 ### Requirement: System fields have predictable collection-slug behavior
 Every page and collection entry editor SHALL present title as an explicit
@@ -279,16 +283,17 @@ and link URL forms, and SHALL not enable raw HTML input, HTML nodes, arbitrary
 attributes, inline event handlers, styles, or unsafe link schemes. Every
 document the editor produces, whether through the toolbar, a keyboard
 shortcut, an input rule, or paste, SHALL pass the shared rich-text validation;
-link marks SHALL carry only their URL and lists SHALL carry no attributes.
+link marks SHALL carry href plus only optional target "_blank" and rel "nofollow", with unchecked options omitted rather than serialized as null; lists, code blocks and horizontal rules SHALL carry no attributes. Code blocks SHALL contain only unmarked text and preserve spaces, tabs and line breaks, including empty code blocks. H1–H4 SHALL remain available without rewriting existing headings. All rich-text leaves inside groups, lists and block data SHALL use this same feature set without per-field restrictions.
 Invalid rich-text values SHALL expose an accessible local field error and SHALL
 not cause a complete-draft request.
 
 Each editable rich-text field SHALL show a fixed toolbar named after its field.
 The toolbar SHALL offer the following controls:
 
-- a text-style choice of Paragraph, Heading 1, Heading 2, and Heading 3;
+- a text-style choice of Paragraph, Heading 1, Heading 2, Heading 3, and Heading 4;
 - Bold, Italic, Strike, and Code toggles;
 - Bulleted list, Numbered list, and Quote toggles;
+- a plain Code block toggle and an Insert horizontal rule action;
 - a Link control.
 
 Each toggle SHALL expose whether its format is active at the current
@@ -303,7 +308,7 @@ from the text to the toolbar. Escape SHALL return focus from the toolbar to the
 text.
 
 The Link control SHALL open a labelled URL input prefilled with the current
-link's URL. It SHALL accept only URLs permitted by the shared allowlist; a
+link's URL and independent Open in a new tab and nofollow switches, prefilled from the existing link and unchecked for a new link. Applying SHALL store target "_blank" only when new-tab is checked and rel "nofollow" only when nofollow is checked; renderer-derived noopener/noreferrer SHALL NOT be stored. Editing SHALL allow either option to be cleared independently. Selection SHALL remain attached to the original text while the popover controls have focus. It SHALL accept only URLs permitted by the shared allowlist; a
 rejected URL SHALL leave the document unchanged and show an accessible error
 that states the permitted forms. Applying a URL SHALL link the selection, or
 the whole existing link when the cursor is inside one, or insert the URL as
@@ -332,7 +337,7 @@ placeholder.
 - **WHEN** a writer links selected text to `https://example.com` and turns a
   paragraph into a numbered list
 - **THEN** the stored document passes the shared rich-text validation, the link
-  mark carries only its URL, and the next Save sends a complete-draft request
+  mark carries its URL without unchecked optional attributes, and the next Save sends a complete-draft request
 
 #### Scenario: An unsafe link is refused in the link control
 - **WHEN** a writer enters `javascript:alert(1)` in the link control and applies
@@ -358,6 +363,26 @@ placeholder.
 - **WHEN** an editable rich-text field has no text
 - **THEN** it shows a placeholder that is exposed as the control's accessible
   placeholder, and a viewer sees neither the placeholder nor the toolbar
+
+#### Scenario: Expanded features remain editable
+- **WHEN** a writer opens an existing document containing H1–H4, a horizontal rule, an empty or multiline code block and links with any of the four new-tab/nofollow combinations
+- **THEN** opening preserves every feature without dirtying the draft, and the writer can create, change and remove those features through the fixed toolbar
+
+#### Scenario: Link choices are independent
+- **WHEN** a writer applies each combination of new-tab and nofollow, reopens the link and clears either switch
+- **THEN** the link retains exactly the selected supported attributes after save/reload and no null or renderer-derived attributes are stored
+
+#### Scenario: Link controls preserve the selected text
+- **WHEN** a writer selects text, opens Link, focuses its URL and switch controls, then applies or removes a link
+- **THEN** only the original selection or whole current link is updated and focus returns to the editor
+
+#### Scenario: Ordinary paste remains safe
+- **WHEN** a writer pastes ordinary HTML containing supported formatting alongside unsafe URLs or unsupported styles and attributes
+- **THEN** accepted pasted content uses only the shared safe document format and an invalid resulting value cannot be saved
+
+#### Scenario: Viewers inspect expanded documents
+- **WHEN** a viewer opens a document containing the expanded features and selects text or uses a formatting shortcut
+- **THEN** all content remains inspectable without mutation, fixed toolbar, bubble menu or editing popover
 
 ### Requirement: Generic block media fields use the existing media surface
 Generic block fields SHALL render from their validated portable metadata. A model or block media field SHALL choose its stored media identifier through the shared media picker dialog, which browses active items across opaque cursor pages with the library's thumbnails, filename search, type filter, and sort, and SHALL let permitted writers upload within that dialog and choose a confirmed upload. The picker SHALL expose labelled loading, empty, no-match, upload-progress, validation-failure, and list-failure states without silently changing the draft; choosing an item SHALL change only that field's value and SHALL NOT save the draft. A field with a value SHALL show the selected item as a thumbnail read through the admin preview boundary together with its filename and offer Replace, which reopens the picker, and Remove, which clears the value. The field SHALL resolve its value through an authorized single-item media read rather than by searching loaded list pages, SHALL label the resolving state, and SHALL NOT infer that an item is missing merely because it is outside a loaded page. When the value is pending deletion, has failed deletion, no longer exists, or cannot be read, the field SHALL show a distinct accessible state for that condition, SHALL retain the identifier in the draft until the writer replaces or removes it, and SHALL offer retry when the read failed for another reason than absence. No media field state SHALL display the raw media identifier. The editor SHALL associate server validation issues at model-field, block-data, rich-text, or URL paths with the matching visible control while preserving the writer's complete local draft.
@@ -1392,3 +1417,138 @@ identities, so indexed server errors cannot refer to a changed array.
 #### Scenario: Save and discard remain predictable
 - **WHEN** a writer saves nested edits, edits them again and discards
 - **THEN** the confirmed normalized draft is restored, explicit empty containers survive and the form is clean
+
+### Requirement: Selection formatting complements the fixed rich-text toolbar
+An editable rich-text field SHALL offer a compact selection bubble menu for Bold, Italic, Strike, inline Code and Link when nonempty text is selected in the focused visible editor. Its toggles SHALL reflect the selection and operate on it without losing the selection when controls take focus. Code-block content SHALL NOT offer unsupported marks or links. Every action SHALL remain available through the fixed toolbar and keyboard; the bubble SHALL NOT steal focus on appearance. Its controls SHALL have accessible names, visible focus and keyboard operation, and Escape SHALL dismiss it and return focus to the text. It SHALL disappear for a collapsed selection, hidden editor, focus outside its editor/controls or read-only field. Opening Link SHALL preserve the selection until application or dismissal.
+
+#### Scenario: Selected text can be formatted
+- **WHEN** a writer selects ordinary text and activates Bold or Link in its bubble menu
+- **THEN** the action applies to that selection, reports its active state where applicable, and the fixed toolbar remains available
+
+#### Scenario: Bubble appearance does not interrupt typing
+- **WHEN** a writer selects text using the keyboard and then collapses the selection or leaves the editor
+- **THEN** the bubble appears without moving focus and disappears after selection collapse or focus departure
+
+#### Scenario: Code blocks keep plain text
+- **WHEN** a writer selects code-block text
+- **THEN** controls cannot insert marks or links into that plain-text code block
+
+### Requirement: Expanded rich text survives authoring and publication
+Expanded rich-text content SHALL survive undo/redo, save/reload, list moves, group/list disclosures and block Content/Settings tabs while retaining existing editing identity and selection where applicable. Saving SHALL retain the complete document; a subsequent draft edit SHALL NOT change the published snapshot until publication. Published content SHALL render through the common Astro renderer with escaped code and exact whitespace, H4, horizontal rules and independent link options; new-tab links SHALL receive renderer-derived noopener noreferrer, merged with nofollow when requested. Existing H1–H3 and href-only documents SHALL remain editable without silent loss. Failed saves/publication or revision conflicts SHALL retain local expanded content under the existing recovery rules. Node and Cloudflare SHALL use the same document contract.
+
+#### Scenario: Nested editor state survives movement
+- **WHEN** a writer edits expanded rich text in a nested list item, moves it, closes and opens its disclosures and switches its block tabs
+- **THEN** content, undo history and selection where applicable remain associated with that item and the saved/reloaded document preserves all features
+
+#### Scenario: Published output matches the editor
+- **WHEN** an admin publishes a document with H4, rules, code containing angle brackets and multiple lines and all four link option combinations, and Astro builds from the published export
+- **THEN** output contains the matching safe elements, escaped code with exact whitespace and the corresponding target/rel attributes
+
+#### Scenario: Draft changes remain isolated
+- **WHEN** a writer changes expanded rich text after publication or receives a failed save or revision conflict
+- **THEN** public content remains the last published snapshot and complete local edits remain available for recovery
+
+### Requirement: Configured placeholders guide empty controls
+Editable text, textarea, URL, number, select and rich-text controls SHALL show configured placeholders when empty at every supported model and block data/settings depth, including scalar list items. An explicit inherited SEO/media placeholder SHALL take precedence; inherited explanations and configured descriptions SHALL remain available. Omitted placeholders SHALL retain existing control fallback behavior; an empty configured string SHALL suppress a generic fallback. Rich-text placeholders SHALL be exposed through aria-placeholder and SHALL NOT appear for viewers. Placeholders SHALL NOT replace labels, become content, dirty the draft or change defaults. Metadata updates SHALL NOT reset rich-text history, selection or form values.
+
+#### Scenario: Nested and scalar-item prompts
+- **WHEN** a writer opens empty nested text, select and rich-text fields and scalar list items with configured placeholders
+- **THEN** each appropriate control shows its configured prompt without creating values or unsaved changes
+
+#### Scenario: Inherited guidance wins
+- **WHEN** a field has a configured generic placeholder and an existing inherited media or SEO explanation
+- **THEN** inherited guidance remains the effective prompt and its accessible explanation is preserved
+
+#### Scenario: Rich-text metadata updates
+- **WHEN** a configured rich-text placeholder changes while the draft has content and undo history
+- **THEN** content, selection and undo history are retained without generating a content edit
+
+### Requirement: Required and constraint guidance is consistent and accessible
+Every applicable descriptor control SHALL show a visible required marker and explain required-for-publication semantics when required. Scalar labels and composite legends SHALL retain accessible names; controls SHALL expose required state through role-supported accessibility attributes or associated explanatory text without native required validation blocking draft saves. Guidance SHALL include configured descriptions and declared text length, numeric and list bounds with accurate draft/publication semantics. All associated description IDs SHALL resolve to existing elements, coexist with errors and inherited annotations, and remain readable in viewer mode. Guidance SHALL NOT materialize absent containers, change validation rules or introduce viewer mutation actions.
+
+#### Scenario: Required nested group and leaves
+- **WHEN** a model or block has a required group with required text, select, boolean, media and rich-text leaves
+- **THEN** its legend and applicable control labels expose required guidance and associated descriptions while an otherwise valid incomplete draft remains savable
+
+#### Scenario: List minima differ from hard maxima
+- **WHEN** a list declares minItems 2 and maxItems 5
+- **THEN** guidance explains the minimum applies to publication and the maximum to drafts as well, without changing existing list operations or budgets
+
+#### Scenario: Read-only and errors coexist
+- **WHEN** a viewer inspects nested fields with required state, constraints, configured descriptions and errors
+- **THEN** guidance and errors remain associated with the controls, disclosures remain usable and mutation actions are absent
+
+### Requirement: Ordinary text counters distinguish declared hard limits from SEO advice
+Text and textarea controls SHALL show a visible current count, including zero for an absent value, measured using raw UTF-16 length. When minLength or maxLength is declared, the counter and associated constraint guidance SHALL identify the declared bounds as validation limits. Unbounded fields SHALL show a count without inventing a limit. Counts SHALL be associated with the control, available in read-only inspection and absent from per-keystroke live announcements. Counter rendering SHALL NOT truncate input, block typing or replace existing save/publication validation. SEO counters SHALL explicitly identify 60/160 as recommendations, retain trimmed code-point counting and explain their separate existing hard limits.
+
+#### Scenario: Declared maximum and failed save
+- **WHEN** a writer enters an ordinary text value longer than maxLength
+- **THEN** the counter reflects its full raw length, guidance identifies the hard maximum and existing validation rejects saving without truncating the author's input
+
+#### Scenario: Optional absent field with minimum
+- **WHEN** an optional text field with minLength is absent
+- **THEN** its count is zero and its minimum guidance does not claim that absence prevents saving or publication
+
+#### Scenario: Counter after list moves and viewer inspection
+- **WHEN** text items are moved or duplicated in a nested list and the saved entry is later viewed read-only
+- **THEN** each visible count belongs to its current value and declared bounds and no counter announces every keystroke
+
+#### Scenario: SEO advice remains advisory
+- **WHEN** SEO title text exceeds 60 code points but remains within its hard limit
+- **THEN** the counter labels 60 as recommended, shows the advisory warning and permits saving
+
+### Requirement: Visual layouts preserve recursive form state and error access
+The admin SHALL render declared sections with accessible headings and tabs with labelled tablists/panels in metadata order. The first tab SHALL initially be selected; Left/Right, Home and End SHALL select and focus tabs with the standard tabs keyboard behavior. Narrow viewports SHALL retain access to all tab controls and fields without page-level horizontal overflow. Unlisted fields SHALL follow the layout in declaration order. Each form owner and list item SHALL own independent navigation state. Model layouts SHALL affect only model fields, block data layouts only the Content panel, and settings layouts only declared settings inside the existing Settings panel; SEO and system/envelope controls SHALL retain their established behavior.
+
+Hidden panels SHALL remain mounted, non-focusable and absent from the accessibility tree. Navigation SHALL preserve rich-text documents and editing identity, media selections, list item identity, local/transient values and validation errors. Navigating an absent group SHALL NOT create data or mark a draft dirty. Viewers SHALL be able to navigate layouts/disclosures but SHALL have no mutation affordances. Lifecycle requests SHALL retain existing editing locks.
+
+Tabs and sections containing descendant problems SHALL display accessible problem indicators under the existing publication/hidden-block rules. Validation-summary activation SHALL select every containing tab, open ancestor block/group/list disclosures and focus the exact leaf/container in the rendered visual order. Save/discard/revert, conflict retention and list/block moves SHALL preserve values and map errors to the current correct item; presentation state SHALL never be submitted or included in dirty comparison/conflict JSON.
+
+#### Scenario: Navigate and save a nested rich-text form
+- **WHEN** a writer edits rich text and media in a list-item tab, switches tabs, moves the item and saves
+- **THEN** current values and editing identity remain intact and the saved JSON uses the original paths
+
+#### Scenario: Reveal a nested hidden error
+- **WHEN** a summary entry targets a field inside an inactive tab of a collapsed item in an inactive block panel
+- **THEN** all containing panels/disclosures open and the exact control receives focus with its error visible
+
+#### Scenario: Navigate an unset group as a viewer
+- **WHEN** a viewer navigates configured layouts around an absent group using keyboard controls
+- **THEN** navigation works, values remain absent, no dirty change occurs and no mutation affordance appears
+
+#### Scenario: Recover after save failure or revision conflict
+- **WHEN** a layout-organized draft save fails or conflicts after editing nested fields
+- **THEN** local values remain available in every panel and existing discard/reload/conflict recovery works without serializing navigation state
+
+#### Scenario: Narrow-screen keyboard navigation
+- **WHEN** an author visits every tab using arrows, Home and End at a narrow viewport
+- **THEN** each selected tab is visible, its panel is keyboard accessible and no control is unreachable through overflow
+
+### Requirement: Collection creation starts with an automatic editable slug
+The collection Create entry dialog SHALL expose Slug and an initially enabled Suggest from title control. While enabled, title changes SHALL update the slug. Any manual slug change, including clearing it, SHALL disable automatic updates until explicitly re-enabled. Closing/cancelling or successfully completing creation SHALL reset dialog values and suggestion mode. Creation SHALL submit the displayed nonempty slug in the existing create request and omit an empty slug. The suggestion SHALL apply NFKD normalization, remove characters other than ASCII letters/digits, whitespace, underscore and hyphen, lowercase, trim, collapse whitespace/underscore/hyphen runs to one hyphen, trim boundary hyphens, truncate to the existing maximum slug length, and remove a resulting trailing hyphen. It SHALL NOT transliterate scripts, fabricate a fallback slug or promise uniqueness. Empty or wholly non-Latin titles SHALL yield an empty suggestion with guidance to enter a slug manually; an empty slug SHALL NOT prevent a valid draft creation.
+
+On success the created entry SHALL open with its persisted slug and no unsaved changes. Subsequent title edits SHALL NOT change that persisted slug automatically. Ordinary loads, refreshes, duplicated entries and entries without slugs SHALL NOT imply new-creation suggestion mode. The existing entry-editor opt-in suggestion behavior SHALL remain available and use the same normalizer. Creation errors SHALL retain title/slug and manual/automatic mode. Route validation and conflicts SHALL remain server-authoritative and use normal accessible error feedback without auto-appending suffixes. Pages/globals and viewers SHALL acquire no creation/slug affordances.
+
+#### Scenario: Follow a new title then stop on manual input
+- **WHEN** a writer enters `Café & News` in the creation dialog then manually changes `cafe-news` to `updates` and edits the title again
+- **THEN** `updates` stays unchanged until suggestions are explicitly re-enabled
+
+#### Scenario: Non-Latin or empty title
+- **WHEN** the title is empty or `Новости`
+- **THEN** the suggested slug is empty, manual-entry guidance is visible, and the existing nonempty-title requirement alone determines whether draft creation can proceed
+
+#### Scenario: Truncation leaves a valid boundary
+- **WHEN** a long normalized suggestion has a hyphen at the truncation boundary
+- **THEN** its trailing hyphen is removed and its nonempty result obeys the existing slug grammar and length limit
+
+#### Scenario: Preserve the created and existing slug
+- **WHEN** creation succeeds with `cafe-news` and the author edits the title in the editor or reloads the entry
+- **THEN** the slug stays `cafe-news` and no automatic update runs unless the author explicitly opts in
+
+#### Scenario: Preserve a slugless duplicate
+- **WHEN** an author opens a duplicated collection entry with no slug and edits its title
+- **THEN** its slug stays absent unless suggestions are explicitly enabled
+
+#### Scenario: Creation failure retains author input
+- **WHEN** the server rejects creation or a route conflict is reported by the existing lifecycle boundary
+- **THEN** normal error feedback is accessible, local values and suggestion mode remain intact, and no alternate slug is generated

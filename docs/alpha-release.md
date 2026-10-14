@@ -8,10 +8,12 @@ were not separately verified by this documentation update.
 
 The owner also confirmed completion of real VPS/Cloudflare application testing
 and recovery/upgrade checks; see the [owner status](./real-application-verification.md#owner-confirmed-status--2026-10-10).
-Preparation and acceptance never publish. The commands below describe the
-alpha.4 procedure historically; preparing another release requires selecting a
-new unpublished version first. With alpha.4 recorded as published,
-`release:check` and preparation intentionally reject reuse of that version.
+The next selected candidate is `0.1.0-alpha.5`, ownership template `0.29.0`,
+on npm channel `next`. Local preparation and exact-artifact acceptance passed on 2026-10-14; it is
+not published or real-deployment-verified by these local checks. Preparation and acceptance never publish; the commands below target
+alpha.5. Published alpha.1–alpha.4 remain immutable and cannot be prepared again
+as new candidates. See [alpha.5 release notes](./alpha-5-release-notes.md) for
+upgrade boundaries and candidate evidence.
 
 ## Coordinates and ownership
 
@@ -19,12 +21,18 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 
 | Artifact | Coordinate | Contents |
 | --- | --- | --- |
-| Generator | `create-lace@0.1.0-alpha.4` | Executable, declarations, templates, ownership inventory, MIT license |
-| Runtime graph | `@lacecms/*@0.1.0-alpha.4` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
-| API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.4` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.4` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
+| Generator | `create-lace@0.1.0-alpha.5` | Executable, declarations, templates, ownership inventory, MIT license |
+| Runtime graph | `@lacecms/*@0.1.0-alpha.5` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
+| API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.5` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
+| Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.5` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
 
 Read-only registry checks on 2026-10-07 returned 404 for alpha.4 for all fifteen npm packages and both GHCR versioned image manifests. This is historical availability evidence, superseded for npm packages by the owner publication confirmation above.
+Read-only checks on 2026-10-14 (Europe/Rome) returned 404 for alpha.5 versions
+of all fifteen npm packages; this neither reserves them nor establishes rights.
+The same read-only check returned 404 for both GHCR alpha.5 image manifests.
+The local npm account is unauthenticated (E401), so publishing rights are not
+verified; the owner must authenticate and recheck npm/GHCR rights before live
+publication. Local artifact preparation does not need publishing credentials.
 
 
 ### Selecting the next version
@@ -50,8 +58,8 @@ The checked-in `release/alpha.json` is the version/coordinate definition. The va
 pnpm install --frozen-lockfile
 pnpm release:check
 pnpm release:plan
-pnpm release:prepare --output .release-artifacts/alpha-4
-pnpm release:verify --output .release-artifacts/alpha-4
+pnpm release:prepare --output .release-artifacts/alpha-5
+pnpm release:verify --output .release-artifacts/alpha-5
 ```
 
 `release:plan` is the mutation-free dry-run plan; it does not build or need Docker. `release:prepare` builds the public graph in an isolated source snapshot, packs inspected archives in a disposable workspace, tests an isolated package consumer with test-only overrides, builds/loads both image platforms locally, exercises migrations/configuration/admin/native runtime and builder health, and saves the tested image archives. It does not build the reference Astro site against a live CMS during package compilation.
@@ -71,7 +79,7 @@ pnpm release:prepare --preview --output .release-artifacts/full-preview
 Run exact-artifact acceptance against the clean prepared inventory before publication:
 
 ```sh
-pnpm acceptance:release --artifacts .release-artifacts/alpha-4
+pnpm acceptance:release --artifacts .release-artifacts/alpha-5
 pnpm --filter @lacecms/platform-node test
 pnpm --filter @lacecms/platform-cloudflare test
 pnpm --dir apps/api test
@@ -107,7 +115,7 @@ An E404 means currently unpublished, not reserved. If it exists and you lack pub
 Publish from the repository root using the clean, acceptance-verified artifact directory:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/alpha-4
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-5
 ```
 
 This is a **live publication**. The script verifies the complete inventory and all archive checksums, checks every selected registry version before publishing anything, and publishes the exact saved tarballs in inventory order with `--access public --tag next`. It never repacks source directories and never moves `latest`. Authentication uses your local npm configuration (`npm login`).
@@ -115,13 +123,13 @@ This is a **live publication**. The script verifies the complete inventory and a
 To inspect the npm publication without publishing, explicitly add `--dry-run`:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/alpha-4 --dry-run
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-5 --dry-run
 ```
 
 Omit `--packages` to publish all fifteen packages. To select packages, pass a comma-separated list of full names or short scoped names; inventory order is preserved:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/alpha-4 --packages cli,sdk,create-lace
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-5 --packages cli,sdk,create-lace
 ```
 
 Matching published archives are skipped after comparing registry integrity with the saved tarball; a different archive stops the entire selected preflight. Re-running the same command resumes missing packages and ensures `next` points to the selected version. All missing packages are submitted consecutively in inventory order, without waiting for registry processing between uploads. Only after the entire batch has been sent does the script verify each version and its `next` tag against npm. npm may process an accepted upload for several minutes. This final batch verification polls pending versions concurrently for up to ten minutes, tolerates transient metadata errors, and saves each successful submission immediately in `publication-npm-submitted.json`. On timeout, rerun the same command: submitted versions are verified without uploading them again. Keep this journal with the artifact directory. A successful live run writes `publication-npm.json` beside the inventory; dry-runs write no receipt. The preparation inventory stays unchanged. A selected subset's receipt covers only that subset.
@@ -139,7 +147,7 @@ Use your GitHub account with publishing rights in organization `lacecms`. For ma
 Publish the saved API and builder archives for all prepared platforms, then assemble their versioned manifest lists:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-4
+pnpm release:publish:images --artifacts .release-artifacts/alpha-5
 ```
 
 This is a **live publication**. The script verifies the complete inventory/checksums and checks existing remote platform tags and versioned manifest lists before any local load or remote push. It loads the exact archives, verifies their image IDs and platforms, tags/pushes only missing platform images, and uses `docker buildx imagetools create` with verified remote digests to publish each multi-platform version tag. It never rebuilds images and never changes `latest`.
@@ -147,13 +155,13 @@ This is a **live publication**. The script verifies the complete inventory/check
 To review the plan without loading, tagging or pushing images, add `--dry-run`. This performs read-only registry checks and needs Docker CLI/Buildx and registry access:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-4 --dry-run
+pnpm release:publish:images --artifacts .release-artifacts/alpha-5 --dry-run
 ```
 
 Omit `--images` for both images, or select `api`, `builder`, or `api,builder`. Each selected image always includes all inventory platforms:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-4 --images api
+pnpm release:publish:images --artifacts .release-artifacts/alpha-5 --images api
 ```
 
 Re-running resumes missing platform tags and manifests. Existing artifacts must match the recorded config/image identities and expected platforms; conflicts stop publication. Registry authentication/network errors stop the run rather than being treated as missing images. A successful live run writes `publication-images.json` beside the inventory with remote platform/manifest digests and source identity. A selected subset's receipt covers only that subset. Neither publication command proves real deployment success or replaces exact-artifact acceptance.

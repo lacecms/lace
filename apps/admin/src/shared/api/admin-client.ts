@@ -187,7 +187,7 @@ export interface AdminClient {
   listTokens(): Promise<BuildTokenListDto>;
   createToken(name: string): Promise<BuildTokenCreatedDto>;
   revokeToken(tokenId: string): Promise<BuildTokenDto>;
-  createEntry(modelKey: string, title: string): Promise<AdminContentEntryDto>;
+  createEntry(modelKey: string, title: string, slug?: string): Promise<AdminContentEntryDto>;
   deleteEntry(entryId: string, expectedRevision: number): Promise<void>;
   loadEntry(entryId: string): Promise<AdminContentEntryDto>;
   listEntries(
@@ -603,11 +603,16 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
           method: "DELETE",
         }),
       ),
-    createEntry: async (modelKey: string, title: string) =>
+    createEntry: async (modelKey: string, title: string, slug?: string) =>
       parse(
         adminContentEntrySchema,
         await request(fetcher, `/api/v1/admin/models/${encodeURIComponent(modelKey)}/entries`, {
-          body: JSON.stringify({ blocks: [], fields: {}, title }),
+          body: JSON.stringify({
+            blocks: [],
+            fields: {},
+            title,
+            ...(slug === undefined || slug === "" ? {} : { slug }),
+          }),
           headers: { "content-type": "application/json" },
           method: "POST",
         }),

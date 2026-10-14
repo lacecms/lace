@@ -40,14 +40,19 @@ export interface CommonFieldOptions<Value> {
   readonly required?: boolean;
 }
 
+/** A prompt on controls with an editable empty text surface. */
+export interface PlaceholderFieldOptions<Value> extends CommonFieldOptions<Value> {
+  readonly placeholder?: string;
+}
+
 /** String-length constraints supported by text and textarea fields. */
-export interface StringFieldOptions extends CommonFieldOptions<string> {
+export interface StringFieldOptions extends PlaceholderFieldOptions<string> {
   readonly maxLength?: number;
   readonly minLength?: number;
 }
 
 /** Numeric bounds supported by number fields. */
-export interface NumberFieldOptions extends CommonFieldOptions<number> {
+export interface NumberFieldOptions extends PlaceholderFieldOptions<number> {
   readonly max?: number;
   readonly min?: number;
 }
@@ -59,12 +64,12 @@ export type BooleanFieldOptions = CommonFieldOptions<boolean>;
 export type StringValueFieldOptions = CommonFieldOptions<string>;
 
 /** Options supported by a safe Tiptap rich-text field. */
-export interface RichTextFieldOptions extends CommonFieldOptions<SafeRichTextDocument> {}
+export interface RichTextFieldOptions extends PlaceholderFieldOptions<SafeRichTextDocument> {}
 
 /** Options supported by select fields. */
-export interface SelectFieldOptions<Choices extends readonly string[]> extends CommonFieldOptions<
-  NoInfer<Choices[number]>
-> {
+export interface SelectFieldOptions<
+  Choices extends readonly string[],
+> extends PlaceholderFieldOptions<NoInfer<Choices[number]>> {
   readonly options: Choices;
 }
 
@@ -85,7 +90,8 @@ type PropertyFrom<Options, Key extends string> = Key extends keyof Options
 type DefaultFrom<Options> = PropertyFrom<Options, "defaultValue">;
 
 type LabelAndDescriptionFrom<Options> = PropertyFrom<Options, "label"> &
-  PropertyFrom<Options, "description">;
+  PropertyFrom<Options, "description"> &
+  PropertyFrom<Options, "placeholder">;
 
 type CommonDefinition<Type extends FieldType, Options> = {
   readonly required: RequiredFrom<Options>;
@@ -128,8 +134,9 @@ export type DatetimeFieldDefinition<
 > = CommonDefinition<"datetime", Options>;
 
 /** A URL-field descriptor. */
-export type UrlFieldDefinition<Options extends StringValueFieldOptions = StringValueFieldOptions> =
-  CommonDefinition<"url", Options>;
+export type UrlFieldDefinition<
+  Options extends PlaceholderFieldOptions<string> = PlaceholderFieldOptions<string>,
+> = CommonDefinition<"url", Options>;
 
 /** A media-field descriptor that stores a media identifier. */
 export type MediaFieldDefinition<
@@ -142,8 +149,72 @@ export type SelectFieldDefinition<
   Options extends SelectFieldOptions<Choices> = SelectFieldOptions<Choices>,
 > = CommonDefinition<"select", Options> & { readonly options: Choices };
 
+/** Ordered presentation of immediate sibling fields; never content data. */
+export interface FormLayout<Key extends string = string> {
+  readonly mode: "sections" | "tabs";
+  readonly groups: readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly description?: string;
+    readonly fields: readonly Key[];
+  }[];
+}
+
+/** Validates, detaches and freezes optional sibling layout metadata. */
+export function normalizeFormLayout<Key extends string>(
+  value: unknown,
+  fields: Readonly<Record<Key, unknown>>,
+  path = "layout",
+): FormLayout<Key> | undefined {
+  if (value === undefined) return undefined;
+  const raw = normalizeJsonValue(value, path, new WeakSet<object>());
+  if (
+    !isRecord(raw) ||
+    Object.keys(raw).some((key) => !["mode", "groups"].includes(key)) ||
+    (raw.mode !== "sections" && raw.mode !== "tabs") ||
+    !Array.isArray(raw.groups) ||
+    raw.groups.length === 0
+  )
+    fail(path, "must declare mode sections/tabs and nonempty groups.");
+  const keys = new Set<string>();
+  const placed = new Set<string>();
+  for (const [index, group] of raw.groups.entries()) {
+    const at = `${path}.groups.${index}`;
+    if (
+      !isRecord(group) ||
+      Object.keys(group).some((key) => !["key", "label", "description", "fields"].includes(key)) ||
+      typeof group.key !== "string" ||
+      !FIELD_KEY_PATTERN.test(group.key) ||
+      keys.has(group.key) ||
+      typeof group.label !== "string" ||
+      !group.label.trim() ||
+      (group.description !== undefined && typeof group.description !== "string") ||
+      !Array.isArray(group.fields) ||
+      group.fields.length === 0
+    )
+      fail(at, "must declare a unique key, nonempty label and fields.");
+    keys.add(group.key);
+    for (const key of group.fields) {
+      if (typeof key !== "string" || !Object.hasOwn(fields, key) || placed.has(key))
+        fail(at, `contains unknown or repeated field ${String(key)}.`);
+      placed.add(key);
+    }
+  }
+  return deepFreeze(raw) as unknown as FormLayout<Key>;
+}
+
+/** Sibling field order used by rendering and validation summaries. */
+export function formFieldKeys(
+  fields: Readonly<Record<string, unknown>>,
+  layout?: FormLayout,
+): readonly string[] {
+  const placed = layout?.groups.flatMap((group) => group.fields) ?? [];
+  return [...placed, ...Object.keys(fields).filter((key) => !placed.includes(key))];
+}
+
 /** A finite group of named child descriptors. */
 export interface GroupFieldDefinition {
+  readonly layout?: FormLayout;
   readonly type: "group";
   readonly fields: ModelFieldDefinitions;
   readonly required: boolean;
@@ -454,6 +525,9 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
     definition.description = description;
   }
 
+  const placeholder = readOptionalString(options, "placeholder");
+  if (placeholder !== undefined) definition.placeholder = placeholder;
+
   const renamedFrom = readOptionalString(options, "renamedFrom");
   if (renamedFrom !== undefined) {
     if (!RENAMED_FROM_PATTERN.test(renamedFrom)) {
@@ -503,6 +577,7 @@ function buildStringField<Type extends "text" | "textarea", Options extends Stri
     "label",
     "maxLength",
     "minLength",
+    "placeholder",
     "required",
   ]);
   const definition: Record<string, unknown> = { type };
@@ -526,8 +601,8 @@ function buildStringField<Type extends "text" | "textarea", Options extends Stri
     options,
     (value) =>
       typeof value === "string" &&
-      (minLength === undefined || value.length >= minLength) &&
-      (maxLength === undefined || value.length <= maxLength),
+      (minLength === undefined || textLength(value) >= minLength) &&
+      (maxLength === undefined || textLength(value) <= maxLength),
     "must be a string that conforms to the declared length constraints.",
   );
 
@@ -541,7 +616,13 @@ function buildStringValueField<
   Options extends StringValueFieldOptions,
 >(type: Type, input: Options | undefined): FieldDefinition {
   const options = normalizeOptions(input ?? {});
-  assertAllowedOptions(options, ["defaultValue", "description", "label", "required"]);
+  assertAllowedOptions(options, [
+    "defaultValue",
+    "description",
+    "label",
+    "required",
+    ...(type === "url" ? ["placeholder"] : []),
+  ]);
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
   addDefault(definition, options, (value) => typeof value === "string", "must be a string.");
@@ -557,12 +638,14 @@ export const field = {
         NoInfer<{
           readonly [Key in keyof Options["fields"]]?: DraftFieldValue<Options["fields"][Key]>;
         }>
-      >,
-  ): CommonDefinition<"group", Options> & { readonly fields: Options["fields"] } {
+      > & { readonly layout?: FormLayout<keyof Options["fields"] & string> },
+  ): CommonDefinition<"group", Options> &
+    PropertyFrom<Options, "layout"> & { readonly fields: Options["fields"] } {
     return normalizeCompositeOptions("group", options) as unknown as CommonDefinition<
       "group",
       Options
-    > & { readonly fields: Options["fields"] };
+    > &
+      PropertyFrom<Options, "layout"> & { readonly fields: Options["fields"] };
   },
 
   /** Define an ordered array of scalar or group values. */
@@ -608,7 +691,13 @@ export const field = {
     options?: Options,
   ): RichTextFieldDefinition<Options> {
     const normalized = normalizeOptions(options ?? {});
-    assertAllowedOptions(normalized, ["defaultValue", "description", "label", "required"]);
+    assertAllowedOptions(normalized, [
+      "defaultValue",
+      "description",
+      "label",
+      "required",
+      "placeholder",
+    ]);
     const definition: Record<string, unknown> = { type: "richText" };
     addCommonOptions(definition, normalized);
     addDefault(
@@ -629,6 +718,7 @@ export const field = {
       "defaultValue",
       "description",
       "label",
+      "placeholder",
       "max",
       "min",
       "required",
@@ -699,6 +789,7 @@ export const field = {
       "description",
       "label",
       "options",
+      "placeholder",
       "required",
     ]);
     const rawChoices = normalized.options;
@@ -734,7 +825,7 @@ export const field = {
   },
 
   /** Define a URL string field; URL protocol validation is added in Session 2B. */
-  url<const Options extends StringValueFieldOptions = StringValueFieldOptions>(
+  url<const Options extends PlaceholderFieldOptions<string> = PlaceholderFieldOptions<string>>(
     options?: Options,
   ): UrlFieldDefinition<Options> {
     return buildStringValueField("url", options) as UrlFieldDefinition<Options>;
@@ -832,7 +923,7 @@ function normalizeDescriptor(
     "required",
     "defaultValue",
     "renamedFrom",
-    ...(type === "group" ? ["fields"] : ["item", "minItems", "maxItems", "itemLabel"]),
+    ...(type === "group" ? ["fields", "layout"] : ["item", "minItems", "maxItems", "itemLabel"]),
   ];
   for (const key of Object.keys(options))
     if (!allowed.includes(key)) fail(`${path}.${key}`, "is not supported by this field type.");
@@ -860,6 +951,8 @@ function normalizeDescriptor(
         });
       }
       result.fields = output;
+      const layout = normalizeFormLayout(options.layout, output, `${path}.layout`);
+      if (layout !== undefined) result.layout = layout;
     } else {
       const child = descriptorRecord(item, `${path}.item`);
       if (child.type === "list") fail(`${path}.item`, "must not be a direct list of lists.");
@@ -917,15 +1010,26 @@ function normalizeDescriptor(
 /** A mark permitted in Lace rich-text documents. */
 export type SafeRichTextMark =
   | { readonly type: "bold" | "code" | "italic" | "strike" }
-  | { readonly attrs: { readonly href: string }; readonly type: "link" };
+  | {
+      readonly attrs: {
+        readonly href: string;
+        readonly target?: "_blank";
+        readonly rel?: "nofollow";
+      };
+      readonly type: "link";
+    };
 
 /** A node permitted in Lace rich-text documents. */
 export type SafeRichTextNode =
-  | { readonly type: "hardBreak" }
+  | { readonly type: "hardBreak" | "horizontalRule" }
+  | {
+      readonly content?: readonly { readonly text: string; readonly type: "text" }[];
+      readonly type: "codeBlock";
+    }
   | { readonly marks?: readonly SafeRichTextMark[]; readonly text: string; readonly type: "text" }
   | { readonly content?: readonly SafeRichTextNode[]; readonly type: "paragraph" }
   | {
-      readonly attrs: { readonly level: 1 | 2 | 3 };
+      readonly attrs: { readonly level: 1 | 2 | 3 | 4 };
       readonly content?: readonly SafeRichTextNode[];
       readonly type: "heading";
     }
@@ -1034,7 +1138,13 @@ function assertMarks(value: unknown, path: readonly ValidationPathSegment[]): vo
       if (!isRecord(mark.attrs)) {
         invalid([...markPath, "attrs"], "invalid_link_attributes", "must be an object.");
       }
-      assertExactKeys(mark.attrs, ["href"], [], [...markPath, "attrs"]);
+      assertExactKeys(mark.attrs, ["href"], ["target", "rel"], [...markPath, "attrs"]);
+      if (Object.hasOwn(mark.attrs, "target") && mark.attrs.target !== "_blank") {
+        invalid([...markPath, "attrs", "target"], "invalid_link_target", 'must be "_blank".');
+      }
+      if (Object.hasOwn(mark.attrs, "rel") && mark.attrs.rel !== "nofollow") {
+        invalid([...markPath, "attrs", "rel"], "invalid_link_rel", 'must be "nofollow".');
+      }
       if (!isSafeUrl(mark.attrs.href)) {
         invalid([...markPath, "attrs", "href"], "unsafe_url", "must be an approved URL.");
       }
@@ -1088,8 +1198,21 @@ function assertRichTextNode(
     return;
   }
 
-  if (value.type === "hardBreak") {
+  if (value.type === "hardBreak" || value.type === "horizontalRule") {
     assertExactKeys(value, ["type"], [], path);
+    return;
+  }
+
+  if (value.type === "codeBlock") {
+    assertExactKeys(value, ["type"], ["content"], path);
+    if (Object.hasOwn(value, "content")) {
+      assertRichTextChildren(value.content, [...path, "content"], ["text"]);
+      for (const [index, child] of (
+        value.content as readonly Record<string, unknown>[]
+      ).entries()) {
+        assertExactKeys(child, ["type", "text"], [], [...path, "content", index]);
+      }
+    }
     return;
   }
 
@@ -1107,8 +1230,13 @@ function assertRichTextNode(
       invalid([...path, "attrs"], "invalid_heading_attributes", "must be an object.");
     }
     assertExactKeys(value.attrs, ["level"], [], [...path, "attrs"]);
-    if (value.attrs.level !== 1 && value.attrs.level !== 2 && value.attrs.level !== 3) {
-      invalid([...path, "attrs", "level"], "invalid_heading_level", "must be 1, 2, or 3.");
+    if (
+      value.attrs.level !== 1 &&
+      value.attrs.level !== 2 &&
+      value.attrs.level !== 3 &&
+      value.attrs.level !== 4
+    ) {
+      invalid([...path, "attrs", "level"], "invalid_heading_level", "must be 1, 2, 3, or 4.");
     }
     if (Object.hasOwn(value, "content")) {
       assertRichTextChildren(value.content, [...path, "content"], ["hardBreak", "text"]);
@@ -1127,7 +1255,7 @@ function assertRichTextNode(
     assertRichTextChildren(
       value.content,
       [...path, "content"],
-      ["bulletList", "orderedList", "paragraph"],
+      ["bulletList", "orderedList", "paragraph", "horizontalRule", "codeBlock"],
     );
     return;
   }
@@ -1137,7 +1265,7 @@ function assertRichTextNode(
     assertRichTextChildren(
       value.content,
       [...path, "content"],
-      ["bulletList", "orderedList", "paragraph"],
+      ["bulletList", "orderedList", "paragraph", "horizontalRule", "codeBlock"],
     );
     return;
   }
@@ -1154,7 +1282,15 @@ export function validateRichTextDocument(value: unknown): SafeRichTextDocument {
   assertRichTextChildren(
     value.content,
     ["content"],
-    ["blockquote", "bulletList", "heading", "orderedList", "paragraph"],
+    [
+      "blockquote",
+      "bulletList",
+      "heading",
+      "orderedList",
+      "paragraph",
+      "horizontalRule",
+      "codeBlock",
+    ],
   );
   return value as unknown as SafeRichTextDocument;
 }
@@ -1251,12 +1387,12 @@ function isFieldValue(definition: FieldDefinition, value: unknown): boolean {
       typeof value === "string" && fieldDefinition.options.includes(value),
     text: (fieldDefinition) =>
       typeof value === "string" &&
-      (fieldDefinition.minLength === undefined || value.length >= fieldDefinition.minLength) &&
-      (fieldDefinition.maxLength === undefined || value.length <= fieldDefinition.maxLength),
+      (fieldDefinition.minLength === undefined || textLength(value) >= fieldDefinition.minLength) &&
+      (fieldDefinition.maxLength === undefined || textLength(value) <= fieldDefinition.maxLength),
     textarea: (fieldDefinition) =>
       typeof value === "string" &&
-      (fieldDefinition.minLength === undefined || value.length >= fieldDefinition.minLength) &&
-      (fieldDefinition.maxLength === undefined || value.length <= fieldDefinition.maxLength),
+      (fieldDefinition.minLength === undefined || textLength(value) >= fieldDefinition.minLength) &&
+      (fieldDefinition.maxLength === undefined || textLength(value) <= fieldDefinition.maxLength),
     url: () => isSafeUrl(value),
   });
 }
@@ -1585,6 +1721,8 @@ export interface BlockDefinitionInput<
   readonly defaultValue?: unknown;
   readonly description?: string;
   readonly fields: Fields;
+  readonly layout?: FormLayout<keyof Fields & string>;
+  readonly settingsLayout?: FormLayout<keyof Settings & string>;
   readonly label?: string;
   /** Data and settings migrations from earlier versions, keyed by target version. */
   readonly migrations?: BlockMigrations;
@@ -1620,6 +1758,8 @@ export interface BlockMetadata<
   readonly defaultValue?: BlockDataValues<Fields>;
   readonly description?: string;
   readonly fields: Fields;
+  readonly layout?: FormLayout<keyof Fields & string>;
+  readonly settingsLayout?: FormLayout<keyof Settings & string>;
   readonly label?: string;
   /** Declared settings; absent when the block declares none. */
   readonly settings?: Settings;
@@ -1742,6 +1882,8 @@ export function defineBlock<
         "fields",
         "label",
         "migrations",
+        "layout",
+        "settingsLayout",
         "settings",
         "type",
         "version",
@@ -1772,6 +1914,12 @@ export function defineBlock<
   const fields = normalizeBlockFields(input.fields) as Fields;
   const migrations = normalizeBlockMigrations(input.migrations, input.version);
   const settings = normalizeBlockSettings(input.settings) as Settings | undefined;
+  const layout = normalizeFormLayout(input.layout, fields, `block.${input.type}.layout`);
+  const settingsLayout = normalizeFormLayout(
+    input.settingsLayout,
+    settings ?? {},
+    `block.${input.type}.settingsLayout`,
+  );
   let defaultValue: BlockDataValues<Fields> | undefined;
   if (input.defaultValue !== undefined) {
     try {
@@ -1799,6 +1947,8 @@ export function defineBlock<
     fields,
     ...(input.label === undefined ? {} : { label: input.label }),
     ...(migrations === undefined ? {} : { migrations }),
+    ...(layout === undefined ? {} : { layout }),
+    ...(settingsLayout === undefined ? {} : { settingsLayout }),
     ...(settings === undefined ? {} : { settings }),
     type: input.type,
     validate: (value, mode) => {
@@ -1825,6 +1975,17 @@ export function toBlockMetadata(definition: BlockDefinition): BlockMetadata {
       ]),
     ),
     ...(definition.label === undefined ? {} : { label: definition.label }),
+    ...(definition.layout === undefined
+      ? {}
+      : { layout: normalizeFormLayout(definition.layout, definition.fields)! }),
+    ...(definition.settingsLayout === undefined
+      ? {}
+      : {
+          settingsLayout: normalizeFormLayout(
+            definition.settingsLayout,
+            definition.settings ?? {},
+          )!,
+        }),
     ...(definition.settings === undefined
       ? {}
       : {
@@ -2506,3 +2667,13 @@ export function validateEntryAggregate(
 }
 
 export { parseSchemaPath, encodeSchemaPath, schemaFieldAt } from "./schema-path.js";
+
+/** Raw UTF-16 units: the existing text/textarea length contract, without trimming. */
+export function textLength(value: string): number {
+  return value.length;
+}
+
+/** Trimmed Unicode code points: the existing SEO title/description contract. */
+export function seoTextLength(value: string): number {
+  return [...value.trim()].length;
+}

@@ -43,7 +43,7 @@ test("entry creation refreshes the collection list and opens the new entry", asy
   const createDialog = screen.getByRole("dialog", { name: "Create entry" });
   await user.type(within(createDialog).getByLabelText("Title"), "New post");
   await user.click(within(createDialog).getByRole("button", { name: "Create entry" }));
-  await waitFor(() => expect(createEntry).toHaveBeenCalledWith("posts", "New post"));
+  await waitFor(() => expect(createEntry).toHaveBeenCalledWith("posts", "New post", "new-post"));
   await waitFor(() => expect(overviewCalls()).toHaveLength(2));
   await waitFor(() => expect(router.state.location.pathname).toBe("/content/posts/entry-new"));
   const title = await screen.findByRole("textbox", { name: "Title" });
@@ -62,7 +62,7 @@ test("requires a non-blank title, keeps failures in the dialog, and resets on ca
   await user.click(await screen.findByRole("button", { name: "Create entry" }));
   const dialog = screen.getByRole("dialog", { name: "Create entry" });
   expect(dialog).toHaveAccessibleDescription(
-    "Add a draft to Posts. You can set its slug and fields in the editor.",
+    "Add a draft to Posts. Choose its slug here and edit its fields in the editor.",
   );
   const title = within(dialog).getByLabelText("Title");
   expect(title).toHaveFocus();
@@ -75,7 +75,7 @@ test("requires a non-blank title, keeps failures in the dialog, and resets on ca
   await user.type(title, "  Launch  ");
   await user.click(submit);
   expect(await within(dialog).findByRole("alert")).toHaveTextContent("Model not synchronized.");
-  expect(createEntry).toHaveBeenCalledWith("posts", "Launch");
+  expect(createEntry).toHaveBeenCalledWith("posts", "Launch", "launch");
 
   await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -84,4 +84,37 @@ test("requires a non-blank title, keeps failures in the dialog, and resets on ca
   expect(within(reopened).getByLabelText("Title")).toHaveValue("");
   expect(within(reopened).queryByRole("alert")).not.toBeInTheDocument();
   expect(createEntry).toHaveBeenCalledTimes(1);
+});
+
+test("CE9B manual slug mode survives failure, clear and title changes until re-enabled", async () => {
+  const user = userEvent.setup();
+  const createEntry = vi
+    .fn()
+    .mockRejectedValue(new AdminClientError({ message: "Rejected slug", status: 422 }));
+  renderInRouter(<CreateEntryDialog modelKey="posts" />, { client: client({ createEntry }) });
+  await user.click(await screen.findByRole("button", { name: "Create entry" }));
+  const dialog = within(screen.getByRole("dialog", { name: "Create entry" }));
+  const title = dialog.getByRole("textbox", { name: "Title" });
+  const slug = dialog.getByRole("textbox", { name: "Slug" });
+  await user.type(title, "Café & News");
+  expect(slug).toHaveValue("cafe-news");
+  await user.clear(slug);
+  await user.type(slug, "manual");
+  await user.clear(title);
+  await user.type(title, "Later");
+  expect(slug).toHaveValue("manual");
+  expect(dialog.getByRole("checkbox")).not.toBeChecked();
+  await user.click(dialog.getByRole("button", { name: "Create entry" }));
+  await dialog.findByRole("alert");
+  expect(slug).toHaveValue("manual");
+  expect(dialog.getByRole("checkbox")).not.toBeChecked();
+  await user.clear(slug);
+  await user.click(dialog.getByRole("button", { name: "Create entry" }));
+  await waitFor(() => expect(createEntry).toHaveBeenLastCalledWith("posts", "Later", undefined));
+  await user.click(dialog.getByRole("checkbox"));
+  expect(slug).toHaveValue("later");
+  await user.clear(title);
+  await user.type(title, "Новости");
+  expect(slug).toHaveValue("");
+  expect(dialog.getByText(/Enter a slug manually/)).toBeVisible();
 });

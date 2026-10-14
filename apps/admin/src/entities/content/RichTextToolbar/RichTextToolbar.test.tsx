@@ -128,3 +128,25 @@ test("opens the link popover from the Link control", async () => {
   expect(await screen.findByLabelText("Link URL")).toHaveFocus();
   expect(screen.getByRole("button", { name: "Link" })).toHaveAttribute("aria-expanded", "true");
 });
+
+test("offers H4, attribute-free code and rules with plain-code marks disabled", async () => {
+  const user = userEvent.setup();
+  render(<Harness content="<h4>Hello</h4>" />);
+  await screen.findByRole("toolbar", { name: "Body formatting" });
+  editor().commands.setTextSelection(2);
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "Text style" })).toHaveTextContent("Heading 4"),
+  );
+  await user.click(screen.getByRole("button", { name: "Code block" }));
+  expect(editor().getJSON().content?.[0]?.type).toBe("codeBlock");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled());
+  expect(screen.getByRole("button", { name: "Link" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Code block" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Bold" })).toBeEnabled());
+  await user.click(screen.getByRole("button", { name: "Insert horizontal rule" }));
+  expect(
+    editor()
+      .getJSON()
+      .content?.some((node) => node.type === "horizontalRule"),
+  ).toBe(true);
+});

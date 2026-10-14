@@ -460,12 +460,15 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const create = tab.getByRole("dialog", { name: "Create entry" });
     await create.getByRole("textbox", { name: "Title" }).fill("Cloudflare published title");
     await create.getByRole("button", { name: "Create entry" }).click();
+    // CE9 also gives the creation dialog a Slug input. Wait for it to close
+    // before editing the entry so this locator cannot target the old dialog.
+    await create.waitFor({ state: "hidden", timeout: 30_000 });
     // Creating an entry opens it in the editor.
     await visible(
-      tab.getByRole("textbox", { name: "Slug" }),
+      main.getByRole("textbox", { name: "Slug", exact: true }),
       "cloudflare-browser-create-opens-editor",
     );
-    await tab.getByRole("textbox", { name: "Slug" }).fill("cloudflare");
+    await main.getByRole("textbox", { name: "Slug", exact: true }).fill("cloudflare");
     await tab.getByRole("textbox", { name: "Summary" }).fill("Cloudflare summary");
     await tab.getByRole("button", { name: "Add block" }).click();
     await tab
@@ -487,7 +490,6 @@ export async function cloudflareConsumerJourney(parent, operations) {
       "cloudflare-browser-publish",
     );
     const cookie = await login(base, email, password, secretValues);
-    await consumer34bSecurity({ base, cookie, png });
     // The starter needs the synchronized home page published as well.
     const homes = await json(base, "api/v1/admin/models/home/entries", { headers: { cookie } });
     const homeId = homes?.items?.[0]?.id;
@@ -503,7 +505,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("link", { name: "Settings", exact: true })
       .click();
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
-    await visible(tab.getByText("0.1.0-alpha.4", { exact: true }), "cloudflare-cms-release");
+    await visible(tab.getByText("0.1.0-alpha.5", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
     // Keep both publications together for build coalescing. Browser assertions
     // are complete: drain requests, then stop polling before the API journey.
@@ -516,10 +518,17 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const pending = await waitBuild(base, cookie, (build) => build.error !== undefined, 30_000);
     if (pending.status !== "pending" || !/trigger_unavailable/u.test(pending.error ?? ""))
       throw new Error(`cloudflare-hook-unavailable: unexpected build ${JSON.stringify(pending)}`);
-    if (hook.calls.length !== 1)
-      throw new Error(
-        `cloudflare-hook-unavailable: expected one hook call, saw ${hook.calls.length}`,
-      );
+    // Post-commit dispatch can make the first failed attempt before the
+    // explicit scheduled call retries it. Coalescing promises one durable
+    // build, not one HTTP attempt while its hook is unavailable.
+    const failedCalls = hook.calls.length;
+    const pendingHistory = await json(base, "api/v1/admin/site-builds", { headers: { cookie } });
+    if (
+      failedCalls < 1 ||
+      pendingHistory.items?.length !== 1 ||
+      pendingHistory.items[0].id !== pending.id
+    )
+      throw new Error("cloudflare-hook-unavailable: publications did not coalesce into one build");
 
     const ready = doctor("ready", "ready", { LACE_BUILD_TOKEN: "present-but-unverified" });
     if (
@@ -543,7 +552,8 @@ export async function cloudflareConsumerJourney(parent, operations) {
         `cloudflare-hook-recovered: untracked accepted hook must be accepted, not ${accepted.status}`,
       );
     if (
-      hook.calls.length !== 2 ||
+      accepted.id !== pending.id ||
+      hook.calls.length !== failedCalls + 1 ||
       hook.calls.some(
         (call) =>
           call.method !== "POST" ||
@@ -558,6 +568,11 @@ export async function cloudflareConsumerJourney(parent, operations) {
     );
     assertSecretFree(history, [hook.url], "build history");
 
+    // Keep the publications adjacent and complete hook recovery before the
+    // negative mutation probes: successful probes also trigger post-commit
+    // dispatch and must not claim a publication during this coalescing check.
+    await consumer34bSecurity({ base, cookie, png });
+
     console.info("Acceptance: cloudflare-astro-build");
     const issued = await json(base, "api/v1/admin/api-tokens", {
       method: "POST",
@@ -569,6 +584,11 @@ export async function cloudflareConsumerJourney(parent, operations) {
     secretValues.add(buildToken);
     const exportHeaders = { authorization: `Bearer ${buildToken}` };
     const published = await json(base, "api/v1/public/build-export", { headers: exportHeaders });
+    const publishedPost = published.entries?.find((entry) => entry.modelKey === "posts");
+    if (publishedPost?.slug !== "cloudflare")
+      throw new Error(
+        `cloudflare-publication: expected slug cloudflare, got ${JSON.stringify(publishedPost?.slug)}`,
+      );
     const build = async (stage) => {
       await run(stage, "pnpm", ["build"], {
         cwd: project,
@@ -891,6 +911,6 @@ async function login(base, email, password, secretValues) {
 async function expectModels(base, cookie) {
   const models = await json(base, "api/v1/admin/content-models", { headers: { cookie } });
   const keys = models?.items?.map((item) => item.key);
-  if (JSON.stringify(keys) !== JSON.stringify(["home", "posts"]))
+  if (JSON.stringify(keys) !== JSON.stringify(["home", "navigation", "posts", "settings"]))
     throw new Error(`cloudflare-config: unexpected models ${JSON.stringify(keys)}`);
 }

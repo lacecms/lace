@@ -247,7 +247,7 @@ test("an image block's empty alt field shows the inherited media alt", async () 
   mountImage({ alt: "Red bicycle" });
   const alt = await screen.findByRole("textbox", { name: "Alt" });
   await waitFor(() => expect(alt).toHaveAttribute("placeholder", "Uses media alt: Red bicycle"));
-  expect(alt).toHaveAccessibleDescription("Uses media alt: Red bicycle");
+  expect(alt).toHaveAccessibleDescription("0 characters Uses media alt: Red bicycle");
   expect(screen.queryByText(/has no alt text/)).toBeNull();
 });
 

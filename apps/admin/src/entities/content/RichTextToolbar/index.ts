@@ -1,1 +1,1 @@
-export { formatShortcut, RichTextToolbar } from "./RichTextToolbar.js";
+export { richTextToggles, formatShortcut, RichTextToolbar } from "./RichTextToolbar.js";

@@ -22,9 +22,12 @@ export type RichTextTag =
   | "h1"
   | "h2"
   | "h3"
+  | "h4"
+  | "hr"
   | "li"
   | "ol"
   | "p"
+  | "pre"
   | "s"
   | "strong"
   | "ul";
@@ -37,7 +40,11 @@ export interface RichTextTextDescription {
 
 /** An allowlisted element with only safe attributes. */
 export interface RichTextElementDescription {
-  readonly attributes: Readonly<{ href?: string }>;
+  readonly attributes: Readonly<{
+    href?: string;
+    target?: "_blank";
+    rel?: "nofollow" | "noopener noreferrer" | "noopener noreferrer nofollow";
+  }>;
   readonly children: readonly RichTextDescriptionNode[];
   readonly kind: "element";
   readonly source: RichTextSource;
@@ -46,13 +53,13 @@ export interface RichTextElementDescription {
 
 export type RichTextDescriptionNode = RichTextElementDescription | RichTextTextDescription;
 
-const noAttributes: Readonly<{ href?: string }> = Object.freeze({});
+const noAttributes: RichTextElementDescription["attributes"] = Object.freeze({});
 
 function element(
   tag: RichTextTag,
   source: RichTextSource,
   children: readonly RichTextDescriptionNode[],
-  attributes: Readonly<{ href?: string }> = noAttributes,
+  attributes: RichTextElementDescription["attributes"] = noAttributes,
 ): RichTextElementDescription {
   return Object.freeze({
     attributes,
@@ -69,7 +76,22 @@ function describeMarks(text: string, marks: readonly SafeRichTextMark[]): RichTe
   for (const mark of [...marks].reverse()) {
     if (mark.type === "link") {
       if (!isSafeUrl(mark.attrs.href)) throw new TypeError("Unsafe link reached rendering.");
-      node = element("a", "link", [node], Object.freeze({ href: mark.attrs.href }));
+      const rel =
+        mark.attrs.target === "_blank"
+          ? mark.attrs.rel === "nofollow"
+            ? "noopener noreferrer nofollow"
+            : "noopener noreferrer"
+          : mark.attrs.rel;
+      node = element(
+        "a",
+        "link",
+        [node],
+        Object.freeze({
+          href: mark.attrs.href,
+          ...(mark.attrs.target === undefined ? {} : { target: mark.attrs.target }),
+          ...(rel === undefined ? {} : { rel }),
+        }),
+      );
     } else if (mark.type === "bold") node = element("strong", "bold", [node]);
     else if (mark.type === "italic") node = element("em", "italic", [node]);
     else if (mark.type === "strike") node = element("s", "strike", [node]);
@@ -88,6 +110,12 @@ function describeNode(node: SafeRichTextNode): RichTextDescriptionNode {
       return describeMarks(node.text, node.marks ?? []);
     case "hardBreak":
       return element("br", "hardBreak", []);
+    case "horizontalRule":
+      return element("hr", "horizontalRule", []);
+    case "codeBlock":
+      return element("pre", "codeBlock", [
+        element("code", "codeBlock", describeNodes(node.content)),
+      ]);
     case "paragraph":
       return element("p", "paragraph", describeNodes(node.content));
     case "heading":

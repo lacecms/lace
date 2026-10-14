@@ -528,11 +528,11 @@ const parityCorpus = [
   ["data link", link("data:text/html,<b>x</b>")],
   ["link with whitespace", link("https://exa mple.com")],
   [
-    "link with target attribute",
+    "link with supported target attribute",
     doc(paragraph(text("x", [{ attrs: { href: "/", target: "_blank" }, type: "link" }]))),
   ],
   ["unknown mark", doc(paragraph(text("x", [{ type: "underline" }])))],
-  ["unknown node", doc({ content: [text("x")], type: "codeBlock" })],
+  ["plain code block", doc({ content: [text("x")], type: "codeBlock" })],
   ["html node", doc({ html: "<b>x</b>", type: "html" })],
   ["heading level 4", doc({ attrs: { level: 4 }, type: "heading" })],
   ["text at root", doc(text("x"))],
@@ -580,8 +580,8 @@ test("the parity corpus covers both accepted and rejected documents", () => {
       return false;
     }
   });
-  expect(accepted.length).toBe(11);
-  expect(parityCorpus.length - accepted.length).toBe(20);
+  expect(accepted.length).toBe(14);
+  expect(parityCorpus.length - accepted.length).toBe(17);
 });
 
 test("renders composite defaults and reports numeric leaf paths with context", () => {
@@ -615,4 +615,116 @@ test("renders composite defaults and reports numeric leaf paths with context", (
     parseBlock(definition, block("nested", { rows: Array(101).fill({ href: "/" }) }), context),
   );
   expect(oversized.cause.issues[0].code).toBe("list_too_long");
+});
+
+test.each([
+  [{}, { href: "/safe" }],
+  [{ rel: "nofollow" }, { href: "/safe", rel: "nofollow" }],
+  [{ target: "_blank" }, { href: "/safe", target: "_blank", rel: "noopener noreferrer" }],
+  [
+    { target: "_blank", rel: "nofollow" },
+    { href: "/safe", target: "_blank", rel: "noopener noreferrer nofollow" },
+  ],
+])("describes independent link choices %#", (attrs, expected) => {
+  const [paragraph] = describeRichText(
+    doc({
+      content: [text("Link", [{ type: "link", attrs: { href: "/safe", ...attrs } }])],
+      type: "paragraph",
+    }),
+  );
+  expect(paragraph.children[0]).toEqual({
+    attributes: expected,
+    children: [{ kind: "text", text: "Link" }],
+    kind: "element",
+    source: "link",
+    tag: "a",
+  });
+});
+
+test("describes h4, void rules and pre/code without altering code text", () => {
+  const code = "\t  <script>&\nnext\n";
+  expect(
+    describeRichText(
+      doc(
+        { attrs: { level: 4 }, content: [text("Title")], type: "heading" },
+        { type: "horizontalRule" },
+        { content: [text(code)], type: "codeBlock" },
+        { type: "codeBlock" },
+      ),
+    ),
+  ).toEqual([
+    {
+      attributes: {},
+      children: [{ kind: "text", text: "Title" }],
+      kind: "element",
+      source: "heading",
+      tag: "h4",
+    },
+    { attributes: {}, children: [], kind: "element", source: "horizontalRule", tag: "hr" },
+    {
+      attributes: {},
+      children: [
+        {
+          attributes: {},
+          children: [{ kind: "text", text: code }],
+          kind: "element",
+          source: "codeBlock",
+          tag: "code",
+        },
+      ],
+      kind: "element",
+      source: "codeBlock",
+      tag: "pre",
+    },
+    {
+      attributes: {},
+      children: [
+        { attributes: {}, children: [], kind: "element", source: "codeBlock", tag: "code" },
+      ],
+      kind: "element",
+      source: "codeBlock",
+      tag: "pre",
+    },
+  ]);
+});
+
+const expandedParityCorpus = [
+  { type: "horizontalRule" },
+  { content: [], type: "codeBlock" },
+  { content: [text("  x\n")], type: "codeBlock" },
+  { content: [{ type: "horizontalRule" }, { type: "codeBlock" }], type: "blockquote" },
+  { attrs: { language: null }, type: "codeBlock" },
+  { content: [text("x", [])], type: "codeBlock" },
+  { content: [{ type: "hardBreak" }], type: "codeBlock" },
+  { content: [], type: "horizontalRule" },
+  { attrs: { level: 5 }, type: "heading" },
+  ...[
+    { target: "_self" },
+    { target: null },
+    { target: "" },
+    { rel: null },
+    { rel: "noopener" },
+    { rel: "noreferrer" },
+    { rel: "nofollow noopener" },
+    { href: "javascript:alert(1)", target: "_blank" },
+  ].map((attrs) => paragraph(text("Link", [{ type: "link", attrs: { href: "/safe", ...attrs } }]))),
+];
+
+test.each(expandedParityCorpus)("expanded content/render acceptance and paths agree %#", (node) => {
+  const value = doc(node);
+  try {
+    validateRichTextDocument(value);
+  } catch (error) {
+    const rendered = captureError(() =>
+      describeRichText(value, { block: context, fieldPath: ["sections", 0, "body"] }),
+    );
+    expect(rendered).toMatchObject({
+      code: "invalid_rich_text",
+      context,
+      fieldPath: ["sections", 0, "body", ...error.issues[0].path],
+    });
+    expect(rendered.cause).toBeInstanceOf(ContentValidationError);
+    return;
+  }
+  expect(() => describeRichText(value)).not.toThrow();
 });

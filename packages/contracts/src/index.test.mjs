@@ -1,4 +1,4 @@
-import { field } from "@lacecms/content";
+import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import {
   DomainError,
   BlockOrderError,
@@ -13,6 +13,7 @@ import {
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
+  contentModelSchema,
   buildExportSchema,
   publicGlobalContentSchema,
   toPublicGlobalContentDto,
@@ -1809,4 +1810,75 @@ test("list label metadata survives recursive contracts and invalid targets fail"
     expect(v.safeParse(fieldMetadataMapSchema, { cards: { ...cards, itemLabel } }).success).toBe(
       false,
     );
+});
+
+test("CE9A recursive metadata preserves placeholders and rejects misplaced prompts", () => {
+  const fields = {
+    group: field.group({
+      fields: { tags: field.list({ item: field.text({ placeholder: "Tag" }) }) },
+    }),
+  };
+  expect(v.parse(fieldMetadataMapSchema, JSON.parse(JSON.stringify(fields)))).toEqual(fields);
+  const block = {
+    type: "card",
+    version: 1,
+    fields,
+    settings: { tone: field.text({ defaultValue: "normal", placeholder: "Tone" }) },
+  };
+  expect(v.parse(blockMetadataSchema, JSON.parse(JSON.stringify(block)))).toEqual(block);
+  for (const invalid of [
+    { type: "media", required: false, placeholder: "Bad" },
+    { type: "text", required: false, placeholder: 3 },
+  ]) {
+    expect(
+      v.safeParse(fieldMetadataMapSchema, {
+        group: { type: "group", required: false, fields: { value: invalid } },
+      }).success,
+    ).toBe(false);
+  }
+});
+
+test("CE9B layout metadata round trips and rejects ambiguous references", () => {
+  const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["body"] }] };
+  const fields = {
+    body: field.text(),
+    nested: field.list({ item: field.group({ fields: { body: field.text() }, layout }) }),
+  };
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "layout",
+      version: 1,
+      fields,
+      layout,
+      settings: { body: field.text({ defaultValue: "" }) },
+      settingsLayout: layout,
+    }),
+  );
+  const model = toContentModelDto({
+    key: "layout",
+    kind: "global",
+    version: 1,
+    fields,
+    layout,
+    blocks: ["layout"],
+    blockDefinitions: [block],
+  });
+  const json = JSON.parse(JSON.stringify(model));
+  expect(v.parse(contentModelSchema, json)).toEqual(json);
+  expect(
+    v.safeParse(contentModelSchema, {
+      ...json,
+      layout: { ...layout, groups: [{ ...layout.groups[0], fields: ["missing"] }] },
+    }).success,
+  ).toBe(false);
+  expect(
+    v.safeParse(contentModelSchema, {
+      ...json,
+      layout: { ...layout, groups: [...layout.groups, ...layout.groups] },
+    }).success,
+  ).toBe(false);
+  expect(
+    v.safeParse(blockMetadataSchema, { ...block, settingsLayout: { ...layout, mode: "unknown" } })
+      .success,
+  ).toBe(false);
 });
