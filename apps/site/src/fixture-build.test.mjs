@@ -354,8 +354,7 @@ test("a live build reads one export, keeps the token out of output and rejects u
     expect(home).toContain(">Lace Journal</a>");
 
     // An export without published globals falls back to static values.
-    served = structuredClone(fixture);
-    delete served.globals;
+    served = { ...structuredClone(fixture), globals: [] };
     calls = 0;
     await build();
     expect(calls).toBe(1);

@@ -29,43 +29,90 @@ The SDK SHALL provide a published-site loader factory that takes its configurati
 - **THEN** it fails with `missing_configuration` naming `LACE_SITE_INDEXING` and stating that it accepts `on` or `off`
 
 ### Requirement: Static mode reads one export per loader
-By default the loader SHALL read the build export once and return the same site view to every later and concurrent call. Concurrent first calls SHALL share one request. A failed read SHALL NOT be cached; the next call SHALL retry.
+By default the loader SHALL read the build export once, as one complete page
+traversal, and return the same site view to every later and concurrent call.
+Concurrent first calls SHALL share one traversal. A failed traversal SHALL NOT
+be cached; the next call SHALL start a new one.
 
 #### Scenario: A static build renders many pages
-- **WHEN** a static-mode loader is called several times, including concurrently
-- **THEN** exactly one build-export request is made and every call receives the same site view
+- **WHEN** a static-mode loader is called several times, including
+  concurrently, for an export of three pages
+- **THEN** exactly one traversal of three page requests is made, and every
+  call receives the same site view
 
 #### Scenario: A static read fails transiently
-- **WHEN** the first call fails because the API is unavailable and a later call succeeds
-- **THEN** the later call issues a new request and returns the site view
+- **WHEN** the first call fails because the API is unavailable during the
+  second page and a later call succeeds
+- **THEN** the later call starts a new traversal from the first page and
+  returns the site view
 
 ### Requirement: Revalidate mode issues conditional reads
-When revalidation is enabled the loader SHALL issue a build-export request on every call, sending the entity tag of the last successful export. Concurrent calls SHALL share one in-flight request. A `304` response SHALL return the previous site view, and a changed export SHALL replace it. A failed revalidation SHALL fail that call and keep the previous entity tag for the next call. A `304` received without any previous export SHALL fail with `invalid_export`.
+When revalidation is enabled, the loader SHALL issue a first-page build-export
+request on every call, sending the entity tag of the last successful export.
+Concurrent calls SHALL share one in-flight read.
 
-The loader SHALL preserve the validator from the latest successful `200` or `304`, including its weak prefix, for subsequent requests. The standard published-site and Astro loaders SHALL support normal fetch compression negotiation without a custom fetch override.
+- A `304` response SHALL return the previous site view without further page
+  requests.
+- A changed first page SHALL start a complete traversal whose assembled export
+  replaces the view.
+- A failed revalidation SHALL fail that call and keep the previous entity tag
+  for the next call.
+- A `304` received without any previous export SHALL fail with
+  `invalid_export`.
+
+The loader SHALL preserve the validator from the latest successful first-page
+`200` or `304`, including its weak prefix, for subsequent requests. The
+standard published-site and Astro loaders SHALL support normal fetch
+compression negotiation without a custom fetch override.
 
 #### Scenario: A publication appears on reload
 - **WHEN** a revalidating loader returned version 3 and the API now serves version 4
-- **THEN** the next call sends the version-3 entity tag and returns the version-4 view
+- **THEN** the next call sends the version-3 entity tag, follows every
+  version-4 page and returns the version-4 view
 
 #### Scenario: Unchanged content is reused
 - **WHEN** a revalidating loader calls the API and receives `304`
 - **THEN** it returns the previous site view without parsing a response body
+  or requesting another page
 
 #### Scenario: Concurrent dev requests share one read
-- **WHEN** several calls start while a revalidation request is in flight
-- **THEN** they all resolve from that single request
+- **WHEN** several calls start while a revalidation read is in flight
+- **THEN** they all resolve from that single read
 
 #### Scenario: Development reloads through compression
 - **WHEN** a standard loader receives a compressed export with a weak tag, then a matching `304`, then a new publication
 - **THEN** reload reuses the prior site on `304` and replaces it with the new publication on `200` without overriding fetch
 
 ### Requirement: Expected published version is enforced
-When an expected published version is configured, the loader SHALL fail with `version_mismatch` if a received export has a different version, naming both versions. Without an expected version, any export version SHALL be accepted.
+When an expected published version is configured, the loader SHALL compare
+it with the first page's version before requesting any continuation page. On
+a difference it SHALL fail with `version_mismatch`, naming both versions. In
+this mode the loader SHALL disable traversal restarts. A
+`BUILD_EXPORT_VERSION_CHANGED` failure on any page SHALL fail with
+`version_mismatch`, naming the expected and the received version.
+
+Without an expected version, any export version SHALL be accepted, and
+traversal restarts SHALL be enabled. When restarts are exhausted, the loader
+SHALL fail with `version_mismatch`, stating that published content kept
+changing during the export.
 
 #### Scenario: Content changes during a build
-- **WHEN** the expected published version is 7 and the API returns an export with version 8
-- **THEN** the loader fails with `version_mismatch` and returns no site view
+- **WHEN** the expected published version is 7 and the first page reports
+  version 8
+- **THEN** the loader fails with `version_mismatch`, requests no continuation
+  page and returns no site view
+
+#### Scenario: A publication lands between pages of an expected build
+- **WHEN** the expected version is 7, the first page reports 7 and the second
+  page fails with `BUILD_EXPORT_VERSION_CHANGED` for actual version 8
+- **THEN** the loader fails with `version_mismatch` naming 7 and 8, without
+  restarting
+
+#### Scenario: A development export keeps changing
+- **WHEN** no expected version is configured and two traversals are each
+  interrupted by `BUILD_EXPORT_VERSION_CHANGED`
+- **THEN** the loader fails with `version_mismatch` explaining that content
+  kept changing
 
 ### Requirement: The site view exposes only published content
 The loader SHALL return a site view with the export `version` and lookups by resolved path, by model key, and by model key and slug, plus a public media URL builder and media lookups. Each entry SHALL expose its identifier, model key, CMS-resolved path, optional slug, title, publication time, field values, and blocks ordered by position, all taken from the published entry of the export; the view SHALL expose no draft snapshot, draft-shaped property, or editorial metadata. Lookups SHALL return no entry rather than fail when nothing matches, and listing an unknown model SHALL return an empty list. Entries listed by model SHALL be ordered by path. The view SHALL use each entry's CMS-resolved path as-is and SHALL NOT derive routes from patterns or depend on particular model keys. The site and each entry SHALL expose `media(id)`, returning the resolved media item of the export's media dictionary or nothing for an unknown ID, and `image(mediaId, usageAlt?)`, returning that item with its `alt` replaced by the effective alt text: the usage alt text when it is non-blank, otherwise the media item's alt text, otherwise an empty string. When a public media base URL is configured, resolved media URLs and the media URL builder SHALL use it; otherwise resolved media URLs SHALL be the URLs from the export, and the media URL builder SHALL return the export URL for a known ID and an API-base URL for an unknown ID. The view SHALL be immutable.
@@ -115,7 +162,21 @@ The loader SHALL fail with `invalid_export` when an export contains two entries 
 - **THEN** the loader fails with `invalid_export` naming `settings`
 
 ### Requirement: Loader failures carry stable codes and hints
-Loader failures SHALL be SDK errors with a stable code: `missing_configuration`, `rejected_token` for HTTP 401 or 403 from the build export, `api_unavailable` for transport failures including timeouts, `version_mismatch`, and `invalid_export`. Other SDK failures, such as other HTTP errors and contract violations, SHALL propagate unchanged. Messages SHALL be project-neutral, SHALL never contain the build token, and SHALL preserve the underlying failure as the cause. A caller-supplied hint for a code SHALL be appended to that code's message.
+Loader failures SHALL be SDK errors with one of these stable codes:
+
+- `missing_configuration`;
+- `rejected_token` for HTTP 401 or 403 from the build export;
+- `api_unavailable` for transport failures, including timeouts;
+- `version_mismatch`;
+- `invalid_export`.
+
+An export whose `formatVersion` is newer than the SDK supports SHALL fail with
+`invalid_export`. Its message SHALL name both format versions and advise
+upgrading `@lacecms/sdk`. Other SDK failures, such as other HTTP errors and
+other contract violations, SHALL propagate unchanged. Messages SHALL be
+project-neutral, SHALL never contain the build token, and SHALL preserve the
+underlying failure as the cause. A caller-supplied hint for a code SHALL be
+appended to that code's message.
 
 #### Scenario: The API rejects the token
 - **WHEN** the build export responds with HTTP 401
@@ -128,6 +189,12 @@ Loader failures SHALL be SDK errors with a stable code: `missing_configuration`,
 #### Scenario: An unrelated HTTP failure
 - **WHEN** the build export responds with HTTP 500 and a valid error envelope
 - **THEN** the loader rethrows the SDK HTTP error unchanged
+
+#### Scenario: The API serves a newer export format
+- **WHEN** the API returns an export with `formatVersion: 2` to a loader whose
+  SDK supports format 1
+- **THEN** the loader fails with `invalid_export`, the message advises
+  upgrading `@lacecms/sdk`, and the SDK contract error is the cause
 
 ### Requirement: The site view exposes published globals
 The site view SHALL expose `global(modelKey)`, returning the published global

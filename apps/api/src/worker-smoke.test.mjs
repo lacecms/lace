@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { appDirectory, buildWorkerBundle } from "./worker-bundle-harness.mjs";
+import { readCompleteBuildExport } from "../../../packages/test-utils/dist/index.js";
 
 const run = promisify(execFile);
 const repositoryRoot = join(appDirectory, "..", "..");
@@ -321,12 +322,16 @@ test("Worker bundle smoke: health, auth, R2 upload, publish, deploy hook, export
   expect(unauthenticatedExport.status).toBeLessThanOrEqual(403);
   const token = await call("/api/v1/admin/api-tokens", { json: { name: "smoke" }, method: "POST" });
   expect(token.response.status).toBe(201);
-  const exported = await miniflare.dispatchFetch(`${origin}/api/v1/public/build-export`, {
-    headers: { authorization: `Bearer ${token.body.token}` },
-  });
-  expect(exported.status).toBe(200);
-  const exportBody = await exported.json();
+  const exported = await readCompleteBuildExport(
+    (url, init) => miniflare.dispatchFetch(url, init),
+    origin,
+    token.body.token,
+    { limit: 1 },
+  );
+  expect(exported.pages.length).toBeGreaterThanOrEqual(1);
+  const exportBody = exported.export;
   expect(exportBody.version).toBeGreaterThanOrEqual(1);
+  expect(exportBody.formatVersion).toBe(1);
   expect(exportBody.entries.map((entry) => entry.path)).toContain("/blog/smoke");
 
   const clientRoute = await call("/admin/content/posts");

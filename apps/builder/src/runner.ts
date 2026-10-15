@@ -109,7 +109,8 @@ async function execute(
 
 async function currentVersion(settings: BuilderSettings): Promise<number> {
   try {
-    const url = new URL("api/v1/public/build-export", settings.apiBaseUrl);
+    // A single-entry first page carries the version ETag without the export.
+    const url = new URL("api/v1/public/build-export?limit=1", settings.apiBaseUrl);
     const response = await fetch(url, {
       headers: { authorization: `Bearer ${settings.buildToken}` },
       signal: AbortSignal.timeout(30_000),

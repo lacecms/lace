@@ -1,25 +1,24 @@
 import {
-  buildExportSchema,
+  BUILD_EXPORT_FORMAT_VERSION,
   entityTagSchema,
   versionFromEntityTag,
-  errorEnvelopeSchema,
   identifierSchemaPublic,
   opaqueCursorSchema,
-  publicContentEntrySchema,
-  publicContentListSchema,
-  publicGlobalContentSchema,
+  tolerantPublicSchemas,
 } from "@lacecms/contracts";
 import type {
+  BuildExportContinuationPageDto,
   BuildExportDto,
+  BuildExportFirstPageDto,
   EntityTag,
-  ErrorEnvelope,
   PublicContentEntryDto,
   PublicContentListDto,
   PublicEntryDto,
   PublicGlobalContentDto,
   PublicMediaDictionaryDto,
   PublicMediaDto,
-  LaceErrorCode,
+  ReportedLaceErrorCode,
+  TolerantErrorEnvelope,
 } from "@lacecms/contracts";
 import * as v from "valibot";
 
@@ -49,8 +48,36 @@ export interface AllCollectionOptions extends LaceRequestOptions {
 }
 
 export interface BuildExportOptions extends LaceRequestOptions {
+  /** Prior entity tag, sent as `If-None-Match` on the first page only. */
   readonly etag?: EntityTag;
+  /**
+   * Called with the first page of each traversal before any continuation page
+   * is requested; a rejection ends the traversal without further requests.
+   */
+  readonly onFirstPage?: (page: BuildExportFirstPageDto) => void | Promise<void>;
+  /** Entries per page from 1 to 100, sent on every page request. */
+  readonly pageSize?: number;
+  /**
+   * Restarts from an unconditional first page when published content changes
+   * during the traversal, at most two traversals in total. Defaults to `true`.
+   */
+  readonly restart?: boolean;
 }
+
+export interface BuildExportPageOptions extends LaceRequestOptions {
+  /** `nextCursor` of the previous page; absent for the first page. */
+  readonly after?: string;
+  /** Prior entity tag for a conditional first-page read. */
+  readonly etag?: EntityTag;
+  readonly limit?: number;
+}
+
+/** One build-export page as delivered by the API. */
+export type BuildExportPage = BuildExportFirstPageDto | BuildExportContinuationPageDto;
+
+export type BuildExportPageResult =
+  | { readonly changed: false; readonly etag: EntityTag }
+  | { readonly changed: true; readonly etag: EntityTag; readonly page: BuildExportPage };
 
 /** Every published item of a collection with the media all of them reference. */
 export interface AllCollectionResult {
@@ -84,11 +111,12 @@ export class LaceTimeoutError extends LaceTransportError {
 }
 
 export class LaceHttpError extends LaceSdkError {
-  public readonly code: LaceErrorCode;
-  public readonly details: ErrorEnvelope["error"]["details"];
+  /** A known Lace error code, or a code introduced by a newer API. */
+  public readonly code: ReportedLaceErrorCode;
+  public readonly details: TolerantErrorEnvelope["error"]["details"];
   public readonly status: number;
 
-  public constructor(status: number, error: ErrorEnvelope["error"]) {
+  public constructor(status: number, error: TolerantErrorEnvelope["error"]) {
     super(error.message);
     this.name = "LaceHttpError";
     this.code = error.code;
@@ -104,9 +132,27 @@ export class LaceContractError extends LaceSdkError {
   }
 }
 
+/** The API sent a build export in a format newer than this SDK supports. */
+export class LaceUnsupportedExportFormatError extends LaceContractError {
+  public readonly received: number;
+  public readonly supported: number;
+
+  public constructor(received: number, supported: number) {
+    super(
+      `The Lace API sent build-export format ${received}, but this @lacecms/sdk supports format ${supported} at most. Upgrade @lacecms/sdk to a release compatible with the Lace API.`,
+    );
+    this.name = "LaceUnsupportedExportFormatError";
+    this.received = received;
+    this.supported = supported;
+  }
+}
+
 export interface LaceClient {
   getAllCollection(modelKey: string, options?: AllCollectionOptions): Promise<AllCollectionResult>;
+  /** Follows every export page and returns the assembled export. */
   getBuildExport(options?: BuildExportOptions): Promise<BuildExportResult>;
+  /** Reads one tolerant-validated export page; a first page may be conditional. */
+  getBuildExportPage(options?: BuildExportPageOptions): Promise<BuildExportPageResult>;
   getByPath(path: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getCollection(modelKey: string, options?: CollectionOptions): Promise<PublicContentListDto>;
   getCollectionBySlug(
@@ -238,6 +284,42 @@ function parseResponseEtag(response: Response, token?: string): EntityTag {
   }
 }
 
+/** Orders strings by code point, which matches SQLite's byte order for UTF-8 paths. */
+function compareCodePoints(left: string, right: string): number {
+  const a = [...left];
+  const b = [...right];
+  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+    const difference = a[index]!.codePointAt(0)! - b[index]!.codePointAt(0)!;
+    if (difference !== 0) return difference;
+  }
+  return a.length - b.length;
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (typeof left !== "object" || typeof right !== "object" || left === null || right === null)
+    return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.hasOwn(right, key) &&
+        sameJson((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]),
+    )
+  );
+}
+
+function isVersionChanged(error: unknown): boolean {
+  return (
+    error instanceof LaceHttpError &&
+    error.status === 409 &&
+    error.code === "BUILD_EXPORT_VERSION_CHANGED"
+  );
+}
+
 async function parseJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -258,7 +340,7 @@ function parseSchema<Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<u
 
 async function parseFailure(response: Response): Promise<never> {
   const value = await parseJson(response);
-  const envelope = v.safeParse(errorEnvelopeSchema, value);
+  const envelope = v.safeParse(tolerantPublicSchemas.errorEnvelope, value);
   if (!envelope.success) {
     throw new LaceContractError("The failed Lace response violated the error contract.");
   }
@@ -309,6 +391,148 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
     return parseSchema(schema, await parseJson(response));
   }
 
+  async function readBuildExportPage(
+    requestOptions: BuildExportPageOptions,
+  ): Promise<BuildExportPageResult> {
+    const etag =
+      requestOptions.etag === undefined ? undefined : assertEntityTag(requestOptions.etag);
+    const url = publicUrl(baseUrl, ["build-export"]);
+    if (requestOptions.after !== undefined) {
+      if (etag !== undefined) throw new TypeError("etag applies to the first export page only.");
+      url.searchParams.set("after", assertCursor(requestOptions.after));
+    }
+    if (requestOptions.limit !== undefined)
+      url.searchParams.set("limit", String(assertLimit(requestOptions.limit)));
+    const response = await send(url, {
+      buildExport: true,
+      ...(etag === undefined ? {} : { etag }),
+      ...(requestOptions.signal === undefined ? {} : { signal: requestOptions.signal }),
+    });
+    if (response.status !== 304 && !response.ok) return parseFailure(response);
+    const responseEtag = parseResponseEtag(response, token);
+    const responseVersion = versionFromEntityTag(responseEtag);
+    if (response.status === 304) {
+      if (requestOptions.after !== undefined)
+        throw new LaceContractError(
+          "The Lace API answered a build-export continuation page with 304. Upgrade the Lace API and SDK to compatible versions and check the proxy conditional-response configuration.",
+        );
+      if (etag !== undefined && responseVersion !== versionFromEntityTag(etag))
+        throw new LaceContractError(
+          "The build-export 304 ETag does not match the requested version. Check the API and proxy conditional-response configuration.",
+        );
+      return { changed: false, etag: responseEtag };
+    }
+    const body = await parseJson(response);
+    let page: BuildExportPage;
+    if (requestOptions.after === undefined) {
+      page = parseSchema(tolerantPublicSchemas.buildExportFirstPage, body);
+    } else {
+      // The tolerant schema would strip these keys; a continuation must not carry them.
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        (Object.hasOwn(body, "globals") || Object.hasOwn(body, "seo"))
+      )
+        throw new LaceContractError(
+          "A build-export continuation page carried first-page keys. Upgrade the Lace API and SDK to compatible versions.",
+        );
+      page = parseSchema(tolerantPublicSchemas.buildExportContinuationPage, body);
+    }
+    if (page.formatVersion > BUILD_EXPORT_FORMAT_VERSION)
+      throw new LaceUnsupportedExportFormatError(page.formatVersion, BUILD_EXPORT_FORMAT_VERSION);
+    if (responseVersion !== page.version)
+      throw new LaceContractError(
+        "The build-export ETag does not match the export version. Upgrade the Lace API and SDK to compatible versions and check the proxy configuration.",
+      );
+    return { changed: true, etag: responseEtag, page };
+  }
+
+  /** One complete traversal; a 409 from any page propagates to the caller. */
+  async function traverseBuildExport(
+    requestOptions: BuildExportOptions,
+    etag: EntityTag | undefined,
+  ): Promise<BuildExportResult> {
+    const shared = {
+      ...(requestOptions.pageSize === undefined ? {} : { limit: requestOptions.pageSize }),
+      ...(requestOptions.signal === undefined ? {} : { signal: requestOptions.signal }),
+    };
+    const result = await readBuildExportPage({
+      ...shared,
+      ...(etag === undefined ? {} : { etag }),
+    });
+    if (!result.changed) return result;
+    const first = result.page as BuildExportFirstPageDto;
+    const violation = (detail: string) =>
+      new LaceContractError(
+        `The build-export pages are inconsistent: ${detail}. Upgrade the Lace API and SDK to compatible versions.`,
+      );
+    const entries: BuildExportFirstPageDto["entries"] = [];
+    const media = new Map<string, PublicMediaDto>();
+    // The highest path delivered so far; a continuation page starts strictly after it.
+    let floor: string | undefined;
+    const collect = (page: BuildExportPage) => {
+      if (page.nextCursor !== undefined && page.entries.length === 0)
+        throw violation("a page with a continuation cursor holds no entry");
+      const previous = floor;
+      for (const entry of page.entries) {
+        if (previous !== undefined && compareCodePoints(entry.path, previous) <= 0)
+          throw violation("entry paths do not continue after the previous page");
+        if (floor === undefined || compareCodePoints(entry.path, floor) > 0) floor = entry.path;
+        entries.push(entry);
+      }
+      for (const [id, item] of Object.entries(page.media)) {
+        const known = media.get(id);
+        if (known !== undefined && !sameJson(known, item))
+          throw violation(`media ${JSON.stringify(id.slice(0, 80))} differs between pages`);
+        media.set(id, item);
+      }
+    };
+    collect(first);
+    await requestOptions.onFirstPage?.(first);
+    let after = first.nextCursor;
+    while (after !== undefined) {
+      const next = await readBuildExportPage({ ...shared, after });
+      if (!next.changed) throw violation("a continuation page was not returned");
+      const page = next.page;
+      if (page.version !== first.version || page.formatVersion !== first.formatVersion)
+        throw violation("pages report different versions or formats");
+      collect(page);
+      after = page.nextCursor;
+    }
+    const merged: Record<string, PublicMediaDto> = {};
+    for (const id of [...media.keys()].sort((left, right) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    ))
+      merged[id] = media.get(id)!;
+    return {
+      changed: true,
+      etag: result.etag,
+      export: {
+        entries,
+        formatVersion: first.formatVersion,
+        globals: first.globals,
+        media: merged,
+        seo: first.seo,
+        version: first.version,
+      },
+    };
+  }
+
+  async function readBuildExport(requestOptions: BuildExportOptions): Promise<BuildExportResult> {
+    const etag =
+      requestOptions.etag === undefined ? undefined : assertEntityTag(requestOptions.etag);
+    if (requestOptions.pageSize !== undefined) assertLimit(requestOptions.pageSize);
+    const attempts = requestOptions.restart === false ? 1 : 2;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        // A restart reads the first page unconditionally.
+        return await traverseBuildExport(requestOptions, attempt === 1 ? etag : undefined);
+      } catch (error) {
+        if (attempt >= attempts || !isVersionChanged(error)) throw error;
+      }
+    }
+  }
+
   function collectionUrl(modelKey: string, requestOptions: CollectionOptions = {}): URL {
     const url = publicUrl(baseUrl, ["collections", assertIdentifier(modelKey, "modelKey")]);
     if (requestOptions.after !== undefined)
@@ -330,7 +554,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
             ...(after === undefined ? {} : { after }),
             ...(requestOptions.limit === undefined ? {} : { limit: requestOptions.limit }),
           }),
-          publicContentListSchema,
+          tolerantPublicSchemas.publicContentList,
           requestOptions,
         );
         items.push(...page.items);
@@ -345,41 +569,27 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
       return { items, media: merged };
     },
 
-    async getBuildExport(requestOptions = {}) {
-      const etag =
-        requestOptions.etag === undefined ? undefined : assertEntityTag(requestOptions.etag);
-      const response = await send(publicUrl(baseUrl, ["build-export"]), {
-        buildExport: true,
-        ...(etag === undefined ? {} : { etag }),
-        ...(requestOptions.signal === undefined ? {} : { signal: requestOptions.signal }),
-      });
-      if (response.status !== 304 && !response.ok) return parseFailure(response);
-      const responseEtag = parseResponseEtag(response, token);
-      const responseVersion = versionFromEntityTag(responseEtag);
-      if (response.status === 304) {
-        if (etag !== undefined && responseVersion !== versionFromEntityTag(etag))
-          throw new LaceContractError(
-            "The build-export 304 ETag does not match the requested version. Check the API and proxy conditional-response configuration.",
-          );
-        return { changed: false, etag: responseEtag };
-      }
-      const exported = parseSchema(buildExportSchema, await parseJson(response));
-      if (responseVersion !== exported.version)
-        throw new LaceContractError(
-          "The build-export ETag does not match the export version. Upgrade the Lace API and SDK to compatible versions and check the proxy configuration.",
-        );
-      return { changed: true, etag: responseEtag, export: exported };
+    getBuildExport(requestOptions = {}) {
+      return readBuildExport(requestOptions);
+    },
+
+    getBuildExportPage(requestOptions = {}) {
+      return readBuildExportPage(requestOptions);
     },
 
     getByPath(path, requestOptions = {}) {
       if (!path.startsWith("/")) throw new TypeError("path must start with a slash.");
       const url = publicUrl(baseUrl, ["content", "by-path"]);
       url.searchParams.set("path", path);
-      return read(url, publicContentEntrySchema, requestOptions);
+      return read(url, tolerantPublicSchemas.publicContentEntry, requestOptions);
     },
 
     getCollection(modelKey, requestOptions = {}) {
-      return read(collectionUrl(modelKey, requestOptions), publicContentListSchema, requestOptions);
+      return read(
+        collectionUrl(modelKey, requestOptions),
+        tolerantPublicSchemas.publicContentList,
+        requestOptions,
+      );
     },
 
     getCollectionBySlug(modelKey, slug, requestOptions = {}) {
@@ -389,7 +599,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
           assertIdentifier(modelKey, "modelKey"),
           assertIdentifier(slug, "slug"),
         ]),
-        publicContentEntrySchema,
+        tolerantPublicSchemas.publicContentEntry,
         requestOptions,
       );
     },
@@ -397,7 +607,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
     getGlobal(modelKey, requestOptions = {}) {
       return read(
         publicUrl(baseUrl, ["globals", assertIdentifier(modelKey, "modelKey")]),
-        publicGlobalContentSchema,
+        tolerantPublicSchemas.publicGlobalContent,
         requestOptions,
       );
     },
@@ -405,7 +615,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
     getPage(modelKey, requestOptions = {}) {
       return read(
         publicUrl(baseUrl, ["pages", assertIdentifier(modelKey, "modelKey")]),
-        publicContentEntrySchema,
+        tolerantPublicSchemas.publicContentEntry,
         requestOptions,
       );
     },

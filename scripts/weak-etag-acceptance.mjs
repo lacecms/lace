@@ -15,7 +15,10 @@ export function compressingExportProxy(upstream) {
   const requests = [];
   const server = createServer(async (incoming, outgoing) => {
     try {
-      const exportPath = incoming.url === "/api/v1/public/build-export";
+      // Every export page (first and continuation) is negotiated the same way.
+      const exportPath =
+        new URL(incoming.url ?? "/", "http://proxy.invalid").pathname ===
+        "/api/v1/public/build-export";
       const condition = incoming.headers["if-none-match"];
       const response = await fetch(new URL(incoming.url ?? "/", upstream), {
         headers: {

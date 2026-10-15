@@ -1,6 +1,7 @@
 import {
   AccountError,
   AccountUseCases,
+  BuildExportCursorError,
   ContentUseCases,
   ContentValidationError,
   RateLimitExceededError,
@@ -29,7 +30,10 @@ import type {
   SensitiveRateLimiter,
 } from "@lacecms/application";
 import {
-  buildExportSchema,
+  buildExportContinuationPageSchema,
+  buildExportFirstPageSchema,
+  buildExportQuerySchema,
+  MAX_BUILD_EXPORT_PAGE_SIZE,
   buildSiteSelectionSchema,
   type BuildSiteIdentityDto,
   buildTokenCreateRequestSchema,
@@ -88,7 +92,8 @@ import {
   setupAdminRequestSchema,
   setupStateSchema,
   toAdminContentEntryDto,
-  toBuildExportDto,
+  toBuildExportContinuationPageDto,
+  toBuildExportFirstPageDto,
   toModelSeoDto,
   toSeoDefaultsDto,
   toPublicContentEntryDto,
@@ -2247,13 +2252,47 @@ export function createLaceApp(input: LaceAppInput): Hono {
   app.get(
     "/api/v1/public/build-export",
     describeRoute({
+      description:
+        "Returns one bounded page of the published build export. A request without `after` returns the first page with `globals` and `seo`; follow `nextCursor` through `after` until it is absent. A continuation cursor of a superseded published state fails with `409 BUILD_EXPORT_VERSION_CHANGED`; restart from the first page.",
+      parameters: [
+        {
+          description: "Opaque `nextCursor` of the previous page; omit for the first page.",
+          in: "query",
+          name: "after",
+          required: false,
+          schema: { maxLength: 4_096, minLength: 1, type: "string" },
+        },
+        {
+          description: "Entries per page; the server may end a page earlier at its byte budget.",
+          in: "query",
+          name: "limit",
+          required: false,
+          schema: {
+            default: MAX_BUILD_EXPORT_PAGE_SIZE,
+            maximum: 100,
+            minimum: 1,
+            type: "integer",
+          },
+        },
+      ],
       responses: {
         200: {
-          content: { "application/json": { schema: resolver(buildExportSchema) } },
-          description: "Published build export",
+          content: {
+            "application/json": {
+              schema: resolver(
+                v.union([buildExportFirstPageSchema, buildExportContinuationPageSchema]),
+              ),
+            },
+          },
+          description: "One page of the published build export",
+        },
+        409: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description:
+            "Published content changed since the first page (BUILD_EXPORT_VERSION_CHANGED)",
         },
       },
-      summary: "Read published build export",
+      summary: "Read a page of the published build export",
       tags: ["public"],
     }),
     async (context) => {
@@ -2269,28 +2308,50 @@ export function createLaceApp(input: LaceAppInput): Hono {
         )
           throw new AuthorizationError();
       }
-      const version = await input.publicContent.publishedContentVersion();
-      const etag = entityTagForVersion(version);
-      const suppliedTag = context.req.header("if-none-match") ?? undefined;
-      if (suppliedTag !== undefined) {
-        try {
-          parse(entityTagSchema, suppliedTag);
-        } catch (error) {
-          if (error instanceof RequestValidationError) return validationResponse(error.issues);
-          throw error;
-        }
-        if (versionFromEntityTag(suppliedTag) === version)
-          return new Response(null, { headers: { etag }, status: 304 });
+      const raw: Record<string, string> = {};
+      for (const [key, value] of new URL(context.req.url).searchParams) {
+        if (Object.hasOwn(raw, key)) invalid("A query parameter is repeated.", `/${key}`);
+        raw[key] = value;
       }
-      const buildExport = await input.publicContent.exportBuildContent();
-      return response(
-        buildExportSchema,
-        toBuildExportDto(buildExport, publicMediaUrl(), seoSection),
-        200,
-        {
-          etag: entityTagForVersion(buildExport.version),
-        },
-      );
+      const query = parse(buildExportQuerySchema, raw);
+      const suppliedTag = context.req.header("if-none-match") ?? undefined;
+      if (suppliedTag !== undefined) parse(entityTagSchema, suppliedTag);
+      // Conditional reads apply to the first page only; a continuation page
+      // is guarded by its cursor's version instead.
+      if (query.after === undefined && suppliedTag !== undefined) {
+        const version = await input.publicContent.publishedContentVersion();
+        if (versionFromEntityTag(suppliedTag) === version)
+          return new Response(null, {
+            headers: { etag: entityTagForVersion(version) },
+            status: 304,
+          });
+      }
+      let page;
+      try {
+        page = await input.publicContent.exportBuildContentPage({
+          ...(query.after === undefined ? {} : { after: opaqueCursor(query.after) }),
+          limit: query.limit ?? MAX_BUILD_EXPORT_PAGE_SIZE,
+        });
+      } catch (error) {
+        if (error instanceof BuildExportCursorError) invalid("The cursor is invalid.", "/after");
+        throw error;
+      }
+      // Each page is validated strictly before it is sent; its ETag is the
+      // version it was read at, even when a publication followed the lookup.
+      const headers = { etag: entityTagForVersion(page.version) };
+      return query.after === undefined
+        ? response(
+            buildExportFirstPageSchema,
+            toBuildExportFirstPageDto(page, publicMediaUrl(), seoSection),
+            200,
+            headers,
+          )
+        : response(
+            buildExportContinuationPageSchema,
+            toBuildExportContinuationPageDto(page, publicMediaUrl(), seoSection),
+            200,
+            headers,
+          );
     },
   );
 

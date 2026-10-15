@@ -10,6 +10,7 @@ import { parseEnv } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
+import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 
 /** A structurally valid 3×2 RGB PNG, so upload exercises the Worker image inspector. */
 function rgbPng() {
@@ -582,8 +583,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const buildToken = issued?.token;
     if (typeof buildToken !== "string") throw new Error("cloudflare-build-token: token missing");
     secretValues.add(buildToken);
-    const exportHeaders = { authorization: `Bearer ${buildToken}` };
-    const published = await json(base, "api/v1/public/build-export", { headers: exportHeaders });
+    const published = await readExport(base, buildToken);
     const publishedPost = published.entries?.find((entry) => entry.modelKey === "posts");
     if (publishedPost?.slug !== "cloudflare")
       throw new Error(
@@ -625,7 +625,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
         title: "Unpublished Cloudflare draft",
       },
     });
-    const later = await json(base, "api/v1/public/build-export", { headers: exportHeaders });
+    const later = await readExport(base, buildToken);
     if (JSON.stringify(later) !== JSON.stringify(published))
       throw new Error("cloudflare-draft-isolation: a draft changed the published export");
     const page2 = await build("cloudflare-draft-build");
@@ -650,7 +650,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     });
     if (!preview.ok || !Buffer.from(await preview.arrayBuffer()).equals(png))
       throw new Error("cloudflare-restart: R2 media bytes did not persist");
-    const afterExport = await json(base, "api/v1/public/build-export", { headers: exportHeaders });
+    const afterExport = await readExport(base, buildToken);
     if (JSON.stringify(afterExport) !== JSON.stringify(published))
       throw new Error("cloudflare-restart: published export did not persist");
     const afterDraft = await json(base, `api/v1/admin/entries/${entryId}`, {
@@ -877,6 +877,16 @@ async function waitBuild(base, cookie, predicate, timeout, beforeEach = async ()
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw new Error(`cloudflare-build: timed out; latest ${JSON.stringify(latest ?? null)}`);
+}
+
+/** Follows every build-export page and returns the strictly validated assembled export. */
+async function readExport(base, token) {
+  const complete = await readCompleteBuildExport(
+    (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
+    new URL(".", base).toString(),
+    token,
+  );
+  return complete.export;
 }
 
 async function json(base, path, options = {}) {

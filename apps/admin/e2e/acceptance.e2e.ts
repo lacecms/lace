@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import { readCompleteBuildExport } from "../../../packages/test-utils/dist/index.js";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -105,7 +106,7 @@ test("administrator completes the local editorial flow and preserves published o
 
   await sidebar.getByRole("link", { name: "Content", exact: true }).click();
   await main.getByRole("link", { name: "home" }).click();
-  await page.getByRole("textbox", { name: "Title" }).fill("Acceptance home");
+  await page.getByRole("textbox", { name: "Title", exact: true }).fill("Acceptance home");
   await page.getByRole("button", { name: "Add block" }).click();
   await page
     .getByRole("dialog", { name: "Add block" })
@@ -129,20 +130,24 @@ test("administrator completes the local editorial flow and preserves published o
   await page.getByRole("button", { name: "Create entry" }).click();
   await page
     .getByRole("dialog", { name: "Create entry" })
-    .getByRole("textbox", { name: "Title" })
+    .getByRole("textbox", { name: "Title", exact: true })
     .fill("Acceptance note");
   await page
     .getByRole("dialog", { name: "Create entry" })
     .getByRole("button", { name: "Create entry" })
     .click();
   // Creating an entry opens it in the editor.
-  await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Acceptance note");
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
+    "Acceptance note",
+  );
   await sidebar.getByRole("link", { name: "Content", exact: true }).click();
   await main.getByRole("link", { name: "notes" }).click();
   await expect(main.getByRole("link", { name: "Acceptance note" })).toBeVisible();
   await expectNoAccessibilityViolations(page, "collection list");
   await main.getByRole("link", { name: "Acceptance note" }).click();
-  await page.getByRole("textbox", { name: "Slug" }).fill("acceptance-note");
+  // The create dialog suggests the slug from the title, so a real edit is needed to save.
+  await expect(page.getByRole("textbox", { name: "Slug" })).toHaveValue("acceptance-note");
+  await page.getByRole("textbox", { name: "Summary" }).fill("Acceptance summary");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText(/Saved revision 2/u)).toBeVisible();
   await page.getByRole("button", { name: "Publish", exact: true }).click();
@@ -181,22 +186,31 @@ test("administrator completes the local editorial flow and preserves published o
   expect(note.status()).toBe(200);
   expect(await note.text()).toContain("Acceptance note");
 
-  const exportBefore = await request.get(`${origin}/api/v1/public/build-export`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  expect(exportBefore.status()).toBe(200);
-  const publishedBefore = await exportBefore.json();
+  // Adapts Playwright's request context to the shared page-following export reader.
+  const readExport = async () =>
+    (
+      await readCompleteBuildExport(
+        async (url, init) => {
+          const response = await request.get(url, init);
+          return {
+            headers: { get: (name) => response.headers()[name.toLowerCase()] ?? null },
+            json: () => response.json(),
+            status: response.status(),
+          };
+        },
+        origin,
+        token ?? undefined,
+      )
+    ).export;
+  const publishedBefore = await readExport();
   await sidebar.getByRole("link", { name: "Content", exact: true }).click();
   await main.getByRole("link", { name: "notes" }).click();
   await main.getByRole("link", { name: "Acceptance note" }).click();
-  await page.getByRole("textbox", { name: "Title" }).fill("Unpublished note");
+  await page.getByRole("textbox", { name: "Title", exact: true }).fill("Unpublished note");
   await page.getByRole("textbox", { name: "Slug" }).fill("unpublished-note");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText(/Saved revision 3/u)).toBeVisible();
-  const exportAfter = await request.get(`${origin}/api/v1/public/build-export`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  expect(await exportAfter.json()).toEqual(publishedBefore);
+  expect(await readExport()).toEqual(publishedBefore);
   const restartAgain = spawnSync("pnpm", ["acceptance:restart-site"], {
     cwd: root,
     encoding: "utf8",
@@ -253,15 +267,18 @@ test("administrator completes the local editorial flow and preserves published o
     await member.getByRole("button", { name: "Sign in" }).click();
     const memberSidebar = member.getByRole("complementary", { name: "Admin navigation" });
     await expect(member.getByRole("heading", { name: "Content", exact: true })).toBeVisible();
-    await expect(member.getByRole("link", { name: "Users" })).toHaveCount(0);
-    await expect(member.getByRole("link", { name: "Settings" })).toHaveCount(0);
+    await expect(member.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
+    // "Site settings" is a content global, so only the admin Settings link must be hidden.
+    await expect(member.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
     await member.goto(`${origin}/admin/users`);
     await expect(member.getByText("Access denied")).toBeVisible();
     await memberSidebar.getByRole("link", { name: "Content", exact: true }).click();
     await member.getByRole("main").getByRole("link", { name: "home" }).click();
     await expect(member.getByRole("button", { name: "Publish", exact: true })).toHaveCount(0);
     if (role === "editor") {
-      await member.getByRole("textbox", { name: "Title" }).fill("Editor private draft");
+      await member
+        .getByRole("textbox", { name: "Title", exact: true })
+        .fill("Editor private draft");
       await member.getByRole("button", { name: "Save draft" }).click();
       await expect(member.getByText(/Saved revision 3/u)).toBeVisible();
     } else {

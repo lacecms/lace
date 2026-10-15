@@ -30,6 +30,7 @@ import {
   safeBuildSourcePath,
   normalizeBuildFailure,
   BUILD_SOURCE_PATH_PATTERN,
+  BuildExportVersionChangedError,
 } from "@lacecms/domain";
 import type {
   ContentBlock,
@@ -1057,8 +1058,18 @@ export const exportSeoSchema = v.strictObject({
   models: v.record(identifierSchema, modelSeoSchema),
 });
 
+/** The structure version of the build export; see the public contract evolution policy. */
+export const BUILD_EXPORT_FORMAT_VERSION = 1;
+const buildExportFormatVersionSchema = v.literal(BUILD_EXPORT_FORMAT_VERSION);
+
+/**
+ * The assembled build export: the union of the pages of one page sequence, as
+ * returned by the SDK and compared by tests. The API never sends it whole.
+ */
 export const buildExportSchema = v.strictObject({
   entries: v.array(publicEntrySchema),
+  /** Strict output accepts only the current format; tolerant consumers accept any. */
+  formatVersion: buildExportFormatVersionSchema,
   /** Always sent by the API; exports produced before globals existed omit it. */
   globals: v.optional(v.array(publicGlobalSchema), []),
   media: publicMediaDictionarySchema,
@@ -1066,6 +1077,43 @@ export const buildExportSchema = v.strictObject({
   seo: v.optional(exportSeoSchema, { defaults: null, models: {} }),
   version: nonNegativeIntegerSchema,
 });
+
+/** Entries one build-export page holds at most, and the default page size. */
+export const MAX_BUILD_EXPORT_PAGE_SIZE = 100;
+
+/** Query parameters of the build-export endpoint; unknown keys are rejected. */
+export const buildExportQuerySchema = v.strictObject({
+  after: v.optional(opaqueCursorSchema),
+  limit: v.optional(
+    v.pipe(
+      v.string(),
+      v.regex(/^[1-9][0-9]{0,2}$/u),
+      v.transform(Number),
+      v.maxValue(MAX_BUILD_EXPORT_PAGE_SIZE),
+    ),
+  ),
+});
+
+const buildExportPageEntries = {
+  /** Routed entries ordered by path, continuing strictly after the cursor's path. */
+  entries: v.array(publicEntrySchema),
+  formatVersion: buildExportFormatVersionSchema,
+  /** Exactly the media delivered by this page's entries (and globals on the first page). */
+  media: publicMediaDictionarySchema,
+  /** Present exactly when further entries remain. */
+  nextCursor: v.optional(opaqueCursorSchema),
+  version: nonNegativeIntegerSchema,
+};
+
+/** The first build-export page (no `after`): it alone carries `globals` and `seo`. */
+export const buildExportFirstPageSchema = v.strictObject({
+  ...buildExportPageEntries,
+  globals: v.array(publicGlobalSchema),
+  seo: exportSeoSchema,
+});
+
+/** A build-export continuation page (`after` present): never `globals` or `seo`. */
+export const buildExportContinuationPageSchema = v.strictObject(buildExportPageEntries);
 
 export const mediaMetadataSchema = v.strictObject({
   alt: v.optional(v.pipe(v.string(), v.minLength(1))),
@@ -1259,6 +1307,7 @@ export const contractValidationIssueSchema = v.strictObject({
 
 export const errorCodeSchema = v.picklist([
   "AUTHORIZATION_DENIED",
+  "BUILD_EXPORT_VERSION_CHANGED",
   "CONFLICT",
   "CONTENT_INVALID_STATE",
   "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -1286,6 +1335,115 @@ export const errorEnvelopeSchema = v.strictObject({
     details: v.optional(jsonObjectSchema),
     message: v.string(),
   }),
+});
+
+type AnySchema = v.GenericSchema;
+
+/**
+ * Rebuilds a strict read schema so that every contract-defined object strips
+ * unknown keys instead of rejecting them. Required keys, value types, defaults,
+ * pipes and consumer-owned JSON (custom leaves) are unchanged; `substitutions`
+ * replace specific leaves, such as the closed error-code picklist.
+ */
+function toTolerantSchema(
+  schema: AnySchema,
+  substitutions: ReadonlyMap<AnySchema, AnySchema>,
+): AnySchema {
+  const replacement = substitutions.get(schema);
+  if (replacement !== undefined) return replacement;
+  const node = schema as AnySchema & {
+    readonly default?: unknown;
+    readonly entries?: Readonly<Record<string, AnySchema>>;
+    readonly item?: AnySchema;
+    readonly key?: AnySchema;
+    readonly options?: readonly AnySchema[];
+    readonly pipe?: readonly [AnySchema, ...v.PipeItem<unknown, unknown, v.BaseIssue<unknown>>[]];
+    readonly value?: AnySchema;
+    readonly wrapped?: AnySchema;
+  };
+  const tolerant = (child: AnySchema) => toTolerantSchema(child, substitutions);
+  if (node.pipe !== undefined) {
+    const [root, ...actions] = node.pipe;
+    return (v.pipe as unknown as (...items: unknown[]) => AnySchema)(tolerant(root), ...actions);
+  }
+  switch (node.type) {
+    case "loose_object":
+    case "object":
+    case "strict_object":
+      return v.object(
+        Object.fromEntries(
+          Object.entries(node.entries!).map(([key, child]) => [key, tolerant(child)]),
+        ),
+      );
+    case "array":
+      return v.array(tolerant(node.item!));
+    case "record":
+      return v.record(
+        node.key as v.GenericSchema<string, string | number | symbol>,
+        tolerant(node.value!),
+      );
+    case "optional":
+      return v.optional(tolerant(node.wrapped!), node.default as never);
+    case "nullable":
+      return v.nullable(tolerant(node.wrapped!), node.default as never);
+    case "nullish":
+      return v.nullish(tolerant(node.wrapped!), node.default as never);
+    case "union":
+      return v.union(node.options!.map(tolerant));
+    default:
+      return schema;
+  }
+}
+
+/**
+ * A newer server may report an error code or export format this release does
+ * not know. A delivered block carrying `hidden` is rejected rather than
+ * stripped: removing the flag would render content the CMS marked as hidden.
+ */
+const tolerantSubstitutions = new Map<AnySchema, AnySchema>([
+  [errorCodeSchema, v.pipe(v.string(), v.minLength(1), v.maxLength(128))],
+  [buildExportFormatVersionSchema, v.pipe(v.number(), v.safeInteger(), v.minValue(1))],
+]);
+tolerantSubstitutions.set(
+  publicBlockSchema,
+  v.pipe(
+    v.unknown(),
+    v.check(
+      (value) => !(typeof value === "object" && value !== null && Object.hasOwn(value, "hidden")),
+      "A hidden block is never delivered.",
+    ),
+    toTolerantSchema(publicBlockSchema, tolerantSubstitutions),
+  ),
+);
+
+function tolerant<Schema extends AnySchema>(schema: Schema): Schema {
+  // The derived schema has the strict schema's output type; only unknown keys differ.
+  return toTolerantSchema(schema, tolerantSubstitutions) as Schema;
+}
+
+/**
+ * Consumer variants of the public read schemas. They ignore and remove object
+ * keys a newer API may add, while enforcing every key, type and constraint of
+ * the strict variants the API validates its output with.
+ */
+export const tolerantPublicSchemas = Object.freeze({
+  buildExport: tolerant(buildExportSchema),
+  buildExportContinuationPage: tolerant(buildExportContinuationPageSchema),
+  buildExportFirstPage: tolerant(buildExportFirstPageSchema),
+  errorEnvelope: tolerant(errorEnvelopeSchema) as unknown as v.GenericSchema<
+    unknown,
+    TolerantErrorEnvelope
+  >,
+  exportSeo: tolerant(exportSeoSchema),
+  publicBlock: tolerant(publicBlockSchema),
+  publicContentEntry: tolerant(publicContentEntrySchema),
+  publicContentList: tolerant(publicContentListSchema),
+  publicEntry: tolerant(publicEntrySchema),
+  publicGlobal: tolerant(publicGlobalSchema),
+  publicGlobalContent: tolerant(publicGlobalContentSchema),
+  publicMedia: tolerant(publicMediaSchema),
+  publicMediaDictionary: tolerant(publicMediaDictionarySchema),
+  seoValue: tolerant(seoValueSchema),
 });
 
 export type ContentEntryDto = v.InferOutput<typeof contentEntrySchema>;
@@ -1318,6 +1476,12 @@ export type PublicGlobalDto = v.InferOutput<typeof publicGlobalSchema>;
 export type PublicGlobalContentDto = v.InferOutput<typeof publicGlobalContentSchema>;
 export type PublicContentListDto = v.InferOutput<typeof publicContentListSchema>;
 export type BuildExportDto = v.InferOutput<typeof buildExportSchema>;
+export type BuildExportFirstPageDto = v.InferOutput<typeof buildExportFirstPageSchema>;
+export type BuildExportContinuationPageDto = v.InferOutput<
+  typeof buildExportContinuationPageSchema
+>;
+export type BuildExportPageDto = BuildExportFirstPageDto | BuildExportContinuationPageDto;
+export type BuildExportQueryDto = v.InferOutput<typeof buildExportQuerySchema>;
 export type MediaMetadataDto = v.InferOutput<typeof mediaMetadataSchema>;
 export type MediaListDto = v.InferOutput<typeof mediaListSchema>;
 export type MediaDetailDto = v.InferOutput<typeof mediaDetailSchema>;
@@ -1332,6 +1496,12 @@ export type MediaListQueryDto = v.InferOutput<typeof mediaListQuerySchema>;
 export type SiteBuildDto = v.InferOutput<typeof siteBuildSchema>;
 export type ErrorEnvelope = v.InferOutput<typeof errorEnvelopeSchema>;
 export type LaceErrorCode = v.InferOutput<typeof errorCodeSchema>;
+/** An error code as consumers read it: a known code, or one a newer API introduced. */
+export type ReportedLaceErrorCode = LaceErrorCode | (string & {});
+/** An error envelope as consumers read it; its code may be unknown to this release. */
+export interface TolerantErrorEnvelope {
+  readonly error: Omit<ErrorEnvelope["error"], "code"> & { readonly code: ReportedLaceErrorCode };
+}
 export type ContractValidationIssue = v.InferOutput<typeof contractValidationIssueSchema>;
 
 /** Maps a portable route without importing configuration or persistence types. */
@@ -1817,35 +1987,81 @@ export interface BuildExportSource {
   readonly version: number;
 }
 
+/** One page read from the build-export port. */
+export interface BuildExportPageSource extends BuildExportSource {
+  readonly nextCursor?: string;
+}
+
 /** The export's SEO configuration section. */
 export type ExportSeoDto = v.InferOutput<typeof exportSeoSchema>;
 
+function exportSeoDto(seo: ExportSeoDto): ExportSeoDto {
+  return {
+    defaults: seo.defaults === null ? null : { ...seo.defaults },
+    models: Object.fromEntries(
+      Object.keys(seo.models)
+        .sort()
+        .map((key) => [key, { ...seo.models[key]! }]),
+    ),
+  };
+}
+
+function exportPageEntries(
+  value: BuildExportPageSource,
+  urlFor: PublicMediaUrl,
+  seoModels: ReadonlySet<string>,
+): BuildExportContinuationPageDto {
+  const globals = value.globals ?? [];
+  return {
+    entries: value.entries.map(({ entry, path }) =>
+      toPublicEntryDto(entry, path, publicEntryOptions(entry, { seoModels })),
+    ),
+    formatVersion: BUILD_EXPORT_FORMAT_VERSION,
+    media: toPublicMediaDictionary(
+      [...value.entries.flatMap((item) => item.media), ...globals.flatMap((item) => item.media)],
+      urlFor,
+    ),
+    ...(value.nextCursor === undefined ? {} : { nextCursor: value.nextCursor as OpaqueCursorDto }),
+    version: value.version,
+  };
+}
+
+/** Converts the first build-export page; it alone carries globals and the SEO section. */
+export function toBuildExportFirstPageDto(
+  value: BuildExportPageSource,
+  urlFor: PublicMediaUrl,
+  seo: ExportSeoDto = { defaults: null, models: {} },
+): BuildExportFirstPageDto {
+  return {
+    ...exportPageEntries(value, urlFor, new Set(Object.keys(seo.models))),
+    globals: (value.globals ?? []).map(({ entry }) => toPublicGlobalDto(entry)),
+    seo: exportSeoDto(seo),
+  };
+}
+
+/** Converts a build-export continuation page; it never carries globals or SEO. */
+export function toBuildExportContinuationPageDto(
+  value: BuildExportPageSource,
+  urlFor: PublicMediaUrl,
+  seo: ExportSeoDto = { defaults: null, models: {} },
+): BuildExportContinuationPageDto {
+  if (value.globals !== undefined)
+    throw new TypeError("A build-export continuation page never carries globals.");
+  return exportPageEntries(value, urlFor, new Set(Object.keys(seo.models)));
+}
+
+/** Converts a complete content source to the assembled export consumers and tests compare. */
 export function toBuildExportDto(
   value: BuildExportSource,
   urlFor: PublicMediaUrl,
   seo: ExportSeoDto = { defaults: null, models: {} },
 ): BuildExportDto {
-  const globals = value.globals ?? [];
-  const seoModels = new Set(Object.keys(seo.models));
-  return {
-    entries: value.entries.map(({ entry, path }) =>
-      toPublicEntryDto(entry, path, publicEntryOptions(entry, { seoModels })),
-    ),
-    globals: globals.map(({ entry }) => toPublicGlobalDto(entry)),
-    media: toPublicMediaDictionary(
-      [...value.entries.flatMap((item) => item.media), ...globals.flatMap((item) => item.media)],
-      urlFor,
-    ),
-    seo: {
-      defaults: seo.defaults === null ? null : { ...seo.defaults },
-      models: Object.fromEntries(
-        Object.keys(seo.models)
-          .sort()
-          .map((key) => [key, { ...seo.models[key]! }]),
-      ),
-    },
-    version: value.version,
-  };
+  const { nextCursor: _nextCursor, ...page } = toBuildExportFirstPageDto(
+    { entries: value.entries, globals: value.globals ?? [], version: value.version },
+    urlFor,
+    seo,
+  );
+  return page;
 }
 
 export interface ContentModelSource {
@@ -1942,6 +2158,7 @@ export function resolveExpectedRevision(input: RevisionPreconditionInput): numbe
 
 const domainErrorStatus: Readonly<Record<DomainErrorCode, 403 | 409 | 422>> = {
   AUTHORIZATION_DENIED: 403,
+  BUILD_EXPORT_VERSION_CHANGED: 409,
   CONTENT_INVALID_STATE: 422,
   CONTENT_MODEL_CARDINALITY_CONFLICT: 409,
   CONTENT_NOT_PUBLISHED: 409,
@@ -1956,6 +2173,8 @@ const domainErrorStatus: Readonly<Record<DomainErrorCode, 403 | 409 | 422>> = {
 
 const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
   AUTHORIZATION_DENIED: "The actor is not permitted to perform this operation.",
+  BUILD_EXPORT_VERSION_CHANGED:
+    "Published content changed during the build export. Restart from the first page.",
   CONTENT_INVALID_STATE: "The requested content operation is invalid.",
   CONTENT_MODEL_CARDINALITY_CONFLICT: "The content model cannot accept another entry.",
   CONTENT_NOT_PUBLISHED: "The entry is not published.",
@@ -2022,6 +2241,14 @@ export function classifyError(error: unknown): ClassifiedError {
       body: {
         error: {
           code: error.code,
+          ...(error instanceof BuildExportVersionChangedError
+            ? {
+                details: {
+                  actualVersion: error.actualVersion,
+                  expectedVersion: error.expectedVersion,
+                },
+              }
+            : {}),
           message:
             error instanceof BlockOrderError ? error.message : domainErrorMessage[error.code],
         },

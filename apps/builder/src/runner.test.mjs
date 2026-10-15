@@ -116,6 +116,38 @@ test("builds from a filtered copy and atomically retains two successful releases
   expect((await lstat(join(output, "current"))).isSymbolicLink()).toBe(true);
 });
 
+test("probes the published version with a single-entry first export page", async () => {
+  const { root, source, tool } = await fixture();
+  const requests = [];
+  const api = createServer((request, response) => {
+    requests.push({ authorization: request.headers.authorization, url: request.url });
+    response.writeHead(200, { "content-type": "application/json", etag: '"4"' });
+    response.end("{}");
+  });
+  await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => new Promise((resolve) => api.close(resolve)));
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: "apps/site",
+    outputDirectory: "dist",
+    workRoot: join(root, "work-probe"),
+    outputRoot: join(root, "output-probe"),
+    apiBaseUrl: `http://127.0.0.1:${api.address().port}/`,
+    buildToken: "build-token",
+    toolPath: tool,
+  });
+  expect(await builder.build({ buildId: "probe", targetVersion: 4 })).toMatchObject({
+    status: "succeeded",
+  });
+  expect(requests.length).toBeGreaterThan(0);
+  for (const request of requests) {
+    expect(request).toEqual({
+      authorization: "Bearer build-token",
+      url: "/api/v1/public/build-export?limit=1",
+    });
+  }
+});
+
 test("version advancement during a build leaves output unpublished", async () => {
   const { root, source, tool } = await fixture();
   let reads = 0;

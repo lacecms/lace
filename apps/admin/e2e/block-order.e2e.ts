@@ -16,7 +16,8 @@ import {
   migrateNodeDatabase,
   NodePlaceholderObjectStorage,
 } from "../../../packages/platform-node/dist/index.js";
-import type { ContentBlockDto } from "../../../packages/contracts/dist/index.js";
+import type { ContentBlockDto, PublicBlockDto } from "../../../packages/contracts/dist/index.js";
+import { readCompleteBuildExport } from "../../../packages/test-utils/dist/index.js";
 import { moveFirstHeroWithKeyboard } from "./helpers/block-order-keyboard.js";
 
 // This fixture uses the production HTTP/use-case/SQLite path. Only identity and
@@ -179,19 +180,14 @@ test("block structural actions survive real saves, reloads, publication, export 
       await page.getByRole("button", { name: "Publish", exact: true }).click();
       await page.getByRole("button", { name: "Confirm publication" }).click();
       await expect(page.getByText("Published. Build pending.")).toBeVisible();
-      const exported = await runtime.app.fetch(
-        new Request(`${apiOrigin}/api/v1/public/build-export`, {
-          headers: { authorization: `Bearer ${token.token}` },
-        }),
+      const { export: data } = await readCompleteBuildExport(
+        (url, init) => runtime.app.fetch(new Request(url, init)),
+        apiOrigin,
+        token.token,
       );
-      expect(exported.status).toBe(200);
-      const data = await exported.json();
-      expect(
-        data.entries[0].entry.published.blocks.map((block: ContentBlockDto) => block.key),
-      ).toEqual(expectedKeys);
-      expect(
-        data.entries[0].entry.published.blocks.map((block: ContentBlockDto) => block.data.heading),
-      ).toEqual(expectedValues);
+      const blocks: readonly PublicBlockDto[] = data.entries[0]!.blocks;
+      expect(blocks.map((block) => block.key)).toEqual(expectedKeys);
+      expect(blocks.map((block) => block.data.heading)).toEqual(expectedValues);
       // Async spawn keeps the fixture API responsive during the actual Astro build.
       await new Promise<void>((resolveBuild, rejectBuild) => {
         const child = spawn(

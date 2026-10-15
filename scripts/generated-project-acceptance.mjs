@@ -34,6 +34,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 import {
   assertSecretFree,
   assertImageFileList,
@@ -285,6 +286,16 @@ async function compose(stage, args, options = {}) {
     cwd: composeCwd,
     ...options,
   });
+}
+
+/** Follows every build-export page and returns the strictly validated assembled export. */
+async function readExport(base, token) {
+  const complete = await readCompleteBuildExport(
+    (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
+    new URL("/", base).toString(),
+    token,
+  );
+  return complete.export;
 }
 
 async function request(base, path, options = {}) {
@@ -1160,7 +1171,8 @@ async function starterJourney(project) {
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
 
   // Without a published global the header falls back to the layout's static values.
-  const { globals: _globals, ...withoutGlobals } = exported;
+  // A first export page always carries `globals`; an empty list means none is published.
+  const withoutGlobals = { ...exported, globals: [] };
   for (const page of await build("starter-build-without-globals", withoutGlobals, {
     LACE_BUILD_SITE_URL: "",
   })) {
@@ -1477,7 +1489,7 @@ async function securityJourney(context, session) {
   console.info("34B exact consumer: live Compose host maintenance refused before database access");
   const exportPath = "/api/v1/public/build-export";
   const auth = { authorization: `Bearer ${buildToken}` };
-  const before = (await request(base, exportPath, { headers: auth })).body;
+  const before = await readExport(base, buildToken);
   for (const headers of [{}, auth]) {
     for (const path of [
       "/api/v1/admin/content-models",
@@ -1564,7 +1576,7 @@ async function securityJourney(context, session) {
       title: "Unpublished consumer draft",
     },
   });
-  const after = (await request(base, exportPath, { headers: auth })).body;
+  const after = await readExport(base, buildToken);
   if (JSON.stringify(before) !== JSON.stringify(after))
     throw new Error("Denied publication or later draft changed published export");
   await run("draft-isolation-build", "pnpm", ["build"], {
@@ -1691,11 +1703,7 @@ async function persistenceJourney(context, session) {
   const headers = { cookie: session.cookie };
   const draftPath = `/api/v1/admin/entries/${session.entryId}`;
   const draft = (await request(session.base, draftPath, { headers })).body;
-  const exported = (
-    await request(session.base, "/api/v1/public/build-export", {
-      headers: { authorization: `Bearer ${session.buildToken}` },
-    })
-  ).body;
+  const exported = await readExport(session.base, session.buildToken);
   await compose("persist-stop", ["down", "--remove-orphans"]);
   await compose("persist-recreate", ["up", "--detach", "--wait"], { timeoutMs: 10 * 60_000 });
   if (
@@ -1703,11 +1711,7 @@ async function persistenceJourney(context, session) {
     JSON.stringify((await request(session.base, draftPath, { headers })).body)
   )
     throw new Error("Database draft did not persist across recreation");
-  const next = (
-    await request(session.base, "/api/v1/public/build-export", {
-      headers: { authorization: `Bearer ${session.buildToken}` },
-    })
-  ).body;
+  const next = await readExport(session.base, session.buildToken);
   if (JSON.stringify(next) !== JSON.stringify(exported))
     throw new Error("Published database state did not persist");
   const media = await fetch(new URL(`/api/v1/public/media/${session.mediaId}`, session.base));

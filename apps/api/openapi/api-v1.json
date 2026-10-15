@@ -961,6 +961,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -1081,6 +1082,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -1130,6 +1132,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -4825,6 +4828,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -7567,6 +7571,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -7616,6 +7621,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -7737,6 +7743,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -7843,6 +7850,7 @@
                         "code": {
                           "enum": [
                             "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
@@ -7940,385 +7948,253 @@
     },
     "/api/v1/public/build-export": {
       "get": {
+        "description": "Returns one bounded page of the published build export. A request without `after` returns the first page with `globals` and `seo`; follow `nextCursor` through `after` until it is absent. A continuation cursor of a superseded published state fails with `409 BUILD_EXPORT_VERSION_CHANGED`; restart from the first page.",
         "operationId": "getApiV1PublicBuildExport",
+        "parameters": [
+          {
+            "description": "Opaque `nextCursor` of the previous page; omit for the first page.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Entries per page; the server may end a page earlier at its byte budget.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "entries": {
-                      "items": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blocks": {
-                            "items": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "anchor": {
-                                  "type": "string"
-                                },
-                                "className": {
-                                  "type": "string"
-                                },
-                                "data": {},
-                                "key": {
-                                  "maxLength": 255,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "position": {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "schemaVersion": {
-                                  "minimum": 1,
-                                  "type": "integer"
-                                },
-                                "settings": {
-                                  "default": {}
-                                },
-                                "type": {
-                                  "maxLength": 255,
-                                  "minLength": 1,
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["data", "key", "position", "schemaVersion", "type"],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          },
-                          "fields": {},
-                          "id": {
-                            "maxLength": 255,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "modelKey": {
-                            "maxLength": 255,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "path": {
-                            "type": "string"
-                          },
-                          "publishedAt": {},
-                          "seo": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entries": {
+                          "items": {
                             "additionalProperties": false,
                             "properties": {
-                              "canonical": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
+                              "blocks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "anchor": {
+                                      "type": "string"
+                                    },
+                                    "className": {
+                                      "type": "string"
+                                    },
+                                    "data": {},
+                                    "key": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "position": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "schemaVersion": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "settings": {
+                                      "default": {}
+                                    },
+                                    "type": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
                                   },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
+                                  "required": ["data", "key", "position", "schemaVersion", "type"],
+                                  "type": "object"
+                                },
+                                "type": "array"
                               },
-                              "description": {
-                                "anyOf": [
-                                  {
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "image": {
-                                "anyOf": [
-                                  {
-                                    "maxLength": 255,
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "noindex": {
-                                "type": "boolean"
-                              },
-                              "title": {
-                                "anyOf": [
-                                  {
-                                    "minLength": 1,
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              }
-                            },
-                            "required": ["canonical", "description", "image", "noindex", "title"],
-                            "type": "object"
-                          },
-                          "slug": {
-                            "maxLength": 255,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "title": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "blocks",
-                          "fields",
-                          "id",
-                          "modelKey",
-                          "path",
-                          "publishedAt",
-                          "title"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "globals": {
-                      "default": [],
-                      "items": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blocks": {
-                            "items": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "anchor": {
-                                  "type": "string"
-                                },
-                                "className": {
-                                  "type": "string"
-                                },
-                                "data": {},
-                                "key": {
-                                  "maxLength": 255,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "position": {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "schemaVersion": {
-                                  "minimum": 1,
-                                  "type": "integer"
-                                },
-                                "settings": {
-                                  "default": {}
-                                },
-                                "type": {
-                                  "maxLength": 255,
-                                  "minLength": 1,
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["data", "key", "position", "schemaVersion", "type"],
-                              "type": "object"
-                            },
-                            "type": "array"
-                          },
-                          "fields": {},
-                          "id": {
-                            "maxLength": 255,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "modelKey": {
-                            "maxLength": 255,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "publishedAt": {}
-                        },
-                        "required": ["blocks", "fields", "id", "modelKey", "publishedAt"],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "media": {
-                      "additionalProperties": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "alt": {
-                            "anyOf": [
-                              {
+                              "fields": {},
+                              "id": {
+                                "maxLength": 255,
                                 "minLength": 1,
                                 "type": "string"
                               },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "caption": {
-                            "anyOf": [
-                              {
+                              "modelKey": {
+                                "maxLength": 255,
                                 "minLength": 1,
                                 "type": "string"
                               },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "focalPoint": {
-                            "anyOf": [
-                              {
+                              "path": {
+                                "type": "string"
+                              },
+                              "publishedAt": {},
+                              "seo": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "x": {
-                                    "type": "number"
+                                  "canonical": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   },
-                                  "y": {
-                                    "type": "number"
+                                  "description": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 255,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "noindex": {
+                                    "type": "boolean"
+                                  },
+                                  "title": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 },
-                                "required": ["x", "y"],
+                                "required": [
+                                  "canonical",
+                                  "description",
+                                  "image",
+                                  "noindex",
+                                  "title"
+                                ],
                                 "type": "object"
                               },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "height": {
-                            "anyOf": [
-                              {
-                                "minimum": 1,
-                                "type": "integer"
+                              "slug": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
                               },
-                              {
-                                "type": "null"
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
                               }
-                            ]
-                          },
-                          "id": {
-                            "maxLength": 255,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "mimeType": {
-                            "type": "string"
-                          },
-                          "url": {
-                            "type": "string"
-                          },
-                          "width": {
-                            "anyOf": [
-                              {
-                                "minimum": 1,
-                                "type": "integer"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "required": [
-                          "alt",
-                          "caption",
-                          "focalPoint",
-                          "height",
-                          "id",
-                          "mimeType",
-                          "url",
-                          "width"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "object"
-                    },
-                    "seo": {
-                      "additionalProperties": false,
-                      "default": {
-                        "defaults": null,
-                        "models": {}
-                      },
-                      "properties": {
-                        "defaults": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": false,
-                              "properties": {
-                                "description": {
-                                  "anyOf": [
-                                    {
-                                      "maxLength": 255,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "image": {
-                                  "anyOf": [
-                                    {
-                                      "maxLength": 255,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "modelKey": {
-                                  "maxLength": 255,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "siteName": {
-                                  "maxLength": 255,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "titleTemplate": {
-                                  "anyOf": [
-                                    {
-                                      "maxLength": 255,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "description",
-                                "image",
-                                "siteName",
-                                "titleTemplate",
-                                "modelKey"
-                              ],
-                              "type": "object"
                             },
-                            {
-                              "type": "null"
-                            }
-                          ]
+                            "required": [
+                              "blocks",
+                              "fields",
+                              "id",
+                              "modelKey",
+                              "path",
+                              "publishedAt",
+                              "title"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
                         },
-                        "models": {
+                        "formatVersion": {
+                          "const": 1
+                        },
+                        "globals": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "blocks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "anchor": {
+                                      "type": "string"
+                                    },
+                                    "className": {
+                                      "type": "string"
+                                    },
+                                    "data": {},
+                                    "key": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "position": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "schemaVersion": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "settings": {
+                                      "default": {}
+                                    },
+                                    "type": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["data", "key", "position", "schemaVersion", "type"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "fields": {},
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "publishedAt": {}
+                            },
+                            "required": ["blocks", "fields", "id", "modelKey", "publishedAt"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "media": {
                           "additionalProperties": {
                             "additionalProperties": false,
                             "properties": {
-                              "description": {
+                              "alt": {
                                 "anyOf": [
                                   {
-                                    "maxLength": 255,
                                     "minLength": 1,
                                     "type": "string"
                                   },
@@ -8327,10 +8203,9 @@
                                   }
                                 ]
                               },
-                              "image": {
+                              "caption": {
                                 "anyOf": [
                                   {
-                                    "maxLength": 255,
                                     "minLength": 1,
                                     "type": "string"
                                   },
@@ -8338,31 +8213,514 @@
                                     "type": "null"
                                   }
                                 ]
+                              },
+                              "focalPoint": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "x": {
+                                        "type": "number"
+                                      },
+                                      "y": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": ["x", "y"],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "height": {
+                                "anyOf": [
+                                  {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "width": {
+                                "anyOf": [
+                                  {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
-                            "required": ["description", "image"],
+                            "required": [
+                              "alt",
+                              "caption",
+                              "focalPoint",
+                              "height",
+                              "id",
+                              "mimeType",
+                              "url",
+                              "width"
+                            ],
                             "type": "object"
                           },
                           "type": "object"
+                        },
+                        "nextCursor": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "seo": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "defaults": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "description": {
+                                      "anyOf": [
+                                        {
+                                          "maxLength": 255,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "image": {
+                                      "anyOf": [
+                                        {
+                                          "maxLength": 255,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "modelKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "siteName": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "titleTemplate": {
+                                      "anyOf": [
+                                        {
+                                          "maxLength": 255,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "description",
+                                    "image",
+                                    "siteName",
+                                    "titleTemplate",
+                                    "modelKey"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "models": {
+                              "additionalProperties": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "description": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 255,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 255,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": ["description", "image"],
+                                "type": "object"
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "required": ["defaults", "models"],
+                          "type": "object"
+                        },
+                        "version": {
+                          "minimum": 0,
+                          "type": "integer"
                         }
                       },
-                      "required": ["defaults", "models"],
+                      "required": [
+                        "entries",
+                        "formatVersion",
+                        "media",
+                        "version",
+                        "globals",
+                        "seo"
+                      ],
                       "type": "object"
                     },
-                    "version": {
-                      "minimum": 0,
-                      "type": "integer"
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entries": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "blocks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "anchor": {
+                                      "type": "string"
+                                    },
+                                    "className": {
+                                      "type": "string"
+                                    },
+                                    "data": {},
+                                    "key": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "position": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "schemaVersion": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "settings": {
+                                      "default": {}
+                                    },
+                                    "type": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["data", "key", "position", "schemaVersion", "type"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "fields": {},
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "publishedAt": {},
+                              "seo": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "canonical": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "description": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "image": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 255,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "noindex": {
+                                    "type": "boolean"
+                                  },
+                                  "title": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "canonical",
+                                  "description",
+                                  "image",
+                                  "noindex",
+                                  "title"
+                                ],
+                                "type": "object"
+                              },
+                              "slug": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "blocks",
+                              "fields",
+                              "id",
+                              "modelKey",
+                              "path",
+                              "publishedAt",
+                              "title"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "formatVersion": {
+                          "const": 1
+                        },
+                        "media": {
+                          "additionalProperties": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "alt": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "caption": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "focalPoint": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "x": {
+                                        "type": "number"
+                                      },
+                                      "y": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": ["x", "y"],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "height": {
+                                "anyOf": [
+                                  {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "width": {
+                                "anyOf": [
+                                  {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "alt",
+                              "caption",
+                              "focalPoint",
+                              "height",
+                              "id",
+                              "mimeType",
+                              "url",
+                              "width"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "object"
+                        },
+                        "nextCursor": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["entries", "formatVersion", "media", "version"],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "One page of the published build export"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
                     }
                   },
-                  "required": ["entries", "media", "version"],
+                  "required": ["error"],
                   "type": "object"
                 }
               }
             },
-            "description": "Published build export"
+            "description": "Published content changed since the first page (BUILD_EXPORT_VERSION_CHANGED)"
           }
         },
-        "summary": "Read published build export",
+        "summary": "Read a page of the published build export",
         "tags": ["public"]
       }
     },

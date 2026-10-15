@@ -7,7 +7,13 @@ import type {
   SeoValueDto,
   PublicMediaDto,
 } from "@lacecms/contracts";
-import { createLaceClient, LaceHttpError, LaceSdkError, LaceTransportError } from "./client.js";
+import {
+  createLaceClient,
+  LaceHttpError,
+  LaceSdkError,
+  LaceTransportError,
+  LaceUnsupportedExportFormatError,
+} from "./client.js";
 import type { LaceClient, LaceFetch } from "./client.js";
 import { resolveSeo, seoText, siteUrlFor } from "./seo.js";
 import type { ResolvedSeo, SeoDefaultValues } from "./seo.js";
@@ -404,12 +410,46 @@ export function createPublishedSiteLoader(
     });
   }
 
+  function mismatch(expected: number, received: number | undefined, cause?: unknown): never {
+    failure(
+      "version_mismatch",
+      `The published content changed during the site build: expected version ${expected}, received ${received === undefined ? "a newer version" : received}. Start the build again.`,
+      cause,
+    );
+  }
+
   async function read(etag?: EntityTag): Promise<ExportRead> {
     const configuration = resolveConfiguration();
+    const expected = configuration.expectedVersion;
     let result;
     try {
-      result = await configuration.client.getBuildExport(etag === undefined ? {} : { etag });
+      result = await configuration.client.getBuildExport({
+        ...(etag === undefined ? {} : { etag }),
+        // A pinned build fails fast instead of restarting on a newer version.
+        ...(expected === undefined
+          ? {}
+          : {
+              onFirstPage: (page) => {
+                if (page.version !== expected) mismatch(expected, page.version);
+              },
+              restart: false,
+            }),
+      });
     } catch (error) {
+      if (
+        error instanceof LaceHttpError &&
+        error.status === 409 &&
+        error.code === "BUILD_EXPORT_VERSION_CHANGED"
+      ) {
+        const actual = error.details?.actualVersion;
+        if (expected !== undefined)
+          mismatch(expected, typeof actual === "number" ? actual : undefined, error);
+        failure(
+          "version_mismatch",
+          "The published content kept changing during the build export. Start the build again once publishing has settled.",
+          error,
+        );
+      }
       if (error instanceof LaceHttpError && (error.status === 401 || error.status === 403))
         failure(
           "rejected_token",
@@ -422,15 +462,17 @@ export function createPublishedSiteLoader(
           "The Lace API is unavailable. Check LACE_API_BASE_URL and that the Lace API is running.",
           error,
         );
+      if (error instanceof LaceUnsupportedExportFormatError)
+        failure(
+          "invalid_export",
+          `The Lace API sent build-export format ${error.received}, but this @lacecms/sdk supports format ${error.supported} at most. Upgrade @lacecms/sdk (and @lacecms/astro) to the release that matches the Lace API.`,
+          error,
+        );
       throw error;
     }
     if (!result.changed) return { changed: false, etag: result.etag };
     const version = result.export.version;
-    if (configuration.expectedVersion !== undefined && version !== configuration.expectedVersion)
-      failure(
-        "version_mismatch",
-        `The published content changed during the site build: expected version ${configuration.expectedVersion}, received ${version}. Start the build again.`,
-      );
+    if (expected !== undefined && version !== expected) mismatch(expected, version);
     return {
       changed: true,
       etag: result.etag,

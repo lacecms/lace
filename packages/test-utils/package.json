@@ -20,7 +20,9 @@
     "@lacecms/application": "workspace:*",
     "@lacecms/config": "workspace:*",
     "@lacecms/content": "workspace:*",
-    "@lacecms/domain": "workspace:*"
+    "@lacecms/contracts": "workspace:*",
+    "@lacecms/domain": "workspace:*",
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "oxlint": "catalog:",

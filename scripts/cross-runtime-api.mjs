@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import * as contracts from "../packages/contracts/dist/index.js";
 import { createPublishedSiteLoader } from "../packages/sdk/dist/index.js";
 import { png } from "../tests/support/cross-runtime-fixture.mjs";
+import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 const require = createRequire(new URL("../packages/contracts/package.json", import.meta.url));
 const { parse } = require("valibot");
 export const expected = JSON.parse(
@@ -357,11 +358,20 @@ export async function apiJourney(f) {
   const authorization = { authorization: `Bearer ${issued.token}` };
   await denied("/api/v1/admin/content-models", { headers: authorization });
   await denied("/api/v1/public/build-export");
-  const exportedResponse = await f.call("/api/v1/public/build-export", { headers: authorization });
-  assert.equal(exportedResponse.status, 200);
-  const exported = parse(contracts.buildExportSchema, await exportedResponse.json());
+  // One entry per page exercises cursor traversal on both runtimes.
+  const complete = await readCompleteBuildExport(
+    (url, init) => {
+      const target = new URL(url);
+      return f.call(`${target.pathname}${target.search}`, init);
+    },
+    "https://lace.invalid",
+    issued.token,
+    { limit: 1 },
+  );
+  assert.ok(complete.pages.length > 1);
+  const exported = parse(contracts.buildExportSchema, complete.export);
   assert.equal(exported.version, 6);
-  const tag = exportedResponse.headers.get("etag");
+  const tag = complete.etag;
   assert.equal(tag, '"6"');
   for (const etag of [tag, `W/${tag}`]) {
     const unchanged = await f.call("/api/v1/public/build-export", {

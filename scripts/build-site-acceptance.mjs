@@ -178,7 +178,7 @@ export async function buildSiteJourney(context, session, operations) {
         "-e",
         `
 import {readdir} from 'node:fs/promises';
-const exported = await fetch(new URL('api/v1/public/build-export', process.env.LACE_API_BASE_URL),
+const exported = await fetch(new URL('api/v1/public/build-export?limit=1', process.env.LACE_API_BASE_URL),
   {headers:{authorization:'Bearer '+process.env.LACE_BUILD_TOKEN}});
 if (!exported.ok) throw new Error('export unavailable');
 const targetVersion = Number(exported.headers.get('etag').slice(1,-1));

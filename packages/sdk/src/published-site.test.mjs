@@ -46,7 +46,14 @@ function mediaItem(id, overrides = {}) {
 }
 
 function buildExport(version, entries, media = {}) {
-  return { entries, media, version };
+  return {
+    entries,
+    formatVersion: 1,
+    globals: [],
+    media,
+    seo: { defaults: null, models: {} },
+    version,
+  };
 }
 
 function exportResponse(value, etag = `"${value.version}"`) {
@@ -454,6 +461,21 @@ test("rejects a legacy-shaped export as a contract violation", async () => {
   expect(error).toBeInstanceOf(LaceContractError);
 });
 
+test("an export in a newer format fails with invalid_export and upgrade guidance", async () => {
+  const error = await captureError(
+    createPublishedSiteLoader({
+      environment,
+      fetch: scriptedFetch([exportResponse({ ...buildExport(2, []), formatVersion: 2 })]).fetch,
+    })(),
+  );
+  expect(error).toBeInstanceOf(LaceSdkError);
+  expect(error.code).toBe("invalid_export");
+  expect(error.message).toContain("Upgrade @lacecms/sdk");
+  expect(error.message).not.toContain(token);
+  expect(error.cause).toBeInstanceOf(LaceContractError);
+  expect(error.cause).toMatchObject({ received: 2, supported: 1 });
+});
+
 test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {
   const conditions = [];
   const responses = [
@@ -753,4 +775,141 @@ test("published-site preserves nested fields, empty composites and nested media 
   expect(entry.blocks[0].data.images).toEqual(["portrait"]);
   expect(entry.image(entry.fields.team[0].profile.photo)).toMatchObject({ id: "portrait" });
   expect(site.global("settings").fields).toEqual(fields);
+});
+
+function pagedExport(version, paths) {
+  const pages = paths.map((group, index) => {
+    const entries = group.map((path) =>
+      exportEntry({ id: `post-${path.slice(-1)}`, path, slug: path.slice(-1) }),
+    );
+    const nextCursor = index < paths.length - 1 ? `cursor-${version}-${index}` : undefined;
+    const page = {
+      entries,
+      formatVersion: 1,
+      media: {},
+      ...(nextCursor === undefined ? {} : { nextCursor }),
+      version,
+    };
+    return index === 0 ? { ...page, globals: [], seo: { defaults: null, models: {} } } : page;
+  });
+  return pages.map((page) => exportResponse(page));
+}
+
+function versionChanged(expectedVersion, actualVersion) {
+  return Response.json(
+    {
+      error: {
+        code: "BUILD_EXPORT_VERSION_CHANGED",
+        details: { actualVersion, expectedVersion },
+        message: "Changed.",
+      },
+    },
+    { status: 409 },
+  );
+}
+
+const threePages = [["/blog/a"], ["/blog/b"], ["/blog/c"]];
+
+test("static mode reads one complete page traversal for every call", async () => {
+  const transport = scriptedFetch(pagedExport(5, threePages));
+  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
+  const sites = await Promise.all([load(), load(), load()]);
+  expect(await load()).toBe(sites[0]);
+  expect(new Set(sites).size).toBe(1);
+  expect(sites[0].allEntries().map((entry) => entry.path)).toEqual([
+    "/blog/a",
+    "/blog/b",
+    "/blog/c",
+  ]);
+  expect(transport.requests.map((request) => new URL(request.url).search)).toEqual([
+    "",
+    "?after=cursor-5-0",
+    "?after=cursor-5-1",
+  ]);
+});
+
+test("static mode restarts a traversal that failed on a later page", async () => {
+  const transport = scriptedFetch([
+    pagedExport(5, threePages)[0],
+    new TypeError("socket hang up"),
+    ...pagedExport(5, threePages),
+  ]);
+  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
+  expect((await captureError(load())).code).toBe("api_unavailable");
+  expect((await load()).allEntries()).toHaveLength(3);
+  expect(transport.requests.map((request) => new URL(request.url).search)).toEqual([
+    "",
+    "?after=cursor-5-0",
+    "",
+    "?after=cursor-5-0",
+    "?after=cursor-5-1",
+  ]);
+});
+
+test("revalidate mode reuses on a first-page 304 and traverses a changed export", async () => {
+  const transport = scriptedFetch([
+    ...pagedExport(3, [["/blog/a"], ["/blog/b"]]),
+    notModified('"3"'),
+    ...pagedExport(4, [["/blog/a"], ["/blog/b"], ["/blog/c"]]),
+  ]);
+  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate: true });
+  const first = await load();
+  expect(await load()).toBe(first);
+  const next = await load();
+  expect(next.version).toBe(4);
+  expect(next.allEntries()).toHaveLength(3);
+  expect(transport.requests.map((request) => request.headers.get("if-none-match"))).toEqual([
+    null,
+    null,
+    '"3"',
+    '"3"',
+    null,
+    null,
+  ]);
+});
+
+test("an expected version is checked on the first page before continuing", async () => {
+  const pinned = { ...environment, LACE_EXPECTED_PUBLISHED_VERSION: "7" };
+  const early = scriptedFetch(pagedExport(8, threePages));
+  const mismatch = await captureError(
+    createPublishedSiteLoader({ environment: pinned, fetch: early.fetch })(),
+  );
+  expect(mismatch.code).toBe("version_mismatch");
+  expect(mismatch.message).toContain("expected version 7, received 8");
+  expect(early.requests).toHaveLength(1);
+
+  const [page] = pagedExport(7, threePages);
+  const interrupted = scriptedFetch([page, versionChanged(7, 8)]);
+  const changed = await captureError(
+    createPublishedSiteLoader({ environment: pinned, fetch: interrupted.fetch })(),
+  );
+  expect(changed.code).toBe("version_mismatch");
+  expect(changed.message).toContain("expected version 7, received 8");
+  expect(interrupted.requests).toHaveLength(2);
+});
+
+test("an export that keeps changing fails with version_mismatch after one restart", async () => {
+  const [firstAttempt] = pagedExport(5, threePages);
+  const [secondAttempt] = pagedExport(6, threePages);
+  const transport = scriptedFetch([
+    firstAttempt,
+    versionChanged(5, 6),
+    secondAttempt,
+    versionChanged(6, 7),
+  ]);
+  const error = await captureError(
+    createPublishedSiteLoader({ environment, fetch: transport.fetch })(),
+  );
+  expect(error.code).toBe("version_mismatch");
+  expect(error.message).toContain("kept changing");
+  expect(transport.requests).toHaveLength(4);
+
+  const recovered = scriptedFetch([
+    pagedExport(5, threePages)[0],
+    versionChanged(5, 6),
+    ...pagedExport(6, threePages),
+  ]);
+  expect((await createPublishedSiteLoader({ environment, fetch: recovered.fetch })()).version).toBe(
+    6,
+  );
 });

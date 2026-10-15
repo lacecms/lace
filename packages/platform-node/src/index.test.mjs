@@ -1297,7 +1297,7 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         statements.push(sql);
         return prepare(sql);
       };
-      expect(await repository.exportBuildContent()).toMatchObject({
+      expect(await repository.exportBuildContentPage({ limit: 100 })).toMatchObject({
         entries: [
           { media: [{ id: "media-1" }], path: "/blog/post-a" },
           { media: [{ id: "media-1" }], path: "/blog/post-b" },
@@ -1305,13 +1305,13 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         globals: [],
         version: 2,
       });
-      // Routes, globals, snapshots, blocks, referenced media, and the version.
-      expect(statements.length).toBeLessThanOrEqual(6);
+      // Version with global sizes, candidates, routes, globals, snapshots,
+      // blocks and delivered media: fixed, independent of the entry count.
+      expect(statements.length).toBeLessThanOrEqual(7);
+      expect(statements.join("\n")).not.toMatch(/ in \(\?/u);
       const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
       expect(
-        database.connection
-          .prepare(`explain query plan ${mediaStatement}`)
-          .all("post-a-published", "post-b-published"),
+        database.connection.prepare(`explain query plan ${mediaStatement}`).all("", "/blog/post-b"),
       ).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ detail: expect.stringMatching(/^SCAN r\b/u) }),
@@ -1334,6 +1334,98 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         ]),
       );
     } finally {
+      database.connection.close();
+    }
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("reads each Node build-export page from one snapshot despite concurrent commits", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lace-node-export-"));
+  const databasePath = join(directory, "lace.sqlite");
+  try {
+    migrateNodeDatabase(databasePath);
+    const database = openNodeDatabase(databasePath);
+    const writer = openNodeDatabase(databasePath);
+    try {
+      database.connection
+        .prepare(
+          "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run("posts", "collection", "Posts", 1, "structure", "projection", 1, 1);
+      database.connection
+        .prepare(
+          "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run("media-1", "object-1", "image.png", "image/png", 1, "{}", "active", "editor", 1, 1);
+      const repository = new NodeContentRepository(database.connection, (key) => routes.get(key));
+      for (const [id, at] of [
+        ["post-a", 20],
+        ["post-b", 21],
+      ]) {
+        await repository.create({
+          entry: draftEntry(id, "posts", at),
+          mediaReferences: references(`${id}-block`),
+        });
+        await repository.publish({
+          entryId: contentEntryId(id),
+          expectedRevision: 1,
+          publishedAt: unixMilliseconds(at + 10),
+          publishedBy: editor,
+          publishedSnapshotId: contentSnapshotId(`${id}-published`),
+        });
+      }
+      // Another connection unpublishes post-b after the page chose its range.
+      const prepare = database.connection.prepare.bind(database.connection);
+      let committed = false;
+      database.connection.prepare = (sql) => {
+        if (!committed && sql.includes("hidden = 0 and")) {
+          committed = true;
+          writer.connection.transaction(() => {
+            writer.connection
+              .prepare("delete from published_routes where path = ?")
+              .run("/blog/post-b");
+            writer.connection
+              .prepare("update published_state set version = version + 1 where singleton_key = 1")
+              .run();
+          })();
+        }
+        return prepare(sql);
+      };
+      const page = await repository.exportBuildContentPage({ limit: 2 });
+      database.connection.prepare = prepare;
+      expect(committed).toBe(true);
+      expect(page.version).toBe(2);
+      expect(page.entries.map((item) => item.path)).toEqual(["/blog/post-a", "/blog/post-b"]);
+      expect(page.entries.map((item) => item.media.map((media) => media.id))).toEqual([
+        ["media-1"],
+        ["media-1"],
+      ]);
+      const current = await repository.exportBuildContentPage({ limit: 1 });
+      expect(current).toMatchObject({ entries: [{ path: "/blog/post-a" }], version: 3 });
+      expect(current).not.toHaveProperty("nextCursor");
+
+      // A cursor issued before another connection's commit cannot continue.
+      writer.connection
+        .prepare(
+          "insert into published_routes (path, entry_id, snapshot_id, updated_at) values (?, ?, ?, ?)",
+        )
+        .run("/blog/post-b", "post-b", "post-b-published", 50);
+      const before = await repository.exportBuildContentPage({ limit: 1 });
+      expect(before).toMatchObject({ entries: [{ path: "/blog/post-a" }], version: 3 });
+      writer.connection
+        .prepare("update published_state set version = version + 1 where singleton_key = 1")
+        .run();
+      await expect(
+        repository.exportBuildContentPage({ after: before.nextCursor, limit: 1 }),
+      ).rejects.toMatchObject({
+        actualVersion: 4,
+        code: "BUILD_EXPORT_VERSION_CHANGED",
+        expectedVersion: 3,
+      });
+    } finally {
+      writer.connection.close();
       database.connection.close();
     }
   } finally {
