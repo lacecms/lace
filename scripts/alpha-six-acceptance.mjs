@@ -108,7 +108,7 @@ export async function alphaSixJourney({
       fields: {},
       blocks: [
         {
-          key: "01J000000000000000000000099",
+          key: `01J${"99".padStart(23, "0")}`,
           type: "image",
           schemaVersion: version,
           position: 1024,
@@ -117,7 +117,7 @@ export async function alphaSixJourney({
       ],
     },
   });
-  assert.equal(created.response.status, 201);
+  assert.equal(created.response.status, 201, JSON.stringify(created.body));
   const detached = await invoke(`admin/media/${uploaded.body.id}?detach=drafts`, {
     method: "DELETE",
   });
