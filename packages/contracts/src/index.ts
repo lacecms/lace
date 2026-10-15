@@ -959,6 +959,11 @@ export const mediaListQuerySchema = v.object({
   type: v.optional(mediaMimeTypeSchema),
 });
 
+/** `detach=drafts` removes the item from using drafts before deletion is requested. */
+export const mediaDeleteQuerySchema = v.object({
+  detach: v.optional(v.picklist(["drafts"])),
+});
+
 const mediaAltSchema = v.pipe(
   v.string(),
   v.check(

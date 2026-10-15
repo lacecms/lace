@@ -590,8 +590,13 @@ test("browses, uploads several files, and inspects media in the library", async 
   await opener.focus();
   await page.keyboard.press("Enter");
   const panel = page.getByRole("dialog", { name: "hero.png" });
-  await expect(panel.getByRole("link", { name: "First post" })).toBeVisible();
+  await expect(
+    panel
+      .getByRole("list", { exact: true, name: "Entries using this media" })
+      .getByRole("link", { name: "First post" }),
+  ).toBeVisible();
   await expect(panel).toContainText("Cover field · Draft and published");
+  await expect(panel).toContainText("remove the media from the draft, then publish the entry");
   await expect(panel.getByRole("button", { name: "Delete media" })).toBeDisabled();
   await expect(panel).not.toContainText("editor-1");
   await page.keyboard.press("Escape");

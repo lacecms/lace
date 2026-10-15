@@ -75,6 +75,7 @@ async function fixture({
   const logs = [];
   const media = new MediaUseCases({
     clock: new DeterministicClock(unixMilliseconds(1)),
+    drafts: content,
     idGenerator: new DeterministicIdGenerator("media"),
     imageInspector: {
       async inspect() {
@@ -1230,6 +1231,204 @@ test("lists media with filters and bound cursors and exposes details with usage"
     status: "deleting",
     usage: [],
   });
+});
+
+const mediaBlocks = [
+  defineBlock({ fields: { image: field.media() }, type: "picture", version: 1 }),
+  defineBlock({
+    fields: {
+      images: field.list({
+        item: field.group({ fields: { caption: field.text(), image: field.media() } }),
+      }),
+    },
+    type: "gallery",
+    version: 1,
+  }),
+];
+const mediaModels = [
+  defineCollection({
+    blocks: ["picture", "gallery"],
+    fields: { cover: field.media(), photos: field.list({ item: field.media() }) },
+    key: "posts",
+    route: "/blog/:slug",
+    seo: {},
+    version: 1,
+  }),
+];
+const PICTURE_KEY = "01ARZ3NDEKTSV4RRFFQ69G5FA1";
+const GALLERY_KEY = "01ARZ3NDEKTSV4RRFFQ69G5FA2";
+
+async function uploadImage(app, filename) {
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]),
+    filename,
+  );
+  const created = await app.fetch(
+    new Request("https://lace.test/api/v1/admin/media", { body: form, method: "POST" }),
+  );
+  expect(created.status).toBe(201);
+  return created.json();
+}
+
+function jsonRequest(method, body) {
+  return { body: JSON.stringify(body), headers: { "content-type": "application/json" }, method };
+}
+
+test("removing a media block from a draft releases the media only after republication", async () => {
+  const { app } = await fixture({ blocks: mediaBlocks, maxBodyBytes: 8192, models: mediaModels });
+  const image = await uploadImage(app, "photo.png");
+  const other = await uploadImage(app, "other.png");
+  const gallery = {
+    data: { images: [{ caption: "Other", image: other.id }] },
+    key: GALLERY_KEY,
+    position: 2000,
+    schemaVersion: 1,
+    type: "gallery",
+  };
+  const created = await json(
+    app,
+    "/api/v1/admin/models/posts/entries",
+    jsonRequest("POST", {
+      blocks: [
+        {
+          data: { image: image.id },
+          key: PICTURE_KEY,
+          position: 1000,
+          schemaVersion: 1,
+          type: "picture",
+        },
+        gallery,
+      ],
+      fields: {},
+      slug: "post",
+      title: "Post",
+    }),
+  );
+  expect(created.response.status).toBe(201);
+  const entryId = created.body.id;
+  const publish = (expectedRevision) =>
+    json(
+      app,
+      `/api/v1/admin/entries/${entryId}/publish`,
+      jsonRequest("POST", { expectedRevision }),
+    );
+  expect((await publish(1)).response.status).toBe(200);
+  const saved = await json(
+    app,
+    `/api/v1/admin/entries/${entryId}/draft`,
+    jsonRequest("PUT", {
+      blocks: [{ ...gallery, position: 1000 }],
+      expectedRevision: 1,
+      fields: {},
+      slug: "post",
+      title: "Post",
+    }),
+  );
+  expect(saved.response.status).toBe(200);
+
+  expect((await json(app, `/api/v1/admin/media/${image.id}`)).body).toMatchObject({
+    usage: [
+      {
+        entryId,
+        locations: [
+          {
+            blockKey: PICTURE_KEY,
+            blockType: "picture",
+            field: "image",
+            source: "block",
+            states: ["published"],
+          },
+        ],
+        status: "changed",
+      },
+    ],
+    usageCount: 1,
+  });
+  const remove = () =>
+    app.fetch(
+      new Request(`https://lace.test/api/v1/admin/media/${image.id}`, { method: "DELETE" }),
+    );
+  const refused = await remove();
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "MEDIA_IN_USE" } });
+
+  expect((await publish(2)).response.status).toBe(200);
+  expect((await json(app, `/api/v1/admin/media/${image.id}`)).body).toMatchObject({
+    usage: [],
+    usageCount: 0,
+  });
+  expect((await json(app, `/api/v1/admin/media/${other.id}`)).body.usageCount).toBe(1);
+  const accepted = await remove();
+  expect(accepted.status).toBe(202);
+  expect(await accepted.json()).toMatchObject({ status: "deleting", usageCount: 0 });
+});
+
+test("detach=drafts clears draft-only usage before deletion and rejects other values", async () => {
+  const { app, store } = await fixture({
+    actor: editor,
+    blocks: mediaBlocks,
+    maxBodyBytes: 8192,
+    models: mediaModels,
+  });
+  const image = await uploadImage(app, "photo.png");
+  const other = await uploadImage(app, "other.png");
+  const created = await json(
+    app,
+    "/api/v1/admin/models/posts/entries",
+    jsonRequest("POST", {
+      blocks: [
+        {
+          data: { image: image.id },
+          key: PICTURE_KEY,
+          position: 1000,
+          schemaVersion: 1,
+          type: "picture",
+        },
+        {
+          data: { images: [{ caption: "One", image: image.id }, { image: other.id }] },
+          key: GALLERY_KEY,
+          position: 2000,
+          schemaVersion: 1,
+          type: "gallery",
+        },
+      ],
+      fields: { cover: image.id, photos: [image.id, other.id] },
+      seo: { image: image.id },
+      slug: "post",
+      title: "Post",
+    }),
+  );
+  expect(created.response.status).toBe(201);
+  const remove = (query) =>
+    json(app, `/api/v1/admin/media/${image.id}${query}`, { method: "DELETE" });
+  for (const query of ["?detach=all", "?detach=drafts&detach=drafts"]) {
+    expect(await remove(query)).toMatchObject({
+      body: { error: { code: "VALIDATION_FAILED", details: { issues: [{ path: "/detach" }] } } },
+      response: { status: 422 },
+    });
+  }
+  expect(await remove("")).toMatchObject({
+    body: { error: { code: "MEDIA_IN_USE" } },
+    response: { status: 409 },
+  });
+  expect((await json(app, `/api/v1/admin/entries/${created.body.id}`)).body.draft.revision).toBe(1);
+
+  expect(await remove("?detach=drafts")).toMatchObject({
+    body: { id: image.id, status: "deleting", usageCount: 0 },
+    response: { status: 202 },
+  });
+  const entry = (await json(app, `/api/v1/admin/entries/${created.body.id}`)).body.draft;
+  expect(entry).toMatchObject({ fields: { photos: [other.id] }, revision: 2 });
+  expect(entry.fields).not.toHaveProperty("cover");
+  expect(entry.seo.image).toBeNull();
+  expect(entry.blocks.map((block) => block.data)).toEqual([
+    {},
+    { images: [{ caption: "One" }, { image: other.id }] },
+  ]);
+  expect(store.mediaDeletionRequests).toEqual([image.id]);
+  expect((await json(app, `/api/v1/admin/media/${other.id}`)).body.usageCount).toBe(1);
 });
 
 test("anonymous setup state exposes only durable completion with no cache or mutation", async () => {

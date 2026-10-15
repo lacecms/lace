@@ -1539,6 +1539,75 @@ contract(
 );
 
 contract(
+  "removing a media block from a draft leaves published-only usage until republication",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({
+      nextId: sequence("outbox"),
+      resolveModel: resolveRoute,
+    });
+    await seedModels(sql, "posts");
+    await seedMedia(sql, "media-1");
+    await seedMedia(sql, "media-2");
+    const kept = heroBlock("kept", "media-2", "Kept", "hero", 2000);
+    await repository.create({
+      entry: entry("post", "posts", {
+        blocks: [heroBlock("removed", "media-1", "Removed"), kept],
+        slug: "post",
+        title: "Post",
+        updatedAt: 1,
+      }),
+      mediaReferences: [
+        { fieldPath: "image", mediaId: mediaId("media-1"), sourceKey: blockKey("removed") },
+        { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: blockKey("kept") },
+      ],
+    });
+    await repository.publish(publish("post", 1, 2));
+    await repository.saveCompleteDraft(
+      save("post", 1, 3, {
+        blocks: [{ ...kept, position: 1000 }],
+        mediaReferences: [
+          { fieldPath: "image", mediaId: mediaId("media-2"), sourceKey: blockKey("kept") },
+        ],
+        slug: "post",
+        title: "Post",
+      }),
+    );
+    const request = (at: number) => ({
+      mediaId: mediaId("media-1"),
+      requestedAt: unixMilliseconds(at),
+      requestedBy: editor,
+    });
+    expect((await repository.loadMediaCatalogItem("media-1"))!.usageCount).toBe(1);
+    expect(await repository.loadMediaUsage({ limit: 50, mediaId: mediaId("media-1") })).toEqual([
+      expect.objectContaining({
+        entryId: "post",
+        locations: [
+          {
+            blockKey: "removed",
+            blockType: "hero",
+            field: "image",
+            source: "block",
+            states: ["published"],
+          },
+        ],
+        status: "changed",
+      }),
+    ]);
+    await expect(repository.markForDeletion(request(4))).rejects.toMatchObject({
+      code: "MEDIA_IN_USE",
+    });
+
+    await repository.publish(publish("post", 2, 5));
+    expect((await repository.loadMediaCatalogItem("media-1"))!.usageCount).toBe(0);
+    expect(await repository.loadMediaUsage({ limit: 50, mediaId: mediaId("media-1") })).toEqual([]);
+    expect((await repository.loadMediaCatalogItem("media-2"))!.usageCount).toBe(1);
+    await expect(repository.markForDeletion(request(6))).resolves.toMatchObject({
+      status: "deleting",
+    });
+  },
+);
+
+contract(
   "rejects a route conflict without changing either entry or public state",
   async (runtime, expect) => {
     const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });

@@ -45,3 +45,45 @@ test("confirmation reports the accepted item and a refusal stays explained", asy
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(deleteMedia).toHaveBeenCalledWith("media-1");
 });
+
+const drafts = [
+  {
+    entryId: "entry-1",
+    locations: [{ field: "cover", source: "field" as const, states: ["draft" as const] }],
+    modelKey: "posts",
+    status: "draft" as const,
+    title: "Hello",
+  },
+];
+
+test("a detaching confirmation names the drafts, can be cancelled, and refreshes those entries", async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const deleteMedia = vi.fn(async () => ({ ...mediaItem, status: "deleting" as const }));
+  const { queryClient } = renderInRouter(
+    <DeleteMediaDialog detachFrom={drafts} item={mediaItem} onChanged={onChanged} />,
+    { client: stubClient({ deleteMedia }) },
+  );
+  const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+  const trigger = await screen.findByRole("button", { name: "Delete media" });
+  await user.click(trigger);
+  let dialog = await screen.findByRole("dialog", { name: "Delete cover.png?" });
+  expect(
+    within(dialog).getByRole("list", { name: "Drafts that lose this media" }),
+  ).toHaveTextContent("Hello");
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(trigger).toHaveFocus();
+  expect(deleteMedia).not.toHaveBeenCalled();
+
+  await user.click(trigger);
+  dialog = await screen.findByRole("dialog", { name: "Delete cover.png?" });
+  await user.click(within(dialog).getByRole("button", { name: "Remove from drafts and delete" }));
+  await waitFor(() =>
+    expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ status: "deleting" })),
+  );
+  expect(deleteMedia).toHaveBeenCalledWith("media-1", { detachDrafts: true });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "entry", "entry-1"] });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "entries", "posts"] });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "media"] });
+});

@@ -1,6 +1,7 @@
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import {
   collectFieldMedia,
+  detachFieldMedia,
   encodeFieldPath,
   MAX_TITLE_LENGTH,
   sha256CanonicalJson,
@@ -40,6 +41,7 @@ import type {
   DraftMediaReference,
   DraftSnapshot,
   EntrySeo,
+  MediaId,
   PublishedSnapshot,
 } from "@lacecms/domain";
 import {
@@ -143,6 +145,12 @@ export interface DuplicateContentEntryUseCaseInput {
   readonly entryId: ContentEntryId;
   /** When supplied, the source draft must still be at this revision. */
   readonly expectedRevision?: number;
+}
+
+export interface DetachMediaFromDraftUseCaseInput {
+  readonly actor: Actor;
+  readonly entryId: ContentEntryId;
+  readonly mediaId: MediaId;
 }
 
 export interface DeleteContentEntryUseCaseInput {
@@ -475,6 +483,47 @@ export class ContentUseCases {
         mediaReferences: draft.mediaReferences,
       }),
     );
+  }
+
+  /**
+   * Removes one media item from the entry's current draft: from entry fields,
+   * the data of every block and the SEO image. The rewritten draft is saved as
+   * an ordinary guarded draft save at the revision it was read with; a draft
+   * that does not use the item is left unchanged. Returns whether it saved.
+   */
+  public async detachMedia(input: DetachMediaFromDraftUseCaseInput): Promise<boolean> {
+    requirePermission(input.actor, "content:write");
+    const entry = await this.entry(input.entryId);
+    const model = this.model(entry.model.key);
+    const { draft } = entry;
+    const fields = detachFieldMedia(model.fields, draft.fields, input.mediaId);
+    let changed = fields !== draft.fields;
+    const blocks = draft.blocks.map((block) => {
+      const definition = this.dependencies.config.blocks.get(block.type);
+      if (definition === undefined) return block;
+      const data = detachFieldMedia(definition.fields, block.data, input.mediaId);
+      if (data === block.data) return block;
+      changed = true;
+      return { ...block, data };
+    });
+    let seo: EntrySeo | undefined = draft.seo;
+    if (seo?.image === input.mediaId) {
+      const { image: _image, ...rest } = seo;
+      seo = rest;
+      changed = true;
+    }
+    if (!changed) return false;
+    await this.save({
+      actor: input.actor,
+      blocks,
+      entryId: entry.id,
+      expectedRevision: draft.revision,
+      fields,
+      ...(seo === undefined ? {} : { seo }),
+      ...(draft.slug === undefined ? {} : { slug: draft.slug }),
+      title: draft.title,
+    });
+    return true;
   }
 
   public async delete(input: DeleteContentEntryUseCaseInput): Promise<void> {

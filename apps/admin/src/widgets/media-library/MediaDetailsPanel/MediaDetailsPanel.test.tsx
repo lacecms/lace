@@ -67,7 +67,29 @@ function mount({
   return { onClose, returnFocus };
 }
 
-test("shows facts and usage with entry links, and withholds deletion of used media", async () => {
+function usageEntry(
+  title: string,
+  states: readonly ("draft" | "published")[],
+  entryId = `entry-${title}`,
+): MediaDetailDto["usage"][number] {
+  return {
+    entryId,
+    locations: [
+      {
+        blockKey: "block-1",
+        blockType: "hero",
+        field: "image",
+        source: "block",
+        states: [...states],
+      },
+    ],
+    modelKey: "home",
+    status: "changed",
+    title,
+  };
+}
+
+test("shows facts and usage with entry links, and offers detaching deletion of draft-only media", async () => {
   mount();
   const panel = await screen.findByRole("dialog", { name: "cover.png" });
   await waitFor(() => expect(panel).toHaveFocus());
@@ -83,8 +105,98 @@ test("shows facts and usage with entry links, and withholds deletion of used med
   expect(link).toHaveAttribute("href", "/content/home/entry-9");
   expect(panel).toHaveTextContent("Hero block · Image field · Draft");
   expect(panel).not.toHaveTextContent("block-1");
+  expect(panel).toHaveTextContent("Only drafts use this media.");
+  expect(within(panel).getByRole("button", { name: "Delete media" })).toBeEnabled();
+});
+
+test("draft-only usage is detached and deleted after a confirmation naming the drafts", async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const twoDrafts = [usageEntry("Hello", ["draft"]), usageEntry("About", ["draft"])];
+  const deleteMedia = vi
+    .fn()
+    .mockRejectedValueOnce(
+      new AdminClientError({ code: "MEDIA_IN_USE", message: "In use.", status: 409 }),
+    )
+    .mockResolvedValueOnce({ ...usedItem, status: "deleting", usageCount: 0 });
+  mount({
+    client: {
+      deleteMedia,
+      getMedia: async () => ({ ...usedItem, usage: twoDrafts, usageCount: 2 }),
+    },
+    onChanged,
+  });
+  expect(await screen.findByText(/Only drafts use this media\./)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Delete media" }));
+  const confirm = await screen.findByRole("dialog", { name: "Delete cover.png?" });
+  const drafts = within(confirm).getByRole("list", { name: "Drafts that lose this media" });
+  expect(
+    within(drafts)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent),
+  ).toEqual(["Hello", "About"]);
+  expect(confirm).toHaveTextContent("published versions are not changed");
+  expect(confirm).toHaveTextContent("A required field left empty blocks publishing");
+  expect(confirm).toHaveTextContent("has to reload it before saving");
+  const submit = within(confirm).getByRole("button", { name: "Remove from drafts and delete" });
+  await user.click(submit);
+  expect(
+    await within(confirm).findByText(/Some drafts may already have changed\./),
+  ).toBeInTheDocument();
+  expect(onChanged).not.toHaveBeenCalled();
+  await user.click(submit);
+  await waitFor(() =>
+    expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ status: "deleting" })),
+  );
+  expect(deleteMedia).toHaveBeenLastCalledWith("media-1", { detachDrafts: true });
+});
+
+test("published usage withholds deletion and says whether publishing releases the media", async () => {
+  mount({
+    client: {
+      getMedia: async () => ({
+        ...usedItem,
+        usage: [usageEntry("Launch", ["published"]), usageEntry("About", ["draft", "published"])],
+        usageCount: 2,
+      }),
+    },
+  });
+  const panel = await screen.findByRole("dialog", { name: "cover.png" });
+  const list = await within(panel).findByRole("list", {
+    name: "Published entries using this media",
+  });
+  const [launch, about] = within(list).getAllByRole("listitem");
+  expect(launch).toHaveTextContent("Publish or unpublish the entry to release it.");
+  expect(within(launch!).getByRole("link", { name: "Launch" })).toHaveAttribute(
+    "href",
+    "/content/home/entry-Launch",
+  );
+  expect(about).toHaveTextContent("remove the media from the draft, then publish the entry");
   expect(within(panel).getByRole("button", { name: "Delete media" })).toBeDisabled();
-  expect(panel).toHaveTextContent("Remove it from every listed entry and publish those entries");
+});
+
+test("truncated or loading usage withholds deletion", async () => {
+  mount({
+    client: {
+      getMedia: async () => ({
+        ...usedItem,
+        usage: [usageEntry("Hello", ["draft"])],
+        usageCount: 60,
+      }),
+    },
+  });
+  expect(
+    await screen.findByText(/More entries use this media than can be changed at once/),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Delete media" })).toBeDisabled();
+});
+
+test("deletion of used media waits for its usage", async () => {
+  mount({ client: { getMedia: () => new Promise(() => {}) } });
+  expect(
+    await screen.findByText("Deletion is available once the usage of this media has loaded."),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Delete media" })).toBeDisabled();
 });
 
 test("reports truncated usage and usage failures without claiming the item is unused", async () => {

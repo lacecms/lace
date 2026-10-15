@@ -13,6 +13,7 @@ import {
   canonicalizeJson,
   compileFieldSchema,
   collectFieldMedia,
+  detachFieldMedia,
   encodeFieldPath,
   decodeFieldPath,
   defineBlock,
@@ -1280,6 +1281,41 @@ test("media traversal distinguishes groups, list indices and legacy paths", () =
   ]);
   expect(decodeFieldPath("cover")).toEqual(["cover"]);
   expect(decodeFieldPath("/images/0/image")).toEqual(["images", 0, "image"]);
+});
+
+test("media detaching clears leaves, drops media list items and keeps other values", () => {
+  const fields = {
+    cover: field.media(),
+    contact: field.group({ fields: { photo: field.media(), name: field.text() } }),
+    images: field.list({
+      item: field.group({ fields: { image: field.media(), caption: field.text() } }),
+    }),
+    media: field.list({ item: field.media() }),
+    title: field.text(),
+  };
+  const data = Object.freeze({
+    cover: "a",
+    contact: { name: "Ada", photo: "a" },
+    images: [{ image: "a", caption: "kept" }, { image: "b" }],
+    media: ["a", "c", "a"],
+    title: "a",
+  });
+  expect(detachFieldMedia(fields, data, "a")).toEqual({
+    contact: { name: "Ada" },
+    images: [{ caption: "kept" }, { image: "b" }],
+    media: ["c"],
+    title: "a",
+  });
+  expect(data.cover).toBe("a");
+  expect(detachFieldMedia(fields, data, "missing")).toBe(data);
+  const untouched = { contact: { photo: "b" }, images: [{ image: "b" }] };
+  const result = detachFieldMedia(fields, { ...untouched, cover: "a" }, "a");
+  expect(result).toEqual(untouched);
+  expect(result.contact).toBe(untouched.contact);
+  expect(result.images).toBe(untouched.images);
+  expect(collectFieldMedia(fields, detachFieldMedia(fields, data, "a"))).not.toContainEqual(
+    expect.objectContaining({ mediaId: "a" }),
+  );
 });
 
 test("nested model hints remain portable while block hints are rejected", () => {
