@@ -1,5 +1,12 @@
 # Compatibility baseline
 
+Read-only registry checks on 2026-10-16 at 00:32 Europe/Rome confirmed all
+fifteen alpha.5 npm versions and both GHCR image manifests are public. Alpha.5
+is now recorded as published and immutable. All fifteen alpha.6 npm version
+endpoints and both image manifests returned 404. This is availability evidence,
+not a reservation or proof of publishing rights. npm `whoami` returned E401;
+authenticated npm/GHCR publishing rights remain a later prerequisite.
+
 ## Status
 
 Lace is pre-release. This document records the initial development baseline;
@@ -246,6 +253,26 @@ Exact candidate evidence is in
 `docs/archive/step-33/step-33h-verification.md` (alpha.3) and
 `docs/archive/step-32/step-32b-verification.md` (alpha.2); preparation and publication
 are described in `docs/alpha-release.md`.
+
+## Alpha.6 coordinated upgrade
+
+Alpha.5 (`0.1.0-alpha.5`, template `0.29.0`) passed local acceptance on
+2026-10-14; this does not establish publication. Alpha.6 selects
+`0.1.0-alpha.6`, template `0.30.0`, on `next` and requires fresh acceptance.
+Upgrade API/admin, builder, SDK and site dependencies together. The raw
+build-export endpoint now returns version-bound pages with `formatVersion: 1`;
+custom HTTP consumers must follow cursors. Older SDKs reject the changed contract; unchecked raw clients may silently
+read only the first page. The new SDK rejects exports without a format version.
+Matching SDK/site loaders assemble all pages and preserve version consistency.
+Public SDK reads ignore additive unknown fields but retain required-field,
+rich-text, hidden-block and format-version checks.
+
+Draft-media detachment requires media and content write permissions, never
+rewrites published snapshots and is atomic per draft only. A later conflict
+leaves already-detached drafts saved and the media active for a retry. Published
+use and more than 50 using entries are refused before draft changes. There are
+no new database migrations relative to alpha.5. See
+[alpha.6 notes](./alpha-6-release-notes.md) for upgrade, backup and rollback steps.
 
 ## Minimum requirements and tested versions
 

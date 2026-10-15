@@ -74,7 +74,7 @@ export async function nodeBrowserJourney(options) {
 
     await sidebar.getByRole("link", { name: "Settings", exact: true }).click();
     await visible(tab.getByText("CMS version", { exact: true }), "node-cms-version");
-    await visible(tab.getByText("0.1.0-alpha.5", { exact: true }), "node-cms-release");
+    await visible(tab.getByText("0.1.0-alpha.6", { exact: true }), "node-cms-release");
     console.info("Acceptance: node-browser-media");
     await sidebar.getByRole("link", { name: "Media", exact: true }).click();
     await tab.getByLabel("Upload images").setInputFiles({

@@ -1,3 +1,4 @@
+import { alphaSixJourney } from "./alpha-six-acceptance.mjs";
 import { consumer34bSecurity } from "./consumer-34b-security.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -506,7 +507,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("link", { name: "Settings", exact: true })
       .click();
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
-    await visible(tab.getByText("0.1.0-alpha.5", { exact: true }), "cloudflare-cms-release");
+    await visible(tab.getByText("0.1.0-alpha.6", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
     // Keep both publications together for build coalescing. Browser assertions
     // are complete: drain requests, then stop polling before the API journey.
@@ -747,6 +748,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     assertSecretFree(trackedHistory, [pagesToken, hook.url], "tracked build history");
     if (trackedHistory.includes("stub-secret"))
       throw new Error("cloudflare-pages-tracking: Pages API settings reached build history");
+    await alphaSixJourney({ base, cookie: tracker, png, entryId, mediaId, buildToken, project });
   } catch (error) {
     // Network failures carry no stage context; keep the local Worker's own output.
     const output = sanitize(worker?.output ?? "").slice(-4000);
