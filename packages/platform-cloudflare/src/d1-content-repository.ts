@@ -13,12 +13,13 @@ import {
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
   SITE_BUILD_DEBOUNCE_MS,
+  assertBuildExportPageSize,
 } from "@lacecms/application";
 import type {
   ActorSummary,
   ApplyConfigurationSynchronizationInput,
   ApplyConfigurationSynchronizationResult,
-  BuildContentExport,
+  BuildContentExportPage,
   BuildQueueReceipt,
   ClaimDispatcherEventsInput,
   CompleteDispatcherLeaseInput,
@@ -45,6 +46,7 @@ import type {
   EnqueueSiteBuildInput,
   ListContentEntriesInput,
   ListMediaInput,
+  ExportBuildContentPageInput,
   ListPublicContentInput,
   LoadContentEntryInput,
   LoadMediaUsageInput,
@@ -78,7 +80,15 @@ import type {
   StoredContentModelState,
 } from "@lacecms/application";
 import {
+  assertBuildExportVersion,
   BLOCK_COLUMNS_SQL,
+  BUILD_EXPORT_CANDIDATES_SQL,
+  BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
+  BUILD_EXPORT_VERSION_SQL,
+  buildExportPage,
+  buildExportPageRange,
+  buildExportPageSql,
+  decodeBuildExportCursor,
   ENTRY_COLUMNS_SQL,
   ENTRY_SEARCH_SQL,
   ENTRY_SORT_SQL,
@@ -176,6 +186,7 @@ import {
   storedSnapshots,
 } from "@lacecms/db";
 import type {
+  BuildExportCandidateRow,
   DueTrackedSiteBuildRow,
   BlockRow,
   ContentModelResolver,
@@ -703,19 +714,64 @@ export class D1ContentRepository
     );
   }
 
-  public async exportBuildContent(): Promise<BuildContentExport> {
-    const rows = await this.all<PublicRow>(`${PUBLIC_ROUTE_SQL} order by r.path asc`);
-    const globalRows = await this.all<PublicGlobalRow>(
-      `${PUBLIC_GLOBAL_SQL} order by e.model_key asc`,
+  /**
+   * Reads one page with two atomic read batches and at most eight statements:
+   * the version and candidate sizes, then the version again with the page's
+   * range-bounded rows. Each version increment is atomic with every
+   * published-state change, so equal versions prove one published state.
+   */
+  public async exportBuildContentPage(
+    input: ExportBuildContentPageInput,
+  ): Promise<BuildContentExportPage> {
+    const limit = assertBuildExportPageSize(input.limit);
+    const after = input.after === undefined ? undefined : decodeBuildExportCursor(input.after);
+    const first = after === undefined;
+    const from = after?.path ?? "";
+    const [stateResult, candidateResult] = await this.database.batch([
+      this.database.prepare(first ? BUILD_EXPORT_FIRST_PAGE_VERSION_SQL : BUILD_EXPORT_VERSION_SQL),
+      bind(this.database.prepare(BUILD_EXPORT_CANDIDATES_SQL), [from, limit + 1]),
+    ]);
+    const state = stateResult!.results[0] as {
+      readonly globals_bytes?: number;
+      readonly version: number;
+    };
+    const expected = after?.version ?? state.version;
+    assertBuildExportVersion(expected, state.version);
+    const range = buildExportPageRange(
+      from,
+      candidateResult!.results as unknown as BuildExportCandidateRow[],
+      limit,
+      state.globals_bytes ?? 0,
     );
-    // One hydration and media pass covers routed entries and globals.
-    const entries = await this.hydrate([...rows, ...globalRows]);
-    const media = await this.publicMedia([...rows, ...globalRows]);
-    return Object.freeze({
-      entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
-      globals: Object.freeze(globalRows.map((row) => publicGlobalContent(row, entries, media))),
-      version: await this.publishedContentVersion(),
-    });
+    const sql = buildExportPageSql(first);
+    const ranged = (statement: string) =>
+      bind(this.database.prepare(statement), [range.after, range.last]);
+    const [versionResult, routes, snapshots, blocks, media, globals] = await this.database.batch([
+      this.database.prepare(BUILD_EXPORT_VERSION_SQL),
+      ranged(sql.routes),
+      ranged(sql.snapshots),
+      ranged(sql.blocks),
+      ranged(sql.media),
+      ...(sql.globals === undefined ? [] : [this.database.prepare(sql.globals)]),
+    ]);
+    assertBuildExportVersion(
+      expected,
+      (versionResult!.results[0] as { readonly version: number }).version,
+    );
+    return buildExportPage(
+      {
+        blocks: blocks!.results as unknown as BlockRow[],
+        ...(globals === undefined
+          ? {}
+          : { globals: globals.results as unknown as PublicGlobalRow[] }),
+        media: media!.results as Record<string, unknown>[],
+        routes: routes!.results as unknown as PublicRow[],
+        snapshots: snapshots!.results as unknown as SnapshotRow[],
+      },
+      range,
+      expected,
+      this.resolveModel,
+    );
   }
 
   public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {

@@ -15,12 +15,14 @@ import {
   contentSyncActor,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
+  assertBuildExportPageSize,
+  selectBuildExportPage,
 } from "@lacecms/application";
 import type {
   ActorSummary,
   ApplyConfigurationSynchronizationInput,
   ApplyConfigurationSynchronizationResult,
-  BuildContentExport,
+  BuildContentExportPage,
   BuildTriggerResult,
   ByteStream,
   Cache,
@@ -53,6 +55,7 @@ import type {
   DispatcherEvent,
   DispatcherLease,
   DispatcherLeasePort,
+  ExportBuildContentPageInput,
   IdGenerator,
   ListContentEntriesInput,
   ListPublicContentInput,
@@ -94,7 +97,10 @@ import type {
   UnpublishContentEntryResult,
 } from "@lacecms/application";
 import {
+  BuildExportCursorError,
+  BuildExportVersionChangedError,
   DomainError,
+  cloneEntrySeo,
   mediaId,
   assertEntryCreationAllowed,
   assertPublicPathAvailable,
@@ -127,6 +133,29 @@ import type { NormalizedContentModel } from "@lacecms/config";
 import type { JsonValue } from "@lacecms/content";
 
 export const packageName = "@lacecms/test-utils";
+
+declare const TextEncoder: new () => { encode(input: string): Uint8Array };
+
+function utf8Length(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/**
+ * Stored JSON bytes of a published snapshot as the SQL adapters measure them:
+ * fields, SEO, and the data and settings of visible blocks.
+ */
+function storedExportBytes(snapshot: PublishedSnapshot): number {
+  let bytes = utf8Length(JSON.stringify(snapshot.fields));
+  if (snapshot.seo !== undefined) bytes += utf8Length(JSON.stringify(cloneEntrySeo(snapshot.seo)));
+  for (const block of snapshot.blocks) {
+    if (block.hidden) continue;
+    bytes +=
+      utf8Length(JSON.stringify(block.data)) + utf8Length(JSON.stringify(block.settings ?? {}));
+  }
+  return bytes;
+}
+
+const BUILD_EXPORT_CURSOR_PREFIX = "build-export:";
 
 /** Reusable assertion primitive for persistence adapters with injectable write checkpoints. */
 export async function assertAtomicCheckpoints(input: {
@@ -1438,14 +1467,51 @@ export class InMemoryContentStore
     return Object.freeze({ media: clone(updated), targetVersion: this.publicVersion });
   }
 
-  public async exportBuildContent(): Promise<BuildContentExport> {
+  public async exportBuildContentPage(
+    input: ExportBuildContentPageInput,
+  ): Promise<BuildContentExportPage> {
+    const limit = assertBuildExportPageSize(input.limit);
+    const after = input.after === undefined ? undefined : this.decodeExportCursor(input.after);
+    if (after !== undefined && after.version !== this.publicVersion) {
+      throw new BuildExportVersionChangedError(after.version, this.publicVersion);
+    }
+    const globals = after === undefined ? this.publicGlobals() : undefined;
+    // Binary path order, like SQLite's default collation over published_routes.path.
+    const remaining = this.publicEntries()
+      .filter(({ path }) => after === undefined || path > after.path)
+      .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+    const { count, more } = selectBuildExportPage(
+      remaining
+        .slice(0, limit + 1)
+        .map(({ entry }) => ({ bytes: storedExportBytes(entry.published!) })),
+      limit,
+      (globals ?? []).reduce((total, entry) => total + storedExportBytes(entry.published!), 0),
+    );
+    const selected = remaining.slice(0, count);
+    const last = selected.at(-1);
     return Object.freeze({
-      entries: Object.freeze(
-        this.publicEntries().map(({ entry, path }) => this.publicView(entry, path)),
-      ),
-      globals: Object.freeze(this.publicGlobals().map((entry) => this.publicGlobalView(entry))),
+      entries: Object.freeze(selected.map(({ entry, path }) => this.publicView(entry, path))),
+      ...(globals === undefined
+        ? {}
+        : { globals: Object.freeze(globals.map((entry) => this.publicGlobalView(entry))) }),
+      ...(more && last !== undefined
+        ? {
+            nextCursor: opaqueCursor(
+              `${BUILD_EXPORT_CURSOR_PREFIX}${this.publicVersion}:${last.path}`,
+            ),
+          }
+        : {}),
       version: this.publicVersion,
     });
+  }
+
+  private decodeExportCursor(cursor: OpaqueCursor): { path: string; version: number } {
+    const match = /^build-export:(0|[1-9][0-9]*):(.*)$/su.exec(cursor);
+    const version = Number(match?.[1]);
+    if (match === null || !Number.isSafeInteger(version)) {
+      throw new BuildExportCursorError("Cursor is unsupported or belongs to a different list.");
+    }
+    return { path: match[2]!, version };
   }
 
   private assertActiveReferences(references: readonly DraftMediaReference[]): void {
@@ -1636,5 +1702,6 @@ export class InMemoryContentStore
     return `${input.entryId}:${input.idempotency.actorId}:${input.idempotency.key}`;
   }
 }
+export * from "./build-export.js";
 export * from "./repository-contract.js";
 export * from "./security-contract.js";

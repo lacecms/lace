@@ -426,3 +426,29 @@ Upgrade notes for the next alpha:
   introduced by a newer API is reported instead of failing as a contract
   violation. Code that assigns `code` to a `LaceErrorCode` variable must
   narrow it first.
+- The build export is paged. `GET /api/v1/public/build-export` returns a
+  first page `{formatVersion, version, entries, globals, seo, media,
+  nextCursor?}`; requests with `?after=<nextCursor>` return continuation pages
+  `{formatVersion, version, entries, media, nextCursor?}`. An optional `limit`
+  (1–100, default 100) caps entries per page, and the server also ends a page
+  at a fixed stored-JSON byte budget, always delivering at least one entry.
+  Sites that use the published-site loader, `getSite()`, `LaceBlocks` or
+  `client.getBuildExport()` need no code change: the SDK follows every cursor
+  and returns the same assembled export as before. Code that reads the raw
+  REST export must follow `nextCursor` until it is absent and merge the
+  pages' `entries` and `media`; `globals` and `seo` come from the first page.
+  The API and `@lacecms/sdk` must come from the same release.
+- A continuation request whose cursor was issued before a publication fails
+  with `409 BUILD_EXPORT_VERSION_CHANGED` and details `{expectedVersion,
+  actualVersion}`. `client.getBuildExport()` then restarts from the first
+  page, at most two traversals in total (`restart: false` disables this). The
+  published-site loader disables restarts when
+  `LACE_EXPECTED_PUBLISHED_VERSION` is set and reports the conflict as
+  `version_mismatch`; without it, exhausted restarts also fail with
+  `version_mismatch`, stating that content kept changing during the export.
+- `If-None-Match` applies to the first page only; continuation pages ignore it
+  and every `200` page carries the strong ETag of its version.
+- The page byte budget (4,000,000 stored bytes) is sized for the Workers Free
+  plan's 128 MB memory and 50 D1 queries per invocation; staying within its
+  10 ms CPU limit is best effort, because one maximal entry can exceed it on
+  its own page.

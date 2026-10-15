@@ -13,12 +13,13 @@ import {
   configurationSyncBaseline,
   planConfigurationSynchronization,
   renderConfigurationSyncPlanJson,
+  assertBuildExportPageSize,
 } from "@lacecms/application";
 import type {
   ActorSummary,
   ApplyConfigurationSynchronizationInput,
   ApplyConfigurationSynchronizationResult,
-  BuildContentExport,
+  BuildContentExportPage,
   ClaimDispatcherEventsInput,
   CompleteDispatcherLeaseInput,
   ContentCommandResult,
@@ -39,6 +40,7 @@ import type {
   CursorPage,
   DispatcherLease,
   DispatcherLeasePort,
+  ExportBuildContentPageInput,
   ListContentEntriesInput,
   ListMediaInput,
   LoadMediaUsageInput,
@@ -75,7 +77,15 @@ import type {
   StoredContentModelState,
 } from "@lacecms/application";
 import {
+  assertBuildExportVersion,
   BLOCK_COLUMNS_SQL,
+  BUILD_EXPORT_CANDIDATES_SQL,
+  BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
+  BUILD_EXPORT_VERSION_SQL,
+  buildExportPage,
+  buildExportPageRange,
+  buildExportPageSql,
+  decodeBuildExportCursor,
   seoJson,
   ENTRY_COLUMNS_SQL,
   ENTRY_SEARCH_SQL,
@@ -1456,21 +1466,48 @@ export class NodeContentRepository
     return mediaUsageEntries(rows);
   }
 
-  public async exportBuildContent(): Promise<BuildContentExport> {
-    const rows = this.connection
-      .prepare(`${PUBLIC_ROUTE_SQL} order by r.path asc`)
-      .all() as readonly PublicRow[];
-    const globalRows = this.connection
-      .prepare(`${PUBLIC_GLOBAL_SQL} order by e.model_key asc`)
-      .all() as readonly PublicGlobalRow[];
-    // One hydration and media pass covers routed entries and globals.
-    const entries = this.hydrate([...rows, ...globalRows]);
-    const media = this.publicMedia([...rows, ...globalRows]);
-    return Object.freeze({
-      entries: Object.freeze(rows.map((row) => publicContentEntry(row, entries, media))),
-      globals: Object.freeze(globalRows.map((row) => publicGlobalContent(row, entries, media))),
-      version: await this.publishedContentVersion(),
+  /**
+   * Reads one page inside a single read transaction, so its version check and
+   * every range-bounded read observe one WAL snapshot.
+   */
+  public async exportBuildContentPage(
+    input: ExportBuildContentPageInput,
+  ): Promise<BuildContentExportPage> {
+    const limit = assertBuildExportPageSize(input.limit);
+    const after = input.after === undefined ? undefined : decodeBuildExportCursor(input.after);
+    const first = after === undefined;
+    const read = this.connection.transaction((): BuildContentExportPage => {
+      const state = this.connection
+        .prepare(first ? BUILD_EXPORT_FIRST_PAGE_VERSION_SQL : BUILD_EXPORT_VERSION_SQL)
+        .get() as { readonly globals_bytes?: number; readonly version: number };
+      if (after !== undefined) assertBuildExportVersion(after.version, state.version);
+      const from = after?.path ?? "";
+      const range = buildExportPageRange(
+        from,
+        this.connection.prepare(BUILD_EXPORT_CANDIDATES_SQL).all(from, limit + 1) as readonly {
+          readonly path: string;
+          readonly stored_bytes: number;
+        }[],
+        limit,
+        state.globals_bytes ?? 0,
+      );
+      const sql = buildExportPageSql(first);
+      const all = <Row>(statement: string, ...params: readonly string[]) =>
+        this.connection.prepare(statement).all(...params) as readonly Row[];
+      return buildExportPage(
+        {
+          blocks: all<BlockRow>(sql.blocks, range.after, range.last),
+          ...(sql.globals === undefined ? {} : { globals: all<PublicGlobalRow>(sql.globals) }),
+          media: all<Record<string, unknown>>(sql.media, range.after, range.last),
+          routes: all<PublicRow>(sql.routes, range.after, range.last),
+          snapshots: all<SnapshotRow>(sql.snapshots, range.after, range.last),
+        },
+        range,
+        state.version,
+        this.resolveModel,
+      );
     });
+    return read();
   }
 
   private entryRow(id: string): EntryRow | undefined {

@@ -21,12 +21,14 @@ import type {
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
-import { permissionsFor, requirePermission, type Permission } from "@lacecms/domain";
+import { DomainError, permissionsFor, requirePermission, type Permission } from "@lacecms/domain";
 import type { AccountSecurityPort } from "./accounts.js";
 import type { UserProfileReader } from "./email.js";
 
 export const packageName = "@lacecms/application";
 
+/** Build-export page failures the HTTP boundary maps to stable responses. */
+export { BuildExportCursorError, BuildExportVersionChangedError } from "@lacecms/domain";
 export * from "./accounts.js";
 export * from "./configuration-sync.js";
 export * from "./email.js";
@@ -322,16 +324,79 @@ export interface PublicGlobalContent {
   readonly media: readonly MediaMetadata[];
 }
 
-export interface BuildContentExport {
-  /** Routed published entries ordered by path. */
+/** Entries one build-export page holds at most. */
+export const MAX_BUILD_EXPORT_PAGE_SIZE = 100;
+/**
+ * Stored JSON bytes (fields, SEO and visible block data and settings; globals
+ * on the first page) after which a build-export page ends. It bounds the
+ * memory and CPU of hydrating, validating and serializing one page.
+ */
+export const BUILD_EXPORT_PAGE_BYTE_BUDGET = 4_000_000;
+
+export interface ExportBuildContentPageInput {
+  /** Continuation cursor of the previous page; absent for the first page. */
+  readonly after?: OpaqueCursor;
+  /** Entries per page, from 1 to `MAX_BUILD_EXPORT_PAGE_SIZE`. */
+  readonly limit: number;
+}
+
+/** One page of the build export, read from a single published state. */
+export interface BuildContentExportPage {
+  /** Routed published entries ordered by path, continuing after the cursor. */
   readonly entries: readonly PublicContentEntry[];
-  /** Published globals ordered by model key. */
-  readonly globals: readonly PublicGlobalContent[];
+  /** Published globals ordered by model key; on the first page only. */
+  readonly globals?: readonly PublicGlobalContent[];
+  /** Present exactly when further entries remain. */
+  readonly nextCursor?: OpaqueCursor;
+  /** The published-state version every page of the sequence was read at. */
   readonly version: number;
 }
 
+/** A candidate entry of a build-export page and its stored JSON size in bytes. */
+export interface BuildExportCandidate {
+  readonly bytes: number;
+}
+
+/**
+ * Chooses how many of the ordered candidates (read with `limit + 1` rows) one
+ * page holds: at most `limit`, ending before an entry would raise the page's
+ * stored bytes above the budget, but always at least one entry. `initialBytes`
+ * counts the first page's globals.
+ */
+export function selectBuildExportPage(
+  candidates: readonly BuildExportCandidate[],
+  limit: number,
+  initialBytes = 0,
+): { readonly count: number; readonly more: boolean } {
+  let total = initialBytes;
+  let count = 0;
+  for (const candidate of candidates.slice(0, limit)) {
+    if (count > 0 && total + candidate.bytes > BUILD_EXPORT_PAGE_BYTE_BUDGET) break;
+    total += candidate.bytes;
+    count += 1;
+  }
+  return { count, more: candidates.length > count };
+}
+
+/** Rejects a build-export page size outside 1–100. */
+export function assertBuildExportPageSize(limit: number): number {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_BUILD_EXPORT_PAGE_SIZE) {
+    throw new DomainError(
+      "CONTENT_INVALID_STATE",
+      `Build-export page size must be between 1 and ${MAX_BUILD_EXPORT_PAGE_SIZE}.`,
+    );
+  }
+  return limit;
+}
+
 export interface PublicContentReadPort {
-  exportBuildContent(): Promise<BuildContentExport>;
+  /**
+   * Reads one build-export page from a single published state. Fails with
+   * `BuildExportVersionChangedError` when the cursor's version is no longer
+   * current or a publication lands during the read, and with
+   * `BuildExportCursorError` for a malformed or foreign cursor.
+   */
+  exportBuildContentPage(input: ExportBuildContentPageInput): Promise<BuildContentExportPage>;
   loadPublic(path: string): Promise<PublicContentEntry | null>;
   /** Reads a published global by model key without consulting published routes. */
   loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null>;

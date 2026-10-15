@@ -11,6 +11,7 @@ import {
   runLocalContentSync,
 } from "../dist/index.js";
 import { createTestActorResolver } from "./test-actors.ts";
+import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 test("CE9A real API keeps incomplete drafts savable and metadata sync preserves public content", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lace-ce9a-"));
@@ -139,17 +140,21 @@ test("CE9A real API keeps incomplete drafts savable and metadata sync preserves 
     await request(`${path}/publish`, { expectedRevision: valid.draft.revision });
     const before = await request(path, undefined, "GET");
     const token = await request("/api/v1/admin/api-tokens", { name: "CE9A build" });
-    const exported = await request("/api/v1/public/build-export", undefined, "GET", 200, {
-      authorization: `Bearer ${token.token}`,
-    });
+    const readExport = async () =>
+      (
+        await readCompleteBuildExport(
+          (url, init) => runtime.app.fetch(new Request(url, init)),
+          "https://lace.test",
+          token.token,
+        )
+      ).export;
+    const exported = await readExport();
     const next = await make("Changed prompt");
     runtime.close();
     runtime = open(next);
     expect(await sync(next)).toBe(0);
     expect(await request(path, undefined, "GET")).toEqual(before);
-    const afterExport = await request("/api/v1/public/build-export", undefined, "GET", 200, {
-      authorization: `Bearer ${token.token}`,
-    });
+    const afterExport = await readExport();
     expect(afterExport.entries).toEqual(exported.entries);
     expect(JSON.stringify(afterExport.entries)).not.toContain("placeholder");
     const metadata = await request("/api/v1/admin/content-models", undefined, "GET");

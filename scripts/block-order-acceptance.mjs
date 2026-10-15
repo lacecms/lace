@@ -1,5 +1,6 @@
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { moveFirstHeroWithKeyboard } from "../apps/admin/e2e/helpers/block-order-keyboard.ts";
+import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 
 /** The admin's explicit save resequences positions from the displayed order. */
 export const savedPositions = (count) =>
@@ -49,14 +50,14 @@ export async function blockOrderJourney(context, session, operations) {
   secretValues.add(exportToken);
   const entry = async () =>
     (await request(base, `/api/v1/admin/entries/${entryId}`, { headers })).body;
-  const exported = async () => {
-    const response = await fetch(new URL("/api/v1/public/build-export", base), {
-      headers: { authorization: `Bearer ${exportToken}` },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) throw new Error(`block-order-export: status ${response.status}`);
-    return response.json();
-  };
+  const exported = async () =>
+    (
+      await readCompleteBuildExport(
+        (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
+        new URL("/", base).toString(),
+        exportToken,
+      )
+    ).export;
   const exportedBlocks = (data) => data.entries.find((item) => item.id === entryId)?.blocks ?? [];
 
   const browser = await loadBrowser(workspace);

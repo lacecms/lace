@@ -410,12 +410,46 @@ export function createPublishedSiteLoader(
     });
   }
 
+  function mismatch(expected: number, received: number | undefined, cause?: unknown): never {
+    failure(
+      "version_mismatch",
+      `The published content changed during the site build: expected version ${expected}, received ${received === undefined ? "a newer version" : received}. Start the build again.`,
+      cause,
+    );
+  }
+
   async function read(etag?: EntityTag): Promise<ExportRead> {
     const configuration = resolveConfiguration();
+    const expected = configuration.expectedVersion;
     let result;
     try {
-      result = await configuration.client.getBuildExport(etag === undefined ? {} : { etag });
+      result = await configuration.client.getBuildExport({
+        ...(etag === undefined ? {} : { etag }),
+        // A pinned build fails fast instead of restarting on a newer version.
+        ...(expected === undefined
+          ? {}
+          : {
+              onFirstPage: (page) => {
+                if (page.version !== expected) mismatch(expected, page.version);
+              },
+              restart: false,
+            }),
+      });
     } catch (error) {
+      if (
+        error instanceof LaceHttpError &&
+        error.status === 409 &&
+        error.code === "BUILD_EXPORT_VERSION_CHANGED"
+      ) {
+        const actual = error.details?.actualVersion;
+        if (expected !== undefined)
+          mismatch(expected, typeof actual === "number" ? actual : undefined, error);
+        failure(
+          "version_mismatch",
+          "The published content kept changing during the build export. Start the build again once publishing has settled.",
+          error,
+        );
+      }
       if (error instanceof LaceHttpError && (error.status === 401 || error.status === 403))
         failure(
           "rejected_token",
@@ -438,11 +472,7 @@ export function createPublishedSiteLoader(
     }
     if (!result.changed) return { changed: false, etag: result.etag };
     const version = result.export.version;
-    if (configuration.expectedVersion !== undefined && version !== configuration.expectedVersion)
-      failure(
-        "version_mismatch",
-        `The published content changed during the site build: expected version ${configuration.expectedVersion}, received ${version}. Start the build again.`,
-      );
+    if (expected !== undefined && version !== expected) mismatch(expected, version);
     return {
       changed: true,
       etag: result.etag,

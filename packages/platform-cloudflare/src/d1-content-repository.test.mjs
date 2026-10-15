@@ -311,3 +311,90 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
   expect(shared).not.toMatch(forbidden);
   expect(shared).not.toMatch(/\bBuffer\.from\b/u);
 });
+
+test("reads a full build-export page with two bounded batches", async () => {
+  const { counting, database, repository } = await open();
+  await seedMedia(database, 200);
+  // Two maximal entries (200 blocks and 200 references each) among 101 routed entries.
+  for (let index = 0; index < 101; index += 1) {
+    const id = `post-${String(index).padStart(3, "0")}`;
+    const maximal = index < 2 ? maximalDraft(id) : maximalDraft(id, 1);
+    await repository.create({
+      entry: draft(id, { blocks: maximal.blocks }),
+      mediaReferences: maximal.references,
+    });
+    await repository.publish(publishInput(id, 1, 2, `${id}-published`));
+  }
+  counting.stats.queries = 0;
+  counting.stats.batches = 0;
+  counting.stats.maxParameters = 0;
+  const first = await repository.exportBuildContentPage({ limit: 100 });
+  expect(counting.stats.batches).toBe(2);
+  expect(counting.stats.queries).toBeLessThanOrEqual(10);
+  expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+  expect(first.entries).toHaveLength(100);
+  expect(first.entries[0].entry.published.blocks).toHaveLength(200);
+  expect(first.entries[0].media).toHaveLength(200);
+  expect(first.globals).toEqual([]);
+
+  counting.stats.queries = 0;
+  counting.stats.batches = 0;
+  const last = await repository.exportBuildContentPage({ after: first.nextCursor, limit: 100 });
+  expect(counting.stats.batches).toBe(2);
+  expect(counting.stats.queries).toBeLessThanOrEqual(10);
+  expect(last.entries.map((item) => item.path)).toEqual(["/blog/post-100"]);
+  expect(last).not.toHaveProperty("nextCursor");
+});
+
+test("fails a build-export page when a publication lands between its batches", async () => {
+  const { counting, database, repository } = await open();
+  for (const id of ["a", "b", "c"]) {
+    await repository.create({ entry: draft(id), mediaReferences: [] });
+    if (id !== "c") await repository.publish(publishInput(id, 1, 2, `${id}-published`));
+  }
+  const other = new D1ContentRepository(database, resolveModel);
+  const binding = counting.binding;
+  let batches = 0;
+  let inject = async () => {};
+  const injecting = new D1ContentRepository(
+    {
+      ...binding,
+      batch: async (statements) => {
+        const result = await binding.batch(statements);
+        batches += 1;
+        if (batches === 1) await inject();
+        return result;
+      },
+    },
+    resolveModel,
+  );
+  const mutations = [
+    () => other.publish(publishInput("c", 1, 3, "c-published")),
+    () =>
+      other.unpublish({
+        entryId: contentEntryId("c"),
+        expectedPublishedSnapshotId: contentSnapshotId("c-published"),
+        unpublishedAt: unixMilliseconds(4),
+        unpublishedBy: editor,
+      }),
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    // The first case reads a first page, the second a continuation page.
+    const after =
+      index === 0 ? undefined : (await repository.exportBuildContentPage({ limit: 1 })).nextCursor;
+    const version = await repository.publishedContentVersion();
+    batches = 0;
+    inject = mutate;
+    const failure = await injecting
+      .exportBuildContentPage({ ...(after === undefined ? {} : { after }), limit: 1 })
+      .catch((error) => error);
+    expect(batches).toBe(2);
+    expect(failure).toMatchObject({
+      actualVersion: version + 1,
+      code: "BUILD_EXPORT_VERSION_CHANGED",
+      expectedVersion: version,
+    });
+  }
+  inject = async () => {};
+  expect((await injecting.exportBuildContentPage({ limit: 100 })).entries).toHaveLength(2);
+});

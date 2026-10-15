@@ -14,6 +14,7 @@ import {
   runLocalContentSync,
 } from "../dist/index.js";
 import { createTestActorResolver } from "./test-actors.ts";
+import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 const execute = promisify(execFile);
 const document = {
@@ -133,9 +134,15 @@ test("real Node draft API preserves expanded rich text through publication and a
       expectedRevision: saved.draft.revision,
     });
     const token = await request("/api/v1/admin/api-tokens", { name: "CE8B build" });
-    const exported = await request("/api/v1/public/build-export", undefined, "GET", {
-      authorization: `Bearer ${token.token}`,
-    });
+    const readExport = async () =>
+      (
+        await readCompleteBuildExport(
+          (url, init) => runtime.app.fetch(new Request(url, init)),
+          "https://lace.test",
+          token.token,
+        )
+      ).export;
+    const exported = await readExport();
     expect(
       exported.entries.find((entry) => entry.modelKey === "posts").blocks[0].data.content,
     ).toEqual(document);
@@ -144,11 +151,7 @@ test("real Node draft API preserves expanded rich text through publication and a
       { ...payload, title: "DRAFT ONLY", blocks: [], expectedRevision: saved.draft.revision },
       "PUT",
     );
-    expect(
-      await request("/api/v1/public/build-export", undefined, "GET", {
-        authorization: `Bearer ${token.token}`,
-      }),
-    ).toEqual(exported);
+    expect(await readExport()).toEqual(exported);
     // Astro fetches the actual runtime API, not a hand-authored export fixture.
     server = createServer(async (incoming, outgoing) => {
       const response = await runtime.app.fetch(

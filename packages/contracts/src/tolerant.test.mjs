@@ -2,6 +2,8 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
   BUILD_EXPORT_FORMAT_VERSION,
+  buildExportContinuationPageSchema,
+  buildExportFirstPageSchema,
   buildExportSchema,
   errorEnvelopeSchema,
   exportSeoSchema,
@@ -98,6 +100,22 @@ const fixtures = {
       formatVersion: 1,
       globals: [global],
       media,
+      seo: exportSeo,
+      version: 9,
+    },
+  ],
+  buildExportContinuationPage: [
+    buildExportContinuationPageSchema,
+    { entries: [entry], formatVersion: 1, media, nextCursor: "next", version: 9 },
+  ],
+  buildExportFirstPage: [
+    buildExportFirstPageSchema,
+    {
+      entries: [entry],
+      formatVersion: 1,
+      globals: [global],
+      media,
+      nextCursor: "next",
       seo: exportSeo,
       version: 9,
     },
@@ -200,6 +218,12 @@ describe("strict and tolerant public read schemas", () => {
       ["publicBlock", without(block(), [], "key")],
       ["publicContentEntry", without({ entry, media }, ["entry"], "title")],
       ["buildExport", without(fixtures.buildExport[1], [], "version")],
+      ["buildExportFirstPage", without(fixtures.buildExportFirstPage[1], [], "globals")],
+      ["buildExportFirstPage", without(fixtures.buildExportFirstPage[1], [], "seo")],
+      [
+        "buildExportContinuationPage",
+        without(fixtures.buildExportContinuationPage[1], [], "media"),
+      ],
       ["seoValue", without(entry.seo, [], "noindex")],
     ];
     for (const [name, value] of cases) {

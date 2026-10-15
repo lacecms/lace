@@ -114,7 +114,14 @@ test("follows cursors only through getAllCollection", async () => {
 test("scopes the build token to exports and supports changed and unchanged exports", async () => {
   const mock = queuedFetch([
     json(
-      { formatVersion: 1, entries: [publicEntry()], media: {}, version: 7 },
+      {
+        globals: [],
+        seo: { defaults: null, models: {} },
+        formatVersion: 1,
+        entries: [publicEntry()],
+        media: {},
+        version: 7,
+      },
       { headers: { etag: '"7"' } },
     ),
     new Response(null, { headers: { etag: '"7"' }, status: 304 }),
@@ -206,7 +213,14 @@ test("distinguishes timeout and caller abort transport failures", async () => {
 test.each(['"7"', 'W/"7"'])("preserves received and supplied build validators %s", async (etag) => {
   const mock = queuedFetch([
     json(
-      { formatVersion: 1, entries: [publicEntry()], media: {}, version: 7 },
+      {
+        globals: [],
+        seo: { defaults: null, models: {} },
+        formatVersion: 1,
+        entries: [publicEntry()],
+        media: {},
+        version: 7,
+      },
       { headers: { etag } },
     ),
     new Response(null, { headers: { etag: 'W/"7"' }, status: 304 }),
@@ -258,7 +272,14 @@ test.each([200, 304])("diagnoses missing and invalid ETags on %i safely", async 
 test("rejects inconsistent response versions and malformed caller validators", async () => {
   for (const response of [
     json(
-      { formatVersion: 1, entries: [publicEntry()], media: {}, version: 8 },
+      {
+        globals: [],
+        seo: { defaults: null, models: {} },
+        formatVersion: 1,
+        entries: [publicEntry()],
+        media: {},
+        version: 8,
+      },
       { headers: { etag: 'W/"7"' } },
     ),
     new Response(null, { headers: { etag: 'W/"8"' }, status: 304 }),
@@ -287,7 +308,17 @@ test("reads a published global by model key and validates its shape", async () =
     json({ global, media: { logo: mediaItem("logo") } }),
     json({ global: { ...global, path: "/settings" }, media: {} }),
     json({ error: { code: "NOT_FOUND", message: "Not found." } }, { status: 404 }),
-    json({ formatVersion: 1, entries: [], media: {}, version: 3 }, { headers: { etag: '"3"' } }),
+    json(
+      {
+        globals: [],
+        seo: { defaults: null, models: {} },
+        formatVersion: 1,
+        entries: [],
+        media: {},
+        version: 3,
+      },
+      { headers: { etag: '"3"' } },
+    ),
   ]);
   const client = createLaceClient({ baseUrl: "https://cms.example/lace/", fetch: mock.fetch });
 
@@ -390,11 +421,27 @@ test("reports an error code introduced by a newer API", async () => {
 test("rejects a build export in a newer format with upgrade guidance", async () => {
   const mock = queuedFetch([
     json(
-      { formatVersion: 2, entries: [], media: {}, version: 4, addedLater: true },
+      {
+        globals: [],
+        seo: { defaults: null, models: {} },
+        formatVersion: 2,
+        entries: [],
+        media: {},
+        version: 4,
+        addedLater: true,
+      },
       { headers: { etag: '"4"' } },
     ),
     json(
-      { formatVersion: 1, entries: [], media: {}, version: 4, addedLater: true },
+      {
+        globals: [],
+        seo: { defaults: null, models: {} },
+        formatVersion: 1,
+        entries: [],
+        media: {},
+        version: 4,
+        addedLater: true,
+      },
       { headers: { etag: '"4"' } },
     ),
   ]);
@@ -419,4 +466,233 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
     seo: { defaults: null, models: {} },
     version: 4,
   });
+});
+
+const exportBase = "https://cms.example/api/v1/public/build-export";
+const exportSeo = { defaults: null, models: { posts: { description: "summary", image: null } } };
+
+function firstPage(version, paths, { media = {}, nextCursor, ...extra } = {}) {
+  return {
+    entries: paths.map((path) =>
+      publicEntry({ id: path === "/" ? "home" : path.slice(1).replaceAll("/", "-"), path }),
+    ),
+    formatVersion: 1,
+    globals: [{ blocks: [], fields: {}, id: "g", modelKey: "settings", publishedAt: timestamp }],
+    media,
+    ...(nextCursor === undefined ? {} : { nextCursor }),
+    seo: exportSeo,
+    version,
+    ...extra,
+  };
+}
+
+function nextPage(version, paths, { media = {}, nextCursor, ...extra } = {}) {
+  const {
+    globals: _globals,
+    seo: _seo,
+    ...page
+  } = firstPage(version, paths, {
+    media,
+    nextCursor,
+  });
+  return { ...page, ...extra };
+}
+
+function page(value) {
+  return json(value, { headers: { etag: `"${value.version}"` } });
+}
+
+function changed(expectedVersion, actualVersion) {
+  return json(
+    {
+      error: {
+        code: "BUILD_EXPORT_VERSION_CHANGED",
+        details: { actualVersion, expectedVersion },
+        message: "Published content changed during the build export.",
+      },
+    },
+    { status: 409 },
+  );
+}
+
+test("assembles a multi-page build export with merged media", async () => {
+  const mock = queuedFetch([
+    page(firstPage(9, ["/", "/a"], { media: { m2: mediaItem("m2") }, nextCursor: "c1" })),
+    page(
+      nextPage(9, ["/b"], {
+        media: { m1: mediaItem("m1"), m2: mediaItem("m2") },
+        nextCursor: "c2",
+      }),
+    ),
+    page(nextPage(9, ["/c"], { media: { m1: mediaItem("m1") } })),
+  ]);
+  const client = createLaceClient({
+    baseUrl: "https://cms.example/",
+    fetch: mock.fetch,
+    token: "t",
+  });
+  const result = await client.getBuildExport({ etag: '"8"', pageSize: 2 });
+  expect(result.changed).toBe(true);
+  expect(result.etag).toBe('"9"');
+  expect(result.export.entries.map((entry) => entry.path)).toEqual(["/", "/a", "/b", "/c"]);
+  expect(result.export.globals.map((global) => global.id)).toEqual(["g"]);
+  expect(result.export.seo).toEqual(exportSeo);
+  expect(result.export).toMatchObject({ formatVersion: 1, version: 9 });
+  expect(Object.keys(result.export.media)).toEqual(["m1", "m2"]);
+  expect(result.export).not.toHaveProperty("nextCursor");
+  expect(mock.requests.map((request) => request.url)).toEqual([
+    `${exportBase}?limit=2`,
+    `${exportBase}?after=c1&limit=2`,
+    `${exportBase}?after=c2&limit=2`,
+  ]);
+  // Only the first page is conditional; every page carries the build token.
+  expect(mock.requests.map((request) => request.headers.get("if-none-match"))).toEqual([
+    '"8"',
+    null,
+    null,
+  ]);
+  expect(
+    mock.requests.every((request) => request.headers.get("authorization") === "Bearer t"),
+  ).toBe(true);
+});
+
+test("an unchanged first page ends the traversal without parsing a body", async () => {
+  const response = new Response(null, { headers: { etag: '"9"' }, status: 304 });
+  response.json = () => {
+    throw new Error("A 304 body must not be parsed.");
+  };
+  const mock = queuedFetch([response]);
+  const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
+  await expect(client.getBuildExport({ etag: 'W/"9"' })).resolves.toEqual({
+    changed: false,
+    etag: '"9"',
+  });
+  expect(mock.requests).toHaveLength(1);
+});
+
+test("restarts once from an unconditional first page when content changes", async () => {
+  const mock = queuedFetch([
+    page(firstPage(9, ["/a"], { nextCursor: "c1" })),
+    changed(9, 10),
+    page(firstPage(10, ["/a"], { nextCursor: "c2" })),
+    page(nextPage(10, ["/b"])),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
+  const result = await client.getBuildExport({ etag: '"8"' });
+  expect(result).toMatchObject({ etag: '"10"', export: { version: 10 } });
+  expect(result.export.entries.map((entry) => entry.path)).toEqual(["/a", "/b"]);
+  expect(mock.requests.map((request) => request.headers.get("if-none-match"))).toEqual([
+    '"8"',
+    null,
+    null,
+    null,
+  ]);
+
+  const persistent = queuedFetch([
+    page(firstPage(9, ["/a"], { nextCursor: "c1" })),
+    changed(9, 10),
+    page(firstPage(10, ["/a"], { nextCursor: "c2" })),
+    changed(10, 11),
+  ]);
+  const failing = createLaceClient({ baseUrl: "https://cms.example/", fetch: persistent.fetch });
+  const failure = await failing.getBuildExport().catch((error) => error);
+  expect(failure).toBeInstanceOf(LaceHttpError);
+  expect(failure).toMatchObject({
+    code: "BUILD_EXPORT_VERSION_CHANGED",
+    details: { actualVersion: 11, expectedVersion: 10 },
+    status: 409,
+  });
+  expect(persistent.requests).toHaveLength(4);
+
+  const once = queuedFetch([page(firstPage(9, ["/a"], { nextCursor: "c1" })), changed(9, 10)]);
+  const pinned = createLaceClient({ baseUrl: "https://cms.example/", fetch: once.fetch });
+  await expect(pinned.getBuildExport({ restart: false })).rejects.toMatchObject({ status: 409 });
+  expect(once.requests).toHaveLength(2);
+});
+
+test("rejects build-export pages that disagree", async () => {
+  const cases = [
+    ["version", [firstPage(9, ["/a"], { nextCursor: "c" }), nextPage(8, ["/b"])]],
+    ["repeated path", [firstPage(9, ["/a", "/b"], { nextCursor: "c" }), nextPage(9, ["/b"])]],
+    ["earlier path", [firstPage(9, ["/b"], { nextCursor: "c" }), nextPage(9, ["/a"])]],
+    [
+      "media",
+      [
+        firstPage(9, ["/a"], { media: { m: mediaItem("m") }, nextCursor: "c" }),
+        nextPage(9, ["/b"], { media: { m: mediaItem("m", "Changed") } }),
+      ],
+    ],
+    [
+      "continuation globals",
+      [firstPage(9, ["/a"], { nextCursor: "c" }), { ...nextPage(9, ["/b"]), globals: [] }],
+    ],
+    [
+      "continuation seo",
+      [firstPage(9, ["/a"], { nextCursor: "c" }), { ...nextPage(9, ["/b"]), seo: exportSeo }],
+    ],
+    [
+      "empty page with cursor",
+      [firstPage(9, ["/a"], { nextCursor: "c" }), nextPage(9, [], { nextCursor: "d" })],
+    ],
+    ["first page without globals", [nextPage(9, ["/a"])]],
+    ["first page without seo", [{ ...firstPage(9, ["/a"]), seo: undefined }]],
+  ];
+  for (const [name, pages] of cases) {
+    const mock = queuedFetch(pages.map((value) => page(value)));
+    const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
+    const failure = await client.getBuildExport().catch((error) => error);
+    expect(failure, name).toBeInstanceOf(LaceContractError);
+  }
+  // A page whose ETag encodes another version is a contract violation too.
+  const mismatched = queuedFetch([
+    page(firstPage(9, ["/a"], { nextCursor: "c" })),
+    json(nextPage(9, ["/b"]), { headers: { etag: '"10"' } }),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mismatched.fetch });
+  await expect(client.getBuildExport()).rejects.toBeInstanceOf(LaceContractError);
+});
+
+test("reads single build-export pages and calls the first-page hook first", async () => {
+  const mock = queuedFetch([
+    page(firstPage(9, ["/a"], { nextCursor: "c1", addedLater: true })),
+    page(nextPage(9, ["/b"])),
+    new Response(null, { headers: { etag: '"9"' }, status: 304 }),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
+  const first = await client.getBuildExportPage({ limit: 1 });
+  expect(first).toMatchObject({
+    changed: true,
+    etag: '"9"',
+    page: { nextCursor: "c1", version: 9 },
+  });
+  expect(first.page).not.toHaveProperty("addedLater");
+  const next = await client.getBuildExportPage({ after: "c1", limit: 1 });
+  expect(next.page).not.toHaveProperty("globals");
+  expect(await client.getBuildExportPage({ etag: '"9"' })).toEqual({ changed: false, etag: '"9"' });
+  expect(mock.requests.map((request) => request.url)).toEqual([
+    `${exportBase}?limit=1`,
+    `${exportBase}?after=c1&limit=1`,
+    exportBase,
+  ]);
+  await expect(client.getBuildExportPage({ after: "c1", etag: '"9"' })).rejects.toBeInstanceOf(
+    TypeError,
+  );
+  for (const limit of [0, 101]) {
+    await expect(client.getBuildExportPage({ limit })).rejects.toBeInstanceOf(TypeError);
+    await expect(client.getBuildExport({ pageSize: limit })).rejects.toBeInstanceOf(TypeError);
+  }
+
+  const hooked = queuedFetch([page(firstPage(7, ["/a"], { nextCursor: "c1" }))]);
+  const hookedClient = createLaceClient({ baseUrl: "https://cms.example/", fetch: hooked.fetch });
+  const seen = [];
+  await expect(
+    hookedClient.getBuildExport({
+      onFirstPage: (value) => {
+        seen.push(value.version);
+        throw new Error("stop");
+      },
+    }),
+  ).rejects.toThrow("stop");
+  expect(seen).toEqual([7]);
+  expect(hooked.requests).toHaveLength(1);
 });

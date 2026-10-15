@@ -22,6 +22,7 @@ import {
   startNodeServer,
 } from "../dist/index.js";
 import { loadProjectConfig } from "../dist/project-config.js";
+import { readCompleteBuildExport } from "../../../packages/test-utils/dist/index.js";
 
 const admin = { id: actorId("integration-admin"), role: "admin" };
 const minioEnvironment = Object.freeze({
@@ -171,12 +172,14 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       name: "integration-build",
       now: unixMilliseconds(Date.now()),
     });
-    const buildExport = await json(value.server, "/api/v1/public/build-export", {
-      headers: { authorization: `Bearer ${buildToken.token}` },
-    });
-    const etag = buildExport.response.headers.get("etag");
+    const buildExport = await readCompleteBuildExport(
+      fetch,
+      String(value.server.url),
+      buildToken.token,
+    );
+    const etag = buildExport.etag;
     expect(etag).not.toBeNull();
-    expect(buildExport.body.formatVersion).toBe(1);
+    expect(buildExport.export.formatVersion).toBe(1);
     expect(
       (
         await json(value.server, "/api/v1/public/build-export", {
@@ -220,11 +223,17 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
         })
       ).response.status,
     ).toBe(200);
-    const changed = await json(value.server, "/api/v1/public/build-export", { headers });
-    expect(changed.response.status).toBe(200);
-    expect(changed.body.version).toBe(buildExport.body.version + 1);
-    expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
-    expect(changed.body.entries.find((entry) => entry.id === entryId).title).toBe(
+    const changed = await readCompleteBuildExport(
+      fetch,
+      String(value.server.url),
+      buildToken.token,
+      {
+        headers: { "if-none-match": weakTag },
+      },
+    );
+    expect(changed.export.version).toBe(buildExport.export.version + 1);
+    expect(changed.etag).toBe(`"${changed.export.version}"`);
+    expect(changed.export.entries.find((entry) => entry.id === entryId).title).toBe(
       "Draft-only title",
     );
     expect((await json(value.server, "/health/ready")).response.status).toBe(200);
@@ -279,11 +288,8 @@ test("media metadata edits of published media change the export ETag and diction
       name: "metadata-build",
       now: unixMilliseconds(Date.now()),
     });
-    const authorization = `Bearer ${buildToken.token}`;
-    const before = await json(value.server, "/api/v1/public/build-export", {
-      headers: { authorization },
-    });
-    expect(before.body.media["office-media"]).toEqual({
+    const before = await readCompleteBuildExport(fetch, String(value.server.url), buildToken.token);
+    expect(before.export.media["office-media"]).toEqual({
       alt: null,
       caption: null,
       focalPoint: null,
@@ -303,12 +309,11 @@ test("media metadata edits of published media change the export ETag and diction
       method: "PATCH",
     });
     expect(patched.response.status).toBe(200);
-    const after = await json(value.server, "/api/v1/public/build-export", {
-      headers: { authorization, "if-none-match": before.response.headers.get("etag") },
+    const after = await readCompleteBuildExport(fetch, String(value.server.url), buildToken.token, {
+      headers: { "if-none-match": before.etag },
     });
-    expect(after.response.status).toBe(200);
-    expect(after.response.headers.get("etag")).not.toBe(before.response.headers.get("etag"));
-    expect(after.body.media["office-media"]).toMatchObject({
+    expect(after.etag).not.toBe(before.etag);
+    expect(after.export.media["office-media"]).toMatchObject({
       alt: "Office",
       focalPoint: { x: 0.25, y: 0.4 },
     });

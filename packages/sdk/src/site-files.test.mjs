@@ -41,6 +41,7 @@ const value = {
   ],
   formatVersion: 1,
   media: {},
+  seo: { defaults: null, models: {} },
   version: 1,
 };
 

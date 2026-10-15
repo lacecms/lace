@@ -216,7 +216,8 @@ block to each and save. Before publication, check
 `GET /api/v1/public/pages/about` and
 `GET /api/v1/public/collections/notes/first-note`: draft content is absent.
 Publish both entries in Admin, then check those endpoints and
-`GET /api/v1/public/build-export` with the read-only build token. Configure
+`GET /api/v1/public/build-export` with the read-only build token (the export
+is paged: follow `nextCursor` through `?after=` until it is absent). Configure
 live site mode as in the root README, restart the stack, and open `/about`
 and `/notes/first-note` in a browser. Their content must match the published
 API output. Save a later draft title or slug without publishing, restart the

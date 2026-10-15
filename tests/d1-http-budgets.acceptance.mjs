@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 import { openProductRuntime } from "./support/cross-runtime-fixture.mjs";
 import { countingD1 } from "../packages/platform-cloudflare/src/d1-test-harness.mjs";
+import {
+  BUILD_EXPORT_PAGE_BYTE_BUDGET,
+  selectBuildExportPage,
+} from "../packages/application/dist/index.js";
 
 function maximalBlocks(label, count = 200) {
   return Array.from({ length: count }, (_, i) => ({
@@ -17,10 +21,21 @@ const publicBlocks = (blocks) => blocks.map((block) => ({ ...block, settings: {}
 
 async function fixture() {
   let count, database;
+  // Statements and rows read of every D1 batch, for per-page evidence.
+  const batches = [];
   const f = await openProductRuntime("worker", {
     instrumentD1(db) {
       database = db;
       count = countingD1(db);
+      const batch = count.binding.batch;
+      count.binding.batch = async (statements) => {
+        const results = await batch(statements);
+        batches.push({
+          rowsRead: results.reduce((sum, result) => sum + (result.meta?.rows_read ?? 0), 0),
+          statements: statements.length,
+        });
+        return results;
+      };
       return count.binding;
     },
   });
@@ -45,7 +60,7 @@ async function fixture() {
     expect(count.stats.maxParameters, name).toBeLessThanOrEqual(100);
     return JSON.parse(text);
   };
-  return { ...f, count, database, measurements, measured };
+  return { ...f, batches, count, database, measurements, measured };
 }
 async function seedMedia(db) {
   for (let offset = 0; offset < 200; offset += 50)
@@ -174,7 +189,7 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
   }
 }, 120000);
 
-test("34B D1 exports 100/201/501 complete published entries across hydration chunks and near-limit JSON", async () => {
+test("34B D1 exports 100/201/501 published entries in bounded pages with near-limit JSON", async () => {
   const f = await fixture();
   try {
     await seedMedia(f.database);
@@ -201,7 +216,13 @@ test("34B D1 exports 100/201/501 complete published entries across hydration chu
     for (const size of [100, 201, 501]) {
       for (let index = expected.length; index < size; index++) {
         const id = `export-${String(index).padStart(4, "0")}`;
-        const fields = { summary: index === 0 ? "x".repeat(999900) : `Published summary ${index}` };
+        // Near-1 MB entries 0-3 exceed the 4 MB page budget together.
+        const fields = {
+          summary:
+            index === 0 || index === 2 || index === 3
+              ? "x".repeat(999900)
+              : `Published summary ${index}`,
+        };
         const blocks =
           index < 2
             ? maximalBlocks(id)
@@ -267,20 +288,65 @@ test("34B D1 exports 100/201/501 complete published entries across hydration chu
         );
       }
       await flush();
-      const exported = await f.measured(
-        `export-${size}`,
-        "/api/v1/public/build-export",
-        { headers: { authorization: `Bearer ${token}` } },
-        200,
+      // Every page request, including token verification, stays within the
+      // Workers Free budget and reads with two bounded batches.
+      const pages = [];
+      let after;
+      do {
+        f.batches.length = 0;
+        const startedAt = performance.now();
+        const page = await f.measured(
+          `export-${size}-page-${pages.length + 1}`,
+          `/api/v1/public/build-export${after === undefined ? "" : `?after=${encodeURIComponent(after)}`}`,
+          { headers: { authorization: `Bearer ${token}` } },
+          200,
+        );
+        const milliseconds = Math.round(performance.now() - startedAt);
+        expect(f.batches).toHaveLength(2);
+        const statements = f.batches.reduce((sum, batch) => sum + batch.statements, 0);
+        expect(statements).toBeLessThanOrEqual(10);
+        console.info(
+          `Paged export D1 ${JSON.stringify({
+            entries: page.entries.length,
+            milliseconds,
+            page: pages.length + 1,
+            rowsRead: f.batches.reduce((sum, batch) => sum + batch.rowsRead, 0),
+            size,
+            statements,
+          })}`,
+        );
+        pages.push(page);
+        after = page.nextCursor;
+      } while (after !== undefined);
+      expect(pages[0].globals).toEqual([]);
+      for (const page of pages.slice(1)) expect(page).not.toHaveProperty("globals");
+      // Page sizes follow the entry limit and the stored-JSON byte budget.
+      const storedBytes = expected.map(
+        ({ blocks, fields }) =>
+          Buffer.byteLength(JSON.stringify(fields)) +
+          blocks.reduce(
+            (sum, block) =>
+              sum + Buffer.byteLength(JSON.stringify(block.data)) + Buffer.byteLength("{}"),
+            0,
+          ),
       );
+      const counts = [];
+      for (let offset = 0; offset < size;) {
+        const { count } = selectBuildExportPage(
+          storedBytes.slice(offset, offset + 101).map((bytes) => ({ bytes })),
+          100,
+        );
+        counts.push(count);
+        offset += count;
+      }
+      expect(pages.map((page) => page.entries.length)).toEqual(counts);
+      expect(
+        storedBytes.slice(0, counts[0]).reduce((sum, bytes) => sum + bytes, 0),
+      ).toBeLessThanOrEqual(BUILD_EXPORT_PAGE_BYTE_BUDGET);
+      expect(counts[0]).toBeLessThan(100);
+      const exported = { entries: pages.flatMap((page) => page.entries) };
       expect(exported.entries).toHaveLength(size);
-      expect(exported.globals).toEqual([]);
-      // One query lists published globals; then per 100 entries or globals: two snapshot
-      // chunks, two block chunks and one referenced-media chunk.
-      expect(f.count.stats.queries).toBeLessThanOrEqual(
-        9 + 5 * Math.ceil((size + exported.globals.length) / 100),
-      );
-      expect(JSON.stringify(exported)).not.toContain("PRIVATE DRAFT SENTINEL");
+      expect(JSON.stringify(pages)).not.toContain("PRIVATE DRAFT SENTINEL");
       expect(
         exported.entries.map(({ id, path, title, fields, blocks }) => ({
           id,

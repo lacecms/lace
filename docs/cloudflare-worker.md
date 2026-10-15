@@ -107,6 +107,18 @@ deletions immediately and a build after the 5-second debounce. Its failures are
 logged and swallowed. The pass is never the only recovery path: the scheduled
 invocation remains authoritative.
 
+## Build export on Workers
+
+`GET /api/v1/public/build-export` is paged so that every request stays within
+per-invocation limits regardless of site size. Each page request, including
+build-token verification, uses at most two D1 batches with at most ten read
+statements, well inside the 50-query free-plan budget, and a page holds at
+most 100 entries or about 4 MB of stored entry JSON. Staying within the Free
+plan's 10 ms CPU limit is best effort: typical pages fit, but one maximal
+entry can exceed it on its own page. Site builds use `@lacecms/sdk`, which
+follows the page cursors; see [compatibility](compatibility.md) for raw
+readers.
+
 ## Deploy hook
 
 When `LACE_DEPLOY_HOOK_URL` is set, each claimed site-build event sends one

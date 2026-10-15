@@ -1632,9 +1632,11 @@ GET /api/v1/public/media/:mediaId
 
 Public routes return published snapshots only. Individual page, collection, path,
 and media reads are anonymous and cacheable. `build-export` returns all published
-models, entries, routes, blocks, and referenced media metadata in a
+entries, routes, blocks, globals, and referenced media metadata in a
 build-efficient representation to avoid an N+1 request pattern during Astro
-generation; it requires a read-only build token.
+generation; it requires a read-only build token. It is delivered in bounded
+keyset pages (see below) so that no single request has to build, validate, or
+serialize the whole site.
 
 Public content responses return the published entry directly, never a draft:
 
@@ -1648,8 +1650,12 @@ GET globals/:modelKey
   -> { global: PublicGlobal, media }
 GET collections/:modelKey
   -> { items: PublicEntry[], media, nextCursor? }
-GET build-export
-  -> { formatVersion, entries: PublicEntry[], globals: PublicGlobal[], media, seo, version }
+GET build-export[?limit=1..100]                 // first page
+  -> { formatVersion, version, entries: PublicEntry[], globals: PublicGlobal[], seo, media, nextCursor? }
+GET build-export?after=<cursor>[&limit=1..100]  // continuation page
+  -> { formatVersion, version, entries: PublicEntry[], media, nextCursor? }
+assembled export (SDK, tests)
+  = { formatVersion, entries: PublicEntry[], globals: PublicGlobal[], media, seo, version }
 
 seo (entry) = { title, description, image, canonical, noindex }   // null when unset
 seo (export) = {
@@ -1689,6 +1695,27 @@ order; unknown values are `null`. Field and block values keep storing media IDs.
 The dictionary never carries storage keys, filenames, uploaders, or lifecycle
 status. Media metadata edits reach the export through the published-state
 version bump of section 9.7, so the build-export ETag changes with them.
+
+Build-export paging:
+
+- Entries are ordered by `published_routes.path` and paged by an opaque keyset
+  cursor that binds the published-state version of the first page and the
+  last delivered path. Unknown query keys, an invalid `limit` and a foreign or
+  malformed cursor fail with `422 VALIDATION_FAILED`.
+- A page ends at `limit` entries (default and maximum 100) or before an entry
+  would raise the page's stored JSON (fields, SEO, and visible block data and
+  settings; on the first page also the globals) above a fixed 4,000,000-byte
+  budget, whichever comes first. A page always holds at least one entry while
+  entries remain, so an oversized entry is delivered alone.
+- `globals` and `seo` appear on the first page only. Each page's `media`
+  resolves exactly the media its own entries and globals deliver.
+- Every page is read from one published state. A continuation request whose
+  cursor version is no longer current, or a page read interrupted by a
+  publication, fails with `409 BUILD_EXPORT_VERSION_CHANGED` and details
+  `{expectedVersion, actualVersion}`; clients restart from the first page.
+- The API validates every page with the strict page schema before sending it.
+  The assembled export remains a shared schema for consumers and tests; the
+  sum of the pages of one sequence is what other sections call "the export".
 
 Content DTOs expose a stable absolute media URL formed from the configured
 `LACE_PUBLIC_BASE_URL` plus `/api/v1/public/media/:mediaId`, never a short-lived
@@ -1838,7 +1865,9 @@ and resolves nested media through the existing published dictionaries/helpers.
 - Publish operations are idempotent.
 - Dates in JSON use ISO 8601 UTC strings.
 - Build export supports conditional requests with an ETag derived from
-  `published_state.version`.
+  `published_state.version`. `If-None-Match` applies to the first page only
+  (`304` without loading content); continuation pages ignore it. Every `200`
+  page carries the strong ETag of the version it was read at.
 - Build tokens are random opaque credentials stored only as hashes, have only a
   `content:build:read` capability, and are accepted only by build-oriented public
   endpoints. They cannot be exchanged for a browser session.
@@ -1891,7 +1920,17 @@ const home = await lace.getPage("home");
 const settings = await lace.getGlobal("settings");
 const posts = await lace.getCollection("posts");
 const exportData = await lace.getBuildExport();
+const firstPage = await lace.getBuildExportPage({ limit: 1 });
 ```
+
+`getBuildExportPage()` reads one tolerant-validated page. `getBuildExport()`
+reads the first page (conditionally when given an ETag), follows every
+`nextCursor`, checks that all pages agree on `version` and `formatVersion`,
+continue the path order, carry `globals`/`seo` only on the first page and
+resolve each media ID identically, and returns the assembled export with the
+first page's ETag. When a page fails with `409 BUILD_EXPORT_VERSION_CHANGED`
+it restarts from an unconditional first page, at most two traversals in total,
+unless the caller disables restarts.
 
 The build token is read-only and may access published content only. It must not
 grant admin-session capabilities, and it is used only in server-side build or
@@ -1910,12 +1949,19 @@ framework and never reads `process.env` or `import.meta.env` itself.
   `indexing` values that take precedence; an invalid site URL or indexing
   value fails with `missing_configuration` without echoing it; optional `fetch`; `revalidate` (default `false`); optional
   `hints` keyed by error code that are appended to error messages.
-- **Static mode** reads one build export per loader, shared by concurrent
-  callers, and forgets a failed read so the next call retries.
-- **Revalidate mode** (dev servers) issues an ETag-conditional read on each call;
-  concurrent calls share one in-flight request and `304` reuses the last view.
-- **Consistency:** when an expected published version is configured, a
-  different export version fails the build.
+- **Static mode** reads one build export (one complete page traversal) per
+  loader, shared by concurrent callers, and forgets a failed traversal so the
+  next call restarts from the first page.
+- **Revalidate mode** (dev servers) issues an ETag-conditional first-page read
+  on each call; concurrent calls share one in-flight read, `304` reuses the last
+  view without further page requests, and a changed first page starts a
+  complete traversal.
+- **Consistency:** when an expected published version is configured, the
+  loader compares it with the first page's version before requesting any
+  continuation page, disables traversal restarts, and maps a difference or a
+  `BUILD_EXPORT_VERSION_CHANGED` page failure to `version_mismatch`. Without an
+  expected version, restarts are enabled and exhausted restarts fail with
+  `version_mismatch`, stating that content kept changing during the export.
 - **Output:** `PublishedSite` with `version`, `byPath(path)`,
   `entries(modelKey)` (sorted by path; empty for an unknown model),
   `bySlug(modelKey, slug)`, `global(modelKey)`, `mediaUrl(mediaId)`,
@@ -2512,7 +2558,13 @@ The architecture responds to those constraints by:
 - placing binary media outside SQL;
 - storing one block per row rather than one potentially huge page row;
 - loading a snapshot's blocks in one indexed query;
-- providing a bulk build-export endpoint;
+- providing a bulk build-export endpoint delivered in bounded pages: each
+  page request (including build-token verification) stays within the 50-query
+  limit, using at most two D1 batches with at most ten range-bounded read
+  statements and no identifier lists that grow with page size, while the
+  4 MB stored-JSON page budget bounds memory and CPU per invocation (the
+  Free-plan 10 ms CPU limit is best effort, since one maximal entry can exceed
+  it);
 - avoiding N+1 queries;
 - copying blocks with set-based SQL;
 - retaining only draft and current published snapshots;

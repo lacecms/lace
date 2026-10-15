@@ -11,6 +11,7 @@ import {
   assertAtomicCheckpoints,
   assertQueryPlanUsesIndex,
   packageName,
+  readAllBuildContentPages,
 } from "../dist/index.js";
 import {
   actorId,
@@ -742,7 +743,9 @@ test("enforces singleton, revision, route, and immutable-publication boundaries 
     entryId: contentEntryId("post-a"),
     mutation: savedMutation(2, "Draft edit", "first"),
   });
-  expect((await store.exportBuildContent()).entries[0].entry.published.title).toBe("Published");
+  expect((await readAllBuildContentPages(store)).entries[0].entry.published.title).toBe(
+    "Published",
+  );
 
   await store.create({ entry: entry({ id: "post-b", model: posts }) });
   await store.saveCompleteDraft({
@@ -759,7 +762,7 @@ test("enforces singleton, revision, route, and immutable-publication boundaries 
     }),
   ).rejects.toMatchObject({ code: "CONTENT_ROUTE_CONFLICT" });
   expect(await store.loadPublished({ entryId: contentEntryId("post-b") })).toBeNull();
-  expect((await store.exportBuildContent()).entries).toHaveLength(1);
+  expect((await readAllBuildContentPages(store)).entries).toHaveLength(1);
 });
 
 test("marks only unreferenced active media for independent deletion", async () => {
@@ -865,13 +868,13 @@ test("replays matching idempotent publications without changing public content",
     publishedSnapshotId: contentSnapshotId("post-idempotent-published"),
   };
   const first = await store.publish(input);
-  const version = (await store.exportBuildContent()).version;
+  const version = (await readAllBuildContentPages(store)).version;
   const replay = await store.publish(input);
 
   expect(first.outcome).toBe("published");
   expect(replay).toMatchObject({ outcome: "replayed", status: "published" });
   expect(replay.entry).not.toBe(first.entry);
-  expect((await store.exportBuildContent()).version).toBe(version);
+  expect((await readAllBuildContentPages(store)).version).toBe(version);
   await expect(
     store.publish({
       ...input,
@@ -881,7 +884,7 @@ test("replays matching idempotent publications without changing public content",
       },
     }),
   ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
-  expect((await store.exportBuildContent()).version).toBe(version);
+  expect((await readAllBuildContentPages(store)).version).toBe(version);
 });
 
 test("runs the authorized in-memory content lifecycle with validation and isolated publications", async () => {
@@ -1289,7 +1292,7 @@ test("runs the global lifecycle as a route-less singleton", async () => {
   expect(await store.loadPublicGlobal(contentModelKey("home"))).toBeNull();
   expect(await store.loadPublicGlobal(contentModelKey("posts"))).toBeNull();
   expect(await store.loadPublicMedia("media-1")).toMatchObject({ id: "media-1" });
-  const exported = await store.exportBuildContent();
+  const exported = await readAllBuildContentPages(store);
   expect(exported.entries).toEqual([]);
   expect(exported.globals.map((item) => item.entry.id)).toEqual([id]);
   expect(await store.loadPublic("/")).toBeNull();
@@ -1321,7 +1324,7 @@ test("runs the global lifecycle as a route-less singleton", async () => {
   });
   expect(unpublished.build).toEqual({ status: "queued", targetVersion: version + 2 });
   expect(await store.loadPublicGlobal(contentModelKey("settings"))).toBeNull();
-  expect((await store.exportBuildContent()).globals).toEqual([]);
+  expect((await readAllBuildContentPages(store)).globals).toEqual([]);
   expect(await store.loadPublicMedia("media-1")).toBeNull();
   expect(unpublished.entry.draft.revision).toBe(4);
 });
@@ -1373,7 +1376,7 @@ test("unpublishes guarded publications idempotently and keeps the draft", async 
   expect(result.entry).not.toHaveProperty("published");
   expect(result.entry.draft).toEqual(changed.draft);
   expect(await store.loadPublic("/blog/a")).toBeNull();
-  expect((await store.exportBuildContent()).entries).toEqual([]);
+  expect((await readAllBuildContentPages(store)).entries).toEqual([]);
   expect(
     (await useCases.list({ actor: admin, limit: 10, modelKey: "posts" })).items[0],
   ).toMatchObject({ status: "draft" });
@@ -2299,7 +2302,7 @@ test("in-memory public reads expose published values and published media only", 
   for (const value of [
     await store.loadPublic("/blog/post"),
     (await store.listPublic({ limit: 10, modelKey: contentModelKey("posts") })).items[0],
-    (await store.exportBuildContent()).entries[0],
+    (await readAllBuildContentPages(store)).entries[0],
   ]) {
     expect(value.media.map((item) => item.id)).toEqual(["media-1", "media-2"]);
     expect(value.media[1]).toMatchObject({ alt: "Office", height: 900, width: 1600 });
@@ -3093,4 +3096,76 @@ test("CE9A fake sync retains populated singleton content when guidance changes",
     if (previous) expect(loaded).toEqual(previous);
     previous = loaded;
   }
+});
+
+test("pages the in-memory build export by path, limit, byte budget and version", async () => {
+  const store = new InMemoryContentStore();
+  const posts = { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" };
+  let revisionTime = 10;
+  async function publishPost(slug, body = slug) {
+    const id = `post-${slug}`;
+    await store.create({ entry: entry({ id, model: posts }) });
+    await store.saveCompleteDraft({
+      entryId: contentEntryId(id),
+      mutation: { ...savedMutation(1, slug, slug), fields: { body } },
+    });
+    revisionTime += 1;
+    await store.publish({
+      entryId: contentEntryId(id),
+      expectedRevision: 2,
+      publishedAt: unixMilliseconds(revisionTime),
+      publishedBy: admin,
+      publishedSnapshotId: contentSnapshotId(`${id}-published`),
+    });
+  }
+  for (const slug of ["e", "a", "d", "b", "c"]) await publishPost(slug);
+  const version = await store.publishedContentVersion();
+
+  const first = await store.exportBuildContentPage({ limit: 2 });
+  expect(first).toMatchObject({ globals: [], version });
+  expect(first.entries.map((item) => item.path)).toEqual(["/blog/a", "/blog/b"]);
+  const second = await store.exportBuildContentPage({ after: first.nextCursor, limit: 2 });
+  expect(second).not.toHaveProperty("globals");
+  expect(second.entries.map((item) => item.path)).toEqual(["/blog/c", "/blog/d"]);
+  const third = await store.exportBuildContentPage({ after: second.nextCursor, limit: 2 });
+  expect(third.entries.map((item) => item.path)).toEqual(["/blog/e"]);
+  expect(third).not.toHaveProperty("nextCursor");
+  expect((await readAllBuildContentPages(store, 2)).entries).toHaveLength(5);
+
+  for (const limit of [0, 101, 1.5]) {
+    await expect(store.exportBuildContentPage({ limit })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+  }
+  const collectionCursor = (await store.listPublic({ limit: 1, modelKey: posts.key })).nextCursor;
+  for (const after of [collectionCursor, "build-export:x:/a", "garbage"]) {
+    await expect(store.exportBuildContentPage({ after, limit: 2 })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+      name: "BuildExportCursorError",
+    });
+  }
+
+  // Byte budget: about 1.5 MB each, so two fit in 4 MB and an oversized entry is alone.
+  await publishPost("f1", "x".repeat(1_500_000));
+  await publishPost("f2", "x".repeat(1_500_000));
+  await publishPost("f3", "x".repeat(1_500_000));
+  await publishPost("g", "x".repeat(4_500_000));
+  const pages = (await readAllBuildContentPages(store)).pages.map((page) =>
+    page.entries.map((item) => item.path),
+  );
+  expect(pages).toEqual([
+    ["/blog/a", "/blog/b", "/blog/c", "/blog/d", "/blog/e", "/blog/f1", "/blog/f2"],
+    ["/blog/f3"],
+    ["/blog/g"],
+  ]);
+
+  const stale = await store.exportBuildContentPage({ limit: 1 });
+  await publishPost("h");
+  await expect(
+    store.exportBuildContentPage({ after: stale.nextCursor, limit: 1 }),
+  ).rejects.toMatchObject({
+    actualVersion: stale.version + 1,
+    code: "BUILD_EXPORT_VERSION_CHANGED",
+    expectedVersion: stale.version,
+  });
 });

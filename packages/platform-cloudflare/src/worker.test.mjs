@@ -17,6 +17,7 @@ import {
   producesDispatchWork,
 } from "../dist/index.js";
 import { countingD1, openLocalCloudflare } from "./d1-test-harness.mjs";
+import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 const cleanups = [];
 afterEach(async () => {
@@ -151,6 +152,15 @@ test("only successful dispatch-producing admin mutations schedule post-commit wo
 });
 
 let fixtureAddress = 0;
+/** Adapts the fixture's in-process Worker call to the shared export reader. */
+function exportFetch(fixture) {
+  return async (url, init) => {
+    const target = new URL(url);
+    const { body, response } = await fixture.call(`${target.pathname}${target.search}`, init);
+    return { headers: response.headers, json: async () => body, status: response.status };
+  };
+}
+
 async function workerFixture(options = {}) {
   const clientAddress = `203.0.113.${++fixtureAddress}`;
   const local = await openLocalCloudflare();
@@ -564,10 +574,13 @@ test("Worker/D1 compares strong and weak export validators through publication",
     now: unixMilliseconds(Date.now()),
   });
   const headers = { authorization: `Bearer ${buildToken.token}` };
-  const fresh = await fixture.call("/api/v1/public/build-export", { headers });
-  expect(fresh.response.status).toBe(200);
-  const etag = fresh.response.headers.get("etag");
-  expect(etag).toBe(`"${fresh.body.version}"`);
+  const fresh = await readCompleteBuildExport(
+    exportFetch(fixture),
+    "https://lace.invalid",
+    buildToken.token,
+  );
+  const etag = fresh.etag;
+  expect(etag).toBe(`"${fresh.export.version}"`);
   for (const tag of [etag, `W/${etag}`]) {
     const result = await fixture.call("/api/v1/public/build-export", {
       headers: { ...headers, "if-none-match": tag },
@@ -618,13 +631,15 @@ test("Worker/D1 compares strong and weak export validators through publication",
     (await fixture.call(`${path}/publish`, { json: { expectedRevision: 2 }, method: "POST" }))
       .response.status,
   ).toBe(200);
-  const changed = await fixture.call("/api/v1/public/build-export", {
-    headers: { ...headers, "if-none-match": `W/${etag}` },
-  });
-  expect(changed.response.status).toBe(200);
-  expect(changed.body.version).toBe(fresh.body.version + 1);
-  expect(changed.response.headers.get("etag")).toBe(`"${changed.body.version}"`);
-  expect(changed.body.entries.find((entry) => entry.id === created.body.id).title).toBe("Second");
+  const changed = await readCompleteBuildExport(
+    exportFetch(fixture),
+    "https://lace.invalid",
+    buildToken.token,
+    { headers: { "if-none-match": `W/${etag}` } },
+  );
+  expect(changed.export.version).toBe(fresh.export.version + 1);
+  expect(changed.etag).toBe(`"${changed.export.version}"`);
+  expect(changed.export.entries.find((entry) => entry.id === created.body.id).title).toBe("Second");
   await fixture.settle();
 });
 

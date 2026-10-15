@@ -39,6 +39,53 @@ function exportServer() {
   };
 }
 
+/** Serves the fixture one entry per page, like the API with `limit=1`. */
+function pagedExportServer(version = 7) {
+  const requests = [];
+  return {
+    requests,
+    fetch: async (url, init) => {
+      const headers = new Headers(init.headers);
+      expect(headers.get("authorization")).toBe(`Bearer ${token}`);
+      const after = new URL(String(url)).searchParams.get("after");
+      requests.push(after);
+      const index = after === null ? 0 : Number(after.slice("page-".length));
+      const { globals, seo, entries: unordered, ...rest } = structuredClone(fixture);
+      const entries = unordered.sort((left, right) =>
+        left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+      );
+      const page = {
+        ...rest,
+        entries: entries.slice(index, index + 1),
+        ...(index + 1 < entries.length ? { nextCursor: `page-${index + 1}` } : {}),
+        version,
+        ...(after === null ? { globals, seo } : {}),
+      };
+      return Response.json(page, { headers: { etag: `"${version}"` } });
+    },
+  };
+}
+
+test("a static build follows every export page once", async () => {
+  const server = pagedExportServer();
+  const getSite = createAstroSiteLoader({ env, fetch: server.fetch });
+  const [left, right] = await Promise.all([getSite(), getSite()]);
+  expect(left).toBe(right);
+  expect(left.allEntries()).toHaveLength(fixture.entries.length);
+  expect(server.requests).toEqual([
+    null,
+    ...fixture.entries.slice(1).map((_entry, index) => `page-${index + 1}`),
+  ]);
+  const pinned = pagedExportServer(8);
+  const error = await createAstroSiteLoader({
+    env: { ...env, LACE_EXPECTED_PUBLISHED_VERSION: "7" },
+    fetch: pinned.fetch,
+  })().catch((cause) => cause);
+  expect(error).toBeInstanceOf(LacePublishedSiteError);
+  expect(error.code).toBe("version_mismatch");
+  expect(pinned.requests).toEqual([null]);
+});
+
 const saved = { ...process.env };
 afterEach(() => {
   for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];

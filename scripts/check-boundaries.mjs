@@ -24,7 +24,13 @@ const allowedDependencies = new Map([
   ["@lacecms/astro", new Set(["@lacecms/render", "@lacecms/sdk"])],
   [
     "@lacecms/test-utils",
-    new Set(["@lacecms/application", "@lacecms/config", "@lacecms/content", "@lacecms/domain"]),
+    new Set([
+      "@lacecms/application",
+      "@lacecms/config",
+      "@lacecms/content",
+      "@lacecms/contracts",
+      "@lacecms/domain",
+    ]),
   ],
   [
     "@lacecms/platform-cloudflare",
