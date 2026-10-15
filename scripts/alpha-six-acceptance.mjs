@@ -27,7 +27,7 @@ export async function alphaSixJourney({
     return { response, body: response.status === 204 ? undefined : await response.json() };
   };
   const { createLaceClient } = await import(
-    pathToFileURL(join(project, "node_modules/@lacecms/sdk/dist/index.js")).href
+    pathToFileURL(join(project, "site/node_modules/@lacecms/sdk/dist/index.js")).href
   );
   const client = createLaceClient({ baseUrl: base, token: buildToken });
   const first = await client.getBuildExportPage({ limit: 1 });
