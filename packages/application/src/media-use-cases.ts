@@ -8,6 +8,7 @@ import {
 } from "@lacecms/domain";
 import type {
   Actor,
+  ContentEntryId,
   MediaFocalPoint,
   MediaId,
   MediaMetadata,
@@ -93,7 +94,22 @@ export interface GetMediaUseCaseInput {
   readonly mediaId: MediaId;
 }
 
-export interface DeleteMediaUseCaseInput extends GetMediaUseCaseInput {}
+export interface DeleteMediaUseCaseInput extends GetMediaUseCaseInput {
+  /**
+   * `drafts` first removes the item from the current draft of every using
+   * entry; it is refused while any current publication uses the item.
+   */
+  readonly detach?: "drafts";
+}
+
+/** Removes one media item from an entry's current draft (a guarded draft save). */
+export interface MediaDraftDetachPort {
+  detachMedia(input: {
+    readonly actor: Actor;
+    readonly entryId: ContentEntryId;
+    readonly mediaId: MediaId;
+  }): Promise<unknown>;
+}
 
 /** An omitted value stays unchanged; `null` (or empty text) clears it. */
 export interface MediaMetadataPatch {
@@ -138,6 +154,8 @@ export interface MediaBinary {
 
 export interface MediaUseCaseDependencies {
   readonly clock: Clock;
+  /** Required only for deletion requests that detach draft usage. */
+  readonly drafts?: MediaDraftDetachPort;
   readonly idGenerator: IdGenerator;
   readonly imageInspector: ImageInspector;
   readonly logger: OperationalLogger;
@@ -415,6 +433,7 @@ export class MediaUseCases {
 
   public async requestDeletion(input: DeleteMediaUseCaseInput): Promise<MediaView> {
     requirePermission(input.actor, "media:write");
+    if (input.detach === "drafts") await this.detachDraftUsage(input);
     const result = await this.dependencies.media.markForDeletion({
       mediaId: input.mediaId,
       requestedAt: this.dependencies.clock.now(),
@@ -499,6 +518,41 @@ export class MediaUseCases {
     return media === undefined || media === null || media.status !== "active"
       ? null
       : this.readBinary(media);
+  }
+
+  /**
+   * Detaches the item from every using draft before a deletion request. It
+   * refuses, before changing any draft, an inactive item, an item a current
+   * publication uses, and usage beyond the bounded usage read. Each draft save
+   * is atomic on its own; the final deletion guard stays authoritative.
+   */
+  private async detachDraftUsage(input: DeleteMediaUseCaseInput): Promise<void> {
+    requirePermission(input.actor, "content:write");
+    const drafts = this.dependencies.drafts;
+    if (drafts === undefined) failure("Detaching media from drafts is unavailable.");
+    const item = await this.dependencies.media.loadMediaCatalogItem(input.mediaId);
+    if (item === null) failure("Media does not exist.");
+    if (item.media.status !== "active") failure("Only active media can be detached.");
+    const usage = await this.dependencies.media.loadMediaUsage({
+      limit: MAX_MEDIA_USAGE_ENTRIES,
+      mediaId: input.mediaId,
+    });
+    const published = usage.some((entry) =>
+      entry.locations.some((location) => location.states.includes("published")),
+    );
+    if (published) {
+      throw new DomainError("MEDIA_IN_USE", "A current publication still uses this media.");
+    }
+    if (item.usageCount > usage.length) {
+      throw new DomainError("MEDIA_IN_USE", "Too many entries use this media to detach it.");
+    }
+    for (const entry of usage) {
+      await drafts.detachMedia({
+        actor: input.actor,
+        entryId: entry.entryId,
+        mediaId: input.mediaId,
+      });
+    }
   }
 
   private async catalogView(id: MediaId, missing: string): Promise<MediaView> {

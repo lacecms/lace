@@ -9,7 +9,7 @@ import {
   MediaStatusBadge,
   mediaTypeLabel,
 } from "../../../entities/media/index.js";
-import { useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import {
   DeleteMediaDialog,
   mediaDeletionDescription,
@@ -46,6 +46,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../../../shared/ui/Sheet/index.js";
+import { usageDeletion, type UsageDeletion } from "./usage-deletion.js";
 import { usageLocationLabel } from "./usage-labels.js";
 
 const sectionHeadingClass = "m-0 text-sm font-semibold";
@@ -164,6 +165,7 @@ function MediaDetails({
   const reload = useCallback(() => void refetch(), [refetch]);
   const usage = detail.data?.usage;
   const usageCount = detail.data?.usageCount ?? item.usageCount;
+  const canEditContent = can(useSession(), "content:write");
 
   async function copyUrl() {
     try {
@@ -313,25 +315,112 @@ function MediaDetails({
                   </p>
                 )}
               </>
-            ) : usageCount > 0 ? (
-              <>
-                <p className="m-0 text-sm text-muted-foreground">
-                  {`This media is used by ${usageCount === 1 ? "1 entry" : `${usageCount} entries`}. Remove it from every listed entry and publish those entries before deleting it.`}
-                </p>
-                <Button className="justify-self-start" disabled variant="outline">
-                  Delete media
-                </Button>
-              </>
             ) : (
-              <div className="justify-self-start">
-                <DeleteMediaDialog item={item} onChanged={onChanged} />
-              </div>
+              <MediaDeletionActions
+                canEditContent={canEditContent}
+                deletion={usageDeletion(usageCount, usage)}
+                item={item}
+                onChanged={onChanged}
+              />
             )}
           </section>
         ) : undefined}
       </div>
     </>
   );
+}
+
+/** The deletion action of an active item, or why it is unavailable. */
+function MediaDeletionActions({
+  canEditContent,
+  deletion,
+  item,
+  onChanged,
+}: {
+  readonly canEditContent: boolean;
+  readonly deletion: UsageDeletion;
+  readonly item: MediaMetadataDto;
+  readonly onChanged: (item: MediaMetadataDto) => void;
+}) {
+  const hint = "m-0 text-sm text-muted-foreground";
+  const unavailable = (
+    <Button className="justify-self-start" disabled variant="outline">
+      Delete media
+    </Button>
+  );
+  switch (deletion.kind) {
+    case "unused":
+      return (
+        <div className="justify-self-start">
+          <DeleteMediaDialog item={item} onChanged={onChanged} />
+        </div>
+      );
+    case "unknown":
+      return (
+        <>
+          <p className={hint}>Deletion is available once the usage of this media has loaded.</p>
+          {unavailable}
+        </>
+      );
+    case "published":
+      return (
+        <>
+          <p className={hint}>
+            Published versions still use this media. It can be deleted once they no longer do:
+          </p>
+          <ul
+            aria-label="Published entries using this media"
+            className="m-0 grid list-none gap-1.5 p-0 text-sm"
+          >
+            {deletion.entries.map(({ entry, releasedByPublishing }) => (
+              <li key={entry.entryId}>
+                <Link
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                  params={{ entryId: entry.entryId, modelKey: entry.modelKey }}
+                  to="/content/$modelKey/$entryId"
+                >
+                  {entry.title}
+                </Link>
+                <span className="text-muted-foreground">
+                  {releasedByPublishing
+                    ? " — its draft no longer uses this media. Publish or unpublish the entry to release it."
+                    : " — remove the media from the draft, then publish the entry."}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {unavailable}
+        </>
+      );
+    case "truncated":
+      return (
+        <>
+          <p className={hint}>
+            More entries use this media than can be changed at once. Remove it from some of them
+            before deleting it.
+          </p>
+          {unavailable}
+        </>
+      );
+    case "drafts":
+      return canEditContent ? (
+        <>
+          <p className={hint}>
+            Only drafts use this media. Deleting it removes it from those drafts first.
+          </p>
+          <div className="justify-self-start">
+            <DeleteMediaDialog detachFrom={deletion.entries} item={item} onChanged={onChanged} />
+          </div>
+        </>
+      ) : (
+        <>
+          <p className={hint}>
+            Only drafts use this media. Someone who can edit content must remove it from them first.
+          </p>
+          {unavailable}
+        </>
+      );
+  }
 }
 
 /** Descriptive metadata for readers who cannot change it, or items pending deletion. */

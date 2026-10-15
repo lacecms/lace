@@ -198,7 +198,11 @@ export interface AdminClient {
   listMedia(cursor?: string, query?: MediaListQuery): Promise<MediaListDto>;
   getMedia(mediaId: string): Promise<MediaDetailDto>;
   uploadMedia(file: File, options?: MediaUploadOptions): Promise<MediaMetadataDto>;
-  deleteMedia(mediaId: string): Promise<MediaMetadataDto>;
+  /** With `detachDrafts`, the server first removes the item from every using draft. */
+  deleteMedia(
+    mediaId: string,
+    options?: { readonly detachDrafts?: boolean },
+  ): Promise<MediaMetadataDto>;
   retryMediaDeletion(mediaId: string): Promise<MediaMetadataDto>;
   /**
    * Changes descriptive metadata, guarded by the `updatedAt` of the item the
@@ -670,12 +674,16 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
         throw responseError(exchange.status, exchange.requestId, exchange.body);
       return parse(mediaMetadataSchema, exchange.body);
     },
-    deleteMedia: async (mediaId: string) =>
+    deleteMedia: async (mediaId: string, options: { readonly detachDrafts?: boolean } = {}) =>
       parse(
         mediaMetadataSchema,
-        await request(fetcher, `/api/v1/admin/media/${encodeURIComponent(mediaId)}`, {
-          method: "DELETE",
-        }),
+        await request(
+          fetcher,
+          `/api/v1/admin/media/${encodeURIComponent(mediaId)}${
+            options.detachDrafts === true ? "?detach=drafts" : ""
+          }`,
+          { method: "DELETE" },
+        ),
       ),
     retryMediaDeletion: async (mediaId: string) =>
       parse(

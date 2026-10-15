@@ -14,6 +14,7 @@ import {
   readAllBuildContentPages,
 } from "../dist/index.js";
 import {
+  DomainError,
   actorId,
   blockKey,
   contentEntryId,
@@ -3168,4 +3169,236 @@ test("pages the in-memory build export by path, limit, byte budget and version",
     code: "BUILD_EXPORT_VERSION_CHANGED",
     expectedVersion: stale.version,
   });
+});
+
+async function detachFixture() {
+  const config = await defineConfig({
+    blocks: [
+      defineBlock({
+        fields: { image: field.media({ required: true }) },
+        type: "asset",
+        version: 1,
+      }),
+      defineBlock({
+        fields: {
+          images: field.list({
+            item: field.group({ fields: { caption: field.text(), image: field.media() } }),
+          }),
+        },
+        type: "gallery",
+        version: 1,
+      }),
+    ],
+    content: [
+      defineCollection({
+        blocks: ["asset", "gallery"],
+        fields: { cover: field.media(), photos: field.list({ item: field.media() }) },
+        key: "posts",
+        route: "/blog/:slug",
+        seo: {},
+        version: 1,
+      }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  for (const id of ["media-1", "media-2"]) {
+    await store.createMedia({
+      createdAt: unixMilliseconds(1),
+      createdBy: admin.id,
+      filename: `${id}.png`,
+      height: 1,
+      id: mediaId(id),
+      mimeType: "image/png",
+      size: 1,
+      storageKey: `media/${id}.png`,
+      width: 1,
+    });
+  }
+  const content = new ContentUseCases({
+    clock: new DeterministicClock(unixMilliseconds(10)),
+    config: config.runtime,
+    content: store,
+    idGenerator: new DeterministicIdGenerator("detach"),
+    media: store,
+  });
+  const mediaDependencies = {
+    clock: new DeterministicClock(unixMilliseconds(20)),
+    idGenerator: new DeterministicIdGenerator("media"),
+    imageInspector: { inspect: async () => ({ height: 1, width: 1 }) },
+    logger: { error() {} },
+    media: store,
+    storage: new InMemoryObjectStorage(),
+  };
+  const media = new MediaUseCases({ ...mediaDependencies, drafts: content });
+  const create = (slug, input) =>
+    content.create({
+      actor: editor,
+      fields: {},
+      blocks: [],
+      slug,
+      title: slug,
+      ...input,
+      modelKey: "posts",
+    });
+  const asset = (key, image, position = 1000, hidden = false) => ({
+    data: { image },
+    hidden,
+    key: blockKey(key),
+    position,
+    schemaVersion: 1,
+    type: "asset",
+  });
+  return { asset, content, create, media, mediaDependencies, store };
+}
+
+test("detaches one media item from a draft's fields, blocks and SEO image", async () => {
+  const { asset, content, create, store } = await detachFixture();
+  const gallery = {
+    data: { images: [{ caption: "One", image: "media-1" }, { image: "media-2" }] },
+    key: blockKey("gallery"),
+    position: 3000,
+    schemaVersion: 1,
+    type: "gallery",
+  };
+  const created = await create("post", {
+    blocks: [asset("visible", "media-1"), asset("hidden", "media-1", 2000, true), gallery],
+    fields: { cover: "media-1", photos: ["media-1", "media-2"] },
+    seo: { image: "media-1", title: "Kept" },
+  });
+  await expect(
+    content.detachMedia({
+      actor: { id: actorId("viewer"), role: "viewer" },
+      entryId: created.id,
+      mediaId: "media-1",
+    }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  await expect(
+    content.detachMedia({ actor: admin, entryId: created.id, mediaId: "media-1" }),
+  ).resolves.toBe(true);
+  const draft = (await store.load({ entryId: created.id })).draft;
+  expect(draft).toMatchObject({
+    fields: { photos: ["media-2"] },
+    revision: 2,
+    seo: { title: "Kept" },
+    slug: "post",
+    title: "post",
+    updatedBy: { id: "admin" },
+  });
+  expect(draft.fields).not.toHaveProperty("cover");
+  expect(draft.seo).not.toHaveProperty("image");
+  expect(draft.blocks.map((block) => [block.key, block.hidden, block.data])).toEqual([
+    ["visible", false, {}],
+    ["hidden", true, {}],
+    ["gallery", false, { images: [{ caption: "One" }, { image: "media-2" }] }],
+  ]);
+  expect((await store.loadMediaCatalogItem("media-1")).usageCount).toBe(0);
+  expect((await store.loadMediaCatalogItem("media-2")).usageCount).toBe(1);
+  await expect(
+    content.detachMedia({ actor: admin, entryId: created.id, mediaId: "media-1" }),
+  ).resolves.toBe(false);
+  expect((await store.load({ entryId: created.id })).draft.revision).toBe(2);
+});
+
+test("deletion with draft detaching clears draft-only usage and queues the item", async () => {
+  const { asset, content, create, media, store } = await detachFixture();
+  const first = await create("first", { fields: { cover: "media-1" } });
+  const second = await create("second", { blocks: [asset("hero", "media-1")] });
+  await expect(media.requestDeletion({ actor: editor, mediaId: "media-1" })).rejects.toMatchObject({
+    code: "MEDIA_IN_USE",
+  });
+  await expect(
+    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
+  ).resolves.toMatchObject({ status: "deleting", usageCount: 0 });
+  for (const { id } of [first, second]) {
+    expect((await content.load({ actor: editor, entryId: id })).draft).toMatchObject({
+      revision: 2,
+      updatedBy: { id: "editor" },
+    });
+  }
+  expect(store.mediaDeletionRequests).toEqual(["media-1"]);
+});
+
+test("draft detaching refuses published usage, inactive media and missing ports before any draft change", async () => {
+  const { asset, content, create, media, mediaDependencies, store } = await detachFixture();
+  const published = await create("published", { blocks: [asset("hero", "media-1")] });
+  const draftOnly = await create("draft", { fields: { cover: "media-1" } });
+  await content.publish({ actor: admin, entryId: published.id, expectedRevision: 1 });
+  await expect(
+    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
+  ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+  for (const { id } of [published, draftOnly]) {
+    expect((await store.load({ entryId: id })).draft.revision).toBe(1);
+  }
+  await expect(
+    media.requestDeletion({
+      actor: { id: actorId("viewer"), role: "viewer" },
+      detach: "drafts",
+      mediaId: "media-1",
+    }),
+  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  await expect(
+    new MediaUseCases(mediaDependencies).requestDeletion({
+      actor: editor,
+      detach: "drafts",
+      mediaId: "media-2",
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  await media.requestDeletion({ actor: editor, mediaId: "media-2" });
+  await expect(
+    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-2" }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  expect(store.mediaDeletionRequests).toEqual(["media-2"]);
+});
+
+test("draft detaching stops on a concurrent save, too many entries or a new reference", async () => {
+  const { content, create, media, mediaDependencies, store } = await detachFixture();
+  const first = await create("first", { fields: { cover: "media-1" } });
+  const second = await create("second", { fields: { cover: "media-1" } });
+  const conflicting = new MediaUseCases({
+    ...mediaDependencies,
+    drafts: {
+      async detachMedia(input) {
+        throw new DomainError("CONTENT_REVISION_CONFLICT", `Conflict for ${input.entryId}.`);
+      },
+    },
+  });
+  await expect(
+    conflicting.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
+  ).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
+  expect((await store.loadMediaCatalogItem("media-1")).media.status).toBe("active");
+
+  const loaded = await store.loadMediaCatalogItem("media-1");
+  const truncated = new MediaUseCases({
+    ...mediaDependencies,
+    drafts: { detachMedia: async () => expect.unreachable() },
+    media: Object.create(store, {
+      loadMediaCatalogItem: { value: async () => ({ ...loaded, usageCount: 51 }) },
+    }),
+  });
+  await expect(
+    truncated.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
+  ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+  for (const { id } of [first, second]) {
+    expect((await store.load({ entryId: id })).draft.revision).toBe(1);
+  }
+
+  let late;
+  const racing = new MediaUseCases({
+    ...mediaDependencies,
+    drafts: {
+      async detachMedia(input) {
+        await content.detachMedia(input);
+        late ??= await create("late", { fields: { cover: "media-1" } });
+      },
+    },
+  });
+  await expect(
+    racing.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
+  ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+  expect((await store.loadMediaCatalogItem("media-1")).media.status).toBe("active");
+  expect((await store.load({ entryId: late.id })).draft.fields).toEqual({ cover: "media-1" });
+  expect(store.mediaDeletionRequests).toEqual([]);
+  await expect(
+    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
+  ).resolves.toMatchObject({ status: "deleting" });
 });

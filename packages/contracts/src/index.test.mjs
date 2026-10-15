@@ -72,6 +72,7 @@ import {
   isoTimestampSchema,
   jsonPointerSchema,
   mediaDetailSchema,
+  mediaDeleteQuerySchema,
   mediaListQuerySchema,
   mediaListSchema,
   mediaMetadataSchema,
@@ -1205,6 +1206,11 @@ describe("admin entry list contracts", () => {
       { limit: "0" },
     ]) {
       expect(v.safeParse(mediaListQuerySchema, invalid).success).toBe(false);
+    }
+    expect(v.parse(mediaDeleteQuerySchema, { detach: "drafts" })).toEqual({ detach: "drafts" });
+    expect(v.parse(mediaDeleteQuerySchema, {})).toEqual({});
+    for (const invalid of [{ detach: "all" }, { detach: ["drafts", "drafts"] }, { detach: "" }]) {
+      expect(v.safeParse(mediaDeleteQuerySchema, invalid).success).toBe(false);
     }
 
     const source = {

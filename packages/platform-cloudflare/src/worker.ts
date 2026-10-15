@@ -285,6 +285,7 @@ export function createCloudflareRuntime(
   });
   const media = new MediaUseCases({
     clock,
+    drafts: content,
     idGenerator: ids,
     imageInspector: input.imageInspector ?? new WorkerImageInspector(),
     logger: {

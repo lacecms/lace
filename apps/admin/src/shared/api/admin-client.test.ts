@@ -490,6 +490,11 @@ test("uploads and requests media deletion with validated credentialed responses"
     "/api/v1/admin/media/media%2F1",
     expect.objectContaining({ credentials: "same-origin", method: "DELETE" }),
   );
+  await expect(client.deleteMedia("media-1", { detachDrafts: true })).resolves.toEqual(item);
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/media/media-1?detach=drafts",
+    expect.objectContaining({ credentials: "same-origin", method: "DELETE" }),
+  );
   await expect(client.retryMediaDeletion("media-1")).resolves.toEqual(item);
   expect(fetcher).toHaveBeenLastCalledWith(
     "/api/v1/admin/media/media-1/retry-deletion",

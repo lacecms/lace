@@ -5307,6 +5307,7 @@
     },
     "/api/v1/admin/media/{mediaId}": {
       "delete": {
+        "description": "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
         "operationId": "deleteApiV1AdminMediaByMediaId",
         "parameters": [
           {
@@ -5317,6 +5318,13 @@
               "maxLength": 255,
               "minLength": 1,
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "detach",
+            "schema": {
+              "enum": ["drafts"]
             }
           }
         ],

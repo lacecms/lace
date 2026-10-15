@@ -60,6 +60,7 @@ import {
   managedUserListSchema,
   managedUserSchema,
   mediaDetailSchema,
+  mediaDeleteQuerySchema,
   mediaListQuerySchema,
   mediaListSchema,
   mediaEntityTag,
@@ -1618,12 +1619,17 @@ export function createLaceApp(input: LaceAppInput): Hono {
         },
       },
       summary: "Request media deletion",
+      description:
+        "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
       tags: ["admin"],
     }),
     validator("param", mediaIdParams, validationHook),
+    validator("query", mediaDeleteQuerySchema, validationHook),
     async (context) => {
+      const { detach } = context.req.valid("query");
       const deleted = await media().requestDeletion({
         actor: await actor(context),
+        ...(detach === undefined ? {} : { detach }),
         mediaId: context.req.param("mediaId") as never,
       });
       return response(mediaMetadataSchema, mediaDto(deleted), 202);

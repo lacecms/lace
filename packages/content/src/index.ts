@@ -1610,6 +1610,56 @@ export function collectFieldMedia(
   return references;
 }
 
+/**
+ * Removes one media item from declared media leaves: a matching media value is
+ * dropped from its object, and a matching element of a list of media is removed
+ * from the list. Every other value is kept; the input is returned unchanged when
+ * nothing matches.
+ */
+export function detachFieldMedia(
+  definitions: ModelFieldDefinitions,
+  values: JsonObject,
+  mediaId: string,
+): JsonObject {
+  const matches = (definition: FieldDefinition, value: JsonValue | undefined): boolean =>
+    definition.type === "media" && value === mediaId;
+  function visit(definition: FieldDefinition, value: JsonValue | undefined): JsonValue | undefined {
+    if (definition.type === "group" && isRecord(value))
+      return walk(definition.fields, value as JsonObject);
+    if (definition.type !== "list" || !Array.isArray(value)) return value;
+    let changed = false;
+    const items: JsonValue[] = [];
+    for (const item of value) {
+      if (matches(definition.item, item)) {
+        changed = true;
+        continue;
+      }
+      const next = visit(definition.item, item)!;
+      changed ||= next !== item;
+      items.push(next);
+    }
+    return changed ? items : value;
+  }
+  function walk(fields: ModelFieldDefinitions, data: JsonObject): JsonObject {
+    let result: Record<string, JsonValue> | undefined;
+    for (const [key, definition] of Object.entries(fields)) {
+      const value = data[key];
+      if (matches(definition, value)) {
+        result ??= { ...data };
+        delete result[key];
+        continue;
+      }
+      const next = visit(definition, value);
+      if (next !== value) {
+        result ??= { ...data };
+        result[key] = next!;
+      }
+    }
+    return result ?? data;
+  }
+  return walk(definitions, values);
+}
+
 /** Keeps legacy scalar keys; nested locations are relative JSON Pointers. */
 export function encodeFieldPath(path: readonly ValidationPathSegment[]): string {
   if (path.length === 1) return String(path[0]);

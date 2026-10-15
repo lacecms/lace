@@ -1217,6 +1217,22 @@ object and then the metadata row; failures set `delete_failed` and remain
 retryable. This avoids either a dangling published reference or an unrecoverable
 SQL/object-storage half-delete.
 
+A writer may also delete an item that only drafts use. The delete request's
+`detach=drafts` option (`media:write` plus `content:write`) first refuses, with
+`MEDIA_IN_USE` and before any change, an item that a current published snapshot
+uses or that more entries use than the 50-entry usage read returns. It then
+removes the item from each using draft — a media value is cleared, a media list
+element is removed, an SEO image is cleared, in entry fields and in visible and
+hidden blocks — through an ordinary guarded draft save by the requesting actor,
+and finally requests deletion through the unchanged guard above. Published
+snapshots are never rewritten, so detaching requests no build. Each draft save
+is atomic on its own: a revision conflict or a newly committed reference stops
+the request, earlier drafts stay detached, and the item stays `active` for a
+retry. The admin offers this only when the loaded usage lists every using entry
+and none uses the item in a published version; when only a published version
+still uses it, the panel says that publishing or unpublishing the entry
+releases it.
+
 The default upload limit is 10 MiB. The initial allowlist is JPEG, PNG, WebP,
 GIF, and AVIF; SVG is excluded because safely sanitizing active XML is outside
 the MVP. The server verifies magic bytes rather than trusting the multipart

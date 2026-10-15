@@ -489,6 +489,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   });
   const media = new MediaUseCases({
     clock,
+    drafts: content,
     idGenerator: ids,
     imageInspector: input.imageInspector ?? new NodeSharpImageInspector(),
     logger: {
