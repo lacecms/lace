@@ -13,7 +13,8 @@ and exact-artifact acceptance on 2026-10-14. Those local receipts alone did not
 establish publication; the registry check below now confirms public availability. See [alpha.5 notes](./alpha-5-release-notes.md).
 The selected next candidate is `0.1.0-alpha.6`, ownership template `0.30.0`,
 on npm channel `next`. Preparation and acceptance never publish. The commands
-below target alpha.6; fresh evidence is required before claiming local acceptance.
+below target alpha.6. Local preparation, independent verification and exact-artifact
+acceptance passed on 2026-10-16; see the [acceptance receipt](./alpha-6-acceptance.json).
 See [alpha.6 release notes](./alpha-6-release-notes.md) for coordinated upgrades
 and the raw build-export response change. Published alpha.1–alpha.4 remain
 immutable. Historical alpha.5 receipts and artifacts must also remain intact.

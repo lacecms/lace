@@ -1,8 +1,8 @@
 # Alpha.6 release preparation and upgrade notes
 
 Selected candidate: `0.1.0-alpha.6`, npm channel `next`, ownership template
-`0.30.0`. Preparation is in progress; publication and real deployment approval
-remain separate. These notes do not announce availability. See
+`0.30.0`. Local preparation and exact-artifact acceptance passed on
+2026-10-16. Publication and real deployment approval remain separate. These notes do not announce availability. See
 [release preparation](./alpha-release.md) and
 [owner verification](./real-application-verification.md).
 
@@ -90,9 +90,20 @@ remain in force.
 
 ## Candidate evidence
 
-Fresh source checks, immutable artifact preparation and exact-artifact acceptance
-are pending. Results will be recorded in the
-[change readiness record](../openspec/changes/prepare-alpha-six-release/readiness.md).
+Source checks and independent saved-artifact verification passed. The complete
+inventory is `.release-artifacts/alpha-6/inventory.json`, from clean source
+`782df0947c7497d8ce7f0e4d5a4ff4bb7afae563`. Fifteen packages and API/builder images
+for both linux/amd64 and linux/arm64 passed preparation smoke checks. Sixteen
+exact-artifact consumer journeys passed on linux/arm64, including the new
+release probes on Node and local Cloudflare. This does not claim two-platform
+end-to-end coverage or real deployment readiness. See the
+[portable acceptance receipt](./alpha-6-acceptance.json) and
+[change readiness record](../openspec/changes/prepare-alpha-six-release/readiness.md)
+for checksums, image IDs, source/harness revisions and evidence. Local image IDs
+are not remote registry digests. The audit policy passed with 851 license records
+and the existing two tooling dispositions (one high, one moderate advisory).
+
 Alpha.5 receipts remain historical; alpha.4 owner deployment confirmations do
-not certify alpha.6. Authenticated publishing rights and affected real
-VPS/Cloudflare upgrade/restore/recovery checks remain separate owner prerequisites.
+not certify alpha.6. npm whoami returned E401; authenticated npm/GHCR publishing
+rights and affected real VPS/Cloudflare upgrade/restore/recovery checks remain
+separate owner prerequisites. No publication or remote deployment occurred.
