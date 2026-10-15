@@ -385,3 +385,44 @@ a matching earlier engine/admin. Stored field paths and values, including keys
 named `layout`, are unchanged. Public metadata synchronization still advances
 published state and requests a build. Creation-time slugs are ordinary stored
 slugs and need no conversion. See [form organization](form-organization.md).
+
+## Public contract evolution
+
+Starting with the release after `0.1.0-alpha.5`, the public delivery contract
+(`/api/v1/public/*` responses and the build export) evolves under one policy.
+
+- **Compatible (no version change):** adding an optional key, or a key older
+  consumers may ignore, to a public response, a public entry, block, global,
+  media item or the build export. `@lacecms/sdk` parses responses with
+  tolerant schemas that ignore and remove unknown keys, so a site build keeps
+  working against a newer API of the same line.
+- **Breaking:** removing a key, changing its type, or changing the meaning of
+  a value consumers rely on. Such a change requires a new build-export
+  `formatVersion` (for the export) or `/api/v2` (for REST responses).
+- **Version pairing:** within one major line, the API must be the same or a
+  newer minor than the site's `@lacecms/sdk`. A newer SDK may rely on keys an
+  older API does not send.
+- **Strict by design:** rich-text grammar, block `schemaVersion` matching and
+  block data validation do not tolerate unknown values; they are safety and
+  rendering contracts. Upgrading block definitions or the rich-text format
+  still requires matching site packages.
+- **Server output stays strict:** the API validates every public response
+  with strict schemas, and the generated OpenAPI document describes them with
+  `additionalProperties: false`. External clients generated from that
+  document should nevertheless ignore unknown properties, because later
+  releases of the same line may add them.
+
+The build export carries `formatVersion` (currently `1`). The SDK declares the
+highest format it supports and rejects a newer export with
+`LaceUnsupportedExportFormatError`; the published-site loader reports it as
+`invalid_export` with advice to upgrade `@lacecms/sdk`.
+
+Upgrade notes for the next alpha:
+
+- The build export requires `formatVersion`; an SDK of this release rejects
+  an export from `0.1.0-alpha.5` or older. Upgrade the API and site packages
+  together, as before.
+- `LaceHttpError.code` is typed `LaceErrorCode | (string & {})`: an error code
+  introduced by a newer API is reported instead of failing as a contract
+  violation. Code that assigns `code` to a `LaceErrorCode` variable must
+  narrow it first.

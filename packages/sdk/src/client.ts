@@ -1,25 +1,22 @@
 import {
-  buildExportSchema,
+  BUILD_EXPORT_FORMAT_VERSION,
   entityTagSchema,
   versionFromEntityTag,
-  errorEnvelopeSchema,
   identifierSchemaPublic,
   opaqueCursorSchema,
-  publicContentEntrySchema,
-  publicContentListSchema,
-  publicGlobalContentSchema,
+  tolerantPublicSchemas,
 } from "@lacecms/contracts";
 import type {
   BuildExportDto,
   EntityTag,
-  ErrorEnvelope,
   PublicContentEntryDto,
   PublicContentListDto,
   PublicEntryDto,
   PublicGlobalContentDto,
   PublicMediaDictionaryDto,
   PublicMediaDto,
-  LaceErrorCode,
+  ReportedLaceErrorCode,
+  TolerantErrorEnvelope,
 } from "@lacecms/contracts";
 import * as v from "valibot";
 
@@ -84,11 +81,12 @@ export class LaceTimeoutError extends LaceTransportError {
 }
 
 export class LaceHttpError extends LaceSdkError {
-  public readonly code: LaceErrorCode;
-  public readonly details: ErrorEnvelope["error"]["details"];
+  /** A known Lace error code, or a code introduced by a newer API. */
+  public readonly code: ReportedLaceErrorCode;
+  public readonly details: TolerantErrorEnvelope["error"]["details"];
   public readonly status: number;
 
-  public constructor(status: number, error: ErrorEnvelope["error"]) {
+  public constructor(status: number, error: TolerantErrorEnvelope["error"]) {
     super(error.message);
     this.name = "LaceHttpError";
     this.code = error.code;
@@ -101,6 +99,21 @@ export class LaceContractError extends LaceSdkError {
   public constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "LaceContractError";
+  }
+}
+
+/** The API sent a build export in a format newer than this SDK supports. */
+export class LaceUnsupportedExportFormatError extends LaceContractError {
+  public readonly received: number;
+  public readonly supported: number;
+
+  public constructor(received: number, supported: number) {
+    super(
+      `The Lace API sent build-export format ${received}, but this @lacecms/sdk supports format ${supported} at most. Upgrade @lacecms/sdk to a release compatible with the Lace API.`,
+    );
+    this.name = "LaceUnsupportedExportFormatError";
+    this.received = received;
+    this.supported = supported;
   }
 }
 
@@ -258,7 +271,7 @@ function parseSchema<Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<u
 
 async function parseFailure(response: Response): Promise<never> {
   const value = await parseJson(response);
-  const envelope = v.safeParse(errorEnvelopeSchema, value);
+  const envelope = v.safeParse(tolerantPublicSchemas.errorEnvelope, value);
   if (!envelope.success) {
     throw new LaceContractError("The failed Lace response violated the error contract.");
   }
@@ -330,7 +343,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
             ...(after === undefined ? {} : { after }),
             ...(requestOptions.limit === undefined ? {} : { limit: requestOptions.limit }),
           }),
-          publicContentListSchema,
+          tolerantPublicSchemas.publicContentList,
           requestOptions,
         );
         items.push(...page.items);
@@ -363,7 +376,12 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
           );
         return { changed: false, etag: responseEtag };
       }
-      const exported = parseSchema(buildExportSchema, await parseJson(response));
+      const exported = parseSchema(tolerantPublicSchemas.buildExport, await parseJson(response));
+      if (exported.formatVersion > BUILD_EXPORT_FORMAT_VERSION)
+        throw new LaceUnsupportedExportFormatError(
+          exported.formatVersion,
+          BUILD_EXPORT_FORMAT_VERSION,
+        );
       if (responseVersion !== exported.version)
         throw new LaceContractError(
           "The build-export ETag does not match the export version. Upgrade the Lace API and SDK to compatible versions and check the proxy configuration.",
@@ -375,11 +393,15 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
       if (!path.startsWith("/")) throw new TypeError("path must start with a slash.");
       const url = publicUrl(baseUrl, ["content", "by-path"]);
       url.searchParams.set("path", path);
-      return read(url, publicContentEntrySchema, requestOptions);
+      return read(url, tolerantPublicSchemas.publicContentEntry, requestOptions);
     },
 
     getCollection(modelKey, requestOptions = {}) {
-      return read(collectionUrl(modelKey, requestOptions), publicContentListSchema, requestOptions);
+      return read(
+        collectionUrl(modelKey, requestOptions),
+        tolerantPublicSchemas.publicContentList,
+        requestOptions,
+      );
     },
 
     getCollectionBySlug(modelKey, slug, requestOptions = {}) {
@@ -389,7 +411,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
           assertIdentifier(modelKey, "modelKey"),
           assertIdentifier(slug, "slug"),
         ]),
-        publicContentEntrySchema,
+        tolerantPublicSchemas.publicContentEntry,
         requestOptions,
       );
     },
@@ -397,7 +419,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
     getGlobal(modelKey, requestOptions = {}) {
       return read(
         publicUrl(baseUrl, ["globals", assertIdentifier(modelKey, "modelKey")]),
-        publicGlobalContentSchema,
+        tolerantPublicSchemas.publicGlobalContent,
         requestOptions,
       );
     },
@@ -405,7 +427,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
     getPage(modelKey, requestOptions = {}) {
       return read(
         publicUrl(baseUrl, ["pages", assertIdentifier(modelKey, "modelKey")]),
-        publicContentEntrySchema,
+        tolerantPublicSchemas.publicContentEntry,
         requestOptions,
       );
     },

@@ -46,7 +46,7 @@ function mediaItem(id, overrides = {}) {
 }
 
 function buildExport(version, entries, media = {}) {
-  return { entries, media, version };
+  return { entries, formatVersion: 1, media, version };
 }
 
 function exportResponse(value, etag = `"${value.version}"`) {
@@ -452,6 +452,21 @@ test("rejects a legacy-shaped export as a contract violation", async () => {
     })(),
   );
   expect(error).toBeInstanceOf(LaceContractError);
+});
+
+test("an export in a newer format fails with invalid_export and upgrade guidance", async () => {
+  const error = await captureError(
+    createPublishedSiteLoader({
+      environment,
+      fetch: scriptedFetch([exportResponse({ ...buildExport(2, []), formatVersion: 2 })]).fetch,
+    })(),
+  );
+  expect(error).toBeInstanceOf(LaceSdkError);
+  expect(error.code).toBe("invalid_export");
+  expect(error.message).toContain("Upgrade @lacecms/sdk");
+  expect(error.message).not.toContain(token);
+  expect(error.cause).toBeInstanceOf(LaceContractError);
+  expect(error.cause).toMatchObject({ received: 2, supported: 1 });
 });
 
 test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {

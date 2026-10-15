@@ -39,6 +39,7 @@ const value = {
       publishedAt: "2026-10-06T00:00:00.000Z",
     },
   ],
+  formatVersion: 1,
   media: {},
   version: 1,
 };

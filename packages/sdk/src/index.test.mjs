@@ -4,6 +4,7 @@ import {
   LaceHttpError,
   LaceTimeoutError,
   LaceTransportError,
+  LaceUnsupportedExportFormatError,
   createLaceClient,
   packageName,
   userAgent,
@@ -112,7 +113,10 @@ test("follows cursors only through getAllCollection", async () => {
 
 test("scopes the build token to exports and supports changed and unchanged exports", async () => {
   const mock = queuedFetch([
-    json({ entries: [publicEntry()], media: {}, version: 7 }, { headers: { etag: '"7"' } }),
+    json(
+      { formatVersion: 1, entries: [publicEntry()], media: {}, version: 7 },
+      { headers: { etag: '"7"' } },
+    ),
     new Response(null, { headers: { etag: '"7"' }, status: 304 }),
     json(single({ modelKey: "home", path: "/" })),
   ]);
@@ -159,7 +163,7 @@ test("maps Lace error envelopes and rejects malformed server data", async () => 
     status: 404,
   });
 
-  const malformedMock = queuedFetch([json({ entries: "not-an-array" })]);
+  const malformedMock = queuedFetch([json({ formatVersion: 1, entries: "not-an-array" })]);
   const malformedClient = createLaceClient({
     baseUrl: "https://cms.example",
     fetch: malformedMock.fetch,
@@ -201,7 +205,10 @@ test("distinguishes timeout and caller abort transport failures", async () => {
 
 test.each(['"7"', 'W/"7"'])("preserves received and supplied build validators %s", async (etag) => {
   const mock = queuedFetch([
-    json({ entries: [publicEntry()], media: {}, version: 7 }, { headers: { etag } }),
+    json(
+      { formatVersion: 1, entries: [publicEntry()], media: {}, version: 7 },
+      { headers: { etag } },
+    ),
     new Response(null, { headers: { etag: 'W/"7"' }, status: 304 }),
   ]);
   const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
@@ -250,7 +257,10 @@ test.each([200, 304])("diagnoses missing and invalid ETags on %i safely", async 
 
 test("rejects inconsistent response versions and malformed caller validators", async () => {
   for (const response of [
-    json({ entries: [publicEntry()], media: {}, version: 8 }, { headers: { etag: 'W/"7"' } }),
+    json(
+      { formatVersion: 1, entries: [publicEntry()], media: {}, version: 8 },
+      { headers: { etag: 'W/"7"' } },
+    ),
     new Response(null, { headers: { etag: 'W/"8"' }, status: 304 }),
   ]) {
     const client = createLaceClient({
@@ -277,7 +287,7 @@ test("reads a published global by model key and validates its shape", async () =
     json({ global, media: { logo: mediaItem("logo") } }),
     json({ global: { ...global, path: "/settings" }, media: {} }),
     json({ error: { code: "NOT_FOUND", message: "Not found." } }, { status: 404 }),
-    json({ entries: [], media: {}, version: 3 }, { headers: { etag: '"3"' } }),
+    json({ formatVersion: 1, entries: [], media: {}, version: 3 }, { headers: { etag: '"3"' } }),
   ]);
   const client = createLaceClient({ baseUrl: "https://cms.example/lace/", fetch: mock.fetch });
 
@@ -285,7 +295,8 @@ test("reads a published global by model key and validates its shape", async () =
     global,
     media: { logo: mediaItem("logo") },
   });
-  await expect(client.getGlobal("settings")).rejects.toBeInstanceOf(LaceContractError);
+  // A newer API's extra key is ignored rather than rejected.
+  await expect(client.getGlobal("settings")).resolves.toEqual({ global, media: {} });
   await expect(client.getGlobal("missing")).rejects.toMatchObject({ status: 404 });
   expect(() => client.getGlobal("")).toThrow(TypeError);
   await expect(client.getBuildExport()).resolves.toMatchObject({
@@ -297,4 +308,115 @@ test("reads a published global by model key and validates its shape", async () =
     "https://cms.example/lace/api/v1/public/globals/missing",
     "https://cms.example/lace/api/v1/public/build-export",
   ]);
+});
+
+test("ignores keys a newer API adds while enforcing required values", async () => {
+  const future = { addedLater: { nested: true } };
+  const entry = {
+    ...publicEntry(),
+    ...future,
+    blocks: [
+      {
+        data: { heading: "Hi", contentKey: 1 },
+        key: "b1",
+        position: 1000,
+        schemaVersion: 1,
+        settings: {},
+        type: "hero",
+        ...future,
+      },
+    ],
+    seo: {
+      canonical: null,
+      description: null,
+      image: null,
+      noindex: false,
+      title: null,
+      ...future,
+    },
+  };
+  const media = { m1: { ...mediaItem("m1"), ...future, focalPoint: { x: 0, y: 1, ...future } } };
+  const mock = queuedFetch([
+    json({ entry, media, ...future }),
+    json({ items: [entry], media, ...future }),
+    json({ global: { ...publicEntry(), ...future }, media: {} }),
+    json({ entry: { ...publicEntry(), publishedAt: undefined }, media: {} }),
+    json({ entry: { ...publicEntry(), title: 42 }, media: {} }),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
+
+  const page = await client.getPage("home");
+  expect(page).toEqual({
+    entry: {
+      ...publicEntry(),
+      blocks: [
+        {
+          data: { contentKey: 1, heading: "Hi" },
+          key: "b1",
+          position: 1000,
+          schemaVersion: 1,
+          settings: {},
+          type: "hero",
+        },
+      ],
+      seo: { canonical: null, description: null, image: null, noindex: false, title: null },
+    },
+    media: { m1: { ...mediaItem("m1"), focalPoint: { x: 0, y: 1 } } },
+  });
+  expect(JSON.stringify(page)).not.toContain("addedLater");
+  expect(JSON.stringify(await client.getCollection("posts"))).not.toContain("addedLater");
+  await expect(client.getGlobal("settings")).resolves.toEqual({
+    global: { blocks: [], fields: {}, id: "entry-1", modelKey: "posts", publishedAt: timestamp },
+    media: {},
+  });
+  // A missing required value and a wrong type still violate the contract.
+  await expect(client.getPage("home")).rejects.toBeInstanceOf(LaceContractError);
+  await expect(client.getPage("home")).rejects.toBeInstanceOf(LaceContractError);
+});
+
+test("reports an error code introduced by a newer API", async () => {
+  const mock = queuedFetch([
+    json(
+      { error: { code: "FUTURE_CONDITION", message: "Later.", addedLater: true } },
+      { status: 409 },
+    ),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
+  const failure = await client.getPage("home").catch((error) => error);
+  expect(failure).toBeInstanceOf(LaceHttpError);
+  expect(failure).toMatchObject({ code: "FUTURE_CONDITION", status: 409 });
+});
+
+test("rejects a build export in a newer format with upgrade guidance", async () => {
+  const mock = queuedFetch([
+    json(
+      { formatVersion: 2, entries: [], media: {}, version: 4, addedLater: true },
+      { headers: { etag: '"4"' } },
+    ),
+    json(
+      { formatVersion: 1, entries: [], media: {}, version: 4, addedLater: true },
+      { headers: { etag: '"4"' } },
+    ),
+  ]);
+  const client = createLaceClient({
+    baseUrl: "https://cms.example",
+    fetch: mock.fetch,
+    token: "build-secret",
+  });
+  const failure = await client.getBuildExport().catch((error) => error);
+  expect(failure).toBeInstanceOf(LaceUnsupportedExportFormatError);
+  expect(failure).toBeInstanceOf(LaceContractError);
+  expect(failure).toMatchObject({ received: 2, supported: 1 });
+  expect(failure.message).toContain("Upgrade @lacecms/sdk");
+  expect(failure.message).not.toContain("build-secret");
+
+  const supported = await client.getBuildExport();
+  expect(supported.export).toEqual({
+    entries: [],
+    formatVersion: 1,
+    globals: [],
+    media: {},
+    seo: { defaults: null, models: {} },
+    version: 4,
+  });
 });

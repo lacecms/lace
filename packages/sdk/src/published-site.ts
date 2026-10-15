@@ -7,7 +7,13 @@ import type {
   SeoValueDto,
   PublicMediaDto,
 } from "@lacecms/contracts";
-import { createLaceClient, LaceHttpError, LaceSdkError, LaceTransportError } from "./client.js";
+import {
+  createLaceClient,
+  LaceHttpError,
+  LaceSdkError,
+  LaceTransportError,
+  LaceUnsupportedExportFormatError,
+} from "./client.js";
 import type { LaceClient, LaceFetch } from "./client.js";
 import { resolveSeo, seoText, siteUrlFor } from "./seo.js";
 import type { ResolvedSeo, SeoDefaultValues } from "./seo.js";
@@ -420,6 +426,12 @@ export function createPublishedSiteLoader(
         failure(
           "api_unavailable",
           "The Lace API is unavailable. Check LACE_API_BASE_URL and that the Lace API is running.",
+          error,
+        );
+      if (error instanceof LaceUnsupportedExportFormatError)
+        failure(
+          "invalid_export",
+          `The Lace API sent build-export format ${error.received}, but this @lacecms/sdk supports format ${error.supported} at most. Upgrade @lacecms/sdk (and @lacecms/astro) to the release that matches the Lace API.`,
           error,
         );
       throw error;

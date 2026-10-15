@@ -185,6 +185,7 @@ function siteExport({ defaults, globals }) {
     ],
     globals,
     media: { logo: library.logo },
+    formatVersion: 1,
     seo: { defaults, models: { posts: { description: "summary", image: null } } },
     version: 1,
   };

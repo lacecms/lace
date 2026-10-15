@@ -8083,6 +8083,9 @@
                       },
                       "type": "array"
                     },
+                    "formatVersion": {
+                      "const": 1
+                    },
                     "globals": {
                       "default": [],
                       "items": {
@@ -8354,7 +8357,7 @@
                       "type": "integer"
                     }
                   },
-                  "required": ["entries", "media", "version"],
+                  "required": ["entries", "formatVersion", "media", "version"],
                   "type": "object"
                 }
               }

@@ -176,6 +176,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
     });
     const etag = buildExport.response.headers.get("etag");
     expect(etag).not.toBeNull();
+    expect(buildExport.body.formatVersion).toBe(1);
     expect(
       (
         await json(value.server, "/api/v1/public/build-export", {

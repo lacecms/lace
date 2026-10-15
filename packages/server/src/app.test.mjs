@@ -457,6 +457,7 @@ test("serves public content and short-circuits matching build exports", async ()
   });
   const fresh = await json(app, "/api/v1/public/build-export");
   expect(fresh.response.headers.get("etag")).toBe('"1"');
+  expect(fresh.body.formatVersion).toBe(1);
   expect(exportLoads()).toBe(1);
   expect(
     (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"1"' } }))

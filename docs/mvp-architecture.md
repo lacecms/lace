@@ -1649,7 +1649,7 @@ GET globals/:modelKey
 GET collections/:modelKey
   -> { items: PublicEntry[], media, nextCursor? }
 GET build-export
-  -> { entries: PublicEntry[], globals: PublicGlobal[], media, seo, version }
+  -> { formatVersion, entries: PublicEntry[], globals: PublicGlobal[], media, seo, version }
 
 seo (entry) = { title, description, image, canonical, noindex }   // null when unset
 seo (export) = {
@@ -1791,6 +1791,22 @@ relative pointer or an unchanged scalar key. SDK parsing preserves nested data
 and resolves nested media through the existing published dictionaries/helpers.
 
 - Requests and responses use shared Valibot runtime schemas.
+- Public read representations (public entry, global, block, media, SEO
+  value, export SEO section, the page/global/list responses, the build export
+  and the error envelope) are defined once and derived into two variants. The
+  **strict** variant rejects unknown keys; the API validates every public
+  response with it, OpenAPI describes it, and tests assert it. The
+  **tolerant** variant strips unknown keys while enforcing the same required
+  keys, types and constraints; `@lacecms/sdk` parses responses with it, so a
+  newer API that adds keys does not break an older site build. Consumer-owned
+  JSON (`fields`, block `data` and `settings`) passes through unchanged, and
+  the tolerant error envelope accepts any non-empty error code. A delivered
+  block carrying `hidden` is rejected by both variants, never stripped, so a
+  faulty server cannot make a hidden block render. Request and admin schemas
+  have no tolerant variant.
+- The build export carries a required `formatVersion` (currently `1`). The
+  strict schema accepts only the current version; the SDK rejects a newer one
+  with an upgrade message.
 - Hono request validation uses `@hono/standard-validator`, keeping route integration based on Standard Schema rather than a validator-specific Hono API.
 - Database rows are never exposed directly as API DTOs.
 - Errors use one stable machine-readable envelope. Validation failures,
@@ -3012,6 +3028,19 @@ Database changes use forward migrations. The MVP does not promise automatic down
 Content blocks and field objects carry `schema_version`. Stored block data is migrated only by configuration synchronization through the block's declared migrations (sections 8 and 11), never when loaded or rendered. Silent destructive conversion is forbidden.
 
 Public REST endpoints remain under `/api/v1` until a breaking contract requires `/api/v2`. Internal TypeScript types alone are not a compatibility contract.
+
+Public contract evolution follows one policy (details in
+[compatibility](./compatibility.md#public-contract-evolution)):
+
+- adding an optional key, or a key older consumers may ignore, is compatible
+  within `/api/v1` and within an export `formatVersion`;
+- removing a key, changing its type, or changing the meaning of a value
+  consumers rely on requires a new export `formatVersion` or `/api/v2`;
+- within one major line, the API must be the same or a newer minor than the
+  site's `@lacecms/sdk`;
+- rich-text grammar, block `schemaVersion` matching and block data validation
+  stay strict by design, because they are safety and rendering contracts, not
+  transport shapes.
 
 ## 23. Primary implementation sequence
 
