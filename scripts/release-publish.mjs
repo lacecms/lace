@@ -1,3 +1,4 @@
+import { assertArtifactIdle, withArtifactLock } from "./release-lock.mjs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
@@ -44,7 +45,7 @@ function select(items, only, key) {
   return items.filter((item) => only.includes(key(item)));
 }
 
-async function command(tool, args, { capture = false, missing = false } = {}) {
+export async function command(tool, args, { capture = false, missing = false } = {}) {
   console.info(`Publication: ${tool} ${args.join(" ")}`);
   return new Promise((accept, reject) => {
     const child = spawn(tool, args, {
@@ -75,7 +76,7 @@ async function command(tool, args, { capture = false, missing = false } = {}) {
   });
 }
 
-async function packageHashes(path) {
+export async function packageHashes(path) {
   const sha512 = createHash("sha512");
   const sha1 = createHash("sha1");
   for await (const chunk of createReadStream(path)) {
@@ -85,7 +86,7 @@ async function packageHashes(path) {
   return { integrity: `sha512-${sha512.digest("base64")}`, shasum: sha1.digest("hex") };
 }
 
-async function lookupPackage(item) {
+export async function lookupPackage(item) {
   const response = await fetch(`${registry}/${encodeURIComponent(item.name)}`, {
     signal: AbortSignal.timeout(30_000),
     headers: { "cache-control": "no-cache" },
@@ -102,7 +103,7 @@ async function lookupPackage(item) {
   return { dist: metadata.versions?.[item.version]?.dist, tags: metadata["dist-tags"] ?? {} };
 }
 
-function matchingPackage(item, local, remote) {
+export function matchingPackage(item, local, remote) {
   if (!remote.dist) return false;
   const matches = remote.dist.integrity
     ? remote.dist.integrity.split(/\s+/u).includes(local.integrity)
@@ -111,7 +112,7 @@ function matchingPackage(item, local, remote) {
   return true;
 }
 
-async function inspectImage(coordinate) {
+export async function inspectImage(coordinate) {
   const raw = await command("docker", ["buildx", "imagetools", "inspect", coordinate, "--raw"], {
     capture: true,
     missing: true,
@@ -129,14 +130,14 @@ async function inspectImage(coordinate) {
   return { ...JSON.parse(raw), digest: descriptor.digest };
 }
 
-function matchingImage(item, remote) {
+export function matchingImage(item, remote) {
   if (!remote) return false;
   if (remote.config?.digest !== item.imageId || !digestPattern.test(remote.digest))
     throw new Error(`Published image differs: ${item.coordinate}`);
   return true;
 }
 
-async function matchingIndex(coordinate, remote, items, inspect) {
+export async function matchingIndex(coordinate, remote, items, inspect) {
   if (!remote) return false;
   if (!Array.isArray(remote.manifests) || remote.manifests.length !== items.length)
     throw new Error(`Published manifest platforms differ: ${coordinate}`);
@@ -155,6 +156,16 @@ async function matchingIndex(coordinate, remote, items, inspect) {
 }
 
 export async function publishRelease(options, operations = {}) {
+  if (options.dryRun) {
+    await (operations.idle ?? assertArtifactIdle)(options.directory);
+    return publishUnlocked(options, operations);
+  }
+  return (operations.withLock ?? withArtifactLock)(options.directory, "publish", () =>
+    publishUnlocked(options, operations),
+  );
+}
+
+async function publishUnlocked(options, operations = {}) {
   const { directory, target, dryRun = false, only } = options;
   if (!["npm", "images"].includes(target)) throw new Error("Select npm or images");
   const inventory = await (operations.verify ?? verifyInventory)(directory);

@@ -33,7 +33,7 @@ The previous locally accepted candidate is `0.1.0-alpha.5` / `next`, ownership t
 deployment evidence. Recheck scenarios affected by CE1–CE9, especially forward
 migrations 0005–0009, public media, globals/SEO, block visibility/settings,
 composites, rich text and editor forms; validate upgrade and coordinated restore
-against the exact candidate. See [alpha.5 notes](./alpha-5-release-notes.md).
+against the exact candidate. See [alpha.5 notes](./compatibility.md#alpha-5-upgrade-and-rollback).
 Real VPS/Cloudflare results and publication remain pending until separately
 recorded by the owner.
 
@@ -46,7 +46,7 @@ multi-page builds and publication-version conflicts, tolerant public reads,
 and confirmed draft-media deletion with published-use refusal. No database
 migration was added since alpha.5. Preserve backups before upgrade and check
 coordinated restore and build recovery against the exact alpha.6 artifacts.
-See [alpha.6 notes](./alpha-6-release-notes.md). Publication and real-deployment
+See [alpha.6 notes](./compatibility.md#alpha-6-upgrade-and-rollback). Publication and real-deployment
 results remain pending until separately recorded; prior confirmations retain
 their original scope.
 

@@ -1,3 +1,4 @@
+import { withArtifactLock } from "./release-lock.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readReleaseModel, validateReleaseModel } from "./release-model.mjs";
@@ -11,7 +12,13 @@ import {
   run,
 } from "./release-artifacts.mjs";
 
-export async function prepareRelease(
+export async function prepareRelease(options, operations = {}) {
+  return (operations.withLock ?? withArtifactLock)(options.output, "prepare", () =>
+    prepareUnlocked(options, operations),
+  );
+}
+
+async function prepareUnlocked(
   { root, output, phase = "all", preview = false, platforms },
   operations = {},
 ) {

@@ -3085,7 +3085,7 @@ detachment. Direct export clients must adopt page traversal; upgrade API, SDK,
 site and builder together. Upgrade
 all Lace dependencies together, apply forward database migrations explicitly,
 and review the public-contract and backup/rollback boundaries in
-[alpha.6 release notes](./alpha-6-release-notes.md). No automatic database
+[alpha.6 release notes](./compatibility.md#alpha-6-upgrade-and-rollback). No automatic database
 downgrade is promised.
 
 Compatibility exists at three boundaries:
@@ -3211,6 +3211,16 @@ The implementation plan uses these resolved defaults:
   evidence. Beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and
   owner publication.
+
+Release lifecycle: reviewed entries in root `CHANGELOG.md` supply concise GitHub
+Release descriptions. An explicit owner operation finalizes a prerelease only
+for the exact verified artifact source, after full npm/GHCR publication and
+byte-verified public JSON evidence. Explicit cleanup may then remove only the
+selected local artifact/evidence directories; active operations, incomplete
+publication and unavailable remote verification block deletion. Tracked history
+and development data remain outside cleanup. Node/Cloudflare deployment gates
+and actual platform coverage remain separate from publication. See
+[release lifecycle](alpha-release.md#github-release-and-cleanup).
 
 The following choices are release and operations work, not blockers for the
 first local vertical slices:

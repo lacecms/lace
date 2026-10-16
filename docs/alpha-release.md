@@ -10,12 +10,12 @@ The owner also confirmed completion of real VPS/Cloudflare application testing
 and recovery/upgrade checks; see the [owner status](./real-application-verification.md#owner-confirmed-status--2026-10-10).
 Alpha.5 (`0.1.0-alpha.5`, ownership template `0.29.0`) passed local preparation
 and exact-artifact acceptance on 2026-10-14. Those local receipts alone did not
-establish publication; the registry check below now confirms public availability. See [alpha.5 notes](./alpha-5-release-notes.md).
+establish publication; the registry check below now confirms public availability. See [alpha.5 notes](./compatibility.md#alpha-5-upgrade-and-rollback).
 The selected next candidate is `0.1.0-alpha.6`, ownership template `0.30.0`,
 on npm channel `next`. Preparation and acceptance never publish. The commands
 below target alpha.6. Local preparation, independent verification and exact-artifact
 acceptance passed on 2026-10-16; see the [acceptance receipt](./alpha-6-acceptance.json).
-See [alpha.6 release notes](./alpha-6-release-notes.md) for coordinated upgrades
+See [alpha.6 release notes](./compatibility.md#alpha-6-upgrade-and-rollback) for coordinated upgrades
 and the raw build-export response change. Published alpha.1–alpha.4 remain
 immutable. Historical alpha.5 receipts and artifacts must also remain intact.
 
@@ -182,3 +182,112 @@ New GHCR packages default to private. For both organization packages, open their
 If publication is interrupted, compare any existing platform tag's config/image identity to the inventory before resuming. Do not overwrite a different image at a released tag. Resume missing platform tags and assemble the full version manifest only once both are verified. Announce availability only after npm and both public image manifests are complete; a consumer must be able to use the generated defaults without an engine checkout or registry credentials.
 
 Official references: [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish/), [Docker manifest inspection](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/), [Docker manifest creation](https://docs.docker.com/reference/cli/docker/buildx/imagetools/create/), [npm organization packages](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/), [GHCR authentication, visibility and image labels](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+## GitHub release and cleanup
+
+Reviewed root [CHANGELOG.md](../CHANGELOG.md) entries are the source for short
+GitHub Release descriptions: normally 3–6 bullets, naming important changes,
+breaking contracts and required upgrade actions. Detailed operational evidence
+belongs in four small JSON assets: inventory, acceptance, npm publication and
+image publication. Packages stay in npm and images in GHCR.
+
+The lifecycle is prepare → exact-artifact acceptance → npm/GHCR publication →
+verified GitHub prerelease → explicit local cleanup. Preparation and dry runs
+never publish. Finalization and cleanup default to preview, and neither replaces
+real VPS/Cloudflare deployment verification. A partial publication retains the
+saved bytes/journals for recovery. Cleanup never edits tracked documentation,
+prunes global caches or deletes unrelated releases/development data.
+
+### Preview and finalize GitHub
+
+Commit reviewed CHANGELOG.md and its linked documentation, and make that commit
+and the artifact source commit available in the source repository. Authenticate
+locally with `gh auth login`, then check `gh auth status`; the account needs
+permission to create repository releases/tags and upload assets. Authentication
+stays outside artifacts. The tag is `v<inventory-version>` at the exact artifact
+source, even if the notes/harness revision is newer.
+
+If CHANGELOG.md exists only in the working tree, preview reports a local
+prerequisite to commit it and the linked documentation, then push that notes
+commit. This is separate from GitHub authentication; no artifact rebuild is
+required because the version tag still selects the saved inventory source.
+
+New `acceptance:release` runs atomically save `acceptance.json` in the artifact
+directory only after all journeys and temporary-environment cleanup succeed.
+Commit the reviewed acceptance scripts before recording their revision. Existing
+reports are not overwritten; preserving temp projects prevents a success receipt.
+For the existing alpha.5/alpha.6 reports, import their original bytes explicitly:
+
+```sh
+pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt docs/alpha-6-acceptance.json
+pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt docs/alpha-6-acceptance.json --apply
+pnpm release:github --artifacts .release-artifacts/alpha-6
+pnpm release:github --artifacts .release-artifacts/alpha-6 --apply
+```
+
+The commands without `--apply` are previews. The final command is a live GitHub
+operation: it verifies every public npm version and both images/platforms,
+creates/resumes a matching draft, verifies four JSON assets and publishes the
+prerelease without changing latest. It does not publish packages, push images,
+repack files, push source commits or move existing tags. The notes body comes
+from the corresponding changelog entry; links point to the reviewed notes
+revision rather than a moving branch. Matching reruns are idempotent; conflicting
+tags, bodies or assets require explicit reconciliation. An interrupted upload
+leaves a draft which can resume with the same command. Upload uses the documented
+[gh release upload](https://cli.github.com/manual/gh_release_upload) command without
+`--clobber`; conflicting existing assets are never deleted or replaced.
+
+Assets are inventory.json, acceptance.json, publication-npm.json and
+publication-images.json. Publication assets are complete deterministic public
+verification reports generated from fresh registry facts; partial local
+publication journals and private diagnostics are never uploaded. Import keeps
+historical acceptance bytes unchanged and does not claim a fresh test execution.
+A successful finalization writes publication-github.json locally with the URL,
+source, notes revision and remote asset hashes. Missing/blocked prerequisites
+produce a nonzero exit and never cause publication or deletion. Current next may
+have advanced; identity checks use immutable version coordinates.
+
+### Preview and clean local release files
+
+After registry publication and verified GitHub finalization:
+
+```sh
+pnpm release:clean --artifacts .release-artifacts/alpha-6
+pnpm release:clean --artifacts .release-artifacts/alpha-6 --evidence .release-artifacts/alpha-6-evidence --apply
+```
+
+The second command removes those explicitly selected local directories, including
+saved tar/image files, only after freshly checking the complete public set and
+remote evidence. Preview lists paths, estimated bytes and unmet prerequisites.
+Keep a separate archive first if local package/image copies are desired after
+publication. No other release directories or global Docker/pnpm caches are
+selected automatically. An absent artifact directory is a no-op; it does not
+silently delete separately selected evidence.
+
+Add `--acceptance` only when intentionally removing the separate named
+`.lace-acceptance` stack. Preview never stops it; apply validates its state and
+runs the existing `acceptance:stop` before removing release data. Invalid state,
+a failed stop, missing GitHub assets or registry/auth failures prevent deletion.
+No `.env`, dev-data, tracked documentation or unrelated temporary project is
+cleaned. Symlink escapes, wildcards and repository/artifact roots are refused.
+
+Preparation, acceptance, publication, finalization and cleanup share per-artifact
+locks under `.release-artifacts/.locks`. An active or stale lock causes refusal;
+inspect the recorded operation/PID and establish that it ended before manually
+removing only that lock. Do not remove locks to bypass active work. Interrupted
+cleanup keeps a recovery journal under `.release-artifacts/.cleanup`; rerun the
+exact same artifact/evidence/acceptance selection to verify remote identities
+and remove remaining files. Changed scope or remaining artifact bytes cause
+refusal. A successful retry removes its journal.
+
+### Retiring historical tracked receipts
+
+Keep docs/alpha-5-acceptance.json and docs/alpha-6-acceptance.json until each
+corresponding published GitHub Release exposes its byte-identical acceptance
+asset. Verify by downloading the asset and comparing SHA-256 with the tracked
+file. Then make a reviewed documentation change: replace receipt links in this
+guide and the historical OpenSpec handoff with the verified release asset URL,
+and remove that tracked JSON. Record the version/tag and preserved checksum in
+the handoff. Local cleanup never performs git rm or rewrites history. Public
+release notes now live in [CHANGELOG.md](../CHANGELOG.md); detailed instructions
+remain in [compatibility](compatibility.md#alpha-6-upgrade-and-rollback).

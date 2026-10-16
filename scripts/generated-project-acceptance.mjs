@@ -1,3 +1,5 @@
+import { acquireArtifactLock } from "./release-lock.mjs";
+import { persistAcceptance } from "./release-evidence.mjs";
 import { alphaSixJourney } from "./alpha-six-acceptance.mjs";
 import { consumer34bSecurity } from "./consumer-34b-security.mjs";
 import { blockOrderJourney } from "./block-order-acceptance.mjs";
@@ -49,6 +51,8 @@ const workspace = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const timeoutMs = 5 * 60_000;
 const secretValues = new Set();
 const temporaryPaths = [];
+let releaseLock;
+let pendingAcceptance;
 let composeProject;
 let composeCwd;
 const capturedDiagnostics = [];
@@ -1972,6 +1976,29 @@ async function main() {
     const args = process.argv.slice(3);
     if (args.length !== 2 || args[0] !== "--artifacts")
       throw new Error("release acceptance requires --artifacts <prepared-directory>");
+    const artifactDirectory = resolve(args[1]);
+    if (
+      (
+        await run("acceptance-harness-clean", "git", [
+          "status",
+          "--porcelain",
+          "--",
+          "scripts",
+          "packages/test-utils",
+        ])
+      ).trim()
+    )
+      throw new Error("Commit reviewed acceptance scripts before recording a harness revision");
+    const harnessRevision = (
+      await run("acceptance-harness-revision", "git", ["rev-parse", "HEAD"])
+    ).trim();
+    releaseLock = await acquireArtifactLock(artifactDirectory, "acceptance");
+    try {
+      await stat(join(artifactDirectory, "acceptance.json"));
+      throw new Error("Acceptance already saved; preserve it or select a separate prepared set");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
     const platform = `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`;
     const artifacts = await loadConsumerArtifacts(
       resolve(args[1]),
@@ -2037,23 +2064,36 @@ async function main() {
       },
     );
     journeys.push("34c-packed-platform-restore-rotation");
-    console.info(
-      JSON.stringify(
-        {
-          result: "passed",
-          version: artifacts.inventory.release.version,
-          templateVersion: artifacts.inventory.release.templateVersion,
-          platform,
-          source: artifacts.inventory.source,
-          builds: context.buildEvidence,
-          journeys,
-          packages: artifacts.inventory.packages,
-          images: Object.values(artifacts.images),
-        },
-        null,
-        2,
-      ),
-    );
+    if (
+      (await run("acceptance-harness-final-revision", "git", ["rev-parse", "HEAD"])).trim() !==
+        harnessRevision ||
+      (
+        await run("acceptance-harness-final-clean", "git", [
+          "status",
+          "--porcelain",
+          "--",
+          "scripts",
+          "packages/test-utils",
+        ])
+      ).trim()
+    )
+      throw new Error("Acceptance harness changed during the run; no success report recorded");
+    pendingAcceptance = {
+      directory: artifactDirectory,
+      inventory: artifacts.inventory,
+      result: {
+        result: "passed",
+        version: artifacts.inventory.release.version,
+        templateVersion: artifacts.inventory.release.templateVersion,
+        platform,
+        source: artifacts.inventory.source,
+        builds: context.buildEvidence,
+        journeys,
+        packages: artifacts.inventory.packages,
+        images: Object.values(artifacts.images),
+      },
+      harnessRevision,
+    };
     return;
   }
   const tarballDirectory = join(parent, "tarballs");
@@ -2204,9 +2244,32 @@ try {
     }
   }
   if (process.env.LACE_ACCEPTANCE_KEEP_TEMP !== "1") {
-    for (const path of temporaryPaths) await rm(path, { recursive: true, force: true });
+    try {
+      for (const path of temporaryPaths) await rm(path, { recursive: true, force: true });
+    } catch (error) {
+      console.error(sanitize(error.message));
+      process.exitCode = 1;
+    }
   } else {
     for (const path of temporaryPaths)
       console.info(`Acceptance files: ${relative(workspace, path)}`);
   }
+}
+
+try {
+  if (!process.exitCode && pendingAcceptance) {
+    const saved = await persistAcceptance(
+      pendingAcceptance.directory,
+      pendingAcceptance.inventory,
+      pendingAcceptance.result,
+      pendingAcceptance.harnessRevision,
+      process.env.LACE_ACCEPTANCE_KEEP_TEMP !== "1",
+    );
+    console.info(JSON.stringify(saved, null, 2));
+  }
+} catch (error) {
+  console.error(sanitize(error.message));
+  process.exitCode = 1;
+} finally {
+  if (releaseLock) await releaseLock();
 }

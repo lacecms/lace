@@ -48,7 +48,10 @@
     "release:verify": "node scripts/release.mjs verify",
     "verify:34a": "node scripts/cross-runtime-verification.mjs",
     "verify:34b": "node scripts/security-resilience-verification.mjs",
-    "verify:34c": "node scripts/operations-verification.mjs"
+    "verify:34c": "node scripts/operations-verification.mjs",
+    "release:github": "node scripts/release-github.mjs",
+    "release:clean": "node scripts/release-clean.mjs",
+    "release:acceptance:import": "node scripts/release-evidence.mjs"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",

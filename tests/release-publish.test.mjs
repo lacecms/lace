@@ -33,6 +33,8 @@ function harness(overrides = {}) {
     commands,
     receipts,
     operations: {
+      withLock: async (_path, _operation, work) => work(),
+      idle: async () => {},
       verify: async () => inventory,
       loadSubmitted: async () => [],
       saveSubmitted: async () => {},
