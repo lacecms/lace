@@ -1,9 +1,15 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.0-alpha.5",
-  "generatorVersion": "0.1.0-alpha.5",
-  "templateVersion": "0.29.0",
-  "publishedVersions": ["0.1.0-alpha.1", "0.1.0-alpha.2", "0.1.0-alpha.3", "0.1.0-alpha.4"],
+  "version": "0.1.0-alpha.6",
+  "generatorVersion": "0.1.0-alpha.6",
+  "templateVersion": "0.30.0",
+  "publishedVersions": [
+    "0.1.0-alpha.1",
+    "0.1.0-alpha.2",
+    "0.1.0-alpha.3",
+    "0.1.0-alpha.4",
+    "0.1.0-alpha.5"
+  ],
   "channel": "next",
   "sourceRepository": "https://github.com/lacecms/lace",
   "images": {

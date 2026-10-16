@@ -1,3 +1,4 @@
+import { alphaSixJourney } from "./alpha-six-acceptance.mjs";
 import { consumer34bSecurity } from "./consumer-34b-security.mjs";
 import { blockOrderJourney } from "./block-order-acceptance.mjs";
 import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs";
@@ -2016,6 +2017,7 @@ async function main() {
     await recoveryJourney(context, session);
     await persistenceJourney(context, session);
     await inspectShipping(context);
+    await alphaSixJourney({ ...session, project: context.project });
     await restorePublishedBaseline(session);
     const journeys = await feedbackJourneys(parent, context, session, artifacts.tarballs, {
       cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
@@ -2024,6 +2026,7 @@ async function main() {
       secretValues,
       workspace,
     });
+    journeys.push("alpha-six-node-contracts-media");
     journeys.push(...(await fieldTrialJourneys(parent, context, session, artifacts.tarballs)));
     await run(
       "34c-packed-restore-rotation",

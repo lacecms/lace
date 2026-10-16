@@ -6,8 +6,8 @@
   "blockVersion": 1,
   "revision": 1,
   "requires": {
-    "@lacecms/astro": "0.1.0-alpha.5",
-    "@lacecms/render": "0.1.0-alpha.5"
+    "@lacecms/astro": "0.1.0-alpha.6",
+    "@lacecms/render": "0.1.0-alpha.6"
   },
   "files": [
     {

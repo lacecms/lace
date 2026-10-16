@@ -19,9 +19,16 @@ not assert that individual evidence files have been attached.
 This confirmation does not approve a beta or stable release, claim a new
 security audit, or separately verify GHCR publication and both image manifests.
 
+Read-only registry checks on 2026-10-16 at 00:32 Europe/Rome confirmed all
+fifteen alpha.5 npm versions and both GHCR image manifests are public. Alpha.5
+is now recorded as published and immutable. All fifteen alpha.6 npm version
+endpoints and both image manifests returned 404. This is availability evidence,
+not a reservation or proof of publishing rights. npm `whoami` returned E401;
+authenticated npm/GHCR publishing rights remain a later prerequisite.
+
 ## Alpha.5 handoff — 2026-10-14
 
-The selected next candidate is `0.1.0-alpha.5` / `next`, ownership template
+The previous locally accepted candidate is `0.1.0-alpha.5` / `next`, ownership template
 `0.29.0`. Alpha.5 preparation does not reuse the alpha.4 confirmation as new
 deployment evidence. Recheck scenarios affected by CE1–CE9, especially forward
 migrations 0005–0009, public media, globals/SEO, block visibility/settings,
@@ -29,6 +36,19 @@ composites, rich text and editor forms; validate upgrade and coordinated restore
 against the exact candidate. See [alpha.5 notes](./alpha-5-release-notes.md).
 Real VPS/Cloudflare results and publication remain pending until separately
 recorded by the owner.
+
+## Alpha.6 handoff — 2026-10-16
+
+The selected candidate is `0.1.0-alpha.6` / `next`, template `0.30.0`.
+Fresh local artifact acceptance is required and does not establish real
+VPS/Cloudflare readiness. Verify coordinated API/SDK/site/builder upgrade,
+multi-page builds and publication-version conflicts, tolerant public reads,
+and confirmed draft-media deletion with published-use refusal. No database
+migration was added since alpha.5. Preserve backups before upgrade and check
+coordinated restore and build recovery against the exact alpha.6 artifacts.
+See [alpha.6 notes](./alpha-6-release-notes.md). Publication and real-deployment
+results remain pending until separately recorded; prior confirmations retain
+their original scope.
 
 ## Purpose and ownership
 
