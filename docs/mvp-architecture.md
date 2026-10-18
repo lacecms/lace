@@ -809,17 +809,19 @@ field DSL and do not receive special database treatment; only `image` and
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
-- `image` (version 3): required media, optional alt text that overrides the
-  media item's alt text, and optional caption, plus the boolean setting
-  `lightbox` ("Open full screen", default `false`). Version 1 required the alt
-  text and version 2 had no setting; both migrations return the stored data
-  unchanged;
+- `image` (version 4): required media, optional alt text that overrides the
+  media item's alt text, optional caption and an optional URL `link` ("Link"),
+  plus the boolean setting `lightbox` ("Open full screen", default `false`).
+  Version 1 required the alt text, version 2 had no setting and version 3 no
+  link; all migrations return the stored data unchanged. A linked image opens
+  its link in the same tab instead of the lightbox;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL;
-- `gallery` (CE7D, version 2): optional title and an `images` list (default `[]`, at
+- `gallery` (CE7D, version 3): optional title and an `images` list (default `[]`, at
   least one item to publish, at most 50) of groups with required media,
-  optional alt text and optional caption that override the media item's, plus
-  the same `lightbox` setting with an identity migration from version 1;
+  optional alt text and optional caption that override the media item's and
+  the same optional `link`, plus the same `lightbox` setting, with identity
+  migrations from versions 1 and 2;
 - `navigation` (CE7D): optional accessible `name` and a `links` list (default
   `[]`, at least one to publish, at most 20) of groups with a required label,
   an optional URL and an optional `children` list (at most 20) of groups with a
@@ -2228,11 +2230,14 @@ attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
 Built-in components carry no `<style>` or `<script>`: presentation stays in the
-site stylesheet. The `image` (revision 5), `gallery` (revision 2) and `hero`
+site stylesheet. The `image` (revision 6), `gallery` (revision 3) and `hero`
 (revision 4) components render media through `LaceImage.astro`; `image` and
 `gallery` open the lightbox when their `lightbox` setting is on, with dialog
 identifiers `lace-lightbox-<entry id>-<block key>[-<item index>]`, and the hero
-image loads eagerly. The registry ships `gallery` and `navigation` (CE7D) besides
+image loads eagerly. A linked `image` block or gallery item wraps its image in
+`<a data-lace-part="link">` instead, without a lightbox; the link is named by
+the alt text, or by an `aria-label` of the caption, then the URL, when the alt
+text is empty. The registry ships `gallery` and `navigation` (CE7D) besides
 the five earlier items; every Lace-maintained site installs all seven.
 
 ### 13.6 Framework selection

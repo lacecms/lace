@@ -12,9 +12,9 @@
       }
     },
     "gallery": {
-      "revision": 2,
+      "revision": 3,
       "files": {
-        "src/components/lace/GalleryBlock.astro": "5a0e26c488408448aead6cc46917ae39a9836c2bf57ea811a566ef4a0a498a60"
+        "src/components/lace/GalleryBlock.astro": "b9960211e68e93d60d600c0df1139696c57c3b20b1cc0db9ea015d3eff2e08bd"
       }
     },
     "hero": {
@@ -24,9 +24,9 @@
       }
     },
     "image": {
-      "revision": 5,
+      "revision": 6,
       "files": {
-        "src/components/lace/ImageBlock.astro": "0c0ec22987fb7052975a7381d0ad19ddc09498635f353c1520f8cf437a08886a"
+        "src/components/lace/ImageBlock.astro": "1311bb4e1c3620cd789c9d5f3b54677da4b78b94af35d39a34bc8a249fd1a5d3"
       }
     },
     "navigation": {

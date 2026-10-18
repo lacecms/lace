@@ -7,20 +7,31 @@ type Props = BlockProps<typeof builtInBlocks.gallery>;
 
 const { anchor, block, className, context, data, image, settings } = Astro.props;
 const title = data.title?.trim() === "" ? undefined : data.title;
-// Each item's own alt text and caption override the media item's.
+// Each item's own alt text and caption override the media item's. A linked item
+// opens its link instead of the lightbox; the alt text names the link, then the
+// caption, then the URL.
 const items = data.images.map((item) => {
   const media = image(item.media, item.alt);
-  return { caption: item.caption ?? media.caption, media };
+  const caption = item.caption ?? media.caption;
+  const linkLabel = media.alt === "" ? (caption?.trim() || item.link) : undefined;
+  return { caption, link: item.link, linkLabel, media };
 });
+const sizes = "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw";
 ---
 
 <section class:list={["gallery", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   {title !== undefined && <h2 data-lace-part="title">{title}</h2>}
   <ul data-lace-part="items" role="list">
-    {items.map(({ caption, media }, index) => (
+    {items.map(({ caption, link, linkLabel, media }, index) => (
       <li data-lace-part="item">
         <figure>
-          <LaceImage data-lace-part="media" image={media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}-${index}`} sizes="(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw" />
+          {link === undefined ? (
+            <LaceImage data-lace-part="media" image={media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}-${index}`} sizes={sizes} />
+          ) : (
+            <a aria-label={linkLabel} data-lace-part="link" href={link}>
+              <LaceImage data-lace-part="media" image={media} sizes={sizes} />
+            </a>
+          )}
           {caption !== undefined && <figcaption data-lace-part="caption">{caption}</figcaption>}
         </figure>
       </li>

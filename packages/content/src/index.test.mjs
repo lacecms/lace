@@ -620,7 +620,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
   ]);
   expect(builtInBlocks.hero.fields.heading.required).toBe(true);
   expect(builtInBlocks.image.fields.media.required).toBe(true);
-  expect(builtInBlocks.image.version).toBe(3);
+  expect(builtInBlocks.image.version).toBe(4);
   expect(builtInBlocks.image.fields.alt.required).toBe(false);
   expect(builtInBlocks.richText.fields.content.type).toBe("richText");
   expect(
@@ -905,7 +905,7 @@ test("keeps a valid renamedFrom hint on every field kind and rejects it in block
   ).toThrow(/fields\.title must not declare renamedFrom/u);
 });
 
-test("image version 3 keeps alt text optional and migrates earlier data unchanged", () => {
+test("image version 4 keeps alt text optional and migrates earlier data unchanged", () => {
   expect(validateBlockData(builtInBlocks.image, { media: "media-1" }, "publish")).toEqual({
     media: "media-1",
   });
@@ -913,15 +913,56 @@ test("image version 3 keeps alt text optional and migrates earlier data unchange
     ContentValidationError,
   );
   const stored = { alt: "A lake", caption: "Morning", media: "media-1" };
-  for (const from of [1, 2])
+  for (const from of [1, 2, 3])
     expect(migrateBlockData(builtInBlocks.image, { data: stored, settings: {} }, from)).toEqual({
       data: stored,
       settings: {},
     });
+  // Version 3 blocks keep a stored lightbox setting and gain no link.
+  expect(
+    migrateBlockData(builtInBlocks.image, { data: stored, settings: { lightbox: true } }, 3),
+  ).toEqual({ data: stored, settings: { lightbox: true } });
   expect(validateBlockSettings(builtInBlocks.image, {})).toEqual({ lightbox: false });
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
-  expect(metadata).toMatchObject({ type: "image", version: 3 });
+  expect(metadata).toMatchObject({ type: "image", version: 4 });
   expect(metadata.fields.alt.required).toBe(false);
+});
+
+test("image blocks and gallery items take an optional safe link", () => {
+  const { gallery, image } = builtInBlocks;
+  const link = {
+    description: "Selecting the image opens this link instead of the full-screen view.",
+    label: "Link",
+    required: false,
+    type: "url",
+  };
+  const [imageMetadata, galleryMetadata] = toBlockRegistryMetadata(
+    defineBlockRegistry([image, gallery]),
+  );
+  expect(imageMetadata.fields.link).toMatchObject(link);
+  expect(galleryMetadata.fields.images.item.fields.link).toMatchObject(link);
+  for (const value of ["/work/kitchen", "#contact", "https://example.com/", "mailto:a@b.co"])
+    expect(validateBlockData(image, { link: value, media: "m" }, "publish")).toEqual({
+      link: value,
+      media: "m",
+    });
+  const item = { link: "https://example.com/", media: "m" };
+  expect(validateBlockData(gallery, { images: [item, { media: "n" }] }, "publish")).toEqual({
+    images: [item, { media: "n" }],
+  });
+  expect(
+    issueFrom(() => validateBlockData(image, { link: "javascript:alert(1)", media: "m" }, "draft"))
+      .path,
+  ).toEqual(["link"]);
+  expect(
+    issueFrom(() =>
+      validateBlockData(
+        gallery,
+        { images: [{ media: "m" }, { link: "javascript:alert(1)", media: "n" }] },
+        "publish",
+      ),
+    ).path,
+  ).toEqual(["images", 1, "link"]);
 });
 
 test("the lightbox setting of image and gallery is a validated boolean", () => {
@@ -937,12 +978,13 @@ test("the lightbox setting of image and gallery is a validated boolean", () => {
 
 test("gallery collects image items that become publishable with one image", () => {
   const { gallery } = builtInBlocks;
-  expect(gallery.version).toBe(2);
+  expect(gallery.version).toBe(3);
   const stored = { images: [{ media: "media-1" }], title: "Studio" };
-  expect(migrateBlockData(gallery, { data: stored, settings: {} }, 1)).toEqual({
-    data: stored,
-    settings: {},
-  });
+  for (const from of [1, 2])
+    expect(migrateBlockData(gallery, { data: stored, settings: {} }, from)).toEqual({
+      data: stored,
+      settings: {},
+    });
   expect(validateBlockSettings(gallery, {})).toEqual({ lightbox: false });
   expect(validateBlockData(gallery, {}, "draft")).toEqual({ images: [] });
   expect(issueFrom(() => validateBlockData(gallery, {}, "publish"))).toMatchObject({

@@ -71,7 +71,7 @@ test.each([
 test("parses an image block without alt text and refuses version 1 image data", () => {
   const data = { media: "lake-media" };
   expect(
-    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 3 }), context),
+    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 4 }), context),
   ).toEqual(data);
   const error = captureError(() =>
     parseBlock(
@@ -227,7 +227,7 @@ const resolvedMedia = {
 
 function describedEntry(media = (id) => resolvedMedia[id]) {
   const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
-  const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 3 })];
+  const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 4 })];
   const [prepared] = prepareBlocks(
     map,
     { blocks, id: "entry-1", media, modelKey: "posts" },
@@ -291,7 +291,7 @@ test("entries without resolved media fall back to the media URL builder", () => 
   const [prepared] = prepareBlocks(
     map,
     {
-      blocks: [block("image", { media: "office" }, { schemaVersion: 3 })],
+      blocks: [block("image", { media: "office" }, { schemaVersion: 4 })],
       id: "entry-1",
       modelKey: "posts",
     },

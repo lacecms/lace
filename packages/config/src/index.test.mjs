@@ -49,8 +49,8 @@ test("expands both starter models to every built-in block at a new version", () 
   const expectedBlocks = ["hero", "richText", "image", "quote", "cta"];
   expect(fixtureConfig.content).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ blocks: expectedBlocks, key: "home", version: 3 }),
-      expect.objectContaining({ blocks: expectedBlocks, key: "posts", version: 3 }),
+      expect.objectContaining({ blocks: expectedBlocks, key: "home", version: 4 }),
+      expect.objectContaining({ blocks: expectedBlocks, key: "posts", version: 4 }),
     ]),
   );
 });

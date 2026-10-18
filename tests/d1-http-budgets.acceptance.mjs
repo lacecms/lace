@@ -11,7 +11,7 @@ function maximalBlocks(label, count = 200) {
     key: `${label}-${i}`,
     type: "image",
     position: (i + 1) * 1000,
-    schemaVersion: 3,
+    schemaVersion: 4,
     data: { media: `budget-media-${i}`, alt: `${label} image ${i}` },
   }));
 }

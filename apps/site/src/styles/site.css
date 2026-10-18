@@ -55,6 +55,14 @@
   height: auto;
   max-width: 100%;
 }
+/* A linked image (image block or gallery item) opens its link instead of the lightbox. */
+:where([data-lace-part="link"]) {
+  display: block;
+}
+:where([data-lace-part="link"]):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 :where([data-lace-part="lightbox"]) {
   background: transparent;
   border: 0;

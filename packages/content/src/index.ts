@@ -2261,6 +2261,12 @@ const lightboxSetting = field.boolean({
   label: "Open full screen",
 });
 
+// The optional link of an `image` block and of each `gallery` item.
+const imageLinkField = field.url({
+  description: "Selecting the image opens this link instead of the full-screen view.",
+  label: "Link",
+});
+
 /** Starter blocks implemented exclusively through the public block and field DSL. */
 export const builtInBlocks = deepFreeze({
   cta: defineBlock({
@@ -2290,6 +2296,7 @@ export const builtInBlocks = deepFreeze({
               description: "Leave empty to use the media item's caption.",
               label: "Caption",
             }),
+            link: imageLinkField,
             media: field.media({ label: "Image", required: true }),
           },
         }),
@@ -2301,11 +2308,12 @@ export const builtInBlocks = deepFreeze({
       title: field.text({ label: "Title" }),
     },
     label: "Gallery",
-    // Version 2 only added the lightbox setting, so version 1 data is already valid.
-    migrations: { 2: (block) => block },
+    // Version 2 only added the lightbox setting and version 3 only the optional
+    // item link, so earlier data is already valid.
+    migrations: { 2: (block) => block, 3: (block) => block },
     settings: { lightbox: lightboxSetting },
     type: "gallery",
-    version: 2,
+    version: 3,
   }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",
@@ -2327,15 +2335,16 @@ export const builtInBlocks = deepFreeze({
     fields: {
       alt: field.text(),
       caption: field.text(),
+      link: imageLinkField,
       media: field.media({ required: true }),
     },
     label: "Image",
-    // Version 2 only made `alt` optional and version 3 only added the lightbox
-    // setting, so earlier data is already valid.
-    migrations: { 2: (block) => block, 3: (block) => block },
+    // Version 2 only made `alt` optional, version 3 only added the lightbox
+    // setting and version 4 only the optional link, so earlier data is valid.
+    migrations: { 2: (block) => block, 3: (block) => block, 4: (block) => block },
     settings: { lightbox: lightboxSetting },
     type: "image",
-    version: 3,
+    version: 4,
   }),
   navigation: defineBlock({
     description: "A list of links with optional one-level submenus.",

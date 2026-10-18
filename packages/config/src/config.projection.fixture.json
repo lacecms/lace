@@ -26,6 +26,12 @@
       "fields": {
         "alt": { "required": false, "type": "text" },
         "caption": { "required": false, "type": "text" },
+        "link": {
+          "description": "Selecting the image opens this link instead of the full-screen view.",
+          "label": "Link",
+          "required": false,
+          "type": "url"
+        },
         "media": { "required": true, "type": "media" }
       },
       "label": "Image",
@@ -39,7 +45,7 @@
         }
       },
       "type": "image",
-      "version": 3
+      "version": 4
     },
     {
       "description": "A quotation with optional attribution.",
@@ -72,9 +78,9 @@
       "kind": "page",
       "label": "Home",
       "path": "/",
-      "projectionHash": "1a496c7b07cf2b5d8e0828f6da2e53549bb040eb3ce23d72037c0edddefbb620",
-      "structureHash": "7e9b7ee06bb0470ed52f2dc531768385e98d21712e93a58b8368fb5be157d0b6",
-      "version": 3
+      "projectionHash": "7f6fc4654a7be698949571bdeb2842e6ab16a47129cb73faa9ea9a07d07d9902",
+      "structureHash": "7e9bdbe316ca6aac45c8e8cb6b0054f905545be35296c559691c33e9fb3006ad",
+      "version": 4
     },
     {
       "blocks": ["hero", "richText", "image", "quote", "cta"],
@@ -90,12 +96,12 @@
       "key": "posts",
       "kind": "collection",
       "label": "Posts",
-      "projectionHash": "1e35e5765fbe8df8cfa20c62e5a7c1f7f45b58c57fc61fe7a96b592cf2f71acc",
+      "projectionHash": "f574f14dd2f7e3f696c9da6e42b7a4873ed38630609b4ea3f426566f4cd89a65",
       "route": "/blog/:slug",
-      "structureHash": "a7455b855ede5547293c2a854f6fb57c6335a3e938d872384f76128ae940482e",
-      "version": 3
+      "structureHash": "8deb67925216b707211244e49324cf6e76eeb8e818c3e2c4feb36bb93767a227",
+      "version": 4
     }
   ],
-  "projectionHash": "d3fa5bf5cbc9bb856ec73e88cbef2c08ee1ea97ed0a2ff9b702ab8975fe7c5aa",
-  "structureHash": "c32ccb3862ab37ae5577ac6c6aa7eb7bc236c3b21e7487513c01956e53360796"
+  "projectionHash": "be5be8be6480cd24916982552566bdd3411753ffb432438a214dd7f652d06c85",
+  "structureHash": "82ee925f988352326e41d9a23fa9339e0bc5f57160ede77286415a552e07c458"
 }

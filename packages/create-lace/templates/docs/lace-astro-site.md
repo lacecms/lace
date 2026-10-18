@@ -637,6 +637,16 @@ downloaded only when the dialog opens. Style it through the
 `lightbox-trigger`, `lightbox`, `lightbox-close` and `lightbox-media` parts
 (see the starter stylesheet).
 
+The `image` block and every gallery item also have an optional _Link_ (a URL
+field with the usual safe URL rules: site paths, `#fragments`, `http(s)`,
+`mailto:` and `tel:`). A linked image is wrapped in an
+`<a data-lace-part="link">` that opens the link in the same tab, and it never
+gets a lightbox, even with _Open full screen_ on; images without a link keep
+the lightbox. The image's alt text names the link; when it is empty, the
+caption, then the URL, becomes the link's `aria-label`, so give linked images
+alt text that describes the destination. Style the wrapper through the `link`
+part (see the starter stylesheet).
+
 Astro keeps downloaded originals and variants in `node_modules/.astro/assets/`
 and revalidates them with the media `ETag`; Lace keeps placeholders in
 `node_modules/.astro/lace/placeholders/`. Keep that directory between builds

@@ -301,7 +301,7 @@
           },
           "key": "post-image",
           "position": 1,
-          "schemaVersion": 3,
+          "schemaVersion": 4,
           "settings": {
             "lightbox": true
           },
@@ -326,6 +326,7 @@
               {
                 "alt": "A quiet desk",
                 "caption": "The note desk",
+                "link": "https://lace.example/desk",
                 "media": "note-media"
               },
               {
@@ -337,7 +338,7 @@
           },
           "key": "post-gallery",
           "position": 3,
-          "schemaVersion": 2,
+          "schemaVersion": 3,
           "settings": {
             "lightbox": true
           },
@@ -403,11 +404,12 @@
         },
         {
           "data": {
+            "link": "/blog/first-post",
             "media": "note-media"
           },
           "key": "note-image",
           "position": 1,
-          "schemaVersion": 3,
+          "schemaVersion": 4,
           "settings": {
             "lightbox": false
           },

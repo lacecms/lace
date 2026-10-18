@@ -138,6 +138,57 @@ test("an image block with the default setting renders no lightbox", async () => 
   );
 });
 
+test("a linked image opens its link instead of the lightbox", async () => {
+  const html = await render([
+    block(
+      "image",
+      { alt: "Kitchen", link: "/work/kitchen", media: "studio" },
+      { key: "photo", settings: { lightbox: true } },
+    ),
+  ]);
+  expect(html).toBe(
+    [
+      '<main><figure data-lace-block="image" data-lace-block-key="photo">',
+      '<a data-lace-part="link" href="/work/kitchen">',
+      '<img alt="Kitchen" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800">',
+      "</a>",
+      '<figcaption data-lace-part="caption">Media caption</figcaption></figure></main>',
+    ].join(""),
+  );
+});
+
+test("a gallery mixes lightbox items and linked items", async () => {
+  const html = await render([
+    block(
+      "gallery",
+      { images: [{ media: "studio" }, { link: "https://example.com/", media: "studio" }] },
+      { key: "shots", settings: { lightbox: true } },
+    ),
+  ]);
+  expect([...html.matchAll(/<dialog[^>]* id="([^"]+)"/gu)].map((match) => match[1])).toEqual([
+    "lace-lightbox-entry-1-shots-0",
+  ]);
+  expect(html).toContain(
+    '<a data-lace-part="link" href="https://example.com/"><img alt="Media alt" data-lace-part="media"',
+  );
+  expect(html.match(/data-lace-part="lightbox-trigger"/gu)).toHaveLength(1);
+});
+
+test("a linked image without alt text is named by its caption, then its URL", async () => {
+  const html = await render([
+    block("gallery", {
+      images: [
+        { caption: "Before", link: "/before", media: "bare" },
+        { link: "/after", media: "bare" },
+      ],
+    }),
+    block("image", { link: "/solo", media: "bare" }, { key: "solo" }),
+  ]);
+  expect(html).toContain('<a aria-label="Before" data-lace-part="link" href="/before">');
+  expect(html).toContain('<a aria-label="/after" data-lace-part="link" href="/after">');
+  expect(html).toContain('<a aria-label="/solo" data-lace-part="link" href="/solo">');
+});
+
 test("the hero image loads eagerly with high priority and no lightbox", async () => {
   const html = await render([block("hero", { heading: "Welcome", image: "studio" })]);
   expect(html).toContain(

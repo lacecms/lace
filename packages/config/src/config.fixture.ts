@@ -15,7 +15,7 @@ export default await defineConfig({
       key: "home",
       label: "Home",
       path: "/",
-      version: 3,
+      version: 4,
     }),
     defineCollection({
       blocks: ["hero", "richText", "image", "quote", "cta"],
@@ -27,7 +27,7 @@ export default await defineConfig({
       key: "posts",
       label: "Posts",
       route: "/blog/:slug",
-      version: 3,
+      version: 4,
     }),
   ],
 });

@@ -29,6 +29,8 @@ when selected and do not yet have an implementation order or new CE numbers.
   - **B `images-b-build-variants-lightbox`:** done (archived 2026-10-18;
     GIFs became animated WebP variants instead of unchanged copies).
   - **C `images-c-deploy-caching`:** done (archived 2026-10-18).
+  - **D `images-d-image-links`:** done (archived 2026-10-18; optional `link`
+    on `image` blocks and gallery items, taking precedence over the lightbox).
 - **Video media (draft 2026-10-18, three changes in order, after image
   delivery):**
   - **A `video-a-media-upload-delivery`:** MP4 and WebM with separate

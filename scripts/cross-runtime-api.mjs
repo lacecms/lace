@@ -184,7 +184,7 @@ export async function apiJourney(f) {
     {
       key: "image-one",
       type: "image",
-      schemaVersion: 3,
+      schemaVersion: 4,
       position: 2000,
       data: { media: cover.id, alt: "Published cover" },
     },
@@ -230,7 +230,7 @@ export async function apiJourney(f) {
       {
         key: "gallery-one",
         type: "gallery",
-        schemaVersion: 2,
+        schemaVersion: 3,
         position: 1000,
         data: {
           title: "Published gallery",

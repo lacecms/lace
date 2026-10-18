@@ -158,7 +158,8 @@ test("the fixture build emits published static routes without CMS access", () =>
     ],
     [
       post,
-      // Rich text, image with a lightbox, quote, gallery of three items with lightboxes.
+      // Rich text, image with a lightbox, quote, gallery of three items with
+      // lightboxes except the linked second item.
       [
         "content",
         ...lightboxParts,
@@ -171,14 +172,15 @@ test("the fixture build emits published static routes without CMS access", () =>
         ...lightboxParts,
         "caption",
         "item",
-        ...lightboxParts,
+        "link",
+        "media",
         "caption",
         "item",
         ...lightboxParts,
       ],
     ],
     [about, ["heading"]],
-    [note, ["text", "attribution", "media"]],
+    [note, ["text", "attribution", "link", "media"]],
   ]) {
     expect(
       [...entryScope(html).matchAll(/data-lace-part="([^"]+)"/gu)].map((match) => match[1]),
@@ -218,8 +220,9 @@ test("the fixture build emits published static routes without CMS access", () =>
     '<nav aria-label="On this page" class="navigation" data-lace-block="navigation" data-lace-block-key="home-navigation"><ul data-lace-part="list"><li data-lace-part="item"><a data-lace-part="link" href="#get-started">Get started</a></li></ul></nav>',
   );
 
-  // Gallery items use their own alt text and caption, then the media's, and
-  // each opens its original in its own dialog.
+  // Gallery items use their own alt text and caption, then the media's; each
+  // opens its original in its own dialog, except the linked item, which opens
+  // its link.
   const media = (id) => `https://cms.example.test/lace/api/v1/public/media/${id}`;
   const galleryItem = (index, alt, id, width, height, caption) => {
     const dialog = `lace-lightbox-first-post-entry-post-gallery-${index}`;
@@ -237,7 +240,9 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(post).toContain(
     '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery"><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" role="list">' +
       galleryItem(0, "Media library description", "post-media", 800, 600, "Media library caption") +
-      galleryItem(1, "A quiet desk", "note-media", 640, 480, "The note desk") +
+      '<li data-lace-part="item"><figure><a data-lace-part="link" href="https://lace.example/desk">' +
+      `<img alt="A quiet desk" data-lace-part="media" decoding="async" height="480" loading="lazy" src="${media("note-media")}" width="640"></a>` +
+      '<figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
       galleryItem(2, "A looping sketch", "sketch-media", 600, 400) +
       "</ul></section>",
   );
@@ -299,9 +304,9 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(about).toContain("Built with Lace");
   expect(note).toContain("Notes render from the published export.");
   // Without block or media alt text the image keeps an empty alt attribute, which
-  // the minified output writes as a bare `alt`.
+  // the minified output writes as a bare `alt`; its link is then named by its URL.
   expect(note).toMatch(
-    /<img alt(?:="")? data-lace-part="media" decoding="async" height="480" loading="lazy" src="[^"]*\/note-media" width="640">/u,
+    /<a aria-label="\/blog\/first-post" data-lace-part="link" href="\/blog\/first-post"><img alt(?:="")? data-lace-part="media" decoding="async" height="480" loading="lazy" src="[^"]*\/note-media" width="640"><\/a>/u,
   );
   // The default lightbox setting renders no dialog.
   expect(entryScope(note)).not.toContain("<dialog");
@@ -469,7 +474,10 @@ test("a fixture build against a served media origin renders WebP variants, place
   expect(post).toContain(
     '<img alt="A durable media URL" data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800">',
   );
-  expect(post.match(/<dialog\b/gu)).toHaveLength(4);
+  expect(post.match(/<dialog\b/gu)).toHaveLength(3);
+  expect(post).toContain(
+    '<a data-lace-part="link" href="https://lace.example/desk"><img alt="A quiet desk"',
+  );
   expect(entryScope(note)).not.toContain("<dialog");
   // Every original was fetched from the build source, never from the public URL.
   expect(new Set(requests)).toEqual(

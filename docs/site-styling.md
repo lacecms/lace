@@ -28,10 +28,10 @@ The supported parts are:
 | --- | --- |
 | `hero` | `eyebrow`, `heading`, `body`, `media`, `action` |
 | `richText` | `content` |
-| `image` | `media`, `caption`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
+| `image` | `media`, `caption`, with a link `link`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
 | `quote` | `text`, `attribution` |
 | `cta` | `heading`, `body`, `action` |
-| `gallery` | `title`, `items`, `item`, `media`, `caption`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
+| `gallery` | `title`, `items`, `item`, `media`, `caption`, with an item link `link`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
 | `navigation` | `list`, `item`, `link`, `label`, `submenu`, `toggle`, `children` |
 
 An optional part is absent when the published block has no value for it. For
@@ -142,3 +142,7 @@ the trigger button, shows a focus ring, sizes the dialog to the image (so the
 `::backdrop` around it stays clickable), constrains the original to the
 viewport with `object-fit: contain`, and pins the close button to the top
 right.
+
+An `image` block or gallery item with a *Link* wraps its `media` image in a
+`link` anchor instead and never gets a lightbox. `site.css` makes the anchor a
+block and gives it the same focus ring as the trigger.
