@@ -1,0 +1,85 @@
+name: Documentation Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild and republish unchanged documentation from main
+        type: boolean
+        default: false
+
+# One serialization boundary covers detection through confirmed deployment.
+concurrency:
+  group: lace-documentation-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: read
+      actions: read
+    outputs:
+      publish: ${{ steps.decision.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.12.0
+          package-manager-cache: false
+      - name: Install only the change detector parser
+        run: npm install --prefix "$RUNNER_TEMP/lace-doc-tools" --ignore-scripts --no-audit --no-fund --no-package-lock yaml@2.9.0
+      - name: Compare with last successful Pages deployment
+        id: decision
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DOCS_FORCE: ${{ inputs.force || false }}
+        run: DOCS_YAML_MODULE="$RUNNER_TEMP/lace-doc-tools/node_modules/yaml" node scripts/docs-publication.mjs
+      - name: Enable pinned pnpm
+        if: steps.decision.outputs.publish == 'true'
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+      - name: Install frozen workspace dependencies
+        if: steps.decision.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Verify documentation
+        if: steps.decision.outputs.publish == 'true'
+        run: |
+          pnpm docs:check
+          pnpm --filter @lacecms/app-docs test:variants
+          pnpm exec vitest run tests/docs-publication.test.mjs --maxWorkers=2
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.decision.outputs.publish == 'true'
+        with:
+          path: apps/docs/dist
+
+  deploy:
+    if: needs.build.outputs.publish == 'true' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy verified static artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Record published URL
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: echo "Documentation published from $GITHUB_SHA at $PAGE_URL" >> "$GITHUB_STEP_SUMMARY"

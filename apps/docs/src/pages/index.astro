@@ -1,0 +1,5 @@
+---
+import catalog from "../catalog.mjs";
+const target = `${import.meta.env.BASE_URL}${catalog.defaultLocale}/${catalog.defaultVersion}/`;
+---
+<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>Lace documentation</title><meta http-equiv="refresh" content={`0;url=${target}`} /><link rel="canonical" href={new URL(target, Astro.site)} /></head><body><a href={target}>Read the Lace documentation</a></body></html>

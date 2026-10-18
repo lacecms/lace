@@ -1,0 +1,8 @@
+---
+import Default from "@astrojs/starlight/components/Head.astro";
+import catalog from "../catalog.mjs";
+const versionSlug = Astro.url.pathname.slice(import.meta.env.BASE_URL.length).split("/")[1];
+const definition = Object.entries(catalog.versions).find(([slug]) => slug === versionSlug)?.[1];
+---
+<Default {...Astro.props} />
+{definition && <meta name="description-version" content={`${definition.label}: CMS ${definition.target}`} />}

@@ -1,0 +1,20 @@
+---
+title: Users, roles and accounts
+description: Manage access, invitations, passwords, sessions and build tokens.
+---
+
+Administrators manage Users, publication and Settings; editors author drafts and upload media; viewers inspect content without mutation. The server enforces permissions even if a user sends API requests directly. UI visibility is not the authorization boundary.
+
+## Invite users
+
+An administrator invites a user with an appropriate role. The recipient follows the expiring invitation link and chooses a password. Delivery depends on configured email; installations without a provider remain usable through the supported operator/link workflow. Reissue expired links through the intended UI rather than sharing passwords. Changing or removing a role affects subsequent authorized operations.
+
+## Personal account
+
+Use account screens for profile/password and session management. Password reset follows the supported reset link workflow when available. Keep reset/invitation links private: they contain credentials. Review active sessions and revoke those you no longer trust. Recovery of the first administrator is an operator procedure, not a reason to reopen the initial setup endpoint; successful initial setup consumes its token and closes that endpoint.
+
+## Build tokens and email
+
+Settings creates read-only build tokens for published export access. Copy the value once and keep it in server-side site/build configuration. A token cannot be revealed later; create a replacement and revoke the old one if lost. A build token is not an admin session or setup token.
+
+Transactional email is optional. Node can use SMTP or Resend; Workers can use Resend or the configured Cloudflare Email Service binding. Choose a provider appropriate to the runtime, configure sender/secrets, then use Settings' delivery test and inspect diagnostics. Never place mail/API keys in public site variables.

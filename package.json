@@ -51,7 +51,10 @@
     "verify:34c": "node scripts/operations-verification.mjs",
     "release:github": "node scripts/release-github.mjs",
     "release:clean": "node scripts/release-clean.mjs",
-    "release:acceptance:import": "node scripts/release-evidence.mjs"
+    "release:acceptance:import": "node scripts/release-evidence.mjs",
+    "docs:dev": "pnpm --filter @lacecms/app-docs dev",
+    "docs:build": "turbo run build --filter @lacecms/app-docs",
+    "docs:check": "pnpm --filter @lacecms/app-docs check"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",

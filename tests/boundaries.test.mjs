@@ -82,3 +82,13 @@ test.each([
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain(message);
 });
+
+test.each(["docs-runtime", "runtime-docs"])("rejects %s coupling", (fixture) => {
+  const result = spawnSync(process.execPath, [checker, join(fixtureDirectory, fixture)], {
+    encoding: "utf8",
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    fixture === "docs-runtime" ? "forbidden dependency" : "may not import @lacecms/app-docs",
+  );
+});

@@ -1,0 +1,6 @@
+---
+import catalog from "../../catalog.mjs";
+export function getStaticPaths() { return Object.keys(catalog.locales).map((locale) => ({params:{locale}})); }
+const target = `${import.meta.env.BASE_URL}${Astro.params.locale}/${catalog.defaultVersion}/`;
+---
+<!doctype html><html lang={Astro.params.locale}><head><meta charset="utf-8" /><title>Lace documentation</title><meta http-equiv="refresh" content={`0;url=${target}`} /></head><body><a href={target}>Read the documentation</a></body></html>

@@ -1,0 +1,27 @@
+{
+  "name": "@lacecms/app-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/prepare.mjs && astro dev --host 127.0.0.1 --port 4322",
+    "build": "node scripts/prepare.mjs && astro build && node scripts/check.mjs",
+    "typecheck": "astro sync && tsc --noEmit",
+    "lint": "oxlint src scripts astro.config.mjs",
+    "test": "vitest run",
+    "check": "pnpm build && pnpm typecheck && pnpm test",
+    "test:variants": "node scripts/variants.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "catalog:",
+    "astro": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "linkedom": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "yaml": "catalog:"
+  }
+}

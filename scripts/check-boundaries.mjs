@@ -12,6 +12,7 @@ const nodeBuiltinModules = new Set(
 );
 
 const allowedDependencies = new Map([
+  ["@lacecms/app-docs", new Set()],
   ["@lacecms/config", new Set(["@lacecms/content"])],
   ["@lacecms/domain", new Set(["@lacecms/content"])],
   ["@lacecms/application", new Set(["@lacecms/domain", "@lacecms/content", "@lacecms/config"])],

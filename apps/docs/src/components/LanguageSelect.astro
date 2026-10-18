@@ -1,0 +1,5 @@
+---
+import Default from "@astrojs/starlight/components/LanguageSelect.astro";
+import catalog from "../catalog.mjs";
+---
+{Object.keys(catalog.locales).length > 1 && <Default {...Astro.props} />}

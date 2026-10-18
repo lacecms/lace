@@ -36,6 +36,10 @@
     "test": {
       "dependsOn": ["build", "^build"],
       "outputs": []
+    },
+    "@lacecms/app-docs#build": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/openapi/api-v1.json"],
+      "outputs": ["dist/**"]
     }
   }
 }

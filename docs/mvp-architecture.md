@@ -249,6 +249,7 @@ apps/
 ├── admin/                     # React/Vite admin SPA
 ├── api/                       # deployable/reference Hono composition root
 ├── builder/                   # fixed-command VPS Astro build service
+├── docs/                      # private static Starlight public documentation
 └── site/                      # engine Astro playground and build fixture (never shipped)
 
 packages/
@@ -330,6 +331,14 @@ Rules:
   `@lacecms/content` for block definitions, and user-owned block markup.
 
 Workspace dependency checks in CI must reject cycles and imports that violate these rules.
+
+The private `apps/docs` application publishes public documentation independently
+of CMS services. It imports no Lace runtime packages and no runtime package may
+import it. Public sources live inside that application; all repository `docs/`
+materials remain maintained internal engineering documentation. The product
+README links to the public site and root `DEVELOPMENT.md` contributor guide.
+Documentation uses explicit locale/version routes, initially English/latest for
+alpha.6 following main, without changing CMS localization scope.
 
 ## 7. Generated user project
 
@@ -2917,6 +2926,12 @@ Major dependency groups:
 
 The static Astro site does not require the Cloudflare Astro SSR adapter.
 
+### Documentation
+
+The private docs app uses pinned Astro/Starlight and static Pagefind search, with
+no CMS runtime dependency or SSR adapter. It is not a public npm artifact or
+part of API/builder runtime images.
+
 ### Admin
 
 - React and React DOM;
@@ -2982,6 +2997,11 @@ hidden data, exact paths, byte/media limits and scalar hash regressions. Shared
 fake/SQLite/D1 contracts cover lifecycle copies, reordered/removed media,
 atomic failures, concurrency, migration totals and public filtering; D1 retains
 100-bind and 50-query maximum-save budgets without per-item queries.
+
+Documentation participates in root build/typecheck/lint/test gates. Its checks
+cover static links/resources, locale/version identity, production-base search
+and changed-input main-only Pages publication. Builds require no CMS services.
+See `docs/documentation-maintenance.md` for public/internal topic ownership.
 
 ### Unit tests
 

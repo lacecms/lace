@@ -3,6 +3,9 @@ packages:
   - packages/*
 
 catalog:
+  "@astrojs/starlight": 0.42.6
+  yaml: 2.9.0
+  linkedom: 0.18.12
   "@scalar/hono-api-reference": 0.12.13
   "@axe-core/playwright": 4.13.0
   "@dnd-kit/core": 6.3.1
