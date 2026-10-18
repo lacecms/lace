@@ -80,6 +80,7 @@ services:
         condition: service_started
     environment:
       LACE_ADMIN_DEV_ORIGIN: ${LACE_ADMIN_DEV_ORIGIN:?set LACE_ADMIN_DEV_ORIGIN}
+      LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}
       LACE_AUTH_SECRET: ${LACE_AUTH_SECRET:?set LACE_AUTH_SECRET}
       LACE_DATABASE_PATH: ${LACE_DATABASE_PATH:?set LACE_DATABASE_PATH}
       # Development-only plaintext SMTP into the local Mailpit inbox.

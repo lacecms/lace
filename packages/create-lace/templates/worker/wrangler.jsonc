@@ -41,6 +41,7 @@
   // LACE_RESEND_API_KEY secret.
   // Scheduled outbox recovery; post-commit dispatch only reduces latency.
   "triggers": { "crons": ["* * * * *"] },
+  // Optional public API reference: add "LACE_API_DOCS_ENABLED": "true" to vars.
   "vars": {
     // The Worker's public origin with a trailing slash: admin login, API and media URLs.
     // Replace before deploying; worker/.dev.vars overrides it for local development.

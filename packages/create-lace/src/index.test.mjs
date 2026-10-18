@@ -318,6 +318,9 @@ test("alpha generation selects exact compatible packages and overridable images"
   expect(TEMPLATE_VERSION).toBe("0.30.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
+  expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");
+  expect(environment).toContain("# LACE_API_DOCS_ENABLED=true");
+  expect(environment).not.toMatch(/^LACE_API_DOCS_ENABLED=true$/m);
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");
   expect(await readFile(join(project.path, "docs/lace-operations.md"), "utf8")).toContain(
     "pnpm create lace@0.1.0-alpha.6",

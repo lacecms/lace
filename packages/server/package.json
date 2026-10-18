@@ -33,6 +33,7 @@
     "@lacecms/application": "workspace:*",
     "@lacecms/contracts": "workspace:*",
     "@mjackson/multipart-parser": "catalog:",
+    "@scalar/hono-api-reference": "catalog:",
     "@valibot/to-json-schema": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",

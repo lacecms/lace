@@ -14,3 +14,6 @@ LACE_EMAIL_FROM=Lace Dev <lace@localhost.test>
 # LACE_PAGES_PROJECT_NAME=
 # LACE_PAGES_API_TOKEN=
 # LACE_PAGES_API_BASE_URL=http://127.0.0.1:9100/client/v4/
+
+# Optional public API reference at /api/docs (browser needs jsDelivr access).
+# LACE_API_DOCS_ENABLED=true

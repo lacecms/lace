@@ -56,6 +56,7 @@ async function createEnvironment(
   const values = {
     LACE_ADMIN_DEV_ORIGIN: "http://admin:5173",
     LACE_API_PORT: String(apiPort),
+    LACE_API_DOCS_ENABLED: "false",
     LACE_AUTH_SECRET: secret(),
     LACE_DATABASE_DIRECTORY: "/workspace/dev-data",
     LACE_DATABASE_PATH: "/workspace/dev-data/lace.sqlite",

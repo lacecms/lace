@@ -304,6 +304,7 @@ export function createCloudflareRuntime(
     secret: settings.authSecret,
   });
   const app = createLaceApp({
+    apiDocsEnabled: settings.apiDocsEnabled ?? false,
     ...(settings.assets === undefined
       ? {}
       : { adminAssets: createCloudflareAdminAssets(settings.assets) }),

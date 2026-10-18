@@ -19,6 +19,7 @@ export interface AssetsFetcher {
 
 /** Bindings, plain variables, and secrets the Worker reads from `env`. */
 export interface CloudflareWorkerEnv {
+  readonly LACE_API_DOCS_ENABLED?: unknown;
   readonly LACE_BUILD_SITE_ID?: unknown;
   readonly LACE_BUILD_SITE_LABEL?: unknown;
   readonly LACE_BUILD_SITE_URL?: unknown;
@@ -68,6 +69,7 @@ export interface PagesTrackingSettings {
 }
 
 export interface CloudflareSettings {
+  readonly apiDocsEnabled?: boolean;
   readonly buildSite?: LaceAppInput["buildSite"];
   readonly assets?: AssetsFetcher;
   readonly authSecret: string;
@@ -310,6 +312,9 @@ function pagesTracking(
 /** Parses Worker bindings and secrets once, without exposing supplied values in errors. */
 export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSettings {
   const issues: CloudflareEnvironmentIssue[] = [];
+  const docs = env.LACE_API_DOCS_ENABLED;
+  if (docs !== undefined && docs !== "true" && docs !== "false")
+    issues.push({ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" });
   const buildSite = parseBuildSiteIdentity(env);
   const database = binding<D1Database>(env.DB, "DB", ["batch", "prepare"], issues);
   const media = binding<R2Bucket>(env.MEDIA, "MEDIA", ["delete", "get", "head", "put"], issues);
@@ -362,6 +367,7 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
     throw new CloudflareEnvironmentError(Object.freeze(issues));
   }
   return Object.freeze({
+    apiDocsEnabled: docs === "true",
     buildSite,
     ...(assets === undefined ? {} : { assets }),
     authSecret,
