@@ -23,9 +23,6 @@ when selected and do not yet have an implementation order or new CE numbers.
   published versions with restore. Requires changing the MVP exclusion of
   revision history.
 
-- **VPS proxy upload limit (selected 2026-10-18):** change
-  `fix-vps-media-upload-limit`; the generated nginx proxy's default 1 MiB
-  body limit rejects image uploads above 1 MiB.
 - **Image delivery (selected 2026-10-18, three changes in order; replaces
   CE11):** build-time variants through the Astro image pipeline, WebP only.
   - **A `images-a-media-format-caching`:** GIF as an upload format; media

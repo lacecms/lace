@@ -49,7 +49,7 @@ on the media route (unbounded at the proxy, relies only on the API).
 
 `tests/deploy-proxy.test.mjs` reads both `nginx.conf` copies, asserts they are
 byte-identical, parses the server-level `client_max_body_size` (must be `1m`)
-and the media location's value (must be ≥ `MAX_MEDIA_BYTES` and ≤
+and the media location's value (must be greater than `MAX_MEDIA_BYTES`, leaving room for the multipart envelope, and ≤
 `MAX_MEDIA_BYTES + 1 MiB`, imported from `@lacecms/application`), and checks
 `proxy_request_buffering off` and that the media location forwards the same
 headers as `/api/`. When the video change raises the ceiling, this test fails

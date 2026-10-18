@@ -32,6 +32,7 @@
     "lace": "node packages/cli/dist/bin.js",
     "openapi:check": "node scripts/check-openapi.mjs",
     "openapi:generate": "node apps/api/scripts/generate-openapi.mjs",
+    "proxy:probe": "node scripts/nginx-upload-probe.mjs",
     "spec:validate": "pnpm exec openspec validate --all --strict --no-interactive",
     "test": "turbo run test --concurrency=2 -- --maxWorkers=2 && vitest run tests --maxWorkers=2 --exclude 'tests/fixtures/**' --exclude '.release-artifacts/**'",
     "test:integration": "node scripts/not-implemented.mjs test:integration failure",

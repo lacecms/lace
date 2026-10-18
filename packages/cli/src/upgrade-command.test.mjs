@@ -342,6 +342,59 @@ describe("upgrade CLI", () => {
     },
     integrationTimeout,
   );
+  it(
+    "upgrades the 0.30 proxy configuration to the 0.31 upload limits and reports an edited proxy",
+    async () => {
+      const { root, project, template } = await fixture();
+      const manifestPath = join(project, ".lace/manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.templateVersion = "0.30.0";
+      // 0.30.0 shipped the proxy without body-size directives.
+      const previous = (await readFile(join(project, "deploy/nginx.conf"), "utf8")).replace(
+        /\n {4}# Matches the API's default JSON body limit[\s\S]*?\n(?= {4}location \/api\/ \{)/u,
+        "\n",
+      );
+      expect(previous).not.toContain("client_max_body_size");
+      await writeFile(join(project, "deploy/nginx.conf"), previous);
+      manifest.files["deploy/nginx.conf"].sha256 = upgradeHash(Buffer.from(previous));
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      await rm(join(project, ".lace/upgrade-instructions.json"));
+      await writeFile(join(project, "README.md"), "user README\n");
+      const configuration = await readFile(join(project, "lace.config.ts"), "utf8");
+      const before = await snapshot(join(project, "site"));
+
+      // An operator edit to the managed proxy blocks apply instead of being overwritten.
+      const edited = previous.replace(
+        "listen 8080;",
+        "listen 8080;\n    client_max_body_size 20m;",
+      );
+      await writeFile(join(project, "deploy/nginx.conf"), edited);
+      const blocked = cli(
+        ["--project", project, "--template", template, "--apply", "--json"],
+        root,
+      );
+      expect(blocked.status, blocked.stdout + blocked.stderr).not.toBe(0);
+      expect(blocked.stdout + blocked.stderr).toContain("deploy/nginx.conf");
+      expect(await readFile(join(project, "deploy/nginx.conf"), "utf8")).toBe(edited);
+
+      await writeFile(join(project, "deploy/nginx.conf"), previous);
+      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      const outcome = JSON.parse(result.stdout);
+      expect(outcome.guidance).toContain("Template 0.31.0: the managed deploy/nginx.conf");
+      expect(outcome.guidance).toContain("docker compose up -d web");
+      const proxy = await readFile(join(project, "deploy/nginx.conf"), "utf8");
+      expect(proxy).toBe(await readFile(join(template, "deploy/nginx.conf"), "utf8"));
+      expect(proxy).toContain("location = /api/v1/admin/media");
+      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
+      expect(await readFile(join(project, "lace.config.ts"), "utf8")).toBe(configuration);
+      expect(await snapshot(join(project, "site"))).toEqual(before);
+      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
+        TEMPLATE_VERSION,
+      );
+    },
+    integrationTimeout,
+  );
   it.each([
     ["existing project, starter template", ["--existing-site", ".."], [], "--existing-site .."],
     ["starter project, no-site template", [], ["--no-site"], "--starter"],
