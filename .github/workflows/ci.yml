@@ -65,6 +65,11 @@ jobs:
       - name: Build an existing Astro site with a generated CMS
         run: pnpm acceptance:existing-site
 
+      - name: Verify public documentation
+        run: |
+          pnpm docs:check
+          pnpm --filter @lacecms/app-docs test:variants
+
       - name: Verify generated OpenAPI
         run: pnpm openapi:check
 

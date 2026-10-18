@@ -1,0 +1,26 @@
+{
+  "defaultLocale": "en",
+  "defaultVersion": "latest",
+  "locales": {
+    "en": {
+      "label": "English",
+      "lang": "en"
+    }
+  },
+  "versions": {
+    "latest": {
+      "label": "Latest",
+      "target": "0.1.0-alpha.6",
+      "tracking": "main"
+    }
+  },
+  "sections": {
+    "getting-started": "Getting started",
+    "content-modeling": "Content modeling",
+    "editing-content": "Editing content",
+    "astro-integration": "Astro integration",
+    "deployment": "Deployment",
+    "operations": "Operations",
+    "reference": "Reference"
+  }
+}

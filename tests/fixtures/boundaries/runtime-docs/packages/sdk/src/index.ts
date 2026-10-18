@@ -1,0 +1,1 @@
+import "@lacecms/app-docs";

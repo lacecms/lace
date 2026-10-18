@@ -1,5 +1,10 @@
 # Lace backlog
 
+- **DOC1 Public documentation (selected):** private Astro/Starlight application,
+  English latest (alpha.6), locale/version foundation, changed-input Pages
+  publication from main, product README and contributor guide. Delivered through
+  `add-starlight-documentation`; independent of the deferred CE sequence.
+
 Future capabilities deferred from the completed
 [content and editor roadmap](docs/archive/content-editor-roadmap.md).
 Selecting an item requires a just-in-time OpenSpec proposal and explicit apply.
@@ -17,6 +22,37 @@ when selected and do not yet have an implementation order or new CE numbers.
 - **CE12 Bounded revision history (C1):** a small number of retained
   published versions with restore. Requires changing the MVP exclusion of
   revision history.
+
+- **VPS proxy upload limit (selected 2026-10-18):** change
+  `fix-vps-media-upload-limit`; the generated nginx proxy's default 1 MiB
+  body limit rejects image uploads above 1 MiB.
+- **Image delivery (selected 2026-10-18, three changes in order; replaces
+  CE11):** build-time variants through the Astro image pipeline, WebP only.
+  - **A `images-a-media-format-caching`:** GIF as an upload format; media
+    responses get `Cache-Control` (public: one day; admin preview: private,
+    no-cache) with `ETag` and `304`.
+  - **B build variants:** per image a 64 px WebP inlined as a blurred
+    placeholder plus WebP at 960 and 1920 px (each capped at the original
+    width) with `srcset`/`sizes`, `loading="lazy"`, `decoding="async"`; GIF
+    copied to `dist` unchanged; the original stays in object storage and opens
+    full screen from the public media URL through a `<dialog>` lightbox,
+    enabled per `image`/`gallery` block by a setting that defaults to off (new
+    block versions). Focal-point crops and AVIF deferred.
+  - **C deploy caching:** 30-day caching of content-hashed `/_astro/` assets
+    in nginx and Pages `_headers`, persistent build caches on the VPS builder
+    and in GitHub Actions, template version bump.
+- **Video media (draft 2026-10-18, three changes in order, after image
+  delivery):**
+  - **A `video-a-media-upload-delivery`:** MP4 and WebM with separate
+    10 MiB image and 64 MiB video limits, streamed binary upload, ranged media
+    delivery and the media-field `accept` option. Requires the VPS proxy
+    change.
+  - **B video blocks:** built-in `video` block (uploaded video, image poster,
+    autoplay/loop/muted/controls settings with a pause control and reduced
+    motion) and `videoEmbed` block (Vimeo/YouTube through a URL-field
+    provider option), render-core describers and Astro registry components.
+  - **C admin video:** library and picker tiles, preview player, kind filter,
+    per-kind local checks and the streamed upload transport.
 
 - **Word/Google Docs paste cleanup (deferred from CE8/B1):** normalize source
   markup into supported rich text, preserve meaningful text/lists/links and

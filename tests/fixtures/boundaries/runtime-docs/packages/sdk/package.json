@@ -1,0 +1,5 @@
+{
+  "name": "@lacecms/sdk",
+  "private": true,
+  "type": "module"
+}
