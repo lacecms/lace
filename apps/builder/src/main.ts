@@ -19,6 +19,7 @@ const builder = new FixedCommandBuilder({
   outputDirectory: process.env.LACE_BUILD_OUTPUT_DIR ?? "dist",
   workRoot: "/work",
   outputRoot: "/output",
+  cacheRoot: "/cache",
   apiBaseUrl,
   buildToken,
   ...(process.env.LACE_PUBLIC_BASE_URL === undefined

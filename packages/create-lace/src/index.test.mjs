@@ -80,37 +80,40 @@ test("generates deterministic owned source and hashed managed files", async () =
     "0005_content_model_structure and 0006_media_descriptive_metadata",
   );
   expect(instructions.configuration[0]).toMatch(
-    /^Template 0\.32\.0: responsive images.*960 and 1920 px.*image block moves to version 3 and gallery to version 2.*No database migration.*lace add block image gallery hero.*block_version_mismatch.*sharp.*laceImageConfig/u,
+    /^Template 0\.33\.0: deploy caching.*\/_astro\/.*max-age=2592000, immutable.*builder-cache.*2 GiB.*actions\/cache.*No database migration.*docker compose up -d builder web.*site\/public\/_headers/u,
   );
   expect(instructions.configuration[1]).toMatch(
+    /^Template 0\.32\.0: responsive images.*960 and 1920 px.*image block moves to version 3 and gallery to version 2.*No database migration.*lace add block image gallery hero.*block_version_mismatch.*sharp.*laceImageConfig/u,
+  );
+  expect(instructions.configuration[2]).toMatch(
     /Template 0\.31\.0: .*deploy\/nginx\.conf.*client_max_body_size 11m.*docker compose up -d web.*No new API, admin, CLI or builder artifacts/u,
   );
-  expect(instructions.configuration[2]).toContain("Template 0.30.0: alpha.6");
+  expect(instructions.configuration[3]).toContain("Template 0.30.0: alpha.6");
   expect(instructions.configuration.join("\n")).toContain("BUILD_EXPORT_VERSION_CHANGED");
   // Invitations and password recovery need the additive account-token migration.
   expect(instructions.database.join("\n")).toContain("0004_account_tokens");
   expect(instructions.configuration.join("\n")).toMatch(
     /Template 0\.29\.0: alpha\.5.*0\.1\.0-alpha\.5.*next.*forward database migrations/u,
   );
-  expect(instructions.configuration[6]).toMatch(
+  expect(instructions.configuration[7]).toMatch(
     /Template 0\.28\.0.*layout.*no database migration/u,
   );
-  expect(instructions.configuration[7]).toMatch(
+  expect(instructions.configuration[8]).toMatch(
     /^Template 0\.27\.0: Gallery and Navigation.*No database migration.*pnpm exec lace add block gallery navigation.*site\.global\("navigation"\)/u,
   );
-  expect(instructions.configuration[8]).toMatch(
+  expect(instructions.configuration[9]).toMatch(
     /^Template 0\.26\.0: block anchors.*id=\{anchor\}.*\{ data, settings \}.*pnpm exec lace add block --all/u,
   );
-  expect(instructions.configuration[9]).toMatch(
+  expect(instructions.configuration[10]).toMatch(
     /^Template 0\.25\.0: search and social metadata.*site\.seo\(entry\).*LACE_SITE_INDEXING.*Nothing breaks without adoption/u,
   );
-  expect(instructions.configuration[10]).toMatch(
+  expect(instructions.configuration[11]).toMatch(
     /^Template 0\.24\.0: global models.*site\.global\(key\).*upgrade does not add them/u,
   );
-  expect(instructions.configuration[11]).toMatch(
+  expect(instructions.configuration[12]).toMatch(
     /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
   );
-  expect(instructions.configuration[13]).toMatch(
+  expect(instructions.configuration[14]).toMatch(
     /image block is version 2.*raise the version of every model that allows image.*refuses image blocks still stored at version 1/u,
   );
   expect(instructions.configuration.join("\n")).toMatch(
@@ -159,6 +162,12 @@ test("optional Cloudflare files are managed only when selected", async () => {
   expect(files["worker/wrangler.jsonc"]).toEqual({ owner: "user" });
   const listed = await listFiles(project.path);
   expect(listed).toContain(".github/workflows/cloudflare.yml");
+  const workflow = await readFile(join(project.path, ".github/workflows/cloudflare.yml"), "utf8");
+  expect(workflow).toContain("uses: actions/cache@v4");
+  expect(workflow).toContain('path: "site/node_modules/.astro"');
+  expect(workflow).toContain("key: lace-astro-${{ runner.os }}-${{ github.run_id }}");
+  expect(workflow).toContain("restore-keys: lace-astro-${{ runner.os }}-");
+  expect(files["site/public/_headers"]).toEqual({ owner: "user" });
   expect(listed).not.toContain("wrangler.jsonc");
   const read = (path) => readFile(join(project.path, path), "utf8");
   const config = await read("worker/wrangler.jsonc");
@@ -321,7 +330,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.6");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.6");
-  expect(TEMPLATE_VERSION).toBe("0.32.0");
+  expect(TEMPLATE_VERSION).toBe("0.33.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");

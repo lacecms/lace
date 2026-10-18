@@ -162,6 +162,7 @@ services:
         bind:
           create_host_path: false
       - static-output:/output
+      - builder-cache:/cache
     depends_on:
       api: { condition: service_healthy }
       static-output-init: { condition: service_completed_successfully }
@@ -210,3 +211,6 @@ networks:
 volumes:
   minio-data: {}
   static-output: {}
+  # lace-site: starter existing
+  builder-cache: {}
+  # lace-site: end

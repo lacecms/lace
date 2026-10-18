@@ -57,3 +57,28 @@ test("the proxy keeps JSON bodies at 1 MiB and streams media up to the API ceili
   expect(values(media, "proxy_pass")).toEqual(values(api, "proxy_pass"));
   expect(values(media, "proxy_set_header")).toEqual(values(api, "proxy_set_header"));
 });
+
+const ASSET_CACHE = ['"public,', "max-age=2592000,", 'immutable"'];
+
+test("the proxy caches hashed assets for 30 days and keeps pages revalidating", async () => {
+  const { locations } = parse(await readFile(repositoryConfig, "utf8"));
+
+  const assets = locations.get("/_astro/");
+  expect(assets, "hashed asset location").toBeDefined();
+  // Without `always`, nginx leaves the header off 404 responses.
+  expect(values(assets, "add_header")).toEqual([["Cache-Control", ...ASSET_CACHE]]);
+  expect(values(assets, "try_files")).toEqual([["$uri", "=404"]]);
+  expect(values(assets, "root")).toEqual(values(locations.get("/"), "root"));
+
+  expect(values(locations.get("/"), "add_header")).toEqual([
+    ["Cache-Control", '"no-cache"', "always"],
+  ]);
+  expect(values(locations.get("= /_headers"), "return")).toEqual([["404"]]);
+});
+
+test("the starter Pages header rules match the proxy asset cache", async () => {
+  const { locations } = parse(await readFile(repositoryConfig, "utf8"));
+  const [[, ...proxyValue]] = values(locations.get("/_astro/"), "add_header");
+  const rules = await readFile("packages/create-lace/templates/site/public/_headers", "utf8");
+  expect(rules).toBe(`/_astro/*\n  Cache-Control: ${proxyValue.join(" ").replaceAll('"', "")}\n`);
+});

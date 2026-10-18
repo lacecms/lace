@@ -29,6 +29,13 @@ jobs:
       # lace-site: existing
       - run: pnpm --dir {{SITE_PATH}} install --frozen-lockfile
       # lace-site: end
+      # Astro's image cache: variants and placeholders are reused between runs. A unique
+      # key saves a new snapshot; GitHub evicts snapshots unused for seven days.
+      - uses: actions/cache@v4
+        with:
+          path: "{{SITE_PATH}}/node_modules/.astro"
+          key: lace-astro-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: lace-astro-${{ runner.os }}-
       # LACE_API_BASE_URL reads the build export from the deployed CMS Worker origin;
       # LACE_PUBLIC_BASE_URL is the Worker's public origin used in rendered media URLs.
       # Optional: LACE_BUILD_SITE_URL (the Pages site URL) enables canonical URLs and

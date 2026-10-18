@@ -222,7 +222,8 @@ Docker Compose
 ├── site-builder
 │   ├── private authenticated HTTP endpoint
 │   ├── read-only generated-project source mount
-│   └── static-output volume
+│   ├── static-output volume
+│   └── builder-cache volume (pnpm store, Astro cache)
 └── static web server/reverse proxy
     └── Astro build output
 ```
@@ -237,6 +238,19 @@ API must never accept an arbitrary shell command from an HTTP request. The
 builder's own deployment settings, never the request, supply the optional
 `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` it forwards to the site build
 (section 9.8).
+
+The builder keeps the pnpm package store and the site's Astro cache directory
+(`node_modules/.astro`: image variants and placeholders) in a dedicated
+`builder-cache` volume. The cache is an optimization only: it is cleared above
+2 GiB, its Astro part is dropped after a failed build, an unusable cache means
+an uncached build, and it never enters a release or depends on request data.
+
+Static responses revalidate (`Cache-Control: no-cache`) so a switched release
+is visible on reload, except Astro's content-hashed `/_astro/` files, which are
+served `public, max-age=2592000, immutable` (30 days) on success only. The
+same rule reaches Cloudflare Pages through the site's `public/_headers`, which
+the VPS proxy refuses to serve; the generated Pages workflow keeps
+`node_modules/.astro` between runs with `actions/cache`.
 
 ## 6. Repository structure
 

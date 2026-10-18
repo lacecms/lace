@@ -140,10 +140,12 @@ Local `pnpm cf:dev` prints email to its output (`LACE_EMAIL_PROVIDER=log` in `wo
 
 The site is built from the published export of the remote Worker with a read-only build token issued in the remote Admin. Choose one:
 
-- **Manual workflow:** the generated `.github/workflows/cloudflare.yml` builds `{{SITE_PATH}}` and uploads `{{SITE_PATH}}/dist` to Pages when you run it. It has no deploy hook, so you rerun it after publishing.
+- **Manual workflow:** the generated `.github/workflows/cloudflare.yml` builds `{{SITE_PATH}}` and uploads `{{SITE_PATH}}/dist` to Pages when you run it. It has no deploy hook, so you rerun it after publishing. It keeps Astro's image cache (`{{SITE_PATH}}/node_modules/.astro`) between runs with `actions/cache`.
 - **Git-connected Pages project:** Pages builds the site itself, and its deploy hook, stored only as the Worker secret `LACE_DEPLOY_HOOK_URL`, rebuilds after each publication.
 
 Either way, give the site build `LACE_BUILD_SITE_URL` (the Pages site URL, also set in the Worker `vars` for "Open on site") so pages get canonical URLs and `sitemap.xml` is written, and `LACE_SITE_INDEXING=off` for a staging or preview build: as repository variables for the workflow, or as Pages environment variables for a Git-connected project.
+
+Pages sends `max-age=0` for every file unless the site's `public/_headers` says otherwise. The starter site ships one that caches the content-hashed `/_astro/` files (scripts, styles and image variants) for 30 days with `Cache-Control: public, max-age=2592000, immutable`; an existing site adds the same file (see [the site guide](lace-astro-site.md), section 12).
 
 Without tracking, a hook the provider accepts is recorded as **Accepted**, which never proves the site changed: confirm the deployment in Pages. With Pages deployment tracking (`LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME` and the separate Pages-Read-only Worker secret `LACE_PAGES_API_TOKEN`), Builds follows that exact deployment to **Succeeded**, **Failed**, **Cancelled** or **Unknown** within the tracking deadline. Setup: [deploy the static site separately](lace-operations.md#deploy-the-static-site-separately) and the tracking entry in [recovery](lace-operations.md#recovery).
 

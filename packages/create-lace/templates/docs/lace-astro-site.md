@@ -640,7 +640,27 @@ downloaded only when the dialog opens. Style it through the
 Astro keeps downloaded originals and variants in `node_modules/.astro/assets/`
 and revalidates them with the media `ETag`; Lace keeps placeholders in
 `node_modules/.astro/lace/placeholders/`. Keep that directory between builds
-to avoid downloading every original again.
+to avoid downloading every original again. The Compose builder does this for
+you: it links the site's `node_modules/.astro` to its persistent
+`builder-cache` volume, together with the pnpm package store, clears the whole
+cache when it grows above 2 GiB and drops the Astro part after a failed build.
+The generated Cloudflare Pages workflow restores and saves the same directory
+with `actions/cache`.
+
+Variants, scripts and styles land in `dist/_astro/` with a content hash in
+their names, so browsers may keep them: the Compose web proxy serves
+`/_astro/` with `Cache-Control: public, max-age=2592000, immutable` (30 days)
+while pages keep revalidating. On Cloudflare Pages the starter site's
+`public/_headers` applies the same rule; for an existing site, add
+`public/_headers` with:
+
+```text
+/_astro/*
+  Cache-Control: public, max-age=2592000, immutable
+```
+
+A site that changes Astro's `build.assets` directory gets no long-lived
+caching: its assets keep revalidating.
 
 ## 13. Build
 

@@ -427,6 +427,7 @@ test("existing-site managed files select the site at its path", async () => {
   const workflow = await read(".github/workflows/cloudflare.yml");
   expect(workflow).toContain("pnpm --dir .. install --frozen-lockfile");
   expect(workflow).toContain("wrangler pages deploy ../dist");
+  expect(workflow).toContain('path: "../node_modules/.astro"');
   const readme = await read("README.md");
   expect(readme).toContain("**existing site** at `..`");
   expect(readme).toContain("pnpm exec lace add block --all --site ..");
@@ -457,6 +458,7 @@ test("no-site managed files configure no builder or build site", async () => {
   expect(compose).not.toContain("LACE_BUILDER_URL");
   expect(compose).not.toContain("LACE_BUILD_SITE_ID");
   expect(compose).not.toContain("build-egress");
+  expect(compose).not.toContain("builder-cache");
   expect(compose).not.toMatch(/builder: \{ condition/u);
   expect(compose).toMatch(/^ {2}static-output-init:/mu);
   expect(compose).toMatch(/^ {2}web:/mu);
@@ -555,14 +557,23 @@ test.skipIf(!docker)("generated Compose files are valid in every mode", async ()
       },
     });
     expect(result.status, result.stderr).toBe(0);
-    const { services } = JSON.parse(result.stdout);
+    const { services, volumes } = JSON.parse(result.stdout);
     if (site.mode === "none") {
       expect(services).not.toHaveProperty("builder");
+      expect(volumes).not.toHaveProperty("builder-cache");
       expect(services.dispatcher.environment).not.toHaveProperty("LACE_BUILDER_URL");
       expect(services.api.environment).not.toHaveProperty("LACE_BUILD_SITE_ID");
     } else {
       const mount = services.builder.volumes.find((volume) => volume.target === "/source");
       expect(mount.source).toBe(await realpath(site.mode === "existing" ? parent : project.path));
+      // Only the builder mounts its persistent cache.
+      const cacheMounts = Object.entries(services).flatMap(([service, { volumes = [] }]) =>
+        volumes.filter((volume) => volume.source === "builder-cache").map(() => service),
+      );
+      expect(cacheMounts).toEqual(["builder"]);
+      expect(
+        services.builder.volumes.find((volume) => volume.source === "builder-cache").target,
+      ).toBe("/cache");
       expect(services.builder.environment.LACE_BUILD_SITE_DIR).toBe(
         site.mode === "existing" ? "." : "site",
       );

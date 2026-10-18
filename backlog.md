@@ -28,9 +28,7 @@ when selected and do not yet have an implementation order or new CE numbers.
   - **A `images-a-media-format-caching`:** done (archived 2026-10-18).
   - **B `images-b-build-variants-lightbox`:** done (archived 2026-10-18;
     GIFs became animated WebP variants instead of unchanged copies).
-  - **C deploy caching:** 30-day caching of content-hashed `/_astro/` assets
-    in nginx and Pages `_headers`, persistent build caches on the VPS builder
-    and in GitHub Actions, template version bump.
+  - **C `images-c-deploy-caching`:** done (archived 2026-10-18).
 - **Video media (draft 2026-10-18, three changes in order, after image
   delivery):**
   - **A `video-a-media-upload-delivery`:** MP4 and WebM with separate

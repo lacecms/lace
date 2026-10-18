@@ -108,7 +108,7 @@ Wait until `docker compose ps` lists every service as running (`healthy` where a
 
 <!-- lace-site: starter existing -->
 
-`pnpm prod:start` recreates the services with the build token and starts the dispatcher, the fixed-command builder and the web proxy. The builder mounts the selected source read-only, runs a frozen install and `astro build`, and switches the served release only after a complete static output exists. Publication queues a build; request one in Builds if an earlier publication was already processed. Only **Succeeded** proves the release switched; the new release can be served a moment before Builds records it. Browsers revalidate because the proxy sends `Cache-Control: no-cache`.
+`pnpm prod:start` recreates the services with the build token and starts the dispatcher, the fixed-command builder and the web proxy. The builder mounts the selected source read-only, runs a frozen install and `astro build`, and switches the served release only after a complete static output exists. Publication queues a build; request one in Builds if an earlier publication was already processed. Only **Succeeded** proves the release switched; the new release can be served a moment before Builds records it. Browsers revalidate pages because the proxy sends `Cache-Control: no-cache`; the content-hashed files under `/_astro/` (scripts, styles and image variants) are cached for 30 days instead. The builder keeps the pnpm store and the Astro image cache in the `builder-cache` volume, so later builds download and convert only what changed; it clears that cache above 2 GiB and drops the Astro part after a failed build.
 
 <!-- lace-site: end -->
 <!-- lace-site: none -->
@@ -143,6 +143,7 @@ Backups: with `api` and `dispatcher` stopped, copy `.lace/data/` (the SQLite dat
 <!-- lace-site: starter existing -->
 
 - **Build failed.** Builds shows a sanitized cause, its correction and, for source problems, a source entry relative to the installation root (for example a rejected symbolic link, an unreadable or missing entry, a frozen-install failure or an Astro build error). The previous complete release stays online and the publication stays committed. Correct the source, lockfile or settings and use **Retry build**; automatic retries stop after eight attempts. Details: [builder source diagnostics](lace-operations.md#builder-source-diagnostics).
+- **Reset the build cache.** Run `docker compose rm --stop --force builder`, remove the `<project>_builder-cache` volume with `docker volume rm` and start the builder again with `pnpm prod:start`. The next build downloads packages and converts every image again.
 - **Builder cannot see the source.** Correct the host bind and permissions for `LACE_BUILD_SOURCE_ROOT`, then `docker compose up -d --force-recreate api dispatcher builder`.
 
 <!-- lace-site: end -->
