@@ -1,0 +1,46 @@
+---
+import { getConfiguredImageService, getImage, imageConfig } from "astro:assets";
+// Extensionless so it resolves to the source in the workspace and to dist when packed.
+import { prepareLaceImage } from "./images";
+import type { ImageDescription } from "@lacecms/render";
+
+interface Props {
+  readonly image: ImageDescription;
+  /** The `sizes` of the variant `srcset`; defaults to `100vw`. */
+  readonly sizes?: string;
+  /** `eager` also raises the fetch priority, for images above the fold. */
+  readonly loading?: "eager" | "lazy";
+  /** Wraps the image in a button that opens the original in a modal dialog. */
+  readonly lightbox?: boolean;
+  /** The dialog's `id`, unique on the page; required with `lightbox`. */
+  readonly lightboxId?: string;
+  readonly [attribute: `data-${string}`]: string | undefined;
+  readonly class?: string;
+}
+
+const { class: className, image, lightbox = false, lightboxId, loading = "lazy", sizes = "100vw", ...attributes } = Astro.props;
+if (lightbox && (lightboxId === undefined || lightboxId === ""))
+  throw new TypeError("LaceImage needs a lightboxId when lightbox is enabled.");
+// Variants come from the site's Astro image pipeline; the placeholder from its image service.
+const prepared = await prepareLaceImage(image, {
+  getImage,
+  imageConfig,
+  service: await getConfiguredImageService(),
+});
+const triggerLabel = image.alt === "" ? "Open full-size image" : `Open full-size image: ${image.alt}`;
+const dialogLabel = image.alt === "" ? "Full-size image" : image.alt;
+---
+
+{lightbox ? (
+  <Fragment>
+    <button aria-haspopup="dialog" aria-label={triggerLabel} command="show-modal" commandfor={lightboxId} data-lace-part="lightbox-trigger" type="button">
+      <img alt={image.alt} class={className} {...attributes} decoding="async" fetchpriority={loading === "eager" ? "high" : undefined} height={image.height} loading={loading} sizes={prepared.srcset === undefined ? undefined : sizes} src={prepared.src} srcset={prepared.srcset} style={prepared.style} width={image.width} />
+    </button>
+    <dialog aria-label={dialogLabel} closedby="any" data-lace-part="lightbox" id={lightboxId}>
+      <button command="close" commandfor={lightboxId} data-lace-part="lightbox-close" type="button">Close</button>
+      <img alt={image.alt} data-lace-part="lightbox-media" decoding="async" height={image.height} loading="lazy" src={image.src} width={image.width} />
+    </dialog>
+  </Fragment>
+) : (
+  <img alt={image.alt} class={className} {...attributes} decoding="async" fetchpriority={loading === "eager" ? "high" : undefined} height={image.height} loading={loading} sizes={prepared.srcset === undefined ? undefined : sizes} src={prepared.src} srcset={prepared.srcset} style={prepared.style} width={image.width} />
+)}

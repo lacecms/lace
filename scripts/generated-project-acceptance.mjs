@@ -576,6 +576,7 @@ async function nodeJourney(context) {
     {
       type: "image",
       data: { media: mediaId, alt: "Onboarding image", caption: "Published caption" },
+      settings: { lightbox: true },
     },
     { type: "quote", data: { quote: "Published quote", attribution: "Lace" } },
     {
@@ -687,17 +688,27 @@ function attribute(tag, name) {
 }
 
 async function verifyRenderedMedia(html, base, bytes) {
-  const images = [...html.matchAll(/<img\b[^>]*>/gu)].map(([tag]) => tag);
+  const images = [...html.matchAll(/<img\b[^>]*data-lace-part="media"[^>]*>/gu)].map(
+    ([tag]) => tag,
+  );
   if (images.length < 2) throw new Error("media: generated hero/image links missing");
   for (const tag of images) {
-    const url = attribute(tag, "src") ?? "";
-    if (!url.startsWith(`${base}api/v1/public/media/`))
-      throw new Error("media: URL is not browser-facing");
+    // Block images are WebP variants the build made from the API's original.
+    if (!/^\/_astro\/\S+\.webp 1w$/u.test(attribute(tag, "srcset") ?? ""))
+      throw new Error("media: rendered image has no build variant");
     // The uploaded PNG is 1×1 and was given a focal point at 25 % / 75 %.
     if (attribute(tag, "width") !== "1" || attribute(tag, "height") !== "1")
       throw new Error("media: rendered image dimensions are missing");
-    if (attribute(tag, "style") !== "object-position:25% 75%")
+    if (!(attribute(tag, "style") ?? "").startsWith("object-position:25% 75%"))
       throw new Error("media: rendered image lacks the focal-point object position");
+  }
+  // The image block's lightbox opens the original on the browser-facing origin.
+  const originals = [...html.matchAll(/<img\b[^>]*data-lace-part="lightbox-media"[^>]*>/gu)];
+  if (originals.length !== 1) throw new Error("media: lightbox original missing");
+  for (const [tag] of originals) {
+    const url = attribute(tag, "src") ?? "";
+    if (!url.startsWith(`${base}api/v1/public/media/`))
+      throw new Error("media: URL is not browser-facing");
     const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
     if (!response.ok || !Buffer.from(await response.arrayBuffer()).equals(bytes))
       throw new Error("media: browser URL did not return uploaded image");
@@ -1039,10 +1050,23 @@ async function starterJourney(project) {
   const siteUrl = "https://starter.example/";
   const token = `lace_build_${randomBytes(16).toString("hex")}`;
   secretValues.add(token);
+  // One opaque 1×1 PNG stands in for every fixture original.
+  const starterPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgZGIGAAAOAAeCcsnOAAAAAElFTkSuQmCC",
+    "base64",
+  );
+  const starterMedia = new Map(Object.keys(exported.media).map((id) => [id, starterPng]));
   const pages = ["site/dist/index.html", "site/dist/blog/first-post/index.html"];
   const build = async (label, body, siteEnvironment) => {
     let requests = 0;
     const server = createHttpServer((request, response) => {
+      // The build fetches media originals for image variants.
+      const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
+      if (media !== null && starterMedia.has(media[1])) {
+        response.writeHead(200, { "content-type": "image/png" });
+        response.end(starterMedia.get(media[1]));
+        return;
+      }
       requests++;
       if (
         request.url !== "/api/v1/public/build-export" ||
@@ -1090,10 +1114,12 @@ async function starterJourney(project) {
   if (!html.includes("https://public.example/lace/api/v1/public/media/post-media"))
     throw new Error("starter-build: public media origin missing");
   if (
-    !html.includes(
-      '<img alt="Lace starter illustration" data-lace-part="media" height="630" src="https://public.example/lace/api/v1/public/media/hero-media" style="object-position:30% 20%" width="1200">',
+    !/<img alt="Lace starter illustration" data-lace-part="media" decoding="async" fetchpriority="high" height="630" loading="eager" sizes="[^"]+" src="\/_astro\/[^"]+\.webp" srcset="[^"]+ 960w, [^"]+ 1200w" style="object-position:30% 20%;[^"]*" width="1200">/u.test(
+      html,
     ) ||
-    !html.includes('<img alt="A durable media URL" data-lace-part="media" height="600"')
+    !html.includes(
+      '<img alt="A durable media URL" data-lace-part="media" decoding="async" height="600"',
+    )
   )
     throw new Error("starter-build: resolved media alt text, dimensions or focal point missing");
   // The fixture home hero links to the anchored, classed call to action.
@@ -1139,7 +1165,7 @@ async function starterJourney(project) {
     !post.includes(
       '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery">',
     ) ||
-    post.split('<li data-lace-part="item"><figure>').length !== 3 ||
+    post.split('<li data-lace-part="item"><figure>').length !== 4 ||
     !post.includes('<img alt="Media library description" data-lace-part="media"') ||
     !post.includes('<img alt="A quiet desk" data-lace-part="media"')
   )

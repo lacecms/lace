@@ -483,6 +483,9 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("dialog", { name: "Choose media for Media" })
       .getByRole("button", { name: "cloudflare.png", exact: true })
       .click();
+    // The image block's lightbox setting lives in the card's Settings tab.
+    await tab.getByRole("tab", { name: "Settings" }).click();
+    await tab.getByRole("switch", { name: "Open full screen" }).click();
     await tab.getByRole("button", { name: "Save draft" }).click();
     await visible(tab.getByText(/Saved revision 2/u), "cloudflare-browser-save");
     await tab.getByRole("button", { name: "Publish", exact: true }).click();
@@ -600,7 +603,13 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const page1 = await build("cloudflare-astro-build");
     if (!page1.includes("Cloudflare published title") || !page1.includes('data-lace-block="image"'))
       throw new Error("cloudflare-astro-build: published entry missing from the generated site");
-    const images = [...page1.matchAll(/<img\b[^>]*src="([^"]+)"/gu)].map(([, url]) => url);
+    // The build fetched the original from the Worker for WebP variants; the
+    // lightbox original stays on the Worker origin.
+    if (!/<img\b[^>]*data-lace-part="media"[^>]*srcset="\/_astro\/[^"]+\.webp /u.test(page1))
+      throw new Error("cloudflare-astro-build: block image has no build variant");
+    const images = [
+      ...page1.matchAll(/<img\b[^>]*data-lace-part="lightbox-media"[^>]*src="([^"]+)"/gu),
+    ].map(([, url]) => url);
     if (images.length === 0) throw new Error("cloudflare-astro-build: rendered media missing");
     for (const url of images) {
       if (!url.startsWith(`${base}api/v1/public/media/`))

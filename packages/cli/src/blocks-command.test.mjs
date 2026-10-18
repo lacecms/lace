@@ -179,7 +179,7 @@ describe("installation into an independent Astro site", () => {
     ]);
     const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
     expect(Object.keys(lock.items)).toEqual(builtIns);
-    expect(lock.items.gallery.revision).toBe(1);
+    expect(lock.items.gallery.revision).toBe(2);
     expect(lock.items.navigation.revision).toBe(1);
     const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
     expect(map).toBe(await readFile(join(starterSite, "src/lace/blocks.ts"), "utf8"));

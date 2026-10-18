@@ -457,8 +457,17 @@ test("declares block settings with defaults in metadata only when present", () =
   expect(toBlockMetadata(none)).toEqual(
     toBlockMetadata(defineBlock({ fields: {}, type: "plain", version: 1 })),
   );
-  for (const builtIn of Object.values(builtInBlocks)) {
-    expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
+  const lightbox = {
+    defaultValue: false,
+    description: "Opens the original image full screen when it is selected.",
+    label: "Open full screen",
+    required: false,
+    type: "boolean",
+  };
+  for (const [type, builtIn] of Object.entries(builtInBlocks)) {
+    if (type === "gallery" || type === "image")
+      expect(toBlockMetadata(builtIn).settings).toEqual({ lightbox });
+    else expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
   }
   for (const [settings, message] of [
     [{ image: field.media({ defaultValue: "m" }) }, "settings.image must be a select"],
@@ -611,7 +620,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
   ]);
   expect(builtInBlocks.hero.fields.heading.required).toBe(true);
   expect(builtInBlocks.image.fields.media.required).toBe(true);
-  expect(builtInBlocks.image.version).toBe(2);
+  expect(builtInBlocks.image.version).toBe(3);
   expect(builtInBlocks.image.fields.alt.required).toBe(false);
   expect(builtInBlocks.richText.fields.content.type).toBe("richText");
   expect(
@@ -896,7 +905,7 @@ test("keeps a valid renamedFrom hint on every field kind and rejects it in block
   ).toThrow(/fields\.title must not declare renamedFrom/u);
 });
 
-test("image version 2 makes alt text optional and migrates version 1 data unchanged", () => {
+test("image version 3 keeps alt text optional and migrates earlier data unchanged", () => {
   expect(validateBlockData(builtInBlocks.image, { media: "media-1" }, "publish")).toEqual({
     media: "media-1",
   });
@@ -904,19 +913,37 @@ test("image version 2 makes alt text optional and migrates version 1 data unchan
     ContentValidationError,
   );
   const stored = { alt: "A lake", caption: "Morning", media: "media-1" };
-  expect(migrateBlockData(builtInBlocks.image, { data: stored, settings: {} }, 1)).toEqual({
-    data: stored,
-    settings: {},
-  });
+  for (const from of [1, 2])
+    expect(migrateBlockData(builtInBlocks.image, { data: stored, settings: {} }, from)).toEqual({
+      data: stored,
+      settings: {},
+    });
+  expect(validateBlockSettings(builtInBlocks.image, {})).toEqual({ lightbox: false });
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
-  expect(metadata).toMatchObject({ type: "image", version: 2 });
+  expect(metadata).toMatchObject({ type: "image", version: 3 });
   expect(metadata.fields.alt.required).toBe(false);
+});
+
+test("the lightbox setting of image and gallery is a validated boolean", () => {
+  for (const definition of [builtInBlocks.image, builtInBlocks.gallery]) {
+    expect(validateBlockSettings(definition, { lightbox: true })).toEqual({ lightbox: true });
+    expect(validateBlockSettings(definition, {})).toEqual({ lightbox: false });
+    expect(() => validateBlockSettings(definition, { lightbox: "yes" })).toThrow(
+      ContentValidationError,
+    );
+    expect(() => validateBlockSettings(definition, { zoom: true })).toThrow(ContentValidationError);
+  }
 });
 
 test("gallery collects image items that become publishable with one image", () => {
   const { gallery } = builtInBlocks;
-  expect(gallery.version).toBe(1);
-  expect(gallery.settings).toBeUndefined();
+  expect(gallery.version).toBe(2);
+  const stored = { images: [{ media: "media-1" }], title: "Studio" };
+  expect(migrateBlockData(gallery, { data: stored, settings: {} }, 1)).toEqual({
+    data: stored,
+    settings: {},
+  });
+  expect(validateBlockSettings(gallery, {})).toEqual({ lightbox: false });
   expect(validateBlockData(gallery, {}, "draft")).toEqual({ images: [] });
   expect(issueFrom(() => validateBlockData(gallery, {}, "publish"))).toMatchObject({
     code: "list_too_short",

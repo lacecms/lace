@@ -34,7 +34,7 @@ export async function astroJourney(f, seed) {
       .filter((file) => file.isFile())
       .map((file) => join(file.parentPath, file.name));
     const htmlFiles = files.filter((file) => file.endsWith(".html")).sort();
-    const manifest = { routes: [], media: [], blocks: {} };
+    const manifest = { routes: [], media: [], variants: [], blocks: {} };
     for (const file of files) {
       const text = await readFile(file, "utf8");
       assert.ok(!text.includes(seed.token), "static output contains build credential");
@@ -81,6 +81,14 @@ export async function astroJourney(f, seed) {
         alts.push(/\salt="([^"]*)"/u.exec(tag)?.[1] ?? (/\salt[\s>]/u.test(tag) ? "" : null));
         assert.match(tag, /\sheight="1"/u, `${path} image height`);
         assert.match(tag, /\swidth="1"/u, `${path} image width`);
+        // The build fetched the 1×1 cover from the API and emitted one WebP variant.
+        const srcset = /\ssrcset="([^"]*)"/u.exec(tag)?.[1];
+        assert.match(srcset ?? "", /^\/_astro\/[^\s"]+\.webp 1w$/u, `${path} image variants`);
+        assert.ok(
+          files.includes(join(directory, srcset.split(" ")[0])),
+          `${path} variant file in output`,
+        );
+        manifest.variants.push("<cover>");
       }
       assert.deepEqual(
         alts,
@@ -89,7 +97,9 @@ export async function astroJourney(f, seed) {
       );
     }
     assert.deepEqual(manifest.routes.sort(), expected.routes);
-    assert.deepEqual(manifest.media, ["<cover>", "<cover>", "<cover>"]);
+    // Block images use variants; no public media URL is needed without a lightbox.
+    assert.deepEqual(manifest.media, []);
+    assert.deepEqual(manifest.variants, ["<cover>", "<cover>", "<cover>"]);
     return manifest;
   } finally {
     await rm(directory, { recursive: true, force: true });

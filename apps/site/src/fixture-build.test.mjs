@@ -1,12 +1,15 @@
 import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
 const exec = promisify(execFile);
+// Astro's own sharp generates the originals the local media origin serves.
+const sharp = createRequire(createRequire(import.meta.url).resolve("astro/package.json"))("sharp");
 const siteRoot = fileURLToPath(new URL("..", import.meta.url));
 const fixture = JSON.parse(
   readFileSync(new URL("./fixtures/published-export.json", import.meta.url), "utf8"),
@@ -16,6 +19,51 @@ const fixture = JSON.parse(
 function entryScope(html) {
   return html.slice(html.indexOf("<main"), html.indexOf("</main>"));
 }
+
+// Originals for the fixture media: opaque PNG and JPEG, a transparent PNG and an animated GIF.
+async function fixtureMedia() {
+  const solid = (width, height, background, channels = 3) =>
+    sharp({ create: { background, channels, height, width } });
+  const frame = (background) => solid(600, 400, background).png().toBuffer();
+  return new Map([
+    ["hero-media", { body: await solid(1200, 630, "#c84").png().toBuffer(), type: "image/png" }],
+    [
+      "note-media",
+      {
+        body: await solid(640, 480, { alpha: 0.4, b: 80, g: 120, r: 40 }, 4).png().toBuffer(),
+        type: "image/png",
+      },
+    ],
+    ["post-media", { body: await solid(800, 600, "#3a6").jpeg().toBuffer(), type: "image/jpeg" }],
+    [
+      "sketch-media",
+      {
+        body: await sharp([await frame("#e33"), await frame("#33e")], { join: { animated: true } })
+          .gif()
+          .toBuffer(),
+        type: "image/gif",
+      },
+    ],
+  ]);
+}
+
+// Serves the fixture originals at the public media path; returns false for other URLs.
+function serveMedia(originals, requests, request, response) {
+  const match = /^\/lace\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
+  const original = match === null ? undefined : originals.get(match[1]);
+  if (original === undefined) return false;
+  requests.push(match[1]);
+  response.writeHead(200, {
+    "cache-control": "public, max-age=86400",
+    "content-type": original.type,
+    etag: `"m-${match[1]}"`,
+  });
+  response.end(original.body);
+  return true;
+}
+
+// The parts of one image whose block has the lightbox on, in document order.
+const lightboxParts = ["lightbox-trigger", "media", "lightbox", "lightbox-close", "lightbox-media"];
 
 function outputFiles(directory = join(siteRoot, "dist")) {
   return readdirSync(directory, { recursive: true, withFileTypes: true })
@@ -28,7 +76,8 @@ test("the fixture build emits published static routes without CMS access", () =>
     cwd: siteRoot,
     env: {
       ...process.env,
-      LACE_API_BASE_URL: "https://unreachable.example/lace",
+      // Without an API base URL the fixture build needs no media origin.
+      LACE_API_BASE_URL: "",
       LACE_BUILD_SITE_URL: "https://site.example",
       LACE_SITE_DATA_MODE: "fixture",
       LACE_SITE_INDEXING: "",
@@ -109,21 +158,23 @@ test("the fixture build emits published static routes without CMS access", () =>
     ],
     [
       post,
-      // Rich text, image, quote, gallery with two items.
+      // Rich text, image with a lightbox, quote, gallery of three items with lightboxes.
       [
         "content",
-        "media",
+        ...lightboxParts,
         "caption",
         "text",
         "attribution",
         "title",
         "items",
         "item",
-        "media",
+        ...lightboxParts,
         "caption",
         "item",
-        "media",
+        ...lightboxParts,
         "caption",
+        "item",
+        ...lightboxParts,
       ],
     ],
     [about, ["heading"]],
@@ -167,11 +218,27 @@ test("the fixture build emits published static routes without CMS access", () =>
     '<nav aria-label="On this page" class="navigation" data-lace-block="navigation" data-lace-block-key="home-navigation"><ul data-lace-part="list"><li data-lace-part="item"><a data-lace-part="link" href="#get-started">Get started</a></li></ul></nav>',
   );
 
-  // Gallery items use their own alt text and caption, then the media's.
+  // Gallery items use their own alt text and caption, then the media's, and
+  // each opens its original in its own dialog.
+  const media = (id) => `https://cms.example.test/lace/api/v1/public/media/${id}`;
+  const galleryItem = (index, alt, id, width, height, caption) => {
+    const dialog = `lace-lightbox-first-post-entry-post-gallery-${index}`;
+    return (
+      `<li data-lace-part="item"><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
+      `<img alt="${alt}" data-lace-part="media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></button>` +
+      `<dialog aria-label="${alt}" closedby="any" data-lace-part="lightbox" id="${dialog}"><button command="close" commandfor="${dialog}" data-lace-part="lightbox-close" type="button">Close</button>` +
+      `<img alt="${alt}" data-lace-part="lightbox-media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></dialog>` +
+      (caption === undefined
+        ? ""
+        : `<figcaption data-lace-part="caption">${caption}</figcaption>`) +
+      "</figure></li>"
+    );
+  };
   expect(post).toContain(
     '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery"><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" role="list">' +
-      '<li data-lace-part="item"><figure><img alt="Media library description" data-lace-part="media" height="600" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800"><figcaption data-lace-part="caption">Media library caption</figcaption></figure></li>' +
-      '<li data-lace-part="item"><figure><img alt="A quiet desk" data-lace-part="media" height="480" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/note-media" width="640"><figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
+      galleryItem(0, "Media library description", "post-media", 800, 600, "Media library caption") +
+      galleryItem(1, "A quiet desk", "note-media", 640, 480, "The note desk") +
+      galleryItem(2, "A looping sketch", "sketch-media", 600, 400) +
       "</ul></section>",
   );
 
@@ -205,13 +272,15 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(home).toContain("[data-lace-block=hero]");
   expect(home).toContain("padding-block:2rem");
   expect(about).toContain("[data-lace-block=hero]");
-  // Without LACE_PUBLIC_BASE_URL the site keeps the media URLs of the export.
+  // Without LACE_PUBLIC_BASE_URL the site keeps the media URLs of the export;
+  // without a media origin there are no variants. The hero loads eagerly.
   expect(home).toContain(
-    '<img alt="Lace starter illustration" data-lace-part="media" height="630" src="https://cms.example.test/lace/api/v1/public/media/hero-media" style="object-position:30% 20%" width="1200">',
+    '<img alt="Lace starter illustration" data-lace-part="media" decoding="async" fetchpriority="high" height="630" loading="eager" src="https://cms.example.test/lace/api/v1/public/media/hero-media" style="object-position:30% 20%" width="1200">',
   );
   expect(post).toContain(
-    '<img alt="A durable media URL" data-lace-part="media" height="600" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800">',
+    '<button aria-haspopup="dialog" aria-label="Open full-size image: A durable media URL" command="show-modal" commandfor="lace-lightbox-first-post-entry-post-image" data-lace-part="lightbox-trigger" type="button"><img alt="A durable media URL" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800"></button>',
   );
+  for (const html of [home, post, about, note]) expect(html).not.toContain("srcset");
   expect(post).toContain('<figcaption data-lace-part="caption">Media is served by Lace.');
   // The stored SEO title replaces the entry title in the head.
   expect(post).not.toContain("First published post");
@@ -232,8 +301,10 @@ test("the fixture build emits published static routes without CMS access", () =>
   // Without block or media alt text the image keeps an empty alt attribute, which
   // the minified output writes as a bare `alt`.
   expect(note).toMatch(
-    /<img alt(?:="")? data-lace-part="media" height="480" src="[^"]*\/note-media" width="640">/u,
+    /<img alt(?:="")? data-lace-part="media" decoding="async" height="480" loading="lazy" src="[^"]*\/note-media" width="640">/u,
   );
+  // The default lightbox setting renders no dialog.
+  expect(entryScope(note)).not.toContain("<dialog");
   // Every route renders the site header from the published settings global.
   for (const html of [home, post, about, note]) {
     expect(html).toMatch(
@@ -285,7 +356,7 @@ test("a fixture build without a site URL and with indexing off writes no sitemap
     encoding: "utf8",
     env: {
       ...process.env,
-      LACE_API_BASE_URL: "https://unreachable.example/lace",
+      LACE_API_BASE_URL: "",
       LACE_BUILD_SITE_URL: "",
       LACE_SITE_DATA_MODE: "fixture",
       LACE_SITE_INDEXING: "off",
@@ -317,11 +388,102 @@ test("a fixture build without a site URL and with indexing off writes no sitemap
   }
 }, 30_000);
 
+test("a fixture build against a served media origin renders WebP variants, placeholders and lightboxes", async () => {
+  const originals = await fixtureMedia();
+  const requests = [];
+  const server = createServer((request, response) => {
+    if (!serveMedia(originals, requests, request, response)) response.writeHead(404).end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}/lace`;
+  try {
+    await exec("pnpm", ["run", "build"], {
+      cwd: siteRoot,
+      env: {
+        ...process.env,
+        // A new port is a new media origin, so cached placeholders do not apply.
+        LACE_API_BASE_URL: origin,
+        LACE_BUILD_SITE_URL: "https://site.example",
+        LACE_SITE_DATA_MODE: "fixture",
+      },
+    });
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+  const read = (path) => readFileSync(join(siteRoot, "dist", path), "utf8");
+  const home = read("index.html");
+  const post = read("blog/first-post/index.html");
+  const note = read("notes/first-note/index.html");
+  const images = (html) =>
+    [...entryScope(html).matchAll(/<img\b[^>]*data-lace-part="media"[^>]*>/gu)].map(
+      (match) => match[0],
+    );
+  const attribute = (tag, name) => new RegExp(`\\s${name}="([^"]*)"`, "u").exec(tag)?.[1];
+  const variants = (tag) =>
+    attribute(tag, "srcset")
+      .split(", ")
+      .map((candidate) => candidate.split(" "));
+
+  // Hero 1200 px: 960 and 1200; post 800 px: one variant; note 640 px; GIF 600 px.
+  const [hero] = images(home);
+  expect(variants(hero).map(([, width]) => width)).toEqual(["960w", "1200w"]);
+  expect(attribute(hero, "src")).toBe(variants(hero)[0][0]);
+  expect(attribute(hero, "sizes")).toBe("(min-width: 64rem) 60rem, 100vw");
+  expect(hero).toContain('loading="eager"');
+  const [postImage, ...galleryImages] = images(post);
+  expect(variants(postImage).map(([, width]) => width)).toEqual(["800w"]);
+  expect(galleryImages.map((tag) => variants(tag).map(([, width]) => width))).toEqual([
+    ["800w"],
+    ["640w"],
+    ["600w"],
+  ]);
+  expect(attribute(galleryImages[0], "sizes")).toBe(
+    "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw",
+  );
+  for (const tag of [hero, postImage, ...galleryImages, ...images(note)]) {
+    for (const [url] of variants(tag)) {
+      expect(url).toMatch(/^\/_astro\/.+\.webp$/u);
+      expect(
+        readFileSync(join(siteRoot, "dist", url))
+          .subarray(8, 12)
+          .toString(),
+      ).toBe("WEBP");
+    }
+    expect(tag).toContain('decoding="async"');
+  }
+  // The GIF becomes an animated WebP.
+  const [sketch] = variants(galleryImages[2])[0];
+  expect(readFileSync(join(siteRoot, "dist", sketch)).includes("ANIM")).toBe(true);
+
+  // Opaque sources carry a blurred inline placeholder; transparent and animated ones do not.
+  for (const tag of [hero, postImage, galleryImages[0]]) {
+    expect(attribute(tag, "style")).toContain("background-image:url(&quot;data:image/svg+xml,");
+    expect(attribute(tag, "style")).toContain("background-size:cover");
+  }
+  expect(attribute(hero, "style")).toContain("background-position:30% 20%");
+  for (const tag of [galleryImages[1], galleryImages[2], ...images(note)])
+    expect(tag).not.toContain("background-image");
+
+  // Lightboxes show the public original URL; the note's default setting has none.
+  expect(post).toContain(
+    '<img alt="A durable media URL" data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://cms.example.test/lace/api/v1/public/media/post-media" width="800">',
+  );
+  expect(post.match(/<dialog\b/gu)).toHaveLength(4);
+  expect(entryScope(note)).not.toContain("<dialog");
+  // Every original was fetched from the build source, never from the public URL.
+  expect(new Set(requests)).toEqual(
+    new Set(["hero-media", "note-media", "post-media", "sketch-media"]),
+  );
+}, 60_000);
+
 test("a live build reads one export, keeps the token out of output and rejects unrenderable blocks", async () => {
   const token = "lace_build_reference-site-sentinel";
+  const originals = await fixtureMedia();
   let served = structuredClone(fixture);
   let calls = 0;
   const server = createServer((request, response) => {
+    if (serveMedia(originals, [], request, response)) return;
     calls++;
     if (
       request.url !== "/lace/api/v1/public/build-export" ||
@@ -349,7 +511,15 @@ test("a live build reads one export, keeps the token out of output and rejects u
     await build();
     expect(calls).toBe(1);
     const home = readFileSync(join(siteRoot, "dist/index.html"), "utf8");
-    expect(home).toContain('src="https://public.example/lace/api/v1/public/media/hero-media"');
+    // Live builds fetch originals from the API for variants; public URLs stay
+    // in metadata and lightboxes.
+    expect(home).toContain(
+      '<meta content="https://public.example/lace/api/v1/public/media/hero-media" property="og:image">',
+    );
+    expect(home).toMatch(/srcset="\/_astro\/[^"]+\.webp 960w, \/_astro\/[^"]+\.webp 1200w"/u);
+    expect(readFileSync(join(siteRoot, "dist/blog/first-post/index.html"), "utf8")).toContain(
+      'data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://public.example/lace/api/v1/public/media/post-media"',
+    );
     for (const file of outputFiles()) expect(readFileSync(file, "utf8")).not.toContain(token);
     expect(home).toContain(">Lace Journal</a>");
 

@@ -140,7 +140,7 @@ test("reports allowlist reorder as display and changed block definitions as migr
   const changedImage = {
     ...baseline.structure,
     blockDefinitions: baseline.structure.blockDefinitions.map((definition) =>
-      definition.type === "image" ? { ...definition, version: 3 } : definition,
+      definition.type === "image" ? { ...definition, version: 4 } : definition,
     ),
   };
   expect(diffContentModelStructures(baseline.structure, changedImage)).toEqual([
@@ -149,7 +149,7 @@ test("reports allowlist reorder as display and changed block definitions as migr
       kind: "block-definition-changed",
       scope: "block",
       target: "image",
-      version: { from: 2, to: 3 },
+      version: { from: 3, to: 4 },
     },
   ]);
 });

@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,10 +32,30 @@ async function fixture() {
   );
 }
 
-/** Serves the build export like the Lace API, honoring entity tags. */
+// The site's sharp generates originals for every fixture media item, which the
+// build fetches from the public media path for image variants.
+const sharp = createRequire(join(workspace, "apps/site/package.json"))("sharp");
+const originals = new Map(
+  await Promise.all(
+    Object.values((await fixture()).media).map(async ({ height, id, width }) => [
+      id,
+      await sharp({ create: { background: "#5a7", channels: 3, height, width } })
+        .png()
+        .toBuffer(),
+    ]),
+  ),
+);
+
+/** Serves the build export and media originals like the Lace API, honoring entity tags. */
 async function exportServer(token, current) {
   const requests = [];
   const server = createServer((request, response) => {
+    const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
+    if (media !== null && originals.has(media[1])) {
+      response.writeHead(200, { "content-type": "image/png" });
+      response.end(originals.get(media[1]));
+      return;
+    }
     requests.push(request.headers["if-none-match"] ?? null);
     if (
       request.url !== "/api/v1/public/build-export" ||
@@ -138,6 +159,10 @@ test("generated Astro builds every built-in block from one export and rejects un
     expect(post).toContain('data-lace-part="caption"');
     expect(post).toContain("Content belongs in the CMS");
     expect(post).toContain("https://public.example/lace/api/v1/public/media/post-media");
+    // Block images are WebP variants built from the API's media originals.
+    expect(post).toMatch(
+      /<img [^>]*data-lace-part="media"[^>]*srcset="\/_astro\/[^"]+\.webp 800w"/u,
+    );
     const output = await outputText(join(generated.path, "site/dist"));
     expect(output).not.toContain(token);
     expect(output).not.toContain("DRAFT ONLY");

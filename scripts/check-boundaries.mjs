@@ -383,7 +383,13 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
         const target = packageOf(specifier);
         const framework = adapterFrameworks.get(member.name);
         if (framework !== undefined) {
-          if (isNodeBuiltin(specifier) || (target !== framework && !memberNames.has(target))) {
+          // Adapters run only at site build time: `node:` builtins and the
+          // framework's virtual modules (such as `astro:assets`) are allowed.
+          const allowed =
+            specifier.startsWith("node:") ||
+            specifier.startsWith(`${framework}:`) ||
+            (!isNodeBuiltin(specifier) && (target === framework || memberNames.has(target)));
+          if (!allowed) {
             throw new Error(
               `framework adapter ${member.name} may not import ${specifier} (in ${filePath})`,
             );

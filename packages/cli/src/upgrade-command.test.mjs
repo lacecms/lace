@@ -395,6 +395,35 @@ describe("upgrade CLI", () => {
     },
     integrationTimeout,
   );
+  it(
+    "upgrades a 0.31 project to the 0.32 image guidance without touching user-owned files",
+    async () => {
+      const { root, project, template } = await fixture();
+      const manifestPath = join(project, ".lace/manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.templateVersion = "0.31.0";
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      await rm(join(project, ".lace/upgrade-instructions.json"));
+      await writeFile(join(project, "README.md"), "user README\n");
+      const configuration = await readFile(join(project, "lace.config.ts"), "utf8");
+      const lock = await readFile(join(project, "site/lace.site.json"), "utf8");
+      const before = await snapshot(join(project, "site"));
+
+      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      const outcome = JSON.parse(result.stdout);
+      expect(outcome.guidance).toContain("Template 0.32.0: responsive images");
+      expect(outcome.guidance).toContain("lace add block image gallery hero");
+      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
+      expect(await readFile(join(project, "lace.config.ts"), "utf8")).toBe(configuration);
+      expect(await readFile(join(project, "site/lace.site.json"), "utf8")).toBe(lock);
+      expect(await snapshot(join(project, "site"))).toEqual(before);
+      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
+        TEMPLATE_VERSION,
+      );
+    },
+    integrationTimeout,
+  );
   it.each([
     ["existing project, starter template", ["--existing-site", ".."], [], "--existing-site .."],
     ["starter project, no-site template", [], ["--no-site"], "--starter"],

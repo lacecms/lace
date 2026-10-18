@@ -263,7 +263,7 @@ test("media metadata edits of published media change the export ETag and diction
             data: { media: "office-media" },
             key: "01J00000000000000000000001",
             position: 1024,
-            schemaVersion: 2,
+            schemaVersion: 3,
             type: "image",
           },
         ],

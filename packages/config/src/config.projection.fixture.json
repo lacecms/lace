@@ -29,8 +29,17 @@
         "media": { "required": true, "type": "media" }
       },
       "label": "Image",
+      "settings": {
+        "lightbox": {
+          "defaultValue": false,
+          "description": "Opens the original image full screen when it is selected.",
+          "label": "Open full screen",
+          "required": false,
+          "type": "boolean"
+        }
+      },
       "type": "image",
-      "version": 2
+      "version": 3
     },
     {
       "description": "A quotation with optional attribution.",
@@ -63,9 +72,9 @@
       "kind": "page",
       "label": "Home",
       "path": "/",
-      "projectionHash": "88fb965b4c38ee41de9b7cf41111223dc387289f2e65ac9b1e589346822a5fa2",
-      "structureHash": "d443afeea47536380deed70752576b7e48a7ee01d5667c0d537402fe25098bb7",
-      "version": 2
+      "projectionHash": "1a496c7b07cf2b5d8e0828f6da2e53549bb040eb3ce23d72037c0edddefbb620",
+      "structureHash": "7e9b7ee06bb0470ed52f2dc531768385e98d21712e93a58b8368fb5be157d0b6",
+      "version": 3
     },
     {
       "blocks": ["hero", "richText", "image", "quote", "cta"],
@@ -81,12 +90,12 @@
       "key": "posts",
       "kind": "collection",
       "label": "Posts",
-      "projectionHash": "59be7b2928a26eaa2a5969f9f8209dc970b217622c3ffe8a825c92429e6b6671",
+      "projectionHash": "1e35e5765fbe8df8cfa20c62e5a7c1f7f45b58c57fc61fe7a96b592cf2f71acc",
       "route": "/blog/:slug",
-      "structureHash": "32c5d12bbcc329ed2a260a12106e98180659c4776c8ad541c89b3fbb576cf3a4",
-      "version": 2
+      "structureHash": "a7455b855ede5547293c2a854f6fb57c6335a3e938d872384f76128ae940482e",
+      "version": 3
     }
   ],
-  "projectionHash": "1373c9c10d163f7d0429e90eca990e79ae8a59033b54e4427cb77e4a60b8aa3b",
-  "structureHash": "f37384be51c5cbacf11576b67a53efaefe1305e2107de8fe9adced238a5efc91"
+  "projectionHash": "d3fa5bf5cbc9bb856ec73e88cbef2c08ee1ea97ed0a2ff9b702ab8975fe7c5aa",
+  "structureHash": "c32ccb3862ab37ae5577ac6c6aa7eb7bc236c3b21e7487513c01956e53360796"
 }

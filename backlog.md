@@ -26,13 +26,8 @@ when selected and do not yet have an implementation order or new CE numbers.
 - **Image delivery (selected 2026-10-18, three changes in order; replaces
   CE11):** build-time variants through the Astro image pipeline, WebP only.
   - **A `images-a-media-format-caching`:** done (archived 2026-10-18).
-  - **B build variants:** per image a 64 px WebP inlined as a blurred
-    placeholder plus WebP at 960 and 1920 px (each capped at the original
-    width) with `srcset`/`sizes`, `loading="lazy"`, `decoding="async"`; GIF
-    copied to `dist` unchanged; the original stays in object storage and opens
-    full screen from the public media URL through a `<dialog>` lightbox,
-    enabled per `image`/`gallery` block by a setting that defaults to off (new
-    block versions). Focal-point crops and AVIF deferred.
+  - **B `images-b-build-variants-lightbox`:** done (archived 2026-10-18;
+    GIFs became animated WebP variants instead of unchanged copies).
   - **C deploy caching:** 30-day caching of content-hashed `/_astro/` assets
     in nginx and Pages `_headers`, persistent build caches on the VPS builder
     and in GitHub Actions, template version bump.

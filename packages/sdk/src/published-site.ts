@@ -40,6 +40,11 @@ export interface PublishedSiteLoaderOptions {
   readonly hints?: Readonly<Partial<Record<PublishedSiteErrorCode, string>>>;
   /** Takes precedence over `LACE_SITE_INDEXING` (`on` or `off`; default `on`). */
   readonly indexing?: "off" | "on";
+  /**
+   * Gives resolved media a `sourceUrl` under the API base URL that site builds
+   * fetch originals from for image variants (default `true`).
+   */
+  readonly optimizeImages?: boolean;
   /** Takes precedence over `LACE_PUBLIC_BASE_URL`. */
   readonly publicBaseUrl?: string;
   /**
@@ -60,7 +65,13 @@ export interface PublishedSiteLoaderOptions {
 export type PublishedBlock = PublicBlockDto;
 
 /** A media item referenced by published content, resolved from the export. */
-export type PublishedMedia = Readonly<PublicMediaDto>;
+export interface PublishedMedia extends Readonly<PublicMediaDto> {
+  /**
+   * The item's public media URL under the API base URL, which the build can
+   * always reach; absent when the loader's `optimizeImages` is `false`.
+   */
+  readonly sourceUrl?: string;
+}
 
 /** A resolved media item whose `alt` is the effective alt text of one usage. */
 export interface PublishedImage extends PublishedMedia {
@@ -138,6 +149,8 @@ interface ResolvedConfiguration {
   readonly expectedVersion?: number;
   readonly indexing: boolean;
   readonly mediaClient: LaceClient;
+  /** Builds build source URLs; absent when image optimization is off. */
+  readonly sourceClient?: LaceClient;
   /** True when the site configures its own public media origin. */
   readonly publicMediaOrigin: boolean;
   readonly siteUrl?: string;
@@ -260,6 +273,9 @@ export function createPublishedSiteLoader(
           : client(publicBaseUrl, "LACE_PUBLIC_BASE_URL"),
       publicMediaOrigin: publicBaseUrl !== undefined,
       ...(siteUrl === undefined ? {} : { siteUrl }),
+      ...(options.optimizeImages === false
+        ? {}
+        : { sourceClient: client(baseUrl, "LACE_API_BASE_URL") }),
     };
   }
 
@@ -267,7 +283,7 @@ export function createPublishedSiteLoader(
     exported: BuildExportDto,
     configuration: ResolvedConfiguration,
   ): PublishedSite {
-    const { indexing, mediaClient, publicMediaOrigin, siteUrl } = configuration;
+    const { indexing, mediaClient, publicMediaOrigin, siteUrl, sourceClient } = configuration;
     const resolved = new Map<string, PublishedMedia>();
     for (const item of Object.values(exported.media)) {
       resolved.set(
@@ -276,6 +292,9 @@ export function createPublishedSiteLoader(
           ...item,
           focalPoint: item.focalPoint === null ? null : Object.freeze({ ...item.focalPoint }),
           url: publicMediaOrigin ? mediaClient.getPublicMediaUrl(item.id) : item.url,
+          ...(sourceClient === undefined
+            ? {}
+            : { sourceUrl: sourceClient.getPublicMediaUrl(item.id) }),
         }),
       );
     }

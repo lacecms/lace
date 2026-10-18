@@ -1,2 +1,2 @@
-import { readFile } from "node:fs/promises";
+import { readFile } from "fs/promises";
 export const read = readFile;

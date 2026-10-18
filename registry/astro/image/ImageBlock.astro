@@ -1,15 +1,16 @@
 ---
+import LaceImage from "@lacecms/astro/LaceImage.astro";
 import type { builtInBlocks } from "@lacecms/content";
 import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.image>;
 
-const { anchor, block, className, data, image } = Astro.props;
+const { anchor, block, className, context, data, image, settings } = Astro.props;
 const media = image(data.media, data.alt);
 const caption = data.caption ?? media.caption;
 ---
 
 <figure class={className} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
-  <img alt={media.alt} data-lace-part="media" height={media.height} src={media.src} style={media.objectPosition === undefined ? undefined : { "object-position": media.objectPosition }} width={media.width} />
+  <LaceImage data-lace-part="media" image={media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}`} sizes="(min-width: 64rem) 60rem, 100vw" />
   {caption !== undefined && <figcaption data-lace-part="caption">{caption}</figcaption>}
 </figure>

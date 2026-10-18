@@ -321,7 +321,9 @@ Rules:
   block DTO satisfies and reuses `@lacecms/content` validation exclusively.
 - A framework adapter (`@lacecms/astro` now; `@lacecms/react`, `@lacecms/vue`,
   and `@lacecms/svelte` are reserved names) contains only code that depends on
-  its framework. It never re-exports `render`, `sdk`, or `content` APIs, so each
+  its framework; besides the framework, its virtual modules and the render
+  core and SDK, it may import only `node:` builtins (server-only build code
+  such as the image placeholder cache). It never re-exports `render`, `sdk`, or `content` APIs, so each
   symbol has one canonical import path.
 - No package exports visual block components. Block markup is user-owned source
   installed from `registry/` (see sections 7 and 13).
@@ -787,19 +789,23 @@ descriptors.
 ### Initial built-in blocks
 
 The starter and browser editor ship with seven blocks. They use only the public
-field DSL, declare no settings and do not receive special database treatment:
+field DSL and do not receive special database treatment; only `image` and
+`gallery` declare a setting:
 
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
-- `image` (version 2): required media, optional alt text that overrides the
-  media item's alt text, and optional caption. Version 1 required the alt
-  text; the version 2 migration returns the stored data unchanged;
+- `image` (version 3): required media, optional alt text that overrides the
+  media item's alt text, and optional caption, plus the boolean setting
+  `lightbox` ("Open full screen", default `false`). Version 1 required the alt
+  text and version 2 had no setting; both migrations return the stored data
+  unchanged;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL;
-- `gallery` (CE7D): optional title and an `images` list (default `[]`, at
+- `gallery` (CE7D, version 2): optional title and an `images` list (default `[]`, at
   least one item to publish, at most 50) of groups with required media,
-  optional alt text and optional caption that override the media item's;
+  optional alt text and optional caption that override the media item's, plus
+  the same `lightbox` setting with an identity migration from version 1;
 - `navigation` (CE7D): optional accessible `name` and a `links` list (default
   `[]`, at least one to publish, at most 20) of groups with a required label,
   an optional URL and an optional `children` list (at most 20) of groups with a
@@ -1555,8 +1561,8 @@ the block content, with the field builders limited to `select`, `boolean`,
 the block metadata (only when declared, so blocks without settings keep their
 hashes) and therefore the structural hash: changing a setting needs a block
 version increase and a migration. Stored blocks keep their settings with
-defaults applied, and the admin and public block contracts carry them. Built-in
-blocks declare no settings.
+defaults applied, and the admin and public block contracts carry them. Among
+the built-ins only `image` and `gallery` declare a setting (`lightbox`).
 
 `defineBlock({ version, migrations })` keys each migration by its target
 version. The keys form one contiguous range ending at the block's version
@@ -2033,8 +2039,12 @@ framework and never reads `process.env` or `import.meta.env` itself.
   effective alt text: the non-blank usage alt (such as the `image` block's
   `alt`), then the media alt, then `""`. Resolved media URLs use
   `LACE_PUBLIC_BASE_URL` when the site configures it and the export's URLs
-  otherwise; `mediaUrl()` returns the resolved URL of a known ID. No
-  draft-shaped property exists on the view.
+  otherwise; `mediaUrl()` returns the resolved URL of a known ID. Each
+  resolved item also carries `sourceUrl`, its public media URL under
+  `LACE_API_BASE_URL` (the origin the build already reaches), from which site
+  builds fetch originals for image variants; the loader option
+  `optimizeImages: false` leaves it out. No draft-shaped property exists on
+  the view.
 - The loader trusts the CMS-resolved `path`, never re-derives route patterns or
   names model keys, and rejects duplicate paths, duplicate slugs within a
   model, duplicate global keys, and a global key shared with an entry.
@@ -2082,9 +2092,9 @@ not claim to validate fields/hidden blocks absent from its rendering input.
   has them, `context`, `mediaUrl`, and `image(mediaId, usageAlt?)`. Components
   place `anchor` as their root `id` and merge `className` into their root
   `class`; there is no wrapper element. `image()` returns an `ImageDescription`
-  (`src`, effective `alt`, and when known `width`, `height`, `caption`, and an
-  `objectPosition` of `X% Y%` from the focal point) so blocks avoid layout
-  shift and honour the focal point. An entry without resolved media falls back
+  (`src`, effective `alt`, and when known `width`, `height`, `caption`,
+  `mimeType`, the build `sourceUrl`, and an `objectPosition` of `X% Y%` from
+  the focal point) so blocks avoid layout shift and honour the focal point. An entry without resolved media falls back
   to `mediaUrl` and the usage alt; an unresolved ID on an entry with resolved
   media fails with `missing_media`.
 - `describeRichText(value, context?)` validates with `validateRichTextDocument`
@@ -2129,6 +2139,23 @@ no client scripts, and requires no Astro integration. Override components for
   return endpoint responses; without a site URL the sitemap response has no
   body, so a static build writes no `sitemap.xml`, and one build warning names
   `LACE_BUILD_SITE_URL`.
+- `@lacecms/astro/LaceImage.astro` takes an `ImageDescription`, `sizes`
+  (default `100vw`), `loading` (`lazy` or `eager`, which adds
+  `fetchpriority="high"`), `lightbox` with a `lightboxId`, and attributes for
+  the `<img>`. With a `sourceUrl` and dimensions it calls `getImage` from
+  `astro:assets` for WebP variants at `min(960, W)` and `min(1920, W)` (GIFs
+  become animated WebP), renders them as `srcset` with `decoding="async"`, and
+  inlines a blurred SVG placeholder around a 64-pixel WebP made by the
+  configured image service from the original, fetched once per build process
+  and cached in `node_modules/.astro/lace/placeholders/` by source URL (left
+  out for transparent images, GIFs and services without local transforms).
+  Without a `sourceUrl` it renders the public URL as before. The lightbox is a
+  `button` with `command="show-modal"` and `commandfor` plus a native
+  `<dialog closedby="any">` holding a close button and the original public
+  URL, loaded lazily; it uses invoker commands and no script.
+  `laceImageConfig(env)` (root entry) returns Astro `image.remotePatterns`
+  that allow only `<LACE_API_BASE_URL>/api/v1/public/media/*`. Sites declare
+  `sharp`, which Astro's image service loads from the site.
 - `@lacecms/astro/RichText.astro` takes `document`, optional `components` keyed
   by node or mark name, and optional `context`. It renders the
   `describeRichText` tree with Astro's escaping and never uses `set:html`;
@@ -2187,7 +2214,11 @@ attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
 Built-in components carry no `<style>` or `<script>`: presentation stays in the
-site stylesheet. The registry ships `gallery` and `navigation` (CE7D) besides
+site stylesheet. The `image` (revision 5), `gallery` (revision 2) and `hero`
+(revision 4) components render media through `LaceImage.astro`; `image` and
+`gallery` open the lightbox when their `lightbox` setting is on, with dialog
+identifiers `lace-lightbox-<entry id>-<block key>[-<item index>]`, and the hero
+image loads eagerly. The registry ships `gallery` and `navigation` (CE7D) besides
 the five earlier items; every Lace-maintained site installs all seven.
 
 ### 13.6 Framework selection

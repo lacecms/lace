@@ -1,4 +1,5 @@
 ---
+import LaceImage from "@lacecms/astro/LaceImage.astro";
 import RichText from "@lacecms/astro/RichText.astro";
 import type { builtInBlocks } from "@lacecms/content";
 import type { BlockProps } from "@lacecms/render";
@@ -13,6 +14,6 @@ const media = data.image === undefined ? undefined : image(data.image);
   {data.eyebrow !== undefined && <p data-lace-part="eyebrow">{data.eyebrow}</p>}
   <h1 data-lace-part="heading">{data.heading}</h1>
   {data.body !== undefined && <div data-lace-part="body"><RichText context={{ block: context, fieldPath: ["body"] }} document={data.body} /></div>}
-  {media !== undefined && <img alt={media.alt} data-lace-part="media" height={media.height} src={media.src} style={media.objectPosition === undefined ? undefined : { "object-position": media.objectPosition }} width={media.width} />}
+  {media !== undefined && <LaceImage data-lace-part="media" image={media} loading="eager" sizes="(min-width: 64rem) 60rem, 100vw" />}
   {data.primaryActionLabel !== undefined && data.primaryActionUrl !== undefined && <a data-lace-part="action" href={data.primaryActionUrl}>{data.primaryActionLabel}</a>}
 </section>

@@ -2254,6 +2254,13 @@ export function effectiveAltText(
   return "";
 }
 
+// The opt-in full-screen original of the `image` and `gallery` blocks.
+const lightboxSetting = field.boolean({
+  defaultValue: false,
+  description: "Opens the original image full screen when it is selected.",
+  label: "Open full screen",
+});
+
 /** Starter blocks implemented exclusively through the public block and field DSL. */
 export const builtInBlocks = deepFreeze({
   cta: defineBlock({
@@ -2294,8 +2301,11 @@ export const builtInBlocks = deepFreeze({
       title: field.text({ label: "Title" }),
     },
     label: "Gallery",
+    // Version 2 only added the lightbox setting, so version 1 data is already valid.
+    migrations: { 2: (block) => block },
+    settings: { lightbox: lightboxSetting },
     type: "gallery",
-    version: 1,
+    version: 2,
   }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",
@@ -2320,10 +2330,12 @@ export const builtInBlocks = deepFreeze({
       media: field.media({ required: true }),
     },
     label: "Image",
-    // Version 2 only made `alt` optional, so version 1 data is already valid.
-    migrations: { 2: (block) => block },
+    // Version 2 only made `alt` optional and version 3 only added the lightbox
+    // setting, so earlier data is already valid.
+    migrations: { 2: (block) => block, 3: (block) => block },
+    settings: { lightbox: lightboxSetting },
     type: "image",
-    version: 2,
+    version: 3,
   }),
   navigation: defineBlock({
     description: "A list of links with optional one-level submenus.",

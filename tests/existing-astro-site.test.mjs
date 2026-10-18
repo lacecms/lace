@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,8 @@ const workspace = fileURLToPath(new URL("..", import.meta.url));
 const fixtureSite = join(workspace, "tests/fixtures/existing-astro-site");
 const astro = join(workspace, "apps/site/node_modules/astro/bin/astro.mjs");
 const lace = join(workspace, "packages/cli/dist/bin.js");
+// The site's sharp, which Astro uses for image variants, generates the served originals.
+const sharp = createRequire(join(workspace, "apps/site/package.json"))("sharp");
 const blockFiles = [
   "lace.site.json",
   "src/lace/blocks.ts",
@@ -69,8 +72,24 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   exported.entries = exported.entries.slice(0, 2);
   exported.entries[1].path = "/articles/first-post";
   const token = "lace_build_existing-site-sentinel";
+  const originals = new Map(
+    await Promise.all(
+      Object.values(exported.media).map(async ({ height, id, width }) => [
+        id,
+        await sharp({ create: { background: "#5a7", channels: 3, height, width } })
+          .png()
+          .toBuffer(),
+      ]),
+    ),
+  );
   let requests = 0;
   const server = createServer((request, response) => {
+    const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
+    if (media !== null && originals.has(media[1])) {
+      response.writeHead(200, { "content-type": "image/png" });
+      response.end(originals.get(media[1]));
+      return;
+    }
     requests++;
     if (request.headers.authorization !== `Bearer ${token}`) {
       response.writeHead(403).end();
@@ -103,7 +122,11 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   expect(blocks(article)).toEqual(["richText", "image", "quote", "gallery"]);
   expect(home).toContain('<main data-lace-model="home" data-lace-entry="home-entry">');
   expect(home).toContain('<a href="/articles/first-post/">First published post</a>');
-  expect(home).toContain("https://cms.example/lace/api/v1/public/media/hero-media");
+  // Block images are WebP variants built from the API; lightboxes keep the public URL.
+  expect(home).toMatch(/<img [^>]*data-lace-part="media"[^>]*srcset="\/_astro\/[^"]+\.webp 960w/u);
+  expect(article).toContain(
+    'data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://cms.example/lace/api/v1/public/media/post-media"',
+  );
   expect(article).toContain('<article data-lace-model="posts" data-lace-entry="first-post-entry">');
   expect(article).toContain("<h2>A safe rich-text heading</h2>");
   expect(article).toContain('<a href="https://lace.example"><em>Published only</em></a>');

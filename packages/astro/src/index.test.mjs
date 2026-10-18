@@ -66,6 +66,22 @@ function pagedExportServer(version = 7) {
   };
 }
 
+test("the Astro loader forwards optimizeImages to the published-site loader", async () => {
+  const optimized = await createAstroSiteLoader({ env, fetch: pagedExportServer().fetch })();
+  expect(optimized.media("hero-media").sourceUrl).toBe(
+    "http://api:3000/api/v1/public/media/hero-media",
+  );
+  expect(optimized.media("hero-media").url).toBe(
+    "https://media.example/lace/api/v1/public/media/hero-media",
+  );
+  const original = await createAstroSiteLoader({
+    env,
+    fetch: pagedExportServer().fetch,
+    optimizeImages: false,
+  })();
+  expect(original.media("hero-media")).not.toHaveProperty("sourceUrl");
+});
+
 test("a static build follows every export page once", async () => {
   const server = pagedExportServer();
   const getSite = createAstroSiteLoader({ env, fetch: server.fetch });
@@ -162,6 +178,7 @@ test("the adapter exports only its server module and the generic components", as
   expect(Object.keys(manifest.exports)).toEqual([
     ".",
     "./LaceBlocks.astro",
+    "./LaceImage.astro",
     "./LaceSeo.astro",
     "./RichText.astro",
   ]);
@@ -173,6 +190,7 @@ test("the adapter exports only its server module and the generic components", as
   );
   expect(components.sort()).toEqual([
     "LaceBlocks.astro",
+    "LaceImage.astro",
     "LaceSeo.astro",
     "RichText.astro",
     "RichTextNodes.astro",
