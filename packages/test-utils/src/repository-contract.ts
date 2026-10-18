@@ -2434,7 +2434,7 @@ contract(
       expect(await ids({ q })).toEqual(expected);
     }
     await expect(
-      repository.listMedia({ ...base, type: "image/gif" as never }),
+      repository.listMedia({ ...base, type: "image/svg+xml" as never }),
     ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
 
     const pageThrough = async (sort: string) => {

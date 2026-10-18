@@ -37,6 +37,7 @@ export const mediaTypeOptions: readonly {
   { label: "All", value: undefined },
   { label: "JPEG", value: "image/jpeg" },
   { label: "PNG", value: "image/png" },
+  { label: "GIF", value: "image/gif" },
   { label: "WebP", value: "image/webp" },
   { label: "AVIF", value: "image/avif" },
 ];

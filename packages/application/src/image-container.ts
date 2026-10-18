@@ -261,6 +261,57 @@ function parseWebp(bytes: Bytes): ParsedImage {
   return { height, orientation, width };
 }
 
+/** Skips GIF data sub-blocks up to and including the zero-length terminator. */
+function skipGifSubBlocks(bytes: Bytes, start: number): number {
+  let offset = start;
+  for (;;) {
+    const size = bytes.u8(offset);
+    offset += 1;
+    if (size === 0) return offset;
+    bytes.slice(offset, size);
+    offset += size;
+  }
+}
+
+function gifColorTableBytes(packed: number): number {
+  return (packed & 0x80) === 0 ? 0 : 3 * 2 ** ((packed & 0x07) + 1);
+}
+
+function parseGif(bytes: Bytes): ParsedImage {
+  const version = bytes.ascii(0, 6);
+  need(version === "GIF87a" || version === "GIF89a");
+  const width = bytes.u16(6, true);
+  const height = bytes.u16(8, true);
+  let offset = 13 + gifColorTableBytes(bytes.u8(10));
+  let sawImage = false;
+  for (;;) {
+    const introducer = bytes.u8(offset);
+    if (introducer === 0x3b) {
+      need(offset + 1 === bytes.length);
+      break;
+    }
+    if (introducer === 0x21) {
+      bytes.u8(offset + 1);
+      offset = skipGifSubBlocks(bytes, offset + 2);
+      continue;
+    }
+    need(introducer === 0x2c);
+    const left = bytes.u16(offset + 1, true);
+    const top = bytes.u16(offset + 3, true);
+    const frameWidth = bytes.u16(offset + 5, true);
+    const frameHeight = bytes.u16(offset + 7, true);
+    need(frameWidth >= 1 && frameHeight >= 1);
+    need(left + frameWidth <= width && top + frameHeight <= height);
+    offset += 10 + gifColorTableBytes(bytes.u8(offset + 9));
+    const codeSize = bytes.u8(offset);
+    need(codeSize >= 2 && codeSize <= 8);
+    offset = skipGifSubBlocks(bytes, offset + 1);
+    sawImage = true;
+  }
+  need(sawImage);
+  return { height, orientation: 1, width };
+}
+
 interface Box {
   readonly data: Bytes;
   readonly type: string;
@@ -361,9 +412,11 @@ export class CompleteImageContainerInspector implements ImageInspector {
           ? parsePng(bytes)
           : mimeType === "image/jpeg"
             ? parseJpeg(bytes)
-            : mimeType === "image/webp"
-              ? parseWebp(bytes)
-              : parseAvif(bytes);
+            : mimeType === "image/gif"
+              ? parseGif(bytes)
+              : mimeType === "image/webp"
+                ? parseWebp(bytes)
+                : parseAvif(bytes);
       need(
         Number.isSafeInteger(parsed.width) &&
           Number.isSafeInteger(parsed.height) &&

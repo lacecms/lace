@@ -411,7 +411,7 @@ and `after` query parameters. `q` SHALL be trimmed; an empty result SHALL mean
 no search, and a term longer than 200 characters SHALL be rejected. A search
 SHALL match media whose display filename contains the term, case-insensitively
 for ASCII letters, as a literal substring. `type` SHALL be one of `image/avif`,
-`image/jpeg`, `image/png`, or `image/webp` and SHALL restrict items to that
+`image/gif`, `image/jpeg`, `image/png`, or `image/webp` and SHALL restrict items to that
 MIME type. `sort` SHALL be one of `createdAt`, `-createdAt`, `filename`,
 `-filename`, `size`, or `-size`. A leading `-` means descending, and the
 default SHALL be `-createdAt`. Filename ordering SHALL be case-insensitive for
@@ -444,6 +444,10 @@ describe these parameters.
   `sort=-createdAt`, a different `type`, or a different `q`
 - **THEN** the API rejects the request with a validation failure instead of
   returning an inconsistent page
+
+#### Scenario: Filter the library to GIF
+- **WHEN** an editor requests `type=image/gif`
+- **THEN** the response contains only GIF items
 
 ### Requirement: Admin media details expose usage
 The admin API SHALL provide `GET /api/v1/admin/media/:mediaId` for callers with

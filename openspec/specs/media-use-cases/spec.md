@@ -9,7 +9,7 @@ lifecycle behavior while keeping binary objects outside the content database.
 
 ### Requirement: Image upload accepts only verified bounded raster formats
 The system SHALL accept uploads no larger than 10 MiB only when their binary
-content is exactly one well-formed JPEG, PNG, WebP, or AVIF image. It SHALL
+content is exactly one well-formed JPEG, PNG, GIF, WebP, or AVIF image. It SHALL
 derive the MIME type from the validated binary format rather than a filename or
 caller-supplied header; reject SVG, empty or truncated inputs, malformed image
 containers, polyglot/trailing executable content, and every other MIME type.
@@ -19,11 +19,13 @@ SHALL reject an image wider or taller than 12,000 pixels or containing more
 than 100,000,000 total pixels. Every accepted upload SHALL record a positive
 integer width and height, measured after the image's embedded orientation is
 applied, so the recorded dimensions are the dimensions at which the image is
-displayed.
+displayed. A GIF's recorded dimensions SHALL be its logical screen width and
+height; an animated GIF SHALL be accepted as one image without decoding its
+frames.
 
 #### Scenario: A valid verified image is accepted
 - **WHEN** an authenticated writer uploads a complete 10 MiB-or-smaller JPEG,
-  PNG, WebP, or AVIF whose decoded dimensions are within the configured limits
+  PNG, GIF, WebP, or AVIF whose decoded dimensions are within the configured limits
 - **THEN** the upload is accepted with the binary-derived MIME type, sanitized
   display filename, opaque storage key, and recorded image dimensions
 
@@ -41,6 +43,18 @@ displayed.
 - **WHEN** an otherwise valid image exceeds the byte limit, either per-side
   dimension limit, or total pixel limit
 - **THEN** the upload is rejected without storing an object or metadata row
+
+#### Scenario: An animated GIF is accepted
+- **WHEN** a writer uploads a complete 3 MiB animated GIF89a whose logical
+  screen is 640 by 360 pixels
+- **THEN** the created media has MIME type `image/gif`, width 640 and height
+  360
+
+#### Scenario: A GIF without its trailer is rejected
+- **WHEN** a writer uploads GIF bytes whose final trailer byte is missing, or
+  whose frame lies outside the logical screen
+- **THEN** the upload is rejected with the stable invalid-media error and no
+  object or metadata row exists
 
 ### Requirement: Object and metadata creation preserve a recoverable boundary
 The system SHALL write a verified binary object before creating its media

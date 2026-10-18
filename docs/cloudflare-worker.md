@@ -88,8 +88,8 @@ asset.
 R2 objects are written by the native binding, without an S3 client. Each write
 is capped at the 10 MiB media limit, and every call has a bounded timeout. Any
 binding error surfaces as one sanitized storage failure. Uploaded images are
-verified by a runtime-neutral structural inspector for JPEG, PNG, WebP, and
-AVIF. The inspector rejects malformed or trailing data and reports displayed
+verified by a runtime-neutral structural inspector for JPEG, PNG, GIF, WebP,
+and AVIF. The inspector rejects malformed or trailing data and reports displayed
 (orientation-applied) dimensions, matching the Node sharp inspector.
 
 ## Outbox recovery

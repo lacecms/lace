@@ -5,6 +5,7 @@ export const maxMediaBytes = 10 * 1024 * 1024;
 export const mediaTypes: ReadonlySet<string> = new Set([
   "image/jpeg",
   "image/png",
+  "image/gif",
   "image/webp",
   "image/avif",
 ]);
@@ -13,9 +14,9 @@ export const mediaTypes: ReadonlySet<string> = new Set([
 export const mediaAccept = [...mediaTypes].join(",");
 
 /** People-facing wording of the upload constraints. */
-export const mediaConstraintsText = "JPEG, PNG, WebP, or AVIF. Maximum 10 MiB.";
+export const mediaConstraintsText = "JPEG, PNG, GIF, WebP, or AVIF. Maximum 10 MiB.";
 
-const extensions = /\.(?:avif|jpe?g|png|webp)$/iu;
+const extensions = /\.(?:avif|gif|jpe?g|png|webp)$/iu;
 
 /**
  * Checks a file against the upload constraints before it is sent. A missing
@@ -29,6 +30,7 @@ export function validateMediaFile(file: Pick<File, "name" | "size" | "type">) {
 
 const typeLabels: Readonly<Record<string, string>> = {
   "image/avif": "AVIF",
+  "image/gif": "GIF",
   "image/jpeg": "JPEG",
   "image/png": "PNG",
   "image/webp": "WebP",

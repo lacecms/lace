@@ -5055,7 +5055,7 @@
             "in": "query",
             "name": "type",
             "schema": {
-              "enum": ["image/avif", "image/jpeg", "image/png", "image/webp"]
+              "enum": ["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"]
             }
           }
         ],
@@ -5959,6 +5959,7 @@
     },
     "/api/v1/admin/media/{mediaId}/preview": {
       "get": {
+        "description": "Streams active media to an authenticated reader with the same immutable `ETag` as the public route and `Cache-Control: private, no-cache`. A matching `If-None-Match` receives `304 Not Modified` after authorization; a malformed one is ignored.",
         "operationId": "getApiV1AdminMediaByMediaIdPreview",
         "parameters": [
           {
@@ -5973,6 +5974,12 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Media bytes"
+          },
+          "304": {
+            "description": "The cached media is still valid"
+          },
           "400": {
             "content": {
               "application/json": {
@@ -5994,6 +6001,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "404": {
+            "description": "Media is not active or does not exist"
           }
         },
         "summary": "Preview media",
@@ -9775,6 +9785,7 @@
     },
     "/api/v1/public/media/{mediaId}": {
       "get": {
+        "description": "Streams media that a current publication uses. The response carries a strong `ETag` derived from the media ID, which never changes because stored bytes are immutable, and `Cache-Control: public, max-age=86400`. A matching `If-None-Match` (weak comparison or `*`) receives `304 Not Modified` without a body; a malformed one is ignored. Unpublished or unknown media is not found, never `304`.",
         "operationId": "getApiV1PublicMediaByMediaId",
         "parameters": [
           {
@@ -9789,6 +9800,12 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Media bytes"
+          },
+          "304": {
+            "description": "The cached media is still valid"
+          },
           "400": {
             "content": {
               "application/json": {
@@ -9810,6 +9827,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "404": {
+            "description": "Media is not published or does not exist"
           }
         },
         "summary": "Read published media",

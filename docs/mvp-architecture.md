@@ -1247,7 +1247,15 @@ GIF, and AVIF; SVG is excluded because safely sanitizing active XML is outside
 the MVP. The server verifies magic bytes rather than trusting the multipart
 content type or filename and stores a generated object key, never a user path.
 The limit and allowlist may be narrowed through deployment configuration but not
-expanded without a corresponding validator implementation.
+expanded without a corresponding validator implementation. Every format is
+verified by walking its complete container structure without decoding pixels.
+A GIF (GIF87a or GIF89a, static or animated) is walked through its header,
+logical screen descriptor, optional global and local color tables, every
+extension and image block with its data sub-blocks, and its trailer, which must
+be the last byte; it needs at least one frame, and every frame must lie inside
+the logical screen. Its recorded dimensions are the logical screen, and the
+dimension and pixel limits apply to that screen. GIFs are stored and delivered
+as uploaded, never transcoded.
 
 ### 9.8 Outbox and site builds
 
@@ -1752,6 +1760,19 @@ keeps a durable URL while storage credentials and object keys stay private.
 The public media endpoint returns an object only when the media ID is referenced
 by a snapshot that is currently published; authenticated admin media endpoints
 provide draft previews. Knowing an unreferenced media ID does not publish it.
+
+Stored media bytes never change: an upload creates a new item and metadata
+edits never touch the object. Media binary responses (the public route and the
+admin preview) therefore carry a strong `ETag` derived from the media ID alone,
+`"m-<mediaId>"`, which a metadata edit does not change; it is separate from the
+metadata `ETag` used for `If-Match` on metadata updates. The public route sends
+`Cache-Control: public, max-age=86400` and the admin preview `Cache-Control:
+private, no-cache`. A matching `If-None-Match` (weak comparison or `*`) gets
+`304 Not Modified` with the same headers and no body, without reading object
+storage; a malformed header is ignored. Authorization, eligibility and not-found
+are decided first, so unpublished, deleted or invisible media never receives
+`304`. Consequently a browser may keep media for up to one day after it stops
+being published; unbounded or `immutable` caching is deliberately not used.
 
 ### Admin endpoints
 

@@ -431,7 +431,7 @@ export interface ObjectStorage {
   put(input: PutObjectInput): Promise<StoredObject>;
 }
 
-export type MediaMimeType = "image/avif" | "image/jpeg" | "image/png" | "image/webp";
+export type MediaMimeType = "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
 
 /**
  * A verified image result. Implementations MUST parse the complete byte sequence,

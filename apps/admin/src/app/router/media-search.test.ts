@@ -5,12 +5,13 @@ test("keeps supported media-library parameters", () => {
   expect(
     parseMediaSearch({ q: "  hero ", sort: "filename", type: "image/png", view: "list" }),
   ).toEqual({ q: "hero", sort: "filename", type: "image/png", view: "list" });
+  expect(parseMediaSearch({ type: "image/gif" })).toMatchObject({ type: "image/gif" });
 });
 
 const none = { q: undefined, sort: undefined, type: undefined, view: undefined };
 
 test("drops unsupported, blank, over-long, and default values", () => {
-  expect(parseMediaSearch({ sort: "author", type: "image/gif", view: "cards" })).toStrictEqual(
+  expect(parseMediaSearch({ sort: "author", type: "image/svg+xml", view: "cards" })).toStrictEqual(
     none,
   );
   expect(parseMediaSearch({ q: "   ", view: "grid" })).toStrictEqual(none);

@@ -23,7 +23,7 @@ export interface MediaUploadEntry {
 
 const rejectionMessages = {
   size: "This file is larger than 10 MiB.",
-  type: "This file type is not supported. Use JPEG, PNG, WebP, or AVIF.",
+  type: "This file type is not supported. Use JPEG, PNG, GIF, WebP, or AVIF.",
 } as const;
 
 let sequence = 0;

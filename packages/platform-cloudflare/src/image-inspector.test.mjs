@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import sharp from "sharp";
+import { animatedGifFixture, gifFixture } from "@lacecms/test-utils";
 import { WorkerImageInspector } from "../dist/index.js";
 
 const inspector = new WorkerImageInspector();
@@ -24,6 +25,8 @@ const cases = [
   ["image/webp", () => base(301, 17).webp({ lossless: true }).toBuffer()],
   ["image/webp", () => base(400, 200).webp().withMetadata({ orientation: 8 }).toBuffer()],
   ["image/avif", () => base(64, 32).avif().toBuffer()],
+  ["image/gif", () => base(5, 4).gif().toBuffer()],
+  ["image/gif", async () => animatedGifFixture()],
 ];
 
 test.each(cases.map(([type, make], index) => [index, type, make]))(
@@ -51,6 +54,7 @@ test("a 400x200 JPEG with EXIF orientation 6 displays as 200x400", async () => {
 test("rejects mismatched, truncated, trailing, and corrupted images", async () => {
   const fixtures = {
     "image/avif": new Uint8Array(await base(8, 8).avif().toBuffer()),
+    "image/gif": animatedGifFixture(),
     "image/jpeg": new Uint8Array(await base(8, 8).jpeg().toBuffer()),
     "image/png": new Uint8Array(await base(8, 8).png().toBuffer()),
     "image/webp": new Uint8Array(await base(8, 8).webp().toBuffer()),
@@ -73,4 +77,28 @@ test("rejects mismatched, truncated, trailing, and corrupted images", async () =
   const webp = fixtures["image/webp"].slice();
   webp[4] ^= 0x01;
   await rejected(webp, "image/webp");
+});
+
+test("an animated GIF reports its logical screen", async () => {
+  await expect(inspector.inspect(animatedGifFixture(), "image/gif")).resolves.toEqual({
+    height: 240,
+    width: 320,
+  });
+});
+
+test.each([
+  [
+    "a frame outside the logical screen",
+    { frames: [{ height: 2, left: 2, width: 2 }], height: 2, width: 3 },
+  ],
+  ["no image descriptor", { frames: [], height: 2, width: 3 }],
+  [
+    "an LZW code size of 12",
+    { frames: [{ codeSize: 12, height: 2, width: 3 }], height: 2, width: 3 },
+  ],
+  ["a missing trailer", { frames: [{ height: 2, width: 3 }], height: 2, trailer: false, width: 3 }],
+])("rejects a GIF with %s", async (_name, fixture) => {
+  await expect(inspector.inspect(gifFixture(fixture), "image/gif")).rejects.toMatchObject({
+    code: "CONTENT_INVALID_STATE",
+  });
 });

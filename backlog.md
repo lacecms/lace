@@ -25,9 +25,7 @@ when selected and do not yet have an implementation order or new CE numbers.
 
 - **Image delivery (selected 2026-10-18, three changes in order; replaces
   CE11):** build-time variants through the Astro image pipeline, WebP only.
-  - **A `images-a-media-format-caching`:** GIF as an upload format; media
-    responses get `Cache-Control` (public: one day; admin preview: private,
-    no-cache) with `ETag` and `304`.
+  - **A `images-a-media-format-caching`:** done (archived 2026-10-18).
   - **B build variants:** per image a 64 px WebP inlined as a blurred
     placeholder plus WebP at 960 and 1920 px (each capped at the original
     width) with `srcset`/`sizes`, `loading="lazy"`, `decoding="async"`; GIF

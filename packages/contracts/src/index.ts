@@ -932,6 +932,7 @@ const positiveIntegerSchema = v.pipe(v.number(), v.integer(), v.minValue(1));
 
 export const mediaMimeTypeSchema = v.picklist([
   "image/avif",
+  "image/gif",
   "image/jpeg",
   "image/png",
   "image/webp",

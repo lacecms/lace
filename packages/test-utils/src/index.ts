@@ -1705,3 +1705,4 @@ export class InMemoryContentStore
 export * from "./build-export.js";
 export * from "./repository-contract.js";
 export * from "./security-contract.js";
+export * from "./gif.js";

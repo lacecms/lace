@@ -947,6 +947,55 @@ test("site-build tracker enforces grace, backoff bounds and the overall deadline
   );
 });
 
+test("resolves media binary eligibility without reading object storage", async () => {
+  const storageReads = [];
+  const records = {
+    "media-1": mediaRecord(),
+    deleting: mediaRecord({ id: "deleting", status: "deleting" }),
+  };
+  const media = mediaUseCases(
+    {
+      async loadMedia(id) {
+        return records[id] ?? null;
+      },
+    },
+    {
+      publicMedia: {
+        async loadPublicMedia(id) {
+          return id === "media-1" ? records[id] : null;
+        },
+      },
+      storage: {
+        async delete() {},
+        async get(key) {
+          storageReads.push(key);
+          return key === "media/media-1" ? bytes(pngBytes) : null;
+        },
+        async put() {
+          throw new Error("unused");
+        },
+      },
+    },
+  );
+  await expect(media.resolvePublic({ mediaId: "media-1" })).resolves.toMatchObject({
+    id: "media-1",
+    storageKey: "media/media-1",
+  });
+  await expect(media.resolvePublic({ mediaId: "deleting" })).resolves.toBeNull();
+  await expect(media.resolvePublic({ mediaId: "missing" })).resolves.toBeNull();
+  await expect(
+    media.resolvePreview({ actor: mediaViewer, mediaId: "media-1" }),
+  ).resolves.toMatchObject({ id: "media-1" });
+  await expect(
+    media.resolvePreview({ actor: mediaViewer, mediaId: "deleting" }),
+  ).resolves.toBeNull();
+  expect(storageReads).toEqual([]);
+  const binary = await media.readPublic({ mediaId: "media-1" });
+  expect(binary).toMatchObject({ filename: "cover.png", mimeType: "image/png" });
+  await expect(media.preview({ actor: mediaViewer, mediaId: "deleting" })).resolves.toBeNull();
+  expect(storageReads).toEqual(["media/media-1"]);
+});
+
 test("validates media metadata patches before any read and merges onto stored values", async () => {
   const reads = [];
   const writes = [];

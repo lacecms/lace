@@ -52,6 +52,11 @@ The library SHALL offer upload only to roles allowed to write media. A writer SH
 - **WHEN** a viewer browses the library
 - **THEN** read and preview controls are available while upload, drop-zone, and deletion controls are absent
 
+#### Scenario: An editor uploads an animated GIF
+- **WHEN** an editor drops a valid 4 MiB animated GIF into the library
+- **THEN** it passes the local type check, is uploaded, and its item is
+  labelled GIF and appears under the GIF type filter
+
 ### Requirement: Media deletion remains confirmed and recoverable
 The library SHALL offer a writer deletion of an active item from its details panel only after an explicit confirmation dialog, and a retry action for an item in `delete_failed`. It SHALL label `deleting` as pending asynchronous removal, not completed deletion. When the item's usage count is zero, the confirmation SHALL request an ordinary deletion. When the usage count is greater than zero, the panel SHALL decide from the loaded usage: while usage is loading or has failed to load, deletion SHALL be unavailable; when any listed location is used by a published version, or when the usage list is truncated, deletion SHALL be unavailable and the panel SHALL explain that the published versions must stop using the item first, naming each entry whose published version uses it and, for an entry whose draft no longer uses the item, saying that publishing or unpublishing that entry releases the item; when every using entry is listed and uses the item only in its draft, and the writer may also edit content, the panel SHALL offer deletion through a confirmation that names each entry whose draft will lose the item, states that the item is removed from those drafts and not from any published version, warns that a required field may then block publication and that someone editing one of those entries will have to reload, and requests deletion with draft detaching. After an accepted detaching deletion the library SHALL refresh the affected entries' remote state. It SHALL update the visible state only from validated API results, preserve the item and show a non-sensitive error when a request fails, and explain a rejected deletion of referenced media without suggesting the reference was removed; a rejection after some drafts were detached SHALL say that some drafts may already have changed. These controls SHALL be keyboard operable and SHALL return focus predictably when the confirmation closes; API authorization and reference checks remain authoritative.
 
@@ -95,7 +100,7 @@ The `/media` route SHALL keep its filename search term, type filter, sort order,
 - **THEN** the URL carries `q=hero`, `type=image/png`, `sort=filename`, and `view=list`, and after the reload the controls and list view are restored and the API is queried with the same search, type, and sort
 
 #### Scenario: Unsupported parameters are ignored
-- **WHEN** a user opens `/media?type=image/gif&sort=author&view=cards`
+- **WHEN** a user opens `/media?type=image/svg+xml&sort=author&view=cards`
 - **THEN** the library loads unfiltered, newest first, in the grid view, without an error
 
 #### Scenario: Changing a filter restarts pagination
