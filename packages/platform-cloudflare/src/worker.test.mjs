@@ -1085,3 +1085,50 @@ test("CE9B real Worker API retains created slugs and duplicate/conflict behavior
   expect(slugless.body.draft.slug).toBeUndefined();
   await fixture.settle();
 }, 30_000);
+
+test("Worker API docs flag validates exact string booleans without disclosing values", async () => {
+  const env = {
+    DB: fakeDatabase,
+    MEDIA: fakeBucket,
+    LACE_AUTH_SECRET: secret,
+    LACE_PUBLIC_BASE_URL: origin,
+  };
+  expect(parseCloudflareSettings(env).apiDocsEnabled).toBe(false);
+  for (const value of ["true", "false"])
+    expect(parseCloudflareSettings({ ...env, LACE_API_DOCS_ENABLED: value }).apiDocsEnabled).toBe(
+      value === "true",
+    );
+  for (const value of ["", "1", "TRUE", true, " secret-docs-value "]) {
+    expect(() => parseCloudflareSettings({ ...env, LACE_API_DOCS_ENABLED: value })).toThrow(
+      "Invalid Cloudflare environment: LACE_API_DOCS_ENABLED.",
+    );
+    const logs = [];
+    const worker = createCloudflareWorker({
+      config,
+      operationalLogger: { error: (entry) => logs.push(entry) },
+    });
+    const response = await worker.fetch(new Request(`${origin}/api/docs`), {
+      ...env,
+      LACE_API_DOCS_ENABLED: value,
+    });
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(logs)).toContain("LACE_API_DOCS_ENABLED");
+    expect(JSON.stringify(logs)).not.toContain("secret-docs-value");
+    expect(await response.text()).not.toContain("LACE_API_DOCS_ENABLED");
+  }
+});
+
+test.each([undefined, "false", "true"])(
+  "Worker API docs route precedes assets with flag %j",
+  async (flag) => {
+    const assets = vi.fn(async () => new Response("asset-fallback"));
+    const fixture = await workerFixture({
+      env: { LACE_API_DOCS_ENABLED: flag, ASSETS: { fetch: assets } },
+    });
+    const result = await fixture.call("/api/docs");
+    expect(result.response.status).toBe(flag === "true" ? 200 : 404);
+    expect(result.response.headers.get("x-request-id")).toBeTruthy();
+    expect(assets).not.toHaveBeenCalled();
+    expect((await fixture.call("/api/v1/openapi.json")).response.status).toBe(200);
+  },
+);

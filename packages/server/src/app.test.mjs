@@ -25,6 +25,7 @@ const editor = { id: actorId("editor"), role: "editor" };
 
 async function fixture({
   actor = admin,
+  apiDocsEnabled,
   resolveActor,
   auth,
   ready = true,
@@ -89,6 +90,7 @@ async function fixture({
   });
   let exportLoads = 0;
   const app = createLaceApp({
+    apiDocsEnabled,
     ...(auth === undefined ? {} : { auth }),
     actors: {
       resolve: resolveActor ?? (async () => actor),
@@ -2813,4 +2815,36 @@ test("checks build credentials before conditional or page reads", async () => {
   expect(unchanged.response.status).toBe(304);
   expect(unchanged.response.headers.get("etag")).toBe(`"${version}"`);
   expect(exportLoads()).toBe(0);
+});
+
+test("optional API reference uses live same-origin contracts and preserves API boundaries", async () => {
+  const disabled = await fixture();
+  const explicit = await fixture({ apiDocsEnabled: false });
+  const enabled = await fixture({ apiDocsEnabled: true, actor: null });
+  for (const { app, logs } of [disabled, explicit]) {
+    const response = await app.request("/api/docs");
+    expect(response.status).toBe(404);
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+    expect(await response.text()).not.toContain("admin-shell");
+    expect(logs.at(-1)).toMatchObject({ path: "/api/docs", status: 404 });
+  }
+  const response = await enabled.app.request("/api/docs");
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("text/html");
+  expect(response.headers.get("x-request-id")).toBeTruthy();
+  const html = await response.text();
+  expect(html).toContain("/api/v1/openapi.json");
+  expect(html).toContain("@scalar/api-reference@1.75.0/dist/browser/standalone.js");
+  expect(html).toMatch(/"persistAuth":\s*false/);
+  expect(html).toMatch(/"telemetry":\s*false/);
+  expect(html).toMatch(/"agent":\s*\{\s*"disabled":\s*true/);
+  expect(html).toMatch(/"withDefaultFonts":\s*false/);
+  expect(html).toMatch(/"servers":\s*\[\s*\{\s*"url":\s*"\/"/);
+  expect(html).not.toContain("proxy.scalar.com");
+  expect(html).not.toContain("authorization");
+  expect(enabled.logs.at(-1)).toMatchObject({ path: "/api/docs", status: 200 });
+  expect((await enabled.app.request("/api/v1/admin/content-models")).status).toBe(403);
+  const schema = await (await disabled.app.request("/api/v1/openapi.json")).json();
+  expect(await (await enabled.app.request("/api/v1/openapi.json")).json()).toEqual(schema);
+  expect(schema.paths).not.toHaveProperty("/api/docs");
 });

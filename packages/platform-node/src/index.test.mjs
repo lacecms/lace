@@ -60,6 +60,7 @@ test.each([undefined, { engineVersion: "2.3.4-custom", openApiTitle: "Embedded" 
     try {
       const settings = parseNodeRuntimeSettings({
         ...minioEnvironment,
+        LACE_API_DOCS_ENABLED: "true",
         LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
         LACE_DATABASE_PATH: join(directory, "db.sqlite"),
         LACE_PUBLIC_BASE_URL: "https://lace.test/",
@@ -67,6 +68,7 @@ test.each([undefined, { engineVersion: "2.3.4-custom", openApiTitle: "Embedded" 
       const config = await defineConfig({ content: [] });
       const runtime = createNodeRuntime({ config, settings, environment });
       try {
+        expect((await runtime.app.request("/api/docs")).status).toBe(200);
         const response = await runtime.app.fetch(
           new Request("https://lace.test/api/v1/openapi.json"),
         );
@@ -1552,4 +1554,27 @@ test("accepts an empty generated proxy setting and rejects empty list members", 
     expect(() =>
       parseNodeRuntimeSettings({ ...environment, LACE_TRUSTED_PROXY_CIDRS: value }),
     ).toThrow("LACE_TRUSTED_PROXY_CIDRS");
+});
+
+test("Node API docs flag accepts only exact string booleans without value disclosure", () => {
+  const env = {
+    ...minioEnvironment,
+    LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+    LACE_DATABASE_PATH: ":memory:",
+    LACE_PUBLIC_BASE_URL: "https://lace.test/",
+  };
+  expect(parseNodeRuntimeSettings(env).apiDocsEnabled).toBe(false);
+  for (const value of ["true", "false"])
+    expect(parseNodeRuntimeSettings({ ...env, LACE_API_DOCS_ENABLED: value }).apiDocsEnabled).toBe(
+      value === "true",
+    );
+  for (const value of ["", "1", "TRUE", " secret-docs-value "]) {
+    try {
+      parseNodeRuntimeSettings({ ...env, LACE_API_DOCS_ENABLED: value });
+      throw new Error("Expected invalid configuration");
+    } catch (error) {
+      expect(error.message).toBe("Invalid Node environment: LACE_API_DOCS_ENABLED.");
+      expect(error.issues).toEqual([{ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" }]);
+    }
+  }
 });

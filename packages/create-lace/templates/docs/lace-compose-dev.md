@@ -196,3 +196,19 @@ pnpm dev:api
 ## Backup, rotation and observation
 
 Follow [Operator observation and recovery](lace-operations.md#operator-observation-and-recovery) for the CMS release card, health/log meanings, coordinated database/object backup, isolated restore, credential rotation and migration/upgrade recovery. Verify the whole restored site before trusting a backup. Remote account operations remain owner-operated.
+
+## Optional API documentation UI
+
+For a Lace release containing the API documentation UI, set
+`LACE_API_DOCS_ENABLED=true` in `.env` and recreate the API container with
+`docker compose up -d --force-recreate api`. Open `/api/docs` on your API origin.
+The page is public when enabled; interactive requests keep normal API permission,
+validation and concurrency checks and use existing same-origin sessions. The
+browser needs `cdn.jsdelivr.net` access for a pinned Scalar script. No external
+request proxy or prefilled/persisted credentials are configured; telemetry,
+remote fonts and optional hosted integrations are disabled.
+
+Absent or exact `false` disables the page (API `404`); other values, including an
+empty string, are invalid. `/api/v1/openapi.json` remains available. Set `false`
+and recreate the container again to disable. Existing published alpha images
+that predate this feature must first be upgraded to a release containing it.

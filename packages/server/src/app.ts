@@ -1,3 +1,4 @@
+import { Scalar } from "@scalar/hono-api-reference";
 import {
   AccountError,
   AccountUseCases,
@@ -328,6 +329,8 @@ export interface BuiltAdminResponder {
 }
 
 export interface LaceAppInput {
+  /** Opt-in browser reference; machine-readable OpenAPI remains available. */
+  readonly apiDocsEnabled?: boolean;
   readonly buildSite?: BuildSiteIdentityDto | null;
   readonly auth?: AuthRouteHandler;
   readonly actors: ActorResolver;
@@ -2375,6 +2378,27 @@ export function createLaceApp(input: LaceAppInput): Hono {
       },
     }),
   );
+
+  if (input.apiDocsEnabled === true) {
+    app.get(
+      "/api/docs",
+      describeRoute({ hide: true }),
+      Scalar({
+        url: "/api/v1/openapi.json",
+        pageTitle: "Lace API documentation",
+        cdn: "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.75.0/dist/browser/standalone.js",
+        servers: [{ url: "/" }],
+        persistAuth: false,
+        telemetry: false,
+        withDefaultFonts: false,
+        showDeveloperTools: "never",
+        hideClientButton: true,
+        // Supported by the pinned browser bundle, ahead of the Hono wrapper's types.
+        ...{ agent: { disabled: true } },
+        mcp: { disabled: true },
+      }),
+    );
+  }
 
   app.notFound(async (context) => {
     if (

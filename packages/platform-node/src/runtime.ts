@@ -62,6 +62,7 @@ export class NodeEnvironmentError extends Error {
 }
 
 export interface NodeRuntimeSettings {
+  readonly apiDocsEnabled?: boolean;
   readonly buildSite?: LaceAppInput["buildSite"];
   readonly trustedProxyCidrs?: readonly string[];
   readonly authSecret: string;
@@ -148,6 +149,9 @@ export function parseNodeEmailSettings(environment: NodeEnvironment): EmailSetti
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
+  const docs = environment.LACE_API_DOCS_ENABLED;
+  if (docs !== undefined && docs !== "true" && docs !== "false")
+    issues.push({ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" });
   const email = parseNodeEmailSettings(environment);
   issues.push(...email.issues);
   const configuredProxies = environment.LACE_TRUSTED_PROXY_CIDRS?.trim();
@@ -233,6 +237,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     throw new NodeEnvironmentError(Object.freeze(issues));
   }
   return Object.freeze({
+    apiDocsEnabled: docs === "true",
     buildSite,
     trustedProxyCidrs,
     ...(adminDevOrigin === undefined ? {} : { adminDevOrigin }),
@@ -510,6 +515,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
       secret: input.settings.authSecret,
     });
   const app = createLaceApp({
+    apiDocsEnabled: input.settings.apiDocsEnabled ?? false,
     ...(input.adminAssets === undefined ? {} : { adminAssets: input.adminAssets }),
     actors: input.actors ?? auth.actors,
     auth,

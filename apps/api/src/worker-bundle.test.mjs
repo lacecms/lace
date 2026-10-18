@@ -49,6 +49,7 @@ test("bundled Worker serves health and Better Auth routes under workerd", async 
   const miniflare = new Miniflare(
     convertV4MiniflareOptions({
       bindings: {
+        LACE_API_DOCS_ENABLED: "true",
         LACE_AUTH_SECRET: secret,
         LACE_PUBLIC_BASE_URL: "http://localhost:8787/",
       },
@@ -61,6 +62,9 @@ test("bundled Worker serves health and Better Auth routes under workerd", async 
     }),
   );
   try {
+    const docs = await miniflare.dispatchFetch("http://localhost:8787/api/docs");
+    expect(docs.status).toBe(200);
+    expect(await docs.text()).toContain("/api/v1/openapi.json");
     const live = await miniflare.dispatchFetch("http://localhost:8787/health/live");
     expect(live.status).toBe(200);
     expect(await live.json()).toEqual({ status: "live" });

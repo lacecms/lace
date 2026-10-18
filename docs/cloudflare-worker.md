@@ -283,3 +283,21 @@ single atomic D1 batches, so concurrent uses of one token succeed at most once.
 ## Local operations evidence
 
 See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+
+## Optional API documentation UI
+
+Add `"LACE_API_DOCS_ENABLED": "true"` to Worker `vars` and redeploy to serve a
+public Scalar reference at `/api/docs`. In local development, put
+`LACE_API_DOCS_ENABLED=true` in the local `.dev.vars` and restart the dev server.
+Omit the setting or use the exact string `false` to disable it and restore API
+`404` responses. Empty strings and all other supplied values are invalid and
+use the Worker's sanitized invalid-environment `503` boundary.
+
+The UI reads the live `/api/v1/openapi.json`, which remains available even when
+the UI is disabled. The browser must reach `cdn.jsdelivr.net` for the pinned
+Scalar script; offline viewing is not supported. The page is anonymous when
+enabled, while interactive API requests use the current Lace origin and retain
+normal authorization, validation and concurrency checks. No external request
+proxy or prefilled/persisted credentials are configured. Existing same-origin
+sessions apply; telemetry, remote fonts and optional hosted integrations are
+disabled. Disable or remove the variable and redeploy to turn the UI off.

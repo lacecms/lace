@@ -324,3 +324,23 @@ variable.
 ## Local operations evidence
 
 See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+
+## Optional API documentation UI
+
+Set `LACE_API_DOCS_ENABLED=true` in the API environment and restart/recreate the
+service to enable the public browser reference at `/api/docs`. For local
+repository development, add it to the ignored `.env` and run `pnpm dev:node`.
+Compose forwards the setting with a `false` default. For a deployed Compose
+service, recreate the API container after changing its environment.
+
+Absent or exact `false` disables the UI and `/api/docs` returns the API `404`.
+Only exact `true` and `false` strings are accepted; empty or other values fail
+startup. The raw `/api/v1/openapi.json` stays available independently.
+
+The page uses Scalar with a version-pinned browser script from jsDelivr, so the
+browser needs access to `cdn.jsdelivr.net`; this is not an offline viewer.
+The reference is anonymously accessible when enabled. Interactive requests go
+directly to the current Lace origin and retain normal API authorization,
+validation and concurrency checks. No credentials are prefilled or persisted
+by the reference; existing same-origin browser sessions still apply. Telemetry,
+remote fonts and optional hosted integrations are disabled.
