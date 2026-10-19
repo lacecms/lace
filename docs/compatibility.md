@@ -647,3 +647,73 @@ Restore matching backups when necessary, first at an isolated origin with
 replacement secrets and production hooks disabled. Automatic database downgrade
 is not supported. Earlier composite/envelope/rich-text rollback restrictions
 remain in force.
+
+## Alpha 7 upgrade and rollback
+
+Alpha.7 (`0.1.0-alpha.7`, ownership template `0.35.0`) packages image delivery
+A–D and the VPS upload proxy fix. It is a preparation candidate on npm `next`;
+use it only after matching artifacts are available. Registry reads on 2026-10-19
+confirmed all alpha.6 packages and both two-platform image indexes are public;
+alpha.7 endpoints returned 404. This does not establish publishing rights.
+
+### Images and deployment changes
+
+Uploads accept verified JPEG, PNG, GIF, WebP and AVIF up to 10 MiB; SVG and video
+are unsupported. Original binaries are unchanged and support cache validators.
+Astro optimizes images at build time to distinct widths `min(960, W)` and
+`min(1920, W)` without upscaling, including animated WebP from GIF. Opaque
+non-GIF images can have blurred placeholders; transparent images, GIF and image
+services without local transforms omit them. Lightbox is opt-in for image and
+gallery blocks; an item's link takes precedence and opens in the same tab.
+
+VPS proxy uploads stream through a dedicated 11 MiB multipart allowance; the API
+still enforces 10 MiB image bytes. Other requests retain the 1 MiB proxy ceiling.
+Successful `/_astro/` assets use thirty-day immutable caching; HTML revalidates
+and missing assets do not receive immutable caching. The builder's separate
+`builder-cache` volume is disposable, bounded at 2 GiB and reuses package/image
+work. After a failed build its Astro cache is cleared; unusable caches fall back
+to an uncached build. Pages adopts asset headers through `public/_headers` and
+its generated workflow restores `node_modules/.astro`.
+
+### Upgrade order
+
+1. Record installed versions and back up matching database, MinIO/R2 objects,
+   configuration, site source, lockfiles and deployment files. Stop API and
+   dispatcher during host SQLite maintenance; use a coordinated D1/R2 backup
+   for Cloudflare, selecting remote operations explicitly.
+2. Generate template 0.35.0 with matching site mode/path and Cloudflare choice.
+   Review `lace upgrade` managed-file conflicts, including nginx, Compose and
+   workflows. `.env`, site source, README, `lace.config.ts` and Worker operator
+   settings remain user-owned. Set all Lace dependencies and API/builder images
+   to alpha.7 together and reinstall; rebuild the Worker when applicable.
+3. In the site, add `sharp` as documented in the generated Astro guide and set
+   `image: laceImageConfig(env)` in `astro.config.mjs`. It allows only the public
+   media path under `LACE_API_BASE_URL`; originals must be reachable during the
+   build. `optimizeImages: false` retains direct public URLs when required.
+4. From the generated CMS, review `pnpm exec lace add block image gallery hero
+   --site <site-path> --dry-run`, then update unedited components and merge
+   conflicts manually (`--write-new` supplies proposed `.new` files). Adopt the
+   starter lightbox/link CSS and Pages `public/_headers` manually. Preserve
+   custom markup and keep `lace.site.json` consistent with reviewed components.
+5. Raise the version of each model allowing image/gallery before explicit
+   content sync. The current starter uses model version 4 for home/posts; custom
+   models advance from their own current version. Image/gallery schemas become
+   4/3 through configuration synchronization, with stored data/settings kept.
+   New components must be ready before the next site build: older renderers
+   refuse the new schemas with `block_version_mismatch`.
+6. Run any older pending forward SQL migrations explicitly, then content sync
+   using the selected Node or Cloudflare target. There are no new migration
+   files relative to tag `v0.1.0-alpha.6`. Recreate updated web/builder services
+   and rebuild; test upload above 1 MiB, GIF animation, linked images, lightbox,
+   HTML refresh and hashed-asset headers at your public origin.
+
+### Rollback boundaries
+
+Template filesystem rollback does not reverse content synchronization. Once the
+new image/gallery schemas are stored, returning to alpha.6 requires matching
+backed-up configuration/content and source components alongside compatible
+packages/images. Restore media objects when content needs them; SQL alone is
+insufficient. Caches are disposable and are not application backups. Keep the
+existing alpha.6 export compatibility and earlier rollback restrictions. Test
+restoration at an isolated origin with replacement secrets and production hooks
+disabled; local acceptance does not establish real VPS or Cloudflare recovery.

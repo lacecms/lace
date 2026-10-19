@@ -10,7 +10,7 @@
   "versions": {
     "latest": {
       "label": "Latest",
-      "target": "0.1.0-alpha.6",
+      "target": "0.1.0-alpha.7",
       "tracking": "main"
     }
   },

@@ -140,7 +140,7 @@ for (const kind of ["node", "worker"]) {
       expect(ready.status).toBe(200);
       expect(await ready.json()).toEqual({ status: "ready" });
       const status = await f.call("/api/v1/admin/settings/status", { cookie: f.cookies.admin });
-      expect(await status.json()).toMatchObject({ engineVersion: "0.1.0-alpha.6", ready: true });
+      expect(await status.json()).toMatchObject({ engineVersion: "0.1.0-alpha.7", ready: true });
       const record = logs.find((entry) => entry.requestId === status.headers.get("x-request-id"));
       expect(record).toMatchObject({
         method: "GET",

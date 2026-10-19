@@ -1,5 +1,11 @@
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
+import {
+  alphaSevenGif,
+  alphaSevenMediaJourney,
+  verifyAlphaSevenImages,
+} from "./alpha-seven-acceptance.mjs";
+import { createRequire } from "node:module";
 import { alphaSixJourney } from "./alpha-six-acceptance.mjs";
 import { consumer34bSecurity } from "./consumer-34b-security.mjs";
 import { blockOrderJourney } from "./block-order-acceptance.mjs";
@@ -1056,6 +1062,7 @@ async function starterJourney(project) {
     "base64",
   );
   const starterMedia = new Map(Object.keys(exported.media).map((id) => [id, starterPng]));
+  const starterPort = await freePort();
   const pages = ["site/dist/index.html", "site/dist/blog/first-post/index.html"];
   const build = async (label, body, siteEnvironment) => {
     let requests = 0;
@@ -1063,7 +1070,7 @@ async function starterJourney(project) {
       // The build fetches media originals for image variants.
       const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
       if (media !== null && starterMedia.has(media[1])) {
-        response.writeHead(200, { "content-type": "image/png" });
+        response.writeHead(200, { "content-type": body.media[media[1]].mimeType });
         response.end(starterMedia.get(media[1]));
         return;
       }
@@ -1083,7 +1090,7 @@ async function starterJourney(project) {
     });
     await new Promise((done, fail) => {
       server.once("error", fail);
-      server.listen(0, "127.0.0.1", done);
+      server.listen(starterPort, "127.0.0.1", done);
     });
     try {
       await run(label, "pnpm", ["build"], {
@@ -1231,6 +1238,81 @@ async function starterJourney(project) {
   )
     throw new Error("starter-build-without-globals: robots.txt is not allow-all without a sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
+  // Extra image cases run only after the baseline markup/SEO assertions.
+  const sharp = createRequire(join(project, "site/package.json"))("sharp");
+  const imageExport = structuredClone(exported);
+  const cases = [
+    [
+      "photo",
+      "image/jpeg",
+      2400,
+      1600,
+      await sharp({ create: { width: 2400, height: 1600, channels: 3, background: "#3a6" } })
+        .jpeg()
+        .toBuffer(),
+    ],
+    [
+      "transparent",
+      "image/png",
+      320,
+      240,
+      await sharp({
+        create: {
+          width: 320,
+          height: 240,
+          channels: 4,
+          background: { r: 10, g: 20, b: 30, alpha: 0.5 },
+        },
+      })
+        .png()
+        .toBuffer(),
+    ],
+    ["gif", "image/gif", 320, 240, alphaSevenGif()],
+  ];
+  for (const [name, mimeType, width, height, bytes] of cases) {
+    const id = `alpha-seven-${name}`;
+    starterMedia.set(id, bytes);
+    imageExport.media[id] = {
+      id,
+      mimeType,
+      width,
+      height,
+      alt: name,
+      caption: null,
+      focalPoint: null,
+      url: `https://public.example/lace/api/v1/public/media/${id}`,
+    };
+    imageExport.entries[0].blocks.push({
+      type: "image",
+      schemaVersion: 4,
+      key: id,
+      position: 10000 + imageExport.entries[0].blocks.length,
+      data: { media: id, ...(name === "gif" ? { link: "/image-destination" } : {}) },
+      settings: { lightbox: true },
+    });
+  }
+  imageExport.entries[0].blocks.push({
+    type: "gallery",
+    schemaVersion: 3,
+    key: "alpha-seven-gallery",
+    position: 20000,
+    data: {
+      images: [
+        { media: "alpha-seven-photo", link: "/gallery-destination" },
+        { media: "alpha-seven-transparent" },
+      ],
+    },
+    settings: { lightbox: true },
+  });
+  const optimized = await build("alpha-seven-starter-images", imageExport, {
+    LACE_BUILD_SITE_URL: siteUrl,
+  });
+  await verifyAlphaSevenImages(project, optimized[0]);
+  const repeated = await build("alpha-seven-starter-images-warm", imageExport, {
+    LACE_BUILD_SITE_URL: siteUrl,
+  });
+  if (optimized[0] !== repeated[0]) throw new Error("Image cache changed rendered output");
+  await verifyAlphaSevenImages(project, repeated[0]);
   console.info(
     "Packed starter installed, typechecked and built every built-in block, block anchors, site navigation and SEO output with and without published globals and a site URL",
   );
@@ -2070,6 +2152,11 @@ async function main() {
     await recoveryJourney(context, session);
     await persistenceJourney(context, session);
     await inspectShipping(context);
+    await alphaSevenMediaJourney({
+      ...session,
+      project: context.project,
+      proxyBase: `http://127.0.0.1:${context.httpPort}/`,
+    });
     await alphaSixJourney({ ...session, project: context.project });
     await restorePublishedBaseline(session);
     const journeys = await feedbackJourneys(parent, context, session, artifacts.tarballs, {
@@ -2079,7 +2166,13 @@ async function main() {
       secretValues,
       workspace,
     });
-    journeys.push("alpha-six-node-contracts-media");
+    journeys.push(
+      "alpha-six-node-contracts-media",
+      "alpha-seven-node-gif-proxy-cache",
+      "alpha-seven-starter-image-variants-lightbox-links-warm-cache",
+      "alpha-seven-local-cloudflare-gif-validators",
+      "alpha-seven-template-upgrade-from-alpha-six",
+    );
     journeys.push(...(await fieldTrialJourneys(parent, context, session, artifacts.tarballs)));
     await run(
       "34c-packed-restore-rotation",

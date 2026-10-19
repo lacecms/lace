@@ -107,6 +107,7 @@ test("34B interrupted owned command waits for child cleanup and marks successors
 test("34B audit rejects undispositioned advisories and unknown/missing license data", () => {
   const base = { metadata: {}, advisories: {} };
   expect(() => validateAudit(base, [{ license: "MIT" }])).not.toThrow();
+  expect(() => validateAudit(base, [{ license: "(MIT OR CC0-1.0)" }])).not.toThrow();
   expect(() =>
     validateAudit(
       { ...base, advisories: { one: { url: "https://example.test/new", module_name: "new" } } },

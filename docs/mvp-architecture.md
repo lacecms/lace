@@ -354,7 +354,7 @@ import it. Public sources live inside that application; all repository `docs/`
 materials remain maintained internal engineering documentation. The product
 README links to the public site and root `DEVELOPMENT.md` contributor guide.
 Documentation uses explicit locale/version routes, initially English/latest for
-alpha.6 following main, without changing CMS localization scope.
+alpha.7 following main, without changing CMS localization scope.
 
 ## 7. Generated user project
 
@@ -3170,14 +3170,16 @@ scalar-only engine needs matching configuration/database backup or an explicit
 validated conversion. Recursive schema evolution is described in section 8;
 admin authoring restrictions remain in section 17 until CE7C expands the editor.
 
-The selected alpha.6 release packages the completed CE1–CE9 changes plus
-public-contract tolerance, paginated build export and confirmed draft-media
-detachment. Direct export clients must adopt page traversal; upgrade API, SDK,
-site and builder together. Upgrade
-all Lace dependencies together, apply forward database migrations explicitly,
-and review the public-contract and backup/rollback boundaries in
-[alpha.6 release notes](./compatibility.md#alpha-6-upgrade-and-rollback). No automatic database
-downgrade is promised.
+The selected alpha.7 release adds accepted image delivery A–D and the VPS
+upload proxy fix to alpha.6. GIF originals remain unchanged; Astro builds WebP
+variants, including animation, with eligible blurred placeholders and optional
+lightboxes. Links on image/gallery content take precedence over lightboxes.
+Upgrade API/admin, SDK, Astro/site components and builder together, review the
+managed proxy/Compose/Pages files and synchronize image/gallery schemas 4/3
+before the next build. No new SQL migration is introduced relative to alpha.6.
+See [alpha.7 upgrade and rollback](./compatibility.md#alpha-7-upgrade-and-rollback)
+for matching backups and source-component updates. Automatic database or content
+schema downgrade is not promised.
 
 Compatibility exists at three boundaries:
 

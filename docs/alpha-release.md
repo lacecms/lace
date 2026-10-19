@@ -11,20 +11,20 @@ and recovery/upgrade checks; see the [owner status](./real-application-verificat
 Alpha.5 (`0.1.0-alpha.5`, ownership template `0.29.0`) passed local preparation
 and exact-artifact acceptance on 2026-10-14. Those local receipts alone did not
 establish publication; the registry check below now confirms public availability. See [alpha.5 notes](./compatibility.md#alpha-5-upgrade-and-rollback).
-The selected next candidate is `0.1.0-alpha.6`, ownership template `0.30.0`,
-on npm channel `next`. Preparation and acceptance never publish. The commands
-below target alpha.6. Local preparation, independent verification and exact-artifact
-acceptance passed on 2026-10-16; see the [acceptance receipt](./alpha-6-acceptance.json).
-See [alpha.6 release notes](./compatibility.md#alpha-6-upgrade-and-rollback) for coordinated upgrades
-and the raw build-export response change. Published alpha.1–alpha.4 remain
-immutable. Historical alpha.5 receipts and artifacts must also remain intact.
+The selected next candidate is `0.1.0-alpha.7`, ownership template `0.35.0`,
+on npm channel `next`. It includes completed image delivery A–D and the VPS
+upload proxy fix. Preparation and acceptance never publish. The commands below
+target alpha.7. Its preparation and exact-artifact acceptance remain pending;
+see the [current evidence](../openspec/changes/prepare-alpha-seven-release/readiness.md)
+and [upgrade/rollback guide](./compatibility.md#alpha-7-upgrade-and-rollback).
 
-Read-only registry checks on 2026-10-16 at 00:32 Europe/Rome confirmed all
-fifteen alpha.5 npm versions and both GHCR image manifests are public. Alpha.5
-is now recorded as published and immutable. All fifteen alpha.6 npm version
-endpoints and both image manifests returned 404. This is availability evidence,
-not a reservation or proof of publishing rights. npm `whoami` returned E401;
-authenticated npm/GHCR publishing rights remain a later prerequisite.
+Read-only registry checks on 2026-10-19 at 18:55 Europe/Rome confirmed all fifteen
+alpha.6 npm versions and both GHCR two-platform image indexes are public.
+Alpha.1–alpha.6 are recorded as published and immutable. The GitHub alpha.6
+prerelease records publication on 2026-10-16. All fifteen alpha.7 npm version
+endpoints and both GHCR manifests returned 404. These are availability checks,
+not reservations or proof of authenticated publishing rights. Historical
+acceptance facts remain attached to their original source and release.
 
 ## Coordinates and ownership
 
@@ -32,10 +32,10 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 
 | Artifact | Coordinate | Contents |
 | --- | --- | --- |
-| Generator | `create-lace@0.1.0-alpha.6` | Executable, declarations, templates, ownership inventory, MIT license |
-| Runtime graph | `@lacecms/*@0.1.0-alpha.6` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
-| API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.6` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.6` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
+| Generator | `create-lace@0.1.0-alpha.7` | Executable, declarations, templates, ownership inventory, MIT license |
+| Runtime graph | `@lacecms/*@0.1.0-alpha.7` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
+| API/admin | `ghcr.io/lacecms/api:0.1.0-alpha.7` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
+| Builder | `ghcr.io/lacecms/builder:0.1.0-alpha.7` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
 
 Read-only registry checks on 2026-10-07 returned 404 for alpha.4 for all fifteen npm packages and both GHCR versioned image manifests. This is historical availability evidence, superseded for npm packages by the owner publication confirmation above.
 Read-only checks on 2026-10-14 (Europe/Rome) returned 404 for alpha.5 versions
@@ -69,8 +69,8 @@ The checked-in `release/alpha.json` is the version/coordinate definition. The va
 pnpm install --frozen-lockfile
 pnpm release:check
 pnpm release:plan
-pnpm release:prepare --output .release-artifacts/alpha-6
-pnpm release:verify --output .release-artifacts/alpha-6
+pnpm release:prepare --output .release-artifacts/alpha-7
+pnpm release:verify --output .release-artifacts/alpha-7
 ```
 
 `release:plan` is the mutation-free dry-run plan; it does not build or need Docker. `release:prepare` builds the public graph in an isolated source snapshot, packs inspected archives in a disposable workspace, tests an isolated package consumer with test-only overrides, builds/loads both image platforms locally, exercises migrations/configuration/admin/native runtime and builder health, and saves the tested image archives. It does not build the reference Astro site against a live CMS during package compilation.
@@ -90,7 +90,7 @@ pnpm release:prepare --preview --output .release-artifacts/full-preview
 Run exact-artifact acceptance against the clean prepared inventory before publication:
 
 ```sh
-pnpm acceptance:release --artifacts .release-artifacts/alpha-6
+pnpm acceptance:release --artifacts .release-artifacts/alpha-7
 pnpm --filter @lacecms/platform-node test
 pnpm --filter @lacecms/platform-cloudflare test
 pnpm --dir apps/api test
@@ -126,7 +126,7 @@ An E404 means currently unpublished, not reserved. If it exists and you lack pub
 Publish from the repository root using the clean, acceptance-verified artifact directory:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/alpha-6
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-7
 ```
 
 This is a **live publication**. The script verifies the complete inventory and all archive checksums, checks every selected registry version before publishing anything, and publishes the exact saved tarballs in inventory order with `--access public --tag next`. It never repacks source directories and never moves `latest`. Authentication uses your local npm configuration (`npm login`).
@@ -134,13 +134,13 @@ This is a **live publication**. The script verifies the complete inventory and a
 To inspect the npm publication without publishing, explicitly add `--dry-run`:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/alpha-6 --dry-run
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-7 --dry-run
 ```
 
 Omit `--packages` to publish all fifteen packages. To select packages, pass a comma-separated list of full names or short scoped names; inventory order is preserved:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/alpha-6 --packages cli,sdk,create-lace
+pnpm release:publish:npm --artifacts .release-artifacts/alpha-7 --packages cli,sdk,create-lace
 ```
 
 Matching published archives are skipped after comparing registry integrity with the saved tarball; a different archive stops the entire selected preflight. Re-running the same command resumes missing packages and ensures `next` points to the selected version. All missing packages are submitted consecutively in inventory order, without waiting for registry processing between uploads. Only after the entire batch has been sent does the script verify each version and its `next` tag against npm. npm may process an accepted upload for several minutes. This final batch verification polls pending versions concurrently for up to ten minutes, tolerates transient metadata errors, and saves each successful submission immediately in `publication-npm-submitted.json`. On timeout, rerun the same command: submitted versions are verified without uploading them again. Keep this journal with the artifact directory. A successful live run writes `publication-npm.json` beside the inventory; dry-runs write no receipt. The preparation inventory stays unchanged. A selected subset's receipt covers only that subset.
@@ -158,7 +158,7 @@ Use your GitHub account with publishing rights in organization `lacecms`. For ma
 Publish the saved API and builder archives for all prepared platforms, then assemble their versioned manifest lists:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-6
+pnpm release:publish:images --artifacts .release-artifacts/alpha-7
 ```
 
 This is a **live publication**. The script verifies the complete inventory/checksums and checks existing remote platform tags and versioned manifest lists before any local load or remote push. It loads the exact archives, verifies their image IDs and platforms, tags/pushes only missing platform images, and uses `docker buildx imagetools create` with verified remote digests to publish each multi-platform version tag. It never rebuilds images and never changes `latest`.
@@ -166,13 +166,13 @@ This is a **live publication**. The script verifies the complete inventory/check
 To review the plan without loading, tagging or pushing images, add `--dry-run`. This performs read-only registry checks and needs Docker CLI/Buildx and registry access:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-6 --dry-run
+pnpm release:publish:images --artifacts .release-artifacts/alpha-7 --dry-run
 ```
 
 Omit `--images` for both images, or select `api`, `builder`, or `api,builder`. Each selected image always includes all inventory platforms:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-6 --images api
+pnpm release:publish:images --artifacts .release-artifacts/alpha-7 --images api
 ```
 
 Re-running resumes missing platform tags and manifests. Existing artifacts must match the recorded config/image identities and expected platforms; conflicts stop publication. Registry authentication/network errors stop the run rather than being treated as missing images. A successful live run writes `publication-images.json` beside the inventory with remote platform/manifest digests and source identity. A selected subset's receipt covers only that subset. Neither publication command proves real deployment success or replaces exact-artifact acceptance.
@@ -221,8 +221,8 @@ For the existing alpha.5/alpha.6 reports, import their original bytes explicitly
 ```sh
 pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt docs/alpha-6-acceptance.json
 pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt docs/alpha-6-acceptance.json --apply
-pnpm release:github --artifacts .release-artifacts/alpha-6
-pnpm release:github --artifacts .release-artifacts/alpha-6 --apply
+pnpm release:github --artifacts .release-artifacts/alpha-7
+pnpm release:github --artifacts .release-artifacts/alpha-7 --apply
 ```
 
 The commands without `--apply` are previews. The final command is a live GitHub
@@ -252,8 +252,8 @@ have advanced; identity checks use immutable version coordinates.
 After registry publication and verified GitHub finalization:
 
 ```sh
-pnpm release:clean --artifacts .release-artifacts/alpha-6
-pnpm release:clean --artifacts .release-artifacts/alpha-6 --evidence .release-artifacts/alpha-6-evidence --apply
+pnpm release:clean --artifacts .release-artifacts/alpha-7
+pnpm release:clean --artifacts .release-artifacts/alpha-7 --evidence .release-artifacts/alpha-7-evidence --apply
 ```
 
 The second command removes those explicitly selected local directories, including

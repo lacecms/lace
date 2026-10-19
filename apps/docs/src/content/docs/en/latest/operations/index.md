@@ -23,6 +23,10 @@ Upgrade all Lace packages and API/builder images together. Read release-specific
 
 Alpha.6 includes version-bound paginated exports. Custom direct-export consumers must traverse pages; use a matching SDK and adopt its compatibility policy. Composite fields and block/rich-text versions have their own constraints. Do not assume a downgrade can read newly stored shapes. Database migrations are forward-only; rollback can require restoring matching configuration, database and objects, not just selecting an old image.
 
+Alpha.7 adds the image delivery changes. Upgrade the user-owned site's dependencies and image configuration, then review image/gallery/hero component updates and lightbox/link styles. Review managed nginx, Compose and Pages workflow conflicts; adopt the site's `public/_headers` manually. The ownership template is 0.35.0; it does not automatically rewrite your site or `lace.config.ts`.
+
+There is no new SQL migration since alpha.6. Configuration synchronization is a separate operation: raise versions of models allowing image/gallery and sync to image/gallery schemas 4/3, with matching components ready before the next build. Older components fail with `block_version_mismatch`. Back up first; after sync, rolling back to alpha.6 can require restoring matching configuration/content and source components as well as packages/images. Retain corresponding media objects. Package-only downgrade does not reverse stored schemas. Builder and Pages caches are disposable and are never application backups.
+
 ## Rotate credentials
 
 Issue a replacement build token, update server-side site/build settings, verify a fresh build, then revoke the old token. Rotate object-store, private-builder, email and management credentials through their respective configuration boundaries, restarting/redeploying the consumers. Review user sessions after account compromise. Auth-secret changes affect session behavior and need a deliberate maintenance plan.
