@@ -3,7 +3,7 @@ title: Deploy on Docker or a VPS
 description: Run the packaged Node CMS and a private static-site builder.
 ---
 
-Create a matching generated project and complete local setup first. In production retain the generated Compose scenario guides: they name your exact site mode and storage mappings. Use matched alpha.6 package/API/builder versions; deploying the engine checkout is not the consumer installation path.
+Create a matching generated project and complete local setup first. In production retain the generated Compose scenario guides: they name your exact site mode and storage mappings. Use matched alpha.7 package/API/builder versions; deploying the engine checkout is not the consumer installation path.
 
 ## Prepare persistent services
 
@@ -16,6 +16,14 @@ Stop `api` and `dispatcher` before host database maintenance. Run `pnpm db:migra
 The first-party builder uses a fixed image-defined command and fixed mounts. Give it the selected user-owned site source, required server-side build settings and a published-content read token. It ignores request-provided command/path/environment overrides. Content publication queues work through the outbox; the dispatcher triggers the configured private builder.
 
 The builder stages a release, builds it, and atomically switches the served output after success. A failure preserves the previous served release. Builds records the covering result; output may become visible shortly before its success status is recorded. Configure `LACE_BUILD_SITE_URL` and indexing behavior for your public host. A build token never belongs in browser environment variables.
+
+## Uploads and build caches
+
+Review the current managed `deploy/nginx.conf`: the media upload location streams requests with an 11 MiB multipart allowance, while the API enforces 10 MiB image bytes. Other requests keep a 1 MiB body limit. Merge upgrade conflicts and recreate the web service; verify a valid image above 1 MiB through the public origin.
+
+HTML revalidates with `Cache-Control: no-cache`. Only successful content-hashed `/_astro/` assets receive `public, max-age=2592000, immutable` (thirty days); missing assets do not. The proxy refuses `/_headers`.
+
+Compose mounts a separate `builder-cache` volume for the pnpm store and Astro image/placeholder cache. It is disposable, never part of a served release or data backup. The builder clears it above 2 GiB and clears its Astro portion after a failed build; an unusable cache falls back to an uncached build. Recreate updated builder/web services after reviewing Compose changes. Never remove database or media volumes to reset a build cache.
 
 ## Verify and recover
 

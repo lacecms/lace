@@ -11,6 +11,13 @@ export function upgradeMetadata(path) {
 
 /** Variants of the published alpha template and the operator change that conflicts. */
 const variants = [
+  { name: "default", version: "0.30.0", flags: [], conflict: "deploy/nginx.conf" },
+  {
+    name: "cloudflare",
+    version: "0.30.0",
+    flags: ["--cloudflare"],
+    conflict: "docs/lace-operations.md",
+  },
   { name: "default", version: "0.14.0", flags: [], conflict: "docs/lace-operations.md" },
   {
     name: "cloudflare",
@@ -108,7 +115,7 @@ export async function templateUpgradeJourney(temporary, operations) {
       "--starter",
       ...variant.flags,
     ]);
-    if (version === "0.14.0") {
+    if (version === "0.14.0" || version === "0.30.0") {
       for (const path of [
         ".env",
         ".env.local",
@@ -249,7 +256,7 @@ export async function templateUpgradeJourney(temporary, operations) {
       ["add", "replace", "remove"].includes(decision.action),
     );
     if (
-      (version === "0.4.0" || variant.name === "cloudflare") &&
+      (version === "0.4.0" || (version === "0.14.0" && variant.name === "cloudflare")) &&
       !changed.some((decision) => decision.action === "add")
     )
       throw new Error(`upgrade-${version}-${variant.name}-apply: no new managed file was added`);
@@ -314,6 +321,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}-repeat: upgraded project is not current`);
   }
   console.info(
-    "Template 0.4.0/0.14.0 default and Cloudflare projects: managed conflicts and new-guide collisions refused, scenario guides and the alpha.2 database step delivered, user README, configuration and site source preserved, repeat plan current",
+    "Template 0.4.0/0.14.0/0.30.0 default and Cloudflare projects: managed conflicts and new-guide collisions refused, scenario guides and the alpha.2 database step delivered, user README, configuration and site source preserved, repeat plan current",
   );
 }

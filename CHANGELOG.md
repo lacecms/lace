@@ -3,6 +3,14 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 0.1.0-alpha.7
+
+- Upload GIF images and reuse unchanged originals with conditional media requests; larger valid images now pass the VPS proxy.
+- Astro renders responsive WebP variants, preserving GIF animation, with eligible blurred placeholders and an optional full-size lightbox.
+- Image blocks and gallery items accept links that take precedence over the lightbox.
+- Site builds reuse image/package caches; successful content-hashed assets cache for thirty days while HTML revalidates.
+- Upgrade engine, site and builder together, review installed components and deployment files, then synchronize image/gallery schemas; no new SQL migration since alpha.6 ([upgrade guide](docs/compatibility.md#alpha-7-upgrade-and-rollback)).
+
 ## 0.1.0-alpha.6
 
 - Build exports are paginated and version-bound; the SDK assembles pages and handles publication conflicts.

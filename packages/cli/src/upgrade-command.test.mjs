@@ -249,7 +249,7 @@ describe("upgrade CLI", () => {
       const managed = ["package.json", ".env.example", "docs/lace-operations.md"];
       for (const path of managed) {
         const previous = (await readFile(join(project, path), "utf8")).replaceAll(
-          "0.1.0-alpha.6",
+          "0.1.0-alpha.7",
           "0.1.0-alpha.1",
         );
         await writeFile(join(project, path), previous);
@@ -281,7 +281,7 @@ describe("upgrade CLI", () => {
       await writeFile(
         join(project, "docs/lace-operations.md"),
         (await readFile(join(template, "docs/lace-operations.md"), "utf8")).replaceAll(
-          "0.1.0-alpha.6",
+          "0.1.0-alpha.7",
           "0.1.0-alpha.1",
         ),
       );
@@ -302,7 +302,7 @@ describe("upgrade CLI", () => {
       expect(outcome.guidance).toContain("pnpm --dir site add @lacecms/astro@0.1.0-alpha.4");
       expect(outcome.guidance).toContain("Template 0.29.0: alpha.5 release coordinates");
       expect(outcome.guidance).toContain("Template 0.30.0: alpha.6 release coordinates");
-      expect(outcome.guidance).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.6");
+      expect(outcome.guidance).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.7");
       expect(outcome.guidance).toContain(
         "Database: Lace 0.1.0-alpha.3 engines require migration 0003_site_build_outcomes",
       );

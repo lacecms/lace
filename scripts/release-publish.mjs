@@ -6,9 +6,15 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jsonFile, verifyInventory } from "./release-artifacts.mjs";
+import {
+  digestPattern,
+  matchingImage,
+  matchingIndex,
+  parseImageManifest,
+} from "./release-image-identity.mjs";
+export { matchingImage, matchingIndex } from "./release-image-identity.mjs";
 
 const registry = "https://registry.npmjs.org";
-const digestPattern = /^sha256:[a-f0-9]{64}$/u;
 
 export function parsePublishArguments(args) {
   const [target, ...rest] = args;
@@ -45,7 +51,7 @@ function select(items, only, key) {
   return items.filter((item) => only.includes(key(item)));
 }
 
-export async function command(tool, args, { capture = false, missing = false } = {}) {
+export async function command(tool, args, { capture = false, missing = false, trim = true } = {}) {
   console.info(`Publication: ${tool} ${args.join(" ")}`);
   return new Promise((accept, reject) => {
     const child = spawn(tool, args, {
@@ -59,7 +65,7 @@ export async function command(tool, args, { capture = false, missing = false } =
     }
     child.on("error", () => reject(new Error(`Could not start ${tool}`)));
     child.on("close", (code) => {
-      if (code === 0) accept(stdout.trim());
+      if (code === 0) accept(trim ? stdout.trim() : stdout);
       else if (
         missing &&
         /manifest unknown|no such manifest|not found/iu.test(stderr) &&
@@ -116,6 +122,7 @@ export async function inspectImage(coordinate) {
   const raw = await command("docker", ["buildx", "imagetools", "inspect", coordinate, "--raw"], {
     capture: true,
     missing: true,
+    trim: false,
   });
   if (raw === null) return null;
   const descriptor = JSON.parse(
@@ -127,32 +134,10 @@ export async function inspectImage(coordinate) {
   );
   if (!digestPattern.test(descriptor.digest))
     throw new Error(`Invalid registry digest: ${coordinate}`);
-  return { ...JSON.parse(raw), digest: descriptor.digest };
-}
-
-export function matchingImage(item, remote) {
-  if (!remote) return false;
-  if (remote.config?.digest !== item.imageId || !digestPattern.test(remote.digest))
-    throw new Error(`Published image differs: ${item.coordinate}`);
-  return true;
-}
-
-export async function matchingIndex(coordinate, remote, items, inspect) {
-  if (!remote) return false;
-  if (!Array.isArray(remote.manifests) || remote.manifests.length !== items.length)
-    throw new Error(`Published manifest platforms differ: ${coordinate}`);
-  const repository = coordinate.slice(0, coordinate.lastIndexOf(":"));
-  for (const item of items) {
-    const descriptors = remote.manifests.filter(
-      (entry) => `${entry.platform?.os}/${entry.platform?.architecture}` === item.platform,
-    );
-    if (descriptors.length !== 1 || !digestPattern.test(descriptors[0].digest))
-      throw new Error(`Published manifest platform differs: ${coordinate} (${item.platform})`);
-    const child = await inspect(`${repository}@${descriptors[0].digest}`);
-    if (!matchingImage(item, child))
-      throw new Error(`Missing published manifest image: ${coordinate}`);
-  }
-  return true;
+  const requested = coordinate.split("@")[1];
+  if (requested && requested !== descriptor.digest)
+    throw new Error(`Registry reference digest mismatch: ${coordinate}`);
+  return parseImageManifest(raw, descriptor.digest);
 }
 
 export async function publishRelease(options, operations = {}) {
@@ -315,7 +300,7 @@ async function publishUnlocked(options, operations = {}) {
       const platforms = [];
       for (const item of items) {
         const remote = await inspect(item.coordinate);
-        platforms.push({ item, remote, exists: matchingImage(item, remote) });
+        platforms.push({ item, remote, exists: await matchingImage(item, remote, inspect) });
       }
       const remote = await inspect(coordinate);
       const exists = await matchingIndex(coordinate, remote, items, inspect);
@@ -338,7 +323,7 @@ async function publishUnlocked(options, operations = {}) {
           await run("docker", ["tag", item.imageId, item.coordinate]);
           await run("docker", ["push", item.coordinate]);
           platform.remote = await inspect(item.coordinate);
-          if (!matchingImage(item, platform.remote))
+          if (!(await matchingImage(item, platform.remote, inspect)))
             throw new Error(`Image missing after push: ${item.coordinate}`);
         }
       }

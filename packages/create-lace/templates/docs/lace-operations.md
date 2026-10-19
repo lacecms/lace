@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.22.0` and Lace `0.1.0-alpha.6` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.6` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.22.0` and Lace `0.1.0-alpha.7` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.7` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-alpha.6 my-site
+pnpm create lace@0.1.0-alpha.7 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -213,7 +213,7 @@ The web proxy serves the content-hashed files under `/_astro/` with `Cache-Contr
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-alpha.6` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-alpha.7` candidate artifacts.
 
 <!-- lace-site: starter -->
 
@@ -612,3 +612,22 @@ validated structured error records to their reason strings, discarding path
 metadata without deleting history or changing statuses/attempts.
 
 This section defines deployment selection; a configured identity does not prove a successful deployment. See [publication visibility](#when-published-content-becomes-visible) for dev, manual and automatic behavior after publication.
+
+## Alpha.7 image upgrade
+
+Template 0.35.0 selects alpha.7 packages/images together. No new SQL migration
+is introduced since alpha.6, but content synchronization advances image/gallery
+schemas to 4/3. Back up matching configuration, database, media, site source and
+locks first. Update all Lace site dependencies and image tags; review managed
+nginx/Compose/Pages workflow changes and merge customized files. User-owned
+site files and configuration require manual adoption: see `lace-astro-site.md`
+for sharp, laceImageConfig, responsive variants, lightbox/link styles and safe
+registry updates. Raise affected model versions and synchronize explicitly,
+with matching components ready before the next build. Older components reject
+new schemas; package downgrade does not reverse synchronized content.
+
+Recreate updated web/builder services; test an image upload above 1 MiB through
+the proxy, animated GIF variants, link precedence and HTML/hashed-asset headers.
+Keep MinIO/R2 objects and database backups separate from disposable build caches.
+Rollback after synchronization requires matching backed-up content/configuration
+and source alongside compatible packages/images, not just old image tags.

@@ -50,6 +50,21 @@ See [alpha.6 notes](./compatibility.md#alpha-6-upgrade-and-rollback). Publicatio
 results remain pending until separately recorded; prior confirmations retain
 their original scope.
 
+## Alpha.7 handoff — 2026-10-19
+
+The selected candidate is `0.1.0-alpha.7` / `next`, template `0.35.0`.
+Its local source/artifact acceptance is pending; see the
+[current evidence](../openspec/changes/archive/2026-10-19-prepare-alpha-seven-release/readiness.md).
+Alpha.6 publication was confirmed through public npm/GHCR reads on 2026-10-19;
+it does not establish real alpha.7 deployment or recovery verification.
+
+Exercise GIF upload and original delivery, WebP animation, lightbox/link
+precedence, a proxied upload above 1 MiB, cache headers, coordinated restore and
+build failure/retry against the exact accepted alpha.7 artifacts. See
+[alpha.7 upgrade notes](./compatibility.md#alpha-7-upgrade-and-rollback).
+Actual VPS/Cloudflare deployment, backup restoration and publishing rights remain
+separate owner-operated checks.
+
 ## Purpose and ownership
 
 The release owner follows this plan after Step 34 against a real application

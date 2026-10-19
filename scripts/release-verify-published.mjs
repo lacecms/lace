@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { parseImageManifest } from "./release-image-identity.mjs";
 import {
   lookupPackage,
   matchingPackage,
@@ -43,7 +44,7 @@ export async function inspectPublicImage(coordinate) {
       response.headers.get("docker-content-digest") !== actual)
   )
     throw new Error("Public manifest digest mismatch");
-  return { ...JSON.parse(bytes), digest: actual };
+  return parseImageManifest(bytes, actual);
 }
 
 export async function verifyPublishedInventory(inventory, directory, operations = {}) {
@@ -77,7 +78,7 @@ export async function verifyPublishedInventory(inventory, directory, operations 
     const platforms = [];
     for (const item of items) {
       const remote = await inspect(item.coordinate);
-      if (!matchingImage(item, remote))
+      if (!(await matchingImage(item, remote, inspect)))
         throw new Error(`Missing published image: ${item.coordinate}`);
       platforms.push({
         coordinate: item.coordinate,

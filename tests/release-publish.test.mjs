@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { parsePublishArguments, publishRelease } from "../scripts/release-publish.mjs";
+import { indexedImages } from "./release-image-fixture.mjs";
 
 const id = (char) => `sha256:${char.repeat(64)}`;
 const packages = ["@lacecms/content", "@lacecms/sdk", "create-lace"].map((name) => ({
@@ -369,4 +370,52 @@ test("loaded image with wrong platform is never tagged or pushed", async () => {
     "Loaded image",
   );
   expect(h.commands.map((c) => c[1])).toEqual(["load", "image"]);
+});
+
+test("index-ID publication resumes one uploaded platform and verifies flattened attestations", async () => {
+  const graph = indexedImages(images);
+  graph.store.delete(images[1].coordinate);
+  const commands = [];
+  const receipts = [];
+  const operations = {
+    withLock: async (_directory, _operation, work) => work(),
+    idle: async () => {},
+    verify: async () => ({ ...inventory, images: graph.items }),
+    inspectImage: graph.inspect,
+    save: async (_path, report) => receipts.push(report),
+    command: async (tool, args) => {
+      commands.push([tool, ...args]);
+      if (args[0] === "image") {
+        const item = graph.items.find((entry) => entry.imageId === args[2]);
+        return JSON.stringify([
+          { Id: item.imageId, Os: "linux", Architecture: item.platform.split("/")[1] },
+        ]);
+      }
+      if (args[0] === "push") {
+        const item = graph.items.find((entry) => entry.coordinate === args[1]);
+        graph.store.set(item.coordinate, graph.store.get(`ghcr.io/lacecms/api@${item.imageId}`));
+      }
+      if (args[0] === "buildx") graph.final("ghcr.io/lacecms/api:0.1.0-alpha.3");
+      return "";
+    },
+  };
+  await publishRelease({ ...options, target: "images", dryRun: true }, operations);
+  expect(commands).toEqual([]);
+  expect(receipts).toEqual([]);
+  await publishRelease({ ...options, target: "images" }, operations);
+  expect(commands.filter((entry) => entry[1] === "push")).toEqual([
+    ["docker", "push", images[1].coordinate],
+  ]);
+  expect(commands.at(-1).slice(-2)).toEqual(
+    graph.items.map((item) => `ghcr.io/lacecms/api@${item.imageId}`),
+  );
+  expect(graph.store.get("ghcr.io/lacecms/api:0.1.0-alpha.3").manifests).toHaveLength(4);
+  commands.length = 0;
+  await publishRelease({ ...options, target: "images" }, operations);
+  expect(commands).toEqual([]);
+  expect(receipts.at(-1).items[0].action).toBe("already-published");
+  const root = graph.store.get("ghcr.io/lacecms/api:0.1.0-alpha.3");
+  graph.index("ghcr.io/lacecms/api:0.1.0-alpha.3", [...root.manifests, root.manifests[1]]);
+  await expect(publishRelease({ ...options, target: "images" }, operations)).rejects.toThrow();
+  expect(commands).toEqual([]);
 });

@@ -1,7 +1,7 @@
 # Lace backlog
 
 - **DOC1 Public documentation (selected):** private Astro/Starlight application,
-  English latest (alpha.6), locale/version foundation, changed-input Pages
+  English latest (alpha.7), locale/version foundation, changed-input Pages
   publication from main, product README and contributor guide. Delivered through
   `add-starlight-documentation`; independent of the deferred CE sequence.
 

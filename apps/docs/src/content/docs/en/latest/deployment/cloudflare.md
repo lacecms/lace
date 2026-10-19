@@ -47,3 +47,7 @@ The Worker and static Astro site have separate deployments. Give the remote site
 Set `LACE_BUILD_SITE_URL` to the served site and `LACE_SITE_INDEXING=off` for staging. A hook result of Accepted means the provider accepted the request, not that readers see new content. Optional exact-deployment tracking uses `LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME` and the separate Pages-read-only `LACE_PAGES_API_TOKEN`; it records a confirmed result or Unknown at its deadline.
 
 After changing config, sync the explicitly selected remote target and redeploy the Worker, which bundles `lace.config.ts`. After an upgrade, migrate explicitly before the corresponding deployment. Back up D1 and R2 together and test restoration; local tests cannot establish account backup or production deployment correctness.
+
+## Image assets and build caches
+
+The site's user-owned `public/_headers` gives successful content-hashed `/_astro/` assets thirty-day immutable caching and keeps HTML revalidating. Adopt the file from a matching starter when upgrading an existing site; inspect actual hosted responses after deployment. The generated Pages workflow restores and saves the site's `node_modules/.astro` directory with `actions/cache`, reusing image variants and placeholders. That cache is disposable and does not back up D1, R2 or content. Other build providers need their own equivalent configuration. Local workflow/header checks do not prove a Pages deployment.

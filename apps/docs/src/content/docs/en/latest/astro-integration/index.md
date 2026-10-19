@@ -23,6 +23,26 @@ Import transport helpers from `@lacecms/sdk`, framework-neutral helpers from `@l
 
 Pages need corresponding Astro files. A collection uses `getStaticPaths`; a config route alone does not create it. Resolve published globals for shared site content and provide an explicit fallback for an unpublished optional global. Use the loader's metadata/path helpers for SEO, canonical URLs, robots and sitemap behavior. Set the public build-site URL deliberately, and disable indexing for staging.
 
+## Optimize images
+
+The generated starter already configures image optimization. For an existing site, install the matching Lace packages plus `sharp` in that site's dependencies and add image configuration in `astro.config.mjs`:
+
+```js
+import { laceImageConfig } from "@lacecms/astro";
+import { defineConfig } from "astro/config";
+
+export default defineConfig({
+  image: laceImageConfig(process.env),
+  output: "static",
+});
+```
+
+Supply `LACE_API_BASE_URL` to the Astro configuration process as well as the server-only loader; if you use an environment file, load it explicitly as shown in the generated `docs/lace-astro-site.md`. The helper allows only that API's public media path. Keep the build token private and make originals reachable from the build environment.
+
+`LaceImage.astro` builds WebP variants at 960 and 1920 pixels, each capped at the original width, with `srcset`, `sizes`, dimensions, alt text and focal point. GIF variants preserve animation. Eligible opaque images receive a blurred placeholder; GIF, transparent images and services without local transforms omit it. Images load lazily by default; Hero uses eager loading. A failed fetch or transform fails the build. Set the loader's `optimizeImages: false` to use direct public originals instead.
+
+Image and Gallery components support an opt-in, script-free full-size lightbox. A block/item link takes precedence and opens in the same tab. Adopt the starter's lightbox and link focus styles. After upgrading packages, review `lace add block image gallery hero --site <path> --dry-run`, update unedited files and merge customized components (`--write-new` provides `.new` proposals). Image/gallery schemas are now 4/3: raise affected model versions and synchronize content explicitly, with matching components ready before the next build. See [upgrade and rollback](../operations/#upgrade-and-roll-back).
+
 ## Style your components
 
 Use public `data-lace-model`, `data-lace-entry`, `data-lace-block`, `data-lace-block-key` and `data-lace-part` hooks. Incidental tags/classes are not the styling contract. Gallery/navigation components ship source rather than a universal theme: provide your own layout, responsive CSS and accessible navigation behavior. Keep editor-chosen CSS classes in any purge safelist.

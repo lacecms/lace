@@ -1,6 +1,13 @@
 # Личный сайт на Lace: рабочий путь до релиза MVP
 
-Проверено по исходникам, шаблонам и принятым спецификациям на 30 сентября 2026 года. Это инструкция, а не отчёт о выполненном production-деплое: приведённые ниже VPS/Cloudflare deployments в этой сессии не запускались.
+Внутренний разбор ручного source-workspace сценария от 30 сентября 2026 года.
+Исторические команды ниже сохраняются как пример разработки движка, а не
+актуальный consumer quickstart. Для новой установки используй
+[публичную документацию](https://lacecms.github.io/lace/en/latest/getting-started/)
+и guides сгенерированного проекта. Обновление до alpha.7 с картинками описано в
+[compatibility](./compatibility.md#alpha-7-upgrade-and-rollback): пакеты, компоненты
+сайта, синхронизация схем и deployment-файлы должны быть согласованы.
+Alpha.6 опубликована; alpha.7 пока готовится, её сборка не означает публикацию.
 
 ## Что именно ты используешь
 
@@ -19,7 +26,11 @@ Lace — headless CMS. В `lace.config.ts` ты описываешь струк�
 
 ## 1. Создай проект из текущего репозитория
 
-Сейчас `@lacecms/*` имеют `private: true` и версию `0.0.0`; шаблоны не дают готовых опубликованных координат API/builder images. Поэтому команду `pnpm create lace@latest` пока нельзя считать обеспеченным способом установки нашей текущей реализации. Рабочий обход — локальная сборка и tarballs, как в generated-project acceptance.
+Публичные `@lacecms/*` и `create-lace` уже выпускаются согласованными альфами.
+Проверка npm/GHCR от 19 октября 2026 года подтверждает доступность alpha.6;
+текущий кандидат — alpha.7/template 0.35.0. Для установки выбирай явно
+опубликованную версию и matching images. Ниже оставлен путь локальной сборки
+и tarballs для работы с исходниками; он не нужен обычному потребителю.
 
 Нужны Node `>=24.12.0` и pnpm `>=12` (минимумы; проверено на Node `24.12.0` и pnpm `12.3.4`), а для VPS — Docker Compose. Каталог назначения должен быть новым либо содержать только `.git`, `README.md`, `LICENSE`.
 
@@ -562,17 +573,27 @@ pnpm exec wrangler secret put LACE_DEPLOY_HOOK_URL --config wrangler.worker.json
 
 HTML статический, но картинки в данном примере загружаются с public media endpoint CMS, который читает R2/MinIO. Для полностью независимого от CMS набора HTML+картинки нужен отдельный build pipeline копирования media в static output; сейчас автоматически его нет.
 
-## Что пока не хватает
+## Текущее состояние и исторические ограничения
 
-1. **Release artifacts:** опубликованных engine packages, согласованных версий API/builder images и распространяемого admin bundle. Tarballs и собственные images обходят это для разработчика, но это ещё не установка «из коробки».
-2. **Полного Cloudflare consumer template:** generator даёт Pages, а Worker entry/config, admin assets, local Worker command, ресурсы и orchestration пока приходится собирать вручную.
-3. **Routes для личного сайта:** пять встроенных блоков уже рендерятся в generated Home/Posts; contacts/works остаются пользовательским кодом.
-4. **Setup UI:** browser wizard пока отсутствует. Generated operations guide теперь документирует рабочий setup API request, login и токены.
-5. **Автоматического Pages rebuild:** build environment уже включён в manual workflow; автоматический запуск по Publish требует отдельного deployment wiring.
-6. **Миграций заполненных моделей:** sync не преобразует существующие snapshots при структурных изменениях. Повышение version само по себе этого не решает.
-7. **Подготовки и проверки альфа-артефактов (25B/25C), финального release gate (26):** 25A закрывает минимальный локальный onboarding, рендеринг и media origins. Публикация пакетов, реальный Cloudflare/VPS, полная security/resilience и backup/restore проверка остаются отдельными этапами.
+Ограничения раннего MVP из этого walkthrough больше не являются списком
+нереализованных возможностей. Публичные пакеты, API/builder images, packaged
+admin, browser setup, Worker consumer template, schema evolution и локальная
+release acceptance реализованы. Полный поддерживаемый порядок действий смотри
+в guides текущего генератора, [операциях авторизации](./auth-operations.md),
+[синхронизации](./configuration-synchronization.md) и
+[release guidance](./alpha-release.md).
 
-Контактная форма, отправка email, визуальный draft preview, локализация и scheduled publication не следуют из этого сценария. Для contacts страница с email/ссылками уже достаточна; submit-форме потребуется отдельный backend/service.
+Пользовательские contacts/works routes по-прежнему требуют Astro-кода.
+Pages deploy hook настраивается отдельно; подтверждение принятого hook не равно
+готовому deployment. При настроенных Pages tracking credentials Lace отслеживает
+конкретный deployment; без них финальную публикацию проверяет оператор.
+Локальная acceptance не заменяет проверку реального VPS/Cloudflare и восстановления.
+
+Alpha.7 собирает WebP variants, включая GIF-анимацию, прямо в static output.
+Lightbox и public media URL по-прежнему используют оригиналы из CMS. Полностью
+автономная копия всех оригиналов не обещается. Обновляй engine/site/builder вместе,
+используй matching registry components, затем повышай версии затронутых моделей
+и явно синхронизируй image/gallery schemas 4/3. Новых SQL-миграций с alpha.6 нет.
 
 ## Исходники, на которых основан гайд
 

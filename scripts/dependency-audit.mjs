@@ -20,6 +20,8 @@ const accepted = {
   },
 };
 const knownLicenses = new Set([
+  // Either alternative is already permitted independently below.
+  "(MIT OR CC0-1.0)",
   "0BSD",
   "Apache-2.0",
   "Apache-2.0 AND LGPL-3.0-or-later",

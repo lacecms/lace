@@ -6,8 +6,9 @@ import { checksum, completeInventory, jsonFile } from "../scripts/release-artifa
 import { packageHashes } from "../scripts/release-publish.mjs";
 import { hashBytes, persistAcceptance } from "../scripts/release-evidence.mjs";
 import { releaseBody } from "../scripts/release-github.mjs";
+import { indexedImages } from "./release-image-fixture.mjs";
 
-export async function lifecycleFixture() {
+export async function lifecycleFixture({ indexed = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "lace-lifecycle-test-"));
   const directory = join(root, ".release-artifacts", "candidate");
   await mkdir(join(directory, "packages"), { recursive: true });
@@ -43,6 +44,8 @@ export async function lifecycleFixture() {
         smokePassed: true,
       });
     }
+  const imageGraph = indexed ? indexedImages(images) : null;
+  if (imageGraph) images.splice(0, images.length, ...imageGraph.items);
   const inventory = completeInventory(release, source, packages, images);
   await jsonFile(join(directory, "inventory.json"), inventory);
   await jsonFile(join(directory, "status.json"), { state: "prepared" });
@@ -66,8 +69,8 @@ export async function lifecycleFixture() {
   await writeFile(join(root, ".gitignore"), ".release-artifacts/\n.lace-acceptance/\n");
   git("add", ".gitignore", "CHANGELOG.md");
   git("commit", "-m", "fixture");
-  const remote = new Map();
-  for (const image of images) {
+  const remote = imageGraph?.store ?? new Map();
+  for (const image of imageGraph ? [] : images) {
     const manifest = {
       digest: `sha256:${hashBytes(image.coordinate)}`,
       config: { digest: image.imageId },
@@ -75,7 +78,14 @@ export async function lifecycleFixture() {
     remote.set(image.coordinate, manifest);
     remote.set(`${release.images[image.kind]}@${manifest.digest}`, manifest);
   }
-  for (const kind of ["api", "builder"])
+  for (const kind of ["api", "builder"]) {
+    if (imageGraph) {
+      imageGraph.final(
+        `${release.images[kind]}:${release.version}`,
+        images.filter((image) => image.kind === kind),
+      );
+      continue;
+    }
     remote.set(`${release.images[kind]}:${release.version}`, {
       digest: `sha256:${hashBytes(kind)}`,
       manifests: images
@@ -85,6 +95,7 @@ export async function lifecycleFixture() {
           platform: { os: "linux", architecture: image.platform.split("/")[1] },
         })),
     });
+  }
   const publishedPackages = new Map(
     await Promise.all(
       packages.map(async (item) => [item.name, await packageHashes(join(directory, item.file))]),
@@ -148,6 +159,7 @@ export async function lifecycleFixture() {
     operations,
     github,
     remote,
+    imageGraph,
     mutations,
     assetBytes,
     get release() {
