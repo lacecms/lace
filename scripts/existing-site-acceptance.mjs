@@ -107,14 +107,24 @@ export async function existingSiteJourney(parent, operations) {
   const fixture = join(workspace, "tests/fixtures/existing-astro-site");
   const root = join(parent, "existing-site");
   await cp(fixture, root, { recursive: true });
-  // The operator's site before connection: no Lace blocks, loader or Lace routes.
+  // The operator's site before connection: no Lace blocks, loader or Lace routes,
+  // and a plain Astro configuration that the guide replaces.
   const fixtureGuideFiles = [
     "src/lib/lace.ts",
     "src/env.d.ts",
     "src/pages/index.astro",
     "src/pages/articles/[slug].astro",
+    "astro.config.mjs",
   ];
-  await Promise.all([...blockFiles, ...fixtureGuideFiles].map((path) => rm(join(root, path))));
+  await Promise.all(
+    [...blockFiles, ...fixtureGuideFiles.filter((path) => path !== "astro.config.mjs")].map(
+      (path) => rm(join(root, path)),
+    ),
+  );
+  await writeFile(
+    join(root, "astro.config.mjs"),
+    'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
+  );
   const before = await tree(root);
 
   const cms = join(root, "cms");
