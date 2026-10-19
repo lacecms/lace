@@ -2143,6 +2143,9 @@ async function main() {
     )
       throw new Error("Consumer template version mismatch");
     await installPackedConsumer(project, artifacts.tarballs);
+    // Exercise image transforms with the inventory's installed packages before
+    // the Compose journey changes the generated project's environment.
+    await starterJourney(project);
     const context = await prepareCompose(project, parent, artifacts);
     context.shipping = shipping;
     context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
