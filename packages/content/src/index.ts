@@ -2287,7 +2287,9 @@ export const builtInBlocks = deepFreeze({
       images: field.list({
         defaultValue: [],
         item: field.group({
+          // Media comes first so editors show the image before its overrides.
           fields: {
+            media: field.media({ label: "Image", required: true }),
             alt: field.text({
               description: "Leave empty to use the media item's alt text.",
               label: "Alt text",
@@ -2297,7 +2299,6 @@ export const builtInBlocks = deepFreeze({
               label: "Caption",
             }),
             link: imageLinkField,
-            media: field.media({ label: "Image", required: true }),
           },
         }),
         itemLabel: "caption",
@@ -2332,11 +2333,12 @@ export const builtInBlocks = deepFreeze({
   image: defineBlock({
     description:
       "A single image with an optional caption and alt text that overrides the media alt.",
+    // Media comes first so editors show the image before its overrides.
     fields: {
+      media: field.media({ required: true }),
       alt: field.text(),
       caption: field.text(),
       link: imageLinkField,
-      media: field.media({ required: true }),
     },
     label: "Image",
     // Version 2 only made `alt` optional, version 3 only added the lightbox

@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
+import { mediaItem, removeMedia, renderInRouter, stubClient } from "../../../app/testing/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 import { SelectedMedia } from "./index.js";
 
@@ -33,7 +33,7 @@ test("an active selection shows its thumbnail, filename, and facts with Replace 
     "/api/v1/admin/media/media-1/preview",
   );
   await user.click(screen.getByRole("button", { name: "Replace media for Hero" }));
-  await user.click(screen.getByRole("button", { name: "Remove media from Hero" }));
+  await removeMedia(user, "Hero");
   expect(onReplace).toHaveBeenCalledTimes(1);
   expect(onRemove).toHaveBeenCalledTimes(1);
   expect(document.body).not.toHaveTextContent("media-1");
@@ -72,7 +72,7 @@ test("a missing selection says it no longer exists without showing its identifie
   });
   expect(await screen.findByText("Selected media no longer exists.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Remove media from Hero" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Media actions for Hero" })).toBeInTheDocument();
   expect(document.body).not.toHaveTextContent("media-1");
 });
 
@@ -108,4 +108,15 @@ test("a selection pending deletion shows no alt text line", async () => {
   });
   expect(await screen.findByText(/being deleted/)).toBeInTheDocument();
   expect(screen.queryByText(/Alt text/)).toBeNull();
+});
+
+test("the selection is one frameless row with Replace and an actions menu", async () => {
+  mount({ getMedia: async () => ({ ...mediaItem, alt: "Red bicycle", usage: [] }) });
+  const filename = await screen.findByText("cover.png");
+  const row = filename.closest(".flex.flex-wrap")!;
+  expect(row).not.toHaveClass("border");
+  expect(screen.getByText("Alt text: Red bicycle")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Replace media for Hero" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Media actions for Hero" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove media from Hero" })).toBeNull();
 });

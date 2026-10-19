@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { itemAction, openAllItems } from "./support/list-items.js";
 import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import { sessionPath, sessionSummary } from "./support/session.js";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
@@ -165,6 +166,7 @@ for (const width of [1280, 390]) {
     await page.goto("/admin/content/posts/entry-1");
     const entryFields = page.getByRole("region", { name: "Fields", exact: true });
     await entryFields.getByRole("tab", { name: "Cards tab", exact: true }).click();
+    await openAllItems(page);
     const list = entryFields.getByRole("list", { name: "Cards", exact: true });
     const first = list.getByRole("listitem").first();
     await first.getByRole("tab", { name: "Rich tab", exact: true }).click();
@@ -174,7 +176,7 @@ for (const width of [1280, 390]) {
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.type(" edited");
     await expect(first).toContainText("cover.png");
-    await first.getByRole("button", { name: "Move down Cards item 1" }).click();
+    await itemAction(page, "Cards item 1", "Move down", { scope: first });
     const moved = list.getByRole("listitem").nth(1);
     await expect(moved.getByRole("textbox", { name: "Body", exact: true })).toHaveText(
       "Rich one edited",
@@ -202,6 +204,7 @@ for (const width of [1280, 390]) {
     await block.getByRole("tab", { name: "Content", exact: true }).click();
     await page.reload();
     await entryFields.getByRole("tab", { name: "Cards tab", exact: true }).click();
+    await openAllItems(page);
     await list
       .getByRole("listitem")
       .nth(1)
@@ -228,7 +231,9 @@ test("CE9B viewers operate keyboard tabs without edits", async ({ page }) => {
   await fields.getByRole("tab", { name: "Overview tab", exact: true }).focus();
   await page.keyboard.press("End");
   await expect(fields.getByRole("tab", { name: "Cards tab", exact: true })).toBeFocused();
+  await openAllItems(page);
   await expect(fields.getByRole("textbox", { name: "Note", exact: true }).first()).toBeDisabled();
+  await fields.getByRole("tab", { name: "Cards tab", exact: true }).focus();
   await page.keyboard.press("Home");
   await expect(fields.getByRole("tab", { name: "Overview tab", exact: true })).toBeFocused();
   await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
@@ -265,6 +270,7 @@ test("CE9B block summary reveals Content, layout tabs and collapsed item", async
   await page.goto("/admin/content/posts/entry-1");
   const block = page.getByRole("article");
   await block.getByRole("tab", { name: "Cards tab", exact: true }).click();
+  await openAllItems(page);
   const item = block
     .getByRole("list", { name: "Cards", exact: true })
     .getByRole("listitem")

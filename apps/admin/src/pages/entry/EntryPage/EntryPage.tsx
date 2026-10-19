@@ -31,6 +31,7 @@ import {
   validationProblems,
   withoutClearedValues,
   type DraftEditorValues,
+  type FieldPreviewRegistry,
   type FieldRendererRegistry,
 } from "../../../entities/content/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
@@ -51,7 +52,7 @@ import { toast } from "../../../shared/ui/Toaster/index.js";
 import { ShellHeaderActions } from "../../../widgets/admin-shell/index.js";
 import { BlockEditor } from "../../../widgets/block-editor/index.js";
 import { collectionFocusTarget } from "../../../widgets/collection-entries/index.js";
-import { MediaPicker } from "../../../widgets/media-library/index.js";
+import { MediaItemPreview, MediaPicker } from "../../../widgets/media-library/index.js";
 import { DiscardChangesDialog } from "../DiscardChangesDialog/index.js";
 import { EntryActionsMenu } from "../EntryActionsMenu/index.js";
 import { EntryConflictAlert } from "../EntryConflictAlert/index.js";
@@ -65,6 +66,7 @@ import {
 
 const entryRoute = getRouteApi("/_protected/content/$modelKey/$entryId");
 const mediaRenderers: FieldRendererRegistry = { media: MediaPicker };
+const mediaPreviews: FieldPreviewRegistry = { media: MediaItemPreview };
 const formId = "entry-draft-form";
 
 export function EntryPage() {
@@ -484,6 +486,7 @@ export function EntryPage() {
         busy={busy || reloadServerDraft.isPending}
         form={form}
         model={model}
+        previews={mediaPreviews}
         readOnly={readOnly}
         renderers={mediaRenderers}
       >

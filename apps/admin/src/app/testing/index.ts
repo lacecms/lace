@@ -294,3 +294,36 @@ export async function addBlock(user: UserEvent, label: string) {
     within(screen.getByRole("dialog", { name: "Add block" })).getByRole("button", { name: label }),
   );
 }
+
+/** Opens an actions menu by keyboard; jsdom pointer opening of menus is unreliable. */
+export async function openActions(user: UserEvent, name: string) {
+  screen.getByRole("button", { name }).focus();
+  await user.keyboard("{Enter}");
+}
+
+/** Runs one action from a list item's actions menu, as a writer would. */
+export async function itemAction(
+  user: UserEvent,
+  item: string,
+  action: "Duplicate" | "Move down" | "Move up" | "Remove",
+) {
+  await openActions(user, `Actions for ${item}`);
+  await user.click(await screen.findByRole("menuitem", { name: `${action} ${item}` }));
+}
+
+/** Runs one action from a list's actions menu, such as Clear. */
+export async function listAction(user: UserEvent, list: string, action: string) {
+  await openActions(user, `Actions for ${list}`);
+  await user.click(await screen.findByRole("menuitem", { name: action }));
+}
+
+/** Opens a collapsed list item row. */
+export async function openItem(user: UserEvent, item: string) {
+  await user.click(await screen.findByRole("button", { name: `Expand ${item}` }));
+}
+
+/** Removes a media field's selection through its actions menu. */
+export async function removeMedia(user: UserEvent, label: string) {
+  await openActions(user, `Media actions for ${label}`);
+  await user.click(await screen.findByRole("menuitem", { name: `Remove media from ${label}` }));
+}

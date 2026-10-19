@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { itemAction } from "./support/list-items.js";
 import { field } from "@lacecms/content";
 import { sessionPath, sessionSummary } from "./support/session.js";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
@@ -153,10 +154,7 @@ for (const width of [1280, 390])
         await expect(title).toHaveAttribute("aria-invalid", "true");
         expect(state.saves).toHaveLength(0);
         await title.fill(" 😀 ");
-        await page
-          .getByRole("button", { name: "Move down Tags item 1", exact: true })
-          .last()
-          .click();
+        await itemAction(page, "Tags item 1", "Move down", { last: true });
         const tag = page.locator('[id="field-fields-details-tags-0"]');
         await expect(tag).toHaveValue("long");
         await expect(tag).toHaveAccessibleDescription("4 characters");

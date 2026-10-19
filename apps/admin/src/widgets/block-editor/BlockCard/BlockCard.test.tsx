@@ -1,12 +1,13 @@
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
+import { builtInBlocks, defineBlockRegistry, toBlockRegistryMetadata } from "@lacecms/content";
 import type { MediaDetailDto } from "@lacecms/contracts";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { expect, test, vi } from "vitest";
-import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
+import { mediaItem, openItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
 import { FieldRendererProvider, type DraftEditorValues } from "../../../entities/content/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 import { BlockCard } from "./index.js";
@@ -242,6 +243,26 @@ function mountImage(
     client: stubClient({ getMedia }),
   });
 }
+
+test("starter image blocks and gallery items show the image before its overrides", async () => {
+  const [imageBlock, galleryBlock] = toBlockRegistryMetadata(
+    defineBlockRegistry([builtInBlocks.image, builtInBlocks.gallery]),
+  ) as unknown as BlockDefinitionDto[];
+  const before = (first: HTMLElement, second: HTMLElement) =>
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  renderInRouter(<ImageHarness data={{}} definition={imageBlock!} />, {
+    client: stubClient({}),
+  });
+  const [media] = await screen.findAllByText("Media selection is not available here.");
+  before(media!, screen.getByRole("textbox", { name: "Alt" }));
+  cleanup();
+  renderInRouter(<ImageHarness data={{ images: [{}] }} definition={galleryBlock!} />, {
+    client: stubClient({}),
+  });
+  await openItem(userEvent.setup(), "Images item 1");
+  const [itemMedia] = await screen.findAllByText("Media selection is not available here.");
+  before(itemMedia!, screen.getByRole("textbox", { name: "Alt text" }));
+});
 
 test("an image block's empty alt field shows the inherited media alt", async () => {
   mountImage({ alt: "Red bicycle" });

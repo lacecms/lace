@@ -14,6 +14,7 @@ import {
   type DraftEditorValues,
   validationProblems,
 } from "../../../entities/content/index.js";
+import { itemAction, listAction, openActions, openItem } from "../../../app/testing/index.js";
 import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
 const links = field.list({
   label: "Links",
@@ -110,28 +111,31 @@ function Harness({
 test("duplicates detach nested lists, moves preserve DOM identity and removal retains the other item", async () => {
   const user = userEvent.setup();
   render(<Harness />);
+  await openItem(user, "Links item 1");
+  await openItem(user, "Links item 2");
   const first = screen.getAllByRole("textbox", { name: "Link title" })[0]!;
-  await user.click(screen.getByRole("button", { name: "Duplicate Links item 1" }));
+  await itemAction(user, "Links item 1", "Duplicate");
   const titles = screen.getAllByRole("textbox", { name: "Link title" });
   await user.clear(titles[1]!);
   await user.type(titles[1]!, "Copy");
   expect(first).toHaveValue("One");
-  await user.click(screen.getByRole("button", { name: "Move down Links item 1" }));
+  await itemAction(user, "Links item 1", "Move down");
   expect(screen.getAllByRole("textbox", { name: "Link title" })[1]).toBe(first);
-  await user.click(screen.getByRole("button", { name: "Remove Links item 1" }));
+  await itemAction(user, "Links item 1", "Remove");
   expect(screen.getAllByRole("textbox", { name: "Link title" })[0]).toBe(first);
   expect(screen.getByTestId("values")).not.toHaveTextContent("item-");
 });
 test("collapsed nested problems reveal exact controls and server errors follow moves", async () => {
   const user = userEvent.setup();
   render(<Harness />);
+  await openItem(user, "Links item 1");
+  await openItem(user, "Links item 2");
   await user.click(screen.getByRole("button", { name: "Server issue" }));
-  await user.click(screen.getByRole("button", { name: "Move down Links item 1" }));
+  await itemAction(user, "Links item 1", "Move down");
   expect(screen.getAllByRole("textbox", { name: "Address" })[1]).toHaveAccessibleDescription(
     "Server rejected this URL",
   );
   await user.click(screen.getByRole("button", { name: "Collapse Links item 2" }));
-  await user.click(screen.getByRole("button", { name: "Collapse Links" }));
   const link = screen.getByRole("link", { name: /Address in Item 2 in Links/u });
   await user.click(link);
   expect(screen.getAllByRole("textbox", { name: "Address" })[1]).toHaveFocus();
@@ -160,20 +164,27 @@ test("viewers can inspect disclosures without mutation actions or enabled leaf c
   const user = userEvent.setup();
   render(<Harness readOnly />);
   expect(screen.queryByRole("button", { name: "Add Links item" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Remove Links item 1" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Actions for Links item 1" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Reorder Links item 1" })).toBeNull();
+  await openItem(user, "Links item 1");
   const first = screen.getAllByRole("textbox", { name: "Link title" })[0]!;
   expect(first).toBeDisabled();
-  await user.click(screen.getByRole("button", { name: "Collapse Links" }));
+  await user.click(screen.getByRole("button", { name: "Collapse Links item 1" }));
   expect(first).not.toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Expand Links" }));
+  await openItem(user, "Links item 1");
   expect(first).toBeVisible();
 });
 test("per-list maximum blocks copies without preventing recovery", async () => {
   const user = userEvent.setup();
   render(<Harness initial={Array.from({ length: 100 }, () => ({ title: "Same" }))} />);
   expect(screen.getByRole("button", { name: "Add Links item" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Duplicate Links item 1" })).toBeDisabled();
-  await user.click(screen.getByRole("button", { name: "Remove Links item 1" }));
+  await openActions(user, "Actions for Links item 1");
+  expect(await screen.findByRole("menuitem", { name: "Duplicate Links item 1" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await user.keyboard("{Escape}");
+  await itemAction(user, "Links item 1", "Remove");
   expect(screen.getByRole("button", { name: "Add Links item" })).toBeEnabled();
   expect(within(screen.getByRole("list", { name: "Links" })).getAllByRole("listitem")).toHaveLength(
     99,
@@ -183,11 +194,11 @@ test("per-list maximum blocks copies without preventing recovery", async () => {
 test("nested list array errors survive group traversal and reveal the scalar", async () => {
   const user = userEvent.setup();
   render(<Harness />);
+  await openItem(user, "Links item 1");
   await user.click(screen.getByRole("button", { name: "Nested issue" }));
   expect(screen.getByRole("textbox", { name: "Children item 1" })).toHaveAccessibleDescription(
     "5 characters Nested child rejected",
   );
-  await user.click(screen.getAllByRole("button", { name: "Collapse Children" })[0]!);
   await user.click(screen.getByRole("button", { name: "Collapse Links item 1" }));
   await user.click(screen.getByRole("link", { name: /Item 1 in Children in Item 1 in Links/u }));
   expect(screen.getByRole("textbox", { name: "Children item 1" })).toHaveFocus();
@@ -198,7 +209,7 @@ test("removing an item recomputes a local list maximum without retaining a stale
   render(<Harness initial={Array.from({ length: 101 }, () => ({ title: "Same" }))} />);
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(screen.getByRole("link", { name: "Links" })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Remove Links item 1" }));
+  await itemAction(user, "Links item 1", "Remove");
   expect(screen.queryByRole("link", { name: "Links" })).toBeNull();
 }, 15000);
 
@@ -206,7 +217,7 @@ test("explicit empty containers round-trip and group items are removed without c
   const user = userEvent.setup();
   const saved = vi.fn();
   render(<Harness initial={[]} onSave={saved} />);
-  await user.click(screen.getByRole("button", { name: "Clear Links" }));
+  await listAction(user, "Links", "Clear Links");
   await user.click(screen.getByRole("button", { name: "Create Links" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved.mock.calls[0]![0].fields.links).toEqual([]);

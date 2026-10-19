@@ -1,7 +1,7 @@
 import type { MediaDetailDto, MediaMetadataDto } from "@lacecms/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { ImageOff } from "lucide-react";
-import type { Ref } from "react";
+import { ImageOff, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
+import { useRef, type Ref } from "react";
 import {
   formatMediaDimensions,
   MediaStatusBadge,
@@ -16,14 +16,21 @@ import {
   useAdminClient,
 } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../shared/ui/DropdownMenu/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
 
-const unavailableText = {
+export const unavailableText = {
   delete_failed: "This media is marked for deletion and cannot be published.",
   deleting: "This media is being deleted and cannot be published.",
 } as const;
 
-function facts(item: MediaMetadataDto): string {
+/** The type and, when known, dimensions of a media item, such as "JPEG · 640 × 479". */
+export function mediaFacts(item: MediaMetadataDto): string {
   const dimensions = formatMediaDimensions(item);
   return dimensions === "Unknown"
     ? mediaTypeLabel(item.mimeType)
@@ -33,8 +40,9 @@ function facts(item: MediaMetadataDto): string {
 /**
  * A media field's value, resolved through the single-item media read: a
  * thumbnail with filename, facts and alt text, or an explicit pending-deletion, missing,
- * or unreadable state. The stored identifier is never shown; Replace and
- * Remove stay available in every state unless the field is read-only.
+ * or unreadable state, as one compact row. The stored identifier is never
+ * shown; Replace and the menu's Remove stay available in every state unless
+ * the field is read-only.
  */
 export function SelectedMedia({
   actionRef,
@@ -68,20 +76,21 @@ export function SelectedMedia({
   });
   useSessionRecovery(detail.error);
   const item = detail.data;
+  const removed = useRef(false);
   const missing = detail.error instanceof AdminClientError && detail.error.code === "NOT_FOUND";
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-2 text-card-foreground">
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
       {item === undefined ? (
         detail.isPending ? (
-          <Skeleton className="size-16 shrink-0" />
+          <Skeleton className="size-14 shrink-0" />
         ) : (
-          <span className="flex size-16 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
             <ImageOff aria-hidden="true" className="size-6" />
           </span>
         )
       ) : (
-        <MediaThumbnail className="size-16 shrink-0 rounded-md" mediaId={item.id} />
+        <MediaThumbnail className="size-14 shrink-0 rounded-md" mediaId={item.id} />
       )}
       <div className="grid min-w-0 flex-1 gap-0.5 text-sm">
         {item === undefined ? undefined : (
@@ -100,7 +109,7 @@ export function SelectedMedia({
                 ? "Selected media no longer exists."
                 : "Selected media could not be loaded."
             : item.status === "active"
-              ? facts(item)
+              ? mediaFacts(item)
               : unavailableText[item.status]}
         </p>
         {item?.status === "active" ? (
@@ -115,7 +124,7 @@ export function SelectedMedia({
           <p className="m-0 text-xs text-destructive">{errorDescription(detail.error)}</p>
         ) : undefined}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex items-center gap-1">
         {item === undefined && detail.error !== null && !missing ? (
           <Button onClick={() => detail.refetch()} size="sm" variant="ghost">
             Try again
@@ -135,14 +144,34 @@ export function SelectedMedia({
             >
               Replace
             </Button>
-            <Button
-              aria-label={`Remove media from ${label}`}
-              onClick={onRemove}
-              size="sm"
-              variant="ghost"
-            >
-              Remove
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button aria-label={`Media actions for ${label}`} size="icon-sm" variant="ghost">
+                  <MoreHorizontalIcon aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(event) => {
+                  if (!removed.current) return;
+                  removed.current = false;
+                  // The picker moves focus to Choose media instead of the removed trigger.
+                  event.preventDefault();
+                }}
+              >
+                <DropdownMenuItem
+                  aria-label={`Remove media from ${label}`}
+                  onSelect={() => {
+                    removed.current = true;
+                    onRemove();
+                  }}
+                  variant="destructive"
+                >
+                  <Trash2Icon aria-hidden />
+                  Remove
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
       </div>

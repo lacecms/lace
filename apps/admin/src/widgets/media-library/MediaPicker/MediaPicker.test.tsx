@@ -6,10 +6,11 @@ import {
   addBlock,
   draftEntry,
   mediaItem,
+  removeMedia,
   renderInRouter,
   renderRoute,
-  stubClient as client,
   staticSessionSource,
+  stubClient as client,
 } from "../../../app/testing/index.js";
 import { type AdminRole } from "../../../entities/session/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
@@ -150,7 +151,7 @@ test("a missing selection is kept until it is replaced or removed", async () => 
   mount({ hero: "missing-1", overrides: { listMedia: async () => ({ items: [mediaItem] }) } });
   expect(await screen.findByText("Selected media no longer exists.")).toBeInTheDocument();
   expect(screen.queryByText(/missing-1/u)).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Remove media from Hero" }));
+  await removeMedia(user, "Hero");
   expect(screen.getByText("No media selected")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Choose media for Hero" })).toHaveFocus();
 });
@@ -159,7 +160,7 @@ test("a viewer sees the selected media without choosing, replacing, or removing 
   mount({ hero: mediaItem.id, role: "viewer" });
   expect(await screen.findByText("cover.png")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Replace media for Hero" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Remove media from Hero" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Media actions for Hero" })).not.toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   document.body.replaceChildren();

@@ -66,7 +66,17 @@ values, structural configuration hashes or schema versions. Update it if its
 target field is renamed or removed. Nested paths, callbacks and labels on
 scalar-item lists are rejected. Without a useful label, summaries use available
 text, rich-text plain text, URLs/select values or “Media selected”; they never
-show a media identifier or raw rich-text JSON.
+show a media identifier or raw rich-text JSON. A second line shows another
+field's value, such as a link's URL.
+
+Each list item is one row in a shared bordered list: a drag handle, its summary,
+a chevron and an actions menu with Move up, Move down, Duplicate and Remove.
+Group items start collapsed when an entry opens; Add and Duplicate open the new
+item and focus its first control. Scalar items show their control inline. When
+an item's first previewable field holds media, its row shows the thumbnail, the
+filename and type/dimensions, and “No alt” when neither the item's `alt` nor the
+media item has alt text. The editor derives all of this from the field
+descriptors; blocks need no presentation code.
 
 Groups and items can be collapsed without changing values or creating unsaved
 changes. Their controls stay mounted, preserving rich-text and media editing
@@ -87,22 +97,25 @@ Clearing a committed scalar item keeps its last committed value and blocks Save
 until the input is corrected or the item is removed. Arrays never acquire empty
 slots, and false, zero and explicit empty containers are retained.
 
-Duplicate inserts an independent deep copy after its source. Move up/down and
-pointer/keyboard drag reorder only the current list. Space picks up/drops a drag,
-arrow keys move it and Escape cancels. Focus and errors follow the item; Remove
-focuses an adjacent item or Add when the list becomes empty. Item identities
-exist only in editor state and never appear in saved content or Copy my JSON.
+Duplicate inserts an independent deep copy after its source. Move up/down (in
+the item's actions menu) and pointer/keyboard drag reorder only the current
+list. Space picks up/drops a drag, arrow keys move it and Escape cancels. Focus
+and errors follow the item; Remove focuses an adjacent item or Add when the list
+becomes empty. Item identities exist only in editor state and never appear in
+saved content or Copy my JSON.
 
-Each list displays its count, maximum and publication minimum. The hard ceiling
-is 100 items per list and 500 list elements per snapshot, counting nested lists,
-applicable defaults and all block data including hidden blocks. A lower
-`maxItems` takes precedence. Exactly 500 is allowed. Add, Duplicate and container
-or block growth are disabled with an explanation when their normalized result
-would exceed a limit. Removal and ordering remain available. Rich-text document
-arrays and the block array do not contribute to this list budget. Existing JSON
-size and media-reference limits still apply, with the server authoritative.
-Schemas allow at most six containers, two consecutive groups and no direct
-list-of-lists; nest a list inside a group item instead.
+Each list header shows its label and its count against the maximum; Clear sits
+in the list's actions menu. The publication minimum is shown while unmet and is
+always part of the list's accessible description. The hard ceiling is 100 items
+per list and 500 list elements per snapshot, counting nested lists, applicable
+defaults and all block data including hidden blocks. A lower `maxItems` takes
+precedence. Exactly 500 is allowed. Add, Duplicate and container or block growth
+are disabled with an explanation when their normalized result would exceed a
+limit. Removal and ordering remain available. Rich-text document arrays and the
+block array do not contribute to this list budget. Existing JSON size and media-
+reference limits still apply, with the server authoritative. Schemas allow at
+most six containers, two consecutive groups and no direct list-of-lists; nest a
+list inside a group item instead.
 
 Missing required descendants and lists below `minItems` are allowed in drafts
 and identified as publication requirements. Invalid present values and maxima

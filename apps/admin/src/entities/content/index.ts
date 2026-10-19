@@ -29,8 +29,11 @@ export {
   FieldRenderer,
   FieldRendererProvider,
   type FieldDefinition,
+  type FieldPreviewProps,
+  type FieldPreviewRegistry,
   type FieldRendererProps,
   type FieldRendererRegistry,
+  type ItemPreview,
 } from "./FieldRenderer/index.js";
 export { mediaAltPair } from "./media-alt.js";
 export { entryActions, hasEntryActions, type EntryActions } from "./entry-actions.js";
