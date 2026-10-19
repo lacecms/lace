@@ -1,3 +1,4 @@
+import { formFieldKeys } from "@lacecms/content";
 import type { ContentBlockDto, ContentModelDto } from "@lacecms/contracts";
 import {
   BoxIcon,
@@ -8,7 +9,7 @@ import {
   QuoteIcon,
   type LucideIcon,
 } from "lucide-react";
-import { fieldLabel } from "../../entities/content/index.js";
+import { fieldLabel, itemSummary } from "../../entities/content/index.js";
 
 export type BlockDefinitionDto = NonNullable<ContentModelDto["blockDefinitions"]>[number];
 
@@ -73,12 +74,30 @@ function truncate(value: string): string {
     : value;
 }
 
+type BlockFieldDefinition = BlockDefinitionDto["fields"][string];
+
+/**
+ * The summary of a non-empty list or group: a list reads as its label, item
+ * count and item summaries; a group as its item summary.
+ */
+function compositeSummary(key: string, field: BlockFieldDefinition, value: unknown): string {
+  if (field.type === "list" && Array.isArray(value) && value.length > 0) {
+    const items = value
+      .map((item) => itemSummary(field.item, item, field.itemLabel).primary)
+      .filter((primary) => primary !== undefined && primary !== "");
+    const count = `${fieldLabel(key, field.label)} (${value.length})`;
+    return items.length === 0 ? count : `${count}: ${items.join(", ")}`;
+  }
+  if (field.type === "group") return itemSummary(field, value).primary ?? "";
+  return "";
+}
+
 /**
  * A one-line description of a block's current data so collapsed blocks stay
  * recognizable. It never exposes stored media identifiers.
  */
 export function blockSummary(
-  definition: Pick<BlockDefinitionDto, "fields">,
+  definition: Pick<BlockDefinitionDto, "fields" | "layout">,
   data: Readonly<Record<string, unknown>> | undefined,
 ): string {
   const entries = Object.entries(definition.fields);
@@ -111,7 +130,17 @@ export function blockSummary(
     const value = text(key);
     if (value !== "") return truncate(value);
   }
-  if (entries.some(([key, field]) => field.type === "media" && text(key) !== "")) {
+  for (const key of formFieldKeys(definition.fields, definition.layout)) {
+    const value = compositeSummary(key, definition.fields[key]!, values[key]);
+    if (value !== "") return truncate(value);
+  }
+  if (
+    entries.some(
+      ([key, field]) =>
+        (field.type === "media" && text(key) !== "") ||
+        (field.type === "group" && itemSummary(field, values[key]).media),
+    )
+  ) {
     return "Media selected";
   }
   return "Empty block";

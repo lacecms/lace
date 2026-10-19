@@ -186,10 +186,21 @@ only with the server-returned canonical positions after a successful save.
 Each block SHALL render as a card whose header shows a reorder handle, an icon
 for its type, its label (or a label derived from its type when none is
 configured), and a one-line summary derived from its current data. The summary
-SHALL use the block's first non-empty text value, otherwise the plain text of
-its first non-empty rich-text value, otherwise a statement that media is
-selected, otherwise a statement that the block is empty. It SHALL never show a
-raw media identifier. Built-in block types SHALL have distinct icons, and any
+SHALL use the block's first non-empty top-level text value, otherwise the plain
+text of its first non-empty top-level rich-text value, otherwise its first
+non-empty top-level URL or select value, otherwise the summary of its first
+non-empty composite field in rendered field order, otherwise a statement that
+media is selected when a top-level media field or media inside a group holds a
+value, otherwise a statement that the block is empty. A list with at least one
+item SHALL summarize as its label (the configured label or one derived from its
+key), its item count in parentheses, and, when any item has a primary summary
+line, a colon followed by those items' primary lines in order, separated by
+commas. A group SHALL summarize as its primary summary line. Item and group
+primary lines SHALL follow the collapsed-item summary order. Lists without
+items, and groups without a primary line, SHALL be skipped. The summary SHALL
+be derived only from schema metadata and the block's values, SHALL contain no
+per-block presentation rules, SHALL be truncated to one line, and SHALL never
+show a raw media identifier or raw rich-text JSON. Built-in block types SHALL have distinct icons, and any
 other block type SHALL use a default icon. The header's label and summary SHALL
 truncate rather than overlap its controls at any viewport width.
 
@@ -244,6 +255,25 @@ SHALL name the moved block by its label and position rather than by its key.
 - **WHEN** a writer collapses a block whose data has a heading or text value
 - **THEN** the card still shows the block's icon, label, and a summary with that
   value, and its toggle reports that it is collapsed
+
+#### Scenario: A collapsed list block summarizes its items
+- **WHEN** a Navigation block has no name and its Links list holds items
+  labelled "Blog" and "About"
+- **THEN** the card summary reads "Links (2): Blog, About" instead of a
+  statement that the block is empty
+
+#### Scenario: A list of media items is counted
+- **WHEN** a Gallery block has no title and its Images list holds three items
+  with media and no caption
+- **THEN** the card summary reads "Images (3)" and shows no media identifier
+
+#### Scenario: Top-level text still wins over a list
+- **WHEN** a Gallery block has the title "Team" and three images
+- **THEN** the card summary reads "Team"
+
+#### Scenario: An empty list leaves the block empty
+- **WHEN** a Gallery block has no title and its Images list holds no items
+- **THEN** the card summary states that the block is empty
 
 #### Scenario: A writer inserts a block between two blocks
 - **WHEN** a writer opens the insert control between the first and second

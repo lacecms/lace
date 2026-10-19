@@ -103,6 +103,30 @@ test("shows the icon, label, and a summary from data, and hides only fields when
   expect(screen.getByLabelText("Heading")).not.toBeVisible();
 });
 
+test("a collapsed navigation card summarizes its links", async () => {
+  const [navigation] = toBlockRegistryMetadata(
+    defineBlockRegistry([builtInBlocks.navigation]),
+  ) as unknown as BlockDefinitionDto[];
+  renderInRouter(
+    <ImageHarness
+      collapsed
+      data={{
+        links: [
+          { label: "Blog", url: "/blog" },
+          { label: "About", url: "/about" },
+        ],
+      }}
+      definition={navigation!}
+    />,
+    { client: stubClient({}) },
+  );
+  expect(await screen.findByRole("article", { name: "Navigation" })).toHaveTextContent(
+    "Links (2): Blog, About",
+  );
+  expect(screen.getByText("Links (2): Blog, About")).toBeVisible();
+  expect(screen.queryByText("Empty block")).not.toBeInTheDocument();
+});
+
 test("keeps a block with an error expanded and shows the error", () => {
   mount({ collapsed: true, error: { data: { heading: { message: "Heading is required." } } } });
   expect(screen.getByLabelText("Heading")).toBeVisible();
@@ -183,7 +207,9 @@ function ImageHarness({
   data,
   definition = image,
   readOnly = false,
+  collapsed = false,
 }: {
+  readonly collapsed?: boolean;
   readonly data: Record<string, unknown>;
   readonly definition?: BlockDefinitionDto;
   readonly readOnly?: boolean;
@@ -213,7 +239,7 @@ function ImageHarness({
           <BlockCard
             active={false}
             blockKey="01ARZ3NDEKTSV4RRFFQ69G5FAV"
-            collapsed={false}
+            collapsed={collapsed}
             control={form.control}
             definition={definition}
             error={undefined}

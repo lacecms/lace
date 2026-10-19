@@ -69,6 +69,11 @@ text, rich-text plain text, URLs/select values or “Media selected”; they nev
 show a media identifier or raw rich-text JSON. A second line shows another
 field's value, such as a link's URL.
 
+A block whose top level has no text, rich-text, URL or select value is
+summarized in its card header by its first non-empty list or group: a list
+reads as its label and item count followed by the item summaries, such as
+“Links (2): Blog, About” or “Images (3)”.
+
 Each list item is one row in a shared bordered list: a drag handle, its summary,
 a chevron and an actions menu with Move up, Move down, Duplicate and Remove.
 Group items start collapsed when an entry opens; Add and Duplicate open the new

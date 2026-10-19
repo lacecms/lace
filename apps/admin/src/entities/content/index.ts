@@ -36,6 +36,7 @@ export {
   type ItemPreview,
 } from "./FieldRenderer/index.js";
 export { mediaAltPair } from "./media-alt.js";
+export { itemSummary } from "./item-summary.js";
 export { entryActions, hasEntryActions, type EntryActions } from "./entry-actions.js";
 export { RichTextEditor } from "./RichTextEditor/index.js";
 export { EntryStatusBadge } from "./EntryStatusBadge/index.js";
