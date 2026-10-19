@@ -917,6 +917,113 @@ test("keeps media uploads, previews, and draft-only public reads separate", asyn
   });
 });
 
+test("media binaries carry immutable validators and answer 304 only after eligibility", async () => {
+  let current = admin;
+  const { app, storage } = await fixture({ maxBodyBytes: 8192, resolveActor: async () => current });
+  const reads = [];
+  const get = storage.get.bind(storage);
+  storage.get = async (key) => {
+    reads.push(key);
+    return get(key);
+  };
+  const request = (path, headers = {}) =>
+    app.fetch(new Request(`https://lace.test${path}`, { headers }));
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]),
+    "cover.png",
+  );
+  const cover = await (
+    await app.fetch(
+      new Request("https://lace.test/api/v1/admin/media", { body: form, method: "POST" }),
+    )
+  ).json();
+  const publicPath = `/api/v1/public/media/${cover.id}`;
+  const previewPath = `/api/v1/admin/media/${cover.id}/preview`;
+  const tag = `"m-${cover.id}"`;
+
+  const preview = await request(previewPath);
+  expect(preview.status).toBe(200);
+  expect(preview.headers.get("etag")).toBe(tag);
+  expect(preview.headers.get("cache-control")).toBe("private, no-cache");
+  expect(await request(publicPath, { "if-none-match": tag })).toMatchObject({ status: 404 });
+
+  const entry = await json(app, "/api/v1/admin/models/posts/entries", {
+    body: JSON.stringify({
+      blocks: [],
+      fields: { image: cover.id },
+      slug: "cover",
+      title: "Cover",
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  const published = await json(app, `/api/v1/admin/entries/${entry.body.id}/publish`, {
+    body: JSON.stringify({ expectedRevision: 1 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  const full = await request(publicPath);
+  expect(full.status).toBe(200);
+  expect(full.headers.get("etag")).toBe(tag);
+  expect(full.headers.get("cache-control")).toBe("public, max-age=86400");
+  expect(new Uint8Array(await full.arrayBuffer())).toHaveLength(8);
+
+  reads.length = 0;
+  for (const header of [tag, `W/${tag}`, `"other", ${tag}`, "*", ` W/"x" ,, ${tag} `]) {
+    const unchanged = await request(publicPath, { "if-none-match": header });
+    expect(unchanged.status, header).toBe(304);
+    expect(unchanged.headers.get("etag")).toBe(tag);
+    expect(unchanged.headers.get("cache-control")).toBe("public, max-age=86400");
+    expect(await unchanged.text()).toBe("");
+  }
+  expect(reads).toEqual([]);
+
+  for (const header of ["not-a-tag", `"other"`, `${tag}, junk`, `"other", *`, ""]) {
+    const complete = await request(publicPath, { "if-none-match": header });
+    expect(complete.status, header).toBe(200);
+    expect(complete.headers.get("etag")).toBe(tag);
+    expect(new Uint8Array(await complete.arrayBuffer())).toHaveLength(8);
+  }
+
+  const detail = await request(`/api/v1/admin/media/${cover.id}`);
+  const edited = await app.fetch(
+    new Request(`https://lace.test/api/v1/admin/media/${cover.id}`, {
+      body: JSON.stringify({ alt: "A new description" }),
+      headers: { "content-type": "application/json", "if-match": detail.headers.get("etag") },
+      method: "PATCH",
+    }),
+  );
+  expect(edited.status).toBe(200);
+  expect(edited.headers.get("etag")).not.toBe(detail.headers.get("etag"));
+  expect((await request(publicPath)).headers.get("etag")).toBe(tag);
+  expect((await request(publicPath, { "if-none-match": tag })).status).toBe(304);
+
+  reads.length = 0;
+  const privately = await request(previewPath, { "if-none-match": tag });
+  expect(privately.status).toBe(304);
+  expect(privately.headers.get("cache-control")).toBe("private, no-cache");
+  current = { id: actorId("viewer"), role: "viewer" };
+  expect((await request(previewPath, { "if-none-match": tag })).status).toBe(304);
+  expect(reads).toEqual([]);
+  current = null;
+  const anonymous = await request(previewPath, { "if-none-match": tag });
+  expect(anonymous.status).toBe(403);
+  expect(anonymous.headers.get("etag")).toBeNull();
+  current = admin;
+
+  const unpublished = await json(app, `/api/v1/admin/entries/${entry.body.id}/unpublish`, {
+    body: JSON.stringify({ expectedPublishedSnapshotId: published.body.entry.published.id }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  expect(unpublished.response.status).toBe(200);
+  const gone = await json(app, publicPath, { headers: { "if-none-match": tag } });
+  expect(gone).toMatchObject({ body: { error: { code: "NOT_FOUND" } }, response: { status: 404 } });
+  expect(gone.response.headers.get("etag")).toBeNull();
+});
+
 test("allows viewers to list media but not mutate it", async () => {
   const { app } = await fixture({ actor: { id: actorId("viewer"), role: "viewer" } });
   expect((await json(app, "/api/v1/admin/media")).response.status).toBe(200);

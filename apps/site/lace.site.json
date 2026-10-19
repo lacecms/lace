@@ -12,21 +12,21 @@
       }
     },
     "gallery": {
-      "revision": 1,
+      "revision": 3,
       "files": {
-        "src/components/lace/GalleryBlock.astro": "442888d455440437a5816f08e455c69d8f0ba605a012b52fb29612d1f970ca68"
+        "src/components/lace/GalleryBlock.astro": "b9960211e68e93d60d600c0df1139696c57c3b20b1cc0db9ea015d3eff2e08bd"
       }
     },
     "hero": {
-      "revision": 3,
+      "revision": 4,
       "files": {
-        "src/components/lace/HeroBlock.astro": "4d03d3c231fbbb55b2b77ebb7ba4434a534ef017dddeac41b54ac026dbe567f6"
+        "src/components/lace/HeroBlock.astro": "55a941d2f4ced9e3888b1767c3baddb953d1470e6b9c3bc58b103d2376e36015"
       }
     },
     "image": {
-      "revision": 4,
+      "revision": 6,
       "files": {
-        "src/components/lace/ImageBlock.astro": "004e0ee6a85bc37a8d0b5d84a1b6b82ac844a2e96183fb95227a39d8b59cbfc5"
+        "src/components/lace/ImageBlock.astro": "1311bb4e1c3620cd789c9d5f3b54677da4b78b94af35d39a34bc8a249fd1a5d3"
       }
     },
     "navigation": {

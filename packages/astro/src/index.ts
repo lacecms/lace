@@ -32,6 +32,8 @@ export interface AstroSiteLoaderOptions {
   readonly fetch?: LaceFetch;
   /** Extra text appended to failures with the matching code, such as project commands. */
   readonly hints?: Readonly<Partial<Record<PublishedSiteErrorCode, string>>>;
+  /** Gives resolved media a build source for image variants (default `true`). */
+  readonly optimizeImages?: boolean;
 }
 
 /** Creates the server-only published-site loader for an Astro site. */
@@ -41,6 +43,7 @@ export function createAstroSiteLoader(options: AstroSiteLoaderOptions = {}): Pub
     revalidate: options.dev === true,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.hints === undefined ? {} : { hints: options.hints }),
+    ...(options.optimizeImages === undefined ? {} : { optimizeImages: options.optimizeImages }),
   });
 }
 
@@ -77,3 +80,25 @@ export type RichTextOverride = (props: RichTextOverrideProps) => unknown;
 
 /** Override components keyed by the originating rich-text node or mark name. */
 export type RichTextComponents = Readonly<Partial<Record<RichTextSource, RichTextOverride>>>;
+
+export {
+  blurredPlaceholder,
+  createPlaceholderResolver,
+  IMAGE_PLACEHOLDER_WIDTH,
+  IMAGE_VARIANT_WIDTHS,
+  laceImageConfig,
+  prepareLaceImage,
+  variantWidths,
+  webpHasAlpha,
+} from "./images.js";
+export type {
+  LaceGetImage,
+  LaceImageConfig,
+  LaceImageService,
+  LaceRemotePattern,
+  PlaceholderResolver,
+  PlaceholderResolverOptions,
+  PlaceholderSource,
+  PreparedLaceImage,
+  PrepareLaceImageOptions,
+} from "./images.js";

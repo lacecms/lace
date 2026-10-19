@@ -4,11 +4,15 @@ import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { expect, test } from "vitest";
 // The registry sources exactly as `lace add block` installs them.
 import GalleryBlock from "../../../registry/astro/gallery/GalleryBlock.astro";
+import HeroBlock from "../../../registry/astro/hero/HeroBlock.astro";
+import ImageBlock from "../../../registry/astro/image/ImageBlock.astro";
 import NavigationBlock from "../../../registry/astro/navigation/NavigationBlock.astro";
 import Blocks from "../test-fixtures/Blocks.astro";
 
 const blocks = defineBlockMap({
   gallery: { component: GalleryBlock, definition: builtInBlocks.gallery },
+  hero: { component: HeroBlock, definition: builtInBlocks.hero },
+  image: { component: ImageBlock, definition: builtInBlocks.image },
   navigation: { component: NavigationBlock, definition: builtInBlocks.navigation },
 });
 
@@ -32,7 +36,8 @@ const media = {
 };
 
 function block(type, data, overrides = {}) {
-  return { data, key: `${type}-1`, position: 0, schemaVersion: 1, type, ...overrides };
+  const schemaVersion = builtInBlocks[type]?.version ?? 1;
+  return { data, key: `${type}-1`, position: 0, schemaVersion, type, ...overrides };
 }
 
 async function render(entryBlocks, { path = "/", ...entry } = {}) {
@@ -80,12 +85,116 @@ test("gallery items follow the media alt and caption fallbacks", async () => {
       '<main><section class="gallery" data-lace-block="gallery" data-lace-block-key="gallery-1">',
       '<h2 data-lace-part="title">Studio</h2>',
       '<ul data-lace-part="items" role="list">',
-      '<li data-lace-part="item"><figure><img alt="Override" data-lace-part="media" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
+      '<li data-lace-part="item"><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
       // Astro writes an empty alt text as a bare attribute.
-      '<li data-lace-part="item"><figure><img alt data-lace-part="media" loading="lazy" src="https://media.example/bare.png"></figure></li>',
+      '<li data-lace-part="item"><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
       "</ul></section></main>",
     ].join(""),
   );
+});
+
+test("gallery items open their own lightboxes when the setting is on", async () => {
+  const images = [{ media: "studio" }, { alt: "Second", media: "bare" }];
+  const off = await render([block("gallery", { images }, { key: "shots" })]);
+  expect(off).not.toContain("<button");
+  expect(off).not.toContain("<dialog");
+  const html = await render([
+    block("gallery", { images }, { key: "shots", settings: { lightbox: true } }),
+  ]);
+  expect([...html.matchAll(/<dialog[^>]* id="([^"]+)"/gu)].map((match) => match[1])).toEqual([
+    "lace-lightbox-entry-1-shots-0",
+    "lace-lightbox-entry-1-shots-1",
+  ]);
+  expect(html).toContain('aria-label="Open full-size image: Media alt"');
+  expect(html).toContain('aria-label="Open full-size image: Second"');
+  expect(html).toContain(
+    '<img alt="Media alt" data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" width="800">',
+  );
+});
+
+test("an image block with the lightbox on wraps its image and keeps the caption last", async () => {
+  const html = await render([
+    block("image", { media: "studio" }, { key: "photo", settings: { lightbox: true } }),
+  ]);
+  expect(html).toBe(
+    [
+      '<main><figure data-lace-block="image" data-lace-block-key="photo">',
+      '<button aria-haspopup="dialog" aria-label="Open full-size image: Media alt" command="show-modal" commandfor="lace-lightbox-entry-1-photo" data-lace-part="lightbox-trigger" type="button">',
+      '<img alt="Media alt" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800">',
+      "</button>",
+      '<dialog aria-label="Media alt" closedby="any" data-lace-part="lightbox" id="lace-lightbox-entry-1-photo">',
+      '<button command="close" commandfor="lace-lightbox-entry-1-photo" data-lace-part="lightbox-close" type="button">Close</button>',
+      '<img alt="Media alt" data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" width="800">',
+      "</dialog>",
+      '<figcaption data-lace-part="caption">Media caption</figcaption></figure></main>',
+    ].join(""),
+  );
+});
+
+test("an image block with the default setting renders no lightbox", async () => {
+  const html = await render([block("image", { alt: "Block alt", media: "studio" })]);
+  expect(html).toBe(
+    '<main><figure data-lace-block="image" data-lace-block-key="image-1"><img alt="Block alt" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></main>',
+  );
+});
+
+test("a linked image opens its link instead of the lightbox", async () => {
+  const html = await render([
+    block(
+      "image",
+      { alt: "Kitchen", link: "/work/kitchen", media: "studio" },
+      { key: "photo", settings: { lightbox: true } },
+    ),
+  ]);
+  expect(html).toBe(
+    [
+      '<main><figure data-lace-block="image" data-lace-block-key="photo">',
+      '<a data-lace-part="link" href="/work/kitchen">',
+      '<img alt="Kitchen" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800">',
+      "</a>",
+      '<figcaption data-lace-part="caption">Media caption</figcaption></figure></main>',
+    ].join(""),
+  );
+});
+
+test("a gallery mixes lightbox items and linked items", async () => {
+  const html = await render([
+    block(
+      "gallery",
+      { images: [{ media: "studio" }, { link: "https://example.com/", media: "studio" }] },
+      { key: "shots", settings: { lightbox: true } },
+    ),
+  ]);
+  expect([...html.matchAll(/<dialog[^>]* id="([^"]+)"/gu)].map((match) => match[1])).toEqual([
+    "lace-lightbox-entry-1-shots-0",
+  ]);
+  expect(html).toContain(
+    '<a data-lace-part="link" href="https://example.com/"><img alt="Media alt" data-lace-part="media"',
+  );
+  expect(html.match(/data-lace-part="lightbox-trigger"/gu)).toHaveLength(1);
+});
+
+test("a linked image without alt text is named by its caption, then its URL", async () => {
+  const html = await render([
+    block("gallery", {
+      images: [
+        { caption: "Before", link: "/before", media: "bare" },
+        { link: "/after", media: "bare" },
+      ],
+    }),
+    block("image", { link: "/solo", media: "bare" }, { key: "solo" }),
+  ]);
+  expect(html).toContain('<a aria-label="Before" data-lace-part="link" href="/before">');
+  expect(html).toContain('<a aria-label="/after" data-lace-part="link" href="/after">');
+  expect(html).toContain('<a aria-label="/solo" data-lace-part="link" href="/solo">');
+});
+
+test("the hero image loads eagerly with high priority and no lightbox", async () => {
+  const html = await render([block("hero", { heading: "Welcome", image: "studio" })]);
+  expect(html).toContain(
+    '<img alt="Media alt" data-lace-part="media" decoding="async" fetchpriority="high" height="600" loading="eager" src="https://media.example/studio.png" style="object-position:25% 40%" width="800">',
+  );
+  expect(html).not.toContain("<dialog");
 });
 
 test("a gallery item caption overrides the media caption", async () => {

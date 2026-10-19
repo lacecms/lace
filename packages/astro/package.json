@@ -22,6 +22,7 @@
       "import": "./dist/index.js"
     },
     "./LaceBlocks.astro": "./dist/LaceBlocks.astro",
+    "./LaceImage.astro": "./dist/LaceImage.astro",
     "./LaceSeo.astro": "./dist/LaceSeo.astro",
     "./RichText.astro": "./dist/RichText.astro"
   },
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@lacecms/content": "workspace:*",
+    "@types/node": "catalog:",
     "astro": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",

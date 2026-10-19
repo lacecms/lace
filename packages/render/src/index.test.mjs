@@ -71,7 +71,7 @@ test.each([
 test("parses an image block without alt text and refuses version 1 image data", () => {
   const data = { media: "lake-media" };
   expect(
-    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 2 }), context),
+    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 4 }), context),
   ).toEqual(data);
   const error = captureError(() =>
     parseBlock(
@@ -227,7 +227,7 @@ const resolvedMedia = {
 
 function describedEntry(media = (id) => resolvedMedia[id]) {
   const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
-  const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 2 })];
+  const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 4 })];
   const [prepared] = prepareBlocks(
     map,
     { blocks, id: "entry-1", media, modelKey: "posts" },
@@ -256,6 +256,22 @@ test("image descriptions carry resolved dimensions, caption, and focal position"
   expect(Object.isFrozen(image("office"))).toBe(true);
 });
 
+test("image descriptions carry the media type and build source of resolved media", () => {
+  const image = describedEntry(() => ({
+    ...resolvedMedia.office,
+    mimeType: "image/jpeg",
+    sourceUrl: "http://api:8787/api/v1/public/media/office",
+  }));
+  expect(image("office")).toMatchObject({
+    mimeType: "image/jpeg",
+    sourceUrl: "http://api:8787/api/v1/public/media/office",
+    src: "https://public.example/api/v1/public/media/office",
+  });
+  const withoutSource = describedEntry(() => ({ ...resolvedMedia.office, mimeType: "image/png" }));
+  expect(withoutSource("office")).not.toHaveProperty("sourceUrl");
+  expect(withoutSource("office").mimeType).toBe("image/png");
+});
+
 test("image descriptions omit the object position without a focal point", () => {
   const image = describedEntry(() => ({ ...resolvedMedia.office, focalPoint: null }));
   expect(image("office")).not.toHaveProperty("objectPosition");
@@ -275,7 +291,7 @@ test("entries without resolved media fall back to the media URL builder", () => 
   const [prepared] = prepareBlocks(
     map,
     {
-      blocks: [block("image", { media: "office" }, { schemaVersion: 2 })],
+      blocks: [block("image", { media: "office" }, { schemaVersion: 4 })],
       id: "entry-1",
       modelKey: "posts",
     },
@@ -286,6 +302,8 @@ test("entries without resolved media fall back to the media URL builder", () => 
     src: "https://api.example/media/office",
   });
   expect(prepared.props.image("office").alt).toBe("");
+  expect(prepared.props.image("office")).not.toHaveProperty("sourceUrl");
+  expect(prepared.props.image("office")).not.toHaveProperty("mimeType");
 });
 
 const banner = defineBlock({

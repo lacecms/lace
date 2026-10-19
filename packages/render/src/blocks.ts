@@ -38,6 +38,10 @@ export interface RenderableMedia {
   readonly caption: string | null;
   readonly focalPoint: { readonly x: number; readonly y: number } | null;
   readonly height: number | null;
+  /** The stored media type, such as `image/jpeg`. */
+  readonly mimeType?: string | undefined;
+  /** The URL a site build fetches the original from; absent when optimization is off. */
+  readonly sourceUrl?: string | undefined;
   readonly url: string;
   readonly width: number | null;
 }
@@ -57,8 +61,13 @@ export interface ImageDescription {
   readonly alt: string;
   readonly caption?: string;
   readonly height?: number;
+  /** The stored media type of resolved media, such as `image/jpeg`. */
+  readonly mimeType?: string;
   /** A CSS `object-position` derived from the focal point, such as `25% 40%`. */
   readonly objectPosition?: string;
+  /** Where a site build fetches the original; present only for resolved media that carry one. */
+  readonly sourceUrl?: string;
+  /** The public URL of the original. */
   readonly src: string;
   readonly width?: number;
 }
@@ -286,11 +295,13 @@ export function createImageDescriber(
       alt: effectiveAltText(usageAlt, media.alt),
       ...(media.caption === null ? {} : { caption: media.caption }),
       ...(media.height === null ? {} : { height: media.height }),
+      ...(media.mimeType === undefined ? {} : { mimeType: media.mimeType }),
       ...(media.focalPoint === null
         ? {}
         : {
             objectPosition: `${percentage(media.focalPoint.x)} ${percentage(media.focalPoint.y)}`,
           }),
+      ...(media.sourceUrl === undefined ? {} : { sourceUrl: media.sourceUrl }),
       src: media.url,
       ...(media.width === null ? {} : { width: media.width }),
     });

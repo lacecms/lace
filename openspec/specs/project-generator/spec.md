@@ -593,3 +593,115 @@ admin, CLI or builder artifact is required.
 - **WHEN** the consumer has modified `deploy/nginx.conf`
 - **THEN** the upgrade reports a managed-file conflict instead of overwriting
   it
+
+### Requirement: Template 0.32.0 delivers build-time image variants and the lightbox setting
+The generator SHALL advance the managed template version to `0.32.0`. The
+generated `lace.config.ts` SHALL keep registering all seven built-in blocks
+and SHALL raise the `home` page and the `posts` collection to model version 3.
+In starter mode the user-owned site SHALL contain the `image`, `gallery` and
+`hero` components byte-identical to their new registry revisions, recorded in
+`lace.site.json`; its `package.json` SHALL declare `sharp` at the version
+Astro's image service uses; its `astro.config.mjs` SHALL read the project `.env` when
+present, overlay the process environment and pass `laceImageConfig` of that
+environment as the Astro `image` configuration; and its stylesheet SHALL
+contain the lightbox rules. The managed Astro site guide SHALL
+document the variants and their widths, the placeholder and when it is left
+out, the `lightbox` setting and its browser support, `sizes`, the
+`optimizeImages` loader option, the remote image allowance and the build
+cache. Template upgrade instructions SHALL state that no database migration
+is required; that engine, admin and site packages move together; that the
+next content sync migrates stored `image` and `gallery` blocks to versions 3
+and 2 and therefore requires the new registry components before the next
+site build; and that adoption is manual because `lace.config.ts` and site
+files are user-owned: bump the models that allow `image` or `gallery`, run
+sync, run `lace add block image gallery hero` (or merge the changes into
+edited components), adopt the `astro.config.mjs` image configuration and the
+stylesheet rules. Upgrades SHALL preserve user-owned files and retain
+deterministic managed hashes and existing conflict detection.
+
+#### Scenario: A new starter project is generated
+- **WHEN** a starter project is generated
+- **THEN** its manifest records template `0.32.0`, `home` and `posts` are at
+  version 3, the site holds the new `image`, `gallery` and `hero` revisions
+  with a matching lock, its `package.json` declares `sharp`, and
+  `astro.config.mjs` configures the media remote pattern
+
+#### Scenario: Existing project upgrades to 0.32.0
+- **WHEN** a 0.31.0 project with unmodified managed files is upgraded
+- **THEN** the upgrade instructions describe the coordinated package upgrade,
+  the absence of a migration, the block version migration on sync and the
+  manual adoption steps, and user-owned files including `lace.config.ts`,
+  `lace.site.json` and site sources are unchanged
+
+### Requirement: Template 0.33.0 delivers deploy caching
+The generator SHALL advance the managed template version to `0.33.0`. The
+managed web proxy SHALL carry the 30-day `/_astro/` cache rule and the
+`/_headers` refusal. In starter and existing-site modes the managed Compose
+file SHALL mount the builder cache volume on the builder and declare it; in
+no-site mode it SHALL declare neither. The managed Cloudflare Pages workflow
+SHALL restore and save the site's Astro cache directory between runs. In
+starter mode the user-owned site SHALL contain `public/_headers` applying
+`Cache-Control: public, max-age=2592000, immutable` to `/_astro/*`, identical
+in value to the proxy rule. The managed guides SHALL describe the asset cache
+lifetime, the `_headers` rule for existing sites, the builder cache, its
+bound and how to reset it, and the Pages workflow cache. Template upgrade
+instructions SHALL state that no database migration and no API, admin, CLI,
+SDK or adapter change is required; that the builder image of the same
+release and the recreation of the `builder` and `web` services are needed;
+and that the `_headers` file is adopted manually because site files are
+user-owned. Upgrades SHALL preserve user-owned files and retain deterministic
+managed hashes and existing conflict detection.
+
+#### Scenario: A new starter project is generated
+- **WHEN** a starter project is generated
+- **THEN** its manifest records template `0.33.0`, `site/public/_headers` is
+  user-owned with the 30-day rule, the proxy, Compose and Pages workflow carry
+  the caching changes
+
+#### Scenario: A no-site project is generated
+- **WHEN** a project without a site is generated
+- **THEN** its proxy carries the cache rule and its Compose file has no
+  builder and no builder cache volume
+
+#### Scenario: Existing project upgrades to 0.33.0
+- **WHEN** a 0.32.0 project with unmodified managed files is upgraded
+- **THEN** the proxy, Compose file and workflow are updated, the instruction
+  names the builder image and service recreation and the manual `_headers`
+  adoption, and user-owned files are unchanged
+
+#### Scenario: Edited proxy configuration
+- **WHEN** the consumer has modified `deploy/nginx.conf`
+- **THEN** the upgrade reports a managed-file conflict instead of overwriting
+  it
+
+### Requirement: Template 0.34.0 delivers image links
+The generator SHALL advance the managed template version to `0.34.0`. The
+generated `lace.config.ts` SHALL keep registering all seven built-in blocks
+and SHALL raise the `home` page and the `posts` collection to model version 4.
+In starter mode the user-owned site SHALL contain the `image` and `gallery`
+components byte-identical to their new registry revisions, recorded in
+`lace.site.json`, and its stylesheet SHALL contain the image link focus rule.
+The managed Astro site guide SHALL document the `link` field of `image` and
+gallery items, its precedence over the lightbox and the `link` part. Template
+upgrade instructions SHALL state that no database migration is required; that
+engine, admin and site packages move together; that the next content sync
+migrates stored `image` and `gallery` blocks to versions 4 and 3 and therefore
+requires the new registry components before the next site build; and that
+adoption is manual because `lace.config.ts` and site files are user-owned:
+bump the models that allow `image` or `gallery`, run sync, run
+`lace add block image gallery` (or merge the changes into edited components)
+and copy the stylesheet rule. Upgrades SHALL preserve user-owned files and
+retain deterministic managed hashes and existing conflict detection.
+
+#### Scenario: A new starter project is generated
+- **WHEN** a starter project is generated
+- **THEN** its manifest records template `0.34.0`, `home` and `posts` are at
+  version 4, and the site holds the new `image` and `gallery` revisions with
+  a matching lock
+
+#### Scenario: Existing project upgrades to 0.34.0
+- **WHEN** a 0.33.0 project with unmodified managed files is upgraded
+- **THEN** the upgrade instructions describe the coordinated package upgrade,
+  the absence of a migration, the block version migration on sync and the
+  manual adoption steps, and user-owned files including `lace.config.ts`,
+  `lace.site.json` and site sources are unchanged

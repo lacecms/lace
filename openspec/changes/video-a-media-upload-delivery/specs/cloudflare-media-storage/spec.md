@@ -71,14 +71,16 @@ represented as a successfully stored or retrieved object.
 - **THEN** it fails with the sanitized storage failure and no object remains
 
 ### Requirement: Worker image inspection matches the portable media policy
-The Worker SHALL verify uploaded JPEG, PNG, WebP, and AVIF images without a
-native image library. Inspection SHALL walk the complete container structure
+The Worker SHALL verify uploaded JPEG, PNG, GIF, WebP, and AVIF images without
+a native image library. Inspection SHALL walk the complete container structure
 of the declared format, reject a format mismatch, truncated or malformed
 structure, missing dimensions, and any trailing bytes after the container's
 end, and SHALL return the displayed dimensions after applying the image's
 embedded orientation, so a 90- or 270-degree orientation swaps width and
-height. Failures SHALL use the same stable invalid-media error as the Node
-inspector. The Worker SHALL verify videos with the same
+height. A GIF SHALL be walked through its header, logical screen descriptor,
+optional color tables, every extension and image block with its data
+sub-blocks, and its trailer. Failures SHALL use the same stable invalid-media
+error as the Node inspector. The Worker SHALL verify videos with the same
 portable streaming video inspector as Node.
 
 #### Scenario: A rotated JPEG is inspected
@@ -93,6 +95,11 @@ portable streaming video inspector as Node.
 - **WHEN** otherwise valid image bytes are followed by extra bytes after the
   container end
 - **THEN** inspection fails with the stable invalid-media error
+
+#### Scenario: An animated GIF is inspected
+- **WHEN** a GIF89a with a 320×240 logical screen, a global color table and
+  three frames is inspected
+- **THEN** inspection reports a width of 320 and a height of 240
 
 #### Scenario: The Worker verifies a video
 - **WHEN** a valid WebM is uploaded to the Worker

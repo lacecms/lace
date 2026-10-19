@@ -24,6 +24,7 @@ import type {
   InvitationIssueResult,
   InvitationView,
   LinkIssueResult,
+  MediaBinary,
   MediaView,
   PublicContentReadPort,
   RateLimitDecision,
@@ -630,11 +631,56 @@ function mediaByteStream(chunks: readonly Uint8Array[]) {
   };
 }
 
-function binaryResponse(
-  value: Awaited<ReturnType<MediaUseCases["preview"]>> extends infer Result
-    ? Exclude<Result, null>
-    : never,
-): Response {
+type EligibleMedia = Exclude<Awaited<ReturnType<MediaUseCases["resolvePublic"]>>, null>;
+
+const PUBLIC_MEDIA_CACHE_CONTROL = "public, max-age=86400";
+const PREVIEW_MEDIA_CACHE_CONTROL = "private, no-cache";
+
+/**
+ * Stored media bytes never change, so the binary tag identifies the item
+ * alone; metadata edits keep it. Media IDs are UUIDs, for which the encoding
+ * is a no-op.
+ */
+function mediaBinaryEntityTag(mediaId: string): string {
+  return `"m-${encodeURIComponent(mediaId)}"`;
+}
+
+const entityTagMember = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/u;
+
+/**
+ * Reports whether `If-None-Match` lists `tag` using weak comparison, or is
+ * `*`. A malformed header is ignored (`false`), so the full response is sent.
+ */
+function ifNoneMatchMatches(header: string | undefined, tag: string): boolean {
+  if (header === undefined) return false;
+  const value = header.trim();
+  if (value === "*") return true;
+  const members = value
+    .split(",")
+    .map((member) => member.trim())
+    .filter((member) => member !== "");
+  if (members.length === 0 || !members.every((member) => entityTagMember.test(member)))
+    return false;
+  return members.some((member) => (member.startsWith("W/") ? member.slice(2) : member) === tag);
+}
+
+/**
+ * Answers a media binary request after eligibility was decided: `304` for a
+ * matching validator without opening object storage, otherwise the stream.
+ */
+async function conditionalMediaResponse(
+  request: Request,
+  media: EligibleMedia,
+  cacheControl: string,
+  open: (media: EligibleMedia) => Promise<MediaBinary>,
+): Promise<Response> {
+  const headers = { "cache-control": cacheControl, etag: mediaBinaryEntityTag(media.id) };
+  if (ifNoneMatchMatches(request.headers.get("if-none-match") ?? undefined, headers.etag))
+    return new Response(null, { headers, status: 304 });
+  return binaryResponse(await open(media), headers);
+}
+
+function binaryResponse(value: MediaBinary, headers: Readonly<Record<string, string>>): Response {
   const iterator = value.body[Symbol.asyncIterator]();
   const body = new ReadableStream<Uint8Array>({
     async cancel() {
@@ -648,6 +694,7 @@ function binaryResponse(
   });
   return new Response(body, {
     headers: {
+      ...headers,
       "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(value.filename)}`,
       "content-type": value.mimeType,
     },
@@ -1752,24 +1799,60 @@ export function createLaceApp(input: LaceAppInput): Hono {
 
   app.get(
     "/api/v1/public/media/:mediaId",
-    describeRoute({ summary: "Read published media", tags: ["public"] }),
+    describeRoute({
+      description:
+        "Streams media that a current publication uses. The response carries a strong `ETag` " +
+        "derived from the media ID, which never changes because stored bytes are immutable, " +
+        "and `Cache-Control: public, max-age=86400`. A matching `If-None-Match` (weak " +
+        "comparison or `*`) receives `304 Not Modified` without a body; a malformed one is " +
+        "ignored. Unpublished or unknown media is not found, never `304`.",
+      responses: {
+        200: { description: "Media bytes" },
+        304: { description: "The cached media is still valid" },
+        404: { description: "Media is not published or does not exist" },
+      },
+      summary: "Read published media",
+      tags: ["public"],
+    }),
     validator("param", mediaIdParams, validationHook),
     async (context) => {
-      const result = await media().readPublic({ mediaId: context.req.param("mediaId") as never });
-      return result === null ? notFound() : binaryResponse(result);
+      const resolved = await media().resolvePublic({
+        mediaId: context.req.param("mediaId") as never,
+      });
+      return resolved === null
+        ? notFound()
+        : conditionalMediaResponse(context.req.raw, resolved, PUBLIC_MEDIA_CACHE_CONTROL, (item) =>
+            media().openBinary(item),
+          );
     },
   );
 
   app.get(
     "/api/v1/admin/media/:mediaId/preview",
-    describeRoute({ summary: "Preview media", tags: ["admin"] }),
+    describeRoute({
+      description:
+        "Streams active media to an authenticated reader with the same immutable `ETag` as " +
+        "the public route and `Cache-Control: private, no-cache`. A matching `If-None-Match` " +
+        "receives `304 Not Modified` after authorization; a malformed one is ignored.",
+      responses: {
+        200: { description: "Media bytes" },
+        304: { description: "The cached media is still valid" },
+        404: { description: "Media is not active or does not exist" },
+      },
+      summary: "Preview media",
+      tags: ["admin"],
+    }),
     validator("param", mediaIdParams, validationHook),
     async (context) => {
-      const result = await media().preview({
+      const resolved = await media().resolvePreview({
         actor: await actor(context),
         mediaId: context.req.param("mediaId") as never,
       });
-      return result === null ? notFound() : binaryResponse(result);
+      return resolved === null
+        ? notFound()
+        : conditionalMediaResponse(context.req.raw, resolved, PREVIEW_MEDIA_CACHE_CONTROL, (item) =>
+            media().openBinary(item),
+          );
     },
   );
 

@@ -25,7 +25,7 @@ afterEach(async () => {
   await Promise.all(cleanup.splice(0).map((item) => item()));
 });
 
-async function fixture() {
+async function fixture(extra = {}) {
   const root = await mkdtemp(join(tmpdir(), "lace-builder-test-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const source = join(root, "source");
@@ -50,6 +50,11 @@ async function fixture() {
 if [ "$1" = "install" ]; then
   test "$2" = "--frozen-lockfile" || exit 1
   test ! -e .env || exit 1
+  echo "$*" >> "${root}/install-args"
+  if [ "$3" = "--store-dir" ]; then
+    mkdir -p "$4"
+    echo package > "$4/package"
+  fi
   mkdir -p apps/site/node_modules/astro
   exit 0
 fi
@@ -60,6 +65,13 @@ test "$4" = "astro" || exit 1
 test "$5" = "build" || exit 1
 test "$6" = "--outDir" || exit 1
 test "$7" = "dist" || exit 1
+if [ -e apps/site/node_modules/.astro/assets/variant.webp ]; then
+  echo hit >> "${root}/astro-cache"
+else
+  echo miss >> "${root}/astro-cache"
+fi
+mkdir -p apps/site/node_modules/.astro/assets
+echo variant > apps/site/node_modules/.astro/assets/variant.webp
 test ! -e fail-build || exit 1
 mkdir -p apps/site/dist
 echo '<h1>ok</h1>' > apps/site/dist/index.html
@@ -77,6 +89,7 @@ echo '<h1>ok</h1>' > apps/site/dist/index.html
     buildToken: "build-token",
     toolPath: tool,
     versionReader: async () => version,
+    ...extra,
   });
   return {
     builder,
@@ -503,4 +516,104 @@ test.each([
   } catch (error) {
     for (const value of Object.values(environment)) expect(error.message).not.toContain(value);
   }
+});
+
+const lines = async (path) =>
+  existsSync(path) ? (await readFile(path, "utf8")).trim().split("\n") : [];
+
+test("persistent caches serve the next build and never reach the release", async () => {
+  const cacheRoot = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(() => rm(cacheRoot, { recursive: true, force: true }));
+  const { builder, root, setVersion } = await fixture({ cacheRoot });
+  for (const version of [1, 2]) {
+    setVersion(version);
+    expect(await builder.build({ buildId: `cached-${version}`, targetVersion: version })).toEqual({
+      status: "succeeded",
+    });
+  }
+  expect(await lines(join(root, "install-args"))).toEqual(
+    Array(2).fill(`install --frozen-lockfile --store-dir ${join(cacheRoot, "pnpm-store")}`),
+  );
+  expect(await lines(join(root, "astro-cache"))).toEqual(["miss", "hit"]);
+  expect(await readFile(join(cacheRoot, "pnpm-store/package"), "utf8")).toBe("package\n");
+  expect(await readFile(join(cacheRoot, "astro/assets/variant.webp"), "utf8")).toBe("variant\n");
+  const current = join(root, "output", await readlink(join(root, "output/current")));
+  expect((await readdir(current)).sort()).toEqual([".lace-release.json", "index.html"]);
+  // The work directory is gone; removing its link left the cache intact.
+  expect(await readdir(join(root, "work"))).toEqual([]);
+});
+
+test("an oversized cache is cleared before the build", async () => {
+  const cacheRoot = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(() => rm(cacheRoot, { recursive: true, force: true }));
+  await mkdir(join(cacheRoot, "astro/assets"), { recursive: true });
+  await writeFile(join(cacheRoot, "astro/assets/variant.webp"), "x".repeat(64));
+  const { builder, root } = await fixture({ cacheRoot, cacheLimitBytes: 32 });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await builder.build({ buildId: "oversized", targetVersion: 1 })).toEqual({
+      status: "succeeded",
+    });
+    expect(log.mock.calls.map(([line]) => line)).toContain(
+      '{"component":"builder-cache","event":"cleared","reason":"size_limit"}',
+    );
+  } finally {
+    log.mockRestore();
+  }
+  expect(await lines(join(root, "astro-cache"))).toEqual(["miss"]);
+});
+
+test("a failed build drops the Astro cache and keeps the package store", async () => {
+  const cacheRoot = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(() => rm(cacheRoot, { recursive: true, force: true }));
+  const { builder, root, source, setVersion } = await fixture({ cacheRoot });
+  expect((await builder.build({ buildId: "warm", targetVersion: 1 })).status).toBe("succeeded");
+  await writeFile(join(source, "fail-build"), "yes");
+  setVersion(2);
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await builder.build({ buildId: "broken", targetVersion: 2 })).toEqual({
+      status: "failed",
+      reason: "build_failed",
+    });
+  } finally {
+    log.mockRestore();
+  }
+  expect(existsSync(join(cacheRoot, "astro"))).toBe(false);
+  expect(existsSync(join(cacheRoot, "pnpm-store/package"))).toBe(true);
+  await rm(join(source, "fail-build"));
+  expect((await builder.build({ buildId: "retry", targetVersion: 2 })).status).toBe("succeeded");
+  expect(await lines(join(root, "astro-cache"))).toEqual(["miss", "hit", "miss"]);
+});
+
+test("a missing or unwritable cache root builds uncached", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(async () => {
+    await chmod(join(parent, "locked"), 0o755).catch(() => {});
+    await rm(parent, { recursive: true, force: true });
+  });
+  await mkdir(join(parent, "locked"));
+  await chmod(join(parent, "locked"), 0o555);
+  for (const cacheRoot of [join(parent, "missing"), join(parent, "locked")]) {
+    const { builder, root } = await fixture({ cacheRoot });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await builder.build({ buildId: "uncached", targetVersion: 1 })).toEqual({
+        status: "succeeded",
+      });
+      expect(log.mock.calls.map(([line]) => line)).toContain(
+        '{"component":"builder-cache","event":"unavailable"}',
+      );
+    } finally {
+      log.mockRestore();
+    }
+    expect(await lines(join(root, "install-args"))).toEqual(["install --frozen-lockfile"]);
+  }
+  expect(existsSync(join(parent, "missing"))).toBe(false);
+});
+
+test("without a cache root the install arguments are unchanged", async () => {
+  const { builder, root } = await fixture();
+  expect((await builder.build({ buildId: "cold", targetVersion: 1 })).status).toBe("succeeded");
+  expect(await lines(join(root, "install-args"))).toEqual(["install --frozen-lockfile"]);
 });

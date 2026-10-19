@@ -1199,6 +1199,9 @@ describe("admin entry list contracts", () => {
     expect(
       v.parse(mediaListQuerySchema, { q: "  Cover ", sort: "-size", type: "image/png", x: "1" }),
     ).toMatchObject({ q: "Cover", sort: "-size", type: "image/png" });
+    expect(v.parse(mediaListQuerySchema, { type: "image/gif" })).toMatchObject({
+      type: "image/gif",
+    });
     for (const invalid of [
       { q: "x".repeat(201) },
       { type: "image/svg+xml" },

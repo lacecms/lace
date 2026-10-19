@@ -184,7 +184,7 @@ export async function apiJourney(f) {
     {
       key: "image-one",
       type: "image",
-      schemaVersion: 2,
+      schemaVersion: 4,
       position: 2000,
       data: { media: cover.id, alt: "Published cover" },
     },
@@ -230,7 +230,7 @@ export async function apiJourney(f) {
       {
         key: "gallery-one",
         type: "gallery",
-        schemaVersion: 1,
+        schemaVersion: 3,
         position: 1000,
         data: {
           title: "Published gallery",
@@ -411,6 +411,16 @@ export async function apiJourney(f) {
   assert.equal(binary.status, 200);
   assert.match(binary.headers.get("content-type"), /image\/png/u);
   assert.deepEqual(Buffer.from(await binary.arrayBuffer()), png);
+  const mediaTag = binary.headers.get("etag");
+  assert.equal(mediaTag, `"m-${cover.id}"`);
+  assert.equal(binary.headers.get("cache-control"), "public, max-age=86400");
+  const revalidated = await f.call(`/api/v1/public/media/${cover.id}`, {
+    headers: { "if-none-match": mediaTag },
+  });
+  assert.equal(revalidated.status, 304);
+  assert.equal(revalidated.headers.get("etag"), mediaTag);
+  assert.equal(revalidated.headers.get("cache-control"), "public, max-age=86400");
+  assert.equal(await revalidated.text(), "");
   const used = await json(
     `/api/v1/admin/media/${cover.id}`,
     admin,

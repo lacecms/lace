@@ -26,11 +26,26 @@
       "fields": {
         "alt": { "required": false, "type": "text" },
         "caption": { "required": false, "type": "text" },
+        "link": {
+          "description": "Selecting the image opens this link instead of the full-screen view.",
+          "label": "Link",
+          "required": false,
+          "type": "url"
+        },
         "media": { "required": true, "type": "media" }
       },
       "label": "Image",
+      "settings": {
+        "lightbox": {
+          "defaultValue": false,
+          "description": "Opens the original image full screen when it is selected.",
+          "label": "Open full screen",
+          "required": false,
+          "type": "boolean"
+        }
+      },
       "type": "image",
-      "version": 2
+      "version": 4
     },
     {
       "description": "A quotation with optional attribution.",
@@ -63,9 +78,9 @@
       "kind": "page",
       "label": "Home",
       "path": "/",
-      "projectionHash": "88fb965b4c38ee41de9b7cf41111223dc387289f2e65ac9b1e589346822a5fa2",
-      "structureHash": "d443afeea47536380deed70752576b7e48a7ee01d5667c0d537402fe25098bb7",
-      "version": 2
+      "projectionHash": "7f6fc4654a7be698949571bdeb2842e6ab16a47129cb73faa9ea9a07d07d9902",
+      "structureHash": "7e9bdbe316ca6aac45c8e8cb6b0054f905545be35296c559691c33e9fb3006ad",
+      "version": 4
     },
     {
       "blocks": ["hero", "richText", "image", "quote", "cta"],
@@ -81,12 +96,12 @@
       "key": "posts",
       "kind": "collection",
       "label": "Posts",
-      "projectionHash": "59be7b2928a26eaa2a5969f9f8209dc970b217622c3ffe8a825c92429e6b6671",
+      "projectionHash": "f574f14dd2f7e3f696c9da6e42b7a4873ed38630609b4ea3f426566f4cd89a65",
       "route": "/blog/:slug",
-      "structureHash": "32c5d12bbcc329ed2a260a12106e98180659c4776c8ad541c89b3fbb576cf3a4",
-      "version": 2
+      "structureHash": "8deb67925216b707211244e49324cf6e76eeb8e818c3e2c4feb36bb93767a227",
+      "version": 4
     }
   ],
-  "projectionHash": "1373c9c10d163f7d0429e90eca990e79ae8a59033b54e4427cb77e4a60b8aa3b",
-  "structureHash": "f37384be51c5cbacf11576b67a53efaefe1305e2107de8fe9adced238a5efc91"
+  "projectionHash": "be5be8be6480cd24916982552566bdd3411753ffb432438a214dd7f652d06c85",
+  "structureHash": "82ee925f988352326e41d9a23fa9339e0bc5f57160ede77286415a552e07c458"
 }

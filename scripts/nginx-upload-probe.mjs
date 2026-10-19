@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request, createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,7 +11,12 @@ const workspace = resolve(import.meta.dirname, "..");
 const image = "nginx:1.27.5-alpine";
 const MiB = 1024 * 1024;
 
-/** Real-image check that the VPS proxy forwards media uploads and keeps JSON bodies at 1 MiB. */
+const ASSET_CACHE = "public, max-age=2592000, immutable";
+
+/**
+ * Real-image check that the VPS proxy forwards media uploads, keeps JSON bodies
+ * at 1 MiB, caches hashed site assets for 30 days and keeps pages revalidating.
+ */
 export async function nginxUploadProbe(configPath = join(workspace, "deploy/nginx.conf")) {
   const received = [];
   const upstream = createServer((incoming, response) => {
@@ -34,6 +39,11 @@ export async function nginxUploadProbe(configPath = join(workspace, "deploy/ngin
       `http://api:${upstreamPort}`,
     );
     await writeFile(join(directory, "default.conf"), config);
+    const release = join(directory, "release");
+    await mkdir(join(release, "_astro"), { recursive: true });
+    await writeFile(join(release, "index.html"), "<!doctype html><title>probe</title>");
+    await writeFile(join(release, "_astro", "app.abc123.js"), "export {};");
+    await writeFile(join(release, "_headers"), "/_astro/*\n  Cache-Control: no-store\n");
     await execute("docker", [
       "run",
       "--detach",
@@ -46,6 +56,8 @@ export async function nginxUploadProbe(configPath = join(workspace, "deploy/ngin
       "127.0.0.1::8080",
       "--volume",
       `${join(directory, "default.conf")}:/etc/nginx/conf.d/default.conf:ro`,
+      "--volume",
+      `${release}:/output/current:ro`,
       image,
     ]);
     const { stdout } = await execute("docker", ["port", container, "8080/tcp"]);
@@ -88,6 +100,24 @@ export async function nginxUploadProbe(configPath = join(workspace, "deploy/ngin
       console.log(
         `${passed ? "ok  " : "FAIL"} ${probe.name}: ${status} (expected ${probe.status}), ` +
           `${upstreamBytes} bytes upstream (expected ${probe.upstreamBytes})`,
+      );
+    }
+
+    const reads = [
+      { name: "hashed asset", path: "/_astro/app.abc123.js", status: 200, cache: ASSET_CACHE },
+      { name: "missing hashed asset", path: "/_astro/missing.def456.js", status: 404, cache: null },
+      { name: "page", path: "/", status: 200, cache: "no-cache" },
+      { name: "Pages header rules", path: "/_headers", status: 404, cache: null },
+    ];
+    for (const probe of reads) {
+      const response = await fetch(`http://127.0.0.1:${proxyPort}${probe.path}`);
+      await response.arrayBuffer();
+      const cache = response.headers.get("cache-control");
+      const passed = response.status === probe.status && cache === probe.cache;
+      results.push({ name: probe.name, status: response.status, cache, passed });
+      console.log(
+        `${passed ? "ok  " : "FAIL"} ${probe.name}: ${response.status} (expected ${probe.status}), ` +
+          `cache-control ${cache} (expected ${probe.cache})`,
       );
     }
     return results;

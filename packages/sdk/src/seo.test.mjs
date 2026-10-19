@@ -225,7 +225,7 @@ test("site.seo applies the model mapping and the published defaults global", asy
   expect(site.seo(site.byPath("/blog/hello"))).toEqual({
     canonical: "https://site.example/blog/hello",
     description: "Post summary",
-    image: { ...library.logo, alt: "Logo" },
+    image: { ...library.logo, alt: "Logo", sourceUrl: library.logo.url },
     siteName: "Acme",
     title: "Hello | Acme",
   });
@@ -233,7 +233,7 @@ test("site.seo applies the model mapping and the published defaults global", asy
   expect(site.seo(site.byPath("/"))).toEqual({
     canonical: "https://site.example/",
     description: "Site description",
-    image: { ...library.logo, alt: "Logo" },
+    image: { ...library.logo, alt: "Logo", sourceUrl: library.logo.url },
     siteName: "Acme",
     title: "Home | Acme",
   });

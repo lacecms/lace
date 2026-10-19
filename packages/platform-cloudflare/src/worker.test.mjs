@@ -17,7 +17,7 @@ import {
   producesDispatchWork,
 } from "../dist/index.js";
 import { countingD1, openLocalCloudflare } from "./d1-test-harness.mjs";
-import { readCompleteBuildExport } from "@lacecms/test-utils";
+import { animatedGifFixture, readCompleteBuildExport } from "@lacecms/test-utils";
 
 const cleanups = [];
 afterEach(async () => {
@@ -363,6 +363,26 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
   expect(unknown.body).toMatchObject({ error: { code: "NOT_FOUND" } });
   expect((await fixture.call("/admin/")).response.status).toBe(404);
   await fixture.settle();
+});
+
+test("Worker accepts an animated GIF into R2 and filters the library by GIF", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  expect((await upload(fixture)).response.status).toBe(201);
+  const form = new FormData();
+  form.append("file", new Blob([animatedGifFixture()], { type: "image/png" }), "loop.gif");
+  const gif = await fixture.call("/api/v1/admin/media", { body: form, method: "POST" });
+  expect(gif.response.status).toBe(201);
+  expect(gif.body).toMatchObject({ height: 240, mimeType: "image/gif", width: 320 });
+  expect(await fixture.local.bucket.head(`media/${gif.body.id}`)).not.toBeNull();
+  const broken = new FormData();
+  broken.append("file", new Blob([animatedGifFixture().slice(0, -1)]), "broken.gif");
+  expect(
+    (await fixture.call("/api/v1/admin/media", { body: broken, method: "POST" })).response.status,
+  ).toBe(422);
+  const list = await fixture.call("/api/v1/admin/media?type=image%2Fgif");
+  expect(list.response.status).toBe(200);
+  expect(list.body.items.map((item) => item.id)).toEqual([gif.body.id]);
 });
 
 test("invalid Worker settings return a sanitized 503 and log only variable names", async () => {

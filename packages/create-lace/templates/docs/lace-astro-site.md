@@ -22,13 +22,14 @@ my-site/                 your Astro project (lockfile root)
 Astro `^7.3.1` must already be a dependency. In the site root:
 
 ```sh
-pnpm add @lacecms/astro@0.1.0-alpha.6 @lacecms/render@0.1.0-alpha.6 @lacecms/sdk@0.1.0-alpha.6 @lacecms/content@0.1.0-alpha.6
+pnpm add @lacecms/astro@0.1.0-alpha.6 @lacecms/render@0.1.0-alpha.6 @lacecms/sdk@0.1.0-alpha.6 @lacecms/content@0.1.0-alpha.6 sharp@0.35.5
 ```
 
 `@lacecms/sdk` loads published content, `@lacecms/render` validates blocks and
 rich text with the CMS rules, `@lacecms/astro` renders them in Astro, and
 `@lacecms/content` provides the built-in block definitions. Upgrade all four
-together.
+together. `sharp` is the image library Astro uses for the block image variants
+(section 12).
 
 ## 2. Configure the server-only environment
 
@@ -594,15 +595,92 @@ vertical list on narrow screens and a row with dropdown submenus from `48rem`:
 }
 ```
 
-## 12. Build
+## 12. Images: variants, placeholder and lightbox
+
+The `image`, `gallery` and `hero` components render media through
+`@lacecms/astro/LaceImage.astro`. During the build it fetches each original
+from the public media path under `LACE_API_BASE_URL` (the origin the build
+already reads the export from) and, through Astro's image pipeline, writes WebP
+variants 960 and 1920 pixels wide, each capped at the original width, to
+`dist/_astro/`. The `<img>` lists them in `srcset` with the `sizes` the component
+passes, keeps the original `width` and `height`, and loads lazily with
+`decoding="async"`; the hero loads eagerly with `fetchpriority="high"`. Animated
+GIFs become animated WebP. A 64-pixel WebP of each opaque image is inlined as a
+blurred `background-image` until the image loads; transparent images and GIFs
+get none.
+
+Allow the media path as an Astro remote image:
+
+`astro.config.mjs`:
+
+```js
+import { laceImageConfig } from "@lacecms/astro";
+import { defineConfig } from "astro/config";
+
+export default defineConfig({ image: laceImageConfig(process.env), output: "static" });
+```
+
+`laceImageConfig(env)` allows exactly `<LACE_API_BASE_URL>/api/v1/public/media/*`
+and nothing without that variable. Astro does not load `.env` for its config
+file; the starter's `astro.config.mjs` reads the project `.env` with Node's
+`util.parseEnv` and overlays `process.env`. Pass `optimizeImages: false` to
+`createAstroSiteLoader` to render the public media URLs as before, without
+variants.
+
+The `image` and `gallery` blocks have an _Open full screen_ setting (off by
+default). When an editor turns it on, each image becomes a button that opens
+the original from its public URL in a modal `<dialog>` with a _Close_ button;
+Escape and a click on the backdrop also close it. It uses HTML invoker
+commands and no script, so it works in Chrome 135, Firefox 144, Safari 26.2 and
+later; older browsers show the image without the action. The original is
+downloaded only when the dialog opens. Style it through the
+`lightbox-trigger`, `lightbox`, `lightbox-close` and `lightbox-media` parts
+(see the starter stylesheet).
+
+The `image` block and every gallery item also have an optional _Link_ (a URL
+field with the usual safe URL rules: site paths, `#fragments`, `http(s)`,
+`mailto:` and `tel:`). A linked image is wrapped in an
+`<a data-lace-part="link">` that opens the link in the same tab, and it never
+gets a lightbox, even with _Open full screen_ on; images without a link keep
+the lightbox. The image's alt text names the link; when it is empty, the
+caption, then the URL, becomes the link's `aria-label`, so give linked images
+alt text that describes the destination. Style the wrapper through the `link`
+part (see the starter stylesheet).
+
+Astro keeps downloaded originals and variants in `node_modules/.astro/assets/`
+and revalidates them with the media `ETag`; Lace keeps placeholders in
+`node_modules/.astro/lace/placeholders/`. Keep that directory between builds
+to avoid downloading every original again. The Compose builder does this for
+you: it links the site's `node_modules/.astro` to its persistent
+`builder-cache` volume, together with the pnpm package store, clears the whole
+cache when it grows above 2 GiB and drops the Astro part after a failed build.
+The generated Cloudflare Pages workflow restores and saves the same directory
+with `actions/cache`.
+
+Variants, scripts and styles land in `dist/_astro/` with a content hash in
+their names, so browsers may keep them: the Compose web proxy serves
+`/_astro/` with `Cache-Control: public, max-age=2592000, immutable` (30 days)
+while pages keep revalidating. On Cloudflare Pages the starter site's
+`public/_headers` applies the same rule; for an existing site, add
+`public/_headers` with:
+
+```text
+/_astro/*
+  Cache-Control: public, max-age=2592000, immutable
+```
+
+A site that changes Astro's `build.assets` directory gets no long-lived
+caching: its assets keep revalidating.
+
+## 13. Build
 
 ```sh
 pnpm astro build
 ```
 
 The build fails instead of emitting partial pages when the token is missing or
-rejected, the API is unreachable, a block has no component, or block data or
-rich text breaks the CMS rules.
+rejected, the API is unreachable, a media original cannot be fetched, a block
+has no component, or block data or rich text breaks the CMS rules.
 
 ## Organize admin forms without changing site data
 

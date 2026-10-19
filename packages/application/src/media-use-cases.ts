@@ -47,6 +47,7 @@ export const MAX_IMAGE_DIMENSION = 12_000;
 export const MAX_IMAGE_PIXELS = 100_000_000;
 export const ALLOWED_MEDIA_MIME_TYPES = Object.freeze([
   "image/avif",
+  "image/gif",
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -181,6 +182,14 @@ export function detectMediaMimeType(bytes: Uint8Array): MediaMimeType {
   if (bytes.byteLength === 0) failure("Media upload must not be empty.");
   if (isPrefix(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (isPrefix(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+  // GIF87a or GIF89a.
+  if (
+    isPrefix(bytes, [0x47, 0x49, 0x46, 0x38]) &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return "image/gif";
+  }
   if (
     bytes.byteLength >= 12 &&
     String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
@@ -508,16 +517,44 @@ export class MediaUseCases {
   }
 
   public async preview(input: GetMediaUseCaseInput): Promise<MediaBinary | null> {
-    requirePermission(input.actor, "content:read");
-    const media = await this.dependencies.media.loadMedia(input.mediaId);
-    return media === null || media.status !== "active" ? null : this.readBinary(media);
+    const media = await this.resolvePreview(input);
+    return media === null ? null : this.openBinary(media);
   }
 
   public async readPublic(input: PublicMediaBinaryUseCaseInput): Promise<MediaBinary | null> {
+    const media = await this.resolvePublic(input);
+    return media === null ? null : this.openBinary(media);
+  }
+
+  /**
+   * Decides authorization and preview eligibility without reading object
+   * storage, so a caller can answer a conditional request first.
+   */
+  public async resolvePreview(input: GetMediaUseCaseInput): Promise<MediaMetadata | null> {
+    requirePermission(input.actor, "content:read");
+    const media = await this.dependencies.media.loadMedia(input.mediaId);
+    return media === null || media.status !== "active" ? null : media;
+  }
+
+  /** Decides public eligibility (current publication use) without reading object storage. */
+  public async resolvePublic(input: PublicMediaBinaryUseCaseInput): Promise<MediaMetadata | null> {
     const media = await this.dependencies.publicMedia?.loadPublicMedia(input.mediaId);
-    return media === undefined || media === null || media.status !== "active"
-      ? null
-      : this.readBinary(media);
+    return media === undefined || media === null || media.status !== "active" ? null : media;
+  }
+
+  /** Opens the stored bytes of media already resolved as eligible. */
+  public async openBinary(media: MediaMetadata): Promise<MediaBinary> {
+    const mimeType = media.mimeType;
+    if (!ALLOWED_MEDIA_MIME_TYPES.includes(mimeType as MediaMimeType)) {
+      throw new Error("Stored media has an unsupported MIME type.");
+    }
+    const body = await this.dependencies.storage.get(media.storageKey);
+    if (body === null) throw new Error("Stored media object is unavailable.");
+    return Object.freeze({
+      body,
+      filename: sanitizeMediaFilename(media.filename),
+      mimeType: mimeType as MediaMimeType,
+    });
   }
 
   /**
@@ -559,20 +596,6 @@ export class MediaUseCases {
     const item = await this.dependencies.media.loadMediaCatalogItem(id);
     if (item === null) throw new Error(missing);
     return toMediaView(detached(item));
-  }
-
-  private async readBinary(media: MediaMetadata): Promise<MediaBinary> {
-    const mimeType = media.mimeType;
-    if (!ALLOWED_MEDIA_MIME_TYPES.includes(mimeType as MediaMimeType)) {
-      throw new Error("Stored media has an unsupported MIME type.");
-    }
-    const body = await this.dependencies.storage.get(media.storageKey);
-    if (body === null) throw new Error("Stored media object is unavailable.");
-    return Object.freeze({
-      body,
-      filename: sanitizeMediaFilename(media.filename),
-      mimeType: mimeType as MediaMimeType,
-    });
   }
 
   private async cleanupAfterMetadataFailure(

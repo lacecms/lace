@@ -41,7 +41,7 @@
           "key": "image-one",
           "type": "image",
           "position": 2000,
-          "schemaVersion": 2,
+          "schemaVersion": 4,
           "data": {
             "media": "<cover>",
             "alt": "Published cover"
@@ -59,7 +59,7 @@
           "key": "gallery-one",
           "type": "gallery",
           "position": 1000,
-          "schemaVersion": 1,
+          "schemaVersion": 3,
           "data": {
             "title": "Published gallery",
             "images": [

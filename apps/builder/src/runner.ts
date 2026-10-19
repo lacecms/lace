@@ -1,3 +1,4 @@
+import { prepareBuildCache, type BuildCache } from "./cache.js";
 import { normalizeBuildFailure, type SiteBuildFailureReason } from "./diagnostics.js";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -39,6 +40,10 @@ export interface BuilderSettings extends SourceSelection, SiteOutputSettings {
   readonly apiBaseUrl: string;
   readonly buildToken: string;
   readonly publicBaseUrl?: string;
+  /** Persistent pnpm store and Astro cache; absent means every build starts cold. */
+  readonly cacheRoot?: string;
+  /** Internal test seam; production uses the fixed cache bound. */
+  readonly cacheLimitBytes?: number;
   /** Internal test seam; production always uses image-pinned pnpm from PATH. */
   readonly toolPath?: string;
   /** Internal test seam; production reads the published export ETag. */
@@ -151,6 +156,7 @@ export class FixedCommandBuilder {
     const { sourceRoot, workRoot, outputRoot } = this.settings;
     let workDirectory: string | undefined;
     let releaseDirectory: string | undefined;
+    let cache: BuildCache | undefined;
     try {
       if (!disjointRoots([sourceRoot, workRoot, outputRoot]))
         throw new StageError("source_invalid");
@@ -170,6 +176,8 @@ export class FixedCommandBuilder {
         request.targetVersion
       )
         throw new StageError("version_changed");
+      if (this.settings.cacheRoot !== undefined)
+        cache = await prepareBuildCache(this.settings.cacheRoot, this.settings.cacheLimitBytes);
       const environment: NodeJS.ProcessEnv = {
         PATH: process.env.PATH,
         HOME: workDirectory,
@@ -192,7 +200,11 @@ export class FixedCommandBuilder {
       if (
         !(await execute(
           project,
-          ["install", "--frozen-lockfile"],
+          [
+            "install",
+            "--frozen-lockfile",
+            ...(cache === undefined ? [] : ["--store-dir", cache.storeDirectory]),
+          ],
           environment,
           this.settings.toolPath ?? "pnpm",
           "install",
@@ -205,6 +217,7 @@ export class FixedCommandBuilder {
       } catch {
         throw new StageError("source_invalid");
       }
+      await cache?.link(join(project, this.settings.siteDirectory, "node_modules"));
       if (
         !(await execute(
           project,
@@ -276,6 +289,7 @@ export class FixedCommandBuilder {
       }
       return { status: "succeeded" };
     } catch (error) {
+      if (error instanceof StageError && error.stage === "build_failed") await cache?.dropAstro();
       return {
         status: "failed",
         ...normalizeBuildFailure(

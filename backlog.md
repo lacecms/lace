@@ -25,19 +25,12 @@ when selected and do not yet have an implementation order or new CE numbers.
 
 - **Image delivery (selected 2026-10-18, three changes in order; replaces
   CE11):** build-time variants through the Astro image pipeline, WebP only.
-  - **A `images-a-media-format-caching`:** GIF as an upload format; media
-    responses get `Cache-Control` (public: one day; admin preview: private,
-    no-cache) with `ETag` and `304`.
-  - **B build variants:** per image a 64 px WebP inlined as a blurred
-    placeholder plus WebP at 960 and 1920 px (each capped at the original
-    width) with `srcset`/`sizes`, `loading="lazy"`, `decoding="async"`; GIF
-    copied to `dist` unchanged; the original stays in object storage and opens
-    full screen from the public media URL through a `<dialog>` lightbox,
-    enabled per `image`/`gallery` block by a setting that defaults to off (new
-    block versions). Focal-point crops and AVIF deferred.
-  - **C deploy caching:** 30-day caching of content-hashed `/_astro/` assets
-    in nginx and Pages `_headers`, persistent build caches on the VPS builder
-    and in GitHub Actions, template version bump.
+  - **A `images-a-media-format-caching`:** done (archived 2026-10-18).
+  - **B `images-b-build-variants-lightbox`:** done (archived 2026-10-18;
+    GIFs became animated WebP variants instead of unchanged copies).
+  - **C `images-c-deploy-caching`:** done (archived 2026-10-18).
+  - **D `images-d-image-links`:** done (archived 2026-10-18; optional `link`
+    on `image` blocks and gallery items, taking precedence over the lightbox).
 - **Video media (draft 2026-10-18, three changes in order, after image
   delivery):**
   - **A `video-a-media-upload-delivery`:** MP4 and WebM with separate

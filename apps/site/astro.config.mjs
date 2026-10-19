@@ -1,7 +1,11 @@
 import { defineConfig } from "astro/config";
 import { fileURLToPath } from "node:url";
+// The adapter's source, like the aliases below; Astro loads the config through Vite.
+import { laceImageConfig } from "../../packages/astro/src/images.ts";
 
 export default defineConfig({
+  // Lets the build fetch media originals from the API for image variants.
+  image: laceImageConfig(process.env),
   output: "static",
   vite: {
     server: { allowedHosts: ["site"] },

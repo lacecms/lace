@@ -14,7 +14,7 @@ export default await defineConfig({
   content: [
     definePage({
       key: "home",
-      version: 2,
+      version: 4,
       label: "Home",
       path: "/",
       blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
@@ -22,7 +22,7 @@ export default await defineConfig({
     }),
     defineCollection({
       key: "posts",
-      version: 2,
+      version: 4,
       label: "Posts",
       route: "/blog/:slug",
       fields: { summary: field.text() },

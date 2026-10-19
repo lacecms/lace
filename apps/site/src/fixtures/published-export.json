@@ -301,7 +301,10 @@
           },
           "key": "post-image",
           "position": 1,
-          "schemaVersion": 2,
+          "schemaVersion": 4,
+          "settings": {
+            "lightbox": true
+          },
           "type": "image"
         },
         {
@@ -323,14 +326,22 @@
               {
                 "alt": "A quiet desk",
                 "caption": "The note desk",
+                "link": "https://lace.example/desk",
                 "media": "note-media"
+              },
+              {
+                "alt": "A looping sketch",
+                "media": "sketch-media"
               }
             ],
             "title": "From the studio"
           },
           "key": "post-gallery",
           "position": 3,
-          "schemaVersion": 1,
+          "schemaVersion": 3,
+          "settings": {
+            "lightbox": true
+          },
           "type": "gallery"
         }
       ],
@@ -393,11 +404,15 @@
         },
         {
           "data": {
+            "link": "/blog/first-post",
             "media": "note-media"
           },
           "key": "note-image",
           "position": 1,
-          "schemaVersion": 2,
+          "schemaVersion": 4,
+          "settings": {
+            "lightbox": false
+          },
           "type": "image"
         }
       ],
@@ -507,6 +522,16 @@
       "mimeType": "image/jpeg",
       "url": "https://cms.example.test/lace/api/v1/public/media/post-media",
       "width": 800
+    },
+    "sketch-media": {
+      "alt": null,
+      "caption": null,
+      "focalPoint": null,
+      "height": 400,
+      "id": "sketch-media",
+      "mimeType": "image/gif",
+      "url": "https://cms.example.test/lace/api/v1/public/media/sketch-media",
+      "width": 600
     }
   },
   "seo": {

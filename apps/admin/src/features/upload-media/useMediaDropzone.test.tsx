@@ -23,7 +23,7 @@ test("the picker input accepts several supported images and passes every file on
   render(<Harness onFiles={onFiles} />);
   const input = screen.getByLabelText("Upload images");
   expect(input).toHaveAttribute("multiple");
-  expect(input).toHaveAttribute("accept", "image/jpeg,image/png,image/webp,image/avif");
+  expect(input).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp,image/avif");
   expect(screen.getByTestId("root")).not.toHaveAttribute("tabindex");
   const files = [
     new File(["a"], "a.png", { type: "image/png" }),

@@ -11,13 +11,14 @@ function maximalBlocks(label, count = 200) {
     key: `${label}-${i}`,
     type: "image",
     position: (i + 1) * 1000,
-    schemaVersion: 2,
+    schemaVersion: 4,
     data: { media: `budget-media-${i}`, alt: `${label} image ${i}` },
   }));
 }
 // Responses carry the block envelope: admin blocks with defaults, public ones without `hidden`.
-const adminBlocks = (blocks) => blocks.map((block) => ({ ...block, hidden: false, settings: {} }));
-const publicBlocks = (blocks) => blocks.map((block) => ({ ...block, settings: {} }));
+const settings = { lightbox: false };
+const adminBlocks = (blocks) => blocks.map((block) => ({ ...block, hidden: false, settings }));
+const publicBlocks = (blocks) => blocks.map((block) => ({ ...block, settings }));
 
 async function fixture() {
   let count, database;
@@ -241,7 +242,8 @@ test("34B D1 exports 100/201/501 published entries in bounded pages with near-li
           path: `/notes/${id}`,
           title: `Published ${index}`,
           fields,
-          blocks: publicBlocks(blocks),
+          // Rows inserted directly keep their stored (empty) settings.
+          blocks: blocks.map((block) => ({ ...block, settings: {} })),
         });
         await enqueue(
           "insert into content_entries (id, model_key, created_by, created_at, updated_at) values (?, 'notes', 'budget-admin', 1, 1)",

@@ -45,8 +45,8 @@ SHALL mean no search, and a term longer than 200 characters SHALL be rejected.
 A search SHALL match media whose display filename contains the term,
 case-insensitively for ASCII letters, as a literal substring. `kind` SHALL be
 `image` or `video` and SHALL restrict items to the MIME types of that kind.
-`type` SHALL be one of `image/avif`, `image/jpeg`, `image/png`, `image/webp`,
-`video/mp4`, or `video/webm` and SHALL restrict items to that MIME type; a
+`type` SHALL be one of `image/avif`, `image/gif`, `image/jpeg`, `image/png`,
+`image/webp`, `video/mp4`, or `video/webm` and SHALL restrict items to that MIME type; a
 `type` outside the requested `kind` SHALL be rejected. `sort`
 SHALL be one of `createdAt`, `-createdAt`, `filename`, `-filename`, `size`, or
 `-size`. A leading `-` means descending, and the default SHALL be
@@ -63,6 +63,10 @@ parameters.
 - **WHEN** an editor requests `q=Cover&type=image/png&sort=-size`
 - **THEN** the response contains only PNG items whose filename contains
   `cover` in any ASCII case, ordered from largest to smallest
+
+#### Scenario: Filter the library to GIF
+- **WHEN** an editor requests `type=image/gif`
+- **THEN** the response contains only GIF items
 
 #### Scenario: Filter by media kind
 - **WHEN** an editor requests `kind=video`

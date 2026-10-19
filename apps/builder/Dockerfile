@@ -16,8 +16,8 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends build-essential python3 \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global pnpm@12.3.4 \
-    && mkdir -p /source /work /output \
-    && chown -R node:node /work /output
+    && mkdir -p /source /work /output /cache \
+    && chown -R node:node /work /output /cache
 COPY --from=compile /build/apps/builder/dist /opt/lace-builder/dist
 COPY --from=compile /build/LICENSE /opt/lace-builder/LICENSE
 USER node

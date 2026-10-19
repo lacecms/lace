@@ -5,11 +5,11 @@ import { loadProjectConfig } from "../dist/project-config.js";
 test("loads the root configuration with typed page, collection and global examples", async () => {
   const config = await loadProjectConfig();
   expect(config.public.content.map(({ key, kind, version }) => ({ key, kind, version }))).toEqual([
-    { key: "about", kind: "page", version: 4 },
-    { key: "home", kind: "page", version: 5 },
+    { key: "about", kind: "page", version: 6 },
+    { key: "home", kind: "page", version: 7 },
     { key: "navigation", kind: "global", version: 1 },
-    { key: "notes", kind: "collection", version: 4 },
-    { key: "posts", kind: "collection", version: 5 },
+    { key: "notes", kind: "collection", version: 6 },
+    { key: "posts", kind: "collection", version: 7 },
     { key: "settings", kind: "global", version: 2 },
   ]);
   expect(config.runtime.blocks.get("hero")).toBeDefined();

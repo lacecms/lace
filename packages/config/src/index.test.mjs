@@ -49,8 +49,8 @@ test("expands both starter models to every built-in block at a new version", () 
   const expectedBlocks = ["hero", "richText", "image", "quote", "cta"];
   expect(fixtureConfig.content).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ blocks: expectedBlocks, key: "home", version: 2 }),
-      expect.objectContaining({ blocks: expectedBlocks, key: "posts", version: 2 }),
+      expect.objectContaining({ blocks: expectedBlocks, key: "home", version: 4 }),
+      expect.objectContaining({ blocks: expectedBlocks, key: "posts", version: 4 }),
     ]),
   );
 });
@@ -332,7 +332,11 @@ test("carries block migrations at runtime without changing identity or projectio
 
 test("keeps fields named like display metadata in the canonical structure", async () => {
   const described = (fields) =>
-    defineConfig({ blocks, content: [postModel({ fields: { title: field.text(), ...fields } })] });
+    defineConfig({
+      blocks,
+      // Built-in image settings carry labels, which give their models a legacy hash.
+      content: [postModel({ blocks: ["richText"], fields: { title: field.text(), ...fields } })],
+    });
   const plain = await described({});
   const withDescription = await described({ description: field.textarea({ label: "SEO" }) });
   const longerDescription = await described({
@@ -413,7 +417,7 @@ test("puts declared block settings in structural identity and omits empty ones",
 
   expect(empty.content[0].structureHash).toBe(plain.content[0].structureHash);
   expect(empty.content[0].projectionHash).toBe(plain.content[0].projectionHash);
-  expect(JSON.stringify(empty.blocks)).not.toContain("settings");
+  expect(empty.blocks.find((block) => block.type === "hero")).not.toHaveProperty("settings");
   expect(left.content[0].structureHash).not.toBe(plain.content[0].structureHash);
   expect(center.content[0].structureHash).not.toBe(left.content[0].structureHash);
   expect(wider.content[0].structureHash).not.toBe(left.content[0].structureHash);

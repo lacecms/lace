@@ -105,6 +105,7 @@ test("the generated connection guide yields the existing-site fixture's own file
     "src/env.d.ts",
     "src/pages/index.astro",
     "src/pages/articles/[slug].astro",
+    "astro.config.mjs",
   ]);
   for (const [path, content] of files)
     expect(content, path).toBe(

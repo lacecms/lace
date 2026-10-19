@@ -41,7 +41,7 @@ test.each([
 test.each([
   ["astro-content", "forbidden dependency: @lacecms/astro -> @lacecms/content"],
   ["astro-reexport", "framework adapter @lacecms/astro may not re-export a Lace package"],
-  ["astro-node", "framework adapter @lacecms/astro may not import node:fs/promises"],
+  ["astro-node", "framework adapter @lacecms/astro may not import fs/promises"],
 ])("rejects the %s adapter boundary violation", (name, message) => {
   const result = spawnSync(process.execPath, [checker, join(fixtureDirectory, "adapter", name)], {
     encoding: "utf8",

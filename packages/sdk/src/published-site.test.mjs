@@ -199,6 +199,43 @@ test("a configured public origin rewrites resolved media URLs", async () => {
   expect(site.mediaUrl("hero-media")).toBe(expected);
 });
 
+test("resolved media carry a token-free build source under the API base URL", async () => {
+  const site = await createPublishedSiteLoader({
+    environment: {
+      ...environment,
+      LACE_API_BASE_URL: "http://api:8787/lace",
+      LACE_PUBLIC_BASE_URL: "https://cms.example.com",
+    },
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+  })();
+  expect(site.media("hero-media").url).toBe(
+    "https://cms.example.com/api/v1/public/media/hero-media",
+  );
+  expect(site.media("hero-media").sourceUrl).toBe(
+    "http://api:8787/lace/api/v1/public/media/hero-media",
+  );
+  expect(site.image("hero-media").sourceUrl).toBe(site.media("hero-media").sourceUrl);
+  expect(site.byPath("/").media("hero-media").sourceUrl).toBe(site.media("hero-media").sourceUrl);
+  expect(site.media("hero-media").sourceUrl).not.toContain(token);
+});
+
+test("optimizeImages false leaves out build sources and nothing else", async () => {
+  const optimized = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+  })();
+  const site = await createPublishedSiteLoader({
+    environment,
+    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
+    optimizeImages: false,
+  })();
+  expect(site.media("hero-media")).not.toHaveProperty("sourceUrl");
+  expect(site.image("hero-media", "Team")).not.toHaveProperty("sourceUrl");
+  const { sourceUrl: _sourceUrl, ...rest } = optimized.media("hero-media");
+  expect(site.media("hero-media")).toEqual(rest);
+  expect(site.mediaUrl("hero-media")).toBe(optimized.mediaUrl("hero-media"));
+});
+
 test("image lookups resolve the effective alt text and keep the media description", async () => {
   const site = await createPublishedSiteLoader({
     environment,
@@ -212,6 +249,7 @@ test("image lookups resolve the effective alt text and keep the media descriptio
     height: 900,
     id: "hero-media",
     mimeType: "image/png",
+    sourceUrl: "https://api.example.test/lace/api/v1/public/media/hero-media",
     url: "https://public.example.test/lace/api/v1/public/media/hero-media",
     width: 1600,
   });

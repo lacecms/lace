@@ -10,6 +10,8 @@ if (mode !== "fixture" && mode !== "live")
   throw new TypeError("LACE_SITE_DATA_MODE must be fixture or live.");
 
 // Fixture mode runs the same loader against the committed export without a request.
+// Image variants need a media origin, so they are built only when the fixture
+// build is given an explicit LACE_API_BASE_URL that serves the fixture media.
 const fixtureFetch: LaceFetch = async () =>
   Response.json(fixtureExport, { headers: { etag: `"${fixtureExport.version}"` } });
 
@@ -25,7 +27,7 @@ export const getSite =
   mode === "fixture"
     ? createAstroSiteLoader({
         env: {
-          LACE_API_BASE_URL: env.LACE_API_BASE_URL ?? DEFAULT_API_BASE_URL,
+          LACE_API_BASE_URL: env.LACE_API_BASE_URL || DEFAULT_API_BASE_URL,
           LACE_BUILD_SITE_URL: env.LACE_BUILD_SITE_URL,
           LACE_BUILD_TOKEN: "fixture",
           LACE_PUBLIC_BASE_URL: env.LACE_PUBLIC_BASE_URL,
@@ -33,5 +35,6 @@ export const getSite =
         },
         fetch: fixtureFetch,
         hints,
+        optimizeImages: (env.LACE_API_BASE_URL ?? "") !== "",
       })
     : createAstroSiteLoader({ env, dev: import.meta.env.DEV, hints });

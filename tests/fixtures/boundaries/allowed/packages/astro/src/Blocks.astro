@@ -1,7 +1,8 @@
 ---
+import { getImage } from "astro:assets";
 import { render } from "@lacecms/render";
 import type { Props as AstroProps } from "astro/types";
-const value = render;
+const value = [render, getImage];
 ---
 
 <p>{String(value)}</p>

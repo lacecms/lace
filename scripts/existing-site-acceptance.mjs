@@ -107,14 +107,24 @@ export async function existingSiteJourney(parent, operations) {
   const fixture = join(workspace, "tests/fixtures/existing-astro-site");
   const root = join(parent, "existing-site");
   await cp(fixture, root, { recursive: true });
-  // The operator's site before connection: no Lace blocks, loader or Lace routes.
+  // The operator's site before connection: no Lace blocks, loader or Lace routes,
+  // and a plain Astro configuration that the guide replaces.
   const fixtureGuideFiles = [
     "src/lib/lace.ts",
     "src/env.d.ts",
     "src/pages/index.astro",
     "src/pages/articles/[slug].astro",
+    "astro.config.mjs",
   ];
-  await Promise.all([...blockFiles, ...fixtureGuideFiles].map((path) => rm(join(root, path))));
+  await Promise.all(
+    [...blockFiles, ...fixtureGuideFiles.filter((path) => path !== "astro.config.mjs")].map(
+      (path) => rm(join(root, path)),
+    ),
+  );
+  await writeFile(
+    join(root, "astro.config.mjs"),
+    'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
+  );
   const before = await tree(root);
 
   const cms = join(root, "cms");
@@ -225,7 +235,8 @@ export async function existingSiteJourney(parent, operations) {
   let exported;
   let exportReads = 0;
   const server = createServer((request, response) => {
-    if (request.url?.startsWith("/lace/api/v1/public/media/")) {
+    // The build fetches originals under the API origin; lightboxes link the public origin.
+    if (/^(?:\/lace)?\/api\/v1\/public\/media\//u.test(request.url ?? "")) {
       response.writeHead(200, { "content-type": "image/png" });
       response.end(mediaBytes);
       return;
@@ -290,10 +301,19 @@ export async function existingSiteJourney(parent, operations) {
     article = await readFile(join(root, "dist/articles/first-post/index.html"), "utf8");
 
     console.info("Acceptance: existing-public-media");
-    const images = [...`${home}${article}`.matchAll(/<img\b[^>]*src="([^"]+)"/gu)].map(
-      ([, url]) => url,
-    );
-    if (images.length < 2) throw new Error("existing-public-media: rendered media missing");
+    // Block images are WebP variants in the build output.
+    const variants = [
+      ...`${home}${article}`.matchAll(/<img\b[^>]*data-lace-part="media"[^>]*srcset="([^" ]+)/gu),
+    ].map(([, url]) => url);
+    if (variants.length < 2) throw new Error("existing-public-media: rendered media missing");
+    for (const url of variants)
+      if (!url.startsWith("/_astro/") || !url.endsWith(".webp"))
+        throw new Error("existing-public-media: block image is not a build variant");
+    // Lightbox originals use the public origin and return the published bytes.
+    const images = [
+      ...article.matchAll(/<img\b[^>]*data-lace-part="lightbox-media"[^>]*src="([^"]+)"/gu),
+    ].map(([, url]) => url);
+    if (images.length === 0) throw new Error("existing-public-media: lightbox original missing");
     for (const url of images) {
       if (!url.startsWith(`${publicBase}api/v1/public/media/`))
         throw new Error("existing-public-media: media URL is not on the public origin");

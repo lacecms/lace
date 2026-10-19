@@ -140,6 +140,7 @@ services:
         bind:
           create_host_path: false
       - static-output:/output
+      - builder-cache:/cache
     depends_on:
       api: { condition: service_healthy }
     networks: [backend, build-egress]
@@ -184,3 +185,4 @@ volumes:
   sqlite-data: {}
   minio-data: {}
   static-output: {}
+  builder-cache: {}

@@ -40,6 +40,22 @@ test("a filtered library URL restores its controls, view, and API query", async 
   });
 });
 
+test("a GIF filter URL restores the filter and labels GIF items", async () => {
+  const gif = {
+    ...mediaItem,
+    filename: "loop.gif",
+    id: "media-gif",
+    mimeType: "image/gif" as const,
+  };
+  const listMedia = vi.fn(async () => ({ items: [gif] }));
+  renderRoute("/media?type=image%2Fgif&view=list", editor(), client({ listMedia }));
+  const table = await screen.findByRole("table", { name: "Media library" });
+  expect(listMedia).toHaveBeenCalledWith(undefined, { type: "image/gif" });
+  expect(screen.getByRole("button", { name: "GIF" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(table).getByText("loop.gif")).toBeInTheDocument();
+  expect(within(table).getByText("GIF")).toBeInTheDocument();
+});
+
 test("unsupported parameters are ignored and filter changes restart pagination", async () => {
   const user = userEvent.setup();
   const listMedia = vi.fn(async (cursor?: string) =>
@@ -48,7 +64,7 @@ test("unsupported parameters are ignored and filter changes restart pagination",
       : { items: [{ ...mediaItem, filename: "two.png", id: "media-2" }] },
   );
   const router = renderRoute(
-    "/media?type=image%2Fgif&sort=author&view=cards",
+    "/media?type=image%2Fsvg%2Bxml&sort=author&view=cards",
     editor(),
     client({ listMedia }),
   );

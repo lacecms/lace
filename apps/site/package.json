@@ -23,7 +23,8 @@
     "@lacecms/content": "workspace:*",
     "@lacecms/render": "workspace:*",
     "@lacecms/sdk": "workspace:*",
-    "astro": "catalog:"
+    "astro": "catalog:",
+    "sharp": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

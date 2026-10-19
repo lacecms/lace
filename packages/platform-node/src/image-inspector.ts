@@ -7,10 +7,12 @@ import {
 import { DomainError } from "@lacecms/domain";
 import sharp from "sharp";
 
-function expectedFormat(mimeType: MediaMimeType): "avif" | "jpeg" | "png" | "webp" {
+function expectedFormat(mimeType: MediaMimeType): "avif" | "gif" | "jpeg" | "png" | "webp" {
   switch (mimeType) {
     case "image/avif":
       return "avif";
+    case "image/gif":
+      return "gif";
     case "image/jpeg":
       return "jpeg";
     case "image/png":

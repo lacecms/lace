@@ -14,7 +14,7 @@ export default await defineConfig({
   content: [
     definePage({
       key: "home",
-      version: 5,
+      version: 7,
       label: "Home",
       path: "/",
       blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
@@ -22,7 +22,7 @@ export default await defineConfig({
     }),
     definePage({
       key: "about",
-      version: 4,
+      version: 6,
       label: "About",
       path: "/about",
       blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
@@ -30,7 +30,7 @@ export default await defineConfig({
     }),
     defineCollection({
       key: "posts",
-      version: 5,
+      version: 7,
       label: "Posts",
       route: "/blog/:slug",
       fields: {
@@ -51,7 +51,7 @@ export default await defineConfig({
     }),
     defineCollection({
       key: "notes",
-      version: 4,
+      version: 6,
       label: "Notes",
       route: "/notes/:slug",
       fields: { summary: field.text() },

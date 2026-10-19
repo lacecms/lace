@@ -28,10 +28,10 @@ The supported parts are:
 | --- | --- |
 | `hero` | `eyebrow`, `heading`, `body`, `media`, `action` |
 | `richText` | `content` |
-| `image` | `media`, `caption` |
+| `image` | `media`, `caption`, with a link `link`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
 | `quote` | `text`, `attribution` |
 | `cta` | `heading`, `body`, `action` |
-| `gallery` | `title`, `items`, `item`, `media`, `caption` |
+| `gallery` | `title`, `items`, `item`, `media`, `caption`, with an item link `link`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
 | `navigation` | `list`, `item`, `link`, `label`, `submenu`, `toggle`, `children` |
 
 An optional part is absent when the published block has no value for it. For
@@ -130,3 +130,19 @@ content with `[data-lace-entry] [data-lace-block="navigation"]`. While the
 global is unpublished the header shows the static `.site-nav` fallback from
 `BaseLayout.astro`, which shares the same list rules.
 
+## Images and the lightbox
+
+Block images are WebP variants with `srcset`; an opaque image also carries a
+blurred inline `background-image` placeholder until it loads, so keep its
+`background-*` properties unset in site CSS. With the *Open full screen*
+setting on, the `image` block and each gallery item wrap the `media` image in a
+`lightbox-trigger` button that opens the `lightbox` `<dialog>`, holding a
+`lightbox-close` button and the original as `lightbox-media`. `site.css` resets
+the trigger button, shows a focus ring, sizes the dialog to the image (so the
+`::backdrop` around it stays clickable), constrains the original to the
+viewport with `object-fit: contain`, and pins the close button to the top
+right.
+
+An `image` block or gallery item with a *Link* wraps its `media` image in a
+`link` anchor instead and never gets a lightbox. `site.css` makes the anchor a
+block and gives it the same focus ring as the trigger.
