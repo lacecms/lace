@@ -20,7 +20,7 @@
 
 ## 4. Immutable artifact preparation and handoff
 
-- [ ] 4.1 Record a reviewed authorized clean shipping revision and successful frozen installation with pinned toolchain; verify Git status, revision, Docker/buildx and both Linux execution platforms before full preparation, reporting missing prerequisites without substituting an eligible preview.
+- [x] 4.1 Record a reviewed authorized clean shipping revision and successful frozen installation with pinned toolchain; verify Git status, revision, Docker/buildx and both Linux execution platforms before full preparation, reporting missing prerequisites without substituting an eligible preview.
 - [ ] 4.2 Run `pnpm release:prepare --output .release-artifacts/alpha-7` or a unique documented retry destination; verify complete publication-eligible inventory with fifteen archives and both API/builder images for linux/amd64 and linux/arm64 and passing platform smokes.
 - [ ] 4.3 Run `pnpm release:verify --output <saved-directory>` and `pnpm acceptance:release --artifacts <saved-directory>`; verify source/checksums/IDs, all existing and added image journeys, durable acceptance receipt and explicitly stated runtime/platform coverage without rebuilding saved artifacts.
 - [ ] 4.4 Write the alpha.7 readiness handoff with inventory path/SHA-256, source/fingerprint, artifact identifiers, commands/results, harness revision and remaining publication/deployment prerequisites; verify links, final strict validation and that no remote publication/deployment or historical-artifact deletion occurred.

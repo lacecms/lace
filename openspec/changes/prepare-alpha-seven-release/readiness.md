@@ -83,3 +83,11 @@ Source/test diagnostics are local under `.release-artifacts/alpha-7-evidence/log
 Initial failing attempts remain there for traceability; only final passing results
 establish these gates. Workspace tests emit existing React/SQLite development
 warnings; no test exceptions or production behavior changes were introduced.
+
+## Clean-source preflight
+
+Reviewed shipping changes were committed as
+`3238c65c70e4084bb7c90ef35b6b86b35b275637` on
+`codex/prepare-alpha-seven-release`. Frozen install passed and Git status was
+empty before this preflight record. The preparation inventory will record the
+final source commit including this record; no preview will establish eligibility.
