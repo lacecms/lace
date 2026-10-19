@@ -1,11 +1,15 @@
 # Compatibility baseline
 
-Read-only registry checks on 2026-10-16 at 00:32 Europe/Rome confirmed all
-fifteen alpha.5 npm versions and both GHCR image manifests are public. Alpha.5
-is now recorded as published and immutable. All fifteen alpha.6 npm version
-endpoints and both image manifests returned 404. This is availability evidence,
-not a reservation or proof of publishing rights. npm `whoami` returned E401;
-authenticated npm/GHCR publishing rights remain a later prerequisite.
+The current preparation candidate is alpha.7 (`0.1.0-alpha.7`, ownership
+template `0.35.0`), on npm `next`. See
+[alpha.7 upgrade and rollback](#alpha-7-upgrade-and-rollback) and
+[release evidence](../openspec/changes/prepare-alpha-seven-release/readiness.md).
+
+Read-only registry checks on 2026-10-19 at 18:55 Europe/Rome confirmed all
+fifteen alpha.6 npm versions and both two-platform GHCR indexes are public;
+alpha.7 version endpoints returned 404. Alpha.1–alpha.6 are recorded as published
+and immutable. Availability checks are not reservations or proof of authenticated
+publishing rights; local preparation does not publish or establish real deployment.
 
 ## Status
 
@@ -257,8 +261,9 @@ are described in `docs/alpha-release.md`.
 ## Alpha.6 coordinated upgrade
 
 Alpha.5 (`0.1.0-alpha.5`, template `0.29.0`) passed local acceptance on
-2026-10-14; this does not establish publication. Alpha.6 selects
-`0.1.0-alpha.6`, template `0.30.0`, on `next` and requires fresh acceptance.
+2026-10-14. Alpha.6 (`0.1.0-alpha.6`, template `0.30.0`) completed local
+acceptance on 2026-10-16; both are now confirmed published. These historical
+contract changes remain relevant when upgrading from alpha.5 or earlier.
 Upgrade API/admin, builder, SDK and site dependencies together. The raw
 build-export endpoint now returns version-bound pages with `formatVersion: 1`;
 custom HTTP consumers must follow cursors. Older SDKs reject the changed contract; unchecked raw clients may silently

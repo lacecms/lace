@@ -14,7 +14,8 @@ establish publication; the registry check below now confirms public availability
 The selected next candidate is `0.1.0-alpha.7`, ownership template `0.35.0`,
 on npm channel `next`. It includes completed image delivery A–D and the VPS
 upload proxy fix. Preparation and acceptance never publish. The commands below
-target alpha.7. Its preparation and exact-artifact acceptance remain pending;
+target alpha.7. Complete two-platform preparation, independent verification and
+exact-artifact acceptance passed on 2026-10-19;
 see the [current evidence](../openspec/changes/prepare-alpha-seven-release/readiness.md)
 and [upgrade/rollback guide](./compatibility.md#alpha-7-upgrade-and-rollback).
 
@@ -216,11 +217,14 @@ New `acceptance:release` runs atomically save `acceptance.json` in the artifact
 directory only after all journeys and temporary-environment cleanup succeed.
 Commit the reviewed acceptance scripts before recording their revision. Existing
 reports are not overwritten; preserving temp projects prevents a success receipt.
-For the existing alpha.5/alpha.6 reports, import their original bytes explicitly:
+For an older alpha.5/alpha.6 set, import its original acceptance bytes explicitly.
+Supply your retained receipt path; these JSON files are no longer in `docs/`.
+The published [alpha.6 acceptance asset](https://github.com/lacecms/lace/releases/download/v0.1.0-alpha.6/acceptance.json)
+is available with the other preserved reports on its GitHub Release:
 
 ```sh
-pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt docs/alpha-6-acceptance.json
-pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt docs/alpha-6-acceptance.json --apply
+pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt /path/to/original/alpha-6-acceptance.json
+pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt /path/to/original/alpha-6-acceptance.json --apply
 pnpm release:github --artifacts .release-artifacts/alpha-7
 pnpm release:github --artifacts .release-artifacts/alpha-7 --apply
 ```
@@ -282,7 +286,7 @@ refusal. A successful retry removes its journal.
 
 ### Retiring historical tracked receipts
 
-Keep docs/alpha-5-acceptance.json and docs/alpha-6-acceptance.json until each
+When an older checkout still tracks alpha.5/alpha.6 acceptance JSON, retain it until each
 corresponding published GitHub Release exposes its byte-identical acceptance
 asset. Verify by downloading the asset and comparing SHA-256 with the tracked
 file. Then make a reviewed documentation change: replace receipt links in this
@@ -290,4 +294,4 @@ guide and the historical OpenSpec handoff with the verified release asset URL,
 and remove that tracked JSON. Record the version/tag and preserved checksum in
 the handoff. Local cleanup never performs git rm or rewrites history. Public
 release notes now live in [CHANGELOG.md](../CHANGELOG.md); detailed instructions
-remain in [compatibility](compatibility.md#alpha-6-upgrade-and-rollback).
+remain in [compatibility](compatibility.md#alpha-7-upgrade-and-rollback).
