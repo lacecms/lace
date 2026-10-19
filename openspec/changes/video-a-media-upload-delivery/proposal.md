@@ -2,7 +2,7 @@
 
 A designer portfolio built on Lace (the reference case is a Framer site with
 autoplaying muted loops and Vimeo embeds in every case study) cannot be built
-today: the media library accepts only JPEG, PNG, WebP and AVIF images up to
+today: the media library accepts only JPEG, PNG, GIF, WebP and AVIF images up to
 10 MiB, every upload is buffered whole in memory, and public media responses
 cannot serve byte ranges, which Safari requires to play video. This change
 lays the media foundation for video; the blocks and the admin follow in two
