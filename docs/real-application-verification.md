@@ -54,7 +54,7 @@ their original scope.
 
 The selected candidate is `0.1.0-alpha.7` / `next`, template `0.35.0`.
 Its local source/artifact acceptance is pending; see the
-[current evidence](../openspec/changes/prepare-alpha-seven-release/readiness.md).
+[current evidence](../openspec/changes/archive/2026-10-19-prepare-alpha-seven-release/readiness.md).
 Alpha.6 publication was confirmed through public npm/GHCR reads on 2026-10-19;
 it does not establish real alpha.7 deployment or recovery verification.
 

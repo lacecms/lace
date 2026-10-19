@@ -16,7 +16,7 @@ on npm channel `next`. It includes completed image delivery A–D and the VPS
 upload proxy fix. Preparation and acceptance never publish. The commands below
 target alpha.7. Complete two-platform preparation, independent verification and
 exact-artifact acceptance passed on 2026-10-19;
-see the [current evidence](../openspec/changes/prepare-alpha-seven-release/readiness.md)
+see the [current evidence](../openspec/changes/archive/2026-10-19-prepare-alpha-seven-release/readiness.md)
 and [upgrade/rollback guide](./compatibility.md#alpha-7-upgrade-and-rollback).
 
 Read-only registry checks on 2026-10-19 at 18:55 Europe/Rome confirmed all fifteen
@@ -183,6 +183,31 @@ New GHCR packages default to private. For both organization packages, open their
 If publication is interrupted, compare any existing platform tag's config/image identity to the inventory before resuming. Do not overwrite a different image at a released tag. Resume missing platform tags and assemble the full version manifest only once both are verified. Announce availability only after npm and both public image manifests are complete; a consumer must be able to use the generated defaults without an engine checkout or registry credentials.
 
 Official references: [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish/), [Docker manifest inspection](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/), [Docker manifest creation](https://docs.docker.com/reference/cli/docker/buildx/imagetools/create/), [npm organization packages](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/), [GHCR authentication, visibility and image labels](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+### Recovering OCI index publication
+
+Docker's containerd image store can identify a saved platform image by its OCI
+index digest, including a runtime manifest and provenance attestation. Legacy
+stores can identify it by its config digest. Publication and independent
+verification recognize both forms and verify the exact expected runtime and
+attestation graph when a final multi-platform index flattens the inputs.
+
+If alpha.7 stopped with `Published image differs` immediately after uploading
+`api:0.1.0-alpha.7-amd64` using the earlier tooling, use the corrected release
+scripts with the original `.release-artifacts/alpha-7` directory. Do not rebuild
+the images, edit inventory image IDs, remove provenance, or replace the accepted
+source/acceptance receipt. First review the read-only plan:
+
+```sh
+pnpm release:publish:images --artifacts .release-artifacts/alpha-7 --dry-run
+```
+
+It should skip the matching uploaded platform index and report only missing
+images/manifests. Once reviewed, the operator can resume the same live command
+without `--dry-run`. A different root, config, runtime child or attestation still
+causes refusal; do not overwrite that conflict. The saved artifact source remains
+`665bd3499b49180a0873881bd9a93bb2722f556a`; later tooling/handoff commits are not
+the image source. Repair verification itself does not publish anything.
 
 ## GitHub release and cleanup
 

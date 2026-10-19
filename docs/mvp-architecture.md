@@ -3298,8 +3298,9 @@ The implementation plan uses these resolved defaults:
   application testing, restore, upgrade, credential rotation and build recovery
   were owner-confirmed on 2026-10-10. Alpha.5 (template `0.29.0`) was prepared and locally accepted on
   2026-10-14; public npm/image availability was verified read-only on 2026-10-16
-  and alpha.5 is now recorded as published and immutable. The next selected
-  candidate is `0.1.0-alpha.6` (template `0.30.0`) on `next`; fresh artifact acceptance and
+  and alpha.5 is now recorded as published and immutable. Alpha.6 (template
+  `0.30.0`) is also confirmed published and immutable. The next selected
+  candidate is `0.1.0-alpha.7` (template `0.35.0`) on `next`; fresh artifact acceptance and
   owner-operated deployment checks remain distinct from historical alpha.4
   evidence. Beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and

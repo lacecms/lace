@@ -3,7 +3,7 @@
 The current preparation candidate is alpha.7 (`0.1.0-alpha.7`, ownership
 template `0.35.0`), on npm `next`. See
 [alpha.7 upgrade and rollback](#alpha-7-upgrade-and-rollback) and
-[release evidence](../openspec/changes/prepare-alpha-seven-release/readiness.md).
+[release evidence](../openspec/changes/archive/2026-10-19-prepare-alpha-seven-release/readiness.md).
 
 Read-only registry checks on 2026-10-19 at 18:55 Europe/Rome confirmed all
 fifteen alpha.6 npm versions and both two-platform GHCR indexes are public;

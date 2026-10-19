@@ -38,6 +38,38 @@ const exists = (path) =>
     },
   );
 
+test("index-ID graphs pass public verification, GitHub finalization and cleanup preflight", async () => {
+  const f = await lifecycleFixture({ indexed: true });
+  try {
+    const published = (inventory, directory) =>
+      verifyPublishedInventory(inventory, directory, f.operations);
+    const reports = await published(f.inventory, f.directory);
+    expect(reports.images.items).toHaveLength(2);
+    await finalizeGithub(
+      { directory: f.directory, root: f.root, apply: true },
+      { github: f.github, published },
+    );
+    const result = await cleanRelease(
+      { directory: f.directory, root: f.root },
+      { github: f.github, registry: f.operations },
+    );
+    expect(result).toBeDefined();
+    expect(await exists(join(f.directory, "inventory.json"))).toBe(true);
+    const coordinate = `${f.inventory.release.images.api}:${f.inventory.release.version}`;
+    const root = f.remote.get(coordinate);
+    f.imageGraph.index(coordinate, root.manifests.slice(0, -1));
+    await expect(
+      cleanRelease(
+        { directory: f.directory, root: f.root, apply: true },
+        { github: f.github, registry: f.operations },
+      ),
+    ).rejects.toThrow();
+    expect(await exists(join(f.directory, "inventory.json"))).toBe(true);
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("cleanup preview shows bounded sizes and makes no changes; explicit apply preserves other versions", () =>
   use(async (f, options, operations) => {
     const other = join(f.root, ".release-artifacts/other");
