@@ -718,6 +718,39 @@ Other kinds reject the option. Descriptor placeholders are projection-only:
 structural identity excludes them without removing content/default keys named
 `placeholder`. Updating them needs no model-version bump or content rewrite.
 
+### Choice-card presentation and list layouts (LIST1)
+
+Select descriptors optionally declare `presentation: { control: "cards", choices }`.
+Each option has one plain-text label, optional description and optional diagram of
+1–16 nonoverlapping integer rectangles in a 12×12 canvas. This detached portable
+metadata is projection-only at descriptor positions, including nested fields and
+scalar settings; content/default keys named `presentation` remain structural.
+Omission preserves dropdowns and existing hashes. Options/defaults retain their
+structural rules. Display-only sync uses existing concurrency guards without
+rewriting snapshots, audit fields or media references. Existing sync still advances
+the published version and requests/coalesces a build for projection changes.
+
+`listLayoutSettings()` exports ordinary scalar `layoutMode` (`flex-row`,
+`flex-column`, `grid`; default `grid`), `layoutWrap` (default true), and
+`layoutPreset` (`auto`, `columns-2`, `columns-3`, `columns-4`, `narrow-wide`,
+`wide-narrow`, `featured-first`; default `auto`). Arrangement stays visible;
+LIST2 shows Wrap items only for flex and Grid preset only for grid, except when
+a relevant validation error requires revealing an inactive setting. Inactive
+values are retained, submitted and validated unconditionally. Wrap applies to flex; vertical wrap
+requires site-defined height. Presets apply to grid. Diagrams explain composition,
+not a preview of site styling.
+
+LIST2 is an explicitly selected, bounded exception to deferred conditional forms:
+blocks may declare projection-only `settingsVisibility`, mapping scalar setting
+keys to `{ setting, values }` predicates over an always-visible required sibling
+select with a valid default. Targets/controllers must exist, option lists must
+be nonempty and unique, and self references/chains/cycles are rejected. Metadata
+is portable, detached and frozen. Hidden controls stay registered and their values
+retain ordinary defaults, validation, permissions and public delivery. Rules do
+not apply to model fields, block data, group/list items or envelope fields.
+`listLayoutSettingsVisibility()` shares the list rules with arbitrary blocks.
+General conditional forms and conditional validation remain deferred.
+
 ### Visual form organization (CE9B)
 
 Models, block data and group descriptors accept optional serializable
@@ -817,11 +850,12 @@ field DSL and do not receive special database treatment; only `image` and
   its link in the same tab instead of the lightbox;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL;
-- `gallery` (CE7D, version 3): optional title and an `images` list (default `[]`, at
+- `gallery` (CE7D/LIST1, version 4): optional title and an `images` list (default `[]`, at
   least one item to publish, at most 50) of groups with required media,
   optional alt text and optional caption that override the media item's and
   the same optional `link`, plus the same `lightbox` setting, with identity
-  migrations from versions 1 and 2;
+  migrations to versions 2, 3 and 4; shared layout settings are added alongside
+  lightbox in Layout/Behavior settings sections;
 - `navigation` (CE7D): optional accessible `name` and a `links` list (default
   `[]`, at least one to publish, at most 20) of groups with a required label,
   an optional URL and an optional `children` list (at most 20) of groups with a
@@ -1556,6 +1590,12 @@ The entry lifecycle has three further commands
 
 ## 11. Block registry and rich text
 
+Gallery v4 adopts the shared scalar list-layout settings. Its identity migration
+4 retains data/settings and lets ordinary normalization fill absent defaults;
+migrations 2/3 remain. Model versions including Gallery must advance for this
+structural change. Guarded resumable sync preserves draft/published/hidden content,
+links, order, envelopes and lightbox, with the existing final version/build rules.
+
 The block registry maps each `block_type` to:
 
 - a stable key;
@@ -2183,6 +2223,22 @@ no client scripts, and requires no Astro integration. Override components for
 
 ### 13.5 Block registry and `lace add block`
 
+LIST1 registry items contain exactly one component plus optional `.css` stylesheet
+companions. SchemaVersion remains 1 for manifests and locks. Sources remain
+site-owned; no runtime package exports visual CSS. Gallery revision 4 imports its
+own `./ListLayout.css`; all files share the item's hash/conflict protection.
+Unsafe paths, symlinks, unsupported roles and case-insensitive target collisions
+across selected/installed items fail before writes. A CSS conflict must not advance
+the component or lock; `.new` recovery preserves the active pair.
+
+Explicit list container/list/direct-item hooks load zero-specificity structural
+rules in `@layer lace-layout`. Container widths at 32/48/64rem control grid presets;
+flex preserves order and wrap without imposing height. `--lace-list-gap` defaults
+to 0 and `--lace-list-item-min` to 14rem. Unmarked nested lists are untouched.
+Site CSS owns decoration, image proportions and cropping, overrides the baseline,
+and keeps the maintained theme's 1rem spacing and 4:3 crop. Default grid/auto uses
+existing image sizes; other layouts use conservative `100vw`, tunable by the site.
+
 Canonical block sources live in the repository `registry/` directory and are
 bundled with, and versioned by, the `@lacecms/cli` release; the CLI never
 fetches registry content over the network. `registry/registry.json` lists the
@@ -2216,7 +2272,7 @@ module, which `lace.config.ts` also uses. Definitions are imported, never copied
 
 `lace add block <type...>` (with `--all`, `--dry-run`, `--json`,
 `--site <dir>` defaulting to `site`, `--framework <key>`, and `--write-new`)
-resolves item dependencies, writes component files, updates the
+resolves item dependencies, writes component and stylesheet files, updates the
 map file, checks installed package versions against item ranges, checks
 built-in definition versions against `lace.config.ts`, and scaffolds a typed
 component for a configured custom block that has no registry item. Ownership
@@ -2687,6 +2743,26 @@ and fails unless the check is empty before restoring enforcement. Application
 connections always keep foreign keys on.
 
 ## 17. Admin application
+
+Select choice cards use generic metadata-driven native radio groups, neutral
+aria-hidden diagrams, visible labels/descriptions and the existing field error/
+guidance paths. Arrow keys wrap; Home/End and Space select; ordinary Tab enters
+and leaves. Optional selects offer No selection. Validation summaries reveal
+containing tabs/disclosures and focus the selected or first radio. Viewers see
+readable choice text, and lifecycle locks prevent edits. Cards reflow at 320px
+and support both themes without media requests or Gallery-specific branches.
+
+LIST2 settings visibility is reactive within each block for writers and viewers.
+Hidden control wrappers stay mounted and are absent from accessibility/keyboard
+navigation. Empty setting sections/tab navigation disappear; values survive
+mode switches, Save/Publish, discard/revert, duplicate/move and revision conflicts.
+Relevant errors temporarily reveal inactive settings with associated explanatory
+text. Summary activation opens containing tabs/disclosures and focuses the usual
+control. Correction restores mode-based visibility; publication issues ignored
+for hidden-on-site blocks do not force reveal. Visibility changes affect only
+configuration projection; sync preserves snapshots, audit/media references and
+baseline concurrency guards. Metadata updates retain existing published-version
+advancement and build-request/coalescing behavior.
 
 CE7C authors groups and lists recursively through labelled fieldsets and
 repeatable controls, reusing scalar, media and rich-text controls. Lists support

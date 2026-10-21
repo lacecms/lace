@@ -110,3 +110,34 @@ test("dependency closures include dependencies and reject missing items and cycl
   );
   expect(() => dependencyClosure(cyclic, "astro", ["a"])).toThrow(/dependency cycle/u);
 });
+
+test("registry accepts CSS companions and rejects ambiguous/unsafe roles", async () => {
+  const component = { source: "Block.astro", target: "Block.astro", role: "component" };
+  const css = { source: "ListLayout.css", target: "ListLayout.css", role: "stylesheet" };
+  const root = await registry([{ name: "cards", manifest: { files: [component, css] } }]);
+  await writeFile(new URL("astro/cards/ListLayout.css", root), "@layer lace-layout {}\n");
+  expect((await loadRegistry(root)).items.get("astro/cards").files.map((f) => f.role)).toEqual([
+    "component",
+    "stylesheet",
+  ]);
+  for (const files of [
+    [component, component],
+    [css],
+    [component, { ...css, role: "script" }],
+    [component, { ...css, target: "bad.js" }],
+    [component, { ...css, source: "Block.astro" }],
+    [component, { ...css, target: "../escape.css" }],
+    [component, css, { ...css, target: "listlayout.CSS" }],
+  ]) {
+    const invalid = await registry([{ name: "cards", manifest: { files } }]);
+    await writeFile(new URL("astro/cards/ListLayout.css", invalid), "");
+    await expect(loadRegistry(invalid)).rejects.toThrow(BlockError);
+  }
+  const { symlink, unlink } = await import("node:fs/promises");
+  await unlink(new URL("astro/cards/ListLayout.css", root));
+  await symlink(
+    new URL("astro/cards/Block.astro", root),
+    new URL("astro/cards/ListLayout.css", root),
+  );
+  await expect(loadRegistry(root)).rejects.toThrow(/symlink/);
+});

@@ -1,4 +1,4 @@
-import { builtInBlocks, defineBlock, field } from "./index.js";
+import { builtInBlocks, defineBlock, field, listLayoutSettings } from "./index.js";
 import type {
   BlockDataValues,
   BlockMigration,
@@ -278,4 +278,52 @@ defineBlock({
   fields: { title: field.text() },
   // @ts-expect-error Block data layout references immediate data keys.
   layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["missing"] }] },
+});
+
+const cardSelect = field.select({
+  options: ["a", "b"],
+  required: true,
+  presentation: {
+    control: "cards",
+    choices: [
+      { value: "a", label: "A" },
+      { value: "b", label: "B" },
+    ],
+  },
+});
+export type CardSelectValue = Expect<Equal<FieldValue<typeof cardSelect>, "a" | "b">>;
+
+const cardList = defineBlock({
+  type: "cardList",
+  version: 1,
+  fields: {},
+  settings: listLayoutSettings(),
+});
+export type ListMode = Expect<
+  Equal<
+    BlockSettingsValues<NonNullable<typeof cardList.settings>>["layoutMode"],
+    "grid" | "flex-row" | "flex-column"
+  >
+>;
+
+const conditionalBlock = defineBlock({
+  type: "conditional",
+  version: 1,
+  fields: {},
+  settings: {
+    mode: field.select({ options: ["a", "b"], required: true, defaultValue: "a" }),
+    wrap: field.boolean({ defaultValue: true }),
+  },
+  settingsVisibility: { wrap: { setting: "mode", values: ["a"] } },
+});
+export type ConditionalMode = Expect<
+  Equal<BlockSettingsValues<NonNullable<typeof conditionalBlock.settings>>["mode"], "a" | "b">
+>;
+defineBlock({
+  type: "bad",
+  version: 1,
+  fields: {},
+  settings: { mode: field.select({ options: ["a"], required: true, defaultValue: "a" }) },
+  // @ts-expect-error Visibility targets must name declared settings.
+  settingsVisibility: { missing: { setting: "mode", values: ["a"] } },
 });

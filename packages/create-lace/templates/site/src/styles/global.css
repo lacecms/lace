@@ -37,14 +37,9 @@ main {
   text-transform: uppercase;
 }
 
-/* Gallery: an adaptive grid; the focal point positions each cropped image. */
+/* Gallery theme; neutral list structure comes from its CSS companion. */
 :where([data-lace-block="gallery"]) [data-lace-part="items"] {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  --lace-list-gap: 1rem;
 }
 :where([data-lace-block="gallery"]) figure {
   margin: 0;

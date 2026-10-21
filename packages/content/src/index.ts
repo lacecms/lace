@@ -66,11 +66,33 @@ export type StringValueFieldOptions = CommonFieldOptions<string>;
 /** Options supported by a safe Tiptap rich-text field. */
 export interface RichTextFieldOptions extends PlaceholderFieldOptions<SafeRichTextDocument> {}
 
+/** Decorative rectangles in a fixed 12 by 12 logical canvas. */
+export interface ChoiceDiagram {
+  readonly cells: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  }[];
+}
+
+/** Portable select hints; options remain the source of authored values. */
+export interface SelectPresentation {
+  readonly control: "cards";
+  readonly choices: readonly {
+    readonly value: string;
+    readonly label: string;
+    readonly description?: string;
+    readonly diagram?: ChoiceDiagram;
+  }[];
+}
+
 /** Options supported by select fields. */
 export interface SelectFieldOptions<
   Choices extends readonly string[],
 > extends PlaceholderFieldOptions<NoInfer<Choices[number]>> {
   readonly options: Choices;
+  readonly presentation?: SelectPresentation;
 }
 
 type RequiredFrom<Options> = "required" extends keyof Options
@@ -147,7 +169,10 @@ export type MediaFieldDefinition<
 export type SelectFieldDefinition<
   Choices extends readonly string[] = readonly string[],
   Options extends SelectFieldOptions<Choices> = SelectFieldOptions<Choices>,
-> = CommonDefinition<"select", Options> & { readonly options: Choices };
+> = CommonDefinition<"select", Options> & { readonly options: Choices } & PropertyFrom<
+    Options,
+    "presentation"
+  >;
 
 /** Ordered presentation of immediate sibling fields; never content data. */
 export interface FormLayout<Key extends string = string> {
@@ -789,6 +814,7 @@ export const field = {
       "description",
       "label",
       "options",
+      "presentation",
       "placeholder",
       "required",
     ]);
@@ -812,6 +838,8 @@ export const field = {
 
     const definition: Record<string, unknown> = { options: choices, type: "select" };
     addCommonOptions(definition, normalized);
+    if (normalized.presentation !== undefined)
+      definition.presentation = normalizeSelectPresentation(normalized.presentation, choices);
     addDefault(
       definition,
       normalized,
@@ -838,6 +866,90 @@ export const field = {
     return buildStringValueField("media", options) as MediaFieldDefinition<Options>;
   },
 } as const;
+
+function normalizeSelectPresentation(
+  value: unknown,
+  options: readonly string[],
+): SelectPresentation {
+  const path = "options.presentation";
+  const exact = (raw: unknown, keys: readonly string[], at: string) => {
+    const record = descriptorRecord(raw, at);
+    for (const key of Object.keys(record))
+      if (!keys.includes(key)) fail(`${at}.${key}`, "is not supported.");
+    return record;
+  };
+  const text = (raw: unknown, at: string): string => {
+    if (
+      typeof raw !== "string" ||
+      !raw.trim() ||
+      /[<>]/u.test(raw) ||
+      [...raw].some((character) => character.charCodeAt(0) < 32)
+    )
+      fail(at, "must be nonempty plain text.");
+    return raw;
+  };
+  const raw = exact(value, ["control", "choices"], path);
+  if (raw.control !== "cards") fail(`${path}.control`, 'must be "cards".');
+  if (!Array.isArray(raw.choices) || raw.choices.length !== options.length)
+    fail(`${path}.choices`, "must cover every select option exactly once.");
+  const seen = new Set<string>();
+  const choices = raw.choices.map((choice, index) => {
+    const at = `${path}.choices[${index}]`;
+    const entry = exact(choice, ["value", "label", "description", "diagram"], at);
+    if (typeof entry.value !== "string" || !options.includes(entry.value) || seen.has(entry.value))
+      fail(`${at}.value`, "must name a unique declared select option.");
+    seen.add(entry.value);
+    const result: SelectPresentation["choices"][number] = {
+      value: entry.value,
+      label: text(entry.label, `${at}.label`),
+      ...(entry.description !== undefined
+        ? { description: text(entry.description, `${at}.description`) }
+        : {}),
+      ...(entry.diagram !== undefined ? { diagram: diagram(entry.diagram, `${at}.diagram`) } : {}),
+    };
+    return result;
+  });
+  return deepFreeze({ control: "cards", choices });
+
+  function diagram(input: unknown, at: string): ChoiceDiagram {
+    const rawDiagram = exact(input, ["cells"], at);
+    if (
+      !Array.isArray(rawDiagram.cells) ||
+      rawDiagram.cells.length < 1 ||
+      rawDiagram.cells.length > 16
+    )
+      fail(`${at}.cells`, "must contain 1–16 rectangles.");
+    const cells: { x: number; y: number; width: number; height: number }[] = [];
+    for (const [index, inputCell] of rawDiagram.cells.entries()) {
+      const cellPath = `${at}.cells[${index}]`;
+      const rawCell = exact(inputCell, ["x", "y", "width", "height"], cellPath);
+      for (const key of ["x", "y", "width", "height"] as const) {
+        const n = rawCell[key];
+        if (
+          typeof n !== "number" ||
+          !Number.isInteger(n) ||
+          n < (key === "x" || key === "y" ? 0 : 1)
+        )
+          fail(`${cellPath}.${key}`, "must be an integer within the 12 by 12 canvas.");
+      }
+      const cell = rawCell as { x: number; y: number; width: number; height: number };
+      if (cell.x + cell.width > 12 || cell.y + cell.height > 12)
+        fail(cellPath, "must fit within the 12 by 12 canvas.");
+      if (
+        cells.some(
+          (other) =>
+            cell.x < other.x + other.width &&
+            cell.x + cell.width > other.x &&
+            cell.y < other.y + other.height &&
+            cell.y + cell.height > other.y,
+        )
+      )
+        fail(cellPath, "must not overlap another rectangle.");
+      cells.push({ ...cell });
+    }
+    return { cells };
+  }
+}
 
 /**
  * Project a field descriptor into a detached, immutable JSON-safe admin form
@@ -1763,6 +1875,66 @@ export const BLOCK_SETTING_FIELD_TYPES = Object.freeze([
 /** The settings of a block that declares none. */
 export type NoBlockSettings = Readonly<Record<never, FieldDefinition>>;
 
+/** Bounded presentation rules over unconditional sibling select settings. */
+export type SettingsVisibility<Key extends string = string> = Readonly<
+  Partial<
+    Record<
+      Key,
+      {
+        readonly setting: Key;
+        readonly values: readonly string[];
+      }
+    >
+  >
+>;
+
+/** Validates and detaches settings-only visibility metadata. */
+export function normalizeSettingsVisibility<Key extends string>(
+  value: unknown,
+  settings: Readonly<Record<Key, FieldDefinition>>,
+  path = "settingsVisibility",
+): SettingsVisibility<Key> | undefined {
+  if (value === undefined) return undefined;
+  const raw = normalizeJsonValue(value, path, new WeakSet<object>());
+  if (!isRecord(raw)) fail(path, "must be a plain object of setting rules.");
+  for (const [target, rule] of Object.entries(raw)) {
+    const at = `${path}.${target}`;
+    if (!Object.hasOwn(settings, target)) fail(at, "must target a declared scalar setting.");
+    if (
+      !isRecord(rule) ||
+      Object.keys(rule).some((key) => !["setting", "values"].includes(key)) ||
+      typeof rule.setting !== "string"
+    )
+      fail(at, "must contain only setting and values.");
+    if (rule.setting === target || Object.hasOwn(raw, rule.setting))
+      fail(
+        `${at}.setting`,
+        "must be an unconditional sibling select; self references, chains and cycles are not allowed.",
+      );
+    const controller = Object.hasOwn(settings, rule.setting)
+      ? settings[rule.setting as Key]
+      : undefined;
+    if (
+      controller?.type !== "select" ||
+      !controller.required ||
+      !Object.hasOwn(controller, "defaultValue") ||
+      typeof controller.defaultValue !== "string" ||
+      !controller.options.includes(controller.defaultValue)
+    )
+      fail(`${at}.setting`, "must name a required select setting with a valid default.");
+    if (
+      !Array.isArray(rule.values) ||
+      rule.values.length === 0 ||
+      new Set(rule.values).size !== rule.values.length ||
+      rule.values.some(
+        (option) => typeof option !== "string" || !controller.options.includes(option),
+      )
+    )
+      fail(`${at}.values`, "must be a nonempty unique subset of the controller options.");
+  }
+  return deepFreeze(raw) as unknown as SettingsVisibility<Key>;
+}
+
 /** Input accepted by the portable block-definition DSL. */
 export interface BlockDefinitionInput<
   Fields extends ModelFieldDefinitions = ModelFieldDefinitions,
@@ -1773,6 +1945,7 @@ export interface BlockDefinitionInput<
   readonly fields: Fields;
   readonly layout?: FormLayout<keyof Fields & string>;
   readonly settingsLayout?: FormLayout<keyof Settings & string>;
+  readonly settingsVisibility?: SettingsVisibility<keyof Settings & string>;
   readonly label?: string;
   /** Data and settings migrations from earlier versions, keyed by target version. */
   readonly migrations?: BlockMigrations;
@@ -1810,6 +1983,7 @@ export interface BlockMetadata<
   readonly fields: Fields;
   readonly layout?: FormLayout<keyof Fields & string>;
   readonly settingsLayout?: FormLayout<keyof Settings & string>;
+  readonly settingsVisibility?: SettingsVisibility<keyof Settings & string>;
   readonly label?: string;
   /** Declared settings; absent when the block declares none. */
   readonly settings?: Settings;
@@ -1934,6 +2108,7 @@ export function defineBlock<
         "migrations",
         "layout",
         "settingsLayout",
+        "settingsVisibility",
         "settings",
         "type",
         "version",
@@ -1970,6 +2145,11 @@ export function defineBlock<
     settings ?? {},
     `block.${input.type}.settingsLayout`,
   );
+  const settingsVisibility = normalizeSettingsVisibility(
+    input.settingsVisibility,
+    settings ?? {},
+    `block.${input.type}.settingsVisibility`,
+  );
   let defaultValue: BlockDataValues<Fields> | undefined;
   if (input.defaultValue !== undefined) {
     try {
@@ -1999,6 +2179,7 @@ export function defineBlock<
     ...(migrations === undefined ? {} : { migrations }),
     ...(layout === undefined ? {} : { layout }),
     ...(settingsLayout === undefined ? {} : { settingsLayout }),
+    ...(settingsVisibility === undefined ? {} : { settingsVisibility }),
     ...(settings === undefined ? {} : { settings }),
     type: input.type,
     validate: (value, mode) => {
@@ -2033,6 +2214,14 @@ export function toBlockMetadata(definition: BlockDefinition): BlockMetadata {
       : {
           settingsLayout: normalizeFormLayout(
             definition.settingsLayout,
+            definition.settings ?? {},
+          )!,
+        }),
+    ...(definition.settingsVisibility === undefined
+      ? {}
+      : {
+          settingsVisibility: normalizeSettingsVisibility(
+            definition.settingsVisibility,
             definition.settings ?? {},
           )!,
         }),
@@ -2254,6 +2443,152 @@ export function effectiveAltText(
   return "";
 }
 
+/** Shared presentation rules for the independent scalar list settings. */
+export function listLayoutSettingsVisibility(): SettingsVisibility<
+  "layoutMode" | "layoutWrap" | "layoutPreset"
+> {
+  return deepFreeze({
+    layoutWrap: { setting: "layoutMode", values: ["flex-row", "flex-column"] },
+    layoutPreset: { setting: "layoutMode", values: ["grid"] },
+  });
+}
+
+/** Shared scalar settings for one explicitly adopted list, in any block. */
+export function listLayoutSettings() {
+  const cells = (rects: readonly (readonly [number, number, number, number])[]): ChoiceDiagram => ({
+    cells: rects.map(([x, y, width, height]) => ({ x, y, width, height })),
+  });
+  const columns = (count: number): ChoiceDiagram =>
+    cells(
+      Array.from({ length: count }, (_, i) => [i * (12 / count), 0, 12 / count - 1, 12] as const),
+    );
+  return deepFreeze({
+    layoutMode: field.select({
+      options: ["flex-row", "flex-column", "grid"],
+      required: true,
+      defaultValue: "grid",
+      label: "Arrangement",
+      presentation: {
+        control: "cards",
+        choices: [
+          {
+            value: "flex-row",
+            label: "Horizontal",
+            description: "Items flow across rows.",
+            diagram: columns(3),
+          },
+          {
+            value: "flex-column",
+            label: "Vertical",
+            description: "Items flow down columns. Wrapping needs a height set in site CSS.",
+            diagram: cells([
+              [0, 0, 12, 3],
+              [0, 4, 12, 3],
+              [0, 8, 12, 3],
+            ]),
+          },
+          {
+            value: "grid",
+            label: "Grid",
+            description: "Items use the selected grid preset.",
+            diagram: cells([
+              [0, 0, 5, 5],
+              [6, 0, 5, 5],
+              [0, 6, 5, 5],
+              [6, 6, 5, 5],
+            ]),
+          },
+        ],
+      },
+    }),
+    layoutWrap: field.boolean({
+      defaultValue: true,
+      label: "Wrap items",
+      description:
+        "Applies to horizontal and vertical flex lists. Vertical wrapping requires a height set in site CSS.",
+    }),
+    layoutPreset: field.select({
+      options: [
+        "auto",
+        "columns-2",
+        "columns-3",
+        "columns-4",
+        "narrow-wide",
+        "wide-narrow",
+        "featured-first",
+      ],
+      required: true,
+      defaultValue: "auto",
+      label: "Grid preset",
+      description:
+        "Applies when Grid is selected. Schematics show composition; your site controls styling.",
+      presentation: {
+        control: "cards",
+        choices: [
+          {
+            value: "auto",
+            label: "Auto",
+            description: "As many equal columns as fit.",
+            diagram: cells([
+              [0, 0, 3, 5],
+              [4, 0, 3, 5],
+              [8, 0, 3, 5],
+              [0, 6, 3, 5],
+              [4, 6, 3, 5],
+            ]),
+          },
+          {
+            value: "columns-2",
+            label: "Two columns",
+            description: "Two equal columns from 32rem.",
+            diagram: columns(2),
+          },
+          {
+            value: "columns-3",
+            label: "Three columns",
+            description: "Two from 32rem, three from 48rem.",
+            diagram: columns(3),
+          },
+          {
+            value: "columns-4",
+            label: "Four columns",
+            description: "Two from 32rem, three from 48rem, four from 64rem.",
+            diagram: columns(4),
+          },
+          {
+            value: "narrow-wide",
+            label: "Narrow + wide",
+            description: "Alternating 1:2 columns from 32rem.",
+            diagram: cells([
+              [0, 0, 3, 12],
+              [4, 0, 8, 12],
+            ]),
+          },
+          {
+            value: "wide-narrow",
+            label: "Wide + narrow",
+            description: "Alternating 2:1 columns from 32rem.",
+            diagram: cells([
+              [0, 0, 8, 12],
+              [9, 0, 3, 12],
+            ]),
+          },
+          {
+            value: "featured-first",
+            label: "Featured first",
+            description: "First item spans two columns from 32rem.",
+            diagram: cells([
+              [0, 0, 12, 5],
+              [0, 6, 5, 5],
+              [6, 6, 5, 5],
+            ]),
+          },
+        ],
+      },
+    }),
+  });
+}
+
 // The opt-in full-screen original of the `image` and `gallery` blocks.
 const lightboxSetting = field.boolean({
   defaultValue: false,
@@ -2282,7 +2617,7 @@ export const builtInBlocks = deepFreeze({
     version: 1,
   }),
   gallery: defineBlock({
-    description: "A grid of images with optional captions.",
+    description: "A list of images with selectable layouts and optional captions.",
     fields: {
       images: field.list({
         defaultValue: [],
@@ -2310,11 +2645,19 @@ export const builtInBlocks = deepFreeze({
     },
     label: "Gallery",
     // Version 2 only added the lightbox setting and version 3 only the optional
-    // item link, so earlier data is already valid.
-    migrations: { 2: (block) => block, 3: (block) => block },
-    settings: { lightbox: lightboxSetting },
+    // item link. Version 4 adds scalar layout defaults; data stays valid.
+    migrations: { 2: (block) => block, 3: (block) => block, 4: (block) => block },
+    settings: { ...listLayoutSettings(), lightbox: lightboxSetting },
+    settingsVisibility: listLayoutSettingsVisibility(),
+    settingsLayout: {
+      mode: "sections",
+      groups: [
+        { key: "layout", label: "Layout", fields: ["layoutMode", "layoutWrap", "layoutPreset"] },
+        { key: "behavior", label: "Behavior", fields: ["lightbox"] },
+      ],
+    },
     type: "gallery",
-    version: 3,
+    version: 4,
   }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",

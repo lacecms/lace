@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
+import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export class BlockError extends Error {
@@ -23,7 +24,7 @@ export type Framework = (typeof SUPPORTED_FRAMEWORKS)[number];
 export interface RegistryFile {
   readonly source: string;
   readonly target: string;
-  readonly role: "component";
+  readonly role: "component" | "stylesheet";
   readonly bytes: Buffer;
 }
 export interface RegistryItem {
@@ -68,6 +69,24 @@ export function safeRelativePath(path: unknown): path is string {
   );
 }
 
+async function guardedRegistryPath(root: URL, url: URL): Promise<void> {
+  const base = resolve(fileURLToPath(root));
+  const target = fileURLToPath(url);
+  const inside = relative(base, target);
+  if (inside.startsWith(`..${sep}`) || inside === ".." || inside.startsWith(sep))
+    broken("a path escapes the registry root.");
+  let current = target;
+  while (current !== base) {
+    try {
+      if ((await lstat(current)).isSymbolicLink()) broken(`symlink at ${current}.`);
+    } catch (error) {
+      if (error instanceof BlockError) throw error;
+      return;
+    }
+    current = dirname(current);
+  }
+}
+
 async function readJson(url: URL, label: string): Promise<unknown> {
   let text: string;
   try {
@@ -85,6 +104,7 @@ async function readJson(url: URL, label: string): Promise<unknown> {
 export const bundledRegistryRoot = new URL("./registry/", import.meta.url);
 
 export async function loadRegistry(root: URL = bundledRegistryRoot): Promise<Registry> {
+  await guardedRegistryPath(root, new URL("registry.json", root));
   const index = await readJson(new URL("registry.json", root), "registry.json");
   if (
     !record(index) ||
@@ -108,6 +128,7 @@ export async function loadRegistry(root: URL = bundledRegistryRoot): Promise<Reg
     const key = itemKey(entry.framework, entry.name);
     if (items.has(key)) broken(`item ${key} is listed twice.`);
     const manifestUrl = new URL(entry.manifest, root);
+    await guardedRegistryPath(root, manifestUrl);
     const manifest = await readJson(manifestUrl, `item ${key}`);
     if (
       !record(manifest) ||
@@ -147,19 +168,23 @@ export async function loadRegistry(root: URL = bundledRegistryRoot): Promise<Reg
         !exactKeys(file, ["source", "target", "role"]) ||
         !safeRelativePath(file.source) ||
         !safeRelativePath(file.target) ||
-        file.role !== "component" ||
+        (file.role !== "component" && file.role !== "stylesheet") ||
+        (file.role === "stylesheet" &&
+          (!file.source.endsWith(".css") || !file.target.endsWith(".css"))) ||
         files.some((other) => other.target.toLowerCase() === (file.target as string).toLowerCase())
       )
         broken(`item ${key} declares an invalid file.`);
+      await guardedRegistryPath(root, new URL(file.source, manifestUrl));
       let bytes: Buffer;
       try {
         bytes = await readFile(new URL(file.source, manifestUrl));
       } catch {
         return broken(`item ${key} is missing ${file.source}.`);
       }
-      files.push({ source: file.source, target: file.target, role: "component", bytes });
+      files.push({ source: file.source, target: file.target, role: file.role, bytes });
     }
-    if (files.length !== 1) broken(`item ${key} must declare exactly one component file.`);
+    if (files.filter((file) => file.role === "component").length !== 1)
+      broken(`item ${key} must declare exactly one component file.`);
     items.set(key, {
       name: entry.name,
       framework: entry.framework,

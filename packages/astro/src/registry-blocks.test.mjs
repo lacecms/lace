@@ -1,4 +1,10 @@
-import { builtInBlocks } from "@lacecms/content";
+import {
+  builtInBlocks,
+  defineBlock,
+  field,
+  listLayoutSettings,
+  listLayoutSettingsVisibility,
+} from "@lacecms/content";
 import { defineBlockMap } from "@lacecms/render";
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { expect, test } from "vitest";
@@ -7,6 +13,7 @@ import GalleryBlock from "../../../registry/astro/gallery/GalleryBlock.astro";
 import HeroBlock from "../../../registry/astro/hero/HeroBlock.astro";
 import ImageBlock from "../../../registry/astro/image/ImageBlock.astro";
 import NavigationBlock from "../../../registry/astro/navigation/NavigationBlock.astro";
+import CardList from "../test-fixtures/CardList.astro";
 import Blocks from "../test-fixtures/Blocks.astro";
 
 const blocks = defineBlockMap({
@@ -82,12 +89,12 @@ test("gallery items follow the media alt and caption fallbacks", async () => {
   ]);
   expect(html).toBe(
     [
-      '<main><section class="gallery" data-lace-block="gallery" data-lace-block-key="gallery-1">',
+      '<main><section class="gallery" data-lace-block="gallery" data-lace-block-key="gallery-1" data-lace-layout-container>',
       '<h2 data-lace-part="title">Studio</h2>',
-      '<ul data-lace-part="items" role="list">',
-      '<li data-lace-part="item"><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
+      '<ul data-lace-part="items" data-lace-layout="grid" data-lace-wrap="true" data-lace-preset="auto" role="list">',
+      '<li data-lace-part="item" data-lace-layout-item><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
       // Astro writes an empty alt text as a bare attribute.
-      '<li data-lace-part="item"><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
+      '<li data-lace-part="item" data-lace-layout-item><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
       "</ul></section></main>",
     ].join(""),
   );
@@ -211,7 +218,7 @@ test("a gallery without a title carries its anchor and class name", async () => 
     block("gallery", { images: [{ media: "bare" }] }, { anchor: "photos", className: "wide" }),
   ]);
   expect(html).toContain(
-    '<section class="gallery wide" data-lace-block="gallery" data-lace-block-key="gallery-1" id="photos">',
+    '<section class="gallery wide" data-lace-block="gallery" data-lace-block-key="gallery-1" data-lace-layout-container id="photos">',
   );
   expect(html).not.toContain('data-lace-part="title"');
 });
@@ -294,4 +301,66 @@ test("a global block without a renderer fails with the global's identity", async
     code: "unknown_block_type",
     context: { blockKey: "c", entryId: "navigation-entry", modelKey: "navigation" },
   });
+});
+
+test("Gallery emits validated shared hooks for every mode and preset without inline layout styles", async () => {
+  for (const layoutMode of ["grid", "flex-row", "flex-column"])
+    for (const layoutPreset of [
+      "auto",
+      "columns-2",
+      "columns-3",
+      "columns-4",
+      "narrow-wide",
+      "wide-narrow",
+      "featured-first",
+    ]) {
+      const html = await render([
+        block(
+          "gallery",
+          { images: [{ media: "bare" }] },
+          { settings: { layoutMode, layoutPreset, layoutWrap: false } },
+        ),
+      ]);
+      expect(html).toContain(
+        `data-lace-layout="${layoutMode}" data-lace-wrap="false" data-lace-preset="${layoutPreset}"`,
+      );
+      expect(html).toContain('data-lace-part="item" data-lace-layout-item');
+      expect(html).not.toMatch(/style=|<style|<script/);
+    }
+});
+
+test("an unrelated card list uses the same scalar settings and layout hooks", async () => {
+  const definition = defineBlock({
+    type: "cardList",
+    version: 1,
+    fields: { cards: field.list({ defaultValue: [], item: field.text() }) },
+    settings: listLayoutSettings(),
+    settingsVisibility: listLayoutSettingsVisibility(),
+  });
+  const container = await AstroContainer.create();
+  const html = await container.renderToString(Blocks, {
+    props: {
+      blocks: defineBlockMap({ cardList: { component: CardList, definition } }),
+      entry: {
+        id: "custom",
+        blocks: [
+          {
+            key: "cards",
+            type: "cardList",
+            schemaVersion: 1,
+            position: 0,
+            data: { cards: ["One", "Two"] },
+            settings: { layoutMode: "flex-row", layoutWrap: false, layoutPreset: "featured-first" },
+          },
+        ],
+        media: () => undefined,
+        modelKey: "home",
+      },
+    },
+  });
+  expect(html).toContain(
+    'data-lace-layout="flex-row" data-lace-wrap="false" data-lace-preset="featured-first"',
+  );
+  expect(html).toContain("<li data-lace-layout-item>One<ul><li>Nested list</li></ul></li>");
+  expect(html).not.toContain("gallery");
 });

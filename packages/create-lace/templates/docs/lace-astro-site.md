@@ -713,3 +713,43 @@ without one. Suggestions do not guarantee uniqueness; publication reports route
 conflicts normally. Creation saves the slug atomically and opens a clean
 editor. Existing entries and duplicates retain their slug until explicitly
 edited or the editor's opt-in suggestion control is enabled.
+
+## Reusable list layouts (Gallery v4)
+
+Gallery imports its site-owned `ListLayout.css` companion. `lace add block gallery`
+installs both under the configured components directory and records both hashes
+in the same item. CSS/component conflicts preserve the entire active item; inspect
+`--dry-run` and `--write-new`, then merge and rerun instead of overwriting edits.
+
+Custom lists spread `listLayoutSettings()` from `@lacecms/content` into scalar
+settings, set `settingsVisibility: listLayoutSettingsVisibility()` on the block
+(using the companion export from `@lacecms/content`), and reuse the installed CSS
+by relative import. Mark their outer element
+`data-lace-layout-container`, list `data-lace-layout`, `data-lace-wrap` and
+`data-lace-preset` from validated settings, and direct items `data-lace-layout-item`.
+Do not claim a second registry ownership of the shared file. The `lace-layout`
+layer has zero-specificity structural rules; site CSS controls decoration and
+image crop. Set `--lace-list-gap` (default 0) and `--lace-list-item-min` (14rem).
+Unlayered site rules override it; order theme layers after `lace-layout` otherwise.
+Vertical wrap needs an explicit site-defined height. Grid thresholds are container
+widths of 32/48/64rem; all seven preset names are in the content-modeling guide.
+Schematics explain composition, not site appearance. Default grid/auto preserves
+Gallery sizes; other modes use conservative `100vw`, tunable in your component.
+
+For a v3 upgrade, back up content and site first, upgrade compatible engine/admin/
+CLI/site packages, install the v4 renderer and companion with conflict review,
+remove old unlayered Gallery display/columns rules, keep 1rem spacing through
+`--lace-list-gap`, and preserve your image/theme rules. Increment model versions
+that structurally include Gallery; deploy matching definitions/renderer, then run
+normal `lace content sync`. Migration 4 preserves data, links, order, envelopes
+and lightbox and fills absent layout defaults (`grid`, true, `auto`); migrations
+2/3 remain. Interrupted sync resumes by rerunning. No new SQL migration is needed.
+After sync, rollback requires the pre-upgrade backup with matching older code;
+there is no automatic down-migration of v4 blocks.
+
+Layout visibility shows Wrap items only for flex and Grid preset only for grid.
+Inactive values remain stored and validated; a relevant validation error reveals
+its control for correction. The optional map requires matching updated CMS/admin
+packages. Changing it needs ordinary content sync, which preserves snapshots but
+retains existing published-version and build-request behavior. No Gallery v4
+migration, SQL migration or Astro source/CSS update is needed for visibility.

@@ -530,6 +530,8 @@ function normalizeCommonModel<Fields extends FieldMap>(
   ) {
     fail("model must be a plain object.");
   }
+  if (Object.hasOwn(input, "settingsVisibility"))
+    fail("settingsVisibility is supported only on block definitions.");
   assertStableKey(input.key, "key");
   assertVersion(input.version);
   if (input.renamedFrom !== undefined) {
@@ -914,10 +916,11 @@ function omitListFields(model: JsonValue): JsonValue {
 
 /** The pre-baseline structural value, kept only to recognise legacy stored hashes. */
 function legacyStructureForHash(projection: JsonValue): MutableJsonValue {
-  const strip = (owner: JsonValue): JsonValue => {
+  const strip = (owner: JsonValue, block = false): JsonValue => {
     const result = { ...(owner as JsonObject) };
     delete result.layout;
     delete result.settingsLayout;
+    if (block) delete result.settingsVisibility;
     const fieldMap = (map: JsonValue): JsonValue =>
       Object.fromEntries(
         Object.entries(map as JsonObject).map(([key, descriptor]) => {
@@ -934,7 +937,9 @@ function legacyStructureForHash(projection: JsonValue): MutableJsonValue {
     if (result.fields) result.fields = fieldMap(result.fields);
     if (result.settings) result.settings = fieldMap(result.settings);
     if (Array.isArray(result.blockDefinitions))
-      result.blockDefinitions = result.blockDefinitions.map(strip);
+      result.blockDefinitions = result.blockDefinitions.map((definition) =>
+        strip(definition, true),
+      );
     return result;
   };
   return omitDisplayMetadata(strip(omitListFields(projection)));
@@ -954,6 +959,7 @@ function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
 function fieldDefinitionStructure(definition: JsonValue): MutableJsonObject {
   const result = withoutDisplayProperties(definition);
   delete result.placeholder;
+  if (result.type === "select") delete result.presentation;
   if (result.type === "group") result.fields = fieldMapStructure(result.fields);
   if (result.type === "list") {
     delete result.itemLabel;
@@ -967,6 +973,7 @@ function fieldMapWithoutPlaceholders(fields: JsonValue | undefined): MutableJson
     Object.entries((fields ?? {}) as JsonObject).map(([key, value]) => {
       const result = JSON.parse(JSON.stringify(value)) as MutableJsonObject;
       delete result.placeholder;
+      if (result.type === "select") delete result.presentation;
       if (result.type === "group") {
         delete result.layout;
         result.fields = fieldMapWithoutPlaceholders(result.fields);
@@ -986,6 +993,12 @@ function fieldMapStructure(fields: JsonValue | undefined): MutableJsonObject {
   return structure;
 }
 
+function blockWithoutVisibility(definition: JsonValue): MutableJsonObject {
+  const result = withoutDisplayProperties(definition);
+  delete result.settingsVisibility;
+  return result;
+}
+
 /**
  * Builds the canonical structure of a model. Display metadata is removed only
  * from the model, field, block, and block-field definitions, so field keys and
@@ -1000,7 +1013,7 @@ export function contentModelStructure(
   structure.fields = fieldMapStructure(projection.fields);
   structure.blockDefinitions = (projection.blockDefinitions as readonly JsonObject[]).map(
     (definition) => ({
-      ...withoutDisplayProperties(definition),
+      ...blockWithoutVisibility(definition),
       fields: fieldMapStructure(definition.fields),
       ...(definition.settings === undefined
         ? {}
@@ -1124,7 +1137,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
       )
         ? {
             blocks: blocks.map((block) => ({
-              ...withoutDisplayProperties(block as unknown as JsonValue),
+              ...blockWithoutVisibility(block as unknown as JsonValue),
               fields: fieldMapStructure(block.fields as unknown as JsonValue),
               ...(block.settings === undefined
                 ? {}
@@ -1138,7 +1151,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
         : omitDisplayMetadata({
             ...(structure as JsonObject),
             blocks: blocks.map((block) => ({
-              ...withoutDisplayProperties(block as unknown as JsonValue),
+              ...blockWithoutVisibility(block as unknown as JsonValue),
               fields: fieldMapWithoutPlaceholders(block.fields as unknown as JsonValue),
               ...(block.settings === undefined
                 ? {}

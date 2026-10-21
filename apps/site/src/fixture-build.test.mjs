@@ -227,7 +227,7 @@ test("the fixture build emits published static routes without CMS access", () =>
   const galleryItem = (index, alt, id, width, height, caption) => {
     const dialog = `lace-lightbox-first-post-entry-post-gallery-${index}`;
     return (
-      `<li data-lace-part="item"><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
+      `<li data-lace-part="item" data-lace-layout-item><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
       `<img alt="${alt}" data-lace-part="media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></button>` +
       `<dialog aria-label="${alt}" closedby="any" data-lace-part="lightbox" id="${dialog}"><button command="close" commandfor="${dialog}" data-lace-part="lightbox-close" type="button">Close</button>` +
       `<img alt="${alt}" data-lace-part="lightbox-media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></dialog>` +
@@ -238,9 +238,9 @@ test("the fixture build emits published static routes without CMS access", () =>
     );
   };
   expect(post).toContain(
-    '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery"><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" role="list">' +
+    '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery" data-lace-layout-container><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" data-lace-layout="grid" data-lace-wrap="true" data-lace-preset="auto" role="list">' +
       galleryItem(0, "Media library description", "post-media", 800, 600, "Media library caption") +
-      '<li data-lace-part="item"><figure><a data-lace-part="link" href="https://lace.example/desk">' +
+      '<li data-lace-part="item" data-lace-layout-item><figure><a data-lace-part="link" href="https://lace.example/desk">' +
       `<img alt="A quiet desk" data-lace-part="media" decoding="async" height="480" loading="lazy" src="${media("note-media")}" width="640"></a>` +
       '<figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
       galleryItem(2, "A looping sketch", "sketch-media", 600, 400) +
@@ -274,9 +274,16 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(note).toContain('<blockquote data-lace-block="quote" data-lace-block-key="note-quote">');
 
   expect(home).toContain("The static Lace starter");
-  expect(home).toContain("[data-lace-block=hero]");
-  expect(home).toContain("padding-block:2rem");
-  expect(about).toContain("[data-lace-block=hero]");
+  const cssFor = (html) =>
+    html +
+    [...html.matchAll(/<link[^>]*href="([^" ]+\.css)"/g)]
+      .map((match) => readFileSync(join(siteRoot, "dist", match[1]), "utf8"))
+      .join("\n");
+  expect(cssFor(home)).toContain("[data-lace-block=hero]");
+  expect(cssFor(home)).toContain("padding-block:2rem");
+  expect(cssFor(about)).toContain("[data-lace-block=hero]");
+  expect(cssFor(post)).toContain("@layer lace-layout");
+  expect(cssFor(post)).toContain("--lace-list-gap:1rem");
   // Without LACE_PUBLIC_BASE_URL the site keeps the media URLs of the export;
   // without a media origin there are no variants. The hero loads eagerly.
   expect(home).toContain(

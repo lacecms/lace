@@ -360,7 +360,7 @@ without an explicit API base URL it SHALL switch optimization off so the
 default fixture build needs no media origin. The committed fixture SHALL hold
 an `image` block with the lightbox on, a `gallery` block with the lightbox on
 whose items include one with a `link`, an `image` block with the default
-setting and a `link`, at block versions 4 and 3. The reference stylesheet SHALL
+setting and a `link`, both at block version 4. The reference stylesheet SHALL
 style the lightbox trigger, the dialog, its backdrop and close button, and the
 image link's focus ring.
 
@@ -377,3 +377,20 @@ image link's focus ring.
 - **WHEN** the fixture build runs without an API base URL
 - **THEN** it succeeds without network access and every image keeps its
   public media URL without `srcset`
+
+The maintained site SHALL load Gallery's installed neutral structural stylesheet
+and keep its 1rem gallery spacing and 4:3 image crop in site-owned theme CSS.
+Competing unlayered rules that force every Gallery into the old grid SHALL be
+removed. The default `grid`/`auto` layout SHALL retain the reference appearance,
+while all other modes and presets SHALL remain selectable and CSS-overridable.
+
+#### Scenario: Layout adoption preserves the default theme
+- **WHEN** the updated fixture with Gallery version 4 and default layout settings
+  is rendered
+- **THEN** it retains the existing gallery image proportions, spacing, caption
+  and link/lightbox behavior while exposing the shared layout hooks
+
+#### Scenario: Site theme does not force grid for flex
+- **WHEN** a Gallery fixture chooses horizontal flex and then vertical flex
+- **THEN** its computed display and direction follow its settings, and the
+  reference theme does not override them back to the former grid

@@ -40,10 +40,15 @@ async function registryItems() {
       framework: entry.framework,
     });
     expect(items.has(`${entry.framework}/${entry.name}`), entry.name).toBe(false);
+    expect(manifest.files.filter((file) => file.role === "component")).toHaveLength(1);
     const files = new Map();
     for (const file of manifest.files) {
       expect(insideSite(file.source) && insideSite(file.target), entry.name).toBe(true);
-      expect(file.role).toBe("component");
+      expect(["component", "stylesheet"]).toContain(file.role);
+      if (file.role === "stylesheet") {
+        expect(file.source).toMatch(/\.css$/);
+        expect(file.target).toMatch(/\.css$/);
+      }
       files.set(file.target, await readFile(join(manifestPath, "..", file.source)));
     }
     items.set(`${entry.framework}/${entry.name}`, { manifest, files });

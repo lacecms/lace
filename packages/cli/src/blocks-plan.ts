@@ -187,6 +187,27 @@ export async function planBlocks(options: {
     selectedNames,
   );
 
+  // Validate ownership for the complete selection before planning any writes.
+  const owners = new Map<string, string>();
+  const claim = (path: string, owner: string): void => {
+    const folded = path.toLowerCase();
+    const previous = owners.get(folded);
+    if (previous !== undefined && previous !== owner)
+      throw new BlockError(
+        "BLOCK_INPUT",
+        `Block file ${path} collides between ${previous} and ${owner}.`,
+      );
+    owners.set(folded, owner);
+  };
+  for (const [name, item] of Object.entries(lock0.items))
+    for (const path of Object.keys(item.files)) claim(path, name);
+  for (const [type, item] of Object.entries(lock0.customBlocks ?? {}))
+    for (const path of Object.keys(item.files)) claim(path, `custom:${type}`);
+  for (const item of closure)
+    for (const file of item.files) claim(`${lock0.componentsDir}/${file.target}`, item.name);
+  for (const type of customTypes)
+    claim(`${lock0.componentsDir}/${customComponentFile(type)}`, `custom:${type}`);
+
   const reserved = new Set([LOCK_FILE.toLowerCase(), lock0.blockMap.toLowerCase()]);
   const items: ItemOutcome[] = [];
   const files: FileDecision[] = [];
@@ -337,8 +358,12 @@ export async function planBlocks(options: {
   const entries: MapEntry[] = [];
   for (const [name, record] of Object.entries(nextItems)) {
     const item = registry.items.get(`${site.framework}/${name}`);
-    const component = Object.keys(record.files).sort()[0];
-    if (item === undefined || component === undefined) continue;
+    if (item === undefined) continue;
+    const target = item.files.find((file) => file.role === "component")!.target;
+    const component =
+      Object.keys(record.files).find((path) => path === `${lock0.componentsDir}/${target}`) ??
+      Object.keys(record.files).find((path) => path.toLowerCase().endsWith(".astro"));
+    if (component === undefined) continue;
     entries.push({ type: item.blockType, component });
   }
   for (const [type, record] of Object.entries(nextCustom)) {

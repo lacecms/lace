@@ -466,7 +466,7 @@ test("declares block settings with defaults in metadata only when present", () =
   };
   for (const [type, builtIn] of Object.entries(builtInBlocks)) {
     if (type === "gallery" || type === "image")
-      expect(toBlockMetadata(builtIn).settings).toEqual({ lightbox });
+      expect(toBlockMetadata(builtIn).settings.lightbox).toEqual(lightbox);
     else expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
   }
   for (const [settings, message] of [
@@ -635,7 +635,11 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
       label: "Call to action",
       type: "cta",
     },
-    { description: "A grid of images with optional captions.", label: "Gallery", type: "gallery" },
+    {
+      description: "A list of images with selectable layouts and optional captions.",
+      label: "Gallery",
+      type: "gallery",
+    },
     {
       description: "Large heading with optional text, image, and action.",
       label: "Hero",
@@ -983,6 +987,10 @@ test("image and gallery items declare media first without changing identity", as
       label: definition.label,
       migrations: definition.migrations,
       settings: definition.settings,
+      ...(definition.settingsLayout ? { settingsLayout: definition.settingsLayout } : {}),
+      ...(definition.settingsVisibility
+        ? { settingsVisibility: definition.settingsVisibility }
+        : {}),
       type: definition.type,
       version: definition.version,
     });
@@ -1007,13 +1015,13 @@ test("image and gallery items declare media first without changing identity", as
     expect(canonicalizeJson(reordered)).toBe(canonicalizeJson(original));
     expect(await sha256CanonicalJson(reordered)).toBe(await sha256CanonicalJson(original));
   }
-  expect([image.version, gallery.version]).toEqual([4, 3]);
+  expect([image.version, gallery.version]).toEqual([4, 4]);
 });
 
 test("the lightbox setting of image and gallery is a validated boolean", () => {
   for (const definition of [builtInBlocks.image, builtInBlocks.gallery]) {
-    expect(validateBlockSettings(definition, { lightbox: true })).toEqual({ lightbox: true });
-    expect(validateBlockSettings(definition, {})).toEqual({ lightbox: false });
+    expect(validateBlockSettings(definition, { lightbox: true }).lightbox).toBe(true);
+    expect(validateBlockSettings(definition, {}).lightbox).toBe(false);
     expect(() => validateBlockSettings(definition, { lightbox: "yes" })).toThrow(
       ContentValidationError,
     );
@@ -1023,14 +1031,19 @@ test("the lightbox setting of image and gallery is a validated boolean", () => {
 
 test("gallery collects image items that become publishable with one image", () => {
   const { gallery } = builtInBlocks;
-  expect(gallery.version).toBe(3);
+  expect(gallery.version).toBe(4);
   const stored = { images: [{ media: "media-1" }], title: "Studio" };
-  for (const from of [1, 2])
+  for (const from of [1, 2, 3])
     expect(migrateBlockData(gallery, { data: stored, settings: {} }, from)).toEqual({
       data: stored,
       settings: {},
     });
-  expect(validateBlockSettings(gallery, {})).toEqual({ lightbox: false });
+  expect(validateBlockSettings(gallery, {})).toEqual({
+    lightbox: false,
+    layoutMode: "grid",
+    layoutWrap: true,
+    layoutPreset: "auto",
+  });
   expect(validateBlockData(gallery, {}, "draft")).toEqual({ images: [] });
   expect(issueFrom(() => validateBlockData(gallery, {}, "publish"))).toMatchObject({
     code: "list_too_short",
@@ -1692,4 +1705,185 @@ test("CE9B layouts survive the maximum six-container branch", () => {
     });
   const root = toFieldMetadata(nested(3));
   expect(root.item.fields.child.item.fields.child.item.layout.groups[0].fields).toEqual(["child"]);
+});
+
+describe("portable select cards", () => {
+  const presentation = () => ({
+    control: "cards",
+    choices: [
+      { value: "b", label: "Second" },
+      {
+        value: "a",
+        label: "First",
+        description: "A composition",
+        diagram: { cells: [{ x: 0, y: 0, width: 6, height: 12 }] },
+      },
+    ],
+  });
+  const make = (hint = presentation()) => field.select({ options: ["a", "b"], presentation: hint });
+  it("detaches, freezes and round trips through nested fields and settings", () => {
+    const hint = presentation();
+    const select = make(hint);
+    hint.choices[1].diagram.cells[0].width = 12;
+    expect(select.presentation.choices[1].diagram.cells[0].width).toBe(6);
+    expect(Object.isFrozen(select.presentation.choices[1].diagram.cells[0])).toBe(true);
+    for (const descriptor of [
+      select,
+      field.group({ fields: { pick: select } }),
+      field.list({ item: select }),
+      field.list({ item: field.group({ fields: { pick: select } }) }),
+    ]) {
+      expect(toFieldMetadata(JSON.parse(JSON.stringify(descriptor)))).toEqual(descriptor);
+    }
+    const custom = defineBlock({
+      type: "cards",
+      version: 1,
+      fields: {},
+      settings: {
+        pick: field.select({
+          options: ["a", "b"],
+          defaultValue: "a",
+          presentation: presentation(),
+        }),
+      },
+    });
+    expect(toBlockMetadata(custom).settings.pick.presentation).toEqual(presentation());
+    expect(validateFieldValue(select, "a", "publish")).toBe("a");
+    expect(() => validateFieldValue(select, { value: "a" }, "draft")).toThrow();
+    expect(field.select({ options: ["a"] })).not.toHaveProperty("presentation");
+  });
+  it.each([
+    (p) => p.choices.pop(),
+    (p) => (p.choices[1].value = "b"),
+    (p) => (p.choices[1].value = "unknown"),
+    (p) => (p.choices[1].label = " "),
+    (p) => (p.choices[1].label = "<b>First</b>"),
+    (p) => (p.choices[1].diagram.cells[0].width = 13),
+    (p) => (p.choices[1].diagram.cells[0].x = -1),
+    (p) => (p.choices[1].diagram.cells[0].height = 0),
+    (p) => (p.choices[1].diagram.cells[0].y = 0.5),
+    (p) => p.choices[1].diagram.cells.push({ x: 1, y: 1, width: 1, height: 1 }),
+    (p) => (p.choices[1].diagram.url = "https://example.com"),
+    (p) => (p.choices[1].diagram.cells[0].color = "red"),
+    (p) => (p.choices[1].diagram.cells = []),
+    (p) =>
+      (p.choices[1].diagram.cells = Array.from({ length: 17 }, () => ({
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      }))),
+    (p) => (p.control = "html"),
+  ])("rejects malformed presentation with a path", (mutate) => {
+    const hint = presentation();
+    mutate(hint);
+    expect(() => make(hint)).toThrow(/presentation/);
+  });
+  it("rejects hints on other field kinds and nonportable values", () => {
+    expect(() => field.boolean({ presentation: presentation() })).toThrow(/presentation/);
+    const hint = presentation();
+    hint.choices[0].label = () => "label";
+    expect(() => make(hint)).toThrow(/presentation/);
+  });
+});
+
+test("list settings are fresh ordinary scalars reusable by any block", async () => {
+  const { listLayoutSettings } = await import("../dist/index.js");
+  const settings = listLayoutSettings();
+  expect(listLayoutSettings()).not.toBe(settings);
+  expect(Object.isFrozen(settings)).toBe(true);
+  const custom = defineBlock({ type: "cardList", version: 1, fields: {}, settings });
+  expect(validateBlockSettings(custom, {}, "draft")).toEqual({
+    layoutMode: "grid",
+    layoutWrap: true,
+    layoutPreset: "auto",
+  });
+  for (const key of ["layoutMode", "layoutPreset"]) {
+    expect(settings[key].presentation.choices).toHaveLength(settings[key].options.length);
+    expect(settings[key].presentation.choices.every((c) => c.diagram.cells.length > 0)).toBe(true);
+  }
+  expect(() =>
+    validateBlockSettings(custom, { layoutMode: "flex-row", layoutPreset: "wrong" }, "draft"),
+  ).toThrow();
+});
+
+describe("bounded scalar setting visibility", () => {
+  const settings = () => ({
+    mode: field.select({ options: ["a", "b"], required: true, defaultValue: "a" }),
+    wrap: field.boolean({ defaultValue: true }),
+    preset: field.text({ defaultValue: "auto" }),
+  });
+  const rule = () => ({ wrap: { setting: "mode", values: ["a"] } });
+  const make = (visibility = rule(), fields = settings()) =>
+    defineBlock({
+      type: "custom",
+      version: 1,
+      fields: {},
+      settings: fields,
+      settingsVisibility: visibility,
+    });
+  it("detaches/freeze/round trips without altering authored settings", () => {
+    const input = rule();
+    const block = make(input);
+    input.wrap.values.push("b");
+    expect(block.settingsVisibility.wrap.values).toEqual(["a"]);
+    expect(Object.isFrozen(block.settingsVisibility.wrap.values)).toBe(true);
+    const metadata = toBlockMetadata(block);
+    expect(toBlockMetadata(defineBlock(JSON.parse(JSON.stringify(metadata))))).toEqual(metadata);
+    expect(validateBlockSettings(block, {})).toEqual({ mode: "a", wrap: true, preset: "auto" });
+    expect(defineBlock({ type: "plain", version: 1, fields: {} })).not.toHaveProperty(
+      "settingsVisibility",
+    );
+  });
+  it.each([
+    { missing: { setting: "mode", values: ["a"] } },
+    { wrap: { setting: "missing", values: ["a"] } },
+    { wrap: { setting: "wrap", values: ["a"] } },
+    { wrap: { setting: "preset", values: ["auto"] } },
+    { wrap: { setting: "mode", values: [] } },
+    { wrap: { setting: "mode", values: ["a", "a"] } },
+    { wrap: { setting: "mode", values: ["other"] } },
+    { wrap: { setting: "mode", values: [true] } },
+    { wrap: { setting: "mode", values: ["a"], extra: true } },
+    { wrap: { setting: "mode", values: ["a"] }, mode: { setting: "preset", values: ["auto"] } },
+    { wrap: { setting: "mode", values: ["a"] }, mode: { setting: "wrap", values: ["a"] } },
+    { wrap: { setting: "mode", values: [() => "a"] } },
+  ])("rejects malformed rules with descriptor paths", (input) =>
+    expect(() => make(input)).toThrow(/settingsVisibility/),
+  );
+  it("requires an unconditional required select with a valid default", () => {
+    expect(() =>
+      make(rule(), {
+        ...settings(),
+        mode: field.select({ options: ["a", "b"], defaultValue: "a" }),
+      }),
+    ).toThrow(/settingsVisibility.wrap.setting/);
+    expect(() =>
+      make(rule(), { ...settings(), mode: field.boolean({ defaultValue: true }) }),
+    ).toThrow(/settingsVisibility.wrap.setting/);
+    expect(() => field.group({ fields: {}, settingsVisibility: rule() })).toThrow();
+    expect(() => field.boolean({ settingsVisibility: rule() })).toThrow();
+  });
+});
+
+test("Gallery and custom lists share visibility without structural setting changes", async () => {
+  const { listLayoutSettings, listLayoutSettingsVisibility } = await import("../dist/index.js");
+  const visibility = listLayoutSettingsVisibility();
+  expect(listLayoutSettingsVisibility()).not.toBe(visibility);
+  expect(Object.isFrozen(visibility.layoutWrap.values)).toBe(true);
+  const custom = defineBlock({
+    type: "cards",
+    version: 1,
+    fields: {},
+    settings: listLayoutSettings(),
+    settingsVisibility: visibility,
+  });
+  expect(custom.settingsVisibility).toEqual(builtInBlocks.gallery.settingsVisibility);
+  expect(builtInBlocks.gallery.version).toBe(4);
+  expect(Object.keys(builtInBlocks.gallery.migrations)).toEqual(["2", "3", "4"]);
+  expect(validateBlockSettings(custom, {})).toEqual({
+    layoutMode: "grid",
+    layoutWrap: true,
+    layoutPreset: "auto",
+  });
 });

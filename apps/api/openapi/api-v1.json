@@ -134,6 +134,9 @@
                     "placeholder": {
                       "type": "string"
                     },
+                    "presentation": {
+                      "$ref": "#/components/schemas/SelectPresentation"
+                    },
                     "required": {
                       "type": "boolean"
                     },
@@ -146,6 +149,28 @@
                 }
               ]
             },
+            "type": "object"
+          },
+          "settingsVisibility": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "setting": {
+                  "type": "string"
+                },
+                "values": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                }
+              },
+              "required": ["setting", "values"],
+              "type": "object"
+            },
+            "description": "Keys name scalar block settings. Each rule uses an unconditional required sibling select with a valid default. Values are a nonempty unique subset of its options. No self references, chains or cycles; validation is unconditional.",
             "type": "object"
           },
           "type": {
@@ -372,6 +397,9 @@
               },
               "placeholder": {
                 "type": "string"
+              },
+              "presentation": {
+                "$ref": "#/components/schemas/SelectPresentation"
               },
               "required": {
                 "type": "boolean"
@@ -701,6 +729,9 @@
                   "placeholder": {
                     "type": "string"
                   },
+                  "presentation": {
+                    "$ref": "#/components/schemas/SelectPresentation"
+                  },
                   "required": {
                     "type": "boolean"
                   },
@@ -788,6 +819,79 @@
           }
         },
         "required": ["type", "required", "item"],
+        "type": "object"
+      },
+      "SelectPresentation": {
+        "additionalProperties": false,
+        "description": "Exactly one choice per declared option. Labels/descriptions are nonempty plain text; cells must not overlap.",
+        "properties": {
+          "choices": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "diagram": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cells": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "Integer rectangle contained in a 12 by 12 canvas; no overlaps.",
+                        "properties": {
+                          "height": {
+                            "maximum": 12,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "width": {
+                            "maximum": 12,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "x": {
+                            "maximum": 11,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "y": {
+                            "maximum": 11,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["x", "y", "width", "height"],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": ["cells"],
+                  "type": "object"
+                },
+                "label": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": ["value", "label"],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "control": {
+            "const": "cards"
+          }
+        },
+        "required": ["control", "choices"],
         "type": "object"
       }
     }

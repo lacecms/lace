@@ -2,6 +2,7 @@ import { CalendarIcon, ExternalLink, Link2, X } from "lucide-react";
 import { type ComponentType, useId, useState } from "react";
 import { cn, formatDate } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { ChoiceCards } from "../../../shared/ui/ChoiceCards/index.js";
 import { Calendar } from "../../../shared/ui/Calendar/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/Popover/index.js";
@@ -83,6 +84,7 @@ function SelectField({
   describedBy,
   id,
   invalid,
+  label,
   onBlur,
   onChange,
   placeholder,
@@ -90,6 +92,38 @@ function SelectField({
   value,
 }: FieldRendererProps) {
   const options = definition.type === "select" ? definition.options : [];
+  if (definition.type === "select" && definition.presentation?.control === "cards") {
+    const choices = options.map((option) =>
+      definition.presentation!.choices.find((choice) => choice.value === option)!,
+    );
+    if (readOnly) {
+      const selected = choices.find((choice) => choice.value === value);
+      return (
+        <p aria-describedby={describedBy} className="m-0 text-sm font-normal" id={id} tabIndex={-1}>
+          {selected?.label ?? "No selection"}
+          {selected?.description ? (
+            <span className="block text-xs text-muted-foreground">{selected.description}</span>
+          ) : null}
+        </p>
+      );
+    }
+    return (
+      <ChoiceCards
+        choices={
+          definition.required
+            ? choices
+            : [{ value: noSelection, label: "No selection" }, ...choices]
+        }
+        describedBy={describedBy}
+        id={id}
+        invalid={invalid}
+        label={label}
+        onBlur={onBlur}
+        onChange={(next) => onChange(next === noSelection ? undefined : next)}
+        value={typeof value === "string" ? value : noSelection}
+      />
+    );
+  }
   return (
     <Select
       disabled={readOnly}

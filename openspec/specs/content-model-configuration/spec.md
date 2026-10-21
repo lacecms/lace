@@ -435,3 +435,60 @@ Pages, collections and globals SHALL accept the portable sibling `layout` define
 #### Scenario: Preserve old hashes and detach metadata
 - **WHEN** pre-layout fixtures are normalized or caller-owned layout arrays are mutated after normalization
 - **THEN** old fixtures keep their pinned hashes and normalized layouts remain unchanged
+
+### Requirement: Choice presentation changes only descriptor projection identity
+Select `presentation` metadata SHALL contribute to projection identity and SHALL
+be excluded from structural identity only at descriptor positions, recursively
+through model fields, block data and declared scalar settings. Changing labels,
+descriptions, diagrams or adding/removing the presentation SHALL NOT require a
+model/block version increase or content rewrite. Synchronization SHALL retain
+its existing published-version advancement and build-request/coalescing behavior.
+Changing the option set or default SHALL retain existing structural rules.
+Unopted configurations SHALL retain their previous projections and hashes.
+
+Synchronization SHALL classify presentation-only changes as display changes and
+apply existing baseline/concurrency guards. It SHALL preserve draft/published
+values, revisions, audit fields and media references.
+Content and default-value keys literally named `presentation`, `choices` or
+`diagram` SHALL remain structural content rather than being recursively removed.
+
+#### Scenario: Change schematic thumbnails on a populated model
+- **WHEN** configuration changes only a nested select's card diagram and its label
+- **THEN** the projection hash changes, structure hash and versions remain the
+  same, and synchronization updates metadata without rewriting content, retaining
+  its existing published-version advancement and build-request/coalescing behavior
+
+#### Scenario: Preserve identically named content keys
+- **WHEN** a group default contains a key named `presentation` and its value changes
+- **THEN** the change remains structural even when a sibling descriptor has
+  presentation metadata
+
+#### Scenario: Stale presentation-only synchronization
+- **WHEN** a presentation-only plan is applied after its synchronization baseline
+  has changed
+- **THEN** the existing concurrency guard rejects the stale plan without partial writes
+
+### Requirement: Setting visibility affects projection identity only
+Block-level `settingsVisibility` SHALL contribute to configuration projection
+identity and be excluded from structural identity only at block-definition
+positions. Identically named model/block data and default-value keys SHALL remain
+structural. Adding, removing or changing visibility rules SHALL not require
+model/block version increments or migrations, rewrite draft/published content,
+or change revisions/audit/media references. Synchronization SHALL preserve its
+existing published-version advancement and build-request/coalescing behavior
+for projection updates, including admin-only metadata.
+Unopted configurations SHALL retain previous hashes. Display-only synchronization
+SHALL retain the existing baseline guards and fail stale plans without partial
+writes on both runtimes. Setting options/defaults SHALL retain structural rules.
+
+#### Scenario: Visibility-only synchronization
+- **WHEN** a populated model changes only block-setting visibility metadata
+- **THEN** its projection changes, its structure and stored snapshots remain identical, and synchronization retains its existing published-version and build-request behavior
+
+#### Scenario: Preserve content with metadata-like keys
+- **WHEN** content/default JSON named `settingsVisibility`, `setting` or `values` changes
+- **THEN** the change retains its ordinary structural classification
+
+#### Scenario: Stale visibility plan
+- **WHEN** a visibility-only plan is applied after its baseline changed
+- **THEN** synchronization rejects it without partial writes
