@@ -1,13 +1,8 @@
 ---
 import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { blocks } from "../../lace/blocks";
-import { getSite } from "../../lib/lace";
-
-export async function getStaticPaths() {
-  const site = await getSite();
-  return site.byPath("/about") === undefined ? [] : [{ params: { slug: undefined } }];
-}
+import { blocks } from "../../lace/blocks.js";
+import { getSite } from "../../lib/lace.js";
 
 const site = await getSite();
 const about = site.byPath("/about");
