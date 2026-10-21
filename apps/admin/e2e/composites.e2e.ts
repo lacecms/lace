@@ -3,6 +3,7 @@ import { field } from "@lacecms/content";
 import { sessionPath, sessionSummary } from "./support/session.js";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
 import { expectVisibleFocus, tabTo } from "./support/keyboard.js";
+import { itemAction, openAllItems } from "./support/list-items.js";
 
 const date = "2026-10-12T00:00:00.000Z";
 const key = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
@@ -241,6 +242,8 @@ async function mock(
   );
   await page.goto("/admin/content/content/entry-1");
   await expect(page.getByRole("heading", { name: "Edit Content" })).toBeVisible();
+  // These tests edit nested values; list rows start collapsed, so open them all.
+  await openAllItems(page);
   return state;
 }
 for (const kind of ["page", "collection", "global"] as const)
@@ -265,9 +268,14 @@ test("keyboard edits nested lists, scalar insertion and rich text, preserves med
   await tabTo(page, address, 100);
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type("/edited-child");
-  const duplicate = page.getByRole("button", { name: "Duplicate Links item 1", exact: true });
-  await tabTo(page, duplicate, 100);
+  const actions = page.getByRole("button", { name: "Actions for Links item 1", exact: true });
+  await tabTo(page, actions, 100);
   await page.keyboard.press("Enter");
+  await page.getByRole("menuitem", { name: "Duplicate Links item 1", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  // The copy opens; its nested child rows start collapsed like any loaded item.
+  await page.getByRole("button", { name: "Actions for Links item 3", exact: true }).waitFor();
+  await openAllItems(page);
   expect(
     await page
       .getByRole("textbox", { name: "Child address", exact: true })
@@ -289,9 +297,8 @@ test("keyboard edits nested lists, scalar insertion and rich text, preserves med
     page.getByRole("dialog", { name: /Picture/u }).getByRole("button", { name: /photo.png/u }),
   );
   await expect(page.getByText("photo.png").first()).toBeVisible();
-  await activate(page, page.getByRole("button", { name: "Duplicate Cards item 1", exact: true }));
-  await page.getByRole("button", { name: "Move down Cards item 1", exact: true }).focus();
-  await page.keyboard.press("Enter");
+  await itemAction(page, "Cards item 1", "Duplicate");
+  await itemAction(page, "Cards item 1", "Move down");
   await page.getByRole("button", { name: "Collapse Cards item 2", exact: true }).focus();
   await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "Expand Cards item 2", exact: true }).focus();
@@ -326,7 +333,6 @@ test("collapsed exact error focus and conflict JSON/reload retain complete local
   await page.getByRole("textbox", { name: "Child address", exact: true }).fill("/local");
   await activate(page, page.getByRole("button", { name: "Collapse Children item 1", exact: true }));
   await activate(page, page.getByRole("button", { name: "Collapse Links item 1", exact: true }));
-  await activate(page, page.getByRole("button", { name: "Collapse Links", exact: true }));
   state.reject = "nested";
   await page.keyboard.press("ControlOrMeta+s");
   const summaryLink = page.getByRole("link", {
@@ -344,6 +350,9 @@ test("collapsed exact error focus and conflict JSON/reload retain complete local
   expect(copied).toContain("/recover");
   expect(copied).not.toContain("item-");
   await activate(page, page.getByRole("button", { name: /Reload server draft/u }));
+  // Reloading the server draft starts its rows collapsed again.
+  await page.getByRole("button", { name: "Expand Links item 1", exact: true }).waitFor();
+  await openAllItems(page);
   await expect(page.getByRole("textbox", { name: "Child address", exact: true })).toHaveValue(
     "/child",
   );
@@ -380,10 +389,12 @@ for (const role of ["editor", "viewer"] as const)
           page.getByRole("textbox", { name: "Link title", exact: true }).first(),
         ).toBeDisabled();
       }
-      const disclosure = page.getByRole("button", { name: "Collapse Links", exact: true });
+      const disclosure = page.getByRole("button", { name: "Collapse Links item 1", exact: true });
       await disclosure.focus();
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("button", { name: "Expand Links", exact: true })).toBeFocused();
+      await expect(
+        page.getByRole("button", { name: "Expand Links item 1", exact: true }),
+      ).toBeFocused();
       await page.keyboard.press("Enter");
       await expectNoAccessibilityViolations(page, `${theme} ${role} composites 375px`);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -401,7 +412,7 @@ test("500-element hidden-block budget prevents list and block growth, removal al
   await firstBlock.getByRole("button", { name: "Actions for Card section block" }).click();
   await expect(page.getByRole("menuitem", { name: "Duplicate", exact: true })).toBeDisabled();
   await page.keyboard.press("Escape");
-  await firstBlock.getByRole("button", { name: "Remove Tags item 1", exact: true }).click();
+  await itemAction(page, "Tags item 1", "Remove", { scope: firstBlock });
   await expect(page.getByRole("button", { name: "Add Links item" })).toBeEnabled();
   await page.getByRole("button", { name: "Add Links item" }).click();
   await expect(page.getByText(/List items: 500 \/ 500/u)).toBeVisible();
@@ -442,14 +453,16 @@ test("keyboard drag stays within nested lists and pending save locks mutations",
   await page.keyboard.press("ControlOrMeta+s");
   await expect.poll(() => state.requests).toBe(1);
   await expect(
-    page.getByRole("button", { name: "Move down Links item 1", exact: true }),
+    page.getByRole("button", { name: "Actions for Links item 1", exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole("textbox", { name: "Link title", exact: true }).first(),
   ).toBeDisabled();
   await expect(page.getByRole("textbox", { name: "Anchor", exact: true })).toBeDisabled();
   await expect(page.getByRole("switch", { name: "Hide on site", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Collapse Links", exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Collapse Links item 1", exact: true }),
+  ).toBeEnabled();
   release();
   await expect(page.getByRole("banner").getByRole("status")).toHaveText("Saved revision 2");
 });
@@ -513,7 +526,6 @@ test("a nested rich-text server issue reveals the block Content tab and every di
   const block = page.locator(`article[data-block-key="${key}"]`);
   await page.getByRole("textbox", { name: "Link title", exact: true }).first().fill("Dirty");
   await activate(page, page.getByRole("button", { name: "Collapse Cards item 1", exact: true }));
-  await activate(page, page.getByRole("button", { name: "Collapse Cards", exact: true }));
   await activate(page, block.getByRole("tab", { name: "Settings", exact: true }));
   await activate(
     page,

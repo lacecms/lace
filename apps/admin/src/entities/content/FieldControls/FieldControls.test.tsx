@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { expect, test } from "vitest";
+import { itemAction } from "../../../app/testing/index.js";
 import type { DraftEditorValues } from "../editor-form.js";
 import type { FieldDefinition } from "../field-types.js";
 import { FieldRenderer, FieldRendererProvider } from "../FieldRenderer/index.js";
@@ -250,7 +251,7 @@ test("CE9A nested group/list guidance follows current values after moves", async
   expect(screen.getByRole("group", { name: "Tags" })).toHaveAccessibleDescription(
     /Minimum 2 items for publication only.*Limit: 5 items/u,
   );
-  await user.click(screen.getByRole("button", { name: "Move down Tags item 1" }));
+  await itemAction(user, "Tags item 1", "Move down");
   expect(screen.getByRole("textbox", { name: "Tags item 1" })).toHaveValue("long");
   expect(screen.getByRole("textbox", { name: "Tags item 1" })).toHaveAccessibleDescription(
     "4 characters",

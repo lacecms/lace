@@ -26,27 +26,44 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  MAX_LIST_ITEMS,
-  textLength,
-  validateFieldValue,
-  type FieldDefinition as Descriptor,
-} from "@lacecms/content";
+import { MAX_LIST_ITEMS, textLength, validateFieldValue } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
-import { GripVerticalIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronDownIcon,
+  CircleAlertIcon,
+  CopyIcon,
+  EraserIcon,
+  GripVerticalIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { Badge } from "../../../shared/ui/Badge/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
-import { REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../../shared/ui/DropdownMenu/index.js";
+import { cn, REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { fieldProblem, recursiveFieldErrors, type DraftEditorValues } from "../editor-form.js";
 import { FieldLayout } from "../FieldLayout/index.js";
-import { fieldGuidance } from "../field-guidance.js";
+import { fieldGuidance, fieldGuidanceParts } from "../field-guidance.js";
 import { fieldLabel } from "../draft.js";
 import {
   fieldControlId,
   type FieldDefinition,
+  type FieldPreviewRegistry,
   type FieldRendererRegistry,
+  type ItemPreview,
 } from "../field-types.js";
 import { builtInRenderers, groupedFieldTypes } from "../FieldControls/index.js";
+import { itemSummary as summarize, previewLeaf, rowLines } from "../item-summary.js";
 import {
   cleanValue,
   draftItemValue,
@@ -59,12 +76,20 @@ import {
   snapshotBudget,
 } from "../composite-values.js";
 
-export type { FieldDefinition, FieldRendererProps, FieldRendererRegistry } from "../field-types.js";
+export type {
+  FieldDefinition,
+  FieldPreviewProps,
+  FieldPreviewRegistry,
+  FieldRendererProps,
+  FieldRendererRegistry,
+  ItemPreview,
+} from "../field-types.js";
 type Form = UseFormReturn<DraftEditorValues, unknown, DraftEditorValues>;
 interface ContextValue {
   readonly readOnly: boolean;
   readonly busy: boolean;
   readonly renderers: FieldRendererRegistry;
+  readonly previews?: FieldPreviewRegistry | undefined;
   readonly epoch?: number;
   readonly onTransientChange?: (() => void) | undefined;
   readonly transient?: Map<string, { name: string; message: string }> | undefined;
@@ -77,6 +102,7 @@ export function FieldRendererProvider({
   readOnly = false,
   busy = false,
   renderers,
+  previews,
   form,
   model,
   transient,
@@ -88,8 +114,18 @@ export function FieldRendererProvider({
   readonly children: ReactNode;
 }) {
   const value = useMemo(
-    () => ({ readOnly, busy, renderers, form, model, transient, epoch, onTransientChange }),
-    [readOnly, busy, renderers, form, model, transient, epoch, onTransientChange],
+    () => ({
+      readOnly,
+      busy,
+      renderers,
+      previews,
+      form,
+      model,
+      transient,
+      epoch,
+      onTransientChange,
+    }),
+    [readOnly, busy, renderers, previews, form, model, transient, epoch, onTransientChange],
   );
   return form ? (
     <BoundContext value={value} form={form}>
@@ -163,44 +199,17 @@ function hasProblems(error: unknown): boolean {
       Object.values(error).some(hasProblems))
   );
 }
-function summary(definition: Descriptor, value: unknown, itemLabel?: string): string {
-  if (itemLabel && record(value) && typeof value[itemLabel] === "string" && value[itemLabel].trim())
-    return value[itemLabel].replace(/\s+/gu, " ").trim();
-  const texts: { priority: number; text: string }[] = [];
-  function visit(field: Descriptor, current: unknown) {
-    if (field.type === "group" && record(current))
-      Object.entries(field.fields).forEach(([key, child]) => visit(child, current[key]));
-    else if (field.type === "list" && Array.isArray(current))
-      current.forEach((item) => visit(field.item, item));
-    else if (
-      ["text", "textarea", "url", "select"].includes(field.type) &&
-      typeof current === "string" &&
-      current.trim()
-    )
-      texts.push({
-        priority: field.type === "text" || field.type === "textarea" ? 0 : 2,
-        text: current,
-      });
-    else if (field.type === "richText" && record(current)) {
-      const plain = (node: unknown): string =>
-        record(node)
-          ? typeof node.text === "string"
-            ? node.text
-            : Array.isArray(node.content)
-              ? node.content.map(plain).join(" ")
-              : ""
-          : "";
-      const text = plain(current);
-      if (text.trim()) texts.push({ priority: 1, text });
-    } else if (field.type === "media" && typeof current === "string" && current)
-      texts.push({ priority: 3, text: "Media selected" });
-  }
-  visit(definition, value);
+
+/** The disclosure toggle icon shared with block cards: pointing down while open. */
+function Chevron({ open }: { readonly open: boolean }) {
   return (
-    texts
-      .sort((a, b) => a.priority - b.priority)[0]
-      ?.text.replace(/\s+/gu, " ")
-      .trim() ?? "Empty item"
+    <ChevronDownIcon
+      aria-hidden
+      className={cn(
+        "transition-transform duration-(--duration-fast) ease-standard",
+        !open && "-rotate-90",
+      )}
+    />
   );
 }
 
@@ -225,6 +234,7 @@ function Disclosure({
   readonly suffix?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
+  const { readOnly } = useCompositeEditing();
   const ref = useRef<HTMLFieldSetElement>(null);
   useEffect(() => {
     const element = ref.current;
@@ -260,11 +270,12 @@ function Disclosure({
         <Button
           aria-controls={`${id}:body`}
           aria-expanded={open}
+          aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
           onClick={() => setOpen(!open)}
-          size="sm"
+          size="icon-sm"
           variant="ghost"
         >
-          {open ? "Collapse" : "Expand"} {label}
+          <Chevron open={open} />
         </Button>
         {suffix}
         {hasProblems(error) ? <span className="text-xs text-destructive">Has problems</span> : null}
@@ -275,7 +286,10 @@ function Disclosure({
         </small>
       ) : null}
       {guidance ? (
-        <small className="text-muted-foreground" id={`${id}:guidance`}>
+        <small
+          className={cn("text-muted-foreground", !readOnly && !hasProblems(error) && "sr-only")}
+          id={`${id}:guidance`}
+        >
           {guidance}
         </small>
       ) : null}
@@ -356,27 +370,8 @@ function ValueNode(props: NodeProps) {
     const candidate = fieldStartingValue(definition, {});
     const createProblem = growthProblem(name, candidate);
     const clearProblem = growthProblem(name, null);
-    return (
-      <Disclosure
-        description={definition.description}
-        guidance={fieldGuidance(definition)}
-        required={definition.required}
-        error={errors}
-        id={id}
-        label={label}
-        suffix={
-          !readOnly && !item && present ? (
-            <Button
-              disabled={busy || !!clearProblem}
-              onClick={() => onChange(undefined)}
-              size="sm"
-              variant="ghost"
-            >
-              Clear {label}
-            </Button>
-          ) : undefined
-        }
-      >
+    const content = (
+      <>
         {!present ? (
           <>
             <p className="text-sm text-muted-foreground">
@@ -427,6 +422,49 @@ function ValueNode(props: NodeProps) {
             }}
           />
         )}
+      </>
+    );
+    // A list item's group is framed and collapsed by its row, so it renders flat.
+    if (item)
+      return (
+        <div
+          aria-describedby={errorMessage(errors) ? `${id}:error` : undefined}
+          aria-label={label}
+          className="grid min-w-0 gap-3 outline-hidden"
+          id={id}
+          role="group"
+          tabIndex={-1}
+        >
+          {errorMessage(errors) ? (
+            <p className={`${fieldErrorClass} text-xs`} id={`${id}:error`} role="alert">
+              {errorMessage(errors)}
+            </p>
+          ) : null}
+          {content}
+        </div>
+      );
+    return (
+      <Disclosure
+        description={definition.description}
+        guidance={fieldGuidance(definition)}
+        required={definition.required}
+        error={errors}
+        id={id}
+        label={label}
+        suffix={
+          !readOnly && !item && present ? (
+            <Button
+              disabled={busy || !!clearProblem}
+              onClick={() => onChange(undefined)}
+              size="sm"
+              variant="ghost"
+            >
+              Clear {label}
+            </Button>
+          ) : undefined
+        }
+      >
+        {content}
         {Object.hasOwn(definition, "defaultValue") ? (
           <small className="text-muted-foreground">
             Clearing uses the configured default on save.
@@ -436,12 +474,18 @@ function ValueNode(props: NodeProps) {
       </Disclosure>
     );
   }
-  const guidance = fieldGuidance(definition);
+  const { quiet: guidance, visible: bounds } = fieldGuidanceParts(definition);
+  // The publication-only note is the Required marker's tooltip unless it explains a problem.
+  const quietClass = readOnly || message ? undefined : "sr-only";
   const effectivePlaceholder =
     placeholder ?? ("placeholder" in definition ? definition.placeholder : undefined);
   const counted = definition.type === "text" || definition.type === "textarea";
   const marker = definition.required ? (
-    <span aria-hidden="true" className="ml-1 text-xs text-muted-foreground">
+    <span
+      aria-hidden="true"
+      className="ml-1 text-xs text-muted-foreground"
+      title="Required for publication only."
+    >
       Required
     </span>
   ) : null;
@@ -450,6 +494,7 @@ function ValueNode(props: NodeProps) {
     [
       definition.description ? `${id}-description` : undefined,
       guidance ? `${id}-guidance` : undefined,
+      bounds ? `${id}-bounds` : undefined,
       counted ? `${id}-count` : undefined,
       annotation ? `${id}-annotation` : undefined,
       placeholder ? `${id}-placeholder` : undefined,
@@ -466,11 +511,20 @@ function ValueNode(props: NodeProps) {
           {marker}
         </span>
       ) : (
-        <div className="flex items-baseline gap-1">
+        <div className="flex min-w-0 items-baseline gap-1">
           <label className="text-sm font-medium" htmlFor={id}>
             {label}
           </label>
           {marker}
+          {counted ? (
+            // In the label row, so the count takes no line of its own.
+            <span
+              className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums"
+              id={`${id}-count`}
+            >
+              {textLength(typeof value === "string" && !clearedItem ? value : "")} characters
+            </span>
+          ) : null}
         </div>
       )}
       {definition.description ? (
@@ -479,8 +533,13 @@ function ValueNode(props: NodeProps) {
         </small>
       ) : null}
       {guidance ? (
-        <small className="text-xs text-muted-foreground" id={`${id}-guidance`}>
+        <small className={cn("text-xs text-muted-foreground", quietClass)} id={`${id}-guidance`}>
           {guidance}
+        </small>
+      ) : null}
+      {bounds ? (
+        <small className="text-xs text-muted-foreground" id={`${id}-bounds`}>
+          {bounds}
         </small>
       ) : null}
       {annotation ? (
@@ -524,11 +583,6 @@ function ValueNode(props: NodeProps) {
         readOnly={readOnly || busy}
         value={clearedItem ? undefined : value}
       />
-      {counted ? (
-        <p className="m-0 text-xs text-muted-foreground" id={`${id}-count`}>
-          {textLength(typeof value === "string" && !clearedItem ? value : "")} characters
-        </p>
-      ) : null}
       {placeholder ? (
         <span className="sr-only" id={`${id}-placeholder`}>
           {placeholder}
@@ -543,36 +597,63 @@ function ValueNode(props: NodeProps) {
     </fieldset>
   );
 }
-function SortableItem({
+/** A list item row: handle, summary or inline control, toggle, and actions menu. */
+function ItemRow({
   id,
   label,
   children,
   readOnly,
   disabled,
-  header,
+  collapsible,
+  open,
+  onToggle,
+  onReveal,
+  summary,
+  problems,
+  menu,
 }: {
   readonly id: string;
   readonly label: string;
   readonly children: ReactNode;
   readonly readOnly: boolean;
   readonly disabled: boolean;
-  readonly header: ReactNode;
+  /** Group items collapse to a summary; scalar items show their control inline. */
+  readonly collapsible: boolean;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly onReveal: () => void;
+  readonly summary: ReactNode;
+  readonly problems: boolean;
+  readonly menu: ReactNode;
 }) {
   const sortable = useSortable({ id, disabled: readOnly || disabled });
+  const ref = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!collapsible || !element) return;
+    element.addEventListener(REVEAL_CONTROL_EVENT, onReveal);
+    return () => element.removeEventListener(REVEAL_CONTROL_EVENT, onReveal);
+  }, [collapsible, onReveal]);
+  const bodyId = `${id}-body`;
   return (
     <li
-      className="grid min-w-0 gap-2 rounded-md border border-border p-2"
+      className="grid min-w-0"
       data-item-id={id}
-      ref={sortable.setNodeRef}
+      ref={(element) => {
+        ref.current = element;
+        sortable.setNodeRef(element);
+      }}
       style={{
         transform: CSS.Transform.toString(sortable.transform),
         transition: sortable.transition,
       }}
     >
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex min-w-0 items-center gap-2 px-1 py-1.5">
         {!readOnly ? (
           <Button
             aria-label={`Reorder ${label}`}
+            className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+            data-drag-handle=""
             disabled={disabled}
             size="icon-sm"
             variant="ghost"
@@ -582,12 +663,119 @@ function SortableItem({
             <GripVerticalIcon aria-hidden />
           </Button>
         ) : null}
-        {header}
+        {collapsible ? (
+          open ? (
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
+          ) : (
+            // The chevron is the keyboard toggle; clicking the summary is a pointer shortcut.
+            <div
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+              onClick={onToggle}
+            >
+              {summary}
+            </div>
+          )
+        ) : (
+          <div className="min-w-0 flex-1">{children}</div>
+        )}
+        {problems ? (
+          <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-destructive">
+            <CircleAlertIcon aria-hidden className="size-3.5" />
+            Has problems
+          </span>
+        ) : null}
+        {collapsible ? (
+          <Button
+            aria-controls={bodyId}
+            aria-expanded={open}
+            aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
+            onClick={onToggle}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <Chevron open={open} />
+          </Button>
+        ) : null}
+        {menu}
       </div>
-      {children}
+      {collapsible ? (
+        <div
+          className={cn("grid min-w-0 gap-3 pr-3 pb-3", readOnly ? "pl-3" : "pl-10")}
+          data-item-body=""
+          hidden={!open}
+          id={bodyId}
+        >
+          {children}
+        </div>
+      ) : null}
     </li>
   );
 }
+
+/** The collapsed summary of a group item, with the leaf preview when one applies. */
+function ItemSummaryLine({
+  definition,
+  value,
+  itemLabel,
+  position,
+}: {
+  readonly definition: FieldDefinition;
+  readonly value: unknown;
+  readonly itemLabel: string | undefined;
+  readonly position: number;
+}) {
+  const { previews } = useCompositeEditing();
+  const summary = summarize(definition, value, itemLabel);
+  const leaf = previewLeaf(definition, value, previews);
+  const Preview = leaf ? previews?.[leaf.definition.type] : undefined;
+  const line = (preview: ItemPreview | undefined) => {
+    const { primary, secondary } = rowLines(summary, preview);
+    return (
+      <>
+        {preview?.visual ?? (
+          <span className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+            {position}
+          </span>
+        )}
+        <span className="grid min-w-0 flex-1">
+          <span className="truncate text-sm" title={primary}>
+            {primary.slice(0, 80)}
+          </span>
+          {secondary ? (
+            <span className="truncate text-xs text-muted-foreground" title={secondary}>
+              {secondary}
+            </span>
+          ) : null}
+        </span>
+        {preview?.indicators?.map((indicator) => (
+          <Badge className="shrink-0" key={indicator} variant="warning">
+            {indicator}
+          </Badge>
+        ))}
+      </>
+    );
+  };
+  return Preview && leaf && definition.type === "group" ? (
+    <Preview definition={leaf.definition} group={{ definition, value }} value={leaf.value}>
+      {line}
+    </Preview>
+  ) : (
+    line(undefined)
+  );
+}
+
+/** The control that receives focus in a row: its menu, or the first visible control, body first. */
+function rowFocusTarget(row: HTMLElement | undefined, target: "control" | "menu") {
+  if (!row) return undefined;
+  if (target === "menu") return row.querySelector<HTMLElement>("[data-item-menu]") ?? undefined;
+  const focusable = (root: Element | null) =>
+    [
+      ...(root?.querySelectorAll<HTMLElement>('input,textarea,[contenteditable="true"],button') ??
+        []),
+    ].find((element) => !element.closest("[hidden]") && !element.hasAttribute("data-drag-handle"));
+  return focusable(row.querySelector("[data-item-body]")) ?? focusable(row);
+}
+
 function ListNode(
   props: NodeProps & { readonly definition: Extract<FieldDefinition, { type: "list" }> },
 ) {
@@ -595,11 +783,14 @@ function ListNode(
   const { readOnly, busy, growthProblem, epoch } = useCompositeEditing();
   const list = Array.isArray(value) ? value : [];
   const [ids, setIds] = useState(() => list.map(newItemIdentity));
+  // Group items start collapsed; open rows follow their identity through moves.
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const lastEpoch = useRef(epoch);
   useLayoutEffect(() => {
     if (lastEpoch.current !== epoch) {
       lastEpoch.current = epoch;
       setIds(list.map(newItemIdentity));
+      setOpen(new Set());
       setPending(false);
     }
   }, [epoch, list]);
@@ -611,33 +802,43 @@ function ListNode(
   const [pending, setPending] = useState(false);
   const [pendingValue, setPendingValue] = useState<unknown>();
   const [announcement, setAnnouncement] = useState("");
-  const [focusToken, setFocusToken] = useState<string>();
+  const [focus, setFocus] = useState<{ token: string; target: "control" | "menu" }>();
+  const setFocusToken = (token: string, target: "control" | "menu" = "control") =>
+    setFocus({ token, target });
   const container = useRef<HTMLDivElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
+  // Menu actions run after the menu closes, so their focus moves win over the trigger.
+  const afterClose = useRef<(() => void) | undefined>(undefined);
   useLayoutEffect(() => {
-    if (!focusToken) return;
+    if (!focus) return;
     const row = [
       ...(container.current?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []),
-    ].find((element) => element.dataset.itemId === focusToken);
-    const control = row?.querySelector<HTMLElement>(
-      'input,textarea,[contenteditable="true"],button',
-    );
-    (control ?? addRef.current)?.focus();
-    setFocusToken(undefined);
-  }, [focusToken, tokens]);
+    ].find((element) => element.dataset.itemId === focus.token);
+    (rowFocusTarget(row, focus.target) ?? addRef.current)?.focus();
+    setFocus(undefined);
+  }, [focus, tokens]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const label = fieldLabel(fieldKey, definition.label);
   const id = fieldControlId(name as `fields.${string}`);
+  const collapsible = definition.item.type === "group";
+  const maximum = definition.maxItems ?? MAX_LIST_ITEMS;
   const initial = draftItemValue(definition.item);
   const addProblem =
-    list.length >= (definition.maxItems ?? MAX_LIST_ITEMS)
-      ? `This list allows at most ${definition.maxItems ?? MAX_LIST_ITEMS} items.`
+    list.length >= maximum
+      ? `This list allows at most ${maximum} items.`
       : growthProblem(name, [...list, initial ?? fieldStartingValue(definition.item, {})]);
   const createProblem = growthProblem(name, []);
   const clearProblem = growthProblem(name, null);
+  const toggle = (token: string, next?: boolean) =>
+    setOpen((current) => {
+      const copy = new Set(current);
+      if (next ?? !copy.has(token)) copy.add(token);
+      else copy.delete(token);
+      return copy;
+    });
   const change = (next: unknown[], nextIds: string[], nextErrors: Errors) => {
     if (readOnly || busy) return;
     setIds(nextIds);
@@ -659,59 +860,161 @@ function ListNode(
     if (addProblem || growthProblem(name, [...list, nextValue])) return;
     const token = newItemIdentity();
     change([...list, structuredClone(nextValue)], [...tokens, token], errors);
+    toggle(token, true);
     setPending(false);
     setPendingValue(undefined);
     setFocusToken(token);
     setAnnouncement(`Added ${label} item ${list.length + 1}.`);
   };
-  const move = (from: number, to: number) => {
+  const move = (from: number, to: number, target: "control" | "menu" = "control") => {
     if (from < 0 || to < 0 || from >= list.length || to >= list.length || from === to) return;
     change(
       moveItem(list, from, to),
       moveItem(tokens, from, to),
       remapErrors(moveItem(errorItems, from, to)),
     );
-    setFocusToken(tokens[from]);
+    setFocusToken(tokens[from]!, target);
     setAnnouncement(`${label} item moved to position ${to + 1} of ${list.length}.`);
   };
   let pendingProblem: string | undefined = "Enter a value.";
   if (pendingValue !== undefined && pendingValue !== null)
     pendingProblem = fieldProblem(definition.item, pendingValue);
+  const guidance = fieldGuidance(definition);
+  const present = value !== undefined && value !== null;
   return (
-    <Disclosure
-      description={definition.description}
-      guidance={fieldGuidance(definition)}
-      required={definition.required}
-      error={errors}
-      id={id}
-      label={label}
-      suffix={
-        <small>
-          {list.length} / {definition.maxItems ?? MAX_LIST_ITEMS} items
-          {definition.minItems ? ` · Minimum ${definition.minItems} for publication` : ""}
-        </small>
+    <div
+      aria-describedby={
+        [
+          definition.description ? `${id}:description` : undefined,
+          guidance ? `${id}:guidance` : undefined,
+          errorMessage(errors) ? `${id}:error` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined
       }
+      aria-labelledby={`${id}:label`}
+      className="grid min-w-0 gap-2 outline-hidden"
+      id={id}
+      ref={container}
+      role="group"
+      tabIndex={-1}
     >
-      <div className="grid min-w-0 gap-2" ref={container}>
-        <p className="sr-only" role="status">
-          {announcement}
-        </p>
-        {value === undefined || value === null ? (
+      <p className="sr-only" role="status">
+        {announcement}
+      </p>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="text-sm font-medium" id={`${id}:label`}>
+          {label}
+          {definition.required ? (
+            <span aria-hidden="true" className="ml-1 text-xs font-normal text-muted-foreground">
+              Required
+            </span>
+          ) : null}
+        </span>
+        {present ? (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {list.length} / {maximum}
+          </span>
+        ) : null}
+        {hasProblems(errors) ? (
+          <span className="text-xs text-destructive">Has problems</span>
+        ) : null}
+        <span className="flex-1" />
+        {present && !readOnly ? (
           <>
-            <p>Not set{definition.required ? " · Required for publication" : ""}</p>
-            {!readOnly ? (
-              <Button
-                disabled={busy || !!createProblem}
-                onClick={() => onChange([])}
-                size="sm"
-                variant="outline"
-              >
-                Create {label}
-              </Button>
-            ) : null}
+            <Button
+              aria-describedby={addProblem ? `${id}:limit` : undefined}
+              aria-label={`Add ${label} item`}
+              disabled={busy || !!addProblem}
+              onClick={() => {
+                if (initial !== undefined) insert(initial);
+                else {
+                  setPending(true);
+                  setPendingValue(undefined);
+                }
+              }}
+              ref={addRef}
+              size="sm"
+              variant="outline"
+            >
+              <PlusIcon aria-hidden />
+              Add
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label={`Actions for ${label}`}
+                  disabled={busy}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <MoreHorizontalIcon aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-w-64">
+                <DropdownMenuItem
+                  aria-describedby={clearProblem ? `${id}:clear-limit` : undefined}
+                  disabled={busy || !!clearProblem}
+                  onSelect={() => onChange(undefined)}
+                >
+                  <EraserIcon aria-hidden />
+                  Clear {label}
+                </DropdownMenuItem>
+                {clearProblem || Object.hasOwn(definition, "defaultValue") ? (
+                  <p
+                    className="m-0 px-2 py-1 text-xs text-muted-foreground"
+                    id={`${id}:clear-limit`}
+                  >
+                    {clearProblem ?? "Clearing uses the configured default on save."}
+                  </p>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
-        ) : (
-          <>
+        ) : null}
+        {guidance ? (
+          // The header shows the maximum; the unmet minimum has its own visible note.
+          <small
+            className={cn(
+              "basis-full text-xs text-muted-foreground",
+              !readOnly && !hasProblems(errors) && "sr-only",
+            )}
+            id={`${id}:guidance`}
+          >
+            {guidance}
+          </small>
+        ) : null}
+      </div>
+      {definition.description ? (
+        <small className="text-xs text-muted-foreground" id={`${id}:description`}>
+          {definition.description}
+        </small>
+      ) : null}
+      {errorMessage(errors) ? (
+        <p className={`${fieldErrorClass} text-xs`} id={`${id}:error`} role="alert">
+          {errorMessage(errors)}
+        </p>
+      ) : null}
+      {!present ? (
+        <>
+          <p className="m-0 text-sm text-muted-foreground">
+            Not set{definition.required ? " · Required for publication" : ""}
+          </p>
+          {!readOnly ? (
+            <Button
+              className="justify-self-start"
+              disabled={busy || !!createProblem}
+              onClick={() => onChange([])}
+              size="sm"
+              variant="outline"
+            >
+              Create {label}
+            </Button>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {list.length ? (
             <DndContext
               accessibility={{
                 announcements: {
@@ -733,100 +1036,141 @@ function ListNode(
               sensors={sensors}
             >
               <SortableContext items={tokens} strategy={verticalListSortingStrategy}>
-                <ol aria-label={label} className="m-0 grid min-w-0 list-none gap-3 p-0">
+                <ol
+                  aria-label={label}
+                  className="m-0 grid min-w-0 list-none divide-y divide-border rounded-md border border-border p-0"
+                >
                   {list.map((itemValue, index) => {
                     const token = tokens[index]!;
                     const itemName = `${label} item ${index + 1}`;
-                    const itemSummary = summary(definition.item, itemValue, definition.itemLabel);
                     const duplicateProblem =
-                      list.length >= (definition.maxItems ?? MAX_LIST_ITEMS)
+                      list.length >= maximum
                         ? addProblem
                         : growthProblem(name, duplicateItem(list, index));
                     return (
-                      <SortableItem
+                      <ItemRow
+                        collapsible={collapsible}
                         disabled={busy}
                         id={token}
                         key={token}
                         label={itemName}
-                        readOnly={readOnly}
-                        header={
-                          <>
-                            <span className="min-w-0 flex-1 truncate text-sm" title={itemSummary}>
-                              {index + 1}. {itemSummary.slice(0, 80)}
-                            </span>
-                            {!readOnly ? (
-                              <>
+                        menu={
+                          readOnly ? null : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
                                 <Button
+                                  aria-label={`Actions for ${itemName}`}
+                                  data-item-menu=""
+                                  disabled={busy}
+                                  size="icon-sm"
+                                  variant="ghost"
+                                >
+                                  <MoreHorizontalIcon aria-hidden />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                className="max-w-64"
+                                onCloseAutoFocus={(event) => {
+                                  const action = afterClose.current;
+                                  if (action === undefined) return;
+                                  afterClose.current = undefined;
+                                  event.preventDefault();
+                                  action();
+                                }}
+                              >
+                                <DropdownMenuItem
                                   aria-label={`Move up ${itemName}`}
                                   disabled={busy || index === 0}
-                                  onClick={() => move(index, index - 1)}
-                                  size="sm"
-                                  variant="ghost"
+                                  onSelect={() => {
+                                    afterClose.current = () => move(index, index - 1, "menu");
+                                  }}
                                 >
-                                  Up
-                                </Button>
-                                <Button
+                                  <ArrowUpIcon aria-hidden />
+                                  Move up
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   aria-label={`Move down ${itemName}`}
                                   disabled={busy || index === list.length - 1}
-                                  onClick={() => move(index, index + 1)}
-                                  size="sm"
-                                  variant="ghost"
+                                  onSelect={() => {
+                                    afterClose.current = () => move(index, index + 1, "menu");
+                                  }}
                                 >
-                                  Down
-                                </Button>
-                                <Button
+                                  <ArrowDownIcon aria-hidden />
+                                  Move down
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   aria-describedby={
                                     duplicateProblem ? `${id}:${token}-limit` : undefined
                                   }
                                   aria-label={`Duplicate ${itemName}`}
                                   disabled={busy || !!duplicateProblem}
-                                  onClick={() => {
-                                    const nextToken = newItemIdentity();
-                                    const nextIds = [...tokens];
-                                    nextIds.splice(index + 1, 0, nextToken);
-                                    const nextErrors = [...errorItems];
-                                    nextErrors.splice(index + 1, 0, undefined);
-                                    change(
-                                      duplicateItem(list, index),
-                                      nextIds,
-                                      remapErrors(nextErrors),
-                                    );
-                                    setFocusToken(nextToken);
-                                    setAnnouncement(`Duplicated ${itemName}.`);
+                                  onSelect={() => {
+                                    afterClose.current = () => {
+                                      const nextToken = newItemIdentity();
+                                      const nextIds = [...tokens];
+                                      nextIds.splice(index + 1, 0, nextToken);
+                                      const nextErrors = [...errorItems];
+                                      nextErrors.splice(index + 1, 0, undefined);
+                                      change(
+                                        duplicateItem(list, index),
+                                        nextIds,
+                                        remapErrors(nextErrors),
+                                      );
+                                      toggle(nextToken, true);
+                                      setFocusToken(nextToken);
+                                      setAnnouncement(`Duplicated ${itemName}.`);
+                                    };
                                   }}
-                                  size="sm"
-                                  variant="ghost"
                                 >
+                                  <CopyIcon aria-hidden />
                                   Duplicate
-                                </Button>
-                                <Button
-                                  aria-label={`Remove ${itemName}`}
-                                  disabled={busy}
-                                  onClick={() => {
-                                    change(
-                                      list.filter((_, i) => i !== index),
-                                      tokens.filter((_, i) => i !== index),
-                                      remapErrors(errorItems.filter((_, i) => i !== index)),
-                                    );
-                                    setFocusToken(tokens[index + 1] ?? tokens[index - 1] ?? "add");
-                                    setAnnouncement(`Removed ${itemName}.`);
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                >
-                                  Remove
-                                </Button>
+                                </DropdownMenuItem>
                                 {duplicateProblem ? (
-                                  <small
-                                    className="basis-full text-muted-foreground"
+                                  <p
+                                    className="m-0 px-2 py-1 text-xs text-muted-foreground"
                                     id={`${id}:${token}-limit`}
                                   >
                                     {duplicateProblem}
-                                  </small>
+                                  </p>
                                 ) : null}
-                              </>
-                            ) : null}
-                          </>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  aria-label={`Remove ${itemName}`}
+                                  disabled={busy}
+                                  onSelect={() => {
+                                    afterClose.current = () => {
+                                      change(
+                                        list.filter((_, i) => i !== index),
+                                        tokens.filter((_, i) => i !== index),
+                                        remapErrors(errorItems.filter((_, i) => i !== index)),
+                                      );
+                                      // Without a neighbour no row matches, so focus falls back to Add.
+                                      setFocusToken(tokens[index + 1] ?? tokens[index - 1] ?? "");
+                                      setAnnouncement(`Removed ${itemName}.`);
+                                    };
+                                  }}
+                                  variant="destructive"
+                                >
+                                  <Trash2Icon aria-hidden />
+                                  Remove
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )
+                        }
+                        onReveal={() => flushSync(() => toggle(token, true))}
+                        onToggle={() => toggle(token)}
+                        open={open.has(token)}
+                        problems={hasProblems(errors?.[index])}
+                        readOnly={readOnly}
+                        summary={
+                          <ItemSummaryLine
+                            definition={definition.item}
+                            itemLabel={definition.itemLabel}
+                            position={index + 1}
+                            value={itemValue}
+                          />
                         }
                       >
                         <ValueNode
@@ -836,7 +1180,7 @@ function ListNode(
                               ? (errors[index] as Errors)
                               : undefined
                           }
-                          fieldKey={`${label} item ${index + 1}`}
+                          fieldKey={itemName}
                           item
                           name={`${name}.${index}`}
                           onBlur={onBlur}
@@ -850,103 +1194,73 @@ function ListNode(
                           }
                           value={itemValue}
                         />
-                      </SortableItem>
+                      </ItemRow>
                     );
                   })}
                 </ol>
               </SortableContext>
             </DndContext>
-            {!list.length ? <p className="text-sm text-muted-foreground">No items.</p> : null}
-            {!readOnly ? (
-              <>
+          ) : (
+            <p className="m-0 text-sm text-muted-foreground">No items.</p>
+          )}
+          {pending ? (
+            <div className="grid gap-2 rounded-md border border-border p-2">
+              <ValueNode
+                definition={definition.item}
+                fieldKey={`New ${label} item`}
+                name={`${name}.new`}
+                onBlur={() => {}}
+                onChange={setPendingValue}
+                value={pendingValue}
+              />
+              <div className="flex gap-2">
                 <Button
-                  aria-describedby={addProblem ? `${id}:limit` : undefined}
-                  disabled={busy || !!addProblem}
+                  disabled={
+                    busy || !!pendingProblem || !!growthProblem(name, [...list, pendingValue])
+                  }
                   onClick={() => {
-                    if (initial !== undefined) insert(initial);
-                    else {
-                      setPending(true);
-                      setPendingValue(undefined);
-                    }
+                    if (!pendingProblem)
+                      insert(
+                        validateFieldValue(
+                          definition.item,
+                          cleanValue(pendingValue, definition.item),
+                          [],
+                          "draft",
+                        ),
+                      );
                   }}
-                  ref={addRef}
                   size="sm"
-                  variant="outline"
                 >
-                  Add {label} item
+                  Add item
                 </Button>
-                {pending ? (
-                  <div className="grid gap-2 rounded border border-border p-2">
-                    <ValueNode
-                      definition={definition.item}
-                      fieldKey={`New ${label} item`}
-                      name={`${name}.new`}
-                      onBlur={() => {}}
-                      onChange={setPendingValue}
-                      value={pendingValue}
-                    />
-                    <Button
-                      disabled={
-                        busy || !!pendingProblem || !!growthProblem(name, [...list, pendingValue])
-                      }
-                      onClick={() => {
-                        if (!pendingProblem)
-                          insert(
-                            validateFieldValue(
-                              definition.item,
-                              cleanValue(pendingValue, definition.item),
-                              [],
-                              "draft",
-                            ),
-                          );
-                      }}
-                      size="sm"
-                    >
-                      Add item
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setPending(false);
-                        setPendingValue(undefined);
-                        addRef.current?.focus();
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : null}
                 <Button
-                  aria-describedby={clearProblem ? `${id}:clear-limit` : undefined}
-                  disabled={busy || !!clearProblem}
-                  onClick={() => onChange(undefined)}
+                  onClick={() => {
+                    setPending(false);
+                    setPendingValue(undefined);
+                    addRef.current?.focus();
+                  }}
                   size="sm"
                   variant="ghost"
                 >
-                  Clear {label}
+                  Cancel
                 </Button>
-                {Object.hasOwn(definition, "defaultValue") ? (
-                  <small>Clearing uses the configured default on save.</small>
-                ) : null}
-              </>
-            ) : null}
-          </>
-        )}
-        {createProblem ? <small>{createProblem}</small> : null}
-        {clearProblem ? <small id={`${id}:clear-limit`}>{clearProblem}</small> : null}
-        {addProblem ? (
-          <small className="text-muted-foreground" id={`${id}:limit`}>
-            {addProblem}
-          </small>
-        ) : null}
-        {list.length < (definition.minItems ?? 0) ? (
-          <small className="text-muted-foreground">
-            Add at least {definition.minItems} items for publication only.
-          </small>
-        ) : null}
-      </div>
-    </Disclosure>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+      {createProblem && !present ? <small>{createProblem}</small> : null}
+      {addProblem && present ? (
+        <small className="text-xs text-muted-foreground" id={`${id}:limit`}>
+          {addProblem}
+        </small>
+      ) : null}
+      {present && list.length < (definition.minItems ?? 0) ? (
+        <small className="text-xs text-muted-foreground">
+          Add at least {definition.minItems} items for publication only.
+        </small>
+      ) : null}
+    </div>
   );
 }
 

@@ -1,12 +1,13 @@
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
+import { builtInBlocks, defineBlockRegistry, toBlockRegistryMetadata } from "@lacecms/content";
 import type { MediaDetailDto } from "@lacecms/contracts";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { expect, test, vi } from "vitest";
-import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
+import { mediaItem, openItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
 import { FieldRendererProvider, type DraftEditorValues } from "../../../entities/content/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 import { BlockCard } from "./index.js";
@@ -102,6 +103,30 @@ test("shows the icon, label, and a summary from data, and hides only fields when
   expect(screen.getByLabelText("Heading")).not.toBeVisible();
 });
 
+test("a collapsed navigation card summarizes its links", async () => {
+  const [navigation] = toBlockRegistryMetadata(
+    defineBlockRegistry([builtInBlocks.navigation]),
+  ) as unknown as BlockDefinitionDto[];
+  renderInRouter(
+    <ImageHarness
+      collapsed
+      data={{
+        links: [
+          { label: "Blog", url: "/blog" },
+          { label: "About", url: "/about" },
+        ],
+      }}
+      definition={navigation!}
+    />,
+    { client: stubClient({}) },
+  );
+  expect(await screen.findByRole("article", { name: "Navigation" })).toHaveTextContent(
+    "Links (2): Blog, About",
+  );
+  expect(screen.getByText("Links (2): Blog, About")).toBeVisible();
+  expect(screen.queryByText("Empty block")).not.toBeInTheDocument();
+});
+
 test("keeps a block with an error expanded and shows the error", () => {
   mount({ collapsed: true, error: { data: { heading: { message: "Heading is required." } } } });
   expect(screen.getByLabelText("Heading")).toBeVisible();
@@ -182,7 +207,9 @@ function ImageHarness({
   data,
   definition = image,
   readOnly = false,
+  collapsed = false,
 }: {
+  readonly collapsed?: boolean;
   readonly data: Record<string, unknown>;
   readonly definition?: BlockDefinitionDto;
   readonly readOnly?: boolean;
@@ -212,7 +239,7 @@ function ImageHarness({
           <BlockCard
             active={false}
             blockKey="01ARZ3NDEKTSV4RRFFQ69G5FAV"
-            collapsed={false}
+            collapsed={collapsed}
             control={form.control}
             definition={definition}
             error={undefined}
@@ -242,6 +269,26 @@ function mountImage(
     client: stubClient({ getMedia }),
   });
 }
+
+test("starter image blocks and gallery items show the image before its overrides", async () => {
+  const [imageBlock, galleryBlock] = toBlockRegistryMetadata(
+    defineBlockRegistry([builtInBlocks.image, builtInBlocks.gallery]),
+  ) as unknown as BlockDefinitionDto[];
+  const before = (first: HTMLElement, second: HTMLElement) =>
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  renderInRouter(<ImageHarness data={{}} definition={imageBlock!} />, {
+    client: stubClient({}),
+  });
+  const [media] = await screen.findAllByText("Media selection is not available here.");
+  before(media!, screen.getByRole("textbox", { name: "Alt" }));
+  cleanup();
+  renderInRouter(<ImageHarness data={{ images: [{}] }} definition={galleryBlock!} />, {
+    client: stubClient({}),
+  });
+  await openItem(userEvent.setup(), "Images item 1");
+  const [itemMedia] = await screen.findAllByText("Media selection is not available here.");
+  before(itemMedia!, screen.getByRole("textbox", { name: "Alt text" }));
+});
 
 test("an image block's empty alt field shows the inherited media alt", async () => {
   mountImage({ alt: "Red bicycle" });

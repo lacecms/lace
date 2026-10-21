@@ -40,14 +40,18 @@ Existing inheritance explanations, site-default annotations and descriptions
 remain accessible. Rich-text viewers receive no placeholder.
 
 Required fields display a Required marker and explain “Required for publication
-only.” Otherwise valid incomplete drafts remain savable. Publication still checks
+only.” The explanation is the Required marker's tooltip and part of the field's
+accessible description; it is shown as text when the field has a problem and
+always for viewers. Nothing appears on focus, so the layout never shifts under
+the pointer. Otherwise valid incomplete drafts remain savable. Publication still checks
 required fields; hidden blocks retain their existing draft-mode exception.
 Numeric bounds and supplied text length limits apply during save. A list's
 minimum applies during publication and its maximum applies to drafts as well.
 An optional absent text value stays valid even if it declares a minimum length.
 Guidance does not create absent containers, apply defaults or change content.
 
-Text and textarea show their current count even without configured bounds. Their
+Text and textarea show their current count, right-aligned in the label row,
+even without configured bounds. Their
 validators count raw JavaScript UTF-16 units without trimming: `" 😀 "` counts
 four, and `"e\u0301"` counts two. Input remains editable past a maximum; Save
 explains violations rather than silently truncating text. SEO title/description

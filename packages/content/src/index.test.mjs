@@ -965,6 +965,51 @@ test("image blocks and gallery items take an optional safe link", () => {
   ).toEqual(["images", 1, "link"]);
 });
 
+test("image and gallery items declare media first without changing identity", async () => {
+  const { gallery, image } = builtInBlocks;
+  const [imageMetadata, galleryMetadata] = toBlockRegistryMetadata(
+    defineBlockRegistry([image, gallery]),
+  );
+  const order = ["media", "alt", "caption", "link"];
+  expect(Object.keys(imageMetadata.fields)).toEqual(order);
+  expect(Object.keys(galleryMetadata.fields.images.item.fields)).toEqual(order);
+  const sorted = (fields) =>
+    Object.fromEntries(Object.entries(fields).sort(([a], [b]) => a.localeCompare(b)));
+  const { images } = gallery.fields;
+  const block = (definition, fields) =>
+    defineBlock({
+      description: definition.description,
+      fields,
+      label: definition.label,
+      migrations: definition.migrations,
+      settings: definition.settings,
+      type: definition.type,
+      version: definition.version,
+    });
+  const alphabetical = [
+    block(image, sorted(image.fields)),
+    block(gallery, {
+      ...gallery.fields,
+      images: field.list({
+        defaultValue: [],
+        item: field.group({ fields: sorted(images.item.fields) }),
+        itemLabel: images.itemLabel,
+        label: images.label,
+        maxItems: images.maxItems,
+        minItems: images.minItems,
+      }),
+    }),
+  ];
+  expect(Object.keys(alphabetical[0].fields)).toEqual(["alt", "caption", "link", "media"]);
+  for (const [index, definition] of [image, gallery].entries()) {
+    const reordered = toBlockMetadata(definition);
+    const original = toBlockMetadata(alphabetical[index]);
+    expect(canonicalizeJson(reordered)).toBe(canonicalizeJson(original));
+    expect(await sha256CanonicalJson(reordered)).toBe(await sha256CanonicalJson(original));
+  }
+  expect([image.version, gallery.version]).toEqual([4, 3]);
+});
+
 test("the lightbox setting of image and gallery is a validated boolean", () => {
   for (const definition of [builtInBlocks.image, builtInBlocks.gallery]) {
     expect(validateBlockSettings(definition, { lightbox: true })).toEqual({ lightbox: true });

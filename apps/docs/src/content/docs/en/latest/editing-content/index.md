@@ -15,7 +15,7 @@ Collection slugs can be suggested from title. Manual slug editing, including cle
 
 Add permitted blocks, duplicate, remove or reorder them. Block visibility, anchors and CSS hooks are intentional content controls; hidden blocks remain stored. Required values are publication requirements, while invalid present values can prevent saving. Validation summaries lead to the exact field and reveal containing tabs/disclosures.
 
-Groups/lists can be created, collapsed and reordered. Duplicate makes an independent value copy. Keyboard drag uses Space to pick up/drop, arrows to move and Escape to cancel; Move up/down is also available. Removing items remains possible when a size limit blocks growth.
+Groups/lists can be created, collapsed and reordered. List items appear as compact rows that start collapsed; each row's actions menu offers Move up, Move down, Duplicate and Remove, and Duplicate makes an independent value copy. Keyboard drag uses Space to pick up/drop, arrows to move and Escape to cancel. Removing items remains possible when a size limit blocks growth.
 
 ## Conflicts and deployment
 

@@ -169,3 +169,42 @@ test("CE9A inherited prompts override configured generic text and empty prompts 
   render(<Harness definition={{ type: "url", required: false, placeholder: "" }} />);
   expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", "");
 });
+
+test("the count sits in the label row and the required note is a tooltip until a problem", () => {
+  const view = render(<Harness definition={{ required: true, type: "text" }} />);
+  const input = screen.getByRole("textbox", { name: "Hero Image" });
+  expect(input).toHaveAccessibleDescription("Required for publication only. 0 characters");
+  const count = screen.getByText("0 characters");
+  expect(count).not.toHaveClass("sr-only");
+  expect(count.parentElement).toContainElement(screen.getByText("Hero Image"));
+  expect(screen.getByText("Required for publication only.")).toHaveClass("sr-only");
+  expect(screen.getByText("Required")).toHaveAttribute("title", "Required for publication only.");
+  view.unmount();
+
+  const errored = render(
+    <Harness definition={{ required: true, type: "text" }} error="Required." />,
+  );
+  expect(screen.getByText("Required for publication only.")).not.toHaveClass("sr-only");
+  errored.unmount();
+
+  render(
+    <Harness
+      definition={{ required: true, type: "text" }}
+      wrap={(children) => (
+        <FieldRendererProvider readOnly renderers={{}}>
+          {children}
+        </FieldRendererProvider>
+      )}
+    />,
+  );
+  expect(screen.getByText("Required for publication only.")).not.toHaveClass("sr-only");
+});
+
+test("bounded counters and declared limits stay visible", () => {
+  render(<Harness definition={{ maxLength: 40, required: false, type: "text" }} />);
+  expect(screen.getByText("Limit: 40 characters.")).not.toHaveClass("sr-only");
+  expect(screen.getByText("0 characters")).not.toHaveClass("sr-only");
+  for (const element of document.querySelectorAll("[aria-describedby]"))
+    for (const id of element.getAttribute("aria-describedby")!.split(" "))
+      expect(document.getElementById(id), id).not.toBeNull();
+});

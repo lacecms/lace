@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { field } from "@lacecms/content";
+import { itemAction, openAllItems } from "./support/list-items.js";
 import { sessionPath, sessionSummary } from "./support/session.js";
 import { AxeBuilder } from "@axe-core/playwright";
 
@@ -118,6 +119,7 @@ test("expanded documents survive nested moves, disclosures, tabs and save/reload
 }) => {
   const state = await mock(page);
   await page.goto("/admin/content/posts/entry-1");
+  await openAllItems(page);
   const body = page.locator('[id^="field-fields-"][role="textbox"]').first();
   await expect(body.locator("h4")).toHaveText("Fourth heading");
   await expect(body.locator("pre")).toHaveText(expanded.content![2]!.content![0]!.text!);
@@ -127,9 +129,12 @@ test("expanded documents survive nested moves, disclosures, tabs and save/reload
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type(" edited");
 
-  await page.getByRole("button", { name: "Move down Sections item 1", exact: true }).last().click();
-  await page.getByRole("button", { name: "Collapse Sections item 2", exact: true }).last().click();
-  await page.getByRole("button", { name: "Expand Sections item 2", exact: true }).last().click();
+  await itemAction(page, "Sections item 1", "Move down", { last: true });
+  // Keyboard activation: rows animate into their new places after a move.
+  await page.getByRole("button", { name: "Collapse Sections item 2", exact: true }).last().focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Expand Sections item 2", exact: true }).last().focus();
+  await page.keyboard.press("Enter");
   const moved = page.locator('[id^="field-fields-"][role="textbox"]').nth(1);
   await expect(moved).toContainText("edited");
   await moved.focus();
@@ -147,6 +152,7 @@ test("expanded documents survive nested moves, disclosures, tabs and save/reload
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Saved revision 2")).toBeVisible();
   await page.reload();
+  await openAllItems(page);
   expect(state.current().draft.fields.sections[1]!.body.content![0]).toEqual(expanded.content![0]);
   await expect(page.locator('[id^="field-fields-"][role="textbox"]').nth(1)).toContainText(
     "edited",
@@ -159,6 +165,7 @@ test("selection menu and link switches preserve text and support keyboard dismis
 }) => {
   const state = await mock(page);
   await page.goto("/admin/content/posts/entry-1");
+  await openAllItems(page);
   const body = page.locator('[id^="field-fields-"][role="textbox"]').first();
   await body.click();
   await page.keyboard.press("ControlOrMeta+End");
@@ -194,12 +201,14 @@ test("selection menu and link switches preserve text and support keyboard dismis
     state.current().draft.fields.sections[0]!.body.content![3]!.content![0]!.marks![0]!.attrs;
   expect(attrs).toEqual({ href: "/docs", rel: "nofollow" });
   await page.reload();
+  await openAllItems(page);
   await expect(body.locator("a")).toHaveAttribute("rel", "nofollow");
 });
 
 test("viewers preserve expanded content and cannot open formatting controls", async ({ page }) => {
   const state = await mock(page, "viewer");
   await page.goto("/admin/content/posts/entry-1");
+  await openAllItems(page);
   const body = page.locator('[id^="field-fields-"][role="textbox"]').first();
   await expect(body).toHaveAttribute("contenteditable", "false");
   await expect(body.locator("h4")).toHaveText("Fourth heading");
@@ -215,6 +224,7 @@ test("fixed toolbar creates H4, code and rules; history, paste and removal stay 
 }) => {
   const state = await mock(page);
   await page.goto("/admin/content/posts/entry-1");
+  await openAllItems(page);
   const body = page.locator('[id^="field-fields-"][role="textbox"]').first();
   const toolbar = page.getByRole("toolbar", { name: "Body formatting", exact: true }).nth(1);
   // Replace through the editor's selection command; browser fill can leave atomic rules behind.
@@ -256,6 +266,7 @@ test("fixed toolbar creates H4, code and rules; history, paste and removal stay 
   await expect(page.getByText("Saved revision 2")).toBeVisible();
   expect(JSON.stringify(state.saves)).not.toContain('"language"');
   await page.reload();
+  await openAllItems(page);
   await expect(body.locator("hr")).toHaveCount(1);
   // Ordinary paste uses the same editor parser, including removal of unsafe links/styles.
   await body.fill("Paste here");
@@ -282,6 +293,7 @@ test("fixed toolbar creates H4, code and rules; history, paste and removal stay 
 test("revision conflicts retain expanded local content until explicit reload", async ({ page }) => {
   const state = await mock(page);
   await page.goto("/admin/content/posts/entry-1");
+  await openAllItems(page);
   const body = page.locator('[id^="field-fields-"][role="textbox"]').first();
   await body.locator("p").last().click();
   await page.keyboard.press("End");

@@ -1,1 +1,1 @@
-export { SelectedMedia } from "./SelectedMedia.js";
+export { mediaFacts, SelectedMedia } from "./SelectedMedia.js";
