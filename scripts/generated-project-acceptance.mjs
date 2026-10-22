@@ -1168,15 +1168,24 @@ async function starterJourney(project) {
       throw new Error("starter-build: published navigation global missing from the site header");
   }
   const [home, post] = published;
+  const gallery = post.match(
+    /<section\b(?=[^>]*\bclass="gallery")(?=[^>]*\bdata-lace-block="gallery")(?=[^>]*\bdata-lace-block-key="post-gallery")[^>]*>[\s\S]*?<\/section>/,
+  )?.[0];
   if (
-    !post.includes(
-      '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery">',
-    ) ||
-    post.split('<li data-lace-part="item"><figure>').length !== 4 ||
-    !post.includes('<img alt="Media library description" data-lace-part="media"') ||
-    !post.includes('<img alt="A quiet desk" data-lace-part="media"')
+    !gallery ||
+    (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 3 ||
+    !gallery.includes('<img alt="Media library description" data-lace-part="media"') ||
+    !gallery.includes('<img alt="A quiet desk" data-lace-part="media"')
   )
     throw new Error("starter-build: gallery figures or their effective alt text missing");
+  if (
+    !gallery.includes("data-lace-layout-container") ||
+    !gallery.includes('data-lace-layout="grid"') ||
+    !gallery.includes('data-lace-wrap="true"') ||
+    !gallery.includes('data-lace-preset="auto"') ||
+    (gallery.match(/<li\b[^>]*\bdata-lace-layout-item[^>]*>/g) ?? []).length !== 3
+  )
+    throw new Error("starter-build: gallery list layout hooks missing");
   if (
     !home.includes("<title>Lace starter | Acceptance Studio</title>") ||
     !home.includes('<meta content="Acceptance site description" name="description">') ||
@@ -1293,7 +1302,7 @@ async function starterJourney(project) {
   }
   imageExport.entries[0].blocks.push({
     type: "gallery",
-    schemaVersion: 3,
+    schemaVersion: 4,
     key: "alpha-seven-gallery",
     position: 20000,
     data: {
