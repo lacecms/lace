@@ -4,13 +4,13 @@ import { loadProjectConfig } from "../dist/project-config.js";
 
 test("loads the root configuration with typed page, collection and global examples", async () => {
   const config = await loadProjectConfig();
-  expect(config.public.content.map(({ key, kind, version }) => ({ key, kind, version }))).toEqual([
-    { key: "about", kind: "page", version: 6 },
-    { key: "home", kind: "page", version: 7 },
-    { key: "navigation", kind: "global", version: 1 },
-    { key: "notes", kind: "collection", version: 6 },
-    { key: "posts", kind: "collection", version: 7 },
-    { key: "settings", kind: "global", version: 2 },
+  expect(config.public.content.map(({ key, kind }) => ({ key, kind }))).toEqual([
+    { key: "about", kind: "page" },
+    { key: "home", kind: "page" },
+    { key: "navigation", kind: "global" },
+    { key: "notes", kind: "collection" },
+    { key: "posts", kind: "collection" },
+    { key: "settings", kind: "global" },
   ]);
   expect(config.runtime.blocks.get("hero")).toBeDefined();
   expect(config.public.content[0].path).toBe("/about");
@@ -31,10 +31,12 @@ test("loads the root configuration with typed page, collection and global exampl
 
 test("accepts a fresh normalized project configuration", async () => {
   const edited = await defineConfig({
-    content: [definePage({ key: "about", path: "/about", version: 1 })],
+    content: [definePage({ key: "about", path: "/about", version: 7 })],
   });
   const loaded = await loadProjectConfig(async () => ({ default: edited }));
-  expect(loaded.public.content.map((model) => model.key)).toEqual(["about"]);
+  expect(loaded.public.content.map(({ key, version }) => ({ key, version }))).toEqual([
+    { key: "about", version: 7 },
+  ]);
 });
 
 test("rejects a missing, invalid or failed project module without exposing raw failures", async () => {
