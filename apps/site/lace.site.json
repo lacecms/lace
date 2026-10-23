@@ -3,7 +3,7 @@
   "framework": "astro",
   "componentsDir": "src/components/lace",
   "blockMap": "src/lace/blocks.ts",
-  "blockMapSha256": "fa5c30bc1d07e5e853ea029fac37c9ba02dcaabe870365d4d8d2dc1af81a7a3e",
+  "blockMapSha256": "d0c408b08b495237fa5aaa8c4bae8ac65687974a401be89b45f5188da69acf0a",
   "items": {
     "cta": {
       "revision": 2,
@@ -46,6 +46,13 @@
       "revision": 2,
       "files": {
         "src/components/lace/RichTextBlock.astro": "8716b129857ca3dd8e6c144c18d2d140e4d6471f0cb2c5a4544d6e8d9b7a3f38"
+      }
+    },
+    "videoEmbed": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/VideoEmbed.css": "eb474820feab7f0dab934dd56d89bda17bc7b771518d4842f5174819df019f5a",
+        "src/components/lace/VideoEmbedBlock.astro": "02fa3e159dc4808c32c6e300534572fd0bdae1708d3212978df6e96f4e5a05b0"
       }
     }
   }

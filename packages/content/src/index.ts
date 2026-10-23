@@ -1,4 +1,7 @@
+import { parseVideoEmbed } from "./video-embeds.js";
+import type { EmbedProvider } from "./video-embeds.js";
 import * as v from "valibot";
+export * from "./video-embeds.js";
 
 /** A JSON primitive that can be transported between Lace runtimes. */
 export type JsonPrimitive = boolean | null | number | string;
@@ -43,6 +46,11 @@ export interface CommonFieldOptions<Value> {
 /** A prompt on controls with an editable empty text surface. */
 export interface PlaceholderFieldOptions<Value> extends CommonFieldOptions<Value> {
   readonly placeholder?: string;
+}
+
+/** Provider restrictions on otherwise ordinary safe URL fields. */
+export interface UrlFieldOptions extends PlaceholderFieldOptions<string> {
+  readonly embedProviders?: readonly EmbedProvider[];
 }
 
 /** String-length constraints supported by text and textarea fields. */
@@ -156,9 +164,8 @@ export type DatetimeFieldDefinition<
 > = CommonDefinition<"datetime", Options>;
 
 /** A URL-field descriptor. */
-export type UrlFieldDefinition<
-  Options extends PlaceholderFieldOptions<string> = PlaceholderFieldOptions<string>,
-> = CommonDefinition<"url", Options>;
+export type UrlFieldDefinition<Options extends UrlFieldOptions = UrlFieldOptions> =
+  CommonDefinition<"url", Options> & PropertyFrom<Options, "embedProviders">;
 
 /** A media-field descriptor that stores a media identifier. */
 export type MediaFieldDefinition<
@@ -646,11 +653,40 @@ function buildStringValueField<
     "description",
     "label",
     "required",
-    ...(type === "url" ? ["placeholder"] : []),
+    ...(type === "url" ? ["placeholder", "embedProviders"] : []),
   ]);
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
-  addDefault(definition, options, (value) => typeof value === "string", "must be a string.");
+  if (type === "url" && options.embedProviders !== undefined) {
+    const providers = options.embedProviders;
+    if (
+      !Array.isArray(providers) ||
+      providers.length === 0 ||
+      providers.some((provider) => provider !== "youtube" && provider !== "vimeo") ||
+      new Set(providers).size !== providers.length
+    )
+      fail("options.embedProviders", "must be a non-empty unique list of youtube and vimeo.");
+    definition.embedProviders = ["youtube", "vimeo"].filter((provider) =>
+      providers.includes(provider),
+    );
+  }
+  addDefault(
+    definition,
+    options,
+    (value) => {
+      if (typeof value !== "string") return false;
+      if (definition.embedProviders === undefined) return true;
+      const embed = parseVideoEmbed(value);
+      return (
+        isSafeUrl(value) &&
+        embed !== undefined &&
+        (definition.embedProviders as readonly string[]).includes(embed.provider)
+      );
+    },
+    definition.embedProviders === undefined
+      ? "must be a string."
+      : "must be a string matching the declared embed providers.",
+  );
   return deepFreeze(definition) as FieldDefinition;
 }
 
@@ -852,8 +888,8 @@ export const field = {
     >;
   },
 
-  /** Define a URL string field; URL protocol validation is added in Session 2B. */
-  url<const Options extends PlaceholderFieldOptions<string> = PlaceholderFieldOptions<string>>(
+  /** Define a safe URL field, optionally restricted to supported video providers. */
+  url<const Options extends UrlFieldOptions = UrlFieldOptions>(
     options?: Options,
   ): UrlFieldDefinition<Options> {
     return buildStringValueField("url", options) as UrlFieldDefinition<Options>;
@@ -1505,7 +1541,12 @@ function isFieldValue(definition: FieldDefinition, value: unknown): boolean {
       typeof value === "string" &&
       (fieldDefinition.minLength === undefined || textLength(value) >= fieldDefinition.minLength) &&
       (fieldDefinition.maxLength === undefined || textLength(value) <= fieldDefinition.maxLength),
-    url: () => isSafeUrl(value),
+    url: (descriptor) => {
+      if (!isSafeUrl(value)) return false;
+      if (descriptor.embedProviders === undefined) return true;
+      const embed = parseVideoEmbed(value);
+      return embed !== undefined && descriptor.embedProviders.includes(embed.provider);
+    },
   });
 }
 
@@ -2746,6 +2787,31 @@ export const builtInBlocks = deepFreeze({
     label: "Rich text",
     type: "richText",
     version: 1,
+  }),
+  videoEmbed: defineBlock({
+    type: "videoEmbed",
+    version: 1,
+    label: "Video embed",
+    description: "A YouTube or Vimeo video with an optional image preview.",
+    fields: {
+      url: field.url({
+        required: true,
+        embedProviders: ["youtube", "vimeo"],
+        label: "Video URL",
+        description: "Paste a YouTube or Vimeo video link, not iframe code.",
+      }),
+      title: field.text({
+        required: true,
+        minLength: 1,
+        label: "Title",
+        description: "Names the video for visitors using assistive technology.",
+      }),
+      poster: field.media({
+        label: "Preview image",
+        description: "Optional. Load the video player only when a visitor selects this preview.",
+      }),
+      caption: field.text({ label: "Caption" }),
+    },
   }),
 });
 

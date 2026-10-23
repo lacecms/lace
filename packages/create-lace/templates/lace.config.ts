@@ -10,23 +10,24 @@ export default await defineConfig({
     builtInBlocks.cta,
     builtInBlocks.gallery,
     builtInBlocks.navigation,
+    builtInBlocks.videoEmbed,
   ],
   content: [
     definePage({
       key: "home",
-      version: 5,
+      version: 6,
       label: "Home",
       path: "/",
-      blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
+      blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation", "videoEmbed"],
       seo: true,
     }),
     defineCollection({
       key: "posts",
-      version: 5,
+      version: 6,
       label: "Posts",
       route: "/blog/:slug",
       fields: { summary: field.text() },
-      blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation"],
+      blocks: ["hero", "richText", "image", "quote", "cta", "gallery", "navigation", "videoEmbed"],
       seo: { description: "summary" },
     }),
     defineGlobal({

@@ -327,3 +327,10 @@ defineBlock({
   // @ts-expect-error Visibility targets must name declared settings.
   settingsVisibility: { missing: { setting: "mode", values: ["a"] } },
 });
+
+const embedUrl = field.url({ embedProviders: ["youtube", "vimeo"], required: true });
+type _EmbedUrlValue = Expect<Equal<FieldValue<typeof embedUrl>, string>>;
+const embedProviders: readonly ("youtube" | "vimeo")[] = embedUrl.embedProviders;
+void embedProviders;
+// @ts-expect-error unsupported provider
+field.url({ embedProviders: ["other"] });

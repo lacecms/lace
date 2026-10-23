@@ -377,6 +377,38 @@
           "position": 0,
           "schemaVersion": 1,
           "type": "hero"
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 1,
+          "key": "about-youtube",
+          "position": 2000,
+          "data": {
+            "url": "https://youtu.be/dQw4w9WgXcQ",
+            "title": "YouTube film"
+          }
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 1,
+          "key": "about-vimeo",
+          "position": 3000,
+          "data": {
+            "url": "https://vimeo.com/76979871/abc123def",
+            "title": "Vimeo film",
+            "poster": "hero-media"
+          }
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 1,
+          "key": "about-vimeo-second",
+          "position": 4000,
+          "data": {
+            "url": "https://vimeo.com/76979871",
+            "title": "Second Vimeo film",
+            "poster": "hero-media"
+          }
         }
       ],
       "fields": {},

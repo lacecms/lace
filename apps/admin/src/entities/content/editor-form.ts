@@ -140,6 +140,8 @@ export function fieldProblem(definition: FieldMetadata, value: unknown): string 
     case "datetime":
       return "Choose a valid date and time.";
     case "url":
+      if (definition.embedProviders !== undefined)
+        return `Enter a valid ${definition.embedProviders.join(" or ")} video URL.`;
       return URL_FIELD_MESSAGE;
     case "media":
       return "Choose a media item.";

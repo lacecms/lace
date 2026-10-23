@@ -13,10 +13,12 @@ import GalleryBlock from "../../../registry/astro/gallery/GalleryBlock.astro";
 import HeroBlock from "../../../registry/astro/hero/HeroBlock.astro";
 import ImageBlock from "../../../registry/astro/image/ImageBlock.astro";
 import NavigationBlock from "../../../registry/astro/navigation/NavigationBlock.astro";
+import VideoEmbedBlock from "../../../registry/astro/videoEmbed/VideoEmbedBlock.astro";
 import CardList from "../test-fixtures/CardList.astro";
 import Blocks from "../test-fixtures/Blocks.astro";
 
 const blocks = defineBlockMap({
+  videoEmbed: { component: VideoEmbedBlock, definition: builtInBlocks.videoEmbed },
   gallery: { component: GalleryBlock, definition: builtInBlocks.gallery },
   hero: { component: HeroBlock, definition: builtInBlocks.hero },
   image: { component: ImageBlock, definition: builtInBlocks.image },
@@ -363,4 +365,42 @@ test("an unrelated card list uses the same scalar settings and layout hooks", as
   );
   expect(html).toContain("<li data-lace-layout-item>One<ul><li>Nested list</li></ul></li>");
   expect(html).not.toContain("gallery");
+});
+
+test("video embeds render canonical iframes or inert optimized previews", async () => {
+  const direct = await render([
+    block(
+      "videoEmbed",
+      {
+        url: "https://youtu.be/dQw4w9WgXcQ?autoplay=1",
+        title: "<Studio & team>",
+        caption: "<Caption>",
+      },
+      { anchor: "film", className: "wide" },
+    ),
+  ]);
+  expect(direct).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
+  expect(direct).toContain('loading="lazy"');
+  expect(direct).toContain('title="<Studio &amp; team>"');
+  expect(direct).toContain('id="film"');
+  expect(direct).toContain('class="video-embed wide"');
+  expect(direct).toContain('referrerpolicy="strict-origin-when-cross-origin"');
+  expect(direct).toContain('allow="fullscreen; picture-in-picture; encrypted-media"');
+  expect(direct).not.toContain("autoplay;");
+  expect(direct).toContain("&lt;Caption&gt;");
+  const preview = await render([
+    block("videoEmbed", {
+      url: "https://vimeo.com/123/abc",
+      title: "Studio",
+      poster: "studio",
+    }),
+  ]);
+  expect(preview).toContain('aria-label="Load video: Studio"');
+  expect(preview).toContain("<template data-lace-video-template>");
+  expect(preview).toContain('src="https://player.vimeo.com/video/123?h=abc"');
+  expect(preview).toContain("object-position:25% 40%");
+  expect(preview).not.toContain("Media caption");
+  expect(preview).toContain('data-lace-part="source"');
+  const hidden = await render([block("videoEmbed", {}, { hidden: true })]);
+  expect(hidden).not.toContain('data-lace-block="videoEmbed"');
 });

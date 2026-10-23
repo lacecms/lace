@@ -12,7 +12,7 @@ remain authoritative; public prose does not replace them.
 | Getting started | personal-site-guide.md, compatibility.md, generated README/Compose guides |
 | Content modeling | node-api.md, configuration-synchronization.md, composite-fields.md, field-guidance.md, form-organization.md, model/SEO/block specs |
 | Editing content | rich-text-authoring.md, admin/media/account specs |
-| Astro integration | site-styling.md, generated lace-astro-site.md, SDK/render/block-installation specs |
+| Astro integration | site-styling.md (including video embed activation and provider smoke checks), generated lace-astro-site.md, SDK/render/block-installation specs |
 | Deployment | cloudflare-worker.md, cloudflare-deployment-handoff.md, generated Compose/Cloudflare guides |
 | Operations | auth-operations.md, database-migrations.md, compatibility.md, generated lace-operations.md |
 | Reference | CLI help/environment declarations, REST/API-docs specs, apps/api/openapi/api-v1.json |

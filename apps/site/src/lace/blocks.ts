@@ -8,6 +8,7 @@ import ImageBlock from "../components/lace/ImageBlock.astro";
 import NavigationBlock from "../components/lace/NavigationBlock.astro";
 import QuoteBlock from "../components/lace/QuoteBlock.astro";
 import RichTextBlock from "../components/lace/RichTextBlock.astro";
+import VideoEmbedBlock from "../components/lace/VideoEmbedBlock.astro";
 
 export const blocks = defineBlockMap({
   cta: { definition: builtInBlocks.cta, component: CtaBlock },
@@ -17,4 +18,5 @@ export const blocks = defineBlockMap({
   navigation: { definition: builtInBlocks.navigation, component: NavigationBlock },
   quote: { definition: builtInBlocks.quote, component: QuoteBlock },
   richText: { definition: builtInBlocks.richText, component: RichTextBlock },
+  videoEmbed: { definition: builtInBlocks.videoEmbed, component: VideoEmbedBlock },
 });

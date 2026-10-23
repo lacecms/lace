@@ -438,14 +438,14 @@ fresh project and moving configuration manually.
 The `create-lace` starter is the single source of what users receive: minimal
 `home` and `posts` pages, a `settings` global (`siteName`, `tagline`), a
 `navigation` global that allows only the `navigation` block, a layout, global
-styles, the seven built-in registry blocks, `lace.site.json`, the block map
+styles, the eight built-in registry blocks, `lace.site.json`, the block map
 file, and the loader file. Each page passes the published site to the layout,
 which renders a site header from `site.global("settings")` and the published
 `navigation` global's blocks through `LaceBlocks` and the block map, falling
 back to static values and a static Home link while either global is
 unpublished (a published navigation global without visible blocks renders no
 navigation). Gallery and navigation layout CSS lives in the site stylesheet; the
-components carry no styles or scripts. It contains no tests, fixtures, or
+components carry no `<style>` elements; only videoEmbed carries its bounded preview activation script. It contains no tests, fixtures, or
 engine-development routes.
 
 `apps/site` is the engine development playground and integration fixture. It may
@@ -709,6 +709,14 @@ Reference fields are not part of the MVP. The field-definition discriminated
 union and validation visitor must be exhaustive so that a reference variant can
 be introduced later without changing existing field encodings.
 
+URL fields optionally declare `embedProviders: ["youtube", "vimeo"]`, a non-empty
+unique subset canonicalized in that order. The restriction is structural: adding
+or narrowing it is breaking; removing or widening it is compatible. Omission
+preserves ordinary URL behavior and hashes. Shared portable validation accepts
+only bounded HTTPS provider video paths and canonicalizes iframe URLs locally,
+preserving Vimeo unlisted hashes while dropping arbitrary playback parameters.
+No provider metadata fetch or raw iframe HTML is supported.
+
 ### Field guidance metadata (CE9A)
 
 Text, textarea, URL, number, select and rich-text fields accept an optional
@@ -835,10 +843,14 @@ descriptors.
 
 ### Initial built-in blocks
 
-The starter and browser editor ship with seven blocks. They use only the public
+The starter and browser editor ship with eight blocks. They use only the public
 field DSL and do not receive special database treatment; only `image` and
 `gallery` declare a setting:
 
+- `videoEmbed` (version 1): required YouTube/Vimeo URL and accessible title,
+  optional image-media poster and caption, no settings. A poster defers the
+  external iframe until button activation; without it, the iframe is lazy.
+  Playback never autostarts. Video-file uploads remain outside this selection;
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
@@ -2167,6 +2179,11 @@ not claim to validate fields/hidden blocks absent from its rendering input.
   `ContentValidationError` as `cause`. Messages name model, entry, block key,
   and field path.
 
+`describeVideoEmbed(url, context?)` shares the content package's provider parser
+and returns provider, video ID, canonical player URL and optional Vimeo hash.
+Invalid URLs fail as `invalid_block_data` with context and URL field path. It
+performs no network calls and leaves existing BlockProps unchanged.
+
 ### 13.4 Astro adapter
 
 `@lacecms/astro` depends on `@lacecms/render` and `@lacecms/sdk`, declares a peer
@@ -2285,7 +2302,8 @@ own classes in the root `class` (`class:list={["hero", className]}`, or
 attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
-Built-in components carry no `<style>` or `<script>`: presentation stays in the
+Built-in components carry no `<style>`; only videoEmbed carries its bounded
+activation `<script>`. Presentation stays in the
 site stylesheet. The `image` (revision 6), `gallery` (revision 3) and `hero`
 (revision 4) components render media through `LaceImage.astro`; `image` and
 `gallery` open the lightbox when their `lightbox` setting is on, with dialog
@@ -2295,6 +2313,15 @@ image loads eagerly. A linked `image` block or gallery item wraps its image in
 the alt text, or by an `aria-label` of the caption, then the URL, when the alt
 text is empty. The registry ships `gallery` and `navigation` (CE7D) besides
 the five earlier items; every Lace-maintained site installs all seven.
+
+The `astro/videoEmbed` registry component is the sole exception to script-free
+block sources: a small local activation script replaces an inert player template
+on a native preview button click and focuses its iframe, once per block. It uses
+no player SDK or framework hydration. The adapter remains free of client scripts.
+The optional poster uses LaceImage and ordinary media references; a companion
+structural stylesheet reserves 16:9 geometry. Source links remain available with
+or without JavaScript. Player URLs use youtube-nocookie.com or player.vimeo.com,
+never autoplay, and keep only Vimeo's privacy hash. Rendering stays static.
 
 ### 13.6 Framework selection
 

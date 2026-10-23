@@ -746,3 +746,24 @@ test.each(expandedParityCorpus)("expanded content/render acceptance and paths ag
   }
   expect(() => describeRichText(value)).not.toThrow();
 });
+
+test("video embed descriptions canonicalize locally and preserve contextual failures", async () => {
+  const { describeVideoEmbed } = await import("../dist/index.js");
+  expect(describeVideoEmbed("https://youtu.be/dQw4w9WgXcQ?autoplay=1")).toEqual({
+    provider: "youtube",
+    videoId: "dQw4w9WgXcQ",
+    src: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+  });
+  expect(describeVideoEmbed("https://vimeo.com/123/abc")).toEqual({
+    provider: "vimeo",
+    videoId: "123",
+    privacyHash: "abc",
+    src: "https://player.vimeo.com/video/123?h=abc",
+  });
+  expect(() => describeVideoEmbed("https://example.com", context)).toThrow(LaceRenderError);
+  try {
+    describeVideoEmbed("https://example.com", context);
+  } catch (error) {
+    expect(error).toMatchObject({ code: "invalid_block_data", context, fieldPath: ["url"] });
+  }
+});

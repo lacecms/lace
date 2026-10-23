@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "templateVersion": "0.36.0",
+  "templateVersion": "0.37.0",
   "database": [
     "Lace engines with block anchors, classes, settings and hidden blocks require migration 0009_content_block_envelope. It is additive: it adds the nullable content_blocks.anchor and class_name columns, hidden (default 0) and settings_json (default '{}') plus a partial unique index on (snapshot_id, anchor), without a table rebuild or backfill, so existing blocks read as visible without an anchor or class and with empty settings. Back up first: an older engine starts against the migrated database but would deliver hidden blocks publicly and reset block envelopes on save, so rolling back the API and admin once anchors, classes, settings or hidden blocks exist requires restoring that backup.",
     "Compose (Node SQLite) for 0009: stop dispatch and the API with docker compose stop api dispatcher, back up the stopped database by copying the whole .lace/data directory, set the new images in .env, run pnpm db:migrate, then pnpm content:sync, then start again with pnpm dev:api or pnpm prod:start.",
@@ -87,6 +87,7 @@
     "Use compatible freshly built Step 29A or later API, admin, CLI and builder artifacts; previously published alpha artifacts do not acquire this behavior. No package or image is published by this upgrade.",
     "Review managed Compose and environment changes. Set LACE_BUILD_SOURCE_ROOT to the host installation root containing pnpm-lock.yaml, LACE_BUILD_SITE_DIR to the relative Astro directory and LACE_BUILD_OUTPUT_DIR to its relative static output. Generated defaults are ., site and dist. For an existing standalone Astro root above cms/, use .., . and dist.",
     "Set LACE_BUILD_SITE_ID and LACE_BUILD_SITE_LABEL to safe operator-authored names shared by API and builder, then recreate the affected services. Current identity is configuration, not verification of a successful deployment.",
-    "Preserve user-owned README, lace.config.ts and site source. Retain existing managed-file conflict review; incorporate applicable instructions in an existing README manually. The last static release remains served until a selected-source build succeeds. See docs/lace-operations.md for external workspace and SDK integration prerequisites."
+    "Preserve user-owned README, lace.config.ts and site source. Retain existing managed-file conflict review; incorporate applicable instructions in an existing README manually. The last static release remains served until a selected-source build succeeds. See docs/lace-operations.md for external workspace and SDK integration prerequisites.",
+    "Template 0.37.0: optional YouTube/Vimeo videoEmbed v1 with image previews. No SQL migration or video uploads. Upgrade compatible content/render/adapter/CLI packages together, run pnpm exec lace add block videoEmbed --site site --dry-run, review the component and VideoEmbed.css, and resolve local conflicts through --write-new/manual merge. Add the built-in definition and allowed block type only to selected models, increment their versions, then run normal config sync. Keep matching renderers for any published embeds. See docs/lace-astro-site.md."
   ]
 }

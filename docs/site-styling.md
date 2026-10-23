@@ -158,3 +158,42 @@ components must match before rebuilding. Copy lightbox/link focus rules and
 Pages `public/_headers` from the matching starter. See the
 [alpha.7 upgrade guide](./compatibility.md#alpha-7-upgrade-and-rollback) for order
 and backup boundaries, and the generated Astro guide for complete setup.
+
+## Video embeds
+
+New starters include `videoEmbed`. Existing sites can install it with
+`pnpm exec lace add block videoEmbed --site site` (use your actual site path).
+Use matching content/render/adapter/CLI packages. Review the component and its
+`VideoEmbed.css` companion together; use `--dry-run` and `--write-new` to resolve
+local source conflicts. Register `builtInBlocks.videoEmbed`, allow the type in
+selected CMS models, advance their versions and run configuration sync.
+
+The block accepts YouTube watch/share/shorts/embed URLs and Vimeo video/player
+URLs. For example, `https://youtu.be/dQw4w9WgXcQ` or an unlisted Vimeo URL
+`https://vimeo.com/76979871/abc123def` (substitute the owner's real privacy hash).
+Title is required for accessibility; poster image and caption are optional.
+Provider restrictions and media references are validated in the CMS.
+
+Without a poster the component renders a lazy iframe. A poster uses LaceImage,
+including existing image optimization/focal point, with an empty decorative alt
+inside a named button. Activating it loads one iframe and moves focus there;
+playback never autostarts and can need a second click on Play. No provider
+requests or thumbnails are loaded before that activation. A source link remains
+available without JavaScript or if embedding fails. Provider privacy/domain
+restrictions must permit the site. URL playback/tracking parameters are not
+forwarded; only a Vimeo privacy hash is retained.
+
+The renderer is site-owned. It is the sole built-in with a small local activation
+script; there is no provider SDK or framework hydration. `VideoEmbed.css` reserves
+a responsive 16:9 area in `@layer lace-layout`; site CSS owns decoration. Hooks:
+`data-lace-part="preview|play|player|caption|source"` on the corresponding elements.
+`describeVideoEmbed` from `@lacecms/render` supplies canonical player data without
+network access. Source URLs are content strings; only posters use media storage.
+Video-file upload support is separate deferred work.
+
+For an optional manual playback smoke check, publish an owner-approved public
+YouTube video and a Vimeo video allowed on your domain, with and without a poster.
+Open the published site, verify keyboard activation and then press the provider's
+Play control. Automated tests stub provider frames and do not prove external
+availability or permissions. Keep renderers deployed while published content uses
+the type; rolling back to a site without its renderer will fail the build.
