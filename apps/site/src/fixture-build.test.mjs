@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
+import { verifyVideoEmbeds } from "./video-embed.browser.mjs";
 
 const exec = promisify(execFile);
 // Astro's own sharp generates the originals the local media origin serves.
@@ -17,7 +18,9 @@ const fixture = JSON.parse(
 
 // The entry scope only: the layout renders the navigation global in the header.
 function entryScope(html) {
-  return html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+  return html
+    .slice(html.indexOf("<main"), html.indexOf("</main>"))
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, "");
 }
 
 // Originals for the fixture media: opaque PNG and JPEG, a transparent PNG and an animated GIF.
@@ -71,7 +74,7 @@ function outputFiles(directory = join(siteRoot, "dist")) {
     .map((entry) => join(entry.parentPath, entry.name));
 }
 
-test("the fixture build emits published static routes without CMS access", () => {
+test("the fixture build emits published static routes without CMS access", async () => {
   execFileSync("pnpm", ["run", "build"], {
     cwd: siteRoot,
     env: {
@@ -121,7 +124,15 @@ test("the fixture build emits published static routes without CMS access", () =>
         ["gallery", "post-gallery"],
       ],
     ],
-    [about, [["hero", "about-hero"]]],
+    [
+      about,
+      [
+        ["hero", "about-hero"],
+        ["videoEmbed", "about-youtube"],
+        ["videoEmbed", "about-vimeo"],
+        ["videoEmbed", "about-vimeo-second"],
+      ],
+    ],
     [
       note,
       [
@@ -179,7 +190,22 @@ test("the fixture build emits published static routes without CMS access", () =>
         ...lightboxParts,
       ],
     ],
-    [about, ["heading"]],
+    [
+      about,
+      [
+        "heading",
+        "player",
+        "source",
+        "preview",
+        "play",
+        "player",
+        "source",
+        "preview",
+        "play",
+        "player",
+        "source",
+      ],
+    ],
     [note, ["text", "attribution", "link", "media"]],
   ]) {
     expect(
@@ -193,7 +219,9 @@ test("the fixture build emits published static routes without CMS access", () =>
         [...entryScope(html).matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1]),
       ),
     ),
-  ).toEqual(new Set(["cta", "gallery", "hero", "image", "navigation", "quote", "richText"]));
+  ).toEqual(
+    new Set(["cta", "gallery", "hero", "image", "navigation", "quote", "richText", "videoEmbed"]),
+  );
 
   // The published navigation global renders in every header, with the current
   // route marked; the static fallback is not emitted.
@@ -360,6 +388,7 @@ test("the fixture build emits published static routes without CMS access", () =>
   expect(readFileSync(join(siteRoot, "dist/robots.txt"), "utf8")).toBe(
     "User-agent: *\nAllow: /\n\nSitemap: https://site.example/sitemap.xml\n",
   );
+  await verifyVideoEmbeds(siteRoot);
 }, 30_000);
 
 test("a fixture build without a site URL and with indexing off writes no sitemap", () => {

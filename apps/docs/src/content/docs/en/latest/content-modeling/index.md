@@ -32,8 +32,24 @@ See [groups, lists and forms](composites/) and [configuration synchronization](s
 
 ## Blocks and SEO
 
-A model declares which block types are allowed. Built-in types include hero, rich text, image, quote, CTA, gallery and navigation. Blocks are ordered; their content schema and settings are versioned separately from the visual component source. Adding a block definition does not install its renderer into the Astro site.
+A model declares which block types are allowed. Built-in types include hero, rich text, image, quote, CTA, gallery, navigation and video embed. Blocks are ordered; their content schema and settings are versioned separately from the visual component source. Adding a block definition does not install its renderer into the Astro site.
 
 The SEO system group provides metadata such as title/description, social image and indexing settings. Configure site defaults and use per-entry overrides deliberately. Admin shows inheritance; recommended title/description lengths are guidance, while hard validation limits still apply. SEO title/description recommendations are 60/160 characters and hard limits are 200/500. Published SEO reaches the build export and site helpers; saving a draft does not update a public page.
 
 A global can supply shared header/navigation content. Publish it like another singleton; unpublished optional globals should have a deliberate site fallback.
+
+## Provider video URLs
+
+Register `builtInBlocks.videoEmbed` and add `"videoEmbed"` to the selected model's
+allowed blocks. Advance existing model versions and run normal configuration sync.
+The block has required Video URL and Title, optional Preview image and Caption.
+It supports YouTube watch/share/shorts/embed links and Vimeo video/player links,
+including unlisted privacy hashes. Other providers and pasted iframe code fail
+validation. Custom URL fields can declare the same restriction:
+
+```ts
+field.url({ required: true, embedProviders: ["youtube", "vimeo"] });
+```
+
+This restriction is structural. Adding or narrowing it is breaking; removing or
+widening it is compatible. Ordinary URL fields keep their existing behavior.

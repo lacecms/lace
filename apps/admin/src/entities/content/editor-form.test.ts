@@ -580,3 +580,12 @@ test.each([
 ])("CE9B normalizes a suggestion for %s", (title, expected) => {
   expect(suggestSlug(title)).toBe(expected);
 });
+
+test("video URL metadata gives provider guidance and rejects unsupported links", () => {
+  const definition = { type: "url", required: true, embedProviders: ["youtube", "vimeo"] } as const;
+  expect(fieldProblem(definition, "https://youtu.be/dQw4w9WgXcQ")).toBeUndefined();
+  expect(fieldProblem(definition, "https://vimeo.com/123/abc")).toBeUndefined();
+  expect(fieldProblem(definition, "https://example.com/clip")).toBe(
+    "Enter a valid youtube or vimeo video URL.",
+  );
+});

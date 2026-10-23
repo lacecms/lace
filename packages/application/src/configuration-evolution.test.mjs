@@ -1294,3 +1294,36 @@ test("setting visibility changes plan display-only metadata without content writ
   expect(after.structureHash).toBe(before.structureHash);
   expect(after.projectionHash).not.toBe(before.projectionHash);
 });
+
+test("embed restrictions classify narrowing as breaking at root and nested paths", async () => {
+  for (const nested of [false, true]) {
+    const descriptor = (providers, required = false) => {
+      const url = field.url({
+        ...(providers === undefined ? {} : { embedProviders: providers }),
+        required,
+      });
+      return nested ? field.list({ item: field.group({ fields: { url } }) }) : url;
+    };
+    for (const [before, after, expected] of [
+      [undefined, ["vimeo"], "breaking"],
+      [["youtube", "vimeo"], ["vimeo"], "breaking"],
+      [["vimeo"], ["youtube", "vimeo"], "compatible"],
+      [["vimeo"], undefined, "compatible"],
+    ]) {
+      const baseline = await posts({ fields: { clip: descriptor(before) } });
+      const target = await posts({ fields: { clip: descriptor(after) }, version: 2 });
+      expect(diffContentModelStructures(baseline.structure, target.structure)).toContainEqual(
+        expect.objectContaining({
+          class: expected,
+          kind: "field-changed",
+          properties: ["embedProviders"],
+        }),
+      );
+    }
+    const baseline = await posts({ fields: { clip: descriptor(undefined, true) } });
+    const target = await posts({ fields: { clip: descriptor(["vimeo"], false) }, version: 2 });
+    expect(diffContentModelStructures(baseline.structure, target.structure)).toContainEqual(
+      expect.objectContaining({ class: "breaking", properties: ["embedProviders", "required"] }),
+    );
+  }
+});

@@ -1,0 +1,34 @@
+@layer lace-layout {
+  :where([data-lace-block="videoEmbed"] [data-lace-video-area]) {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    min-width: 0;
+  }
+  :where(
+    [data-lace-block="videoEmbed"] [data-lace-video-area] > iframe,
+    [data-lace-block="videoEmbed"] [data-lace-part="preview"]
+  ) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  :where([data-lace-block="videoEmbed"] [data-lace-part="preview"]) {
+    position: relative;
+    cursor: pointer;
+  }
+  :where([data-lace-block="videoEmbed"] [data-lace-part="preview"] img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  :where([data-lace-block="videoEmbed"] [data-lace-part="play"]) {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+}

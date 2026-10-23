@@ -57,6 +57,7 @@ test("the bundled registry matches the repository registry and lists the built-i
     "navigation",
     "quote",
     "richText",
+    "videoEmbed",
   ]);
   const hero = loaded.items.get("astro/hero");
   expect(

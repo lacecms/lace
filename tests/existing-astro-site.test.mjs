@@ -17,13 +17,12 @@ const astro = join(workspace, "apps/site/node_modules/astro/bin/astro.mjs");
 const lace = join(workspace, "packages/cli/dist/bin.js");
 // The site's sharp, which Astro uses for image variants, generates the served originals.
 const sharp = createRequire(join(workspace, "apps/site/package.json"))("sharp");
+const fixtureLock = JSON.parse(await readFile(join(fixtureSite, "lace.site.json"), "utf8"));
+const blockTypes = Object.keys(fixtureLock.items);
 const blockFiles = [
   "lace.site.json",
-  "src/lace/blocks.ts",
-  "src/components/lace/ListLayout.css",
-  ...["Cta", "Gallery", "Hero", "Image", "Navigation", "Quote", "RichText"].map(
-    (name) => `src/components/lace/${name}Block.astro`,
-  ),
+  fixtureLock.blockMap,
+  ...Object.values(fixtureLock.items).flatMap((item) => Object.keys(item.files)),
 ];
 const roots = [];
 afterEach(async () => {
@@ -49,15 +48,7 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   await Promise.all(blockFiles.map((path) => rm(join(site, path))));
   const added = await exec(
     process.execPath,
-    [
-      lace,
-      "add",
-      "block",
-      ...["cta", "gallery", "hero", "image", "navigation", "quote", "richText"],
-      "--site",
-      "site",
-      "--json",
-    ],
+    [lace, "add", "block", ...blockTypes, "--site", "site", "--json"],
     { cwd: root },
   );
   expect(JSON.parse(added.stdout)).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED" });

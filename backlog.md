@@ -31,18 +31,20 @@ when selected and do not yet have an implementation order or new CE numbers.
   - **C `images-c-deploy-caching`:** done (archived 2026-10-18).
   - **D `images-d-image-links`:** done (archived 2026-10-18; optional `link`
     on `image` blocks and gallery items, taking precedence over the lightbox).
-- **Video media (draft 2026-10-18, three changes in order, after image
-  delivery):**
-  - **A `video-a-media-upload-delivery`:** MP4 and WebM with separate
-    10 MiB image and 64 MiB video limits, streamed binary upload, ranged media
-    delivery and the media-field `accept` option. Requires the VPS proxy
-    change.
-  - **B video blocks:** built-in `video` block (uploaded video, image poster,
-    autoplay/loop/muted/controls settings with a pause control and reduced
-    motion) and `videoEmbed` block (Vimeo/YouTube through a URL-field
-    provider option), render-core describers and Astro registry components.
-  - **C admin video:** library and picker tiles, preview player, kind filter,
-    per-kind local checks and the streamed upload transport.
+- **Video embeds (selected 2026-10-22):** implement `video-embed-block`
+  first: built-in `videoEmbed`, YouTube/Vimeo URL validation, optional preview
+  image from the existing media library, render-core description and a site-owned
+  Astro renderer. Without a preview render a lazy iframe; with a preview load the
+  player on explicit activation. No video-file upload dependency.
+- **Uploaded video (deferred, no implementation order selected):** MP4/WebM
+  storage, streamed upload, byte-range delivery and field-level media kinds;
+  then uploaded-video blocks and admin library/picker/player support. Revisit
+  autoplay/loop/muted/controls and motion accessibility when selecting that work.
+  The existing unapplied `video-a-media-upload-delivery` draft (0 completed tasks)
+  is retained as historical planning input, not the selected next change. Its old
+  A → B → C order is superseded by this embed-first selection; rebase and replan
+  it against accepted specs before any future apply. Do not include another
+  `videoEmbed` implementation in that future uploaded-video scope.
 
 - **Word/Google Docs paste cleanup (deferred from CE8/B1):** normalize source
   markup into supported rich text, preserve meaningful text/lists/links and

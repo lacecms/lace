@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "videoEmbed",
+  "framework": "astro",
+  "blockType": "videoEmbed",
+  "blockVersion": 1,
+  "revision": 1,
+  "requires": {
+    "@lacecms/astro": "0.1.0-alpha.7",
+    "@lacecms/render": "0.1.0-alpha.7"
+  },
+  "files": [
+    {
+      "source": "VideoEmbedBlock.astro",
+      "target": "VideoEmbedBlock.astro",
+      "role": "component"
+    },
+    {
+      "source": "VideoEmbed.css",
+      "target": "VideoEmbed.css",
+      "role": "stylesheet"
+    }
+  ],
+  "dependencies": []
+}

@@ -23,7 +23,16 @@ const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
 const generator = fileURLToPath(new URL("../../create-lace/dist/bin.js", import.meta.url));
 const workspace = fileURLToPath(new URL("../../../", import.meta.url));
 const starterSite = join(workspace, "packages/create-lace/templates/site");
-const builtIns = ["cta", "gallery", "hero", "image", "navigation", "quote", "richText"];
+const builtIns = [
+  "cta",
+  "gallery",
+  "hero",
+  "image",
+  "navigation",
+  "quote",
+  "richText",
+  "videoEmbed",
+];
 const earlierBuiltIns = ["cta", "hero", "image", "quote", "richText"];
 const integrationTimeout = 60_000;
 const roots = [];
@@ -179,11 +188,16 @@ describe("installation into an independent Astro site", () => {
       ["navigation", "added"],
     ]);
     const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-    expect(Object.keys(lock.items)).toEqual(builtIns);
+    expect(Object.keys(lock.items)).toEqual(builtIns.filter((name) => name !== "videoEmbed"));
     expect(lock.items.gallery.revision).toBe(5);
     expect(lock.items.navigation.revision).toBe(1);
     const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
-    expect(map).toBe(await readFile(join(starterSite, "src/lace/blocks.ts"), "utf8"));
+    expect(map).toBe(
+      (await readFile(join(starterSite, "src/lace/blocks.ts"), "utf8"))
+        .split("\n")
+        .filter((line) => !line.includes("VideoEmbedBlock") && !line.includes("videoEmbed:"))
+        .join("\n"),
+    );
     for (const [index, type] of earlierBuiltIns.entries())
       expect(
         (
@@ -442,7 +456,7 @@ describe("site and framework validation", () => {
     await expect(runAddBlockCommand(["carousel"], { cwd: root })).rejects.toMatchObject({
       code: "BLOCK_USAGE",
       message: expect.stringContaining(
-        "Available: cta, gallery, hero, image, navigation, quote, richText.",
+        "Available: cta, gallery, hero, image, navigation, quote, richText, videoEmbed.",
       ),
     });
   });
@@ -722,4 +736,36 @@ test("Gallery v3 upgrades to v4 as a component/CSS pair and protects edited v3 s
   expect(Object.keys(lock.items.gallery.files)).toHaveLength(2);
   expect(await readFile(component, "utf8")).toContain('import "./ListLayout.css"');
   expect(await readFile(css, "utf8")).toContain("@layer lace-layout");
+});
+
+test("videoEmbed installs and protects both component and CSS during updates", async () => {
+  for (const edited of ["VideoEmbedBlock.astro", "VideoEmbed.css"]) {
+    const root = await tempRoot();
+    const site = await astroSite(root);
+    await run(root, ["videoEmbed"]);
+    const component = join(site, "src/components/lace/VideoEmbedBlock.astro");
+    const css = join(site, "src/components/lace/VideoEmbed.css");
+    const map = await readFile(join(site, "src/lace/blocks.ts"));
+    const lock = await readFile(join(site, "lace.site.json"));
+    await writeFile(join(site, "src/components/lace", edited), "/* user customization */");
+    const before = [await readFile(component), await readFile(css)];
+    const next = await newerRegistry(root, async (directory) => {
+      const manifestPath = join(directory, "astro/videoEmbed/item.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.revision = 2;
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      for (const filename of ["VideoEmbedBlock.astro", "VideoEmbed.css"]) {
+        const path = join(directory, "astro/videoEmbed", filename);
+        await writeFile(path, (await readFile(path, "utf8")) + "\n<!-- revision 2 -->\n");
+      }
+    });
+    const result = await run(root, ["videoEmbed", "--write-new"], next);
+    expect(result.data.items[0].status).toBe("conflict");
+    expect(await readFile(component)).toEqual(before[0]);
+    expect(await readFile(css)).toEqual(before[1]);
+    expect(await readFile(join(site, "src/lace/blocks.ts"))).toEqual(map);
+    expect(await readFile(join(site, "lace.site.json"))).toEqual(lock);
+    expect(await readFile(`${component}.new`, "utf8")).toContain("describeVideoEmbed");
+    expect(await readFile(`${css}.new`, "utf8")).toContain("aspect-ratio");
+  }
 });

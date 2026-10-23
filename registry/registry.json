@@ -35,6 +35,11 @@
       "name": "richText",
       "framework": "astro",
       "manifest": "astro/richText/item.json"
+    },
+    {
+      "name": "videoEmbed",
+      "framework": "astro",
+      "manifest": "astro/videoEmbed/item.json"
     }
   ]
 }

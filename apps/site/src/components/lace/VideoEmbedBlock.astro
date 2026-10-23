@@ -1,0 +1,49 @@
+---
+import LaceImage from "@lacecms/astro/LaceImage.astro";
+import type { builtInBlocks } from "@lacecms/content";
+import { describeVideoEmbed, type BlockProps } from "@lacecms/render";
+import "./VideoEmbed.css";
+
+type Props = BlockProps<typeof builtInBlocks.videoEmbed>;
+const { anchor, block, className, context, data, image } = Astro.props;
+const video = describeVideoEmbed(data.url, context);
+const poster = data.poster === undefined ? undefined : { ...image(data.poster), alt: "" };
+const frame = { src: video.src, title: data.title, allow: "fullscreen; picture-in-picture; encrypted-media", allowfullscreen: true, referrerpolicy: "strict-origin-when-cross-origin" as const, tabindex: 0, "data-lace-part": "player" };
+---
+
+<figure class:list={["video-embed", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+  <div data-lace-video-area>
+    {poster === undefined ? (
+      <iframe {...frame} loading="lazy" />
+    ) : (
+      <>
+        <button type="button" data-lace-part="preview" aria-label={`Load video: ${data.title}`}>
+          <LaceImage image={poster} sizes="(min-width: 64rem) 60rem, 100vw" />
+          <span data-lace-part="play" aria-hidden="true">▶</span>
+        </button>
+        <template data-lace-video-template><iframe {...frame} /></template>
+      </>
+    )}
+  </div>
+  {data.caption !== undefined && <figcaption data-lace-part="caption">{data.caption}</figcaption>}
+  <a data-lace-part="source" href={data.url}>Watch on {video.provider === "youtube" ? "YouTube" : "Vimeo"}</a>
+</figure>
+
+<script>
+  // Delegation works for multiple blocks and for subsequently inserted markup.
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest<HTMLButtonElement>('[data-lace-block="videoEmbed"] [data-lace-part="preview"]');
+    if (!button) return;
+    const area = button.parentElement;
+    const template = area?.querySelector<HTMLTemplateElement>("template[data-lace-video-template]");
+    if (!template || area?.querySelector("iframe")) return;
+    const fragment = template.content.cloneNode(true) as DocumentFragment;
+    const frame = fragment.querySelector("iframe");
+    if (!frame) return;
+    button.replaceWith(fragment);
+    template.remove();
+    frame.focus();
+  });
+</script>

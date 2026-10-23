@@ -102,7 +102,7 @@ test("generated block sources are user-owned and identical to the reference site
     lock.blockMap,
     ...Object.values(lock.items).flatMap((item) => Object.keys(item.files)),
   ];
-  expect(shared).toHaveLength(11);
+  expect(shared).toHaveLength(13);
   for (const path of shared) {
     expect(generated.manifest.files[`site/${path}`]).toEqual({ owner: "user" });
     expect(await readFile(join(generated.path, "site", path), "utf8")).toBe(
@@ -116,7 +116,11 @@ test("generated block sources are user-owned and identical to the reference site
 test("generated Astro builds every built-in block from one export and rejects unsupported content", async () => {
   const generated = await project();
   const exported = await fixture();
+  const embed = exported.entries
+    .find((entry) => entry.modelKey === "about")
+    .blocks.find((block) => block.type === "videoEmbed");
   exported.entries = exported.entries.slice(0, 2);
+  exported.entries[0].blocks.push({ ...embed, key: "starter-video", position: 9000 });
   let served = exported;
   const token = "private-test-build-credential";
   const server = await exportServer(token, () => served);
@@ -141,12 +145,13 @@ test("generated Astro builds every built-in block from one export and rejects un
       "utf8",
     );
     // The header renders the published navigation global before the entry's blocks.
-    expect([...home.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1])).toEqual([
-      "navigation",
-      "hero",
-      "navigation",
-      "cta",
-    ]);
+    expect(
+      [
+        ...home
+          .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, "")
+          .matchAll(/data-lace-block="([^"]+)"/gu),
+      ].map((match) => match[1]),
+    ).toEqual(["navigation", "hero", "navigation", "cta", "videoEmbed"]);
     expect([...post.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1])).toEqual([
       "navigation",
       "richText",

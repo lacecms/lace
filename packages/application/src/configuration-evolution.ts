@@ -180,6 +180,7 @@ export const CONFIGURATION_SYNC_SCAN_PAGE_SIZE = 100;
 export const CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT = 20;
 
 const FIELD_PROPERTIES = new Set([
+  "embedProviders",
   "fields",
   "item",
   "minItems",
@@ -270,6 +271,16 @@ function compareField(key: string, before: JsonObject, after: JsonObject): Struc
   const changed: string[] = [];
   // Any tightened property makes the whole field change `validated`.
   let tightened = false;
+  let providerBreaking = false;
+  if (!same(before.embedProviders, after.embedProviders)) {
+    changed.push("embedProviders");
+    if (after.embedProviders !== undefined) {
+      const nextProviders = new Set(stringList(after.embedProviders));
+      providerBreaking =
+        before.embedProviders === undefined ||
+        stringList(before.embedProviders).some((provider) => !nextProviders.has(provider));
+    }
+  }
   const bounds: readonly [string, typeof lowerBoundChange][] = [
     ["minItems", lowerBoundChange],
     ["maxItems", upperBoundChange],
@@ -310,7 +321,7 @@ function compareField(key: string, before: JsonObject, after: JsonObject): Struc
   return [
     {
       ...(backfill ? { backfill: true } : {}),
-      class: tightened ? "validated" : "compatible",
+      class: providerBreaking ? "breaking" : tightened ? "validated" : "compatible",
       kind: "field-changed",
       properties: changed,
       scope: "field",

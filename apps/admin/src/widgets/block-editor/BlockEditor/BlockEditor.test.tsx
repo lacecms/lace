@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent, type UserEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
+import { builtInBlocks, toBlockMetadata } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 import {
   addBlock,
@@ -485,3 +486,150 @@ test("saves keep loaded block envelopes, new blocks take setting defaults, copie
   expect(added).toMatchObject({ hidden: false, settings: { align: "left" }, type: "panel" });
   expect(added).not.toHaveProperty("anchor");
 });
+
+test("generic video embed authoring validates URLs, selects and clears a poster", async () => {
+  const user = userEvent.setup();
+  const model: ContentModelDto = {
+    blockDefinitions: [toBlockMetadata(builtInBlocks.videoEmbed)],
+    blocks: ["videoEmbed"],
+    fields: {},
+    key: "posts",
+    kind: "collection",
+    route: "/posts/:slug",
+    version: 1,
+  };
+  const saveDraft = vi.fn(async (_id: string, input: Parameters<AdminClient["saveDraft"]>[1]) => ({
+    ...draftEntry,
+    draft: { ...draftEntry.draft, ...input, revision: 3 },
+  }));
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "editor-1", role: "editor" }),
+    client({
+      listModels: async () => ({ items: [model] }),
+      saveDraft: saveDraft as unknown as AdminClient["saveDraft"],
+      listMedia: async () => ({
+        items: [
+          {
+            createdAt: "2026-09-20T00:00:00.000Z",
+            createdBy: { id: "editor-1", displayName: "Editor" },
+            id: "media-1",
+            filename: "cover.png",
+            mimeType: "image/png",
+            size: 12,
+            status: "active",
+            updatedAt: "2026-09-20T00:00:00.000Z",
+            url: "https://lace.test/cover.png",
+            usageCount: 0,
+          },
+        ],
+      }),
+    }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await addBlock(user, "Video embed");
+  const card = () => screen.getByRole("article", { name: "Video embed" });
+  await user.type(
+    within(card()).getByRole("textbox", { name: /Video URL/ }),
+    "https://example.com/clip",
+  );
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  expect(saveDraft).not.toHaveBeenCalled();
+  expect(
+    (await screen.findAllByText("Enter a valid youtube or vimeo video URL.")).length,
+  ).toBeGreaterThan(0);
+  const url = within(card()).getByRole("textbox", { name: /Video URL/ });
+  await user.clear(url);
+  await user.type(url, "https://vimeo.com/123/abc");
+  await user.type(within(card()).getByRole("textbox", { name: /^Title/ }), "Studio film");
+  await user.click(within(card()).getByRole("button", { name: "Choose media for Preview image" }));
+  await user.click(
+    await within(screen.getByRole("dialog")).findByRole("button", { name: "cover.png" }),
+  );
+  expect(
+    within(card()).getByRole("button", { name: "Replace media for Preview image" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
+  expect(saveDraft.mock.calls[0]![1].blocks[0]!.data).toMatchObject({
+    url: "https://vimeo.com/123/abc",
+    title: "Studio film",
+    poster: "media-1",
+  });
+  expect(document.querySelector("iframe")).toBeNull();
+  screen.getByRole("button", { name: "Media actions for Preview image" }).focus();
+  await user.keyboard("{Enter}");
+  await user.click(screen.getByRole("menuitem", { name: "Remove media from Preview image" }));
+  expect(
+    within(card()).getByRole("button", { name: "Choose media for Preview image" }),
+  ).toBeInTheDocument();
+}, 15_000);
+
+test.each(["viewer", "editor"] as const)(
+  "video embeds retain %s access and conflict recovery",
+  async (role) => {
+    const user = userEvent.setup();
+    const model: ContentModelDto = {
+      blockDefinitions: [toBlockMetadata(builtInBlocks.videoEmbed)],
+      blocks: ["videoEmbed"],
+      fields: {},
+      key: "posts",
+      kind: "collection",
+      route: "/posts/:slug",
+      version: 1,
+    };
+    const block = {
+      key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      type: "videoEmbed",
+      schemaVersion: 1,
+      position: 1000,
+      hidden: false,
+      settings: {},
+      data: { url: "https://vimeo.com/123", title: "Original film" },
+    };
+    const saveDraft = vi.fn(async () => {
+      throw new AdminClientError({
+        code: "CONTENT_REVISION_CONFLICT",
+        message: "The draft was modified by another request.",
+        status: 409,
+      });
+    });
+    renderRoute(
+      "/content/posts/entry-1",
+      staticSessionSource({ id: `${role}-1`, role }),
+      client({
+        listModels: async () => ({ items: [model] }),
+        loadEntry: async () => ({ ...draftEntry, draft: { ...draftEntry.draft, blocks: [block] } }),
+        saveDraft,
+      }),
+    );
+    await screen.findByRole("heading", { name: "Edit posts" });
+    const title = within(screen.getByRole("article", { name: "Video embed" })).getByRole(
+      "textbox",
+      { name: /^Title/ },
+    );
+    if (role === "viewer") {
+      expect(title).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Choose media for Preview image" }),
+      ).not.toBeInTheDocument();
+      expect(saveDraft).not.toHaveBeenCalled();
+    } else {
+      await user.clear(title);
+      await user.type(title, "Local film");
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Draft changed elsewhere");
+      expect(title).toHaveValue("Local film");
+      await user.click(screen.getByRole("button", { name: "Reload server draft" }));
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole("article", { name: "Video embed" })).getByRole("textbox", {
+            name: /^Title/,
+          }),
+        ).toHaveValue("Original film"),
+      );
+    }
+    expect(document.querySelector("iframe")).toBeNull();
+  },
+  15_000,
+);

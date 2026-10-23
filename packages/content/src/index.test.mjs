@@ -617,6 +617,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
     "navigation",
     "quote",
     "richText",
+    "videoEmbed",
   ]);
   expect(builtInBlocks.hero.fields.heading.required).toBe(true);
   expect(builtInBlocks.image.fields.media.required).toBe(true);
@@ -661,6 +662,11 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
       description: "Formatted text with headings, lists, and links.",
       label: "Rich text",
       type: "richText",
+    },
+    {
+      type: "videoEmbed",
+      label: "Video embed",
+      description: "A YouTube or Vimeo video with an optional image preview.",
     },
   ]);
   expect(() => defineBlockRegistry([builtInBlocks.hero, builtInBlocks.hero])).toThrow(
@@ -1886,4 +1892,106 @@ test("Gallery and custom lists share visibility without structural setting chang
     layoutWrap: true,
     layoutPreset: "auto",
   });
+});
+
+test("embed URL grammar is shared by definitions, metadata and compiled nested validation", async () => {
+  const { parseVideoEmbed, normalizeFieldDefinition } = await import("../dist/index.js");
+  const descriptor = field.url({ embedProviders: ["vimeo", "youtube"], required: true });
+  expect(descriptor.embedProviders).toEqual(["youtube", "vimeo"]);
+  const metadata = normalizeFieldDefinition(
+    JSON.parse(JSON.stringify(toFieldMetadata(descriptor))),
+  );
+  const accepted = [
+    "https://youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://www.youtube.com/watch/?v=dQw4w9WgXcQ&autoplay=1",
+    "https://m.youtube.com/shorts/dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ/",
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    "https://youtube.com/embed/dQw4w9WgXcQ",
+    "https://vimeo.com/76979871",
+    "https://www.vimeo.com/76979871/abc123def",
+    "https://player.vimeo.com/video/76979871?h=abc123def",
+    "https://vimeo.com/76979871/abc123def?h=abc123def",
+    "https://VIMEO.com:443/76979871?h=abc123def#t=5",
+  ];
+  const rejected = [
+    "http://vimeo.com/123",
+    "https://vimeo.com:444/123",
+    "https://a@vimeo.com/123",
+    "https://youtube.com.evil.test/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/short",
+    "https://youtube.com/watch?v=dQw4w9WgXcQ&v=dQw4w9WgXcQ",
+    "https://vimeo.com/123/a?h=b",
+    "https://vimeo.com/123?h=a&h=a",
+    "https://vimeo.com/0",
+    "https://vimeo.com/event/123",
+    "https://vimeo.com/123?h=",
+    "https://youtube.com/playlist?list=abc",
+    "https://example.com/video.mp4",
+    '<iframe src="https://vimeo.com/123"></iframe>',
+    "/watch",
+    "javascript:alert(1)",
+  ];
+  for (const value of accepted) {
+    expect(parseVideoEmbed(value), value).toBeDefined();
+    for (const definition of [descriptor, metadata]) {
+      expect(() => validateFieldValue(definition, value, [], "publish"), value).not.toThrow();
+      expect(
+        (await import("valibot")).safeParse(compileFieldSchema(definition), value).success,
+      ).toBe(true);
+    }
+  }
+  for (const value of rejected) {
+    expect(parseVideoEmbed(value), value).toBeUndefined();
+    for (const definition of [descriptor, metadata])
+      expect(() => validateFieldValue(definition, value, [], "draft"), value).toThrow();
+  }
+  expect(parseVideoEmbed(accepted[1]).src).toBe(
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+  );
+  expect(parseVideoEmbed(accepted[7]).src).toBe(
+    "https://player.vimeo.com/video/76979871?h=abc123def",
+  );
+  const nested = field.list({ item: field.group({ fields: { url: metadata } }) });
+  expect(() =>
+    validateFieldValue(nested, [{ url: "https://example.com/" }], ["clips"], "draft"),
+  ).toThrow(ContentValidationError);
+  try {
+    validateFieldValue(nested, [{ url: "https://example.com/" }], ["clips"], "draft");
+  } catch (error) {
+    expect(error.issues[0].path).toEqual(["clips", 0, "url"]);
+  }
+  expect(() => validateModelFields({ url: descriptor }, {}, "draft")).not.toThrow();
+  expect(() => validateModelFields({ url: descriptor }, {}, "publish")).toThrow();
+  expect(() =>
+    validateFieldValue(field.url({ embedProviders: ["vimeo"] }), accepted[0], [], "draft"),
+  ).toThrow();
+});
+
+test("embed descriptor rejects invalid options and preserves ordinary URL metadata", () => {
+  for (const embedProviders of [[], ["youtube", "youtube"], ["other"], "vimeo", null])
+    expect(() => field.url({ embedProviders })).toThrow();
+  expect(() => field.text({ embedProviders: ["youtube"] })).toThrow();
+  expect(() =>
+    field.url({
+      embedProviders: ["vimeo"],
+      defaultValue: "https://youtube.com/watch?v=dQw4w9WgXcQ",
+    }),
+  ).toThrow();
+  expect(toFieldMetadata(field.url({ required: true }))).toEqual({ type: "url", required: true });
+  expect(() => validateFieldValue(field.url(), "/work", [], "publish")).not.toThrow();
+});
+
+test("videoEmbed is a public DSL block with draft and publication semantics", () => {
+  const definition = builtInBlocks.videoEmbed;
+  expect(definition.version).toBe(1);
+  expect(definition.settings).toBeUndefined();
+  expect(validateBlockData(definition, {}, "draft")).toEqual({});
+  expect(() => validateBlockData(definition, {}, "publish")).toThrow();
+  const data = { url: "https://vimeo.com/123", title: "Studio" };
+  expect(validateBlockData(definition, data, "publish")).toEqual(data);
+  expect(() => validateBlockData(definition, { ...data, title: "" }, "publish")).toThrow();
+  expect(() =>
+    validateBlockData(definition, { ...data, url: "https://example.com" }, "draft"),
+  ).toThrow();
 });

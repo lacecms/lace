@@ -8,6 +8,10 @@ export default getViteConfig(
     resolve: {
       alias: [
         {
+          find: "@lacecms/render",
+          replacement: fileURLToPath(new URL("../render/dist/index.js", import.meta.url)),
+        },
+        {
           find: /^@lacecms\/astro$/u,
           replacement: fileURLToPath(new URL("./dist/index.js", import.meta.url)),
         },
