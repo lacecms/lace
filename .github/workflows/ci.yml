@@ -53,6 +53,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Install Chromium for browser tests
+        run: pnpm --filter @lacecms/app-admin exec playwright install --with-deps chromium
+
       - name: Test
         run: pnpm test
 
