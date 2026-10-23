@@ -4,8 +4,6 @@ import {
   anchorProblem,
   classNameProblem,
   fieldControlId,
-  FieldRenderer,
-  FieldLayout,
   type DraftEditorValues,
 } from "../../../entities/content/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
@@ -13,6 +11,7 @@ import { Input } from "../../../shared/ui/Input/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { Switch } from "../../../shared/ui/Switch/index.js";
 import { toast } from "../../../shared/ui/Toaster/index.js";
+import { BlockSettingsFields } from "../BlockSettingsFields/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 
 type EditorControl = Control<DraftEditorValues, unknown, DraftEditorValues>;
@@ -180,24 +179,12 @@ export function BlockSettingsPanel({
           <h4 className="m-0 text-sm font-semibold" id={`${hiddenId}-settings`}>
             Block settings
           </h4>
-          <FieldLayout
-            fields={definition.settings ?? {}}
-            layout={definition.settingsLayout}
-            label="Block settings"
+          <BlockSettingsFields
+            control={control}
+            definition={definition}
             errors={error?.settings}
-            renderField={(key) => {
-              const setting = definition.settings![key]!;
-              return (
-                <FieldRenderer
-                  control={control}
-                  definition={setting}
-                  error={settingsError(key)}
-                  fieldKey={key}
-                  key={key}
-                  name={`blocks.${index}.settings.${key}`}
-                />
-              );
-            }}
+            errorFor={settingsError}
+            index={index}
           />
         </section>
       )}
@@ -261,7 +248,6 @@ export function BlockSettingsSummary({
   readonly index: number;
 }) {
   const titleId = `field-blocks-${index}-settings-title`;
-  const settings = Object.entries(definition.settings ?? {});
   return (
     <section aria-labelledby={titleId} className="grid gap-3 border-t border-border pt-3">
       <h4 className="m-0 text-sm font-semibold" id={titleId}>
@@ -279,24 +265,7 @@ export function BlockSettingsSummary({
           {className === undefined || className.trim() === "" ? "None" : className}
         </dd>
       </dl>
-      <FieldLayout
-        fields={definition.settings ?? {}}
-        layout={definition.settingsLayout}
-        label="Block settings"
-        renderField={(key) => {
-          const setting = definition.settings![key]!;
-          return (
-            <FieldRenderer
-              control={control}
-              definition={setting}
-              error={undefined}
-              fieldKey={key}
-              key={key}
-              name={`blocks.${index}.settings.${key}`}
-            />
-          );
-        }}
-      />
+      <BlockSettingsFields control={control} definition={definition} index={index} />
     </section>
   );
 }

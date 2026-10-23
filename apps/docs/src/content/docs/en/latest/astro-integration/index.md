@@ -50,3 +50,64 @@ Use public `data-lace-model`, `data-lace-entry`, `data-lace-block`, `data-lace-b
 ## Develop and deploy
 
 Dev revalidates exports on render, but `getStaticPaths` and data passed through static path props may need a restart after publication. Token/environment or new/renamed route changes need restart. `pnpm build` creates a new static artifact. Host that artifact independently of the CMS; [deployment](../deployment/) explains automatic versus manual rebuilding.
+
+## List layout styling
+
+Gallery v4 installs `ListLayout.css` beside `GalleryBlock.astro`, which imports it
+automatically. Both files are user-owned and hash guarded as one registry item.
+A custom list can reuse the installed stylesheet with a relative import and the
+same scalar settings described in [content modeling](../content-modeling/composites/).
+Mark the existing outer element `data-lace-layout-container`, its list
+`data-lace-layout={settings.layoutMode}`, `data-lace-wrap={String(settings.layoutWrap)}`,
+`data-lace-preset={settings.layoutPreset}`, and direct items `data-lace-layout-item`.
+Do not register the CSS under a second item's ownership.
+
+The stylesheet uses container queries and zero-specificity selectors in the
+`lace-layout` layer. It owns neutral flex/grid structure and list resets only;
+unmarked nested lists keep their styles. It sets no colors, typography, image
+crop, aspect ratio or fixed height. Vertical flex wrapping needs a definite
+height supplied by your CSS. Set `--lace-list-gap` (default 0) and
+`--lace-list-item-min` (default 14rem) on the list. Unlayered site CSS overrides
+display, gap and columns without `!important`. With your own layers, put the
+site theme after `lace-layout` in the layer order.
+
+The starter keeps its 1rem Gallery gap and 4:3 image crop in site CSS. Remove old
+unlayered `display: grid` and `grid-template-columns` rules that would force flex
+back into grid. Keep your image and decorative rules. Grid/auto keeps Gallery's
+existing image `sizes`; other layouts use `100vw`. Tune the user-owned component's
+sizes to actual site widths, especially for custom layouts and featured images.
+
+### Upgrade Gallery v3 to v4
+
+1. Back up content and site sources. Upgrade matching engine, admin, content,
+   contracts, CLI, SDK/render and Astro packages before adopting card metadata.
+   Older engines reject the new metadata. No SQL migration is required.
+2. Run `lace add block gallery --site site --dry-run`, review the proposed
+   component and `ListLayout.css`, then run without `--dry-run`. For a connected
+   site, pass that site's directory. A CSS or component conflict protects both
+   files and the item's lock revision. Use `--write-new` to inspect proposed
+   files and manually merge edits; active files are never overwritten. Repeat
+   the command after resolving conflicts and review the lock/diffs.
+3. Remove competing structural Gallery rules from site CSS as described above.
+   Keep spacing through `--lace-list-gap: 1rem` and keep image/theme rules.
+4. Adopt Gallery definition v4 and increment each model version whose structure
+   includes Gallery. Keep migrations 2/3; migration 4 preserves data/settings and
+   normal validation supplies missing `grid`, true and `auto` defaults. Deploy
+   matching CMS/site definitions and renderer together: mismatched versions fail
+   existing guards. Synchronize with `lace content sync` on the intended runtime.
+   Interrupted block migration resumes on rerun using existing guarded units.
+5. Verify draft/published/hidden lists, links overriding lightboxes, all layouts,
+   and a site build. Publish scalar settings normally; diagrams never enter the
+   authored or public payload. Other built-in block versions remain unchanged.
+
+Before synchronization, rollback can restore the earlier code and site files.
+After synchronization, older Gallery code cannot consume v4 blocks: restore the
+pre-upgrade content backup with matching code/site sources. There is no automatic
+down-migration; do not silently strip newly authored settings.
+
+For mode-specific admin controls, adopt both `listLayoutSettings()` and block-level
+`settingsVisibility: listLayoutSettingsVisibility()` from `@lacecms/content`.
+Wrap items appears for flex and Grid preset for grid, with hidden values retained
+and validated. Errors can reveal an inactive control. This optional metadata needs
+matching updated CMS/admin packages and ordinary sync; existing sync may request
+a build, but visibility requires no Astro/CSS or content migration.

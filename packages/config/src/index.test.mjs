@@ -1035,3 +1035,93 @@ test("CE9B layouts are projection-only at every owner and preserve content keys"
     defineGlobal({ key: "bad", version: 1, fields: { name: field.text() }, layout }),
   ).toThrow();
 });
+
+test("select cards change projection only and preserve identically named content", async () => {
+  const make = (label, data = "stored", options = ["a", "b"], defaultValue = "a") => {
+    const select = field.select({
+      options,
+      defaultValue,
+      ...(label
+        ? {
+            presentation: { control: "cards", choices: options.map((value) => ({ value, label })) },
+          }
+        : {}),
+    });
+    const fields = {
+      nested: field.list({
+        item: field.group({
+          fields: {
+            select,
+            presentation: field.text(),
+            choices: field.text(),
+            diagram: field.text(),
+          },
+          defaultValue: { presentation: data, choices: "choices", diagram: "diagram" },
+        }),
+      }),
+    };
+    return defineConfig({
+      blocks: [defineBlock({ type: "cards", version: 1, fields, settings: { select } })],
+      content: [homeModel({ blocks: ["cards"], fields })],
+    });
+  };
+  const before = await make(undefined);
+  for (const label of ["First", "Second"]) {
+    const after = await make(label);
+    expect(after.structureHash).toBe(before.structureHash);
+    expect(after.runtime.content[0].structureHash).toBe(before.runtime.content[0].structureHash);
+    expect(after.projectionHash).not.toBe(before.projectionHash);
+    expect((await make(label, "changed")).structureHash).not.toBe(after.structureHash);
+    expect((await make(label, "stored", ["a", "b", "c"])).structureHash).not.toBe(
+      after.structureHash,
+    );
+    expect((await make(label, "stored", ["a", "b"], "b")).structureHash).not.toBe(
+      after.structureHash,
+    );
+  }
+});
+
+test("block settings visibility is projection-only and preserves namesake content/defaults", async () => {
+  const make = (values, data = "stored", options = ["a", "b"], defaultValue = "a") =>
+    defineConfig({
+      blocks: [
+        defineBlock({
+          type: "conditional",
+          version: 1,
+          fields: {
+            nested: field.group({
+              fields: {
+                settingsVisibility: field.text(),
+                setting: field.text(),
+                values: field.text(),
+              },
+              defaultValue: { settingsVisibility: data, setting: "mode", values: "stored" },
+            }),
+          },
+          settings: {
+            mode: field.select({ options, required: true, defaultValue }),
+            wrap: field.boolean({ defaultValue: true }),
+          },
+          ...(values ? { settingsVisibility: { wrap: { setting: "mode", values } } } : {}),
+        }),
+      ],
+      content: [homeModel({ blocks: ["conditional"] })],
+    });
+  const before = await make();
+  for (const values of [["a"], ["b"], ["a", "b"]]) {
+    const after = await make(values);
+    expect(after.structureHash).toBe(before.structureHash);
+    expect(after.runtime.content[0].structureHash).toBe(before.runtime.content[0].structureHash);
+    expect(after.projectionHash).not.toBe(before.projectionHash);
+    expect((await make(values, "changed")).structureHash).not.toBe(after.structureHash);
+    expect((await make(values, "stored", ["a", "b", "c"])).structureHash).not.toBe(
+      after.structureHash,
+    );
+    expect((await make(values, "stored", ["a", "b"], "b")).structureHash).not.toBe(
+      after.structureHash,
+    );
+  }
+  expect(() =>
+    definePage({ key: "wrong", version: 1, path: "/wrong", settingsVisibility: {} }),
+  ).toThrow(/settingsVisibility/);
+});

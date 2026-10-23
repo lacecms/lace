@@ -73,4 +73,4 @@ export { fieldControlId } from "./field-types.js";
 
 export { EntryListBudget, useCompositeEditing } from "./FieldRenderer/index.js";
 
-export { FieldLayout } from "./FieldLayout/index.js";
+export { FieldLayout, layoutHasProblems } from "./FieldLayout/index.js";

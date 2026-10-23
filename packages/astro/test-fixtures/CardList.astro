@@ -1,0 +1,13 @@
+---
+import "../../../registry/astro/gallery/ListLayout.css";
+import type { BlockProps } from "@lacecms/render";
+import { defineBlock, field, listLayoutSettings, listLayoutSettingsVisibility } from "@lacecms/content";
+const definition = defineBlock({ type: "cardList", version: 1, fields: { cards: field.list({ defaultValue: [], item: field.text() }) }, settings: listLayoutSettings(), settingsVisibility: listLayoutSettingsVisibility() });
+type Props = BlockProps<typeof definition>;
+const { data, settings } = Astro.props;
+---
+<section data-lace-layout-container>
+  <ol data-lace-layout={settings.layoutMode} data-lace-wrap={String(settings.layoutWrap)} data-lace-preset={settings.layoutPreset}>
+    {data.cards.map(card => <li data-lace-layout-item>{card}<ul><li>Nested list</li></ul></li>)}
+  </ol>
+</section>

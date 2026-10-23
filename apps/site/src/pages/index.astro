@@ -1,8 +1,8 @@
 ---
 import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { blocks } from "../lace/blocks";
-import { getSite } from "../lib/lace";
+import { blocks } from "../lace/blocks.js";
+import { getSite } from "../lib/lace.js";
 
 const site = await getSite();
 const home = site.byPath("/");

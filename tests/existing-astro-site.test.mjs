@@ -20,6 +20,7 @@ const sharp = createRequire(join(workspace, "apps/site/package.json"))("sharp");
 const blockFiles = [
   "lace.site.json",
   "src/lace/blocks.ts",
+  "src/components/lace/ListLayout.css",
   ...["Cta", "Gallery", "Hero", "Image", "Navigation", "Quote", "RichText"].map(
     (name) => `src/components/lace/${name}Block.astro`,
   ),

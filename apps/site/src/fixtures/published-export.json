@@ -338,9 +338,12 @@
           },
           "key": "post-gallery",
           "position": 3,
-          "schemaVersion": 3,
+          "schemaVersion": 4,
           "settings": {
-            "lightbox": true
+            "lightbox": true,
+            "layoutMode": "grid",
+            "layoutWrap": true,
+            "layoutPreset": "auto"
           },
           "type": "gallery"
         }
@@ -482,7 +485,7 @@
         "tagline": "Notes from the reference site",
         "description": "The reference site of the Lace CMS.",
         "image": "hero-media",
-        "titleTemplate": "%s · Lace Journal"
+        "titleTemplate": "%s \u00b7 Lace Journal"
       },
       "id": "settings-entry",
       "modelKey": "settings",

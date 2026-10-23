@@ -1,0 +1,85 @@
+/* Neutral list structure. Unlayered site CSS overrides every rule here. */
+@layer lace-layout {
+  :where([data-lace-layout-container]) {
+    container-type: inline-size;
+    container-name: lace-list;
+    min-inline-size: 0;
+  }
+  :where([data-lace-layout]) {
+    --lace-list-gap: 0;
+    --lace-list-item-min: 14rem;
+    gap: var(--lace-list-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-inline-size: 0;
+  }
+  :where([data-lace-layout] > [data-lace-layout-item]) {
+    min-inline-size: 0;
+    min-block-size: 0;
+  }
+  :where([data-lace-layout="flex-row"], [data-lace-layout="flex-column"]) {
+    display: flex;
+  }
+  :where([data-lace-layout="flex-row"]) {
+    flex-direction: row;
+  }
+  :where([data-lace-layout="flex-column"]) {
+    flex-direction: column;
+  }
+  :where([data-lace-layout="flex-row"] > [data-lace-layout-item]) {
+    flex: 1 1 var(--lace-list-item-min);
+  }
+  :where([data-lace-layout="flex-column"] > [data-lace-layout-item]) {
+    /* Column items follow their content height, including responsive images. */
+    flex: 0 0 auto;
+  }
+  :where([data-lace-layout][data-lace-wrap="true"]) {
+    flex-wrap: wrap;
+  }
+  :where([data-lace-layout][data-lace-wrap="false"]) {
+    flex-wrap: nowrap;
+  }
+  :where([data-lace-layout="grid"]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :where([data-lace-layout="grid"][data-lace-preset="auto"]) {
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--lace-list-item-min), 100%), 1fr));
+  }
+  @container lace-list (min-width: 32rem) {
+    :where(
+      [data-lace-layout="grid"][data-lace-preset="columns-2"],
+      [data-lace-layout="grid"][data-lace-preset="columns-3"],
+      [data-lace-layout="grid"][data-lace-preset="columns-4"],
+      [data-lace-layout="grid"][data-lace-preset="featured-first"]
+    ) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    :where([data-lace-layout="grid"][data-lace-preset="narrow-wide"]) {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    }
+    :where([data-lace-layout="grid"][data-lace-preset="wide-narrow"]) {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    }
+    :where(
+      [data-lace-layout="grid"][data-lace-preset="featured-first"]
+        > [data-lace-layout-item]:first-child
+    ) {
+      grid-column: 1 / -1;
+    }
+  }
+  @container lace-list (min-width: 48rem) {
+    :where(
+      [data-lace-layout="grid"][data-lace-preset="columns-3"],
+      [data-lace-layout="grid"][data-lace-preset="columns-4"]
+    ) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @container lace-list (min-width: 64rem) {
+    :where([data-lace-layout="grid"][data-lace-preset="columns-4"]) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+}

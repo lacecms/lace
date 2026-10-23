@@ -129,6 +129,7 @@ describe("installation into an independent Astro site", () => {
     for (const path of [
       "lace.site.json",
       "src/lace/blocks.ts",
+      "src/components/lace/ListLayout.css",
       ...builtIns.map(
         (type) => `src/components/lace/${type[0].toUpperCase()}${type.slice(1)}Block.astro`,
       ),
@@ -179,7 +180,7 @@ describe("installation into an independent Astro site", () => {
     ]);
     const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
     expect(Object.keys(lock.items)).toEqual(builtIns);
-    expect(lock.items.gallery.revision).toBe(3);
+    expect(lock.items.gallery.revision).toBe(5);
     expect(lock.items.navigation.revision).toBe(1);
     const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
     expect(map).toBe(await readFile(join(starterSite, "src/lace/blocks.ts"), "utf8"));
@@ -623,4 +624,102 @@ describe("CLI process", () => {
     expect(mismatch.status).toBe(3);
     expect(mismatch.stderr).toContain("differs from framework");
   });
+});
+
+test("case-insensitive targets collide with selected and already installed owners before writes", async () => {
+  const root = await tempRoot();
+  const site = await astroSite(root);
+  const registry = await newerRegistry(root, async (directory) => {
+    const path = join(directory, "astro/cta/item.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.files[0].target = "heroblock.ASTRO";
+    await writeFile(path, JSON.stringify(manifest));
+  });
+  const before = await tree(site);
+  await expect(run(root, ["hero", "cta"], registry)).rejects.toThrow(/collides/);
+  expect(await tree(site)).toEqual(before);
+  await run(root, ["hero"]);
+  const installed = await tree(site);
+  await expect(run(root, ["cta"], registry)).rejects.toThrow(/collides/);
+  expect(await tree(site)).toEqual(installed);
+});
+
+async function companionRegistry(root, revision = 2) {
+  return newerRegistry(root, async (directory) => {
+    const path = join(directory, "astro/hero/item.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.revision = revision;
+    manifest.files.push({ source: "A.css", target: "A.css", role: "stylesheet" });
+    await writeFile(path, JSON.stringify(manifest));
+    await writeFile(join(directory, "astro/hero/A.css"), `/* revision ${revision} */\n`);
+    await writeFile(
+      join(directory, "astro/hero/HeroBlock.astro"),
+      `---\nimport './A.css';\n---\n<p>Revision ${revision}</p>\n`,
+    );
+  });
+}
+test("CSS companions install, restore and remain atomic on conflicts with .new recovery", async () => {
+  const root = await tempRoot();
+  const site = await astroSite(root);
+  const registry = await companionRegistry(root);
+  const before = await tree(site);
+  await run(root, ["hero", "--dry-run"], registry);
+  expect(await tree(site)).toEqual(before);
+  await run(root, ["hero"], registry);
+  const css = join(site, "src/components/lace/A.css"),
+    component = join(site, "src/components/lace/HeroBlock.astro");
+  expect(await readFile(join(site, "src/lace/blocks.ts"), "utf8")).toContain("HeroBlock.astro");
+  expect(await readFile(join(site, "src/lace/blocks.ts"), "utf8")).not.toContain("A.css");
+  expect((await run(root, ["hero"], registry)).data.items[0].status).toBe("current");
+  await rm(css);
+  await run(root, ["hero"], registry);
+  expect(await readFile(css, "utf8")).toContain("revision 2");
+  await writeFile(css, "/* my theme */\n");
+  const installedComponent = await readFile(component),
+    lock = await readFile(join(site, "lace.site.json"));
+  const next = await companionRegistry(root, 3);
+  const result = await run(root, ["hero", "--write-new"], next);
+  expect(result.data.items[0].status).toBe("conflict");
+  expect(await readFile(component)).toEqual(installedComponent);
+  expect(await readFile(join(site, "lace.site.json"))).toEqual(lock);
+  expect(await readFile(css, "utf8")).toBe("/* my theme */\n");
+  expect(await readFile(`${css}.new`, "utf8")).toContain("revision 3");
+  expect(await readFile(`${component}.new`, "utf8")).toContain("Revision 3");
+});
+
+test("Gallery v3 upgrades to v4 as a component/CSS pair and protects edited v3 source", async () => {
+  const root = await tempRoot();
+  const site = await astroSite(root);
+  const previous = await newerRegistry(root, async (directory) => {
+    const path = join(directory, "astro/gallery/item.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.blockVersion = 3;
+    manifest.revision = 3;
+    manifest.files = manifest.files.filter((file) => file.role === "component");
+    await writeFile(path, JSON.stringify(manifest));
+    await writeFile(
+      join(directory, "astro/gallery/GalleryBlock.astro"),
+      "<section>Version 3</section>\n",
+    );
+  });
+  await run(root, ["gallery"], previous);
+  const component = join(site, "src/components/lace/GalleryBlock.astro"),
+    css = join(site, "src/components/lace/ListLayout.css");
+  await writeFile(component, "<section>My edited version 3</section>\n");
+  const baseline = await readFile(join(site, "lace.site.json"));
+  const conflict = await run(root, ["gallery", "--write-new"]);
+  expect(conflict.data.items[0].status).toBe("conflict");
+  expect(await readFile(component, "utf8")).toContain("My edited version 3");
+  await expect(stat(css)).rejects.toThrow();
+  expect(await readFile(join(site, "lace.site.json"))).toEqual(baseline);
+  expect(await readFile(`${component}.new`, "utf8")).toContain('import "./ListLayout.css"');
+  expect(await readFile(`${css}.new`, "utf8")).toContain("@layer lace-layout");
+  // Restore the backup of unmodified v3 source, then apply the reviewed update.
+  await writeFile(component, "<section>Version 3</section>\n");
+  await run(root, ["gallery"]);
+  const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
+  expect(lock.items.gallery.revision).toBe(5);
+  expect(Object.keys(lock.items.gallery.files)).toHaveLength(2);
+  expect(await readFile(component, "utf8")).toContain('import "./ListLayout.css"');
+  expect(await readFile(css, "utf8")).toContain("@layer lace-layout");
 });

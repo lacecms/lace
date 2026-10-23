@@ -177,6 +177,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     "settings",
     "layout",
     "settingsLayout",
+    "settingsVisibility",
     "type",
     "version",
   ]);
@@ -205,6 +206,12 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
       ...(value.settingsLayout === undefined
         ? {}
         : { settingsLayout: value.settingsLayout as unknown as FormLayout }),
+      ...(value.settingsVisibility === undefined
+        ? {}
+        : {
+            settingsVisibility:
+              value.settingsVisibility as import("@lacecms/content").SettingsVisibility,
+          }),
       ...(value.settings === undefined ? {} : { settings: value.settings }),
       type: value.type,
       version: value.version,

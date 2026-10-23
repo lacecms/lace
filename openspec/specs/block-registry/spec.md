@@ -144,13 +144,21 @@ minimum of 1 and a maximum of 20 items, each item a group of a required text
 each child a group of a required text `label` and a required `url`; both link
 lists SHALL use `label` as their item label. URL values SHALL follow the
 existing safe URL rules.
-`image` SHALL be at definition version 4 and `gallery` at definition version
-3. Both SHALL declare one boolean setting `lightbox` labelled "Open full
-screen" with a description and the default `false`. `image` SHALL declare
-migrations to versions 2, 3 and 4, and `gallery` migrations to versions 2 and
-3, each returning the stored data unchanged and no settings, so migrated
-blocks keep their data and settings and receive the setting's default when
-they had none. `navigation` SHALL
+`image` and `gallery` SHALL be at definition version 4. Both SHALL declare
+a boolean setting `lightbox` labelled "Open full screen" with a description
+and the default `false`. Gallery SHALL additionally declare the reusable
+`layoutMode`, `layoutWrap` and `layoutPreset` scalar settings from the
+list-layout contract, with defaults `grid`, `true` and `auto`, respectively.
+Its Settings form SHALL place those fields in a Layout section before a
+Behavior section containing lightbox, using ordinary settingsLayout metadata.
+Arrangement SHALL remain visible. Wrap and preset controls SHALL follow the
+shared mode-specific visibility and validation-error reveal contract.
+`image` SHALL declare migrations to versions 2, 3 and 4. Gallery SHALL retain
+identity migrations to versions 2 and 3 and add the version 4 migration, which
+returns stored data and settings unchanged; normal setting validation SHALL
+supply any absent defaults. Migration SHALL preserve item order, media usage,
+alt/caption/link overrides, lightbox values and block-envelope values, including
+hidden blocks and both draft and published snapshots. `navigation` SHALL
 be at definition version 1. The other built-ins SHALL stay at version 1 and
 SHALL declare no settings.
 Each built-in SHALL carry a non-empty human-readable label and a non-empty
@@ -180,9 +188,10 @@ configuration or hashes of a configuration that does not register them.
   changes
 
 #### Scenario: Version 1 gallery blocks migrate unchanged
-- **WHEN** a version 1 `gallery` block is migrated to the configured version 3
+- **WHEN** a version 1 `gallery` block is migrated to the configured version 4
 - **THEN** the migrated data equals the stored data and its settings are
-  `{ lightbox: false }` after defaults
+  `{ lightbox: false, layoutMode: "grid", layoutWrap: true, layoutPreset: "auto" }`
+  after defaults
 
 #### Scenario: Version 3 image blocks keep their lightbox setting
 - **WHEN** a version 3 `image` block with settings `{ lightbox: true }` is
@@ -248,6 +257,19 @@ schema version, or attempts to register a duplicate type
   changed
 - **THEN** its structural and projection hashes equal the pinned values from
   before the change
+
+#### Scenario: Version 3 Gallery preserves content and lightbox
+- **WHEN** version 3 Gallery blocks, including a hidden block, are synchronized
+  in draft and published snapshots with lightbox enabled and linked images
+- **THEN** Gallery becomes version 4 with the three layout defaults, while
+  content, item order, lightbox, links and envelope values are preserved under
+  the existing guarded block-migration and final published-version/build rules
+
+#### Scenario: Layout settings share runtime validation
+- **WHEN** Gallery settings use an unknown mode, a nonboolean wrap or an
+  unknown preset, including one unused by the selected mode
+- **THEN** both runtime adapters reject the value at its declared setting path
+  using the same shared validation rules
 
 ### Requirement: Ordered block aggregate validation
 The system SHALL validate a complete flat ordered block aggregate against a
@@ -395,3 +417,21 @@ SHALL remain valid without migration.
 - **WHEN** a saved `image` block or gallery item from before the reordering is
   loaded and validated in draft and publish modes
 - **THEN** it validates exactly as before and no migration runs
+
+### Requirement: Gallery adopts reusable mode-specific setting visibility
+Gallery v4 SHALL declare the shared list-layout visibility rules: `layoutMode`
+always visible, `layoutWrap` visible for both flex modes, and `layoutPreset`
+visible for grid, subject to generic validation-error reveal. An unrelated block
+SHALL be able to reuse the same scalar settings and visibility rules without
+admin changes. Layout/Behavior grouping, settings/defaults, Gallery definition
+version 4, migrations 2/3/4 and all image/link/lightbox semantics SHALL remain
+unchanged. Setting visibility metadata SHALL not enter authored/public payloads
+or change Astro registry source revisions or stylesheet ownership.
+
+#### Scenario: Two adopters
+- **WHEN** Gallery and a custom card-list block adopt shared layout settings and visibility
+- **THEN** both expose the same mode-specific controls with independent retained scalar values through the ordinary editor
+
+#### Scenario: Existing content and sites remain compatible
+- **WHEN** Gallery gains visibility metadata
+- **THEN** existing v4 blocks, model structural versions, Astro components, CSS hashes and public settings retain their existing contracts

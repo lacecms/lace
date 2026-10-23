@@ -1,4 +1,5 @@
 ---
+import "./ListLayout.css";
 import LaceImage from "@lacecms/astro/LaceImage.astro";
 import type { builtInBlocks } from "@lacecms/content";
 import type { BlockProps } from "@lacecms/render";
@@ -16,14 +17,16 @@ const items = data.images.map((item) => {
   const linkLabel = media.alt === "" ? (caption?.trim() || item.link) : undefined;
   return { caption, link: item.link, linkLabel, media };
 });
-const sizes = "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw";
+const sizes = settings.layoutMode === "grid" && settings.layoutPreset === "auto"
+  ? "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw"
+  : "100vw";
 ---
 
-<section class:list={["gallery", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+<section class:list={["gallery", className]} data-lace-block={block.type} data-lace-block-key={block.key} data-lace-layout-container id={anchor}>
   {title !== undefined && <h2 data-lace-part="title">{title}</h2>}
-  <ul data-lace-part="items" role="list">
+  <ul data-lace-part="items" data-lace-layout={settings.layoutMode} data-lace-wrap={String(settings.layoutWrap)} data-lace-preset={settings.layoutPreset} role="list">
     {items.map(({ caption, link, linkLabel, media }, index) => (
-      <li data-lace-part="item">
+      <li data-lace-part="item" data-lace-layout-item>
         <figure>
           {link === undefined ? (
             <LaceImage data-lace-part="media" image={media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}-${index}`} sizes={sizes} />

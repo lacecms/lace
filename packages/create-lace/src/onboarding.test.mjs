@@ -102,7 +102,7 @@ test("generated block sources are user-owned and identical to the reference site
     lock.blockMap,
     ...Object.values(lock.items).flatMap((item) => Object.keys(item.files)),
   ];
-  expect(shared).toHaveLength(10);
+  expect(shared).toHaveLength(11);
   for (const path of shared) {
     expect(generated.manifest.files[`site/${path}`]).toEqual({ owner: "user" });
     expect(await readFile(join(generated.path, "site", path), "utf8")).toBe(

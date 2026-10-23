@@ -53,7 +53,8 @@ when selected and do not yet have an implementation order or new CE numbers.
   together with conditional validation, dependencies/cycles, hidden-value
   retention and public delivery. Cover groups, per-item list scope, defaults,
   server enforcement and reachable validation errors; do not ship a partial
-  visibility-only mechanism as CE9.
+  visibility-only mechanism as CE9. Completed LIST2 implements the bounded scalar
+  block-settings exception recorded in the archived roadmap; it does not select general conditional forms.
 
 Further candidates, not yet ordered: scheduled publication (C2, an MVP
 exclusion), bulk list actions and field-value filters, media folders and tags,

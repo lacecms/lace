@@ -2026,3 +2026,72 @@ describe("paged build export contract", () => {
     expect(v.parse(errorEnvelopeSchema, classified.body)).toEqual(classified.body);
   });
 });
+
+test("recursive select card metadata is validated through shared descriptors", () => {
+  const select = field.select({
+    options: ["a"],
+    presentation: {
+      control: "cards",
+      choices: [
+        { value: "a", label: "A", diagram: { cells: [{ x: 0, y: 0, width: 12, height: 12 }] } },
+      ],
+    },
+  });
+  const nested = field.list({ item: field.group({ fields: { select } }) });
+  expect(v.safeParse(fieldMetadataSchema, nested).success).toBe(true);
+  const forged = JSON.parse(JSON.stringify(nested));
+  forged.item.fields.select.presentation.choices[0].diagram.cells[0].width = 13;
+  expect(v.safeParse(fieldMetadataSchema, forged).success).toBe(false);
+  forged.item.fields.select = {
+    type: "boolean",
+    required: false,
+    presentation: select.presentation,
+  };
+  expect(v.safeParse(fieldMetadataSchema, forged).success).toBe(false);
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "custom",
+      version: 1,
+      fields: { nested },
+      settings: {
+        select: field.select({
+          options: ["a"],
+          presentation: select.presentation,
+          defaultValue: "a",
+        }),
+      },
+    }),
+  );
+  expect(v.safeParse(blockMetadataSchema, block).success).toBe(true);
+});
+
+test("block visibility metadata uses shared validation for forged REST input", () => {
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "conditional",
+      version: 1,
+      fields: {},
+      settings: {
+        mode: field.select({ options: ["a", "b"], required: true, defaultValue: "a" }),
+        wrap: field.boolean({ defaultValue: true }),
+      },
+      settingsVisibility: { wrap: { setting: "mode", values: ["a"] } },
+    }),
+  );
+  expect(v.safeParse(blockMetadataSchema, JSON.parse(JSON.stringify(block))).success).toBe(true);
+  for (const settingsVisibility of [
+    { missing: { setting: "mode", values: ["a"] } },
+    { wrap: { setting: "missing", values: ["a"] } },
+    { wrap: { setting: "mode", values: ["unknown"] } },
+    { wrap: { setting: "mode", values: ["a", "a"] } },
+    { wrap: { setting: "mode", values: ["a"], css: "bad" } },
+  ]) {
+    expect(v.safeParse(blockMetadataSchema, { ...block, settingsVisibility }).success).toBe(false);
+  }
+  expect(
+    v.safeParse(blockMetadataSchema, {
+      ...block,
+      settings: { ...block.settings, mode: { ...block.settings.mode, required: false } },
+    }).success,
+  ).toBe(false);
+});

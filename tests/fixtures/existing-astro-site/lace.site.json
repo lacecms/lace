@@ -12,9 +12,10 @@
       }
     },
     "gallery": {
-      "revision": 3,
+      "revision": 5,
       "files": {
-        "src/components/lace/GalleryBlock.astro": "b9960211e68e93d60d600c0df1139696c57c3b20b1cc0db9ea015d3eff2e08bd"
+        "src/components/lace/GalleryBlock.astro": "0fdc9707cc58361316b894c73f9b1644f09b81300ac0deeb0d0c9a4e9fdefeb1",
+        "src/components/lace/ListLayout.css": "a8606fc40a51963db63e115646c1466b51727b310aa9f6425ea798fb3ac204fe"
       }
     },
     "hero": {

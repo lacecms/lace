@@ -260,3 +260,43 @@ test("CE9A nested group/list guidance follows current values after moves", async
     for (const id of element.getAttribute("aria-describedby")!.split(" "))
       expect(document.getElementById(id), id).not.toBeNull();
 });
+
+const cardDefinition = {
+  type: "select",
+  required: false,
+  options: ["a", "b"],
+  label: "Composition",
+  description: "Select a composition",
+  presentation: {
+    control: "cards",
+    choices: [
+      { value: "b", label: "Second", description: "Second layout" },
+      { value: "a", label: "First" },
+    ],
+  },
+} as const;
+test("card selects follow option order and share errors, guidance and focus IDs", async () => {
+  const user = userEvent.setup();
+  render(<Harness definition={cardDefinition} error="Choose again" initial="b" />);
+  const group = screen.getByRole("radiogroup", { name: "Composition" });
+  expect(
+    within(group)
+      .getAllByRole("radio")
+      .map((r) => r.getAttribute("aria-label")),
+  ).toEqual(["No selection", "First", "Second"]);
+  const selected = screen.getByRole("radio", { name: "Second" });
+  expect(selected).toHaveAttribute("id", "field-fields-value");
+  expect(selected).toHaveAttribute("aria-invalid", "true");
+  expect(selected).toHaveAccessibleDescription(/Select a composition.*Choose again.*Second layout/);
+  await user.click(screen.getByRole("radio", { name: "First" }));
+  expect(value()).toBe('"a"');
+  expect(screen.getByRole("radio", { name: "First" })).toHaveAttribute("id", "field-fields-value");
+  await user.click(screen.getByRole("radio", { name: "No selection" }));
+  expect(value()).toBe("null");
+});
+test("read-only cards expose chosen text without mutation controls", () => {
+  render(<Harness definition={cardDefinition} initial="b" readOnly />);
+  expect(screen.getByText("Second")).toBeVisible();
+  expect(screen.getByText("Second layout")).toBeVisible();
+  expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+});

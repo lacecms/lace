@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
-import { builtInBlocks, field } from "@lacecms/content";
+import { builtInBlocks, defineBlock, field } from "@lacecms/content";
 import {
   CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT,
   configurationSyncAdvancesPublicState,
@@ -1227,4 +1227,70 @@ test("CE9B model and nested layouts plan no content writes", async () => {
   expect(plan.status).not.toBe("blocked");
   expect(configurationSyncContentWrites(plan)).toEqual([]);
   expect(after.structureHash).toBe(before.structureHash);
+});
+
+test("select card presentation plans display updates without content writes", async () => {
+  const make = (label) =>
+    posts({
+      fields: {
+        nested: field.list({
+          item: field.group({
+            fields: {
+              pick: field.select({
+                options: ["a"],
+                presentation: { control: "cards", choices: [{ value: "a", label }] },
+              }),
+            },
+          }),
+        }),
+      },
+    });
+  const before = await make("Before"),
+    after = await make("After");
+  const plan = planConfigurationSynchronization({
+    models: [after],
+    storedModels: [storedFrom(before)],
+  });
+  expect(plan.status).not.toBe("blocked");
+  expect(configurationSyncContentWrites(plan)).toEqual([]);
+  expect(after.structureHash).toBe(before.structureHash);
+  expect(after.projectionHash).not.toBe(before.projectionHash);
+});
+
+test("setting visibility changes plan display-only metadata without content writes", async () => {
+  const make = async (values) =>
+    (
+      await defineConfig({
+        blocks: [
+          defineBlock({
+            type: "conditional",
+            version: 1,
+            fields: {},
+            settings: {
+              mode: field.select({ options: ["a", "b"], required: true, defaultValue: "a" }),
+              wrap: field.boolean({ defaultValue: true }),
+            },
+            settingsVisibility: { wrap: { setting: "mode", values } },
+          }),
+        ],
+        content: [
+          defineCollection({
+            key: "posts",
+            version: 1,
+            route: "/posts/:slug",
+            blocks: ["conditional"],
+          }),
+        ],
+      })
+    ).runtime.content[0];
+  const before = await make(["a"]),
+    after = await make(["b"]);
+  const plan = planConfigurationSynchronization({
+    models: [after],
+    storedModels: [storedFrom(before)],
+  });
+  expect(plan.status).not.toBe("blocked");
+  expect(configurationSyncContentWrites(plan)).toEqual([]);
+  expect(after.structureHash).toBe(before.structureHash);
+  expect(after.projectionHash).not.toBe(before.projectionHash);
 });

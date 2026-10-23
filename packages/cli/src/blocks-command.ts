@@ -124,7 +124,11 @@ async function applyPlan(root: string, plan: BlockPlan, writeNew: boolean): Prom
   }
   if (writeNew)
     for (const decision of [...plan.files, plan.blockMap])
-      if (decision.action === "conflict" && decision.targetBytes !== undefined) {
+      if (
+        (decision.action === "conflict" ||
+          plan.items.some((item) => item.name === decision.item && item.status === "conflict")) &&
+        decision.targetBytes !== undefined
+      ) {
         const path = `${decision.path}.new`;
         const current = await readSiteFile(root, path);
         await write(
