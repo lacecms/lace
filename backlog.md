@@ -13,9 +13,23 @@ These items are outside the final planned wave. CE10–CE12 retain their relativ
 order; the two deferred editor topics require separate scope/session planning
 when selected and do not yet have an implementation order or new CE numbers.
 
-- **CE10 Entry references and internal links (A7):** reference fields and
-  `entry:<id>` links in URL fields and rich text, resolved to paths at build
-  time so slug changes do not break links.
+- **CE10 Internal URL links (implemented 2026-10-23):**
+  `ce10-internal-url-links` implements stable entry-ID destinations in ordinary URL
+  fields, including nested model/global/block data. Block settings retain their
+  existing select/boolean/number/text allowlist.
+  Resolve published paths at build time, track indexed incoming usages, require
+  additional reviewed confirmation for deletion/unpublication affecting published
+  links, and render unavailable targets without navigation. Add one Link block
+  with button/text appearances; put Hero then CTA last in the block picker.
+  D1 reads/writes are bounded, with no per-link build requests. Migration 0010
+  and format-2 export are implemented; populated model removal stays forbidden.
+  See `docs/internal-url-links.md` and its verification record. Specs synchronized
+  and change archived on 2026-10-24 at
+  `openspec/changes/archive/2026-10-24-ce10-internal-url-links`. Reference fields
+  and rich-text internal links remain excluded.
+- **Entry reference fields and rich-text internal links (deferred from CE10):**
+  related-content fields and stable destinations inside rich text require their
+  own future scope/planning; no implementation order selected.
 - **CE11 Responsive images (C3):** width variants and `srcset` through
   Astro image optimization or Cloudflare Images, using CE3 dimensions and
   focal point.

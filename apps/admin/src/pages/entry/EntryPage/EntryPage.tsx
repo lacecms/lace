@@ -1,3 +1,4 @@
+import { LinkAuthoringProvider, OrdinaryUrlField } from "../../../features/select-link/index.js";
 import type {
   AdminContentEntryDto,
   ContentModelDto,
@@ -65,7 +66,7 @@ import {
 } from "../EntryPublicationDetails/index.js";
 
 const entryRoute = getRouteApi("/_protected/content/$modelKey/$entryId");
-const mediaRenderers: FieldRendererRegistry = { media: MediaPicker };
+const mediaRenderers: FieldRendererRegistry = { media: MediaPicker, url: OrdinaryUrlField };
 const mediaPreviews: FieldPreviewRegistry = { media: MediaItemPreview };
 const formId = "entry-draft-form";
 
@@ -479,236 +480,244 @@ export function EntryPage() {
           unsavedChanges={dirty}
         />
       </ShellHeaderActions>
-      <FieldRendererProvider
-        epoch={editorEpoch}
-        transient={transient.current}
-        onTransientChange={onTransientChange}
-        busy={busy || reloadServerDraft.isPending}
-        form={form}
-        model={model}
-        previews={mediaPreviews}
-        readOnly={readOnly}
-        renderers={mediaRenderers}
-      >
-        <form
-          aria-labelledby="entry-title"
-          className="grid max-w-[80rem] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
-          id={formId}
-          noValidate
-          onSubmit={(event) => {
-            if (readOnly || busy) {
-              event.preventDefault();
-              return;
-            }
-            void submitDraft(event);
-          }}
+      <LinkAuthoringProvider form={form} model={model}>
+        <FieldRendererProvider
+          epoch={editorEpoch}
+          transient={transient.current}
+          onTransientChange={onTransientChange}
+          busy={busy || reloadServerDraft.isPending}
+          form={form}
+          model={model}
+          previews={mediaPreviews}
+          readOnly={readOnly}
+          renderers={mediaRenderers}
         >
-          <div className="contents">
-            <div className="grid min-w-0 content-start gap-4">
-              <h1
-                className="m-0 text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                id="entry-title"
-              >
-                Edit {model.label ?? model.key}
-              </h1>
-              {problems.length === 0 ? undefined : (
-                <EntryValidationSummary problems={problems} ref={summaryRef} />
-              )}
-              {conflict === undefined ? (
-                save.error === null || validationRejected(save.error) ? undefined : (
-                  <div className="grid gap-2">
-                    <PageError error={save.error} />
-                    {save.error instanceof AdminClientError &&
-                    save.error.code === "CONTENT_INVALID_STATE" ? (
-                      <div className="grid gap-2 text-sm">
-                        <p>
-                          Your unsaved changes are still here. Retry Save draft to send the
-                          displayed block order. Copy your JSON before reloading if the problem
-                          continues.
-                        </p>
-                        <Button
-                          className="justify-self-start"
-                          onClick={() => void copyLocalDraft()}
-                          size="sm"
-                          variant="outline"
-                        >
-                          Copy my JSON
-                        </Button>
-                        {copyError === undefined ? undefined : <p role="alert">{copyError}</p>}
-                      </div>
-                    ) : undefined}
-                  </div>
-                )
-              ) : (
-                <EntryConflictAlert
-                  conflict={conflict}
-                  copyError={copyError}
-                  onCopy={() => void copyLocalDraft()}
-                  onReload={() => reloadServerDraft.mutate()}
-                  reloadError={
-                    reloadServerDraft.error === null
-                      ? undefined
-                      : errorDescription(reloadServerDraft.error)
-                  }
-                  reloading={reloadServerDraft.isPending}
-                />
-              )}
-              {model.kind === "global" ? (
-                // A global's title is its model label and is owned by the system.
-                <div className="grid gap-1">
-                  <p className="m-0 py-1 text-2xl font-semibold tracking-tight">
-                    {model.label ?? model.key}
-                  </p>
-                  {model.description === undefined ? undefined : (
-                    <p className="m-0 text-sm text-muted-foreground">{model.description}</p>
-                  )}
-                </div>
-              ) : (
-                <div className="grid gap-1">
-                  <label className="sr-only" htmlFor="system-title">
-                    Title
-                  </label>
-                  <Input
-                    aria-describedby={titleError === undefined ? undefined : "system-title-error"}
-                    aria-invalid={titleError === undefined ? undefined : true}
-                    className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input"
-                    disabled={readOnly || busy}
-                    id="system-title"
-                    placeholder="Untitled"
-                    {...form.register("title")}
-                  />
-                  {titleError === undefined ? undefined : (
-                    <p
-                      className={`${fieldErrorClass} text-xs`}
-                      id="system-title-error"
-                      role="alert"
-                    >
-                      {titleError.message}
-                    </p>
-                  )}
-                </div>
-              )}
-              <EntryListBudget control={form.control as never} model={model} />
-              <BlockEditor
-                control={form.control}
-                errors={blockErrors}
-                getValues={form.getValues}
-                linkBase={blockLinkBase}
-                model={model}
-                readOnly={readOnly}
-              />
-            </div>
-            <aside aria-label="Entry details" className="grid min-w-0 content-start gap-4">
-              <EntryPublicationDetails entry={currentEntry} latestBuild={latestBuild} model={model}>
-                {publish.error !== null && publishAttempt !== undefined ? (
-                  <div className="grid gap-2">
-                    <p className="m-0 text-destructive" role="alert">
-                      {errorDescription(publish.error)}
-                    </p>
-                    <Button
-                      className="justify-self-start"
-                      disabled={publish.isPending}
-                      onClick={retryPublish}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Retry publish
-                    </Button>
-                  </div>
-                ) : undefined}
-              </EntryPublicationDetails>
-              {hasEntryFields ? (
-                <section
-                  aria-labelledby="entry-fields-title"
-                  className="grid gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs"
+          <form
+            aria-labelledby="entry-title"
+            className="grid max-w-[80rem] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
+            id={formId}
+            noValidate
+            onSubmit={(event) => {
+              if (readOnly || busy) {
+                event.preventDefault();
+                return;
+              }
+              void submitDraft(event);
+            }}
+          >
+            <div className="contents">
+              <div className="grid min-w-0 content-start gap-4">
+                <h1
+                  className="m-0 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                  id="entry-title"
                 >
-                  <h2 className="m-0 text-sm font-semibold" id="entry-fields-title">
-                    Fields
-                  </h2>
-                  {model.kind === "collection" ? (
-                    <div className="grid gap-1.5">
-                      <label className="text-sm font-medium" htmlFor="system-slug">
-                        Slug
-                      </label>
-                      <Input
-                        aria-describedby={slugError === undefined ? undefined : "system-slug-error"}
-                        aria-invalid={slugError === undefined ? undefined : true}
-                        disabled={readOnly || busy}
-                        id="system-slug"
-                        {...form.register("slug", {
-                          onChange: () => {
-                            if (suggestingSlug) setSlugManuallyEdited(true);
-                          },
-                        })}
-                      />
-                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <input
-                          disabled={readOnly || busy}
-                          checked={suggestingSlug}
-                          className="size-3.5 accent-primary"
-                          onChange={(event) => {
-                            const enabled = event.currentTarget.checked;
-                            suggestingSlugRef.current = enabled;
-                            setSuggestingSlug(enabled);
-                            setSlugManuallyEdited(false);
-                            if (enabled)
-                              form.setValue("slug", suggestSlug(form.getValues("title")), {
-                                shouldDirty: true,
-                              });
-                          }}
-                          type="checkbox"
-                        />
-                        Suggest from title
-                      </label>
-                      {slugError === undefined ? undefined : (
-                        <p
-                          className={`${fieldErrorClass} text-xs`}
-                          id="system-slug-error"
-                          role="alert"
-                        >
-                          {slugError.message}
-                        </p>
-                      )}
+                  Edit {model.label ?? model.key}
+                </h1>
+                {problems.length === 0 ? undefined : (
+                  <EntryValidationSummary problems={problems} ref={summaryRef} />
+                )}
+                {conflict === undefined ? (
+                  save.error === null || validationRejected(save.error) ? undefined : (
+                    <div className="grid gap-2">
+                      <PageError error={save.error} />
+                      {save.error instanceof AdminClientError &&
+                      save.error.code === "CONTENT_INVALID_STATE" ? (
+                        <div className="grid gap-2 text-sm">
+                          <p>
+                            Your unsaved changes are still here. Retry Save draft to send the
+                            displayed block order. Copy your JSON before reloading if the problem
+                            continues.
+                          </p>
+                          <Button
+                            className="justify-self-start"
+                            onClick={() => void copyLocalDraft()}
+                            size="sm"
+                            variant="outline"
+                          >
+                            Copy my JSON
+                          </Button>
+                          {copyError === undefined ? undefined : <p role="alert">{copyError}</p>}
+                        </div>
+                      ) : undefined}
+                    </div>
+                  )
+                ) : (
+                  <EntryConflictAlert
+                    conflict={conflict}
+                    copyError={copyError}
+                    onCopy={() => void copyLocalDraft()}
+                    onReload={() => reloadServerDraft.mutate()}
+                    reloadError={
+                      reloadServerDraft.error === null
+                        ? undefined
+                        : errorDescription(reloadServerDraft.error)
+                    }
+                    reloading={reloadServerDraft.isPending}
+                  />
+                )}
+                {model.kind === "global" ? (
+                  // A global's title is its model label and is owned by the system.
+                  <div className="grid gap-1">
+                    <p className="m-0 py-1 text-2xl font-semibold tracking-tight">
+                      {model.label ?? model.key}
+                    </p>
+                    {model.description === undefined ? undefined : (
+                      <p className="m-0 text-sm text-muted-foreground">{model.description}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-1">
+                    <label className="sr-only" htmlFor="system-title">
+                      Title
+                    </label>
+                    <Input
+                      aria-describedby={titleError === undefined ? undefined : "system-title-error"}
+                      aria-invalid={titleError === undefined ? undefined : true}
+                      className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input"
+                      disabled={readOnly || busy}
+                      id="system-title"
+                      placeholder="Untitled"
+                      {...form.register("title")}
+                    />
+                    {titleError === undefined ? undefined : (
+                      <p
+                        className={`${fieldErrorClass} text-xs`}
+                        id="system-title-error"
+                        role="alert"
+                      >
+                        {titleError.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <EntryListBudget control={form.control as never} model={model} />
+                <BlockEditor
+                  control={form.control}
+                  errors={blockErrors}
+                  getValues={form.getValues}
+                  linkBase={blockLinkBase}
+                  model={model}
+                  readOnly={readOnly}
+                />
+              </div>
+              <aside aria-label="Entry details" className="grid min-w-0 content-start gap-4">
+                <EntryPublicationDetails
+                  entry={currentEntry}
+                  latestBuild={latestBuild}
+                  model={model}
+                >
+                  {publish.error !== null && publishAttempt !== undefined ? (
+                    <div className="grid gap-2">
+                      <p className="m-0 text-destructive" role="alert">
+                        {errorDescription(publish.error)}
+                      </p>
+                      <Button
+                        className="justify-self-start"
+                        disabled={publish.isPending}
+                        onClick={retryPublish}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Retry publish
+                      </Button>
                     </div>
                   ) : undefined}
-                  <FieldLayout
-                    fields={model.fields}
-                    layout={model.layout}
-                    errors={errors}
-                    label="Entry fields"
-                    renderField={(key) => {
-                      const definition = model.fields[key]!;
-                      return (
-                        <FieldRenderer
-                          annotation={seoDefaultsAnnotation(model, key)}
-                          control={form.control}
-                          definition={definition}
-                          error={errors?.[key]?.message}
-                          fieldKey={key}
-                          key={key}
-                          name={`fields.${key}`}
+                </EntryPublicationDetails>
+                {hasEntryFields ? (
+                  <section
+                    aria-labelledby="entry-fields-title"
+                    className="grid gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs"
+                  >
+                    <h2 className="m-0 text-sm font-semibold" id="entry-fields-title">
+                      Fields
+                    </h2>
+                    {model.kind === "collection" ? (
+                      <div className="grid gap-1.5">
+                        <label className="text-sm font-medium" htmlFor="system-slug">
+                          Slug
+                        </label>
+                        <Input
+                          aria-describedby={
+                            slugError === undefined ? undefined : "system-slug-error"
+                          }
+                          aria-invalid={slugError === undefined ? undefined : true}
+                          disabled={readOnly || busy}
+                          id="system-slug"
+                          {...form.register("slug", {
+                            onChange: () => {
+                              if (suggestingSlug) setSlugManuallyEdited(true);
+                            },
+                          })}
                         />
-                      );
-                    }}
-                  />
-                </section>
-              ) : undefined}
-              {model.seo === undefined ? undefined : (
-                <fieldset className="min-w-0 border-0 p-0" disabled={readOnly || busy}>
-                  <EntrySeoCard
-                    control={form.control}
-                    defaults={seoDefaults.defaults}
-                    errors={form.formState.errors.seo}
-                    model={model}
-                    readOnly={readOnly || busy}
-                    siteUrl={buildSite.data?.site?.url}
-                  />
-                </fieldset>
-              )}
-            </aside>
-          </div>
-        </form>
-      </FieldRendererProvider>
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            disabled={readOnly || busy}
+                            checked={suggestingSlug}
+                            className="size-3.5 accent-primary"
+                            onChange={(event) => {
+                              const enabled = event.currentTarget.checked;
+                              suggestingSlugRef.current = enabled;
+                              setSuggestingSlug(enabled);
+                              setSlugManuallyEdited(false);
+                              if (enabled)
+                                form.setValue("slug", suggestSlug(form.getValues("title")), {
+                                  shouldDirty: true,
+                                });
+                            }}
+                            type="checkbox"
+                          />
+                          Suggest from title
+                        </label>
+                        {slugError === undefined ? undefined : (
+                          <p
+                            className={`${fieldErrorClass} text-xs`}
+                            id="system-slug-error"
+                            role="alert"
+                          >
+                            {slugError.message}
+                          </p>
+                        )}
+                      </div>
+                    ) : undefined}
+                    <FieldLayout
+                      fields={model.fields}
+                      layout={model.layout}
+                      errors={errors}
+                      label="Entry fields"
+                      renderField={(key) => {
+                        const definition = model.fields[key]!;
+                        return (
+                          <FieldRenderer
+                            annotation={seoDefaultsAnnotation(model, key)}
+                            control={form.control}
+                            definition={definition}
+                            error={errors?.[key]?.message}
+                            fieldKey={key}
+                            key={key}
+                            name={`fields.${key}`}
+                          />
+                        );
+                      }}
+                    />
+                  </section>
+                ) : undefined}
+                {model.seo === undefined ? undefined : (
+                  <fieldset className="min-w-0 border-0 p-0" disabled={readOnly || busy}>
+                    <EntrySeoCard
+                      control={form.control}
+                      defaults={seoDefaults.defaults}
+                      errors={form.formState.errors.seo}
+                      model={model}
+                      readOnly={readOnly || busy}
+                      siteUrl={buildSite.data?.site?.url}
+                    />
+                  </fieldset>
+                )}
+              </aside>
+            </div>
+          </form>
+        </FieldRendererProvider>
+      </LinkAuthoringProvider>
       <DiscardChangesDialog
         onLeave={() => {
           if (blocker.status === "blocked") blocker.proceed();

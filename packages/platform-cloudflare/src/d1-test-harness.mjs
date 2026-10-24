@@ -66,11 +66,26 @@ export async function openLocalD1() {
 
 /** Counts queries and bound parameters issued through a D1 binding. */
 export function countingD1(database) {
-  const stats = { batches: 0, maxParameters: 0, queries: 0 };
+  const stats = {
+    batches: 0,
+    maxParameters: 0,
+    maxBatchStatements: 0,
+    queries: 0,
+    rowsRead: 0,
+    rowsWritten: 0,
+  };
+  const measure = async (pending) => {
+    const result = await pending;
+    for (const item of Array.isArray(result) ? result : [result]) {
+      stats.rowsRead += Number(item?.meta?.rows_read ?? 0);
+      stats.rowsWritten += Number(item?.meta?.rows_written ?? 0);
+    }
+    return result;
+  };
   const wrap = (statement, parameters = 0) => ({
     all: () => {
       stats.queries += 1;
-      return statement.all();
+      return measure(statement.all());
     },
     bind: (...values) => {
       stats.maxParameters = Math.max(stats.maxParameters, values.length);
@@ -88,15 +103,16 @@ export function countingD1(database) {
     parameters,
     run: () => {
       stats.queries += 1;
-      return statement.run();
+      return measure(statement.run());
     },
   });
   return {
     binding: {
       batch: (statements) => {
         stats.batches += 1;
+        stats.maxBatchStatements = Math.max(stats.maxBatchStatements, statements.length);
         stats.queries += statements.length;
-        return database.batch(statements.map((statement) => statement.inner));
+        return measure(database.batch(statements.map((statement) => statement.inner)));
       },
       prepare: (sql) => wrap(database.prepare(sql)),
     },

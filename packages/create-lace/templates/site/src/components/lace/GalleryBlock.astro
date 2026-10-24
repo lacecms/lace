@@ -6,16 +6,18 @@ import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.gallery>;
 
-const { anchor, block, className, context, data, image, settings } = Astro.props;
+const { anchor, block, className, context, data, image, settings, link } = Astro.props;
 const title = data.title?.trim() === "" ? undefined : data.title;
 // Each item's own alt text and caption override the media item's. A linked item
 // opens its link instead of the lightbox; the alt text names the link, then the
 // caption, then the URL.
 const items = data.images.map((item) => {
+  const destination = link(item.link);
+  const href = destination.state === "resolved" ? destination.href : undefined;
   const media = image(item.media, item.alt);
   const caption = item.caption ?? media.caption;
-  const linkLabel = media.alt === "" ? (caption?.trim() || item.link) : undefined;
-  return { caption, link: item.link, linkLabel, media };
+  const linkLabel = media.alt === "" ? (caption?.trim() || href) : undefined;
+  return { caption, link: href, linkLabel, media };
 });
 const sizes = settings.layoutMode === "grid" && settings.layoutPreset === "auto"
   ? "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw"

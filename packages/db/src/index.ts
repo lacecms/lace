@@ -15,6 +15,7 @@ export const checkedInMigrations = Object.freeze([
   { createdAt: 1791750744187, name: "0007_content_model_global_kind.sql" },
   { createdAt: 1791756612246, name: "0008_content_snapshot_seo.sql" },
   { createdAt: 1791794161634, name: "0009_content_block_envelope.sql" },
+  { createdAt: 1792774203883, name: "0010_internal_url_links.sql" },
 ]);
 
 export interface AppliedMigration {
@@ -24,3 +25,5 @@ export interface AppliedMigration {
 
 export * from "./schema.js";
 export * from "./sql-content.js";
+export * from "./sql-internal-links.js";
+export * from "./internal-link-reader.js";

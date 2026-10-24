@@ -1,6 +1,8 @@
 import { parseVideoEmbed } from "./video-embeds.js";
 import type { EmbedProvider } from "./video-embeds.js";
 import * as v from "valibot";
+import { decodeEntryLink, MAX_INTERNAL_LINK_REFERENCES } from "./internal-links.js";
+export * from "./internal-links.js";
 export * from "./video-embeds.js";
 
 /** A JSON primitive that can be transported between Lace runtimes. */
@@ -1251,7 +1253,7 @@ function assertExactKeys(
   }
 }
 
-/** Returns whether a URL is permitted in Lace URL fields and rich-text links. */
+/** Returns whether a URL is permitted as an href, including rich-text links. */
 export function isSafeUrl(value: unknown): value is string {
   if (
     typeof value !== "string" ||
@@ -1270,6 +1272,11 @@ export function isSafeUrl(value: unknown): value is string {
   return /^(?:https?:\/\/[^/?#\s]+(?:[/?#][^\s]*)?|mailto:[^\s@]+@[^\s@]+|tel:\+?[0-9(). -]+)$/u.test(
     value,
   );
+}
+
+/** Ordinary URL fields support safe manual URLs and canonical entry tokens. */
+export function isUrlFieldTarget(value: unknown): value is string {
+  return isSafeUrl(value) || decodeEntryLink(value) !== undefined;
 }
 
 function assertMarks(value: unknown, path: readonly ValidationPathSegment[]): void {
@@ -1542,8 +1549,8 @@ function isFieldValue(definition: FieldDefinition, value: unknown): boolean {
       (fieldDefinition.minLength === undefined || textLength(value) >= fieldDefinition.minLength) &&
       (fieldDefinition.maxLength === undefined || textLength(value) <= fieldDefinition.maxLength),
     url: (descriptor) => {
+      if (descriptor.embedProviders === undefined) return isUrlFieldTarget(value);
       if (!isSafeUrl(value)) return false;
-      if (descriptor.embedProviders === undefined) return true;
       const embed = parseVideoEmbed(value);
       return embed !== undefined && descriptor.embedProviders.includes(embed.provider);
     },
@@ -1731,6 +1738,103 @@ export function validateSnapshotListBudget(
 export interface FieldMediaReference {
   readonly mediaId: string;
   readonly path: readonly ValidationPathSegment[];
+}
+
+/** A declared ordinary URL leaf, relative to its field map. */
+export interface FieldInternalLinkReference {
+  readonly targetId: string;
+  readonly path: readonly ValidationPathSegment[];
+}
+
+/** Discover references only in normalized ordinary URL descriptors. */
+export function collectFieldInternalLinks(
+  definitions: ModelFieldDefinitions,
+  values: JsonObject,
+): readonly FieldInternalLinkReference[] {
+  const references: FieldInternalLinkReference[] = [];
+  function visit(
+    definition: FieldDefinition,
+    value: JsonValue | undefined,
+    path: readonly ValidationPathSegment[],
+  ): void {
+    if (definition.type === "url" && definition.embedProviders === undefined) {
+      const targetId = decodeEntryLink(value);
+      if (targetId !== undefined) references.push({ targetId, path });
+    } else if (definition.type === "group" && isRecord(value)) {
+      walk(definition.fields, value as JsonObject, path);
+    } else if (definition.type === "list" && Array.isArray(value)) {
+      value.forEach((item, index) => visit(definition.item, item, [...path, index]));
+    }
+  }
+  function walk(
+    fields: ModelFieldDefinitions,
+    data: JsonObject,
+    path: readonly ValidationPathSegment[],
+  ): void {
+    for (const [key, definition] of Object.entries(fields))
+      visit(definition, data[key], [...path, key]);
+  }
+  walk(definitions, values, []);
+  return deepFreeze(references);
+}
+
+/** A source-scoped reference tuple, ready for persistence and public manifests. */
+export interface InternalLinkReference {
+  readonly sourceKey: string;
+  readonly area: "fields" | "data";
+  readonly pointer: string;
+  readonly targetId: string;
+  readonly delivered: boolean;
+}
+
+/** The local manifest location delivered to site consumers. */
+export type PublicInternalLinkReference = Omit<InternalLinkReference, "delivered">;
+
+/** Collect and bound every declared internal URL in one normalized snapshot. */
+export function collectSnapshotInternalLinks(
+  fields: ModelFieldDefinitions,
+  values: JsonObject,
+  blocks: readonly {
+    readonly key: string;
+    readonly fields: ModelFieldDefinitions;
+    readonly data: JsonObject;
+    readonly hidden?: boolean;
+  }[],
+): readonly InternalLinkReference[] {
+  const references: InternalLinkReference[] = [];
+  function add(
+    definitions: ModelFieldDefinitions,
+    data: JsonObject,
+    sourceKey: string,
+    area: "fields" | "data",
+    delivered: boolean,
+    rootPath: readonly ValidationPathSegment[],
+  ): void {
+    for (const reference of collectFieldInternalLinks(definitions, data)) {
+      if (references.length === MAX_INTERNAL_LINK_REFERENCES)
+        invalid(
+          [...rootPath, ...reference.path],
+          "too_many_internal_links",
+          `must not contain more than ${MAX_INTERNAL_LINK_REFERENCES} internal links.`,
+        );
+      references.push({
+        sourceKey,
+        area,
+        delivered,
+        targetId: reference.targetId,
+        pointer: `/${reference.path.map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`,
+      });
+    }
+  }
+  add(fields, values, "$fields", "fields", true, ["fields"]);
+  blocks.forEach((block, index) =>
+    add(block.fields, block.data, block.key, "data", block.hidden !== true, [
+      "blocks",
+      index,
+      "data",
+    ]),
+  );
+  return deepFreeze(references);
 }
 
 /** Finds declared media leaves only; ordinary strings never become references. */
@@ -2732,6 +2836,25 @@ export const builtInBlocks = deepFreeze({
     type: "image",
     version: 4,
   }),
+  link: defineBlock({
+    description: "A link to a page or URL, presented as a button or text.",
+    fields: {
+      label: field.text({ label: "Label", minLength: 1, maxLength: 200, required: true }),
+      url: field.url({ label: "Destination", required: true }),
+    },
+    settings: {
+      appearance: field.select({
+        label: "Appearance",
+        options: ["button", "text"],
+        defaultValue: "button",
+        required: true,
+      }),
+      newTab: field.boolean({ label: "Open in new tab", defaultValue: false, required: true }),
+    },
+    label: "Link",
+    type: "link",
+    version: 1,
+  }),
   navigation: defineBlock({
     description: "A list of links with optional one-level submenus.",
     fields: {
@@ -3137,6 +3260,16 @@ export function validateEntryAggregate(
       fields: registry.get(block.type)!.fields,
       data: block.data,
       path: ["blocks", index, "data"],
+    })),
+  );
+  collectSnapshotInternalLinks(
+    model.fields,
+    fields,
+    blocks.map((block) => ({
+      key: block.key,
+      fields: registry.get(block.type)!.fields,
+      data: block.data,
+      hidden: block.hidden,
     })),
   );
   return deepFreeze({

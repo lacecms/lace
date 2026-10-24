@@ -23,6 +23,7 @@ import type {
   ClaimDispatcherEventsInput,
   CompleteDispatcherLeaseInput,
   ContentCommandResult,
+  ContentLinkReadPort,
   ContentEntryCommandPort,
   ContentEntryListPage,
   ContentEntryReadPort,
@@ -78,6 +79,17 @@ import type {
 } from "@lacecms/application";
 import {
   assertBuildExportVersion,
+  syncInternalLinkStatements,
+  COMMIT_SYNC_LINK_GRAPH_SQL,
+  LINK_IMPACT_EVIDENCE_SQL,
+  linkRemovalCondition,
+  INVALID_PUBLISHED_LINK_TARGETS_SQL,
+  assertPublishedInternalLinkTargets,
+  SqlContentLinkReader,
+  replaceInternalLinkStatements,
+  copyInternalLinkDiffStatements,
+  COPY_INTERNAL_LINKS_SQL,
+  BUMP_INTERNAL_LINK_GRAPH_SQL,
   BLOCK_COLUMNS_SQL,
   BUILD_EXPORT_CANDIDATES_SQL,
   BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
@@ -237,6 +249,7 @@ export interface NodeRepositoryOptions {
  */
 export class NodeContentRepository
   implements
+    ContentLinkReadPort,
     ContentEntryCommandPort,
     ContentEntryReadPort,
     ConfigurationSyncApplyPort,
@@ -257,6 +270,25 @@ export class NodeContentRepository
     private readonly resolveModel: ContentModelResolver,
     private readonly options: NodeRepositoryOptions = {},
   ) {}
+
+  private linkReader(): SqlContentLinkReader {
+    return new SqlContentLinkReader({
+      all: async <Row>(sql: string, ...params: readonly unknown[]) => {
+        return this.connection.prepare(sql).all(...params) as readonly Row[];
+      },
+    });
+  }
+  public resolveLinkTargets(ids: readonly string[]) {
+    return this.linkReader().resolveLinkTargets(ids);
+  }
+  public listLinkTargets(input: import("@lacecms/application").LinkTargetQuery) {
+    return this.linkReader().listLinkTargets(input);
+  }
+  public readLinkImpact(
+    input: import("@lacecms/application").LinkImpactQuery & { readonly actorId: string },
+  ) {
+    return this.linkReader().readLinkImpact(input);
+  }
 
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return this.readConfigurationSyncStateNow();
@@ -332,12 +364,14 @@ export class NodeContentRepository
     for (const unit of input.units) {
       try {
         this.connection.transaction(() => {
+          const linkDirtyToken = randomUUID();
           for (const migration of unit.snapshots) {
             this.checkpoint(`sync.migration.${migration.state}`);
             const statements = configurationSyncMigrationStatements(
               migration,
               input.migratedAt,
               SQLITE_MIGRATION_PARAMETERS,
+              linkDirtyToken,
             );
             const guard = this.connection
               .prepare(`select ${statements.guard.sql} as ok`)
@@ -347,6 +381,8 @@ export class NodeContentRepository
               this.connection.prepare(write.sql).run(...write.params);
             }
           }
+          this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
+          this.connection.prepare("delete from mutation_guards where token=?").run(linkDirtyToken);
         })();
       } catch (error) {
         this.throwWriteError(error, false);
@@ -390,6 +426,15 @@ export class NodeContentRepository
         const singletonEntries = new Map(
           input.singletonEntries.map((page) => [page.modelKey, page]),
         );
+        const linkDirtyToken = randomUUID();
+        const linkStatements = syncInternalLinkStatements(input.linkRewrites ?? [], linkDirtyToken);
+        for (const valid of linkStatements.valid) {
+          const row = this.connection.prepare(`select ${valid.sql} as ok`).get(...valid.params) as {
+            readonly ok: number;
+          };
+          if (row.ok !== 1)
+            failure("Schema synchronization would introduce an unavailable internal link.");
+        }
         for (const operation of actualPlan.operations) {
           if (operation.action === "create") {
             const configuration = configurationByKey.get(operation.model.key);
@@ -534,6 +579,12 @@ export class NodeContentRepository
             }
           }
         }
+        for (const write of linkStatements.writes)
+          this.connection.prepare(write.sql).run(...write.params);
+        if (linkStatements.writes.length) {
+          this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
+          this.connection.prepare("delete from mutation_guards where token=?").run(linkDirtyToken);
+        }
         if (!configurationSyncAdvancesPublicState(actualPlan)) {
           return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
         }
@@ -587,6 +638,7 @@ export class NodeContentRepository
         this.insertSnapshot(draft, version.config_version);
         this.insertBlocks(draft);
         this.insertReferences(draft.id, input.mediaReferences, draft.updatedAt);
+        this.replaceInternalLinks(draft.id, input.internalLinks ?? []);
         this.connection
           .prepare("update content_entries set draft_snapshot_id = ? where id = ?")
           .run(draft.id, id);
@@ -640,6 +692,7 @@ export class NodeContentRepository
           input.mutation.mediaReferences,
           input.mutation.updatedAt,
         );
+        this.replaceInternalLinks(draftSnapshotId, input.internalLinks ?? []);
         this.connection
           .prepare("update content_entries set updated_at = ? where id = ?")
           .run(input.mutation.updatedAt, input.entryId);
@@ -682,6 +735,16 @@ export class NodeContentRepository
             };
           }
         }
+        assertPublishedInternalLinkTargets(
+          this.connection
+            .prepare(INVALID_PUBLISHED_LINK_TARGETS_SQL)
+            .all(
+              entry.draft.id,
+              entry.id,
+              path ?? null,
+            ) as readonly import("@lacecms/db").InvalidPublishedLinkTargetRow[],
+          entry.draft.blocks.map((block) => block.key),
+        );
         this.checkpoint("publish.snapshot");
         const copied = this.connection
           .prepare(
@@ -705,6 +768,13 @@ export class NodeContentRepository
           .prepare(
             `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
           )
+          .run(input.publishedSnapshotId, entry.draft.id);
+        this.bumpLinkGraph([
+          entry.draft.id,
+          ...(entry.published === undefined ? [] : [entry.published.id]),
+        ]);
+        this.connection
+          .prepare(COPY_INTERNAL_LINKS_SQL)
           .run(input.publishedSnapshotId, entry.draft.id);
         this.checkpoint("publish.references");
         this.connection
@@ -803,6 +873,8 @@ export class NodeContentRepository
         if (entry.published_snapshot_id !== input.expectedPublishedSnapshotId) {
           revisionConflict("The published snapshot no longer matches the expected publication.");
         }
+        this.checkLinkRemoval(input.entryId, "unpublish", input.unpublishedBy.id, input.linkImpact);
+        this.bumpLinkGraph([input.expectedPublishedSnapshotId]);
         this.checkpoint("unpublish.route");
         this.connection
           .prepare("delete from published_routes where entry_id = ?")
@@ -871,6 +943,9 @@ export class NodeContentRepository
         this.checkpoint("revert.blocks");
         this.connection.prepare(copySnapshotBlocksSql()).run(draftId, publishedId);
         this.connection.prepare(copySnapshotReferencesSql()).run(draftId, publishedId);
+        this.checkpoint("revert.internal-links");
+        for (const statement of copyInternalLinkDiffStatements(draftId, publishedId))
+          this.connection.prepare(statement.sql).run(...statement.params);
         this.checkpoint("revert.published");
         this.connection
           .prepare("update content_snapshots set revision = ? where id = ?")
@@ -901,6 +976,7 @@ export class NodeContentRepository
             "The publication state no longer matches the deletion guard.",
           );
         }
+        this.checkLinkRemoval(input.entryId, "delete", input.deletedBy.id, input.linkImpact);
         if (entry.published_snapshot_id !== null) {
           this.checkpoint("delete.route");
           this.connection
@@ -913,6 +989,11 @@ export class NodeContentRepository
             "publication",
           );
         }
+        this.bumpLinkGraph(
+          [entry.draft_snapshot_id, entry.published_snapshot_id].filter(
+            (id): id is string => id !== null,
+          ),
+        );
         this.checkpoint("delete.entry");
         const deleted = this.connection
           .prepare(
@@ -1610,6 +1691,34 @@ export class NodeContentRepository
         snapshot.updatedAt,
       );
     }
+  }
+
+  private checkLinkRemoval(
+    targetId: string,
+    action: import("@lacecms/application").LinkImpactAction,
+    actorId: string,
+    acknowledgment: import("@lacecms/application").LinkImpactAcknowledgment | undefined,
+  ): void {
+    const row = this.connection
+      .prepare(LINK_IMPACT_EVIDENCE_SQL)
+      .get(targetId, targetId, action, targetId) as
+      | import("@lacecms/db").ImpactEvidenceRow
+      | undefined;
+    linkRemovalCondition(row, targetId, action, actorId, acknowledgment);
+  }
+
+  private replaceInternalLinks(
+    snapshotId: string,
+    references: readonly import("@lacecms/content").InternalLinkReference[],
+  ): void {
+    this.checkpoint("draft.internal-links");
+    for (const statement of replaceInternalLinkStatements(snapshotId, references))
+      this.connection.prepare(statement.sql).run(...statement.params);
+    this.checkpoint("draft.internal-links.complete");
+  }
+
+  private bumpLinkGraph(snapshotIds: readonly string[]): void {
+    this.connection.prepare(BUMP_INTERNAL_LINK_GRAPH_SQL).run(JSON.stringify(snapshotIds));
   }
 
   private insertReferences(

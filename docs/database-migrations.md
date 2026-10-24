@@ -176,3 +176,11 @@ a freshly migrated database, and every run also asserts that no
 ## Local operations evidence
 
 See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+
+## CE10 internal URL links
+
+See [internal URL links](./internal-url-links.md) for canonical ID targets, the
+200-occurrence snapshot bound, publication/removal guards, format-2 transport,
+installed source adoption, migration 0010 and matching-backup rollback. URL
+fields remain content fields; block settings, provider URLs, SEO and rich-text
+hrefs retain their existing grammars.

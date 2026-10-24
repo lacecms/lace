@@ -143,6 +143,13 @@ async function mockApi(page: Page, role: Role) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    if (path.endsWith("/link-impact"))
+      return json(route, {
+        mode: "sources",
+        sources: [],
+        hasPublishedUsages: false,
+        receipt: "unreferenced",
+      });
     const method = request.method();
     if (path === sessionPath) return json(route, sessionSummary({ id: `${role}-1`, role }));
     if (path === "/api/v1/admin/content-models") return json(route, { items: [about, posts] });

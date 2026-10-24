@@ -1,6 +1,8 @@
 import {
   BlockMigrationError,
   collectFieldMedia,
+  collectSnapshotInternalLinks,
+  MAX_INTERNAL_LINK_REFERENCES,
   encodeFieldPath,
   validateSnapshotListBudget,
   ContentValidationError,
@@ -52,6 +54,7 @@ export interface ConfigurationSyncMigrationBlock {
 
 /** One current snapshot of an entry read by the migration scan. */
 export interface ConfigurationSyncMigrationSnapshot {
+  readonly internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
   readonly blocks: readonly ConfigurationSyncMigrationBlock[];
   readonly fields: JsonObject;
   readonly references: readonly ConfigurationSyncMediaReference[];
@@ -92,6 +95,7 @@ export interface ConfigurationSyncMigratedBlock {
 
 /** The guarded rewrite of one snapshot of a migration unit. */
 export interface ConfigurationSyncSnapshotMigration {
+  readonly internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
   readonly blocks: readonly ConfigurationSyncMigratedBlock[];
   /** Present when a published snapshot takes the draft's new revision. */
   readonly draftGuard?: { readonly revision: number; readonly snapshotId: string };
@@ -168,6 +172,7 @@ export interface MigrationBudgetContext {
 }
 
 interface SnapshotOutcome {
+  internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
   readonly blocks: ConfigurationSyncMigratedBlock[];
   readonly migrated: { fromVersion: number; type: string }[];
   readonly references: ConfigurationSyncMediaReference[];
@@ -278,6 +283,33 @@ function migrateSnapshot(
   }
   if (firstMigrated !== undefined) {
     try {
+      const migratedKeys = new Set(outcome.blocks.map((block) => block.key));
+      const newLinks = collectSnapshotInternalLinks(
+        {},
+        {},
+        outcome.blocks.map((block) => {
+          const original = snapshot.blocks.find((item) => item.key === block.key)!;
+          return {
+            key: block.key,
+            fields: definitions.get(original.type)!.fields,
+            data: block.data,
+            hidden: original.hidden,
+          };
+        }),
+      );
+      const keptLinks = (snapshot.internalLinks ?? []).filter(
+        (reference) => !migratedKeys.has(reference.sourceKey),
+      );
+      if (keptLinks.length + newLinks.length > MAX_INTERNAL_LINK_REFERENCES)
+        throw new ContentValidationError([
+          {
+            code: "too_many_internal_links",
+            message: "Snapshot internal-link limit exceeded.",
+            path: ["blocks", snapshot.blocks.indexOf(firstMigrated), "data"],
+          },
+        ]);
+      if (newLinks.length || (snapshot.internalLinks?.length ?? 0))
+        outcome.internalLinks = [...keptLinks, ...newLinks];
       const migratedData = new Map(outcome.blocks.map((block) => [block.key, block.data]));
       validateSnapshotListBudget(
         budgetContext?.fields ?? {},
@@ -353,6 +385,9 @@ export function planEntryMigration(
           : {}),
         expectedRevision: entry.published.revision,
         references: Object.freeze(published.references),
+        ...(published.internalLinks === undefined
+          ? {}
+          : { internalLinks: published.internalLinks }),
         revision: follows ? draftRevision! : entry.published.revision,
         snapshotId: entry.published.snapshotId,
         state: "published",
@@ -365,6 +400,7 @@ export function planEntryMigration(
         blocks: Object.freeze(draft.blocks),
         expectedRevision: entry.draft!.revision,
         references: Object.freeze(draft.references),
+        ...(draft.internalLinks === undefined ? {} : { internalLinks: draft.internalLinks }),
         revision: draftRevision!,
         snapshotId: entry.draft!.snapshotId,
         state: "draft",

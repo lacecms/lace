@@ -536,6 +536,8 @@ test("accepts only absolute http and https canonical URLs", () => {
     "https://example.com/a#top",
     "https://exa mple.com/",
     "mailto:a@example.com",
+    "entry:target",
+    "entry:a%2Fb",
     "https://",
     "",
     5,

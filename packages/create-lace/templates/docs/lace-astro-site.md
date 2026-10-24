@@ -54,7 +54,12 @@ The token is read only in server code and never reaches the browser.
 ```ts
 import { createAstroSiteLoader } from "@lacecms/astro";
 
+const onLinkDiagnostics = (diagnostics: import("@lacecms/sdk").LinkDiagnostics) => {
+  if (diagnostics.total > 0) console.warn("[lace] Unavailable internal links", diagnostics);
+};
+
 export const getSite = createAstroSiteLoader({
+  onLinkDiagnostics,
   env: { ...import.meta.env, ...process.env },
   dev: import.meta.env.DEV,
 });
@@ -531,6 +536,25 @@ editors on purpose (and keep those classes in any CSS purge safelist):
 [data-lace-model="posts"] [data-lace-block="quote"] {
   border-inline-start: 4px solid currentColor;
 }
+
+/* Only resolved anchors get a navigation affordance; unavailable labels remain plain text. */
+.link {
+  margin-block: 1rem;
+}
+.link[data-lace-appearance="button"] [data-lace-part="link"] {
+  display: inline-block;
+  padding: 0.65rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.35rem;
+  text-decoration: none;
+}
+.link[data-lace-appearance="text"] [data-lace-part="link"] {
+  text-decoration: underline;
+}
+.link [data-lace-part="link"]:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
 ```
 
 The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`;
@@ -792,3 +816,28 @@ Open the published site, verify keyboard activation and then press the provider'
 Play control. Automated tests stub provider frames and do not prove external
 availability or permissions. Keep renderers deployed while published content uses
 the type; rolling back to a site without its renderer will fail the build.
+
+## Internal URLs (template 0.38.0)
+
+Use the CMS entry picker in ordinary URL content fields for links that follow
+entry IDs across slug changes. Manual URLs remain available. URL fields in model,
+global and nested block data participate; settings and rich-text/provider/SEO
+hrefs do not. Resolve custom markup with `const target = site.link(value)` and
+emit `<a href={target.href}>` only for `target.state === "resolved"`. Unavailable
+links retain a plain label or unlinked image; republishing the same ID restores
+navigation after a build. A different entry at the old path does not.
+
+Upgrade SDK/render/Astro/content and run `lace add block image gallery navigation
+hero cta link --site site --dry-run`, then review/apply through the installer.
+Edited sources get conflict reports and `--write-new` proposals, never silent
+overwrite. Adding allowed Link blocks or optional model/global URL fields needs
+model version increments and normal sync; existing block schema versions stay
+unchanged. The Link block's button/text appearance styles belong to your site.
+
+The new API exports format 2 with required local `internalLinks` manifests;
+format-1-only SDKs reject it. A current loader accepts formats 1 and 2, resolves
+only after every export page and exposes bounded `linkDiagnostics` with an
+`onLinkDiagnostics` callback once per assembled export. No target requests are
+made during rendering. Network/consistency failures still fail a build. Migration
+0010 must precede the matching engine; roll back with matching artifacts and the
+matching SQLite/D1 backup. Populated model removal remains prohibited.

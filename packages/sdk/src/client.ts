@@ -54,7 +54,7 @@ export interface BuildExportOptions extends LaceRequestOptions {
    * Called with the first page of each traversal before any continuation page
    * is requested; a rejection ends the traversal without further requests.
    */
-  readonly onFirstPage?: (page: BuildExportFirstPageDto) => void | Promise<void>;
+  readonly onFirstPage?: (page: BuildExportFirstPage) => void | Promise<void>;
   /** Entries per page from 1 to 100, sent on every page request. */
   readonly pageSize?: number;
   /**
@@ -72,8 +72,19 @@ export interface BuildExportPageOptions extends LaceRequestOptions {
   readonly limit?: number;
 }
 
-/** One build-export page as delivered by the API. */
-export type BuildExportPage = BuildExportFirstPageDto | BuildExportContinuationPageDto;
+/** Formats this SDK can assemble; strict server DTOs describe only current output. */
+export type SupportedBuildExportFormat = 1 | 2;
+export type BuildExportData = Omit<BuildExportDto, "formatVersion"> & {
+  readonly formatVersion: SupportedBuildExportFormat;
+};
+export type BuildExportFirstPage = Omit<BuildExportFirstPageDto, "formatVersion"> & {
+  readonly formatVersion: SupportedBuildExportFormat;
+};
+export type BuildExportContinuationPage = Omit<BuildExportContinuationPageDto, "formatVersion"> & {
+  readonly formatVersion: SupportedBuildExportFormat;
+};
+/** One supported build-export page as delivered by the API. */
+export type BuildExportPage = BuildExportFirstPage | BuildExportContinuationPage;
 
 export type BuildExportPageResult =
   | { readonly changed: false; readonly etag: EntityTag }
@@ -87,7 +98,7 @@ export interface AllCollectionResult {
 
 export type BuildExportResult =
   | { readonly changed: false; readonly etag: EntityTag }
-  | { readonly changed: true; readonly etag: EntityTag; readonly export: BuildExportDto };
+  | { readonly changed: true; readonly etag: EntityTag; readonly export: BuildExportData };
 
 export class LaceSdkError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
@@ -131,6 +142,9 @@ export class LaceContractError extends LaceSdkError {
     this.name = "LaceContractError";
   }
 }
+
+/** A malformed known manifest; never carries source values or URLs. */
+export class LaceLinkManifestError extends LaceContractError {}
 
 /** The API sent a build export in a format newer than this SDK supports. */
 export class LaceUnsupportedExportFormatError extends LaceContractError {
@@ -333,8 +347,11 @@ function parseSchema<Schema extends v.BaseSchema<unknown, unknown, v.BaseIssue<u
   value: unknown,
 ): v.InferOutput<Schema> {
   const parsed = v.safeParse(schema, value);
-  if (!parsed.success)
+  if (!parsed.success) {
+    if (parsed.issues.some((issue) => issue.path?.some((part) => part.key === "internalLinks")))
+      throw new LaceLinkManifestError("The build export has an invalid internal-link manifest.");
     throw new LaceContractError("The Lace response violated its public contract.");
+  }
   return parsed.output;
 }
 
@@ -461,7 +478,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
       ...(etag === undefined ? {} : { etag }),
     });
     if (!result.changed) return result;
-    const first = result.page as BuildExportFirstPageDto;
+    const first = result.page as BuildExportFirstPage;
     const violation = (detail: string) =>
       new LaceContractError(
         `The build-export pages are inconsistent: ${detail}. Upgrade the Lace API and SDK to compatible versions.`,

@@ -5,19 +5,20 @@ import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.image>;
 
-const { anchor, block, className, context, data, image, settings } = Astro.props;
+const { anchor, block, className, context, data, image, settings, link } = Astro.props;
+const destination = link(data.link);
 const media = image(data.media, data.alt);
 const caption = data.caption ?? media.caption;
 // A linked image opens its link instead of the lightbox; the alt text names the
 // link, then the caption, then the URL.
-const linkLabel = media.alt === "" ? (caption?.trim() || data.link) : undefined;
+const linkLabel = media.alt === "" ? (caption?.trim() || (destination.state === "resolved" ? destination.href : undefined)) : undefined;
 ---
 
 <figure class={className} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
-  {data.link === undefined ? (
+  {destination.state !== "resolved" ? (
     <LaceImage data-lace-part="media" image={media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}`} sizes="(min-width: 64rem) 60rem, 100vw" />
   ) : (
-    <a aria-label={linkLabel} data-lace-part="link" href={data.link}>
+    <a aria-label={linkLabel} data-lace-part="link" href={destination.href}>
       <LaceImage data-lace-part="media" image={media} sizes="(min-width: 64rem) 60rem, 100vw" />
     </a>
   )}

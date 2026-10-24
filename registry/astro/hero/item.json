@@ -4,10 +4,12 @@
   "framework": "astro",
   "blockType": "hero",
   "blockVersion": 1,
-  "revision": 4,
+  "revision": 5,
   "requires": {
     "@lacecms/astro": "0.1.0-alpha.7",
-    "@lacecms/render": "0.1.0-alpha.7"
+    "@lacecms/render": "0.1.0-alpha.7",
+    "@lacecms/content": "0.1.0-alpha.7",
+    "@lacecms/sdk": "0.1.0-alpha.7"
   },
   "files": [
     {

@@ -3,37 +3,43 @@
   "framework": "astro",
   "componentsDir": "src/components/lace",
   "blockMap": "src/lace/blocks.ts",
-  "blockMapSha256": "d0c408b08b495237fa5aaa8c4bae8ac65687974a401be89b45f5188da69acf0a",
+  "blockMapSha256": "a5773d59e91fc9dffece1da2b8a72ab4fdfacd567a5d0e524edce7827e6bc38e",
   "items": {
     "cta": {
-      "revision": 2,
+      "revision": 3,
       "files": {
-        "src/components/lace/CtaBlock.astro": "42fe89c754c00daffed4e89860a2ac455c91d63f2fe6c387ad4e305721d60ec0"
+        "src/components/lace/CtaBlock.astro": "3e042ba0e79954cc46c35406db30b5a9c2153c13183aa71d5fd74f4ea776df43"
       }
     },
     "gallery": {
-      "revision": 5,
+      "revision": 6,
       "files": {
-        "src/components/lace/GalleryBlock.astro": "0fdc9707cc58361316b894c73f9b1644f09b81300ac0deeb0d0c9a4e9fdefeb1",
+        "src/components/lace/GalleryBlock.astro": "8a2455f083c9fffc2758085cb63e08072cb155e12768d14f51adddba733c9653",
         "src/components/lace/ListLayout.css": "a8606fc40a51963db63e115646c1466b51727b310aa9f6425ea798fb3ac204fe"
       }
     },
     "hero": {
-      "revision": 4,
+      "revision": 5,
       "files": {
-        "src/components/lace/HeroBlock.astro": "55a941d2f4ced9e3888b1767c3baddb953d1470e6b9c3bc58b103d2376e36015"
+        "src/components/lace/HeroBlock.astro": "776136821f99b66afa0ff4f67243f32d48beca9c42748c24ed47558bf1f0d9f6"
       }
     },
     "image": {
-      "revision": 6,
+      "revision": 7,
       "files": {
-        "src/components/lace/ImageBlock.astro": "1311bb4e1c3620cd789c9d5f3b54677da4b78b94af35d39a34bc8a249fd1a5d3"
+        "src/components/lace/ImageBlock.astro": "ec64652ed1c9b8608e20225d0edc005c13d52901c3a610bcf2e225ce162e0a30"
+      }
+    },
+    "link": {
+      "revision": 1,
+      "files": {
+        "src/components/lace/LinkBlock.astro": "1998507ffd526760862d4454ea63eb7aef96ddb742de3e941353baca7dda3e60"
       }
     },
     "navigation": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/NavigationBlock.astro": "81aeee6342765d2d4554eafc03484c14d59b82c6761e1626a3006fae09e45ec7"
+        "src/components/lace/NavigationBlock.astro": "9020b9365c2194b62071eb6d254c8ab8fe2c125c7348c276c27a4d488abf0374"
       }
     },
     "quote": {

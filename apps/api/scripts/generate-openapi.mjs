@@ -19,6 +19,7 @@ const app = createLaceApp({
   actors: { resolve: async () => null },
   config,
   content: {},
+  links: {},
   environment: { engineVersion: "0.0.0", openApiTitle: "Lace API" },
   logger: { log: () => {} },
   maxBodyBytes: 1_048_576,

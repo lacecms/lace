@@ -52,9 +52,9 @@ test("filters by description, moves with arrows, and chooses a single match with
   const onChoose = mount();
   await user.click(screen.getByRole("button", { name: "Add block" }));
   await user.keyboard("{ArrowDown}");
-  expect(screen.getByRole("button", { name: "Hero" })).toHaveFocus();
-  await user.keyboard("{ArrowDown}");
   expect(screen.getByRole("button", { name: "Quote" })).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(screen.getByRole("button", { name: "Pricing Table" })).toHaveFocus();
   await user.keyboard("{ArrowUp}{ArrowUp}");
   const filter = screen.getByRole("searchbox", { name: "Filter blocks" });
   expect(filter).toHaveFocus();
@@ -77,4 +77,29 @@ test("states when no block matches and resets the filter on reopening", async ()
   expect(screen.getByRole("button", { name: "Add block" })).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "Add block" }));
   expect(screen.getByRole("searchbox", { name: "Filter blocks" })).toHaveValue("");
+});
+
+test("palette order stably retains custom types followed by Hero and CTA", async () => {
+  const user = userEvent.setup();
+  const definitions = ["cta", "custom", "hero", "image", "link"].map((type) => ({
+    type,
+    version: 1,
+    fields: {},
+  }));
+  const choose = vi.fn();
+  render(
+    <AddBlockMenu definitions={definitions} onChoose={choose}>
+      <Button>Add block</Button>
+    </AddBlockMenu>,
+  );
+  await user.click(screen.getByRole("button", { name: "Add block" }));
+  const dialog = screen.getByRole("dialog", { name: "Add block" });
+  expect(
+    within(dialog)
+      .getAllByRole("button")
+      .map((item) => item.textContent),
+  ).toEqual(["Custom", "Image", "Link", "Hero", "Cta"]);
+  expect(definitions.map((item) => item.type)).toEqual(["cta", "custom", "hero", "image", "link"]);
+  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+  expect(choose).toHaveBeenCalledWith(definitions[4]);
 });

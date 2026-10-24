@@ -56,7 +56,10 @@ test("deletes a draft-only entry after one confirmation and keeps failures visib
   expect(onDeleted).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "Delete entry" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(deleteEntry).toHaveBeenCalledWith("entry-1", 4);
+  expect(deleteEntry).toHaveBeenCalledWith("entry-1", 4, {
+    receipt: "receipt",
+    acknowledgePublishedLinks: true,
+  });
   await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
 });
 
@@ -81,7 +84,12 @@ test("a published entry is deleted only after its saved title is typed exactly",
   await user.type(input, "First");
   expect(confirm).toBeEnabled();
   await user.click(confirm);
-  await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith("entry-1", 4));
+  await waitFor(() =>
+    expect(deleteEntry).toHaveBeenCalledWith("entry-1", 4, {
+      receipt: "receipt",
+      acknowledgePublishedLinks: true,
+    }),
+  );
 });
 
 test("cancelling sends no request, clears the typed title, and returns focus to the opener", async () => {

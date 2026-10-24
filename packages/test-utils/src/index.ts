@@ -130,7 +130,7 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { NormalizedContentModel } from "@lacecms/config";
-import type { JsonValue } from "@lacecms/content";
+import type { InternalLinkReference, JsonValue } from "@lacecms/content";
 
 export const packageName = "@lacecms/test-utils";
 
@@ -592,6 +592,7 @@ export class InMemoryContentStore
   private modelStates = new Map<string, StoredContentModelState>();
   private readonly media = new Map<string, MediaMetadata>();
   private readonly publicationIdempotency = new Map<string, StoredPublicationIdempotency>();
+  private readonly linkReferences = new Map<string, readonly InternalLinkReference[]>();
   private readonly references = new Map<string, readonly DraftMediaReference[]>();
   private readonly routes = new Map<string, PublishedRoute>();
   private publicVersion = 0;
@@ -979,6 +980,8 @@ export class InMemoryContentStore
         }
       }
     }
+    for (const rewrite of input.linkRewrites ?? [])
+      this.linkReferences.set(rewrite.snapshotId, clone(rewrite.references));
     this.modelStates = nextStates;
     this.entries = nextEntries;
     this.references.clear();
@@ -1019,6 +1022,7 @@ export class InMemoryContentStore
     this.assertActiveReferences(input.mediaReferences ?? []);
     this.entries.set(entry.id, entry);
     this.references.set(entry.draft.id, clone(input.mediaReferences ?? []));
+    this.linkReferences.set(entry.draft.id, clone(input.internalLinks ?? []));
     return Object.freeze({ entry: copyEntry(entry), status: "created" });
   }
 
@@ -1040,7 +1044,11 @@ export class InMemoryContentStore
       if (route.entryId === input.entryId) nextRoutes.delete(path);
     this.entries.delete(input.entryId);
     this.references.delete(entry.draft.id);
-    if (entry.published !== undefined) this.references.delete(entry.published.id);
+    this.linkReferences.delete(entry.draft.id);
+    if (entry.published !== undefined) {
+      this.references.delete(entry.published.id);
+      this.linkReferences.delete(entry.published.id);
+    }
     this.routes.clear();
     for (const [path, route] of nextRoutes) this.routes.set(path, route);
     if (entry.published !== undefined) this.publicVersion += 1;
@@ -1103,6 +1111,7 @@ export class InMemoryContentStore
     const saved = saveCompleteDraft(entry, input.mutation);
     this.entries.set(saved.id, saved);
     this.references.set(saved.draft.id, clone(input.mutation.mediaReferences ?? []));
+    this.linkReferences.set(saved.draft.id, clone(input.internalLinks ?? []));
     return Object.freeze({ entry: copyEntry(saved), status: "saved" });
   }
 
@@ -1147,6 +1156,11 @@ export class InMemoryContentStore
     // Publication replaces the prior published snapshot, as SQLite cascades its references.
     if (entry.published !== undefined) this.references.delete(entry.published.id);
     this.references.set(published.published!.id, clone(this.references.get(entry.draft.id) ?? []));
+    if (entry.published !== undefined) this.linkReferences.delete(entry.published.id);
+    this.linkReferences.set(
+      published.published!.id,
+      clone(this.linkReferences.get(entry.draft.id) ?? []),
+    );
     this.routes.clear();
     for (const [routePath, route] of nextRoutes) this.routes.set(routePath, route);
     this.publicVersion += 1;
@@ -1200,6 +1214,7 @@ export class InMemoryContentStore
     }
     this.entries.set(unpublished.id, unpublished);
     this.references.delete(input.expectedPublishedSnapshotId);
+    this.linkReferences.delete(input.expectedPublishedSnapshotId);
     this.publicVersion += 1;
     if (idempotencyMapKey !== undefined) {
       this.publicationIdempotency.set(idempotencyMapKey, {
@@ -1224,6 +1239,10 @@ export class InMemoryContentStore
     this.references.set(
       reverted.draft.id,
       clone(this.references.get(input.expectedPublishedSnapshotId) ?? []),
+    );
+    this.linkReferences.set(
+      reverted.draft.id,
+      clone(this.linkReferences.get(input.expectedPublishedSnapshotId) ?? []),
     );
     return Object.freeze({ entry: copyEntry(reverted), status: "reverted" });
   }
@@ -1266,8 +1285,8 @@ export class InMemoryContentStore
   }
 
   private publicGlobalView(entry: ContentEntry): PublicGlobalContent {
-    const { entry: projected, media } = this.publicView(entry, "");
-    return Object.freeze({ entry: projected, media });
+    const { entry: projected, media, internalLinks } = this.publicView(entry, "");
+    return Object.freeze({ entry: projected, media, internalLinks });
   }
 
   /** References a published snapshot delivers: none held by a hidden block (like SQL). */
@@ -1304,6 +1323,11 @@ export class InMemoryContentStore
         published,
       }),
       media: Object.freeze(media),
+      internalLinks: Object.freeze(
+        (this.linkReferences.get(entry.published!.id) ?? [])
+          .filter((item) => item.delivered)
+          .map(({ delivered: _delivered, ...item }) => Object.freeze(item)),
+      ),
       path,
     });
   }

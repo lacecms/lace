@@ -1,0 +1,6 @@
+---
+import type { BlockProps } from "@lacecms/render";
+const { data, link } = Astro.props as BlockProps;
+const result = link(data.url);
+---
+{result.state === "resolved" ? <a href={result.href}>Open</a> : <span>Open</span>}

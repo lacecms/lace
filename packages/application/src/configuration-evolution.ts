@@ -106,6 +106,7 @@ export interface ConfigurationSyncSnapshotFindings {
 
 /** One current draft or published snapshot read for a data-dependent sync decision. */
 export interface ConfigurationSyncSnapshot {
+  readonly internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
   readonly blocks: readonly {
     readonly data?: JsonObject;
     readonly settings?: JsonObject;

@@ -174,13 +174,29 @@ test.each([false, true])(
           { databasePath: db },
           repository,
         );
-        const before = opened.connection.prepare("select * from content_models").all();
+        const tables = [
+          "content_models",
+          "content_entries",
+          "content_snapshots",
+          "content_blocks",
+          "published_routes",
+          "content_entry_link_references",
+          "content_link_state",
+        ];
+        const state = () =>
+          Object.fromEntries(
+            tables.map((table) => [
+              table,
+              opened.connection.prepare(`select * from ${table}`).all(),
+            ]),
+          );
+        const before = state();
         result = invoke(repository, ["content", "sync", "--check"], environment, json);
         expect(result.status).toBe(0);
         result = invoke(root, ["content", "sync"], environment, json);
         expect(result.status).toBe(6);
         diagnostic(result, json, "SYNC_BLOCKED", "content sync", /incompatible/u);
-        expect(opened.connection.prepare("select * from content_models").all()).toEqual(before);
+        expect(state()).toEqual(before);
         result = invoke(root, ["content", "sync", "--check"], environment, json);
         expect(result.status).toBe(2);
         diagnostic(result, json, "SYNC_PENDING", "content sync", /invalid/u);

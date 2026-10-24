@@ -5,3 +5,22 @@
 [data-lace-model="posts"] [data-lace-block="quote"] {
   border-inline-start: 4px solid currentColor;
 }
+
+/* Only resolved anchors get a navigation affordance; unavailable labels remain plain text. */
+.link {
+  margin-block: 1rem;
+}
+.link[data-lace-appearance="button"] [data-lace-part="link"] {
+  display: inline-block;
+  padding: 0.65rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.35rem;
+  text-decoration: none;
+}
+.link[data-lace-appearance="text"] [data-lace-part="link"] {
+  text-decoration: underline;
+}
+.link [data-lace-part="link"]:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

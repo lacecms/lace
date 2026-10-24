@@ -4,6 +4,7 @@ import {
   AccountUseCases,
   BuildExportCursorError,
   ContentUseCases,
+  ContentLinkUseCases,
   ContentValidationError,
   RateLimitExceededError,
   MAX_MEDIA_BYTES,
@@ -84,6 +85,13 @@ import {
   errorEnvelopeSchema,
   idempotencyKeySchema,
   identifierSchemaPublic,
+  linkTargetIdSchema,
+  linkTargetQuerySchema,
+  linkTargetPageSchema,
+  resolveLinkTargetsRequestSchema,
+  linkTargetStatusesSchema,
+  linkImpactQuerySchema,
+  linkImpactPageSchema,
   opaqueCursorSchema,
   publishContentEntryResultSchema,
   publicContentEntrySchema,
@@ -338,6 +346,7 @@ export interface LaceAppInput {
   readonly adminAssets?: BuiltAdminResponder;
   readonly config: ServerConfig;
   readonly content: ContentUseCases;
+  readonly links: ContentLinkUseCases;
   readonly environment: ServerEnvironmentMetadata;
   readonly logger: ServerLogger;
   readonly maxBodyBytes: number;
@@ -1965,6 +1974,98 @@ export function createLaceApp(input: LaceAppInput): Hono {
   );
 
   app.get(
+    "/api/v1/admin/link-targets",
+    describeRoute({
+      summary: "Search internal link destinations",
+      description:
+        "Requires content:read. Title-prefix search trims input and compares ASCII case-insensitively; non-ASCII characters and SQL wildcards are literal. Globals are excluded.",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Bounded destination page",
+          content: {
+            "application/json": { schema: resolver(linkTargetPageSchema) },
+          },
+        },
+      },
+    }),
+    validator("query", linkTargetQuerySchema, validationHook),
+    async (context) => {
+      const query = context.req.valid("query") as v.InferOutput<typeof linkTargetQuerySchema>;
+      const result = await input.links.list(await actor(context), {
+        limit: query.limit,
+        ...(query.modelKey === undefined ? {} : { modelKey: query.modelKey }),
+        ...(query.status === undefined ? {} : { status: query.status }),
+        ...(query.search === undefined ? {} : { search: query.search }),
+        ...(query.after === undefined ? {} : { after: opaqueCursor(query.after) }),
+      });
+      return response(linkTargetPageSchema, result);
+    },
+  );
+  app.post(
+    "/api/v1/admin/link-targets/resolve",
+    describeRoute({
+      summary: "Resolve up to 200 distinct destination IDs",
+      tags: ["admin"],
+      requestBody: {
+        content: { "application/json": { schema: resolver(resolveLinkTargetsRequestSchema) } },
+      },
+      responses: {
+        200: {
+          description: "Destination statuses keyed by ID",
+          content: {
+            "application/json": { schema: resolver(linkTargetStatusesSchema) },
+          },
+        },
+      },
+    }),
+    validator("json", resolveLinkTargetsRequestSchema, validationHook),
+    async (context) => {
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof resolveLinkTargetsRequestSchema
+      >;
+      return response(
+        linkTargetStatusesSchema,
+        await input.links.resolve(await actor(context), body.ids),
+      );
+    },
+  );
+  app.get(
+    "/api/v1/admin/entries/:entryId/link-impact",
+    describeRoute({
+      summary: "Review incoming links before delete or unpublish",
+      description:
+        "Requires content:read. Source pages contain at most ten initial locations each. Continue an individual source with sourceEntryId, snapshotId and locationsAfter. A 409 CONTENT_LINK_IMPACT_CHANGED requires restarting the review; receipts confer no permissions.",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Bounded source or location page and concurrency receipt",
+          content: {
+            "application/json": { schema: resolver(linkImpactPageSchema) },
+          },
+        },
+      },
+    }),
+    validator("param", v.strictObject({ entryId: linkTargetIdSchema }), validationHook),
+    validator("query", linkImpactQuerySchema, validationHook),
+    async (context) => {
+      const query = context.req.valid("query") as v.InferOutput<typeof linkImpactQuerySchema>;
+      const result = await input.links.impact(await actor(context), {
+        limit: query.limit,
+        action: query.action,
+        targetId: context.req.param("entryId"),
+        ...(query.sourceEntryId === undefined ? {} : { sourceEntryId: query.sourceEntryId }),
+        ...(query.snapshotId === undefined ? {} : { snapshotId: query.snapshotId }),
+        ...(query.after === undefined ? {} : { after: opaqueCursor(query.after) }),
+        ...(query.locationsAfter === undefined
+          ? {}
+          : { locationsAfter: opaqueCursor(query.locationsAfter) }),
+      });
+      return response(linkImpactPageSchema, result);
+    },
+  );
+
+  app.get(
     "/api/v1/admin/entries/:entryId",
     describeRoute({
       responses: {
@@ -2097,6 +2198,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
         expectedPublishedSnapshotId: body.expectedPublishedSnapshotId as never,
+        ...(body.linkImpact === undefined ? {} : { linkImpact: body.linkImpact }),
         ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       });
       return response(
@@ -2179,7 +2281,16 @@ export function createLaceApp(input: LaceAppInput): Hono {
 
   app.delete(
     "/api/v1/admin/entries/:entryId",
-    describeRoute({ summary: "Delete content entry", tags: ["admin"] }),
+    describeRoute({
+      summary: "Delete content entry",
+      tags: ["admin"],
+      description:
+        "Requires content:write and the expected draft revision through If-Match or the body. Optional linkImpact acknowledges the current published incoming links. Refresh impact after CONTENT_LINK_IMPACT_CHANGED.",
+      requestBody: {
+        required: false,
+        content: { "application/json": { schema: resolver(deleteContentEntryRequestSchema) } },
+      },
+    }),
     validator("param", entryIdParams, validationHook),
     async (context) => {
       const body = parse(deleteContentEntryRequestSchema, await optionalJsonBody(context.req.raw));
@@ -2187,6 +2298,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         actor: await actor(context),
         entryId: context.req.param("entryId") as never,
         expectedRevision: revision(body, context.req.raw),
+        ...(body.linkImpact === undefined ? {} : { linkImpact: body.linkImpact }),
       });
       return new Response(null, { status: 204 });
     },

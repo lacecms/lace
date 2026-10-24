@@ -54,6 +54,7 @@ const media = {
 };
 
 const entry = {
+  internalLinks: [],
   blocks: [block(), block({ anchor: undefined, className: undefined, key: "block-2" })].map(
     (value) => JSON.parse(JSON.stringify(value)),
   ),
@@ -74,6 +75,7 @@ const entry = {
 };
 
 const global = {
+  internalLinks: [],
   blocks: [block({ key: "nav-1" })],
   fields: { siteName: "Lace" },
   id: "settings",
@@ -97,7 +99,7 @@ const fixtures = {
     buildExportSchema,
     {
       entries: [entry],
-      formatVersion: 1,
+      formatVersion: 2,
       globals: [global],
       media,
       seo: exportSeo,
@@ -106,13 +108,13 @@ const fixtures = {
   ],
   buildExportContinuationPage: [
     buildExportContinuationPageSchema,
-    { entries: [entry], formatVersion: 1, media, nextCursor: "next", version: 9 },
+    { entries: [entry], formatVersion: 2, media, nextCursor: "next", version: 9 },
   ],
   buildExportFirstPage: [
     buildExportFirstPageSchema,
     {
       entries: [entry],
-      formatVersion: 1,
+      formatVersion: 2,
       globals: [global],
       media,
       nextCursor: "next",
@@ -277,11 +279,11 @@ describe("strict and tolerant public read schemas", () => {
   });
 
   test("the export format version is strict for output and open for consumers", () => {
-    expect(BUILD_EXPORT_FORMAT_VERSION).toBe(1);
+    expect(BUILD_EXPORT_FORMAT_VERSION).toBe(2);
     const exported = fixtures.buildExport[1];
-    expect(v.safeParse(buildExportSchema, { ...exported, formatVersion: 2 }).success).toBe(false);
-    expect(v.parse(tolerantPublicSchemas.buildExport, { ...exported, formatVersion: 2 })).toEqual(
-      expect.objectContaining({ formatVersion: 2 }),
+    expect(v.safeParse(buildExportSchema, { ...exported, formatVersion: 3 }).success).toBe(false);
+    expect(v.parse(tolerantPublicSchemas.buildExport, { ...exported, formatVersion: 3 })).toEqual(
+      expect.objectContaining({ formatVersion: 3 }),
     );
     for (const value of [undefined, 0, 1.5, "1"]) {
       const candidate = { ...exported, formatVersion: value };
@@ -303,4 +305,38 @@ describe("strict and tolerant public read schemas", () => {
       ).toBe(false);
     }
   });
+});
+
+test("format 1 normalizes absent local manifests while format 2 requires them", () => {
+  const { internalLinks: _entryLinks, ...legacyEntry } = entry;
+  const { internalLinks: _globalLinks, ...legacyGlobal } = global;
+  const legacy = {
+    ...fixtures.buildExport[1],
+    formatVersion: 1,
+    entries: [legacyEntry],
+    globals: [legacyGlobal],
+  };
+  const parsed = v.parse(tolerantPublicSchemas.buildExport, legacy);
+  expect(parsed.entries[0].internalLinks).toEqual([]);
+  expect(parsed.globals[0].internalLinks).toEqual([]);
+  expect(v.safeParse(buildExportSchema, legacy).success).toBe(false);
+  expect(
+    v.safeParse(tolerantPublicSchemas.buildExport, { ...legacy, formatVersion: 2 }).success,
+  ).toBe(false);
+  const manifest = [{ sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "target" }];
+  const linked = { ...entry, internalLinks: manifest };
+  for (const value of [
+    null,
+    {},
+    [{ ...manifest[0], area: "settings" }],
+    [{ ...manifest[0], pointer: "url" }],
+    [{ ...manifest[0], targetId: "" }],
+    [...manifest, ...manifest],
+  ]) {
+    for (const schema of [publicEntrySchema, tolerantPublicSchemas.publicEntry])
+      expect(v.safeParse(schema, { ...linked, internalLinks: value }).success).toBe(false);
+  }
+  const future = { ...linked, internalLinks: [{ ...manifest[0], future: true }] };
+  expect(v.safeParse(publicEntrySchema, future).success).toBe(false);
+  expect(v.parse(tolerantPublicSchemas.publicEntry, future).internalLinks).toEqual(manifest);
 });

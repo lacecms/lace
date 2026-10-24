@@ -54,6 +54,7 @@ test("the bundled registry matches the repository registry and lists the built-i
     "gallery",
     "hero",
     "image",
+    "link",
     "navigation",
     "quote",
     "richText",

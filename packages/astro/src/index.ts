@@ -5,6 +5,7 @@ import type {
   PublishedSiteEnvironment,
   PublishedSiteErrorCode,
   PublishedSiteLoader,
+  LinkDiagnostics,
   SitemapOptions,
 } from "@lacecms/sdk";
 import type { RichTextElementDescription, RichTextSource } from "@lacecms/render";
@@ -34,6 +35,7 @@ export interface AstroSiteLoaderOptions {
   readonly hints?: Readonly<Partial<Record<PublishedSiteErrorCode, string>>>;
   /** Gives resolved media a build source for image variants (default `true`). */
   readonly optimizeImages?: boolean;
+  readonly onLinkDiagnostics?: (diagnostics: LinkDiagnostics) => void;
 }
 
 /** Creates the server-only published-site loader for an Astro site. */
@@ -44,6 +46,9 @@ export function createAstroSiteLoader(options: AstroSiteLoaderOptions = {}): Pub
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.hints === undefined ? {} : { hints: options.hints }),
     ...(options.optimizeImages === undefined ? {} : { optimizeImages: options.optimizeImages }),
+    ...(options.onLinkDiagnostics === undefined
+      ? {}
+      : { onLinkDiagnostics: options.onLinkDiagnostics }),
   });
 }
 

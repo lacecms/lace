@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "link",
+  "framework": "astro",
+  "blockType": "link",
+  "blockVersion": 1,
+  "revision": 1,
+  "requires": {
+    "@lacecms/astro": "0.1.0-alpha.7",
+    "@lacecms/render": "0.1.0-alpha.7",
+    "@lacecms/content": "0.1.0-alpha.7",
+    "@lacecms/sdk": "0.1.0-alpha.7"
+  },
+  "files": [
+    {
+      "source": "LinkBlock.astro",
+      "target": "LinkBlock.astro",
+      "role": "component"
+    }
+  ],
+  "dependencies": []
+}

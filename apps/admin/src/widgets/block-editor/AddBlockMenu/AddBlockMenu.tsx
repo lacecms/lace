@@ -3,6 +3,7 @@ import { Input } from "../../../shared/ui/Input/index.js";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/Popover/index.js";
 import {
   blockIcon,
+  paletteDefinitions,
   blockLabel,
   matchesBlockFilter,
   type BlockDefinitionDto,
@@ -29,7 +30,9 @@ export function AddBlockMenu({
   const [query, setQuery] = useState("");
   const chosen = useRef(false);
   const list = useRef<HTMLUListElement>(null);
-  const matches = definitions.filter((definition) => matchesBlockFilter(definition, query));
+  const matches = paletteDefinitions(definitions).filter((definition) =>
+    matchesBlockFilter(definition, query),
+  );
 
   const choose = (definition: BlockDefinitionDto) => {
     if (unavailable?.(definition)) return;

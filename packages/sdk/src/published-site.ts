@@ -1,6 +1,7 @@
+import { immutable, publishedLinks } from "./internal-links.js";
+import type { PublishedLinkLookup, LinkDiagnostics } from "./internal-links.js";
 import { effectiveAltText } from "@lacecms/contracts";
 import type {
-  BuildExportDto,
   EntityTag,
   PublicBlockDto,
   PublicEntryDto,
@@ -10,11 +11,12 @@ import type {
 import {
   createLaceClient,
   LaceHttpError,
+  LaceLinkManifestError,
   LaceSdkError,
   LaceTransportError,
   LaceUnsupportedExportFormatError,
 } from "./client.js";
-import type { LaceClient, LaceFetch } from "./client.js";
+import type { BuildExportData, LaceClient, LaceFetch } from "./client.js";
 import { resolveSeo, seoText, siteUrlFor } from "./seo.js";
 import type { ResolvedSeo, SeoDefaultValues } from "./seo.js";
 
@@ -45,6 +47,8 @@ export interface PublishedSiteLoaderOptions {
    * fetch originals from for image variants (default `true`).
    */
   readonly optimizeImages?: boolean;
+  /** Called once for each newly assembled view; 304 and repeated renders reuse diagnostics. */
+  readonly onLinkDiagnostics?: (diagnostics: LinkDiagnostics) => void;
   /** Takes precedence over `LACE_PUBLIC_BASE_URL`. */
   readonly publicBaseUrl?: string;
   /**
@@ -86,7 +90,8 @@ export interface PublishedMediaLookup {
 }
 
 /** The published content of one entry; no draft or editorial data is exposed. */
-export interface PublishedEntry extends PublishedMediaLookup {
+export interface PublishedEntry extends PublishedMediaLookup, PublishedLinkLookup {
+  readonly internalLinks: readonly Readonly<PublicEntryDto["internalLinks"][number]>[];
   readonly blocks: readonly PublishedBlock[];
   readonly fields: PublicEntryDto["fields"];
   readonly id: string;
@@ -103,7 +108,8 @@ export interface PublishedEntry extends PublishedMediaLookup {
 }
 
 /** The published content of one route-less global; no path, slug, or title. */
-export interface PublishedGlobal extends PublishedMediaLookup {
+export interface PublishedGlobal extends PublishedMediaLookup, PublishedLinkLookup {
+  readonly internalLinks: readonly Readonly<PublicEntryDto["internalLinks"][number]>[];
   readonly blocks: readonly PublishedBlock[];
   readonly fields: PublicEntryDto["fields"];
   readonly id: string;
@@ -112,7 +118,8 @@ export interface PublishedGlobal extends PublishedMediaLookup {
 }
 
 /** An immutable view of one published build export. */
-export interface PublishedSite extends PublishedMediaLookup {
+export interface PublishedSite extends PublishedMediaLookup, PublishedLinkLookup {
+  readonly linkDiagnostics: LinkDiagnostics;
   /** Every published entry of every model, sorted by path; no globals. */
   allEntries(): readonly PublishedEntry[];
   byPath(path: string): PublishedEntry | undefined;
@@ -280,10 +287,21 @@ export function createPublishedSiteLoader(
   }
 
   function buildSite(
-    exported: BuildExportDto,
+    exported: BuildExportData,
     configuration: ResolvedConfiguration,
   ): PublishedSite {
     const { indexing, mediaClient, publicMediaOrigin, siteUrl, sourceClient } = configuration;
+    let links;
+    try {
+      links = publishedLinks(exported);
+    } catch (cause) {
+      failure(
+        "invalid_export",
+        "The build export has inconsistent link identities or manifests.",
+        cause,
+      );
+    }
+    immutable(exported);
     const resolved = new Map<string, PublishedMedia>();
     for (const item of Object.values(exported.media)) {
       resolved.set(
@@ -316,11 +334,13 @@ export function createPublishedSiteLoader(
         .sort((left, right) => left.position - right.position)
         .map((block) => Object.freeze(block));
       const published: PublishedEntry = Object.freeze({
+        internalLinks: entry.internalLinks,
         blocks: Object.freeze(blocks),
         fields: entry.fields,
         id: entry.id,
         image: lookup.image,
         media: lookup.media,
+        link: links.link,
         modelKey: entry.modelKey,
         path,
         publishedAt: entry.publishedAt,
@@ -359,6 +379,7 @@ export function createPublishedSiteLoader(
       globals.set(
         global.modelKey,
         Object.freeze({
+          internalLinks: global.internalLinks,
           blocks: Object.freeze(
             [...global.blocks]
               .sort((left, right) => left.position - right.position)
@@ -368,6 +389,7 @@ export function createPublishedSiteLoader(
           id: global.id,
           image: lookup.image,
           media: lookup.media,
+          link: links.link,
           modelKey: global.modelKey,
           publishedAt: global.publishedAt,
         }),
@@ -403,7 +425,9 @@ export function createPublishedSiteLoader(
       });
     }
     const mappings = exported.seo.models;
-    return Object.freeze({
+    const site: PublishedSite = Object.freeze({
+      link: links.link,
+      linkDiagnostics: links.linkDiagnostics,
       allEntries: () => all,
       byPath: (path: string) => byPath.get(path),
       bySlug: (modelKey: string, slug: string) => bySlug.get(modelKey)?.get(slug),
@@ -427,6 +451,8 @@ export function createPublishedSiteLoader(
       urlFor: (path: string) => (siteUrl === undefined ? undefined : siteUrlFor(siteUrl, path)),
       version: exported.version,
     });
+    options.onLinkDiagnostics?.(links.linkDiagnostics);
+    return site;
   }
 
   function mismatch(expected: number, received: number | undefined, cause?: unknown): never {
@@ -481,6 +507,8 @@ export function createPublishedSiteLoader(
           "The Lace API is unavailable. Check LACE_API_BASE_URL and that the Lace API is running.",
           error,
         );
+      if (error instanceof LaceLinkManifestError)
+        failure("invalid_export", "The build export has an invalid internal-link manifest.", error);
       if (error instanceof LaceUnsupportedExportFormatError)
         failure(
           "invalid_export",

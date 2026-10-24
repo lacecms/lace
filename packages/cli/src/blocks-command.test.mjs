@@ -28,6 +28,7 @@ const builtIns = [
   "gallery",
   "hero",
   "image",
+  "link",
   "navigation",
   "quote",
   "richText",
@@ -61,7 +62,7 @@ async function astroSite(root, name = "site") {
 }
 
 async function installPackages(site, version = "0.1.0-alpha.7") {
-  for (const name of ["astro", "render"]) {
+  for (const name of ["astro", "render", "content", "sdk"]) {
     const directory = join(site, "node_modules/@lacecms", name);
     await mkdir(directory, { recursive: true });
     await writeFile(
@@ -188,14 +189,22 @@ describe("installation into an independent Astro site", () => {
       ["navigation", "added"],
     ]);
     const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-    expect(Object.keys(lock.items)).toEqual(builtIns.filter((name) => name !== "videoEmbed"));
-    expect(lock.items.gallery.revision).toBe(5);
-    expect(lock.items.navigation.revision).toBe(1);
+    expect(Object.keys(lock.items)).toEqual(
+      builtIns.filter((name) => name !== "videoEmbed" && name !== "link"),
+    );
+    expect(lock.items.gallery.revision).toBe(6);
+    expect(lock.items.navigation.revision).toBe(2);
     const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
     expect(map).toBe(
       (await readFile(join(starterSite, "src/lace/blocks.ts"), "utf8"))
         .split("\n")
-        .filter((line) => !line.includes("VideoEmbedBlock") && !line.includes("videoEmbed:"))
+        .filter(
+          (line) =>
+            !line.includes("VideoEmbedBlock") &&
+            !line.includes("videoEmbed:") &&
+            !line.includes("LinkBlock") &&
+            !line.includes("  link:"),
+        )
         .join("\n"),
     );
     for (const [index, type] of earlierBuiltIns.entries())
@@ -456,7 +465,7 @@ describe("site and framework validation", () => {
     await expect(runAddBlockCommand(["carousel"], { cwd: root })).rejects.toMatchObject({
       code: "BLOCK_USAGE",
       message: expect.stringContaining(
-        "Available: cta, gallery, hero, image, navigation, quote, richText, videoEmbed.",
+        "Available: cta, gallery, hero, image, link, navigation, quote, richText, videoEmbed.",
       ),
     });
   });
@@ -732,7 +741,7 @@ test("Gallery v3 upgrades to v4 as a component/CSS pair and protects edited v3 s
   await writeFile(component, "<section>Version 3</section>\n");
   await run(root, ["gallery"]);
   const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-  expect(lock.items.gallery.revision).toBe(5);
+  expect(lock.items.gallery.revision).toBe(6);
   expect(Object.keys(lock.items.gallery.files)).toHaveLength(2);
   expect(await readFile(component, "utf8")).toContain('import "./ListLayout.css"');
   expect(await readFile(css, "utf8")).toContain("@layer lace-layout");
