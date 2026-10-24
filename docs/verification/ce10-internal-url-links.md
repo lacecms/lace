@@ -143,3 +143,7 @@ Documentation checks and the sequential locale/version variant builds passed.
 Checking all specs also exposed the still-active `video-embed-block` delta's
 outdated copies of two shared requirements after CE10 synchronization: strict
 validation requires those copies to preserve the newly accepted Link scenarios.
+After owner approval, both shared requirement copies were updated from the
+accepted specs, preserving all existing video scenarios and provider-restricted
+video URLs. Full `pnpm spec:validate` then passed all 80 items (78 accepted specs
+and two active changes).
