@@ -147,3 +147,14 @@ After owner approval, both shared requirement copies were updated from the
 accepted specs, preserving all existing video scenarios and provider-restricted
 video URLs. Full `pnpm spec:validate` then passed all 80 items (78 accepted specs
 and two active changes).
+
+CI run `40079358245` exposed a concurrent build/typecheck race in the platform
+release-version generator: rewriting its existing TypeScript source could expose
+a truncated file, producing TS2305 for `engineVersion`. Generation now leaves
+unchanged content untouched and replaces changed content through a unique
+same-directory temporary file and atomic rename. A regression test verifies
+unchanged timestamps, concurrent generation, old readers retaining complete
+source, new readers seeing the replacement and temporary-file cleanup.
+All nine release-version/artifact tests passed. Forced typechecking passed all
+36 Turbo tasks with zero cache hits plus the root configuration check; lint,
+formatting and all 80 OpenSpec validation items passed.
