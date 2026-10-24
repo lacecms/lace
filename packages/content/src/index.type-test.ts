@@ -1,4 +1,11 @@
-import { builtInBlocks, defineBlock, field, listLayoutSettings } from "./index.js";
+import {
+  builtInBlocks,
+  defineBlock,
+  field,
+  listLayoutSettings,
+  encodeEntryLink,
+  decodeEntryLink,
+} from "./index.js";
 import type {
   BlockDataValues,
   BlockMigration,
@@ -30,6 +37,9 @@ const selectWithDefault = field.select({
   options: ["design", "engineering"] as const,
 });
 const url = field.url({ defaultValue: "https://lacecms.dev" });
+const internalUrl: FieldValue<typeof url> = encodeEntryLink("opaque/target");
+const internalTarget: string | undefined = decodeEntryLink(internalUrl);
+void internalTarget;
 const media = field.media({ defaultValue: "01K4M0D3LQYH8ND26GG2DDC8N2" });
 const hero = defineBlock({
   fields: {
@@ -334,3 +344,16 @@ const embedProviders: readonly ("youtube" | "vimeo")[] = embedUrl.embedProviders
 void embedProviders;
 // @ts-expect-error unsupported provider
 field.url({ embedProviders: ["other"] });
+
+export type LinkData = Expect<
+  Equal<
+    BlockDataValues<typeof builtInBlocks.link.fields>,
+    { readonly label: string; readonly url: string }
+  >
+>;
+export type LinkAppearance = Expect<
+  Equal<
+    BlockSettingsValues<NonNullable<typeof builtInBlocks.link.settings>>["appearance"],
+    "button" | "text"
+  >
+>;

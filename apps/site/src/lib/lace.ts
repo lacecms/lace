@@ -4,6 +4,10 @@ import fixtureExport from "../fixtures/published-export.json" with { type: "json
 
 const DEFAULT_API_BASE_URL = "https://cms.example.test/lace";
 
+const onLinkDiagnostics = (diagnostics: import("@lacecms/sdk").LinkDiagnostics) => {
+  if (diagnostics.total > 0) console.warn("[lace] Unavailable internal links", diagnostics);
+};
+
 const env: Readonly<Record<string, string | undefined>> = { ...import.meta.env, ...process.env };
 const mode = env.LACE_SITE_DATA_MODE ?? "fixture";
 if (mode !== "fixture" && mode !== "live")
@@ -26,6 +30,7 @@ const hints = {
 export const getSite =
   mode === "fixture"
     ? createAstroSiteLoader({
+        onLinkDiagnostics,
         env: {
           LACE_API_BASE_URL: env.LACE_API_BASE_URL || DEFAULT_API_BASE_URL,
           LACE_BUILD_SITE_URL: env.LACE_BUILD_SITE_URL,
@@ -37,4 +42,9 @@ export const getSite =
         hints,
         optimizeImages: (env.LACE_API_BASE_URL ?? "") !== "",
       })
-    : createAstroSiteLoader({ env, dev: import.meta.env.DEV, hints });
+    : createAstroSiteLoader({
+        onLinkDiagnostics,
+        env,
+        dev: import.meta.env.DEV,
+        hints,
+      });

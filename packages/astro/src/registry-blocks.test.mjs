@@ -9,6 +9,8 @@ import { defineBlockMap } from "@lacecms/render";
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { expect, test } from "vitest";
 // The registry sources exactly as `lace add block` installs them.
+import LinkBlock from "../../../registry/astro/link/LinkBlock.astro";
+import CtaBlock from "../../../registry/astro/cta/CtaBlock.astro";
 import GalleryBlock from "../../../registry/astro/gallery/GalleryBlock.astro";
 import HeroBlock from "../../../registry/astro/hero/HeroBlock.astro";
 import ImageBlock from "../../../registry/astro/image/ImageBlock.astro";
@@ -18,6 +20,8 @@ import CardList from "../test-fixtures/CardList.astro";
 import Blocks from "../test-fixtures/Blocks.astro";
 
 const blocks = defineBlockMap({
+  link: { component: LinkBlock, definition: builtInBlocks.link },
+  cta: { component: CtaBlock, definition: builtInBlocks.cta },
   videoEmbed: { component: VideoEmbedBlock, definition: builtInBlocks.videoEmbed },
   gallery: { component: GalleryBlock, definition: builtInBlocks.gallery },
   hero: { component: HeroBlock, definition: builtInBlocks.hero },
@@ -403,4 +407,78 @@ test("video embeds render canonical iframes or inert optimized previews", async 
   expect(preview).toContain('data-lace-part="source"');
   const hidden = await render([block("videoEmbed", {}, { hidden: true })]);
   expect(hidden).not.toContain('data-lace-block="videoEmbed"');
+});
+
+const resolveLink = (value) =>
+  value === undefined || value === null || value === ""
+    ? { state: "empty" }
+    : value === "entry:missing"
+      ? { state: "unavailable", targetId: "missing" }
+      : value === "entry:target"
+        ? { state: "resolved", targetId: "target", href: "/new" }
+        : { state: "resolved", href: value };
+
+test.each(["button", "text"])(
+  "Link %s preserves its envelope and newTab and degrades to a plain label",
+  async (appearance) => {
+    const data = { label: "Open page", url: "entry:target" };
+    const settings = { appearance, newTab: true };
+    const html = await render(
+      [block("link", data, { anchor: "next", className: "accent", settings })],
+      { link: resolveLink },
+    );
+    expect(html).toContain('class="link accent"');
+    expect(html).toContain(`data-lace-appearance="${appearance}"`);
+    expect(html).toContain('id="next"');
+    expect(html).toContain(
+      'data-lace-part="link" href="/new" target="_blank" rel="noopener noreferrer"',
+    );
+    expect(html).not.toContain("entry:");
+    const unavailable = await render(
+      [block("link", { ...data, url: "entry:missing" }, { settings })],
+      { link: resolveLink },
+    );
+    expect(unavailable).toContain('<span data-lace-part="label">Open page</span>');
+    expect(unavailable).not.toMatch(/<(?:a|button)\b|tabindex|role=|entry:/u);
+  },
+);
+
+test("link-aware sources preserve actions, submenus and image lightboxes without raw token output", async () => {
+  const authored = [
+    block("hero", {
+      heading: "Hello",
+      primaryActionLabel: "Hero action",
+      primaryActionUrl: "entry:missing",
+    }),
+    block("cta", { heading: "Next", actionLabel: "CTA action", actionUrl: "entry:missing" }),
+    block("image", { media: "bare", link: "entry:target" }),
+    block(
+      "gallery",
+      { images: [{ media: "studio", link: "entry:missing" }] },
+      { settings: { lightbox: true } },
+    ),
+    block("navigation", {
+      links: [
+        {
+          label: "Parent",
+          url: "entry:missing",
+          children: [
+            { label: "Child", url: "entry:target" },
+            { label: "Unavailable", url: "entry:missing" },
+          ],
+        },
+      ],
+    }),
+  ];
+  const html = await render(authored, { link: resolveLink, path: "/new" });
+  expect(html).toContain('<span data-lace-part="label">Hero action</span>');
+  expect(html).toContain('<span data-lace-part="label">CTA action</span>');
+  expect(html).toContain('aria-label="/new"');
+  expect(html).toContain('href="/new"');
+  expect(html).toContain('data-lace-part="submenu"');
+  expect(html).toContain('aria-current="page"');
+  expect(html).toContain('<span data-lace-part="label">Unavailable</span>');
+  expect(html).toContain('data-lace-part="lightbox"');
+  expect(html).not.toContain("entry:");
+  expect(authored[0].data.primaryActionUrl).toBe("entry:missing");
 });

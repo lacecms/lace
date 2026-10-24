@@ -2,6 +2,7 @@ import { formFieldKeys } from "@lacecms/content";
 import type { ContentBlockDto, ContentModelDto } from "@lacecms/contracts";
 import {
   BoxIcon,
+  LinkIcon,
   ImageIcon,
   MousePointerClickIcon,
   PanelTopIcon,
@@ -17,6 +18,7 @@ const builtInIcons: Readonly<Record<string, LucideIcon>> = {
   cta: MousePointerClickIcon,
   hero: PanelTopIcon,
   image: ImageIcon,
+  link: LinkIcon,
   quote: QuoteIcon,
   richText: PilcrowIcon,
 };
@@ -153,4 +155,15 @@ export function matchesBlockFilter(definition: BlockDefinitionDto, query: string
   return [blockLabel(definition), definition.type, definition.description ?? ""].some((value) =>
     value.toLowerCase().includes(needle),
   );
+}
+
+/** UI-only stable partition; configuration and saved block order are untouched. */
+export function paletteDefinitions(
+  definitions: readonly BlockDefinitionDto[],
+): readonly BlockDefinitionDto[] {
+  return [
+    ...definitions.filter((item) => item.type !== "hero" && item.type !== "cta"),
+    ...definitions.filter((item) => item.type === "hero"),
+    ...definitions.filter((item) => item.type === "cta"),
+  ];
 }

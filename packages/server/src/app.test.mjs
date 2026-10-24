@@ -1,6 +1,11 @@
 import { expect, test } from "vitest";
 import { createLaceApp, sensitiveRequestLimit } from "../dist/index.js";
-import { ContentUseCases, MediaUseCases, SiteBuildUseCases } from "@lacecms/application";
+import {
+  ContentUseCases,
+  ContentLinkUseCases,
+  MediaUseCases,
+  SiteBuildUseCases,
+} from "@lacecms/application";
 import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 import {
@@ -41,6 +46,7 @@ async function fixture({
   sessionId,
   sensitiveLimiter,
   defer,
+  linkReads,
 } = {}) {
   const config = await defineConfig({
     blocks: [
@@ -101,6 +107,19 @@ async function fixture({
     adminAssets: { fetch: async () => new Response("admin-shell") },
     config,
     content,
+    links: new ContentLinkUseCases(
+      linkReads ?? {
+        listLinkTargets: async () => ({ items: [] }),
+        resolveLinkTargets: async (ids) =>
+          Object.fromEntries(ids.map((id) => [id, { id, state: "missing" }])),
+        readLinkImpact: async () => ({
+          mode: "sources",
+          sources: [],
+          receipt: "receipt",
+          hasPublishedUsages: false,
+        }),
+      },
+    ),
     buildSite,
     ...(builds === undefined ? {} : { builds }),
     ...(security === undefined ? {} : { security }),
@@ -461,7 +480,7 @@ test("serves public content and short-circuits matching build exports", async ()
   });
   const fresh = await json(app, "/api/v1/public/build-export");
   expect(fresh.response.headers.get("etag")).toBe('"1"');
-  expect(fresh.body.formatVersion).toBe(1);
+  expect(fresh.body.formatVersion).toBe(2);
   expect(exportLoads()).toBe(1);
   expect(
     (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"1"' } }))
@@ -576,6 +595,7 @@ test("public responses return published entries with one resolved media dictiona
   const single = await json(app, "/api/v1/public/content/by-path?path=/blog/post-b");
   expect(Object.keys(single.body)).toEqual(["entry", "media"]);
   expect(single.body.entry).toEqual({
+    internalLinks: [],
     blocks: [],
     fields: {},
     id: "post-b",
@@ -1806,6 +1826,7 @@ test("globals are read by model key and refused as routed or deletable entries",
   expect(read.response.status).toBe(200);
   expect(Object.keys(read.body)).toEqual(["global", "media"]);
   expect(read.body.global).toEqual({
+    internalLinks: [],
     blocks: [],
     fields: { logo: "logo", siteName: "Lace" },
     id: created.body.id,
@@ -2830,7 +2851,7 @@ test("serves the build export in version-bound keyset pages", async () => {
   const first = await json(app, `${path}?limit=2`);
   expect(first.response.status).toBe(200);
   expect(first.response.headers.get("etag")).toBe(`"${version}"`);
-  expect(first.body).toMatchObject({ formatVersion: 1, globals: [], media: {}, version });
+  expect(first.body).toMatchObject({ formatVersion: 2, globals: [], media: {}, version });
   expect(first.body.seo).toEqual({ defaults: null, models: {} });
   expect(first.body.entries.map((entry) => entry.path)).toEqual(["/blog/a", "/blog/b"]);
 
@@ -2954,4 +2975,66 @@ test("optional API reference uses live same-origin contracts and preserves API b
   const schema = await (await disabled.app.request("/api/v1/openapi.json")).json();
   expect(await (await enabled.app.request("/api/v1/openapi.json")).json()).toEqual(schema);
   expect(schema.paths).not.toHaveProperty("/api/docs");
+});
+
+test("internal-link HTTP reads enforce permissions and strict bounded query modes before reads", async () => {
+  const calls = [];
+  const linkReads = {
+    listLinkTargets: async (query) => {
+      calls.push(["list", query]);
+      return { items: [] };
+    },
+    resolveLinkTargets: async (ids) => {
+      calls.push(["resolve", ids]);
+      return Object.fromEntries(ids.map((id) => [id, { id, state: "missing" }]));
+    },
+    readLinkImpact: async (query) => {
+      calls.push(["impact", query]);
+      return { mode: "sources", sources: [], receipt: "receipt", hasPublishedUsages: false };
+    },
+  };
+  const { app } = await fixture({
+    actor: { id: actorId("viewer"), role: "viewer" },
+    linkReads,
+    maxBodyBytes: 20_000,
+  });
+  expect(
+    (await json(app, "/api/v1/admin/link-targets?search=%20A_%20&limit=50")).response.status,
+  ).toBe(200);
+  expect(calls.at(-1)).toEqual(["list", { search: "A_", limit: 50 }]);
+  const ids = Array.from({ length: 200 }, (_, i) => `id-${i}`);
+  expect(
+    (
+      await json(app, "/api/v1/admin/link-targets/resolve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+    ).response.status,
+  ).toBe(200);
+  expect(calls.at(-1)).toEqual(["resolve", ids]);
+  expect(
+    (await json(app, "/api/v1/admin/entries/id/link-impact?action=delete")).response.status,
+  ).toBe(200);
+  expect(calls.at(-1)).toEqual([
+    "impact",
+    { targetId: "id", action: "delete", actorId: "viewer", limit: 20 },
+  ]);
+  const before = calls.length;
+  for (const query of ["limit=51", "status=missing", "unknown=1", "search=" + "a".repeat(101)])
+    expect((await json(app, `/api/v1/admin/link-targets?${query}`)).response.status).toBe(422);
+  for (const query of [
+    "action=delete&sourceEntryId=s",
+    "action=delete&locationsAfter=c",
+    "action=delete&sourceEntryId=s&snapshotId=d&after=c",
+    "action=publish",
+    "action=delete&extra=1",
+  ])
+    expect((await json(app, `/api/v1/admin/entries/id/link-impact?${query}`)).response.status).toBe(
+      422,
+    );
+  expect(calls.length).toBe(before);
+  const denied = await fixture({ actor: null, linkReads });
+  expect((await json(denied.app, "/api/v1/admin/link-targets")).response.status).toBe(403);
+  expect(calls.length).toBe(before);
 });

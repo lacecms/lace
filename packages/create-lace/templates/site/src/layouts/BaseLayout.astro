@@ -21,6 +21,7 @@ const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value : undefined;
 const siteName = text(settings.siteName) ?? "Lace starter";
 const tagline = text(settings.tagline);
+const help = site.link(settings.helpUrl);
 // Site-wide links come from the published `navigation` global; the static link
 // stands in until it is published in Admin.
 const navigation = site.global("navigation");
@@ -39,6 +40,7 @@ const base = import.meta.env.BASE_URL;
     <header class="site-header">
       <a class="site-name" href={base}>{siteName}</a>
       {tagline === undefined ? null : <p class="site-tagline">{tagline}</p>}
+      {help.state === "resolved" ? <a href={help.href}>Help</a> : help.state === "unavailable" ? <span>Help</span> : null}
       {navigation === undefined ? (
         <nav aria-label="Main" class="site-nav">
           <ul>

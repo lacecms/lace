@@ -1,13 +1,20 @@
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import {
   collectFieldMedia,
+  collectSnapshotInternalLinks,
+  ContentValidationError,
   detachFieldMedia,
   encodeFieldPath,
   MAX_TITLE_LENGTH,
   sha256CanonicalJson,
   validateEntryAggregate,
 } from "@lacecms/content";
-import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
+import type {
+  InternalLinkReference,
+  FieldDefinition,
+  JsonObject,
+  JsonValue,
+} from "@lacecms/content";
 
 /**
  * Thrown by the content use cases when a submitted or published aggregate
@@ -66,12 +73,18 @@ import type {
   OpaqueCursor,
   PublicationIdempotencyKey,
   PublicContentReadPort,
+  ContentLinkReadPort,
+  LinkImpactAcknowledgment,
 } from "./index.js";
+import { internalLinkIssuePath } from "./internal-links.js";
 
 export interface ContentUseCaseDependencies {
   readonly clock: Clock;
   readonly config: RuntimeConfigProjection;
-  readonly content: ContentEntryReadPort & ContentEntryCommandPort & PublicContentReadPort;
+  readonly content: ContentEntryReadPort &
+    ContentEntryCommandPort &
+    PublicContentReadPort &
+    Partial<ContentLinkReadPort>;
   readonly idGenerator: IdGenerator;
   readonly media: ContentMediaReadPort;
 }
@@ -128,6 +141,7 @@ export interface PublishContentEntryUseCaseInput {
 }
 
 export interface UnpublishContentEntryUseCaseInput {
+  readonly linkImpact?: LinkImpactAcknowledgment;
   readonly actor: Actor;
   readonly entryId: ContentEntryId;
   readonly expectedPublishedSnapshotId: ContentSnapshotId;
@@ -154,6 +168,7 @@ export interface DetachMediaFromDraftUseCaseInput {
 }
 
 export interface DeleteContentEntryUseCaseInput {
+  readonly linkImpact?: LinkImpactAcknowledgment;
   readonly actor: Actor;
   readonly entryId: ContentEntryId;
   readonly expectedRevision: number;
@@ -191,6 +206,7 @@ export function duplicateTitle(title: string): string {
 }
 
 interface NormalizedDraft extends Omit<CompleteDraftInput, "seo"> {
+  readonly internalLinks: readonly InternalLinkReference[];
   readonly blocks: readonly ContentBlock[];
   readonly fields: JsonObject;
   readonly mediaReferences: readonly DraftMediaReference[];
@@ -265,7 +281,11 @@ export class ContentUseCases {
       model: contentModelRoute(model),
     });
     return commandEntry(
-      await this.dependencies.content.create({ entry, mediaReferences: draft.mediaReferences }),
+      await this.dependencies.content.create({
+        entry,
+        mediaReferences: draft.mediaReferences,
+        internalLinks: draft.internalLinks,
+      }),
     );
   }
 
@@ -343,6 +363,7 @@ export class ContentUseCases {
     return commandEntry(
       await this.dependencies.content.saveCompleteDraft({
         entryId: entry.id,
+        internalLinks: draft.internalLinks,
         mutation: {
           ...draft,
           expectedRevision: input.expectedRevision,
@@ -358,7 +379,12 @@ export class ContentUseCases {
   ): Promise<PublishContentEntryUseCaseResult> {
     requirePermission(input.actor, "content:publish");
     const entry = await this.entry(input.entryId);
-    const draft = await this.validateDraft(entry.draft, this.model(entry.model.key), "publish");
+    const draft = await this.validateDraft(
+      entry.draft,
+      this.model(entry.model.key),
+      "publish",
+      entry.id,
+    );
     contentPublicPath(entry.model, draft.slug);
     const result = await this.dependencies.content.publish({
       entryId: entry.id,
@@ -396,6 +422,7 @@ export class ContentUseCases {
                 entryId: input.entryId,
                 expectedPublishedSnapshotId: input.expectedPublishedSnapshotId,
                 operation: "unpublish",
+                ...(input.linkImpact === undefined ? {} : { linkImpact: { ...input.linkImpact } }),
               }),
             ),
             key: publicationIdempotencyKey(input.idempotencyKey),
@@ -407,6 +434,7 @@ export class ContentUseCases {
     const result = await this.dependencies.content.unpublish({
       entryId: entry.id,
       expectedPublishedSnapshotId: input.expectedPublishedSnapshotId,
+      ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
       ...(idempotency === undefined ? {} : { idempotency }),
       unpublishedAt: this.dependencies.clock.now(),
       unpublishedBy: input.actor,
@@ -481,6 +509,7 @@ export class ContentUseCases {
         duplicateOf: { entryId: source.id, expectedRevision: source.draft.revision },
         entry,
         mediaReferences: draft.mediaReferences,
+        internalLinks: draft.internalLinks,
       }),
     );
   }
@@ -533,6 +562,7 @@ export class ContentUseCases {
     if (entry.published !== undefined) requirePermission(input.actor, "content:publish");
     await this.dependencies.content.delete({
       deletedAt: this.dependencies.clock.now(),
+      ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
       deletedBy: input.actor,
       entryId: entry.id,
       ...(entry.published === undefined ? {} : { expectedPublishedSnapshotId: entry.published.id }),
@@ -582,6 +612,7 @@ export class ContentUseCases {
     input: CompleteDraftInput,
     model: NormalizedContentModel,
     mode: "draft" | "publish",
+    publishingEntryId?: string,
   ): Promise<NormalizedDraft> {
     assertOrderedBlockPositions(input.blocks);
     const aggregate = validateEntryAggregate(
@@ -655,7 +686,45 @@ export class ContentUseCases {
       if (!active.has(id))
         throw new DomainError("CONTENT_INVALID_STATE", `Media ${id} is unavailable.`);
     }
-    return { ...normalized, mediaReferences: Object.freeze(mediaReferences) };
+    const internalLinks = collectSnapshotInternalLinks(
+      model.fields,
+      normalized.fields,
+      normalized.blocks.map((block) => ({
+        ...block,
+        fields: this.dependencies.config.blocks.get(block.type)!.fields,
+      })),
+    );
+    if (internalLinks.length > 0) {
+      if (this.dependencies.content.resolveLinkTargets === undefined)
+        throw new DomainError("CONTENT_INVALID_STATE", "Internal link validation is unavailable.");
+      const statuses = await this.dependencies.content.resolveLinkTargets([
+        ...new Set(internalLinks.map((reference) => reference.targetId)),
+      ]);
+      const issues = internalLinks.flatMap((reference) => {
+        const status = statuses[reference.targetId];
+        const self = publishingEntryId === reference.targetId && model.kind !== "global";
+        const nonRoutable = status?.state === "non-routable";
+        if (
+          !nonRoutable &&
+          (mode === "draft" || !reference.delivered || self || status?.state === "published")
+        )
+          return [];
+        return [
+          {
+            code: nonRoutable ? "internal_link_non_routable" : "internal_link_unavailable",
+            message: nonRoutable
+              ? "must target a page or collection entry."
+              : "must target an entry with a published route.",
+            path: internalLinkIssuePath(
+              reference,
+              normalized.blocks.map((block) => block.key),
+            ),
+          },
+        ];
+      });
+      if (issues.length > 0) throw new ContentValidationError(issues);
+    }
+    return { ...normalized, mediaReferences: Object.freeze(mediaReferences), internalLinks };
   }
 
   private collectMedia(

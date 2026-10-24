@@ -196,6 +196,7 @@ test("prepareBlocks returns components and props in block order", () => {
   const prepared = prepareBlocks(map, { blocks, id: "entry-1", modelKey: "home" }, mediaUrl);
   expect(prepared.map((item) => item.component)).toEqual(["Hero", "Quote", "Cta"]);
   expect(prepared[1].props).toEqual({
+    link: expect.any(Function),
     block: blocks[1],
     context: { blockKey: "b", entryId: "entry-1", modelKey: "home" },
     data: { quote: "Middle" },
@@ -766,4 +767,61 @@ test("video embed descriptions canonicalize locally and preserve contextual fail
   } catch (error) {
     expect(error).toMatchObject({ code: "invalid_block_data", context, fieldPath: ["url"] });
   }
+});
+
+test("block link props resolve manual targets, preserve required tokens and contextualize failures", async () => {
+  const { createLinkResolver } = await import("../dist/index.js");
+  const context = { modelKey: "pages", entryId: "source", blockKey: "action" };
+  const fallback = createLinkResolver(undefined, context);
+  expect(fallback("/manual")).toEqual({ state: "resolved", href: "/manual" });
+  expect(fallback("")).toEqual({ state: "empty" });
+  expect(() => fallback("entry:target")).toThrow(
+    expect.objectContaining({ code: "missing_link_resolver", context }),
+  );
+  for (const value of ["javascript:bad", "entry:%74arget", "//evil", 42])
+    expect(() => fallback(value)).toThrow(
+      expect.objectContaining({ code: "invalid_link", context }),
+    );
+  for (const resolve of [
+    () => ({ state: "resolved", href: "entry:target", targetId: "target" }),
+    () => ({ state: "resolved", href: "javascript:evil", targetId: "target" }),
+    () => ({ state: "unavailable", targetId: "other" }),
+    () => ({ state: "unavailable", targetId: "target", href: "#" }),
+    () => ({ state: "empty" }),
+    () => null,
+    () => {
+      throw new Error("bad resolver");
+    },
+  ])
+    expect(() => createLinkResolver(resolve, context)("entry:target")).toThrow(
+      expect.objectContaining({ code: "invalid_link", context }),
+    );
+  const action = defineBlock({
+    type: "action",
+    version: 1,
+    fields: { url: field.url({ required: true }) },
+  });
+  const map = defineBlockMap({ action: { component: "Action", definition: action } });
+  const block = {
+    key: "action",
+    type: "action",
+    schemaVersion: 1,
+    position: 1000,
+    data: { url: "entry:target" },
+  };
+  const [prepared] = prepareBlocks(
+    map,
+    {
+      ...context,
+      id: "source",
+      blocks: [block],
+      link: () => ({ state: "unavailable", targetId: "target" }),
+    },
+    () => "/media",
+  );
+  expect(prepared.props.data.url).toBe("entry:target");
+  expect(prepared.props.link(prepared.props.data.url)).toEqual({
+    state: "unavailable",
+    targetId: "target",
+  });
 });

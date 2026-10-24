@@ -1,0 +1,16 @@
+---
+import type { builtInBlocks } from "@lacecms/content";
+import type { BlockProps } from "@lacecms/render";
+
+type Props = BlockProps<typeof builtInBlocks.link>;
+const { anchor, block, className, data, link, settings } = Astro.props;
+const destination = link(data.url);
+---
+
+<div class:list={["link", className]} data-lace-appearance={settings.appearance} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+  {destination.state === "resolved" ? (
+    <a data-lace-part="link" href={destination.href} target={settings.newTab ? "_blank" : undefined} rel={settings.newTab ? "noopener noreferrer" : undefined}>{data.label}</a>
+  ) : (
+    <span data-lace-part="label">{data.label}</span>
+  )}
+</div>

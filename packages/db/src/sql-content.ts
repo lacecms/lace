@@ -1,3 +1,7 @@
+import {
+  syncInternalLinkStatements,
+  SNAPSHOT_INTERNAL_LINKS_JSON_SQL,
+} from "./sql-internal-links.js";
 /**
  * Runtime-neutral SQLite-dialect helpers shared by the Node SQLite and
  * Cloudflare D1 content repositories. Nothing here executes SQL or uses a
@@ -40,7 +44,7 @@ import type {
   TrackedSiteBuildCheck,
   UpdateMediaMetadataInput,
 } from "@lacecms/application";
-import { MAX_TOP_LEVEL_BLOCKS } from "@lacecms/content";
+import { ContentValidationError, MAX_TOP_LEVEL_BLOCKS } from "@lacecms/content";
 import type { JsonObject } from "@lacecms/content";
 import {
   BuildExportCursorError,
@@ -309,11 +313,13 @@ export interface MediaUsageRow {
 }
 
 export interface PublicRow extends EntryRow {
+  readonly internal_links_json: string;
   readonly path: string;
   readonly published_created_at: number;
 }
 
 export interface PublicGlobalRow extends EntryRow {
+  readonly internal_links_json: string;
   readonly published_created_at: number;
 }
 
@@ -332,6 +338,7 @@ export interface StoredModelStateRow {
 }
 
 export interface SyncSnapshotRow {
+  readonly internal_links_json?: string;
   readonly references_json?: string;
   readonly entry_id: string;
   readonly fields_json: string;
@@ -425,14 +432,19 @@ export const MEDIA_SORT_SQL: Readonly<Record<string, SortSql>> = {
   filename: { order: "m.filename collate nocase", value: "m.filename" },
   size: { order: "m.size", value: "m.size" },
 };
+/** Local delivered projection, ordered by exact source location and scoped by snapshot PK. */
+const PUBLIC_INTERNAL_LINKS_JSON_SQL = `(select coalesce(json_group_array(json_object(
+  'sourceKey', source_key, 'area', area, 'pointer', field_path, 'targetId', target_entry_id)), '[]')
+  from (select source_key,area,field_path,target_entry_id from content_entry_link_references
+    where snapshot_id=s.id and delivered=1 order by source_key,area,field_path))`;
 export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
-        r.path, s.created_at as published_created_at
+        r.path, s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
    from published_routes r
    join content_entries e on e.id = r.entry_id and e.published_snapshot_id = r.snapshot_id
    join content_snapshots s on s.id = r.snapshot_id`;
 /** Published route-less globals; never joins `published_routes`. */
 export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
-        s.created_at as published_created_at
+        s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
    from content_entries e
    join content_models m on m.key = e.model_key and m.kind = 'global'
    join content_snapshots s on s.id = e.published_snapshot_id`;
@@ -466,6 +478,7 @@ export function publicSnapshotMediaSql(count: number): string {
  */
 const STORED_EXPORT_BYTES_SQL = `(length(cast(s.fields_json as blob))
     + coalesce(length(cast(s.seo_json as blob)), 0)
+    + length(cast(${PUBLIC_INTERNAL_LINKS_JSON_SQL} as blob))
     + coalesce((select sum(length(cast(b.data_json as blob)) + length(cast(b.settings_json as blob)))
                   from content_blocks b
                  where b.snapshot_id = s.id and b.hidden = 0), 0))`;
@@ -528,7 +541,7 @@ export function buildExportPageSql(globals: boolean): {
     ...(globals
       ? {
           globals: `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
-        s.created_at as published_created_at
+        s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
    from content_models m
    cross join content_entries e on e.model_key = m.key
    join content_snapshots s on s.id = e.published_snapshot_id
@@ -613,7 +626,7 @@ export const STORED_MODEL_STATE_JSON_SQL = `(select coalesce(json_group_array(js
 export const STORED_MODEL_BASELINES_SQL = `select m.key, ${VALID_BASELINE_SQL} as structure_json
    from content_models m order by m.key asc`;
 /** Binds model key, exclusive snapshot-ID cursor, and page limit. */
-export const SYNC_SNAPSHOTS_SQL = `select s.id, s.entry_id, s.revision, s.title, s.fields_json,
+export const SYNC_SNAPSHOTS_SQL = `select ${SNAPSHOT_INTERNAL_LINKS_JSON_SQL} as internal_links_json, s.id, s.entry_id, s.revision, s.title, s.fields_json,
         s.seo_json is not null as has_seo,
         (select coalesce(json_group_array(json_object('sourceKey',r.source_key,'fieldPath',r.field_path,'mediaId',r.media_id)), '[]') from content_media_references r where r.snapshot_id=s.id) as references_json,
         case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
@@ -755,6 +768,13 @@ export function syncSnapshotPage(
   const items: ConfigurationSyncSnapshot[] = rows.map((row) =>
     Object.freeze({
       blocks: Object.freeze(blocks.get(row.id) ?? []),
+      ...(row.internal_links_json === undefined
+        ? {}
+        : {
+            internalLinks: JSON.parse(
+              row.internal_links_json,
+            ) as readonly import("@lacecms/content").InternalLinkReference[],
+          }),
       entryId: row.entry_id,
       fields: parseObject(row.fields_json, "Snapshot fields"),
       references: JSON.parse(row.references_json ?? "[]") as NonNullable<
@@ -788,8 +808,7 @@ export const SYNC_MIGRATION_ENTRIES_SQL = `select e.id, e.draft_snapshot_id, e.p
   order by e.id asc
   limit ?`;
 /** Snapshot heads for a list of snapshot IDs; append the placeholders. */
-export const SYNC_MIGRATION_SNAPSHOTS_SQL =
-  "select id, revision, title, fields_json from content_snapshots where id in";
+export const SYNC_MIGRATION_SNAPSHOTS_SQL = `select s.id, s.revision, s.title, s.fields_json, ${SNAPSHOT_INTERNAL_LINKS_JSON_SQL} as internal_links_json from content_snapshots s where s.id in`;
 /**
  * Blocks of a list of snapshot IDs with all data for list budgets and settings only for target types. Binds the
  * target type JSON array first; append the snapshot placeholders and the order.
@@ -810,6 +829,7 @@ export interface SyncMigrationEntryRow {
 }
 
 export interface SyncMigrationSnapshotRow {
+  readonly internal_links_json?: string;
   readonly fields_json: string;
   readonly id: string;
   readonly revision: number;
@@ -919,6 +939,13 @@ export function syncMigrationPage(
     return Object.freeze({
       blocks: Object.freeze(blocks.get(row.id) ?? []),
       fields: parseObject(row.fields_json, "Snapshot fields"),
+      ...(row.internal_links_json === undefined || row.internal_links_json === "[]"
+        ? {}
+        : {
+            internalLinks: JSON.parse(
+              row.internal_links_json,
+            ) as readonly import("@lacecms/content").InternalLinkReference[],
+          }),
       references: Object.freeze(references.get(row.id) ?? []),
       revision: row.revision,
       snapshotId: row.id,
@@ -967,6 +994,7 @@ export function configurationSyncMigrationStatements(
   migration: ConfigurationSyncSnapshotMigration,
   migratedAt: number,
   maxParameters: number,
+  linkDirtyToken?: string,
 ): ConfigurationSyncMigrationStatements {
   const current =
     migration.state === "draft" ? "e.draft_snapshot_id = s.id" : "e.published_snapshot_id = s.id";
@@ -991,9 +1019,20 @@ export function configurationSyncMigrationStatements(
                 where d.id = ? and d.revision = ?)`;
     guardParams.push(migration.draftGuard.snapshotId, migration.draftGuard.revision);
   }
+  const links =
+    migration.internalLinks === undefined
+      ? undefined
+      : syncInternalLinkStatements(
+          [{ snapshotId: migration.snapshotId, references: migration.internalLinks }],
+          linkDirtyToken ?? "sync-links",
+        );
+  for (const valid of links?.valid ?? []) {
+    guardSql += ` and (${valid.sql})`;
+    guardParams.push(...valid.params);
+  }
   guardSql += ")";
 
-  const writes: ConfigurationSyncWriteStatement[] = [];
+  const writes: ConfigurationSyncWriteStatement[] = [...(links?.writes ?? [])];
   // Each write also binds the migration time and the snapshot ID.
   const shared = 2;
   const blockRows = Math.floor((maxParameters - shared) / MIGRATED_BLOCK_VALUES);
@@ -1911,6 +1950,7 @@ export function publicContentEntry(
   if (entry === undefined) failure("Published route references an unreadable entry.");
   return Object.freeze({
     entry: publicEntry(entry),
+    internalLinks: Object.freeze(JSON.parse(row.internal_links_json)),
     media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
     path: row.path,
   });
@@ -1926,6 +1966,7 @@ export function publicGlobalContent(
   if (entry === undefined) failure("Published global references an unreadable entry.");
   return Object.freeze({
     entry: publicEntry(entry),
+    internalLinks: Object.freeze(JSON.parse(row.internal_links_json)),
     media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
   });
 }
@@ -1973,7 +2014,7 @@ export function sqliteWriteError(
   singletonCreation: boolean,
   runtime: string,
 ): never {
-  if (error instanceof DomainError) throw error;
+  if (error instanceof DomainError || error instanceof ContentValidationError) throw error;
   const message = error instanceof Error ? error.message : "";
   if (
     singletonCreation &&

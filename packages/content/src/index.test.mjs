@@ -13,6 +13,8 @@ import {
   canonicalizeJson,
   compileFieldSchema,
   collectFieldMedia,
+  collectFieldInternalLinks,
+  collectSnapshotInternalLinks,
   detachFieldMedia,
   encodeFieldPath,
   decodeFieldPath,
@@ -21,6 +23,9 @@ import {
   effectiveAltText,
   field,
   isSafeUrl,
+  isUrlFieldTarget,
+  encodeEntryLink,
+  decodeEntryLink,
   migrateBlockData,
   sha256CanonicalJson,
   toBlockMetadata,
@@ -36,6 +41,68 @@ import {
   validateSnapshotListBudget,
 } from "../dist/index.js";
 
+describe("canonical internal URL targets", () => {
+  test.each(["opaque-id", "a/b", "a?b#c%", "日本語 🧵", "a b", "x".repeat(255)])(
+    "round-trips opaque ID %s without broadening href safety",
+    (id) => {
+      const token = encodeEntryLink(id);
+      expect(decodeEntryLink(token)).toBe(id);
+      expect(isUrlFieldTarget(token)).toBe(true);
+      expect(isSafeUrl(token)).toBe(false);
+      expect(validateFieldValue(field.url(), token)).toBe(token);
+      expect(validateFieldValue(toFieldMetadata(field.url()), token)).toBe(token);
+      expect(() =>
+        validateFieldValue(field.url({ embedProviders: ["youtube", "vimeo"] }), token),
+      ).toThrow();
+      expect(() =>
+        validateRichTextDocument({
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                { type: "text", text: "Link", marks: [{ type: "link", attrs: { href: token } }] },
+              ],
+            },
+          ],
+        }),
+      ).toThrow();
+    },
+  );
+  test.each(["", "x".repeat(256), "a\u0000b", "a\u0085b", "\ud800", "\udfff"])(
+    "refuses invalid IDs",
+    (id) => expect(() => encodeEntryLink(id)).toThrow(),
+  );
+  test.each([
+    "entry:",
+    "entry:%ZZ",
+    "entry:%",
+    "entry:%70ost-a",
+    "entry:a%2fb",
+    "entry:a/b",
+    "entry:post-a#x",
+    "entry:post-a?x",
+    "entry:%ED%A0%80",
+    "entry:%00",
+    "entry:%C2%85",
+    "entry:日本語",
+  ])("refuses malformed or noncanonical token %s", (token) => {
+    expect(decodeEntryLink(token)).toBeUndefined();
+    expect(isUrlFieldTarget(token)).toBe(false);
+    expect(() => validateFieldValue(field.url(), token)).toThrow();
+  });
+  test.each([
+    "/about#team",
+    "#section",
+    "https://example.com/a?q=b",
+    "mailto:hi@example.com",
+    "tel:+123",
+  ])("preserves manual URL %s", (value) => {
+    expect(decodeEntryLink(value)).toBeUndefined();
+    expect(validateFieldValue(field.url(), value)).toBe(value);
+  });
+});
+
 const fieldCases = [
   ["text", () => field.text({ defaultValue: "Lace" }), "text"],
   ["textarea", () => field.textarea({ defaultValue: "Lace" }), "textarea"],
@@ -48,6 +115,120 @@ const fieldCases = [
   ["url", () => field.url({ defaultValue: "https://lacecms.dev" }), "url"],
   ["media", () => field.media({ defaultValue: "01K4M0D3LQYH8ND26GG2DDC8N2" }), "media"],
 ];
+
+describe("descriptor-driven internal link projection", () => {
+  const links = field.list({ item: field.url() });
+  const block = defineBlock({
+    type: "linkFixture",
+    version: 1,
+    fields: {
+      links,
+      destination: field.url({ defaultValue: "entry:default" }),
+      text: field.text(),
+    },
+    settings: { note: field.text({ defaultValue: "entry:ignored" }) },
+  });
+  const model = { kind: "global", blocks: [block.type], fields: { links } };
+  const registry = defineBlockRegistry([block]);
+  const payload = (count) => ({
+    kind: "global",
+    title: "Links",
+    fields: { links: Array(100).fill("entry:same") },
+    blocks: [
+      {
+        key: "links",
+        type: block.type,
+        schemaVersion: 1,
+        hidden: true,
+        data: { links: Array(count).fill("entry:same"), text: "entry:ignored" },
+      },
+    ],
+  });
+  test.each(["draft", "publish"])("counts defaults and hidden occurrences in %s", (mode) => {
+    const normalized = validateEntryAggregate(payload(99), model, registry, mode);
+    const references = collectSnapshotInternalLinks(
+      model.fields,
+      normalized.fields,
+      normalized.blocks.map((item) => ({ ...item, fields: block.fields })),
+    );
+    expect(references).toHaveLength(200);
+    expect(references[0]).toEqual({
+      area: "fields",
+      sourceKey: "$fields",
+      pointer: "/links/0",
+      delivered: true,
+      targetId: "same",
+    });
+    expect(references[199]).toEqual({
+      area: "data",
+      sourceKey: "links",
+      pointer: "/destination",
+      delivered: false,
+      targetId: "default",
+    });
+    expect(
+      issueFrom(() => validateEntryAggregate(payload(100), model, registry, mode)),
+    ).toMatchObject({
+      code: "too_many_internal_links",
+      path: ["blocks", 0, "data", "destination"],
+    });
+    expect(Object.isFrozen(references[0])).toBe(true);
+  });
+  test("walks normalized nested defaults and preserves exact item paths", () => {
+    const fields = {
+      group: field.group({
+        defaultValue: {},
+        fields: {
+          links: field.list({
+            defaultValue: [{}, { url: "entry:a%2Fb" }],
+            item: field.group({
+              fields: {
+                url: field.url({ defaultValue: "entry:default" }),
+                text: field.text({ defaultValue: "entry:ignored" }),
+              },
+            }),
+          }),
+        },
+      }),
+    };
+    const values = validateModelFields(fields, {}, "publish");
+    expect(collectFieldInternalLinks(fields, values)).toEqual([
+      { path: ["group", "links", 0, "url"], targetId: "default" },
+      { path: ["group", "links", 1, "url"], targetId: "a/b" },
+    ]);
+    expect(collectSnapshotInternalLinks(fields, values, []).map((ref) => ref.pointer)).toEqual([
+      "/group/links/0/url",
+      "/group/links/1/url",
+    ]);
+  });
+  test("ignores text, rich-text text, manual URLs, providers and settings", () => {
+    const fields = {
+      text: field.text(),
+      body: field.richText(),
+      manual: field.url(),
+      provider: field.url({ embedProviders: ["youtube"] }),
+    };
+    expect(
+      collectFieldInternalLinks(fields, {
+        text: "entry:ignored",
+        manual: "/entry:ignored",
+        body: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "entry:ignored" }] }],
+        },
+        provider: "https://youtu.be/abcdef12345",
+      }),
+    ).toEqual([]);
+    expect(() =>
+      defineBlock({
+        type: "badSettings",
+        version: 1,
+        fields: {},
+        settings: { url: field.url({ defaultValue: "entry:target" }) },
+      }),
+    ).toThrow();
+  });
+});
 
 test.each(fieldCases)("builds a %s descriptor", (_name, build, type) => {
   const definition = build();
@@ -467,7 +648,7 @@ test("declares block settings with defaults in metadata only when present", () =
   for (const [type, builtIn] of Object.entries(builtInBlocks)) {
     if (type === "gallery" || type === "image")
       expect(toBlockMetadata(builtIn).settings.lightbox).toEqual(lightbox);
-    else expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
+    else if (type !== "link") expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
   }
   for (const [settings, message] of [
     [{ image: field.media({ defaultValue: "m" }) }, "settings.image must be a select"],
@@ -614,6 +795,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
     "gallery",
     "hero",
     "image",
+    "link",
     "navigation",
     "quote",
     "richText",
@@ -651,6 +833,11 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
         "A single image with an optional caption and alt text that overrides the media alt.",
       label: "Image",
       type: "image",
+    },
+    {
+      description: "A link to a page or URL, presented as a button or text.",
+      label: "Link",
+      type: "link",
     },
     {
       description: "A list of links with optional one-level submenus.",
@@ -1994,4 +2181,33 @@ test("videoEmbed is a public DSL block with draft and publication semantics", ()
   expect(() =>
     validateBlockData(definition, { ...data, url: "https://example.com" }, "draft"),
   ).toThrow();
+});
+
+test("Link uses ordinary URLs and scalar presentation settings", () => {
+  const definition = builtInBlocks.link;
+  expect(toBlockMetadata(definition)).toMatchObject({ type: "link", version: 1, label: "Link" });
+  expect(Object.keys(definition.fields)).toEqual(["label", "url"]);
+  expect(definition).not.toHaveProperty("migrations");
+  expect(validateBlockSettings(definition, {})).toEqual({ appearance: "button", newTab: false });
+  expect(validateBlockSettings(definition, { appearance: "text", newTab: true })).toEqual({
+    appearance: "text",
+    newTab: true,
+  });
+  for (const url of ["entry:target", "/page", "https://example.com"])
+    expect(validateBlockData(definition, { label: "Read more", url }, "publish")).toEqual({
+      label: "Read more",
+      url,
+    });
+  expect(validateBlockData(definition, {}, "draft")).toEqual({});
+  expect(issueFrom(() => validateBlockData(definition, {}, "publish"))).toMatchObject({
+    code: "missing_required_field",
+    path: ["label"],
+  });
+  expect(
+    issueFrom(() => validateBlockData(definition, { label: "Read" }, "publish")),
+  ).toMatchObject({ path: ["url"] });
+  for (const label of ["", "x".repeat(201)])
+    expect(() => validateBlockData(definition, { label, url: "/" }, "draft")).toThrow();
+  expect(() => validateBlockSettings(definition, { appearance: "other" })).toThrow();
+  expect(() => validateBlockSettings(definition, { newTab: "yes" })).toThrow();
 });

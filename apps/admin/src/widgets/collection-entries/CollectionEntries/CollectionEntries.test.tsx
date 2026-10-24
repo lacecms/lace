@@ -319,7 +319,12 @@ test("search updates the URL after a pause and deletion returns focus to the hea
       name: "Delete entry",
     }),
   );
-  await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith("entry-launch", 2));
+  await waitFor(() =>
+    expect(deleteEntry).toHaveBeenCalledWith("entry-launch", 2, {
+      receipt: "receipt",
+      acknowledgePublishedLinks: true,
+    }),
+  );
   await waitFor(() =>
     expect(screen.getByRole("heading", { level: 1, name: "Posts" })).toHaveFocus(),
   );
@@ -375,7 +380,12 @@ test("an admin deletes a published row only after typing its title and cancel re
     "Launch",
   );
   await user.click(confirm);
-  await waitFor(() => expect(deleteEntry).toHaveBeenCalledWith("entry-launch", 2));
+  await waitFor(() =>
+    expect(deleteEntry).toHaveBeenCalledWith("entry-launch", 2, {
+      receipt: "receipt",
+      acknowledgePublishedLinks: true,
+    }),
+  );
 });
 
 test("duplicating a row opens the copy", async () => {

@@ -1028,6 +1028,7 @@ async function starterJourney(project) {
     navigation,
     {
       blocks: [],
+      internalLinks: [],
       fields: {
         description: "Acceptance site description",
         image: "hero-media",

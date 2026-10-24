@@ -106,3 +106,26 @@ Run ordinary content sync after changing them; no model/block version bump, SQL
 migration or content rewrite is needed. Existing sync still advances the published
 version and requests/coalesces a site build for metadata updates. Stored snapshots,
 revisions and media references remain unchanged. Server validation is unconditional.
+
+## Internal URL destinations
+
+Ordinary URL content fields support **Manual URL** and **CMS entry** modes,
+including nested model/global fields and block data. Choosing a published page
+stores its ID, so its link follows later slug changes. Settings, rich-text links,
+video provider URLs and SEO canonical URLs keep their existing grammar.
+Missing destinations keep their IDs for repair; publishing requires valid
+visible destinations. Delete/unpublish reviews incoming links and requires an
+extra acknowledgment when published-visible links would stop navigating.
+
+Use `site.link(value)`, `entry.link(value)` or a published global's `link(value)`
+before generating an href. Only `state === "resolved"` provides `href`;
+`unavailable` retains its label/image without navigation, and `empty` has no
+value. The Link block supports button/text appearances and optional new-tab
+navigation. Updated Hero/CTA/navigation/image/gallery sources use this helper.
+
+Build export format 2 requires local `internalLinks` manifests and a compatible
+SDK; format-1-only SDKs fail with upgrade guidance. Upgrade packages and installed
+sources before authoring ID targets. Migration 0010 adds indexed projections;
+back up first and roll back with matching artifacts and the matching database.
+The loader reports bounded `linkDiagnostics` once per assembled view and performs
+no per-link network requests. Manual URLs and anchors retain their limitations.

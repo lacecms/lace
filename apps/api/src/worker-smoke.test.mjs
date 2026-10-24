@@ -331,7 +331,10 @@ test("Worker bundle smoke: health, auth, R2 upload, publish, deploy hook, export
   expect(exported.pages.length).toBeGreaterThanOrEqual(1);
   const exportBody = exported.export;
   expect(exportBody.version).toBeGreaterThanOrEqual(1);
-  expect(exportBody.formatVersion).toBe(1);
+  expect(exportBody.formatVersion).toBe(2);
+  for (const source of [...exportBody.entries, ...exportBody.globals]) {
+    expect(source.internalLinks).toEqual([]);
+  }
   expect(exportBody.entries.map((entry) => entry.path)).toContain("/blog/smoke");
 
   const clientRoute = await call("/admin/content/posts");

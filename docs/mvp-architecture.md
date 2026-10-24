@@ -717,6 +717,48 @@ only bounded HTTPS provider video paths and canonicalizes iframe URLs locally,
 preserving Vimeo unlisted hashes while dropping arbitrary playback parameters.
 No provider metadata fetch or raw iframe HTML is supported.
 
+### Internal URL links (CE10)
+
+The owner-selected `ce10-internal-url-links` change extends ordinary URL fields
+with canonical `entry:<URI-component-encoded-id>` destinations in model/global
+fields and block data, including nested groups/lists. The block settings
+allowlist stays select/boolean/number/text; URL fields are content, not settings. Rich
+text, provider-restricted video URLs and SEO canonical URLs keep their existing
+grammar; no reference-field kind is introduced and the MVP reference-field
+exclusion remains. Manual URLs are not automatically converted or repaired.
+
+The implementation adds snapshot-scoped indexed reference locations and one
+graph revision updated atomically with lifecycle/schema mutations. Published
+incoming links require an explicit, current impact acknowledgment before target
+entry deletion or unpublication; existing authorization and singleton
+restrictions remain. Configuration sync continues to refuse model removal while
+entries exist; CE10 adds no model-deletion command or CLI impact override.
+Drafts retain missing/unpublished target IDs,
+while publication requires delivered targets to have published routes, with a
+self-publication exception. Hidden-block references remain tracked but do not
+block publication for unavailable targets. Each snapshot has a separate maximum
+of 200 internal-reference occurrences, including hidden blocks and defaults.
+
+One complete published export supplies build-time ID-to-path resolution. Missing
+targets yield bounded warnings and non-navigating content; transport/consistency
+errors remain fatal. Stored snapshots are not rewritten when a target moves or
+disappears. One version 1 Link block has button/text appearance and a new-tab
+setting; Hero then CTA move to the end of the admin block picker only.
+
+The compatibility boundary is build-export format 2, with coordinated
+API/admin, SDK/render/adapter and installed source adoption. Authored public JSON
+values remain authored values; consumers adopting this new URL-field grammar
+must resolve targets before writing hrefs. Existing manual URLs retain their
+meaning. New SDKs retain format 1 support for compatible legacy exports. The
+export design permits at most twelve read statements in
+the existing two-batch page algorithm, superseding the previous ten-read bound. Complete D1 invocations retain the 50-statement
+budget, 100 binds per statement and 40-statement guarded mutation batch ceiling.
+There are no per-link DB/HTTP reads during rendering. See
+[internal URL links](./internal-url-links.md) and the
+[verification evidence](./verification/ce10-internal-url-links.md). The delta specs
+were synchronized into accepted specs and the change archived on 2026-10-24 at
+`openspec/changes/archive/2026-10-24-ce10-internal-url-links`.
+
 ### Field guidance metadata (CE9A)
 
 Text, textarea, URL, number, select and rich-text fields accept an optional

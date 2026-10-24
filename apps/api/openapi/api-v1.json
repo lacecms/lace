@@ -1068,6 +1068,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -1189,6 +1191,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -1239,6 +1243,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -1687,6 +1693,7 @@
     },
     "/api/v1/admin/entries/{entryId}": {
       "delete": {
+        "description": "Requires content:write and the expected draft revision through If-Match or the body. Optional linkImpact acknowledges the current published incoming links. Refresh impact after CONTENT_LINK_IMPACT_CHANGED.",
         "operationId": "deleteApiV1AdminEntriesByEntryId",
         "parameters": [
           {
@@ -1700,6 +1707,39 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedRevision": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "linkImpact": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acknowledgePublishedLinks": {
+                        "const": true
+                      },
+                      "receipt": {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["receipt", "acknowledgePublishedLinks"],
+                    "type": "object"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "400": {
             "content": {
@@ -3231,6 +3271,278 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/entries/{entryId}/link-impact": {
+      "get": {
+        "description": "Requires content:read. Source pages contain at most ten initial locations each. Continue an individual source with sourceEntryId, snapshotId and locationsAfter. A 409 CONTENT_LINK_IMPACT_CHANGED requires restarting the review; receipts confer no permissions.",
+        "operationId": "getApiV1AdminEntriesByEntryIdLinkImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": ["delete", "unpublish"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "20",
+              "maximum": 50,
+              "pattern": "^(?:[1-9]|[1-4][0-9]|50)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceEntryId",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "snapshotId",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locationsAfter",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hasPublishedUsages": {
+                          "type": "boolean"
+                        },
+                        "mode": {
+                          "const": "sources"
+                        },
+                        "nextCursor": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sources": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "entryId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "locations": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"]
+                                    },
+                                    "delivered": {
+                                      "type": "boolean"
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "delivered"],
+                                  "type": "object"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "nextLocationsCursor": {
+                                "maxLength": 4096,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "phase": {
+                                "enum": ["draft", "published"]
+                              },
+                              "snapshotId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "entryId",
+                              "snapshotId",
+                              "modelKey",
+                              "title",
+                              "phase",
+                              "locations"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        }
+                      },
+                      "required": ["hasPublishedUsages", "receipt", "mode", "sources"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hasPublishedUsages": {
+                          "type": "boolean"
+                        },
+                        "locations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "enum": ["fields", "data"]
+                              },
+                              "delivered": {
+                                "type": "boolean"
+                              },
+                              "pointer": {
+                                "minLength": 1,
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["sourceKey", "area", "pointer", "delivered"],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "mode": {
+                          "const": "locations"
+                        },
+                        "nextCursor": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "snapshotId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sourceEntryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hasPublishedUsages",
+                        "receipt",
+                        "mode",
+                        "sourceEntryId",
+                        "snapshotId",
+                        "locations"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Bounded source or location page and concurrency receipt"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review incoming links before delete or unpublish",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/entries/{entryId}/publish": {
       "post": {
         "operationId": "postApiV1AdminEntriesByEntryIdPublish",
@@ -4235,6 +4547,21 @@
                     "maxLength": 255,
                     "minLength": 1,
                     "type": "string"
+                  },
+                  "linkImpact": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acknowledgePublishedLinks": {
+                        "const": true
+                      },
+                      "receipt": {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["receipt", "acknowledgePublishedLinks"],
+                    "type": "object"
                   }
                 },
                 "required": ["expectedPublishedSnapshotId"],
@@ -4935,6 +5262,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -5116,6 +5445,335 @@
           }
         },
         "summary": "Resend an invitation with a new link",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/link-targets": {
+      "get": {
+        "description": "Requires content:read. Title-prefix search trims input and compares ASCII case-insensitively; non-ASCII characters and SQL wildcards are literal. Globals are excluded.",
+        "operationId": "getApiV1AdminLinkTargets",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "modelKey",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": ["published", "unpublished"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "20",
+              "maximum": 50,
+              "pattern": "^(?:[1-9]|[1-4][0-9]|50)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"]
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "published"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state", "path"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"]
+                              },
+                              "state": {
+                                "const": "unpublished"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bounded destination page"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search internal link destinations",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/link-targets/resolve": {
+      "post": {
+        "operationId": "postApiV1AdminLinkTargetsResolve",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "ids": {
+                    "items": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 200,
+                    "type": "array"
+                  }
+                },
+                "required": ["ids"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"]
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "published"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state", "path"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"]
+                              },
+                              "state": {
+                                "const": "unpublished"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "const": "missing"
+                          }
+                        },
+                        "required": ["id", "state"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "modelKey": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "const": "non-routable"
+                          }
+                        },
+                        "required": ["id", "modelKey", "state"],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Destination statuses keyed by ID"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve up to 200 distinct destination IDs",
         "tags": ["admin"]
       }
     },
@@ -7696,6 +8354,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -7746,6 +8406,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -7868,6 +8530,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -7975,6 +8639,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -8154,6 +8820,35 @@
                                 "minLength": 1,
                                 "type": "string"
                               },
+                              "internalLinks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"]
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "targetId": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "targetId"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
                               "modelKey": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -8235,6 +8930,7 @@
                               }
                             },
                             "required": [
+                              "internalLinks",
                               "blocks",
                               "fields",
                               "id",
@@ -8248,7 +8944,7 @@
                           "type": "array"
                         },
                         "formatVersion": {
-                          "const": 1
+                          "const": 2
                         },
                         "globals": {
                           "items": {
@@ -8298,6 +8994,35 @@
                                 "minLength": 1,
                                 "type": "string"
                               },
+                              "internalLinks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"]
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "targetId": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "targetId"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
                               "modelKey": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -8305,7 +9030,14 @@
                               },
                               "publishedAt": {}
                             },
-                            "required": ["blocks", "fields", "id", "modelKey", "publishedAt"],
+                            "required": [
+                              "internalLinks",
+                              "blocks",
+                              "fields",
+                              "id",
+                              "modelKey",
+                              "publishedAt"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -8582,6 +9314,35 @@
                                 "minLength": 1,
                                 "type": "string"
                               },
+                              "internalLinks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"]
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "targetId": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "targetId"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
                               "modelKey": {
                                 "maxLength": 255,
                                 "minLength": 1,
@@ -8663,6 +9424,7 @@
                               }
                             },
                             "required": [
+                              "internalLinks",
                               "blocks",
                               "fields",
                               "id",
@@ -8676,7 +9438,7 @@
                           "type": "array"
                         },
                         "formatVersion": {
-                          "const": 1
+                          "const": 2
                         },
                         "media": {
                           "additionalProperties": {
@@ -8806,6 +9568,8 @@
                             "BUILD_EXPORT_VERSION_CHANGED",
                             "CONFLICT",
                             "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
                             "CONTENT_MODEL_CARDINALITY_CONFLICT",
                             "CONTENT_NOT_PUBLISHED",
                             "CONTENT_PAGE_SINGLETON",
@@ -8915,6 +9679,36 @@
                             "maxLength": 255,
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "internalLinks": {
+                            "default": [],
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "area": {
+                                  "enum": ["fields", "data"]
+                                },
+                                "pointer": {
+                                  "minLength": 1,
+                                  "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                  "type": "string"
+                                },
+                                "sourceKey": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "targetId": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["sourceKey", "area", "pointer", "targetId"],
+                              "type": "object"
+                            },
+                            "maxItems": 200,
+                            "type": "array"
                           },
                           "modelKey": {
                             "maxLength": 255,
@@ -9216,6 +10010,36 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "internalLinks": {
+                          "default": [],
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "enum": ["fields", "data"]
+                              },
+                              "pointer": {
+                                "minLength": 1,
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "targetId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["sourceKey", "area", "pointer", "targetId"],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
                         "modelKey": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -9487,6 +10311,36 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "internalLinks": {
+                          "default": [],
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "enum": ["fields", "data"]
+                              },
+                              "pointer": {
+                                "minLength": 1,
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "targetId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["sourceKey", "area", "pointer", "targetId"],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
                         "modelKey": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -9748,6 +10602,36 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "internalLinks": {
+                          "default": [],
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "enum": ["fields", "data"]
+                              },
+                              "pointer": {
+                                "minLength": 1,
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "targetId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["sourceKey", "area", "pointer", "targetId"],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
                         "modelKey": {
                           "maxLength": 255,
                           "minLength": 1,
@@ -10008,6 +10892,36 @@
                           "maxLength": 255,
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "internalLinks": {
+                          "default": [],
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "enum": ["fields", "data"]
+                              },
+                              "pointer": {
+                                "minLength": 1,
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "targetId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["sourceKey", "area", "pointer", "targetId"],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
                         },
                         "modelKey": {
                           "maxLength": 255,

@@ -68,7 +68,9 @@ test("the registry holds one astro item per built-in block at its definition ver
     expect(definition?.type, manifest.name).toBe(manifest.name);
     expect(manifest.blockVersion, manifest.name).toBe(definition.version);
     expect(Number.isInteger(manifest.revision) && manifest.revision >= 1).toBe(true);
-    expect(Object.keys(manifest.requires).sort()).toEqual(["@lacecms/astro", "@lacecms/render"]);
+    expect(Object.keys(manifest.requires)).toEqual(
+      expect.arrayContaining(["@lacecms/astro", "@lacecms/render"]),
+    );
     expect(manifest.dependencies).toEqual([]);
   }
 });

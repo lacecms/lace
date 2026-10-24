@@ -4,7 +4,10 @@ import type { BlockProps } from "@lacecms/render";
 
 type Props = BlockProps<typeof builtInBlocks.navigation>;
 
-const { anchor, block, className, data } = Astro.props;
+const { anchor, block, className, data, link: resolveLink } = Astro.props;
+const href = (value: unknown) => { const result = resolveLink(value); return result.state === "resolved" ? result.href : undefined; };
+const items = data.links.map((item) => ({ ...item, url: href(item.url),
+  children: item.children?.map((child) => ({ ...child, url: href(child.url) })) }));
 const name = data.name?.trim() === "" ? undefined : data.name;
 const path = (value: string) => (value.length > 1 && value.endsWith("/") ? value.slice(0, -1) : value);
 const currentPath = path(Astro.url.pathname);
@@ -15,14 +18,14 @@ const current = (url: string | undefined) =>
 
 <nav aria-label={name} class:list={["navigation", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
   <ul data-lace-part="list">
-    {data.links.map((link) => (
+    {items.map((link) => (
       <li data-lace-part="item">
         {link.children !== undefined && link.children.length > 0 ? (
           <details data-lace-part="submenu">
             <summary data-lace-part="toggle">{link.label}</summary>
             <ul data-lace-part="children">
               {link.url !== undefined && <li data-lace-part="item"><a aria-current={current(link.url)} data-lace-part="link" href={link.url}>{link.label}</a></li>}
-              {link.children.map((child) => <li data-lace-part="item"><a aria-current={current(child.url)} data-lace-part="link" href={child.url}>{child.label}</a></li>)}
+              {link.children.map((child) => <li data-lace-part="item">{child.url === undefined ? <span data-lace-part="label">{child.label}</span> : <a aria-current={current(child.url)} data-lace-part="link" href={child.url}>{child.label}</a>}</li>)}
             </ul>
           </details>
         ) : link.url !== undefined ? (

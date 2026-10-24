@@ -1,6 +1,7 @@
 import { engineVersion } from "./release-version.js";
 import {
   ContentUseCases,
+  ContentLinkUseCases,
   MediaDeletionDispatcher,
   MediaUseCases,
   SITE_BUILD_DEBOUNCE_MS,
@@ -314,6 +315,7 @@ export function createCloudflareRuntime(
     config: input.config,
     buildSite: settings.buildSite ?? null,
     content,
+    links: new ContentLinkUseCases(repository),
     // Requests use their own `waitUntil`; this fallback serves direct app calls.
     defer: (task) => {
       void task.catch(() => logger.error({ component: "deferred", reason: "task_failed" }));

@@ -102,7 +102,7 @@ test("generated block sources are user-owned and identical to the reference site
     lock.blockMap,
     ...Object.values(lock.items).flatMap((item) => Object.keys(item.files)),
   ];
-  expect(shared).toHaveLength(13);
+  expect(shared).toHaveLength(14);
   for (const path of shared) {
     expect(generated.manifest.files[`site/${path}`]).toEqual({ owner: "user" });
     expect(await readFile(join(generated.path, "site", path), "utf8")).toBe(
@@ -151,7 +151,7 @@ test("generated Astro builds every built-in block from one export and rejects un
           .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, "")
           .matchAll(/data-lace-block="([^"]+)"/gu),
       ].map((match) => match[1]),
-    ).toEqual(["navigation", "hero", "navigation", "cta", "videoEmbed"]);
+    ).toEqual(["navigation", "hero", "navigation", "cta", "videoEmbed", "link", "link"]);
     expect([...post.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1])).toEqual([
       "navigation",
       "richText",

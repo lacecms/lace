@@ -19,6 +19,7 @@ const builtIns = [
   "gallery",
   "hero",
   "image",
+  "link",
   "navigation",
   "quote",
   "richText",

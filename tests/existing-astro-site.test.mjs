@@ -110,7 +110,7 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   const article = await readFile(join(site, "dist/articles/first-post/index.html"), "utf8");
   const blocks = (html) =>
     [...html.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1]);
-  expect(blocks(home)).toEqual(["hero", "navigation", "cta"]);
+  expect(blocks(home)).toEqual(["hero", "navigation", "cta", "link", "link"]);
   expect(blocks(article)).toEqual(["richText", "image", "quote", "gallery"]);
   expect(home).toContain('<main data-lace-model="home" data-lace-entry="home-entry">');
   expect(home).toContain('<a href="/articles/first-post/">First published post</a>');

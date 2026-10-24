@@ -6,6 +6,7 @@ import {
   isBlockAnchor,
   normalizeBlockClassName,
   toBlockMetadata,
+  isInternalLinkTargetId,
 } from "@lacecms/content";
 import type {
   BlockMetadata,
@@ -13,6 +14,7 @@ import type {
   FieldMetadata,
   JsonObject,
   JsonValue,
+  PublicInternalLinkReference,
 } from "@lacecms/content";
 import {
   BlockOrderError,
@@ -49,6 +51,8 @@ import type {
 import * as v from "valibot";
 
 export const packageName = "@lacecms/contracts";
+// Portable URL safety primitives for SDK consumers without a content dependency.
+export { decodeEntryLink, encodeEntryLink, isSafeUrl } from "@lacecms/content";
 
 const identifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(255));
 const nonNegativeIntegerSchema = v.pipe(v.number(), v.integer(), v.minValue(0));
@@ -136,6 +140,129 @@ export type OpaqueCursorDto = v.InferOutput<typeof opaqueCursorSchema>;
 export type IsoTimestamp = v.InferOutput<typeof isoTimestampSchema>;
 export type EntityTag = v.InferOutput<typeof entityTagSchema>;
 export type IdempotencyKey = v.InferOutput<typeof idempotencyKeySchema>;
+
+/** Opaque CMS identity, including encoded punctuation and Unicode in entry tokens. */
+export const linkTargetIdSchema = v.pipe(
+  identifierSchema,
+  v.check((value: string) => isInternalLinkTargetId(value)),
+);
+export const linkImpactActionSchema = v.picklist(["delete", "unpublish"]);
+export const linkImpactAcknowledgmentSchema = v.strictObject({
+  receipt: opaqueCursorSchema,
+  acknowledgePublishedLinks: v.literal(true),
+});
+const linkPageLimitSchema = v.optional(
+  v.pipe(v.string(), v.regex(/^(?:[1-9]|[1-4][0-9]|50)$/u), v.transform(Number), v.maxValue(50)),
+  "20",
+);
+export const linkTargetQuerySchema = v.strictObject({
+  modelKey: v.optional(identifierSchema),
+  status: v.optional(v.picklist(["published", "unpublished"])),
+  search: v.optional(v.pipe(v.string(), v.maxLength(100), v.trim())),
+  after: v.optional(opaqueCursorSchema),
+  limit: linkPageLimitSchema,
+});
+export const resolveLinkTargetsRequestSchema = v.strictObject({
+  ids: v.pipe(
+    v.array(linkTargetIdSchema),
+    v.maxLength(200),
+    v.check((ids) => new Set(ids).size === ids.length, "IDs must be distinct."),
+  ),
+});
+export const linkImpactQuerySchema = v.pipe(
+  v.strictObject({
+    action: linkImpactActionSchema,
+    after: v.optional(opaqueCursorSchema),
+    limit: linkPageLimitSchema,
+    sourceEntryId: v.optional(linkTargetIdSchema),
+    snapshotId: v.optional(linkTargetIdSchema),
+    locationsAfter: v.optional(opaqueCursorSchema),
+  }),
+  v.check((value) => {
+    const locations =
+      value.sourceEntryId !== undefined ||
+      value.snapshotId !== undefined ||
+      value.locationsAfter !== undefined;
+    return (
+      !locations ||
+      (value.sourceEntryId !== undefined &&
+        value.snapshotId !== undefined &&
+        value.after === undefined)
+    );
+  }, "Use either source pagination or a complete source/snapshot location query."),
+);
+const routableTargetEntries = {
+  id: linkTargetIdSchema,
+  modelKey: identifierSchema,
+  modelKind: v.picklist(["page", "collection"]),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+};
+export const routableLinkTargetSchema = v.variant("state", [
+  v.strictObject({ ...routableTargetEntries, state: v.literal("published"), path: v.string() }),
+  v.strictObject({ ...routableTargetEntries, state: v.literal("unpublished") }),
+]);
+export const linkTargetStatusSchema = v.union([
+  routableLinkTargetSchema,
+  v.strictObject({ id: linkTargetIdSchema, state: v.literal("missing") }),
+  v.strictObject({
+    id: linkTargetIdSchema,
+    modelKey: identifierSchema,
+    state: v.literal("non-routable"),
+  }),
+]);
+export const linkTargetPageSchema = v.strictObject({
+  items: v.pipe(v.array(routableLinkTargetSchema), v.maxLength(50)),
+  nextCursor: v.optional(opaqueCursorSchema),
+});
+export const linkTargetStatusesSchema = v.pipe(
+  v.record(linkTargetIdSchema, linkTargetStatusSchema),
+  v.check(
+    (items) =>
+      Object.keys(items).length <= 200 &&
+      Object.entries(items).every(([id, item]) => id === item.id),
+  ),
+);
+export const linkUsageLocationSchema = v.strictObject({
+  sourceKey: identifierSchema,
+  area: v.picklist(["fields", "data"]),
+  pointer: v.pipe(jsonPointerSchema, v.minLength(1)),
+  delivered: v.boolean(),
+});
+export const linkUsageSourceSchema = v.strictObject({
+  entryId: linkTargetIdSchema,
+  snapshotId: linkTargetIdSchema,
+  modelKey: identifierSchema,
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  phase: v.picklist(["draft", "published"]),
+  locations: v.pipe(v.array(linkUsageLocationSchema), v.maxLength(10)),
+  nextLocationsCursor: v.optional(opaqueCursorSchema),
+});
+const linkImpactEntries = {
+  hasPublishedUsages: v.boolean(),
+  receipt: opaqueCursorSchema,
+  nextCursor: v.optional(opaqueCursorSchema),
+};
+export const linkImpactPageSchema = v.variant("mode", [
+  v.strictObject({
+    ...linkImpactEntries,
+    mode: v.literal("sources"),
+    sources: v.pipe(v.array(linkUsageSourceSchema), v.maxLength(50)),
+  }),
+  v.strictObject({
+    ...linkImpactEntries,
+    mode: v.literal("locations"),
+    sourceEntryId: linkTargetIdSchema,
+    snapshotId: linkTargetIdSchema,
+    locations: v.pipe(v.array(linkUsageLocationSchema), v.maxLength(50)),
+  }),
+]);
+export type LinkTargetStatusDto = v.InferOutput<typeof linkTargetStatusSchema>;
+export type LinkTargetPageDto = v.InferOutput<typeof linkTargetPageSchema>;
+export type LinkTargetStatusesDto = v.InferOutput<typeof linkTargetStatusesSchema>;
+export type LinkImpactPageDto = v.InferOutput<typeof linkImpactPageSchema>;
+export type LinkImpactAcknowledgmentDto = v.InferOutput<typeof linkImpactAcknowledgmentSchema>;
+export type LinkUsageLocationDto = v.InferOutput<typeof linkUsageLocationSchema>;
+export type LinkUsageSourceDto = v.InferOutput<typeof linkUsageSourceSchema>;
 
 export type FieldMetadataMapDto = Readonly<Record<string, FieldMetadata>>;
 
@@ -633,9 +760,11 @@ export const publishContentEntryRequestSchema = v.strictObject({
 });
 export const deleteContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
+  linkImpact: v.optional(linkImpactAcknowledgmentSchema),
 });
 export const unpublishContentEntryRequestSchema = v.strictObject({
   expectedPublishedSnapshotId: identifierSchema,
+  linkImpact: v.optional(linkImpactAcknowledgmentSchema),
 });
 export const revertContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
@@ -999,8 +1128,31 @@ export const mediaFocalPointSchema = v.strictObject({
   y: mediaFocalCoordinateSchema,
 });
 
+export const internalLinkManifestLocationSchema = v.pipe(
+  v.strictObject({
+    sourceKey: identifierSchema,
+    area: v.picklist(["fields", "data"]),
+    pointer: v.pipe(jsonPointerSchema, v.minLength(1)),
+    targetId: linkTargetIdSchema,
+  }),
+  v.check((value) => (value.area === "fields") === (value.sourceKey === "$fields")),
+);
+export const internalLinkManifestSchema = v.pipe(
+  v.array(internalLinkManifestLocationSchema),
+  v.maxLength(200),
+  v.check(
+    (items) =>
+      new Set(items.map((item) => JSON.stringify([item.sourceKey, item.area, item.pointer])))
+        .size === items.length,
+    "Each source location must occur once.",
+  ),
+);
+export type InternalLinkManifestDto = v.InferOutput<typeof internalLinkManifestSchema>;
+const optionalInternalLinksSchema = v.optional(internalLinkManifestSchema, () => []);
+
 /** One published entry as public consumers see it; no draft or editorial data. */
 export const publicEntrySchema = v.strictObject({
+  internalLinks: optionalInternalLinksSchema,
   blocks: v.array(publicBlockSchema),
   fields: jsonObjectSchema,
   id: identifierSchema,
@@ -1036,6 +1188,7 @@ export const publicMediaDictionarySchema = v.pipe(
 
 /** One published route-less global; no path, slug, title, draft, or editorial data. */
 export const publicGlobalSchema = v.strictObject({
+  internalLinks: optionalInternalLinksSchema,
   blocks: v.array(publicBlockSchema),
   fields: jsonObjectSchema,
   id: identifierSchema,
@@ -1072,19 +1225,28 @@ export const exportSeoSchema = v.strictObject({
 });
 
 /** The structure version of the build export; see the public contract evolution policy. */
-export const BUILD_EXPORT_FORMAT_VERSION = 1;
+export const BUILD_EXPORT_FORMAT_VERSION = 2;
 const buildExportFormatVersionSchema = v.literal(BUILD_EXPORT_FORMAT_VERSION);
+
+const exportEntrySchema = v.strictObject({
+  ...publicEntrySchema.entries,
+  internalLinks: internalLinkManifestSchema,
+});
+const exportGlobalSchema = v.strictObject({
+  ...publicGlobalSchema.entries,
+  internalLinks: internalLinkManifestSchema,
+});
 
 /**
  * The assembled build export: the union of the pages of one page sequence, as
  * returned by the SDK and compared by tests. The API never sends it whole.
  */
 export const buildExportSchema = v.strictObject({
-  entries: v.array(publicEntrySchema),
+  entries: v.array(exportEntrySchema),
   /** Strict output accepts only the current format; tolerant consumers accept any. */
   formatVersion: buildExportFormatVersionSchema,
   /** Always sent by the API; exports produced before globals existed omit it. */
-  globals: v.optional(v.array(publicGlobalSchema), []),
+  globals: v.optional(v.array(exportGlobalSchema), []),
   media: publicMediaDictionarySchema,
   /** Always sent by the API; exports produced before SEO existed omit it. */
   seo: v.optional(exportSeoSchema, { defaults: null, models: {} }),
@@ -1109,7 +1271,7 @@ export const buildExportQuerySchema = v.strictObject({
 
 const buildExportPageEntries = {
   /** Routed entries ordered by path, continuing strictly after the cursor's path. */
-  entries: v.array(publicEntrySchema),
+  entries: v.array(exportEntrySchema),
   formatVersion: buildExportFormatVersionSchema,
   /** Exactly the media delivered by this page's entries (and globals on the first page). */
   media: publicMediaDictionarySchema,
@@ -1121,7 +1283,7 @@ const buildExportPageEntries = {
 /** The first build-export page (no `after`): it alone carries `globals` and `seo`. */
 export const buildExportFirstPageSchema = v.strictObject({
   ...buildExportPageEntries,
-  globals: v.array(publicGlobalSchema),
+  globals: v.array(exportGlobalSchema),
   seo: exportSeoSchema,
 });
 
@@ -1323,6 +1485,8 @@ export const errorCodeSchema = v.picklist([
   "BUILD_EXPORT_VERSION_CHANGED",
   "CONFLICT",
   "CONTENT_INVALID_STATE",
+  "CONTENT_LINKS_IN_USE",
+  "CONTENT_LINK_IMPACT_CHANGED",
   "CONTENT_MODEL_CARDINALITY_CONFLICT",
   "CONTENT_NOT_PUBLISHED",
   "CONTENT_PAGE_SINGLETON",
@@ -1439,10 +1603,32 @@ function tolerant<Schema extends AnySchema>(schema: Schema): Schema {
  * keys a newer API may add, while enforcing every key, type and constraint of
  * the strict variants the API validates its output with.
  */
+function tolerantBuild<Schema extends AnySchema>(schema: Schema): Schema {
+  const substitutions = new Map(tolerantSubstitutions);
+  substitutions.set(exportEntrySchema, tolerant(publicEntrySchema));
+  substitutions.set(exportGlobalSchema, tolerant(publicGlobalSchema));
+  return v.pipe(
+    v.unknown(),
+    v.check((value) => {
+      if (value === null || typeof value !== "object") return false;
+      const input = value as Record<string, unknown>;
+      if (input.formatVersion === 1) return true;
+      return [input.entries, input.globals ?? []].every(
+        (items) =>
+          Array.isArray(items) &&
+          items.every(
+            (item: unknown) =>
+              item !== null && typeof item === "object" && Object.hasOwn(item, "internalLinks"),
+          ),
+      );
+    }, "Format 2 requires local internal-link manifests."),
+    toTolerantSchema(schema, substitutions),
+  ) as unknown as Schema;
+}
 export const tolerantPublicSchemas = Object.freeze({
-  buildExport: tolerant(buildExportSchema),
-  buildExportContinuationPage: tolerant(buildExportContinuationPageSchema),
-  buildExportFirstPage: tolerant(buildExportFirstPageSchema),
+  buildExport: tolerantBuild(buildExportSchema),
+  buildExportContinuationPage: tolerantBuild(buildExportContinuationPageSchema),
+  buildExportFirstPage: tolerantBuild(buildExportFirstPageSchema),
   errorEnvelope: tolerant(errorEnvelopeSchema) as unknown as v.GenericSchema<
     unknown,
     TolerantErrorEnvelope
@@ -1859,6 +2045,7 @@ export function toSiteBuildRecordDto(build: {
 
 /** A published entry with the media its published snapshot references. */
 export interface PublicEntrySource {
+  readonly internalLinks?: readonly PublicInternalLinkReference[];
   readonly entry: ContentEntry;
   readonly media: readonly PublicMediaSource[];
   readonly path: string;
@@ -1882,11 +2069,14 @@ export type PublicMediaUrl = (mediaId: string) => string;
 export function toPublicEntryDto(
   entry: ContentEntry,
   path: string,
-  options: SeoMappingOptions = {},
+  options: SeoMappingOptions & {
+    readonly internalLinks?: readonly PublicInternalLinkReference[];
+  } = {},
 ): PublicEntryDto {
   const snapshot = entry.published;
   if (snapshot === undefined) throw new TypeError("A public entry requires a published snapshot.");
   return {
+    internalLinks: (options.internalLinks ?? []).map((item) => ({ ...item })),
     blocks: publicBlocks(snapshot.blocks),
     fields: snapshot.fields,
     id: entry.id,
@@ -1909,10 +2099,14 @@ function publicEntryOptions(entry: ContentEntry, options: PublicSeoOptions): Seo
 }
 
 /** Maps the published snapshot of a global; the draft and its title are never read. */
-export function toPublicGlobalDto(entry: ContentEntry): PublicGlobalDto {
+export function toPublicGlobalDto(
+  entry: ContentEntry,
+  internalLinks: readonly PublicInternalLinkReference[] = [],
+): PublicGlobalDto {
   const snapshot = entry.published;
   if (snapshot === undefined) throw new TypeError("A public global requires a published snapshot.");
   return {
+    internalLinks: internalLinks.map((item) => ({ ...item })),
     blocks: publicBlocks(snapshot.blocks),
     fields: snapshot.fields,
     id: entry.id,
@@ -1956,7 +2150,10 @@ export function toPublicContentEntryDto(
   options: PublicSeoOptions = {},
 ): PublicContentEntryDto {
   return {
-    entry: toPublicEntryDto(value.entry, value.path, publicEntryOptions(value.entry, options)),
+    entry: toPublicEntryDto(value.entry, value.path, {
+      ...publicEntryOptions(value.entry, options),
+      ...(value.internalLinks === undefined ? {} : { internalLinks: value.internalLinks }),
+    }),
     media: toPublicMediaDictionary(value.media, urlFor),
   };
 }
@@ -1967,8 +2164,8 @@ export function toPublicContentListDto(
   options: PublicSeoOptions = {},
 ): PublicContentListDto {
   return {
-    items: value.items.map(({ entry, path }) =>
-      toPublicEntryDto(entry, path, publicEntryOptions(entry, options)),
+    items: value.items.map(({ entry, path, internalLinks = [] }) =>
+      toPublicEntryDto(entry, path, { ...publicEntryOptions(entry, options), internalLinks }),
     ),
     media: toPublicMediaDictionary(
       value.items.flatMap((item) => item.media),
@@ -1980,6 +2177,7 @@ export function toPublicContentListDto(
 
 /** A published global and the media its publication references. */
 export interface PublicGlobalSource {
+  readonly internalLinks?: readonly PublicInternalLinkReference[];
   readonly entry: ContentEntry;
   readonly media: readonly PublicMediaSource[];
 }
@@ -1989,7 +2187,7 @@ export function toPublicGlobalContentDto(
   urlFor: PublicMediaUrl,
 ): PublicGlobalContentDto {
   return {
-    global: toPublicGlobalDto(value.entry),
+    global: toPublicGlobalDto(value.entry, value.internalLinks),
     media: toPublicMediaDictionary(value.media, urlFor),
   };
 }
@@ -2026,8 +2224,8 @@ function exportPageEntries(
 ): BuildExportContinuationPageDto {
   const globals = value.globals ?? [];
   return {
-    entries: value.entries.map(({ entry, path }) =>
-      toPublicEntryDto(entry, path, publicEntryOptions(entry, { seoModels })),
+    entries: value.entries.map(({ entry, path, internalLinks = [] }) =>
+      toPublicEntryDto(entry, path, { ...publicEntryOptions(entry, { seoModels }), internalLinks }),
     ),
     formatVersion: BUILD_EXPORT_FORMAT_VERSION,
     media: toPublicMediaDictionary(
@@ -2047,7 +2245,9 @@ export function toBuildExportFirstPageDto(
 ): BuildExportFirstPageDto {
   return {
     ...exportPageEntries(value, urlFor, new Set(Object.keys(seo.models))),
-    globals: (value.globals ?? []).map(({ entry }) => toPublicGlobalDto(entry)),
+    globals: (value.globals ?? []).map(({ entry, internalLinks }) =>
+      toPublicGlobalDto(entry, internalLinks),
+    ),
     seo: exportSeoDto(seo),
   };
 }
@@ -2173,6 +2373,8 @@ const domainErrorStatus: Readonly<Record<DomainErrorCode, 403 | 409 | 422>> = {
   AUTHORIZATION_DENIED: 403,
   BUILD_EXPORT_VERSION_CHANGED: 409,
   CONTENT_INVALID_STATE: 422,
+  CONTENT_LINKS_IN_USE: 409,
+  CONTENT_LINK_IMPACT_CHANGED: 409,
   CONTENT_MODEL_CARDINALITY_CONFLICT: 409,
   CONTENT_NOT_PUBLISHED: 409,
   CONTENT_PAGE_SINGLETON: 409,
@@ -2189,6 +2391,9 @@ const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
   BUILD_EXPORT_VERSION_CHANGED:
     "Published content changed during the build export. Restart from the first page.",
   CONTENT_INVALID_STATE: "The requested content operation is invalid.",
+  CONTENT_LINKS_IN_USE:
+    "Published links use this destination. Review the current link impact before removal.",
+  CONTENT_LINK_IMPACT_CHANGED: "Link impact changed. Refresh and review it again.",
   CONTENT_MODEL_CARDINALITY_CONFLICT: "The content model cannot accept another entry.",
   CONTENT_NOT_PUBLISHED: "The entry is not published.",
   CONTENT_PAGE_SINGLETON: "Page and global entries are defined by configuration.",

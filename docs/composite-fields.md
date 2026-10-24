@@ -223,3 +223,11 @@ the same release.
 
 For configurable placeholders, required markers and text counters, see
 [field guidance](field-guidance.md).
+
+## CE10 internal URL links
+
+See [internal URL links](./internal-url-links.md) for canonical ID targets, the
+200-occurrence snapshot bound, publication/removal guards, format-2 transport,
+installed source adoption, migration 0010 and matching-backup rollback. URL
+fields remain content fields; block settings, provider URLs, SEO and rich-text
+hrefs retain their existing grammars.

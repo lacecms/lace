@@ -5,6 +5,7 @@ import CtaBlock from "../components/lace/CtaBlock.astro";
 import GalleryBlock from "../components/lace/GalleryBlock.astro";
 import HeroBlock from "../components/lace/HeroBlock.astro";
 import ImageBlock from "../components/lace/ImageBlock.astro";
+import LinkBlock from "../components/lace/LinkBlock.astro";
 import NavigationBlock from "../components/lace/NavigationBlock.astro";
 import QuoteBlock from "../components/lace/QuoteBlock.astro";
 import RichTextBlock from "../components/lace/RichTextBlock.astro";
@@ -15,6 +16,7 @@ export const blocks = defineBlockMap({
   gallery: { definition: builtInBlocks.gallery, component: GalleryBlock },
   hero: { definition: builtInBlocks.hero, component: HeroBlock },
   image: { definition: builtInBlocks.image, component: ImageBlock },
+  link: { definition: builtInBlocks.link, component: LinkBlock },
   navigation: { definition: builtInBlocks.navigation, component: NavigationBlock },
   quote: { definition: builtInBlocks.quote, component: QuoteBlock },
   richText: { definition: builtInBlocks.richText, component: RichTextBlock },

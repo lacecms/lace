@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -17,7 +18,22 @@ export async function platformReleaseVersion(directory, { check = false } = {}) 
   if (check) {
     if ((await readFile(destination, "utf8")) !== source)
       throw new Error(`Stale platform release version: ${manifest.name}`);
-  } else await writeFile(destination, source);
+  } else {
+    const current = await readFile(destination, "utf8").catch((error) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (current === source) return;
+    // Build and typecheck can read this source concurrently. Never expose a
+    // truncated destination, even when regenerating a changed release version.
+    const temporary = `${destination}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, source, { flag: "wx" });
+      await rename(temporary, destination);
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)

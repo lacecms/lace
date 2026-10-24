@@ -33,6 +33,7 @@ import type {
   ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
   ContentCommandResult,
+  ContentLinkReadPort,
   ContentEntryCommandPort,
   ContentEntryListPage,
   ContentEntryReadPort,
@@ -81,6 +82,17 @@ import type {
 } from "@lacecms/application";
 import {
   assertBuildExportVersion,
+  syncInternalLinkStatements,
+  COMMIT_SYNC_LINK_GRAPH_SQL,
+  LINK_IMPACT_EVIDENCE_SQL,
+  linkRemovalCondition,
+  INVALID_PUBLISHED_LINK_TARGETS_SQL,
+  assertPublishedInternalLinkTargets,
+  SqlContentLinkReader,
+  replaceInternalLinkStatements,
+  copyInternalLinkDiffStatements,
+  COPY_INTERNAL_LINKS_SQL,
+  BUMP_INTERNAL_LINK_GRAPH_SQL,
   BLOCK_COLUMNS_SQL,
   BUILD_EXPORT_CANDIDATES_SQL,
   BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
@@ -313,6 +325,7 @@ function rowsPerStatement(shared: number, width: number): number {
  */
 export class D1ContentRepository
   implements
+    ContentLinkReadPort,
     ContentEntryCommandPort,
     ContentEntryReadPort,
     ConfigurationSyncApplyPort,
@@ -335,6 +348,25 @@ export class D1ContentRepository
   ) {}
 
   // ---------------------------------------------------------------- reads
+
+  private linkReader(): SqlContentLinkReader {
+    return new SqlContentLinkReader({
+      all: async <Row>(sql: string, ...params: readonly unknown[]) => {
+        return this.all<Row>(sql, ...params);
+      },
+    });
+  }
+  public resolveLinkTargets(ids: readonly string[]) {
+    return this.linkReader().resolveLinkTargets(ids);
+  }
+  public listLinkTargets(input: import("@lacecms/application").LinkTargetQuery) {
+    return this.linkReader().listLinkTargets(input);
+  }
+  public readLinkImpact(
+    input: import("@lacecms/application").LinkImpactQuery & { readonly actorId: string },
+  ) {
+    return this.linkReader().readLinkImpact(input);
+  }
 
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return (await this.readSyncState()).state;
@@ -415,6 +447,13 @@ export class D1ContentRepository
   public async applyConfigurationSyncBlockMigrations(
     input: ApplyConfigurationSyncBlockMigrationsInput,
   ): Promise<ConfigurationSyncMigrationCounts> {
+    const linkDirtyToken = crypto.randomUUID();
+    const linkGraphCost = input.units.some((unit) =>
+      unit.snapshots.some((snapshot) => snapshot.internalLinks !== undefined),
+    )
+      ? 2
+      : 0;
+    const statementBudget = D1_MAX_BATCH_STATEMENTS - linkGraphCost;
     type Part = {
       readonly state: "draft" | "published";
       readonly statements: ReturnType<typeof configurationSyncMigrationStatements>;
@@ -437,18 +476,19 @@ export class D1ContentRepository
           migration,
           input.migratedAt,
           D1_MAX_BOUND_PARAMETERS - 1,
+          linkDirtyToken,
         ),
       }));
       const unitCost = parts.reduce((sum, part) => sum + cost(part), 0);
-      if (unitCost <= D1_MAX_BATCH_STATEMENTS) {
-        if (size + unitCost > D1_MAX_BATCH_STATEMENTS) flush();
+      if (unitCost <= statementBudget) {
+        if (size + unitCost > statementBudget) flush();
         current.push(...parts);
         size += unitCost;
         continue;
       }
       flush();
       for (const part of parts) {
-        if (size + cost(part) > D1_MAX_BATCH_STATEMENTS) flush();
+        if (size + cost(part) > statementBudget) flush();
         current.push(part);
         size += cost(part);
       }
@@ -468,6 +508,10 @@ export class D1ContentRepository
         for (const write of part.statements.writes) {
           batch.add(`${write.sql} and ${guarded}`, ...write.params, tokenJson);
         }
+      }
+      if (linkGraphCost) {
+        batch.add(`${COMMIT_SYNC_LINK_GRAPH_SQL} and ${guarded}`, linkDirtyToken, tokenJson);
+        this.releaseGuard(batch, linkDirtyToken);
       }
       for (const token of tokens) this.releaseGuard(batch, token);
       const results = await this.execute(batch, false);
@@ -821,6 +865,7 @@ export class D1ContentRepository
     this.addSnapshotInsert(batch, draft, version.config_version, token);
     this.addBlockInserts(batch, draft.id, draft.updatedAt, draft.blocks, token);
     this.addReferenceInserts(batch, draft.id, draft.updatedAt, input.mediaReferences, token);
+    this.addInternalLinkDiff(batch, draft.id, input.internalLinks ?? [], token);
     batch.add(
       `update content_entries set draft_snapshot_id = ? where id = ? ${token === undefined ? "" : `and ${GUARD_SQL}`}`,
       draft.id,
@@ -863,6 +908,7 @@ export class D1ContentRepository
     );
     this.addBlockInserts(batch, draftId, mutation.updatedAt, mutation.blocks, token);
     this.addReferenceInserts(batch, draftId, mutation.updatedAt, mutation.mediaReferences, token);
+    this.addInternalLinkDiff(batch, draftId, input.internalLinks ?? [], token);
     batch.add(
       `update content_entries set updated_at = ? where id = ? and ${GUARD_SQL}`,
       mutation.updatedAt,
@@ -924,6 +970,7 @@ export class D1ContentRepository
        select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ?
          from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id
         where e.id = ? and s.id = ? and s.revision = ?
+          and not exists (${INVALID_PUBLISHED_LINK_TARGETS_SQL})
           ${idempotency === undefined ? "" : "and not exists (select 1 from idempotency_records where scope = ? and key = ?)"}`,
       newId,
       input.publishedAt,
@@ -932,6 +979,9 @@ export class D1ContentRepository
       input.entryId,
       draftId,
       input.expectedRevision,
+      draftId,
+      input.entryId,
+      path ?? null,
       ...(idempotency === undefined ? [] : [scope, idempotency.key]),
     );
     batch.checkpoint("publish.blocks");
@@ -943,6 +993,12 @@ export class D1ContentRepository
       draftId,
       ...exists.params,
     );
+    batch.add(
+      `${BUMP_INTERNAL_LINK_GRAPH_SQL} and ${exists.sql}`,
+      JSON.stringify([draftId, ...(entry.published === undefined ? [] : [entry.published.id])]),
+      ...exists.params,
+    );
+    batch.add(`${COPY_INTERNAL_LINKS_SQL} and ${exists.sql}`, newId, draftId, ...exists.params);
     batch.checkpoint("publish.references");
     batch.add(
       `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
@@ -1007,6 +1063,15 @@ export class D1ContentRepository
         const replay = await this.replayPublication(scope!, idempotency);
         if (replay !== null) return replay;
       }
+      assertPublishedInternalLinkTargets(
+        await this.all<import("@lacecms/db").InvalidPublishedLinkTargetRow>(
+          INVALID_PUBLISHED_LINK_TARGETS_SQL,
+          draftId,
+          input.entryId,
+          path ?? null,
+        ),
+        entry.draft.blocks.map((block) => block.key),
+      );
       revisionConflict("The draft revision no longer matches the expected revision.");
     }
     return {
@@ -1037,6 +1102,12 @@ export class D1ContentRepository
     if (entry.published.id !== input.expectedPublishedSnapshotId) {
       revisionConflict("The published snapshot no longer matches the expected publication.");
     }
+    const impact = await this.checkLinkRemoval(
+      input.entryId,
+      "unpublish",
+      input.unpublishedBy.id,
+      input.linkImpact,
+    );
     const committed: ContentEntry = Object.freeze({
       draft: entry.draft,
       id: entry.id,
@@ -1048,14 +1119,20 @@ export class D1ContentRepository
         input.entryId,
         input.expectedPublishedSnapshotId,
         ...(idempotency === undefined ? [] : [scope, idempotency.key]),
+        ...impact.params,
       ],
       sql: `exists (select 1 from content_entries where id = ? and published_snapshot_id = ?)${
         idempotency === undefined
           ? ""
           : " and not exists (select 1 from idempotency_records where scope = ? and key = ?)"
-      }`,
+      } and (${impact.sql})`,
     });
     const guarded: Condition = { params: [token], sql: GUARD_SQL };
+    batch.add(
+      `${BUMP_INTERNAL_LINK_GRAPH_SQL} and ${GUARD_SQL}`,
+      JSON.stringify([input.expectedPublishedSnapshotId]),
+      token,
+    );
     batch.checkpoint("unpublish.route");
     batch.add(
       `delete from published_routes where entry_id = ? and ${GUARD_SQL}`,
@@ -1102,6 +1179,12 @@ export class D1ContentRepository
       const current = await this.entryRow(input.entryId);
       if (current === undefined) failure("Content entry does not exist.");
       if (current.published_snapshot_id === null) notPublished();
+      await this.checkLinkRemoval(
+        input.entryId,
+        "unpublish",
+        input.unpublishedBy.id,
+        input.linkImpact,
+      );
       revisionConflict("The published snapshot no longer matches the expected publication.");
     }
     return {
@@ -1146,6 +1229,9 @@ export class D1ContentRepository
     batch.checkpoint("revert.blocks");
     batch.add(copySnapshotBlocksSql(GUARD_SQL), draftId, publishedId, token);
     batch.add(copySnapshotReferencesSql(GUARD_SQL), draftId, publishedId, token);
+    batch.checkpoint("revert.internal-links");
+    for (const statement of copyInternalLinkDiffStatements(draftId, publishedId, GUARD_SQL))
+      batch.add(statement.sql, ...statement.params, token);
     batch.checkpoint("revert.published");
     batch.add(
       `update content_snapshots set revision = ? where id = ? and ${GUARD_SQL}`,
@@ -1182,10 +1268,16 @@ export class D1ContentRepository
     if (entry.published_snapshot_id !== expectedPublished) {
       revisionConflict("The publication state no longer matches the deletion guard.");
     }
+    const impact = await this.checkLinkRemoval(
+      input.entryId,
+      "delete",
+      input.deletedBy.id,
+      input.linkImpact,
+    );
     const batch = this.batch();
     const token = this.guard(batch, input.deletedAt, {
-      params: [input.entryId, expectedPublished, input.expectedRevision],
-      sql: "exists (select 1 from content_entries e join content_snapshots d on d.id = e.draft_snapshot_id where e.id = ? and e.published_snapshot_id is ? and d.revision = ?)",
+      params: [input.entryId, expectedPublished, input.expectedRevision, ...impact.params],
+      sql: `exists (select 1 from content_entries e join content_snapshots d on d.id = e.draft_snapshot_id where e.id = ? and e.published_snapshot_id is ? and d.revision = ?) and (${impact.sql})`,
     });
     const guarded: Condition = { params: [token], sql: GUARD_SQL };
     if (expectedPublished !== null) {
@@ -1202,6 +1294,13 @@ export class D1ContentRepository
         snapshotId: expectedPublished,
       });
     }
+    batch.add(
+      `${BUMP_INTERNAL_LINK_GRAPH_SQL} and ${GUARD_SQL}`,
+      JSON.stringify(
+        [entry.draft_snapshot_id, entry.published_snapshot_id].filter((id) => id !== null),
+      ),
+      token,
+    );
     batch.checkpoint("delete.entry");
     batch.add(`delete from content_entries where id = ? and ${GUARD_SQL}`, input.entryId, token);
     this.releaseGuard(batch, token);
@@ -1212,6 +1311,7 @@ export class D1ContentRepository
       if (current.published_snapshot_id !== expectedPublished) {
         revisionConflict("The publication state no longer matches the deletion guard.");
       }
+      await this.checkLinkRemoval(input.entryId, "delete", input.deletedBy.id, input.linkImpact);
       revisionConflict("The draft revision no longer matches the deletion guard.");
     }
     return { status: "deleted" };
@@ -1240,9 +1340,11 @@ export class D1ContentRepository
     const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
     const singletonEntries = new Map(input.singletonEntries.map((page) => [page.modelKey, page]));
     const batch = this.batch();
+    const linkDirtyToken = crypto.randomUUID();
+    const linkStatements = syncInternalLinkStatements(input.linkRewrites ?? [], linkDirtyToken);
     const token = this.guard(batch, input.appliedAt, {
-      params: [json],
-      sql: `${STORED_MODEL_STATE_JSON_SQL} = ?`,
+      params: [json, ...linkStatements.valid.flatMap((valid) => valid.params)],
+      sql: `${STORED_MODEL_STATE_JSON_SQL} = ?${linkStatements.valid.map((valid) => ` and (${valid.sql})`).join("")}`,
     });
     for (const operation of actualPlan.operations) {
       if (operation.action === "create") {
@@ -1378,6 +1480,12 @@ export class D1ContentRepository
           batch.add(`${statement.sql} and ${GUARD_SQL}`, ...statement.params, token);
         }
       }
+    }
+    for (const write of linkStatements.writes)
+      batch.add(`${write.sql} and ${GUARD_SQL}`, ...write.params, token);
+    if (linkStatements.writes.length) {
+      batch.add(`${COMMIT_SYNC_LINK_GRAPH_SQL} and ${GUARD_SQL}`, linkDirtyToken, token);
+      this.releaseGuard(batch, linkDirtyToken);
     }
     if (!configurationSyncAdvancesPublicState(actualPlan)) {
       this.releaseGuard(batch, token);
@@ -1943,6 +2051,38 @@ export class D1ContentRepository
   }
 
   /** Inserts the batch-unique guard only when the mutation precondition holds. */
+  private async checkLinkRemoval(
+    targetId: string,
+    action: import("@lacecms/application").LinkImpactAction,
+    actorId: string,
+    acknowledgment: import("@lacecms/application").LinkImpactAcknowledgment | undefined,
+  ): Promise<Condition> {
+    const row = await this.first<import("@lacecms/db").ImpactEvidenceRow>(
+      LINK_IMPACT_EVIDENCE_SQL,
+      targetId,
+      targetId,
+      action,
+      targetId,
+    );
+    return linkRemovalCondition(row, targetId, action, actorId, acknowledgment);
+  }
+
+  private addInternalLinkDiff(
+    batch: MutationBatch,
+    snapshotId: string,
+    references: readonly import("@lacecms/content").InternalLinkReference[],
+    token?: string,
+  ): void {
+    batch.checkpoint("draft.internal-links");
+    for (const statement of replaceInternalLinkStatements(
+      snapshotId,
+      references,
+      token === undefined ? "1" : GUARD_SQL,
+    ))
+      batch.add(statement.sql, ...statement.params, ...(token === undefined ? [] : [token]));
+    batch.checkpoint("draft.internal-links.complete");
+  }
+
   private guard(batch: MutationBatch, now: number, precondition: Condition): string {
     const token = `guard:${crypto.randomUUID()}`;
     batch.add(

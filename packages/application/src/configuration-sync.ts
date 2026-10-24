@@ -1,4 +1,5 @@
 import type { ContentModelStructure, NormalizedContentModel } from "@lacecms/config";
+import { configurationSyncLinkRewrites } from "./configuration-links.js";
 import {
   canonicalizeJson,
   schemaFieldAt,
@@ -283,6 +284,7 @@ export interface ConfigurationSyncSingletonEntry {
 
 /** Complete guarded input for one atomic synchronization mutation. */
 export interface ApplyConfigurationSynchronizationInput {
+  readonly linkRewrites?: readonly import("./configuration-links.js").ConfigurationSyncLinkRewrite[];
   readonly appliedAt: UnixMilliseconds;
   /** The scan evidence the plan was derived from; repositories re-plan with it. */
   readonly evidence: ConfigurationSyncEvidence;
@@ -1730,7 +1732,7 @@ async function applyFinalMutation(
     readonly ids: IdGenerator;
     readonly clock: Clock;
     readonly models: readonly NormalizedContentModel[];
-    readonly target: ConfigurationSyncApplyPort;
+    readonly target: ConfigurationSyncApplyPort & ConfigurationSyncStateReadPort;
   },
   prepared: PreparedConfigurationSynchronization,
 ): Promise<ApplyConfigurationSynchronizationResult> {
@@ -1751,6 +1753,12 @@ async function applyFinalMutation(
     );
   }
   return input.target.applyConfigurationSynchronization({
+    linkRewrites: await configurationSyncLinkRewrites({
+      models: input.models,
+      plan: prepared.plan,
+      state: input.target,
+      singletons: singletonEntries,
+    }),
     appliedAt,
     evidence: prepared.evidence,
     expectedStoredModels: prepared.storedModels,

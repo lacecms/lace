@@ -70,6 +70,15 @@ import {
   type UpdateMediaMetadataRequestDto,
   type UpdateMediaMetadataResultDto,
 } from "@lacecms/contracts";
+import {
+  linkTargetPageSchema,
+  linkTargetStatusesSchema,
+  linkImpactPageSchema,
+  type LinkTargetPageDto,
+  type LinkTargetStatusesDto,
+  type LinkImpactPageDto,
+  type LinkImpactAcknowledgmentDto,
+} from "@lacecms/contracts";
 import * as v from "valibot";
 
 export const adminQueryKeys = Object.freeze({
@@ -188,7 +197,33 @@ export interface AdminClient {
   createToken(name: string): Promise<BuildTokenCreatedDto>;
   revokeToken(tokenId: string): Promise<BuildTokenDto>;
   createEntry(modelKey: string, title: string, slug?: string): Promise<AdminContentEntryDto>;
-  deleteEntry(entryId: string, expectedRevision: number): Promise<void>;
+  deleteEntry(
+    entryId: string,
+    expectedRevision: number,
+    linkImpact?: LinkImpactAcknowledgmentDto,
+  ): Promise<void>;
+  listLinkTargets(
+    query: {
+      readonly search?: string;
+      readonly status?: "published" | "unpublished";
+      readonly after?: string;
+      readonly limit?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<LinkTargetPageDto>;
+  resolveLinkTargets(ids: readonly string[], signal?: AbortSignal): Promise<LinkTargetStatusesDto>;
+  linkImpact(
+    entryId: string,
+    query: {
+      readonly action: "delete" | "unpublish";
+      readonly after?: string;
+      readonly sourceEntryId?: string;
+      readonly snapshotId?: string;
+      readonly locationsAfter?: string;
+      readonly limit?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<LinkImpactPageDto>;
   loadEntry(entryId: string): Promise<AdminContentEntryDto>;
   listEntries(
     modelKey: string,
@@ -221,7 +256,11 @@ export interface AdminClient {
   /** Removes the publication guarded by the snapshot the caller displays; keeps the draft. */
   unpublishEntry(
     entryId: string,
-    input: { readonly expectedPublishedSnapshotId: string; readonly idempotencyKey: string },
+    input: {
+      readonly expectedPublishedSnapshotId: string;
+      readonly idempotencyKey: string;
+      readonly linkImpact?: LinkImpactAcknowledgmentDto;
+    },
   ): Promise<UnpublishContentEntryResultDto>;
   /** Replaces the draft with the current publication. */
   revertEntry(entryId: string, expectedRevision: number): Promise<AdminContentEntryDto>;
@@ -621,9 +660,61 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
           method: "POST",
         }),
       ),
-    deleteEntry: async (entryId: string, expectedRevision: number) => {
+    listLinkTargets: async (
+      query: Parameters<AdminClient["listLinkTargets"]>[0],
+      signal?: AbortSignal,
+    ) => {
+      const search = new URLSearchParams(
+        Object.entries(query)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => [key, String(value)]),
+      );
+      return parse(
+        linkTargetPageSchema,
+        await request(fetcher, `/api/v1/admin/link-targets?${search}`, {
+          ...(signal === undefined ? {} : { signal }),
+        }),
+      );
+    },
+    resolveLinkTargets: async (ids: readonly string[], signal?: AbortSignal) =>
+      parse(
+        linkTargetStatusesSchema,
+        await request(fetcher, "/api/v1/admin/link-targets/resolve", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids }),
+          ...(signal === undefined ? {} : { signal }),
+        }),
+      ),
+    linkImpact: async (
+      entryId: string,
+      query: Parameters<AdminClient["linkImpact"]>[1],
+      signal?: AbortSignal,
+    ) => {
+      const search = new URLSearchParams(
+        Object.entries(query)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => [key, String(value)]),
+      );
+      return parse(
+        linkImpactPageSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/entries/${encodeURIComponent(entryId)}/link-impact?${search}`,
+          { ...(signal === undefined ? {} : { signal }) },
+        ),
+      );
+    },
+    deleteEntry: async (
+      entryId: string,
+      expectedRevision: number,
+      linkImpact?: LinkImpactAcknowledgmentDto,
+    ) => {
       await request(fetcher, `/api/v1/admin/entries/${encodeURIComponent(entryId)}`, {
-        body: JSON.stringify({ expectedRevision }),
+        body: JSON.stringify({
+          expectedRevision,
+          ...(linkImpact === undefined ? {} : { linkImpact }),
+        }),
         headers: { "content-type": "application/json" },
         method: "DELETE",
       });
@@ -716,7 +807,10 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       parse(
         unpublishContentEntryResultSchema,
         await request(fetcher, `/api/v1/admin/entries/${encodeURIComponent(entryId)}/unpublish`, {
-          body: JSON.stringify({ expectedPublishedSnapshotId: input.expectedPublishedSnapshotId }),
+          body: JSON.stringify({
+            expectedPublishedSnapshotId: input.expectedPublishedSnapshotId,
+            ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
+          }),
           headers: {
             "content-type": "application/json",
             "idempotency-key": input.idempotencyKey,

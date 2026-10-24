@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import sharp from "sharp";
 import {
   applyPreparedConfigurationSynchronization,
@@ -244,6 +244,9 @@ async function workerFixture(options = {}) {
     return created.body;
   };
   return {
+    get cookie() {
+      return cookie;
+    },
     advance: (milliseconds) => {
       offset += milliseconds;
     },
@@ -1152,3 +1155,115 @@ test.each([undefined, "false", "true"])(
     expect((await fixture.call("/api/v1/openapi.json")).response.status).toBe(200);
   },
 );
+
+test("complete authenticated content invocations fit D1 limits with maximum internal links", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  const mediaIds = Array.from({ length: 200 }, (_, index) => `link-media-${index}`);
+  await fixture.local.database
+    .prepare(`insert into media
+    (id,storage_key,filename,mime_type,size,width,height,metadata_json,status,created_by,created_at,updated_at)
+    select value,'media/'||value,'image.png','image/png',1,1,1,'{}','active','admin',1,1 from json_each(?)`)
+    .bind(JSON.stringify(mediaIds))
+    .run();
+  const target = await fixture.call("/api/v1/admin/models/notes/entries", {
+    method: "POST",
+    json: { title: "Target", slug: "link-target", fields: {}, blocks: [] },
+  });
+  expect(target.response.status).toBe(201);
+  const targetPublication = await fixture.call(`/api/v1/admin/entries/${target.body.id}/publish`, {
+    method: "POST",
+    json: { expectedRevision: 1 },
+  });
+  expect(targetPublication.response.status).toBe(200);
+  await fixture.settle();
+  const counted = countingD1(fixture.local.database);
+  const env = { ...fixture.env, DB: counted.binding };
+  const measurements = [];
+  const invoke = async (name, path, method, json, expectedStatus, headers = {}) => {
+    counted.stats.queries = 0;
+    counted.stats.maxBatchStatements = 0;
+    counted.stats.maxParameters = 0;
+    const pending = [];
+    const response = await fixture.worker.fetch(
+      new Request(`${origin}${path}`, {
+        method,
+        headers: {
+          cookie: fixture.cookie,
+          "content-type": "application/json",
+          "cf-connecting-ip": "203.0.113.199",
+          ...headers,
+        },
+        ...(json === undefined ? {} : { body: JSON.stringify(json) }),
+      }),
+      env,
+      { waitUntil: (task) => pending.push(task) },
+    );
+    const text = await response.text();
+    while (pending.length) await Promise.all(pending.splice(0));
+    expect(response.status, `${name}: ${text}`).toBe(expectedStatus);
+    measurements.push({
+      name,
+      queries: counted.stats.queries,
+      maxBatch: counted.stats.maxBatchStatements,
+      maxBinds: counted.stats.maxParameters,
+    });
+    expect(counted.stats.queries, name).toBeLessThanOrEqual(50);
+    expect(counted.stats.maxBatchStatements, name).toBeLessThanOrEqual(40);
+    expect(counted.stats.maxParameters, name).toBeLessThanOrEqual(100);
+    return text ? JSON.parse(text) : undefined;
+  };
+  const payload = {
+    title: "Maximum links",
+    slug: "maximum-links",
+    fields: {},
+    blocks: mediaIds.map((id, index) => ({
+      key: `image-${index}`,
+      type: "image",
+      schemaVersion: 4,
+      position: (index + 1) * 1000,
+      data: { media: id, link: `entry:${target.body.id}` },
+    })),
+  };
+  const source = await invoke("create", "/api/v1/admin/models/notes/entries", "POST", payload, 201);
+  const path = `/api/v1/admin/entries/${source.id}`;
+  await invoke("save", `${path}/draft`, "PUT", { ...payload, expectedRevision: 1 }, 200);
+  await invoke("stale-save", `${path}/draft`, "PUT", { ...payload, expectedRevision: 1 }, 409);
+  const published = await invoke(
+    "publish",
+    `${path}/publish`,
+    "POST",
+    { expectedRevision: 2 },
+    200,
+  );
+  await invoke("duplicate", `${path}/duplicate`, "POST", {}, 201);
+  const reverted = await invoke("revert", `${path}/revert`, "POST", { expectedRevision: 2 }, 200);
+  await invoke(
+    "unpublish",
+    `${path}/unpublish`,
+    "POST",
+    { expectedPublishedSnapshotId: published.entry.published.id },
+    200,
+  );
+  await invoke("delete", path, "DELETE", undefined, 204, {
+    "if-match": `"${reverted.draft.revision}"`,
+  });
+  if (process.env.LACE_CE10_EVIDENCE)
+    await writeFile(
+      `${process.env.LACE_CE10_EVIDENCE}-invocations.json`,
+      JSON.stringify(measurements, null, 2),
+    );
+  console.info("CE10 complete D1 invocation counts", JSON.stringify(measurements));
+});
+
+test("CE10 authenticated Worker destination status and impact acknowledgment contract", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  const { internalLinkHttpContract } =
+    await import("../../../tests/fixtures/internal-link-http.mjs");
+  const journey = await internalLinkHttpContract(fixture.call, expect);
+  const { internalLinkBuildContract } =
+    await import("../../../tests/fixtures/internal-link-build.mjs");
+  await internalLinkBuildContract(journey, expect);
+  await fixture.settle();
+}, 60_000);

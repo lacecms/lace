@@ -121,8 +121,8 @@ its input, so it cannot alter stored data.
 ### Requirement: Block registry identity and starter blocks
 The system SHALL create a registry of block definitions and reject duplicate
 block types or duplicate type/schema-version registrations. The registry SHALL
-ship the `hero`, `richText`, `image`, `quote`, `cta`, `gallery` and
-`navigation` built-ins, defined only through the public block and field DSL.
+ship the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`,
+`navigation`, `videoEmbed` and `link` built-ins, defined only through the public block and field DSL.
 `hero` SHALL contain optional eyebrow,
 required heading, optional rich-text body, optional media, and optional
 primary-action label and URL; `richText` SHALL contain required rich-text data;
@@ -142,8 +142,7 @@ link instead of the full-screen view. `navigation` SHALL contain an optional tex
 minimum of 1 and a maximum of 20 items, each item a group of a required text
 `label`, an optional `url` and an optional `children` list of at most 20 items,
 each child a group of a required text `label` and a required `url`; both link
-lists SHALL use `label` as their item label. URL values SHALL follow the
-existing safe URL rules.
+lists SHALL use `label` as their item label. URL values SHALL follow the ordinary URL-field target rules, including internal references; provider-restricted URLs SHALL retain provider validation.
 `image` and `gallery` SHALL be at definition version 4. Both SHALL declare
 a boolean setting `lightbox` labelled "Open full screen" with a description
 and the default `false`. Gallery SHALL additionally declare the reusable
@@ -159,7 +158,7 @@ returns stored data and settings unchanged; normal setting validation SHALL
 supply any absent defaults. Migration SHALL preserve item order, media usage,
 alt/caption/link overrides, lightbox values and block-envelope values, including
 hidden blocks and both draft and published snapshots. `navigation` SHALL
-be at definition version 1. The other built-ins SHALL stay at version 1 and
+be at definition version 1. Except for `link`, the other built-ins SHALL stay at version 1 and
 SHALL declare no settings.
 Each built-in SHALL carry a non-empty human-readable label and a non-empty
 one-sentence description, and its serializable metadata projection SHALL
@@ -168,10 +167,25 @@ SHALL contribute to the configuration projection hash and SHALL NOT contribute
 to the structural hash. Adding built-ins SHALL NOT change the normalized
 configuration or hashes of a configuration that does not register them.
 
+`videoEmbed` SHALL be version 1 with no settings or migrations, a non-empty
+label and description, required `url` restricted to YouTube and Vimeo, required
+text `title` with minimum length 1, optional image-media `poster` and optional
+text `caption`. Field labels and guidance SHALL explain the supported providers,
+accessible title, optional poster and deferred player loading. Registering the
+new built-in SHALL NOT change configurations that do not select it.
+
+The `link` built-in SHALL be version 1, label `Link`, with a non-empty description,
+required `label` text (minLength 1, maxLength 200), required ordinary `url`, and
+required scalar settings `appearance` (select `button` or `text`, default
+`button`) and `newTab` (boolean, default false). It SHALL declare no migrations.
+Fields SHALL be ordered label then destination. Both appearances SHALL implement
+navigation rather than form submission or arbitrary actions. Empty required
+values SHALL follow normal draft/publication validation.
+
 #### Scenario: Resolve each built-in by type
 - **WHEN** the starter block registry is created
 - **THEN** it resolves exactly one versioned definition each for `hero`,
-  `richText`, `image`, `quote`, `cta`, `gallery` and `navigation` with
+  `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` with
   serializable field metadata, a label, and a description
 
 #### Scenario: Image alt text is optional
@@ -270,6 +284,18 @@ schema version, or attempts to register a duplicate type
   unknown preset, including one unused by the selected mode
 - **THEN** both runtime adapters reject the value at its declared setting path
   using the same shared validation rules
+
+#### Scenario: Embed definition uses only the public DSL
+- **WHEN** the video embed built-in is resolved
+- **THEN** its serializable fields are URL, title, poster and caption with the declared restrictions, and existing definitions keep their versions
+
+#### Scenario: Standalone link variants
+- **WHEN** a Link block has a label and valid manual or internal URL with default settings or appearance `text`
+- **THEN** it validates with a string URL and selected scalar presentation, and no second button block type is registered
+
+#### Scenario: Link required values
+- **WHEN** a Link draft omits its URL or label
+- **THEN** draft mode permits the omission, while publication rejects it at that field path
 
 ### Requirement: Ordered block aggregate validation
 The system SHALL validate a complete flat ordered block aggregate against a

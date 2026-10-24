@@ -13,6 +13,8 @@ export type LaceRenderErrorCode =
   | "invalid_block_data"
   | "invalid_block_envelope"
   | "invalid_rich_text"
+  | "missing_link_resolver"
+  | "invalid_link"
   | "missing_media"
   | "unknown_block_type";
 

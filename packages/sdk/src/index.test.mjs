@@ -323,11 +323,14 @@ test("reads a published global by model key and validates its shape", async () =
   const client = createLaceClient({ baseUrl: "https://cms.example/lace/", fetch: mock.fetch });
 
   await expect(client.getGlobal("settings")).resolves.toEqual({
-    global,
+    global: { ...global, internalLinks: [] },
     media: { logo: mediaItem("logo") },
   });
   // A newer API's extra key is ignored rather than rejected.
-  await expect(client.getGlobal("settings")).resolves.toEqual({ global, media: {} });
+  await expect(client.getGlobal("settings")).resolves.toEqual({
+    global: { ...global, internalLinks: [] },
+    media: {},
+  });
   await expect(client.getGlobal("missing")).rejects.toMatchObject({ status: 404 });
   expect(() => client.getGlobal("")).toThrow(TypeError);
   await expect(client.getBuildExport()).resolves.toMatchObject({
@@ -380,6 +383,7 @@ test("ignores keys a newer API adds while enforcing required values", async () =
   expect(page).toEqual({
     entry: {
       ...publicEntry(),
+      internalLinks: [],
       blocks: [
         {
           data: { contentKey: 1, heading: "Hi" },
@@ -397,7 +401,14 @@ test("ignores keys a newer API adds while enforcing required values", async () =
   expect(JSON.stringify(page)).not.toContain("addedLater");
   expect(JSON.stringify(await client.getCollection("posts"))).not.toContain("addedLater");
   await expect(client.getGlobal("settings")).resolves.toEqual({
-    global: { blocks: [], fields: {}, id: "entry-1", modelKey: "posts", publishedAt: timestamp },
+    global: {
+      blocks: [],
+      fields: {},
+      id: "entry-1",
+      modelKey: "posts",
+      publishedAt: timestamp,
+      internalLinks: [],
+    },
     media: {},
   });
   // A missing required value and a wrong type still violate the contract.
@@ -424,7 +435,7 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
       {
         globals: [],
         seo: { defaults: null, models: {} },
-        formatVersion: 2,
+        formatVersion: 3,
         entries: [],
         media: {},
         version: 4,
@@ -453,7 +464,7 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
   const failure = await client.getBuildExport().catch((error) => error);
   expect(failure).toBeInstanceOf(LaceUnsupportedExportFormatError);
   expect(failure).toBeInstanceOf(LaceContractError);
-  expect(failure).toMatchObject({ received: 2, supported: 1 });
+  expect(failure).toMatchObject({ received: 3, supported: 2 });
   expect(failure.message).toContain("Upgrade @lacecms/sdk");
   expect(failure.message).not.toContain("build-secret");
 

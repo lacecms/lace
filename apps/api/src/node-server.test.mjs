@@ -179,7 +179,10 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
     );
     const etag = buildExport.etag;
     expect(etag).not.toBeNull();
-    expect(buildExport.export.formatVersion).toBe(1);
+    expect(buildExport.export.formatVersion).toBe(2);
+    for (const source of [...buildExport.export.entries, ...buildExport.export.globals]) {
+      expect(source.internalLinks).toEqual([]);
+    }
     expect(
       (
         await json(value.server, "/api/v1/public/build-export", {

@@ -271,6 +271,8 @@ test("the site view exposes published content only, ordered and immutable", asyn
   expect(site.version).toBe(3);
   const home = site.byPath("/");
   expect(home).toEqual({
+    internalLinks: [],
+    link: expect.any(Function),
     blocks: [block("first", 0), block("second", 1)],
     fields: { summary: "Welcome" },
     id: "home",
@@ -503,7 +505,7 @@ test("an export in a newer format fails with invalid_export and upgrade guidance
   const error = await captureError(
     createPublishedSiteLoader({
       environment,
-      fetch: scriptedFetch([exportResponse({ ...buildExport(2, []), formatVersion: 2 })]).fetch,
+      fetch: scriptedFetch([exportResponse({ ...buildExport(2, []), formatVersion: 3 })]).fetch,
     })(),
   );
   expect(error).toBeInstanceOf(LaceSdkError);
@@ -511,7 +513,7 @@ test("an export in a newer format fails with invalid_export and upgrade guidance
   expect(error.message).toContain("Upgrade @lacecms/sdk");
   expect(error.message).not.toContain(token);
   expect(error.cause).toBeInstanceOf(LaceContractError);
-  expect(error.cause).toMatchObject({ received: 2, supported: 1 });
+  expect(error.cause).toMatchObject({ received: 3, supported: 2 });
 });
 
 test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {
@@ -950,4 +952,143 @@ test("an export that keeps changing fails with version_mismatch after one restar
   expect((await createPublishedSiteLoader({ environment, fetch: recovered.fetch })()).version).toBe(
     6,
   );
+});
+
+function linkedEntry(id, targetId, path = `/${id}`) {
+  return {
+    ...exportEntry({
+      id,
+      path,
+      fields: { nested: [{ url: `entry:${targetId}` }], plainText: "entry:untracked" },
+    }),
+    internalLinks: [{ sourceKey: "$fields", area: "fields", pointer: "/nested/0/url", targetId }],
+  };
+}
+function linkedExport(entries, globals = [], version = 1) {
+  return { ...buildExport(version, entries), formatVersion: 2, globals };
+}
+
+test("format 2 preserves manifests across pages and resolves later destinations without target I/O", async () => {
+  const source = linkedEntry("source", "target", "/a");
+  const target = { ...exportEntry({ id: "target", path: "/z-new" }), internalLinks: [] };
+  const global = {
+    id: "global",
+    modelKey: "navigation",
+    fields: { url: "entry:target" },
+    blocks: [],
+    publishedAt: timestamp,
+    internalLinks: [{ sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "target" }],
+  };
+  const transport = scriptedFetch([
+    exportResponse({ ...linkedExport([source], [global]), nextCursor: "later" }),
+    exportResponse({ entries: [target], formatVersion: 2, media: {}, version: 1 }),
+  ]);
+  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
+  const site = await load();
+  for (const owner of [site, site.byPath("/a"), site.global("navigation")]) {
+    expect(owner.link("entry:target")).toEqual({
+      state: "resolved",
+      href: "/z-new",
+      targetId: "target",
+    });
+    expect(owner.link("entry:absent")).toEqual({ state: "unavailable", targetId: "absent" });
+    expect(owner.link("/manual#part")).toEqual({ state: "resolved", href: "/manual#part" });
+    expect(owner.link(undefined)).toEqual({ state: "empty" });
+    for (const value of ["entry:%74arget", "entry:", "javascript:bad", "//evil", 42])
+      expect(() => owner.link(value)).toThrow();
+  }
+  expect(site.byPath("/a").fields.nested[0].url).toBe("entry:target");
+  expect(site.byPath("/a").internalLinks).toEqual(source.internalLinks);
+  expect(Object.isFrozen(site.byPath("/a").fields.nested[0])).toBe(true);
+  expect(Object.isFrozen(site.global("navigation").internalLinks)).toBe(true);
+  expect(site.linkDiagnostics).toEqual({ total: 0, items: [], truncated: false });
+  expect(await load()).toBe(site);
+  expect(transport.requests).toHaveLength(2);
+  expect(transport.requests.every((request) => request.url.includes("/public/build-export"))).toBe(
+    true,
+  );
+});
+
+test("duplicate source IDs and inconsistent manifest locations fail before exposing a site", async () => {
+  const source = linkedEntry("source", "target");
+  const global = { ...source, modelKey: "navigation" };
+  delete global.path;
+  delete global.title;
+  const cases = [
+    linkedExport([source, { ...source, path: "/another" }]),
+    linkedExport([source], [global]),
+    linkedExport([
+      { ...source, internalLinks: [...source.internalLinks, ...source.internalLinks] },
+    ]),
+    linkedExport([
+      { ...source, internalLinks: [{ ...source.internalLinks[0], targetId: "different" }] },
+    ]),
+    linkedExport([
+      { ...source, internalLinks: [{ ...source.internalLinks[0], pointer: "/not-found" }] },
+    ]),
+    linkedExport([
+      {
+        ...source,
+        internalLinks: [{ sourceKey: "block", area: "data", pointer: "/url", targetId: "target" }],
+      },
+    ]),
+    linkedExport([{ ...source, path: "//unsafe" }]),
+  ];
+  for (const exported of cases) {
+    const loader = createPublishedSiteLoader({
+      environment,
+      fetch: scriptedFetch([exportResponse(exported)]).fetch,
+    });
+    await expect(loader()).rejects.toMatchObject({ code: "invalid_export" });
+  }
+});
+
+test("unavailable diagnostics are bounded, deterministic, private and reported once per assembled view", async () => {
+  const entries = Array.from({ length: 150 }, (_, i) =>
+    linkedEntry(`source-${String(i).padStart(3, "0")}`, "missing"),
+  ).reverse();
+  const callbacks = [];
+  const transport = scriptedFetch([
+    exportResponse(linkedExport(entries)),
+    notModified('"1"'),
+    exportResponse(
+      linkedExport(
+        [...entries, { ...exportEntry({ id: "missing", path: "/recovered" }), internalLinks: [] }],
+        [],
+        2,
+      ),
+    ),
+  ]);
+  const loader = createPublishedSiteLoader({
+    environment,
+    fetch: transport.fetch,
+    revalidate: true,
+    onLinkDiagnostics: (diagnostics) => callbacks.push(diagnostics),
+  });
+  const first = await loader();
+  expect(first.linkDiagnostics).toMatchObject({ total: 150, truncated: true });
+  expect(first.linkDiagnostics.items).toHaveLength(100);
+  expect(first.linkDiagnostics.items[0]).toEqual({
+    sourceId: "source-000",
+    modelKey: "posts",
+    sourceKey: "$fields",
+    area: "fields",
+    pointer: "/nested/0/url",
+    targetId: "missing",
+  });
+  expect(JSON.stringify(first.linkDiagnostics)).not.toContain("published");
+  expect(JSON.stringify(first.linkDiagnostics)).not.toContain("entry:");
+  expect(Object.isFrozen(first.linkDiagnostics.items[0])).toBe(true);
+  first.link("entry:missing");
+  first.byPath("/source-000").link("entry:missing");
+  expect(await loader()).toBe(first);
+  expect(callbacks).toHaveLength(1);
+  const recovered = await loader();
+  expect(recovered.link("entry:missing")).toEqual({
+    state: "resolved",
+    href: "/recovered",
+    targetId: "missing",
+  });
+  expect(recovered.linkDiagnostics.total).toBe(0);
+  expect(callbacks).toHaveLength(2);
 });

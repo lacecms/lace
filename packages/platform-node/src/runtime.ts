@@ -1,6 +1,7 @@
 import { engineVersion } from "./release-version.js";
 import {
   ContentUseCases,
+  ContentLinkUseCases,
   MediaUseCases,
   SiteBuildUseCases,
   contentModelRoute,
@@ -523,6 +524,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     buildSite: input.settings.buildSite ?? null,
     config: input.config,
     content,
+    links: new ContentLinkUseCases(repository),
     defer: (task) => {
       void task.catch(() =>
         console.error(

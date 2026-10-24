@@ -436,3 +436,74 @@ test("block envelope migration adds default columns and the anchor index additiv
     await miniflare.dispose();
   }
 });
+
+test("internal-link migration preserves JSON and incoming links after target deletion on D1", async () => {
+  const miniflare = new Miniflare(
+    convertV4MiniflareOptions({
+      compatibilityDate: "2026-09-01",
+      d1Databases: ["DB"],
+      modules: true,
+      script: "export default { fetch() { return new Response(null); } };",
+    }),
+  );
+  try {
+    const db = await miniflare.getD1Database("DB");
+    await db.batch(
+      (await migrationStatements((file) => file < "0010")).map((sql) => db.prepare(sql)),
+    );
+    const legacy = '{"url":"/manual#anchor","text":"entry:ignored"}';
+    await db
+      .prepare(
+        "insert into content_models (key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values ('posts','collection','Posts',1,'s','p',1,1)",
+      )
+      .run();
+    for (const id of ["source", "target"]) {
+      await db
+        .prepare(
+          "insert into content_entries (id,model_key,created_by,created_at,updated_at) values (?,'posts','admin',1,1)",
+        )
+        .bind(id)
+        .run();
+      await db
+        .prepare(
+          "insert into content_snapshots (id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values (?,?,1,?,?,1,1,1,'admin')",
+        )
+        .bind(`${id}-draft`, id, id, legacy)
+        .run();
+      await db
+        .prepare("update content_entries set draft_snapshot_id=? where id=?")
+        .bind(`${id}-draft`, id)
+        .run();
+    }
+    await db.batch(
+      (await migrationStatements((file) => file === "0010_internal_url_links.sql")).map((sql) =>
+        db.prepare(sql),
+      ),
+    );
+    expect((await db.prepare("select * from content_link_state").all()).results).toEqual([
+      { singleton_key: 1, revision: 0 },
+    ]);
+    expect((await db.prepare("select * from content_entry_link_references").all()).results).toEqual(
+      [],
+    );
+    expect(
+      (await db.prepare("select fields_json from content_snapshots order by id").all()).results,
+    ).toEqual([{ fields_json: legacy }, { fields_json: legacy }]);
+    await db
+      .prepare(
+        "insert into content_entry_link_references values ('source-draft','$fields','fields','/url','target',1)",
+      )
+      .run();
+    await db.prepare("delete from content_entries where id='target'").run();
+    expect(
+      (await db.prepare("select target_entry_id from content_entry_link_references").all()).results,
+    ).toEqual([{ target_entry_id: "target" }]);
+    await db.prepare("delete from content_entries where id='source'").run();
+    expect((await db.prepare("select * from content_entry_link_references").all()).results).toEqual(
+      [],
+    );
+    expect((await db.prepare("pragma foreign_key_check").all()).results).toEqual([]);
+  } finally {
+    await miniflare.dispose();
+  }
+});

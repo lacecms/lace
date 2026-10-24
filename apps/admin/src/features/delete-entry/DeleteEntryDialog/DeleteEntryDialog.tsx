@@ -1,3 +1,8 @@
+import {
+  useLinkImpactReview,
+  LinkImpactReview,
+  isLinkImpactChanged,
+} from "../../../entities/content/index.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useRef, useState } from "react";
 import {
@@ -50,10 +55,14 @@ export function DeleteEntryDialog({
 }) {
   const client = useAdminClient();
   const queryClient = useQueryClient();
+  const impact = useLinkImpactReview(entryId, "delete", open);
   const [typed, setTyped] = useState("");
   const deleted = useRef(false);
   const remove = useMutation({
-    mutationFn: () => client.deleteEntry(entryId, expectedRevision),
+    mutationFn: () => client.deleteEntry(entryId, expectedRevision, impact.acknowledgment),
+    onError: (error) => {
+      if (isLinkImpactChanged(error)) impact.refresh();
+    },
     onSuccess: async () => {
       deleted.current = true;
       setTyped("");
@@ -63,7 +72,7 @@ export function DeleteEntryDialog({
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.models });
     },
   });
-  const confirmed = !published || typed.trim() === title;
+  const confirmed = impact.ready && (!published || typed.trim() === title);
   return (
     <Dialog
       onOpenChange={(next) => {
@@ -94,6 +103,7 @@ export function DeleteEntryDialog({
               : `“${title}” will be permanently deleted. This cannot be undone.`}
           </DialogDescription>
         </DialogHeader>
+        <LinkImpactReview review={impact} />
         <form
           className="grid gap-4"
           onSubmit={(event) => {

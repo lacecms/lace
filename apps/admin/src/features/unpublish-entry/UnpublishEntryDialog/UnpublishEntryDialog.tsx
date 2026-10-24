@@ -1,3 +1,9 @@
+import {
+  useLinkImpactReview,
+  LinkImpactReview,
+  isLinkImpactChanged,
+} from "../../../entities/content/index.js";
+import type { LinkImpactAcknowledgmentDto } from "@lacecms/contracts";
 import type { ContentModelDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { type RefObject, useRef } from "react";
@@ -61,11 +67,18 @@ export function UnpublishEntryDialog({
   readonly returnFocus?: RefObject<HTMLElement | null>;
 }) {
   const client = useAdminClient();
+  const impact = useLinkImpactReview(entryId, "unpublish", open);
   const attemptKey = useRef<string | undefined>(undefined);
+  const attemptImpact = useRef<LinkImpactAcknowledgmentDto | undefined>(undefined);
   const unpublish = useMutation({
     mutationFn: (idempotencyKey: string) =>
-      client.unpublishEntry(entryId, { expectedPublishedSnapshotId, idempotencyKey }),
+      client.unpublishEntry(entryId, {
+        expectedPublishedSnapshotId,
+        idempotencyKey,
+        ...(attemptImpact.current === undefined ? {} : { linkImpact: attemptImpact.current }),
+      }),
     onError: (error) => {
+      if (isLinkImpactChanged(error)) impact.refresh();
       if (error instanceof AdminClientError && error.status !== undefined)
         attemptKey.current = undefined;
     },
@@ -111,6 +124,7 @@ export function UnpublishEntryDialog({
             technicalDetails={technicalDetails(unpublish.error)}
           />
         )}
+        <LinkImpactReview review={impact} />
         <DialogFooter>
           {stale ? (
             <Button
@@ -129,9 +143,12 @@ export function UnpublishEntryDialog({
             </DialogClose>
           )}
           <Button
-            disabled={unpublish.isPending || stale}
+            disabled={unpublish.isPending || stale || !impact.ready}
             onClick={() => {
-              attemptKey.current ??= ulid();
+              if (attemptKey.current === undefined) {
+                attemptKey.current = ulid();
+                attemptImpact.current = impact.acknowledgment;
+              }
               unpublish.mutate(attemptKey.current);
             }}
             variant="destructive"

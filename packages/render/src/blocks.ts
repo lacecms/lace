@@ -1,3 +1,5 @@
+import { createLinkResolver } from "./links.js";
+import type { LinkResolver } from "./links.js";
 import {
   ContentValidationError,
   effectiveAltText,
@@ -48,6 +50,7 @@ export interface RenderableMedia {
 
 /** The structural entry shape whose blocks the render core prepares. */
 export interface RenderableEntry {
+  readonly link?: LinkResolver;
   readonly blocks: readonly RenderableBlock[];
   readonly id: string;
   /** Resolves the entry's media; the published-site entries provide it. */
@@ -113,6 +116,7 @@ export interface BlockProps<Definition extends AnyBlockDefinition = BlockDefinit
   readonly context: BlockContext;
   readonly data: BlockDataOf<Definition>;
   readonly image: ImageDescriber;
+  readonly link: LinkResolver;
   readonly mediaUrl: MediaUrlBuilder;
   /** The block's settings with every declared default applied. */
   readonly settings: BlockSettingsOf<Definition>;
@@ -331,9 +335,10 @@ export function prepareBlocks<Component>(
         const data = parseBlock(definition, block, context);
         const envelope = parseBlockEnvelope(definition, block, context);
         const image = createImageDescriber(entry, mediaUrl, context);
+        const link = createLinkResolver(entry.link, context);
         return Object.freeze({
           component,
-          props: Object.freeze({ ...envelope, block, context, data, image, mediaUrl }),
+          props: Object.freeze({ ...envelope, block, context, data, image, link, mediaUrl }),
         });
       }),
   );

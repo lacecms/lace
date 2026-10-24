@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import {
   actorId,
   blockKey,
@@ -84,6 +84,7 @@ function maximalDraft(label, count = 200) {
       images: [{ image: `media-${index}` }],
       tags: index < 100 ? [label, label] : [label],
       text: "x".repeat(64),
+      url: "entry:post",
     },
     key: blockKey(`${label}-${index}`),
     position: (index + 1) * 1000,
@@ -95,7 +96,17 @@ function maximalDraft(label, count = 200) {
     mediaId: mediaId(`media-${index}`),
     sourceKey: block.key,
   }));
-  return { blocks, references };
+  return {
+    blocks,
+    references,
+    internalLinks: blocks.map((block) => ({
+      sourceKey: block.key,
+      area: "data",
+      pointer: "/url",
+      targetId: "post",
+      delivered: true,
+    })),
+  };
 }
 
 function saveInput(id, expectedRevision, at, blocks, mediaReferences, title = `Saved ${at}`) {
@@ -133,6 +144,7 @@ test("saves a maximal draft in one batch within parameter and query budgets", as
   await repository.create({
     entry: draft("post", { blocks: created.blocks }),
     mediaReferences: created.references,
+    internalLinks: created.internalLinks,
   });
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
   expect(counting.stats.batches).toBe(1);
@@ -140,12 +152,15 @@ test("saves a maximal draft in one batch within parameter and query budgets", as
   counting.stats.queries = 0;
   counting.stats.batches = 0;
   counting.stats.maxParameters = 0;
-  const result = await repository.saveCompleteDraft(
-    saveInput("post", 1, 2, saved.blocks, saved.references),
-  );
+  const result = await repository.saveCompleteDraft({
+    ...saveInput("post", 1, 2, saved.blocks, saved.references),
+    internalLinks: saved.internalLinks,
+  });
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
   expect(counting.stats.batches).toBe(1);
   expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+  expect(counting.stats.maxBatchStatements).toBeLessThanOrEqual(40);
+  expect(await scalar("select count(*) from content_entry_link_references")).toBe(200);
   expect(result.entry.draft.revision).toBe(2);
   expect(result.entry.draft.blocks).toHaveLength(200);
   expect(result.entry.draft.blocks[0].data).toEqual(saved.blocks[0].data);
@@ -166,6 +181,7 @@ test("saves a maximal draft in one batch within parameter and query budgets", as
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
   expect(counting.stats.batches).toBe(1);
   expect(await scalar("select count(*) from content_blocks")).toBe(400);
+  expect(await scalar("select count(*) from content_entry_link_references")).toBe(400);
 });
 
 test("rejects an oversized draft before sending any write", async () => {
@@ -320,8 +336,18 @@ test("reads a full build-export page with two bounded batches", async () => {
     const id = `post-${String(index).padStart(3, "0")}`;
     const maximal = index < 2 ? maximalDraft(id) : maximalDraft(id, 1);
     await repository.create({
-      entry: draft(id, { blocks: maximal.blocks }),
+      entry: draft(id, {
+        blocks: maximal.blocks,
+        fields: { links: Array(200).fill(`entry:${id}`) },
+      }),
       mediaReferences: maximal.references,
+      internalLinks: Array.from({ length: 200 }, (_, index) => ({
+        sourceKey: "$fields",
+        area: "fields",
+        pointer: `/links/${index}`,
+        targetId: id,
+        delivered: true,
+      })),
     });
     await repository.publish(publishInput(id, 1, 2, `${id}-published`));
   }
@@ -335,6 +361,8 @@ test("reads a full build-export page with two bounded batches", async () => {
   expect(first.entries).toHaveLength(100);
   expect(first.entries[0].entry.published.blocks).toHaveLength(200);
   expect(first.entries[0].media).toHaveLength(200);
+  expect(first.entries.every((item) => item.internalLinks.length === 200)).toBe(true);
+  expect(first.entries[0].internalLinks.every((item) => item.targetId === "post-000")).toBe(true);
   expect(first.globals).toEqual([]);
 
   counting.stats.queries = 0;
@@ -397,4 +425,240 @@ test("fails a build-export page when a publication lands between its batches", a
   }
   inject = async () => {};
   expect((await injecting.exportBuildContentPage({ limit: 100 })).entries).toHaveLength(2);
+});
+
+test("link reads use bounded indexed statements without hydrating aggregates", async () => {
+  const { counting, repository } = await open();
+  await repository.create({ entry: draft("post"), mediaReferences: [] });
+  counting.stats.queries = 0;
+  const ids = ["post", ...Array.from({ length: 199 }, (_, index) => `missing-${index}`)];
+  expect(Object.keys(await repository.resolveLinkTargets(ids))).toHaveLength(200);
+  expect(counting.stats.queries).toBeLessThanOrEqual(2);
+  counting.stats.queries = 0;
+  expect((await repository.listLinkTargets({ search: "post", limit: 20 })).items).toHaveLength(1);
+  expect(counting.stats.queries).toBeLessThanOrEqual(2);
+  counting.stats.queries = 0;
+  expect(
+    await repository.readLinkImpact({
+      targetId: "post",
+      action: "delete",
+      actorId: "admin",
+      limit: 20,
+    }),
+  ).toMatchObject({ mode: "sources", sources: [], hasPublishedUsages: false });
+  expect(counting.stats.queries).toBeLessThanOrEqual(5);
+  counting.stats.queries = 0;
+  await expect(
+    repository.listLinkTargets({ after: "invalid-cursor", limit: 20 }),
+  ).rejects.toThrow();
+  await expect(
+    repository.readLinkImpact({
+      targetId: "post",
+      action: "delete",
+      actorId: "admin",
+      limit: 20,
+      after: "invalid-cursor",
+    }),
+  ).rejects.toThrow();
+  expect(counting.stats.queries).toBe(0);
+});
+
+test("final removal guard rejects a source published after impact preflight", async () => {
+  const { database, repository, counting } = await open();
+  await repository.create({ entry: draft("post"), mediaReferences: [] });
+  await repository.publish(publishInput("post", 1, 2, "target-published"));
+  await repository.create({
+    entry: draft("source"),
+    mediaReferences: [],
+    internalLinks: [
+      { sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "post", delivered: true },
+    ],
+  });
+  let interleave = true;
+  const raced = new D1ContentRepository(
+    {
+      ...counting.binding,
+      batch: async (statements) => {
+        if (interleave) {
+          interleave = false;
+          await repository.publish(publishInput("source", 1, 3, "source-published"));
+        }
+        return counting.binding.batch(statements);
+      },
+    },
+    resolveModel,
+  );
+  await expect(
+    raced.unpublish({
+      entryId: contentEntryId("post"),
+      expectedPublishedSnapshotId: contentSnapshotId("target-published"),
+      unpublishedAt: unixMilliseconds(4),
+      unpublishedBy: editor,
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_LINKS_IN_USE" });
+  expect(await repository.loadPublic("/blog/post")).not.toBeNull();
+  const impact = await repository.readLinkImpact({
+    targetId: "post",
+    action: "unpublish",
+    actorId: editor.id,
+    limit: 20,
+  });
+  await repository.create({
+    entry: draft("another-source"),
+    mediaReferences: [],
+    internalLinks: [
+      { sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "post", delivered: true },
+    ],
+  });
+  // Refresh after the new draft; publication below must still invalidate the receipt at commit.
+  const fresh = await repository.readLinkImpact({
+    targetId: "post",
+    action: "unpublish",
+    actorId: editor.id,
+    limit: 20,
+  });
+  const confirmed = new D1ContentRepository(
+    {
+      ...counting.binding,
+      batch: async (statements) => {
+        await repository.publish(publishInput("another-source", 1, 5, "another-source-published"));
+        return counting.binding.batch(statements);
+      },
+    },
+    resolveModel,
+  );
+  await expect(
+    confirmed.unpublish({
+      entryId: contentEntryId("post"),
+      expectedPublishedSnapshotId: contentSnapshotId("target-published"),
+      unpublishedAt: unixMilliseconds(6),
+      unpublishedBy: editor,
+      linkImpact: { receipt: fresh.receipt, acknowledgePublishedLinks: true },
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_LINK_IMPACT_CHANGED" });
+  expect(await repository.loadPublic("/blog/post")).not.toBeNull();
+  expect(impact.hasPublishedUsages).toBe(true);
+  expect(
+    (await database.prepare("select count(*) as count from mutation_guards").first()).count,
+  ).toBe(0);
+});
+
+test("CE10 high fan-out evidence keeps impact and picker indexed with bounded row work", async () => {
+  const { counting, database, repository } = await open();
+  await repository.create({ entry: draft("target"), mediaReferences: [] });
+  await repository.publish(publishInput("target", 1, 2, "target-published"));
+  const ids = JSON.stringify(
+    Array.from({ length: 1000 }, (_, i) => `source-${String(i).padStart(4, "0")}`),
+  );
+  await database.batch([
+    database
+      .prepare(
+        "insert into content_entries(id,model_key,created_by,created_at,updated_at) select value,'posts','editor',1,1 from json_each(?)",
+      )
+      .bind(ids),
+    database
+      .prepare(
+        "insert into content_snapshots(id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) select value||'-published',value,1,value,'{}',1,1,1,'editor' from json_each(?)",
+      )
+      .bind(ids),
+    database.prepare(
+      "update content_entries set draft_snapshot_id=id||'-published',published_snapshot_id=id||'-published' where id like 'source-%'",
+    ),
+    database
+      .prepare(
+        "insert into published_routes(path,entry_id,snapshot_id,updated_at) select '/sources/'||value,value,value||'-published',1 from json_each(?)",
+      )
+      .bind(ids),
+    database
+      .prepare(
+        "insert into content_entry_link_references select value||'-published','$fields','fields','/url','target',1 from json_each(?)",
+      )
+      .bind(ids),
+    database
+      .prepare(
+        "insert into content_entry_link_references select 'source-0000-published','dense','data','/url/'||value,'target',1 from json_each(?)",
+      )
+      .bind(JSON.stringify(Array.from({ length: 199 }, (_, i) => i))),
+  ]);
+  const sql = new Map();
+  const binding = {
+    ...counting.binding,
+    prepare: (query) => {
+      const prepared = counting.binding.prepare(query);
+      sql.set(query, []);
+      return {
+        ...prepared,
+        bind: (...params) => {
+          sql.set(query, params);
+          return prepared.bind(...params);
+        },
+      };
+    },
+  };
+  const traced = new D1ContentRepository(binding, resolveModel);
+  const evidence = [];
+  const record = async (name, operation) => {
+    counting.stats.queries = counting.stats.rowsRead = counting.stats.rowsWritten = 0;
+    const result = await operation();
+    evidence.push({
+      name,
+      queries: counting.stats.queries,
+      rowsRead: counting.stats.rowsRead,
+      rowsWritten: counting.stats.rowsWritten,
+    });
+    expect(counting.stats.rowsWritten).toBe(0);
+    return result;
+  };
+  const first = await record("impact-50-sources", () =>
+    traced.readLinkImpact({ targetId: "target", action: "delete", actorId: "admin", limit: 50 }),
+  );
+  expect(first.sources).toHaveLength(50);
+  const dense = first.sources[0];
+  expect(dense.locations).toHaveLength(10);
+  await record("impact-50-locations", () =>
+    traced.readLinkImpact({
+      targetId: "target",
+      action: "delete",
+      actorId: "admin",
+      limit: 50,
+      sourceEntryId: dense.entryId,
+      snapshotId: dense.snapshotId,
+      locationsAfter: dense.nextLocationsCursor,
+    }),
+  );
+  await record("picker-50-prefix", () =>
+    traced.listLinkTargets({ search: "source-09", limit: 50 }),
+  );
+  await record("resolve-200", () =>
+    traced.resolveLinkTargets([
+      "target",
+      ...Array.from({ length: 199 }, (_, i) => `source-${String(i).padStart(4, "0")}`),
+    ]),
+  );
+  const plans = [];
+  for (const [query, binds] of sql) {
+    const statement = database.prepare(`explain query plan ${query}`);
+    const result = await (binds.length ? statement.bind(...binds) : statement).all();
+    plans.push(...result.results.map((row) => row.detail));
+  }
+  expect(plans.join("\n")).toContain("content_entry_link_references_target_idx");
+  expect(plans.join("\n")).toContain("content_snapshots_title_prefix_idx");
+  if (process.env.LACE_CE10_EVIDENCE)
+    await writeFile(
+      `${process.env.LACE_CE10_EVIDENCE}-fanout.json`,
+      JSON.stringify({ evidence, plans }, null, 2),
+    );
+  console.info(
+    "CE10 high fan-out D1 evidence",
+    JSON.stringify({
+      evidence,
+      indexedPlans: [
+        ...new Set(
+          plans.filter((line) =>
+            /content_entry_link_references|content_snapshots_title/u.test(line),
+          ),
+        ),
+      ],
+    }),
+  );
 });

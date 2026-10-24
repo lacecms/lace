@@ -70,3 +70,25 @@ test("an invalid envelope fails rendering with invalid_block_envelope", async ()
     fieldPath: ["settings", "tone"],
   });
 });
+
+test("Astro forwards structural entry and global link lookups without changing authored URLs", async () => {
+  const { default: LinkProbe } = await import("../test-fixtures/LinkProbe.astro");
+  const definition = defineBlock({
+    type: "action",
+    version: 1,
+    fields: { url: field.url({ required: true }) },
+  });
+  const props = {
+    blocks: defineBlockMap({ action: { component: LinkProbe, definition } }),
+    entry: {
+      id: "source",
+      modelKey: "navigation",
+      blocks: [block("action", { type: "action", data: { url: "entry:target" } })],
+      link: () => ({ state: "unavailable", targetId: "target" }),
+    },
+  };
+  expect(await render(props)).toContain("<span>Open</span>");
+  props.entry.link = () => ({ state: "resolved", targetId: "target", href: "/new" });
+  expect(await render(props)).toContain('<a href="/new">Open</a>');
+  expect(props.entry.blocks[0].data.url).toBe("entry:target");
+});

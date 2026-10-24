@@ -1,5 +1,5 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "entries": [
     {
       "blocks": [
@@ -93,6 +93,34 @@
           "position": 2,
           "schemaVersion": 1,
           "type": "cta"
+        },
+        {
+          "type": "link",
+          "key": "home-link-button",
+          "schemaVersion": 1,
+          "position": 10000,
+          "data": {
+            "label": "Explore button link",
+            "url": "entry:about-entry"
+          },
+          "settings": {
+            "appearance": "button",
+            "newTab": false
+          }
+        },
+        {
+          "type": "link",
+          "key": "home-link-text",
+          "schemaVersion": 1,
+          "position": 11000,
+          "data": {
+            "label": "Explore text link",
+            "url": "entry:first-post-entry"
+          },
+          "settings": {
+            "appearance": "text",
+            "newTab": false
+          }
         }
       ],
       "fields": {},
@@ -107,7 +135,21 @@
         "noindex": false,
         "title": null
       },
-      "title": "Lace starter"
+      "title": "Lace starter",
+      "internalLinks": [
+        {
+          "sourceKey": "home-link-button",
+          "area": "data",
+          "pointer": "/url",
+          "targetId": "about-entry"
+        },
+        {
+          "sourceKey": "home-link-text",
+          "area": "data",
+          "pointer": "/url",
+          "targetId": "first-post-entry"
+        }
+      ]
     },
     {
       "blocks": [
@@ -351,7 +393,8 @@
       "fields": {
         "author": "Lace team",
         "category": "engineering",
-        "publishedAt": "2026-09-20"
+        "publishedAt": "2026-09-20",
+        "relatedUrl": "entry:about-entry"
       },
       "id": "first-post-entry",
       "modelKey": "posts",
@@ -365,7 +408,15 @@
         "title": "Release notes & <updates>"
       },
       "slug": "first-post",
-      "title": "First published post"
+      "title": "First published post",
+      "internalLinks": [
+        {
+          "sourceKey": "$fields",
+          "area": "fields",
+          "pointer": "/relatedUrl",
+          "targetId": "about-entry"
+        }
+      ]
     },
     {
       "blocks": [
@@ -423,7 +474,8 @@
         "noindex": false,
         "title": null
       },
-      "title": "About Lace"
+      "title": "About Lace",
+      "internalLinks": []
     },
     {
       "blocks": [
@@ -466,7 +518,8 @@
         "title": null
       },
       "slug": "first-note",
-      "title": "First published note"
+      "title": "First published note",
+      "internalLinks": []
     }
   ],
   "globals": [
@@ -508,7 +561,8 @@
       "fields": {},
       "id": "navigation-entry",
       "modelKey": "navigation",
-      "publishedAt": "2026-09-20T00:00:00.000Z"
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "internalLinks": []
     },
     {
       "blocks": [],
@@ -517,11 +571,20 @@
         "tagline": "Notes from the reference site",
         "description": "The reference site of the Lace CMS.",
         "image": "hero-media",
-        "titleTemplate": "%s \u00b7 Lace Journal"
+        "titleTemplate": "%s \u00b7 Lace Journal",
+        "helpUrl": "entry:about-entry"
       },
       "id": "settings-entry",
       "modelKey": "settings",
-      "publishedAt": "2026-09-20T00:00:00.000Z"
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "internalLinks": [
+        {
+          "sourceKey": "$fields",
+          "area": "fields",
+          "pointer": "/helpUrl",
+          "targetId": "about-entry"
+        }
+      ]
     }
   ],
   "media": {

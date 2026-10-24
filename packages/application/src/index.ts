@@ -1,4 +1,10 @@
-import type { JsonObject } from "@lacecms/content";
+import type {
+  InternalLinkReference,
+  PublicInternalLinkReference,
+  JsonObject,
+} from "@lacecms/content";
+import type { LinkImpactAcknowledgment } from "./internal-links.js";
+export * from "./internal-links.js";
 import type {
   Actor,
   ActorId,
@@ -195,6 +201,7 @@ export interface ContentEntryReadPort {
 }
 
 export interface CreateContentEntryInput {
+  readonly internalLinks?: readonly InternalLinkReference[];
   /** Commits the new entry only while the duplicated source draft is still at this revision. */
   readonly duplicateOf?: DuplicateSourceGuard;
   readonly entry: ContentEntry;
@@ -208,6 +215,7 @@ export interface DuplicateSourceGuard {
 }
 
 export interface SaveCompleteDraftInput {
+  readonly internalLinks?: readonly InternalLinkReference[];
   readonly entryId: ContentEntryId;
   readonly mutation: CompleteDraftMutation;
 }
@@ -229,6 +237,7 @@ export interface PublicationIdempotency {
 }
 
 export interface DeleteContentEntryInput {
+  readonly linkImpact?: LinkImpactAcknowledgment;
   readonly deletedAt: UnixMilliseconds;
   readonly deletedBy: Actor;
   readonly entryId: ContentEntryId;
@@ -237,6 +246,7 @@ export interface DeleteContentEntryInput {
 }
 
 export interface UnpublishContentEntryCommand {
+  readonly linkImpact?: LinkImpactAcknowledgment;
   readonly entryId: ContentEntryId;
   readonly expectedPublishedSnapshotId: ContentSnapshotId;
   readonly idempotency?: PublicationIdempotency;
@@ -305,6 +315,7 @@ export interface ContentEntryCommandPort {
 
 export interface PublicContentEntry {
   readonly entry: ContentEntry;
+  readonly internalLinks: readonly PublicInternalLinkReference[];
   /** Active media referenced by the entry's current published snapshot. */
   readonly media: readonly MediaMetadata[];
   readonly path: string;
@@ -318,6 +329,7 @@ export interface ListPublicContentInput {
 
 /** A published route-less global with the media its publication references. */
 export interface PublicGlobalContent {
+  readonly internalLinks: readonly PublicInternalLinkReference[];
   /** Published-only projection; never exposes the mutable draft. */
   readonly entry: ContentEntry;
   /** Active media referenced by the global's current published snapshot. */
@@ -1001,3 +1013,4 @@ export function requireContentReader(actor: Actor): void {
 export { CompleteImageContainerInspector } from "./image-container.js";
 
 export * from "./configuration-fields.js";
+export * from "./configuration-links.js";

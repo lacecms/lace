@@ -137,6 +137,7 @@ function syncWriteDatabase() {
     create table content_snapshots (id text primary key, entry_id text not null, fields_json text not null);
     create table content_blocks (snapshot_id text, block_key text, block_type text, position integer);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
     insert into content_entries values ('e1', 'posts'), ('e2', 'pages');
     insert into content_snapshots values
       ('s1', 'e1', '{"a":true,"b":"str","c":null,"d":{"x":[1,2]},"e":1.5,"m":"media-1","keep":"k"}'),
@@ -240,6 +241,7 @@ test("the SEO removal write clears groups and SEO references of one model only",
     create table content_entries (id text primary key, model_key text not null);
     create table content_snapshots (id text primary key, entry_id text not null, seo_json text);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
     insert into content_entries values ('e1', 'posts'), ('e2', 'pages');
     insert into content_snapshots values
       ('s1', 'e1', '{"image":"media-1","title":"A"}'), ('s2', 'e1', null),
@@ -744,6 +746,7 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
       width integer, height integer, alt text, caption text, focal_x real, focal_y real, status text,
       created_by text, created_at integer, updated_at integer);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
     insert into published_state values (1, 4);
     insert into content_models values ('posts', 'collection'), ('settings', 'global');
     insert into content_entries values
@@ -770,18 +773,30 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
       .all(...params)
       .map((row) => ({ ...row }));
   expect(all(BUILD_EXPORT_VERSION_SQL)).toEqual([{ version: 4 }]);
-  // '{"x":1}' is 7 bytes.
-  expect(all(BUILD_EXPORT_FIRST_PAGE_VERSION_SQL)).toEqual([{ globals_bytes: 7, version: 4 }]);
+  // Fields plus the two JSON bytes of an empty local manifest.
+  expect(all(BUILD_EXPORT_FIRST_PAGE_VERSION_SQL)).toEqual([{ globals_bytes: 9, version: 4 }]);
   // a: '{"t":"é"}' (10 bytes, é is two) + '{"title":"A"}' (13) + visible '{"m":"m1"}' (10) + '{}' (2).
   // The hidden block's 21 bytes do not count.
   const candidates = all(BUILD_EXPORT_CANDIDATES_SQL, "", 3);
   expect(candidates).toEqual([
-    { path: "/a", stored_bytes: 35 },
-    { path: "/b", stored_bytes: 2 + 10 + 7 },
-    { path: "/c", stored_bytes: 2 },
+    { path: "/a", stored_bytes: 37 },
+    { path: "/b", stored_bytes: 2 + 10 + 7 + 2 },
+    { path: "/c", stored_bytes: 4 },
   ]);
   expect(all(BUILD_EXPORT_CANDIDATES_SQL, "/a", 3).map((row) => row.path)).toEqual(["/b", "/c"]);
 
+  const manifest = [{ sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "b" }];
+  database.exec(
+    "insert into content_entry_link_references values ('a-p','$fields','fields','/url','b',1),('a-p','k2','data','/url','b',0)",
+  );
+  const linkedFields = '{"t":"é","url":"entry:b"}';
+  database.prepare("update content_snapshots set fields_json=? where id='a-p'").run(linkedFields);
+  const linked = all(BUILD_EXPORT_CANDIDATES_SQL, "", 1)[0];
+  expect(linked.stored_bytes).toBe(
+    35 + Buffer.byteLength(linkedFields) - 10 + Buffer.byteLength(JSON.stringify(manifest)),
+  );
+  const publicRoute = all(buildExportPageSql(true).routes, "", "/a")[0];
+  expect(JSON.parse(publicRoute.internal_links_json)).toEqual(manifest);
   const range = buildExportPageRange("", candidates.slice(0, 3), 2, 7);
   expect(range).toEqual({ after: "", last: "/b", more: true });
   const first = buildExportPageSql(true);
@@ -813,4 +828,69 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
     more: false,
   });
   expect(buildExportPageRange("", [], 100, 7)).toEqual({ after: "", last: "", more: false });
+});
+
+test("internal-link migration preserves legacy JSON and only cascades outgoing references", async () => {
+  for (const upgraded of [false, true]) {
+    const database = new DatabaseSync(":memory:");
+    try {
+      // Follow the explicit Node rebuild procedure for preexisting migrations.
+      for (const migration of checkedInMigrations.filter((item) => item.name < "0010"))
+        database.exec(
+          await readFile(new URL(`../drizzle/${migration.name}`, import.meta.url), "utf8"),
+        );
+      database.exec("pragma foreign_keys=on");
+      const legacy = '{"url":"/manual#anchor","text":"entry:ignored"}';
+      if (upgraded) {
+        database.exec(
+          "insert into content_models (key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values ('posts','collection','Posts',1,'s','p',1,1)",
+        );
+        for (const id of ["source", "target"]) {
+          database
+            .prepare(
+              "insert into content_entries (id,model_key,created_by,created_at,updated_at) values (?,'posts','admin',1,1)",
+            )
+            .run(id);
+          database
+            .prepare(
+              "insert into content_snapshots (id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values (?,?,1,?, ?,1,1,1,'admin')",
+            )
+            .run(`${id}-draft`, id, id, legacy);
+          database
+            .prepare("update content_entries set draft_snapshot_id=? where id=?")
+            .run(`${id}-draft`, id);
+        }
+      }
+      database.exec(
+        await readFile(new URL("../drizzle/0010_internal_url_links.sql", import.meta.url), "utf8"),
+      );
+      expect(database.prepare("select * from content_link_state").all()).toEqual([
+        { singleton_key: 1, revision: 0 },
+      ]);
+      expect(database.prepare("select * from content_entry_link_references").all()).toEqual([]);
+      if (upgraded) {
+        expect(
+          database.prepare("select fields_json from content_snapshots order by id").all(),
+        ).toEqual([{ fields_json: legacy }, { fields_json: legacy }]);
+        database.exec(
+          "insert into content_entry_link_references values ('source-draft','$fields','fields','/url','target',1)",
+        );
+        database.exec("delete from content_entries where id='target'");
+        expect(
+          database.prepare("select target_entry_id from content_entry_link_references").all(),
+        ).toEqual([{ target_entry_id: "target" }]);
+        database.exec("delete from content_entries where id='source'");
+        expect(database.prepare("select * from content_entry_link_references").all()).toEqual([]);
+      }
+      expect(database.prepare("pragma foreign_key_check").all()).toEqual([]);
+      expect(
+        database
+          .prepare("pragma index_list('content_snapshots')")
+          .all()
+          .some((item) => item.name === "content_snapshots_title_prefix_idx"),
+      ).toBe(true);
+    } finally {
+      database.close();
+    }
+  }
 });

@@ -165,6 +165,7 @@ test("unpublishing keeps unsaved values and follows the build", async () => {
     expect(unpublishEntry).toHaveBeenCalledWith("entry-1", {
       expectedPublishedSnapshotId: "published-1",
       idempotencyKey: expect.any(String),
+      linkImpact: { receipt: "receipt", acknowledgePublishedLinks: true },
     }),
   );
   const region = screen.getByRole("region", { name: "Publication status" });
@@ -260,7 +261,10 @@ test("deleting a dirty draft returns to the list without the discard prompt", as
   expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
   await user.click(within(dialog).getByRole("button", { name: "Delete entry" }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/content/posts"));
-  expect(deleteEntry).toHaveBeenCalledWith("entry-1", 2);
+  expect(deleteEntry).toHaveBeenCalledWith("entry-1", 2, {
+    receipt: "receipt",
+    acknowledgePublishedLinks: true,
+  });
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   await waitFor(() =>
     expect(screen.getByRole("heading", { level: 1, name: "posts" })).toHaveFocus(),

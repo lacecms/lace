@@ -74,3 +74,10 @@ export { fieldControlId } from "./field-types.js";
 export { EntryListBudget, useCompositeEditing } from "./FieldRenderer/index.js";
 
 export { FieldLayout, layoutHasProblems } from "./FieldLayout/index.js";
+
+export {
+  LinkImpactReview,
+  useLinkImpactReview,
+  isLinkImpactChanged,
+} from "./LinkImpactReview/index.js";
+export { builtInRenderers } from "./FieldControls/index.js";

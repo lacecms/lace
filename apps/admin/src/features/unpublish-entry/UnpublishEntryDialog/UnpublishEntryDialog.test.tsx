@@ -99,6 +99,7 @@ test("a network retry reuses the idempotency key and a terminal response retires
   expect(first).toEqual({
     expectedPublishedSnapshotId: "published-1",
     idempotencyKey: expect.any(String),
+    linkImpact: { receipt: "receipt", acknowledgePublishedLinks: true },
   });
   expect(second?.idempotencyKey).toBe(first?.idempotencyKey);
   expect(third?.idempotencyKey).not.toBe(first?.idempotencyKey);
