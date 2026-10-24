@@ -113,6 +113,8 @@ test("the fixture build emits published static routes without CMS access", async
         ["hero", "home-hero"],
         ["navigation", "home-navigation"],
         ["cta", "home-cta"],
+        ["link", "home-link-button"],
+        ["link", "home-link-text"],
       ],
     ],
     [
@@ -143,7 +145,7 @@ test("the fixture build emits published static routes without CMS access", async
   ]) {
     const roots = [
       ...entryScope(html).matchAll(
-        /<(?:section|figure|blockquote|aside|nav)\b[^>]*data-lace-block="([^"]+)"[^>]*data-lace-block-key="([^"]+)"/gu,
+        /<(?:section|figure|blockquote|aside|nav|div)\b[^>]*data-lace-block="([^"]+)"[^>]*data-lace-block-key="([^"]+)"/gu,
       ),
     ].map((match) => [match[1], match[2]]);
     expect(roots).toEqual(expected);
@@ -152,7 +154,7 @@ test("the fixture build emits published static routes without CMS access", async
   for (const [html, expected] of [
     [
       home,
-      // Hero, local navigation, call to action.
+      // Hero, local navigation, call to action, button and text links.
       [
         "eyebrow",
         "heading",
@@ -165,6 +167,8 @@ test("the fixture build emits published static routes without CMS access", async
         "heading",
         "body",
         "action",
+        "link",
+        "link",
       ],
     ],
     [
@@ -220,8 +224,30 @@ test("the fixture build emits published static routes without CMS access", async
       ),
     ),
   ).toEqual(
-    new Set(["cta", "gallery", "hero", "image", "navigation", "quote", "richText", "videoEmbed"]),
+    new Set([
+      "cta",
+      "gallery",
+      "hero",
+      "image",
+      "link",
+      "navigation",
+      "quote",
+      "richText",
+      "videoEmbed",
+    ]),
   );
+
+  for (const [appearance, key, href, label] of [
+    ["button", "home-link-button", "/about", "Explore button link"],
+    ["text", "home-link-text", "/blog/first-post", "Explore text link"],
+  ]) {
+    expect(entryScope(home)).toContain(
+      `<div class="link" data-lace-appearance="${appearance}" data-lace-block="link" data-lace-block-key="${key}"><a data-lace-part="link" href="${href}">${label}</a></div>`,
+    );
+  }
+  for (const html of [home, post, about, note]) {
+    expect(html).not.toMatch(/href="entry:/u);
+  }
 
   // The published navigation global renders in every header, with the current
   // route marked; the static fallback is not emitted.

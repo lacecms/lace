@@ -113,3 +113,20 @@ separate operations.
   `pnpm exec openspec validate ce10-internal-url-links --type change --strict`
   passed. `pnpm openapi:check` passed against a temporary Git index containing
   the regenerated snapshot; the repository index was not staged or changed.
+
+## CI follow-up on 2026-10-24
+
+CI run `40076901192` failed because the reference-site fixture build test still
+expected the markup from before the two standalone Link blocks were added.
+The failure was reproduced locally. Updating the test also exposed its omitted
+Link root tag and built-in type. It now verifies both appearances, resolved
+destination paths and the absence of entry-token hrefs across all fixture pages.
+
+The subsequent full `pnpm test` run exposed two more stale expectations in the
+real Node-server and Worker smoke tests: both still expected export format 1.
+They now require format 2 and verify empty reference manifests on their sources.
+
+After these corrections, the complete `pnpm test` command passed: all 42 Turbo
+tasks and all 211 root tests across 32 files. Typecheck, lint, formatting and
+strict validation of all 78 accepted specs also passed. These results are local;
+they do not assert that a new GitHub Actions run has completed.
