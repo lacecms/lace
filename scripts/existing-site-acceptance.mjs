@@ -6,15 +6,6 @@ import { basename, join } from "node:path";
 import { guideFiles } from "./consumer-guides.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 
-// The block files `lace add block --all` must reproduce; everything else in the
-// fixture is the operator's own site (layout, styles, link override, config).
-const blockFiles = [
-  "lace.site.json",
-  "src/lace/blocks.ts",
-  ...["Cta", "Gallery", "Hero", "Image", "Navigation", "Quote", "RichText"].map(
-    (name) => `src/components/lace/${name}Block.astro`,
-  ),
-];
 const heroPath = "src/components/lace/HeroBlock.astro";
 const quotePath = "src/components/lace/QuoteBlock.astro";
 
@@ -105,6 +96,13 @@ export function assertSafeRichText(html) {
 export async function existingSiteJourney(parent, operations) {
   const { generator, installPackedConsumer, run, secretValues, workspace } = operations;
   const fixture = join(workspace, "tests/fixtures/existing-astro-site");
+  // Remove and reinstall every locked source, including stylesheet companions.
+  const fixtureLock = JSON.parse(await readFile(join(fixture, "lace.site.json"), "utf8"));
+  const blockFiles = [
+    "lace.site.json",
+    fixtureLock.blockMap,
+    ...Object.values(fixtureLock.items).flatMap((item) => Object.keys(item.files)),
+  ];
   const root = join(parent, "existing-site");
   await cp(fixture, root, { recursive: true });
   // The operator's site before connection: no Lace blocks, loader or Lace routes,
@@ -326,11 +324,19 @@ export async function existingSiteJourney(parent, operations) {
   }
 
   const blocks = (html) => [...html.matchAll(/data-lace-block="([^"]+)"/gu)].map((m) => m[1]);
-  // The shared fixture adds local navigation on home and a gallery to the post.
-  if (JSON.stringify(blocks(home)) !== JSON.stringify(["hero", "navigation", "cta"]))
+  // Home includes both Link appearances; the post includes a gallery.
+  if (
+    JSON.stringify(blocks(home)) !== JSON.stringify(["hero", "navigation", "cta", "link", "link"])
+  )
     throw new Error(`existing-build: home blocks differ: ${blocks(home).join(", ")}`);
   if (JSON.stringify(blocks(article)) !== JSON.stringify(["richText", "image", "quote", "gallery"]))
     throw new Error(`existing-build: article blocks differ: ${blocks(article).join(", ")}`);
+  if (!home.includes('<a data-lace-part="link" href="/articles/first-post">Explore text link</a>'))
+    throw new Error("existing-build: internal Link did not use the exported article route");
+  if (!home.includes('<span data-lace-part="label">Explore button link</span>'))
+    throw new Error("existing-build: unavailable Link did not retain its label");
+  if (/href="entry:/u.test(`${home}${article}`))
+    throw new Error("existing-build: an internal reference was emitted as an href");
   console.info("Acceptance: existing-styling-hooks");
   for (const hook of [
     'data-lace-model="home"',

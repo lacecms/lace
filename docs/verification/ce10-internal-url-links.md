@@ -130,3 +130,16 @@ After these corrections, the complete `pnpm test` command passed: all 42 Turbo
 tasks and all 211 root tests across 32 files. Typecheck, lint, formatting and
 strict validation of all 78 accepted specs also passed. These results are local;
 they do not assert that a new GitHub Actions run has completed.
+
+CI run `40077934891` subsequently passed tests, the workspace build and packed
+starter acceptance, then failed the existing-site acceptance's stale home-block
+list. That list now includes both Link blocks, with assertions for the remapped
+article href, unavailable-target label fallback and absence of token hrefs.
+The journey now derives all block files from its fixture lock so installation
+recreates Link and every stylesheet companion instead of retaining copied files.
+The complete `pnpm acceptance:existing-site` command passed locally after this
+correction, including source parity, public media and operator-edit protection.
+Documentation checks and the sequential locale/version variant builds passed.
+Checking all specs also exposed the still-active `video-embed-block` delta's
+outdated copies of two shared requirements after CE10 synchronization: strict
+validation requires those copies to preserve the newly accepted Link scenarios.
