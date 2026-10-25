@@ -382,3 +382,33 @@ After staging the owner-authorized commit, direct `pnpm openapi:check` passed
 against the real repository index; the earlier temporary-index caveat no longer
 applies to the staged artifact. Final format and diff whitespace checks passed,
 and strict validation passed for all 79 synchronized main specifications.
+
+## CI follow-up: in-memory identity and legacy Node fixtures
+
+The first PR #60 CI run for d4574dd failed in @lacecms/test-utils with three
+assertions. The in-memory adapter had not retained publicProjectionHash and
+publicProjectionSourceHash, so later synchronization kept requesting baseline
+recording rather than reaching a no-op. The list-input assertion also omitted
+new runtime listQueryLimits. These suites were missed by the original focused
+verification, despite the Node/D1 repository corpus passing.
+
+The in-memory final model state now carries both public identity values, matching
+the SQL adapters, and raw public identity/source changes participate in stale-plan
+comparison. The list-input expectation includes Node 200/null. Added regression
+cases verify query-only enable/edit/remove without public state/build changes,
+idempotent repeats, and rejection of concurrent changes to either identity value
+even when the derived plan remains the same. All 54 test-utils tests pass.
+
+The complete root test run then exposed five older Node-test expectations:
+the migration count did not include 0011, populated-migration snapshots did not
+expect its two null columns, and the EXPLAIN query-plan fixture used positional
+arguments against numbered SQL parameters. Counts now use the checked-in ledger;
+full snapshot comparisons retain old data and assert the added null fields;
+the actual captured list statement is explained with its numbered bindings,
+retaining the entry-list index assertion. All 39 focused Node tests pass.
+
+Follow-up checks: root typecheck (36 tasks plus project check), lint (21 tasks),
+format check, direct openapi:check and full strict OpenSpec validation (81 items)
+passed. The full root pnpm test run is used in addition to the focused suites;
+PR CI is rechecked on the fix commit rather than relying on the original narrow
+repository checks.

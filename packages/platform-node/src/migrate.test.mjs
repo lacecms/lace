@@ -363,7 +363,8 @@ const CONTENT_TABLES = [
 
 /**
  * Later migrations add `content_snapshots.seo_json` (0008) and the block
- * envelope (0009), with empty or default values for existing rows.
+ * envelope (0009), plus nullable public identity (0011), with empty or default
+ * values for existing rows.
  */
 function withEmptySeo(tables) {
   return withDefaultEnvelope({
@@ -375,6 +376,11 @@ function withEmptySeo(tables) {
 function withDefaultEnvelope(tables) {
   return {
     ...tables,
+    content_models: tables.content_models.map((row) => ({
+      ...row,
+      public_projection_hash: null,
+      public_projection_source_hash: null,
+    })),
     content_blocks: tables.content_blocks.map((row) => ({
       ...row,
       anchor: null,

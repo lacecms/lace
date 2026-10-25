@@ -29,7 +29,7 @@ import {
 } from "../dist/index.js";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
 import { createBetterAuthBoundary } from "@lacecms/auth";
-import { betterAuthSchema } from "@lacecms/db";
+import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import {
   actorId,
   blockKey,
@@ -994,12 +994,12 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
   const directory = await mkdtemp(join(tmpdir(), "lace-schema-"));
   const databasePath = join(directory, "lace.sqlite");
   try {
-    expect(migrateNodeDatabase(databasePath)).toHaveLength(11);
+    expect(migrateNodeDatabase(databasePath)).toHaveLength(checkedInMigrations.length);
     const database = openNodeDatabase(databasePath);
     try {
       expect(database.connection.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.connection.pragma("journal_mode", { simple: true })).toBe("wal");
-      expect(listAppliedMigrations(database.connection)).toHaveLength(11);
+      expect(listAppliedMigrations(database.connection)).toHaveLength(checkedInMigrations.length);
 
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
@@ -1329,7 +1329,9 @@ test("bounds Node build-export queries and selects the entry-list index", async 
       database.connection.prepare = prepare;
       const listStatement = statements.find((sql) => sql.includes("sort_value"));
       expect(
-        database.connection.prepare(`explain query plan ${listStatement}`).all("posts", 101),
+        database.connection
+          .prepare(`explain query plan ${listStatement}`)
+          .all({ 1: "posts", 2: 101 }),
       ).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ detail: expect.stringContaining("content_entries_list_idx") }),

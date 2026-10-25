@@ -1820,7 +1820,13 @@ test("validates list queries before reads and describes editors with fallbacks",
     return list(input);
   };
   await useCases.list({ actor: admin, limit: 5, modelKey: "posts", q: "   " });
-  expect(received).toEqual({ limit: 5, listFields: [], modelKey: "posts", sort: "-updatedAt" });
+  expect(received).toEqual({
+    limit: 5,
+    listFields: [],
+    listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+    modelKey: "posts",
+    sort: "-updatedAt",
+  });
 
   const describe = (id) => useCases.describeActor({ actor: admin, actorId: actorId(id) });
   await expect(describe("editor")).resolves.toEqual({ displayName: "Editor Name", id: "editor" });
@@ -3402,3 +3408,94 @@ test("draft detaching stops on a concurrent save, too many entries or a new refe
     media.requestDeletion({ actor: editor, detach: "drafts", mediaId: "media-1" }),
   ).resolves.toMatchObject({ status: "deleting" });
 });
+
+test("memory query-only sync records trusted public identity and remains idempotent without builds", async () => {
+  const store = new InMemoryContentStore();
+  const clock = new DeterministicClock(unixMilliseconds(10));
+  const ids = new DeterministicIdGenerator("query-sync");
+  const make = async (listOptions) =>
+    (
+      await defineConfig({
+        content: [
+          defineCollection({
+            key: "posts",
+            route: "/:slug",
+            version: 1,
+            fields: { summary: field.text() },
+            ...(listOptions === undefined ? {} : { listOptions }),
+          }),
+        ],
+      })
+    ).runtime.content;
+  const sync = async (models) =>
+    applyPreparedConfigurationSynchronization({
+      clock,
+      ids,
+      models,
+      target: store,
+      prepared: await prepareConfigurationSynchronization({ models, state: store }),
+    });
+  await sync(await make());
+  const version = await store.publishedContentVersion();
+  const builds = [...store.configurationSyncBuildRequests];
+  for (const listOptions of [
+    { searchableFields: ["summary"] },
+    { sortableFields: ["summary"] },
+    undefined,
+  ]) {
+    const models = await make(listOptions);
+    expect((await sync(models)).status).toBe("applied");
+    expect(store.storedModelStates()[0]).toMatchObject({
+      projectionHash: models[0].projectionHash,
+      publicProjectionHash: models[0].publicProjectionHash,
+      publicProjectionSourceHash: models[0].projectionHash,
+    });
+    expect((await sync(models)).status).toBe("noop");
+    expect(await store.publishedContentVersion()).toBe(version);
+    expect(store.configurationSyncBuildRequests).toEqual(builds);
+  }
+});
+
+test.each(["publicProjectionHash", "publicProjectionSourceHash"])(
+  "memory sync guards a concurrent %s change even when the derived plan is unchanged",
+  async (key) => {
+    const store = new InMemoryContentStore();
+    const models = (
+      await defineConfig({
+        content: [
+          defineCollection({
+            key: "posts",
+            route: "/:slug",
+            version: 1,
+          }),
+        ],
+      })
+    ).runtime.content;
+    const clock = new DeterministicClock(unixMilliseconds(10));
+    const ids = new DeterministicIdGenerator("public-baseline");
+    const apply = (prepared) =>
+      applyPreparedConfigurationSynchronization({
+        clock,
+        ids,
+        models,
+        prepared,
+        target: store,
+      });
+    await apply(await prepareConfigurationSynchronization({ models, state: store }));
+    const {
+      publicProjectionHash: _public,
+      publicProjectionSourceHash: _source,
+      ...legacy
+    } = store.storedModelStates()[0];
+    store.setStoredModelStates([legacy]);
+    const prepared = await prepareConfigurationSynchronization({ models, state: store });
+    expect(prepared.plan.operations).toMatchObject([{ action: "record-baseline" }]);
+    store.setStoredModelStates([{ ...legacy, [key]: "untrusted-concurrent-value" }]);
+    const concurrent = await prepareConfigurationSynchronization({ models, state: store });
+    expect(concurrent.plan).toEqual(prepared.plan);
+    const version = await store.publishedContentVersion();
+    await expect(apply(prepared)).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    expect(await store.publishedContentVersion()).toBe(version);
+    expect(store.storedModelStates()[0][key]).toBe("untrusted-concurrent-value");
+  },
+);
