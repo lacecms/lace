@@ -507,3 +507,61 @@ test("internal-link migration preserves JSON and incoming links after target del
     await miniflare.dispose();
   }
 });
+
+test("public identity migration preserves fresh and populated local D1 state", async () => {
+  const { openLocalCloudflare } = await import("./d1-test-harness.mjs");
+  for (const populated of [false, true]) {
+    const { database: db, dispose } = await openLocalCloudflare({ migrate: false });
+    try {
+      await db.batch(
+        (await migrationStatements((file) => file < "0011")).map((sql) => db.prepare(sql)),
+      );
+      if (populated) {
+        for (const sql of [
+          "insert into content_models(key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values('posts','collection','Posts',1,'s','p',1,1)",
+          "insert into content_entries(id,model_key,created_by,created_at,updated_at) values('entry','posts','admin',1,1)",
+          "insert into content_snapshots(id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values('draft','entry',1,'Draft','{\"count\":0}',1,1,1,'admin')",
+          "update content_entries set draft_snapshot_id='draft'",
+          "insert into published_state values(1,7,1)",
+          "insert into outbox_events(id,type,payload_json,available_at,created_at) values('event','site.build.requested','{}',1,1)",
+        ])
+          await db.prepare(sql).run();
+      }
+      const tables = [
+        "content_models",
+        "content_entries",
+        "content_snapshots",
+        "published_routes",
+        "published_state",
+        "outbox_events",
+      ];
+      const before = await Promise.all(
+        tables.map(async (table) => (await db.prepare(`select * from ${table}`).all()).results),
+      );
+      await db.batch(
+        (await migrationStatements((file) => file === "0011_public_projection_identity.sql")).map(
+          (sql) => db.prepare(sql),
+        ),
+      );
+      for (const [index, table] of tables.entries()) {
+        const rows = (await db.prepare(`select * from ${table}`).all()).results.map((row) => {
+          if (table === "content_models") {
+            expect(row.public_projection_hash).toBeNull();
+            expect(row.public_projection_source_hash).toBeNull();
+            const {
+              public_projection_hash: _publicHash,
+              public_projection_source_hash: _publicSourceHash,
+              ...old
+            } = row;
+            return old;
+          }
+          return row;
+        });
+        expect(rows).toEqual(before[index]);
+      }
+      expect((await db.prepare("pragma foreign_key_check").all()).results).toEqual([]);
+    } finally {
+      await dispose();
+    }
+  }
+});

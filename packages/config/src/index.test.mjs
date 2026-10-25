@@ -1125,3 +1125,99 @@ test("block settings visibility is projection-only and preserves namesake conten
     definePage({ key: "wrong", version: 1, path: "/wrong", settingsVisibility: {} }),
   ).toThrow(/settingsVisibility/);
 });
+
+test("listOptions normalize independently, detach and disappear when empty", async () => {
+  const options = {
+    searchableFields: ["author"],
+    sortableFields: ["publishedAt"],
+    filterableFields: [],
+  };
+  const model = postModel({ listOptions: options });
+  options.searchableFields.push("publishedAt");
+  expect(model.listFields).toBeUndefined();
+  expect(model.listOptions).toEqual({
+    searchableFields: ["author"],
+    sortableFields: ["publishedAt"],
+  });
+  expect(Object.isFrozen(model.listOptions.searchableFields)).toBe(true);
+  const config = async (overrides) => defineConfig({ blocks, content: [postModel(overrides)] });
+  expect(
+    (await config({ listOptions: { searchableFields: [], filterableFields: [] } })).public,
+  ).toEqual((await config({})).public);
+});
+
+test.each([
+  { unknown: [] },
+  { searchableFields: ["publishedAt"] },
+  { sortableFields: ["missing"] },
+  { filterableFields: ["author", "author"] },
+  { sortableFields: ["group.child"] },
+  { searchableFields: null },
+  { sortableFields: Array(17).fill("author") },
+  { sortableFields: ["composite"] },
+])("rejects invalid collection query capabilities %j", (listOptions) => {
+  expect(() =>
+    postModel({
+      fields: {
+        author: field.text(),
+        publishedAt: field.date(),
+        composite: field.group({ fields: { child: field.text() } }),
+      },
+      listOptions,
+    }),
+  ).toThrow(ConfigurationError);
+});
+
+test("pages and globals reject listOptions", () => {
+  expect(() => homeModel({ listOptions: {} })).toThrow(ConfigurationError);
+  expect(() => defineGlobal({ key: "settings", version: 1, listOptions: {} })).toThrow(
+    ConfigurationError,
+  );
+});
+
+test("listOptions are projection-only while consumer keys remain structural", async () => {
+  const normalize = async (overrides) =>
+    await defineConfig({ blocks, content: [postModel(overrides)] });
+  const base = await normalize({});
+  const enabled = await normalize({ listOptions: { searchableFields: ["author"] } });
+  expect(enabled.structureHash).toBe(base.structureHash);
+  expect(enabled.content[0].structureHash).toBe(base.content[0].structureHash);
+  expect(enabled.projectionHash).not.toBe(base.projectionHash);
+  expect(enabled.content[0].projectionHash).not.toBe(base.content[0].projectionHash);
+  const a = await normalize({ fields: { listOptions: field.text({ defaultValue: "a" }) } });
+  const b = await normalize({ fields: { listOptions: field.text({ defaultValue: "b" }) } });
+  expect(a.content[0].structureHash).not.toBe(b.content[0].structureHash);
+  const nested = (value) =>
+    normalize({
+      fields: {
+        data: field.group({
+          fields: { listOptions: field.text() },
+          defaultValue: { listOptions: value },
+        }),
+      },
+    });
+  expect((await nested("a")).content[0].structureHash).not.toBe(
+    (await nested("b")).content[0].structureHash,
+  );
+});
+
+test("public identity excludes only root query options and stays internal", async () => {
+  const make = async (overrides = {}) => defineConfig({ blocks, content: [postModel(overrides)] });
+  const before = await make();
+  const enabled = await make({ listOptions: { searchableFields: ["author"] } });
+  const label = await make({ label: "Renamed" });
+  expect(before.runtime.content[0].publicProjectionHash).toBe(before.content[0].projectionHash);
+  expect(enabled.runtime.content[0].publicProjectionHash).toBe(
+    before.runtime.content[0].publicProjectionHash,
+  );
+  expect(label.runtime.content[0].publicProjectionHash).not.toBe(
+    before.runtime.content[0].publicProjectionHash,
+  );
+  expect(JSON.stringify(enabled.public)).not.toContain("publicProjectionHash");
+  expect(enabled.content[0].publicProjectionHash).toBeUndefined();
+  const named = async (value) =>
+    make({ fields: { listOptions: field.text({ defaultValue: value }) } });
+  expect((await named("a")).runtime.content[0].publicProjectionHash).not.toBe(
+    (await named("b")).runtime.content[0].publicProjectionHash,
+  );
+});

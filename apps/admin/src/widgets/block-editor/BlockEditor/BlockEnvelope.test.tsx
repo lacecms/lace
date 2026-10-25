@@ -60,7 +60,11 @@ function mount(
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, model] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, model],
+        }) as never,
       loadBuildSite: async () =>
         ({ site: { id: "main", label: "Main", url: "https://example.com/" } }) as never,
       loadEntry: async () =>

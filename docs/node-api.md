@@ -344,3 +344,14 @@ directly to the current Lace origin and retain normal API authorization,
 validation and concurrency checks. No credentials are prefilled or persisted
 by the reference; existing same-origin browser sessions still apply. Telemetry,
 remote fonts and optional hosted integrations are disabled.
+
+## Configured collection query reads
+
+Collections can opt into `listOptions` for typed draft filters, field sorts and
+extra search targets, independently of visible `listFields`. The Admin model
+list advertises runtime `listQueryLimits` (Node 200/null, Cloudflare 48/50), and
+the entry list accepts namespaced `field:<key>` sorts and JSON `filters`.
+Ordinary literal LIKE ignores ASCII case and retains non-ASCII/Cyrillic case;
+text equality uses `= COLLATE NOCASE`. Public order/content stay independent.
+See [query contracts, cursor recovery and measurements](collection-queries.md)
+and the public content-modeling/API guides for examples and exact limits.

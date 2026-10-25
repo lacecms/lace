@@ -72,7 +72,11 @@ test("entry editor renders metadata fields, preserves blocks, suggests a slug, a
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, editorModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, fields: { summary: "Draft" } },
@@ -128,7 +132,11 @@ test("entry editor prevents invalid local submission and keeps manual slug edits
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, editorModel],
+        }) as never,
       saveDraft,
     }),
   );
@@ -383,7 +391,11 @@ test("rich-text controls refuse an unsafe link and an unsafe stored link blocks 
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, editorModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, fields: { stored: unsafe } },
@@ -451,7 +463,10 @@ test("a server-normalized media draft becomes clean after save", async () => {
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
       listMedia: async () => ({ items: [mediaItem] }),
-      listModels: async () => ({ items: [model] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [model],
+      }),
       saveDraft,
     }),
   );
@@ -519,7 +534,11 @@ test("dirty entry navigation requires an explicit leave-or-stay choice without a
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, editorModel],
+        }) as never,
       saveDraft,
     }),
   );
@@ -552,7 +571,11 @@ test("server validation issues remain on their field and keep the draft editable
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, editorModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, editorModel],
+        }) as never,
       saveDraft: async () => {
         throw new AdminClientError({
           issues: [
@@ -615,7 +638,11 @@ function mountSummary(overrides: Partial<AdminClient> = {}, role: "admin" | "edi
     "/content/posts/entry-1",
     staticSessionSource({ id: `${role}-1`, role }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, summaryModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, summaryModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, blocks: summaryBlocks, fields: { summary: "Kept" } },
@@ -803,7 +830,11 @@ test("viewers see the entry read-only with no save or publish action", async () 
     "/content/posts/entry-1",
     staticSessionSource({ id: "viewer-1", role: "viewer" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, viewerModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, viewerModel],
+        }) as never,
       saveDraft,
     }),
   );
@@ -851,7 +882,11 @@ test("a writer clears a saved optional date and saves without it", async () => {
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, dateModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, dateModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, fields: { eventDate: "2026-09-01" } },
@@ -1005,7 +1040,10 @@ test("a global editor shows site content without title, slug, or public URL", as
     "/content/settings/settings-1",
     staticSessionSource({ id: "admin-1", role: "admin" }),
     client({
-      listModels: async () => ({ items: [...models.items, settingsModel] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [...models.items, settingsModel],
+      }),
       loadBuildSite: async () => ({
         site: { id: "main-site", label: "Main site", url: "https://example.com/" },
       }),

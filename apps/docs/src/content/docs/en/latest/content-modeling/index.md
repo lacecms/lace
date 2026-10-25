@@ -53,3 +53,78 @@ field.url({ required: true, embedProviders: ["youtube", "vimeo"] });
 
 This restriction is structural. Adding or narrowing it is breaking; removing or
 widening it is compatible. Ordinary URL fields keep their existing behavior.
+
+## Collection list queries
+
+Collections can opt into queries over their current drafts. `listFields` selects
+visible columns; `listOptions` independently enables sorting, filters and extra
+search targets. A hidden field can still be queried.
+
+```ts
+const articles = defineCollection({
+  key: "articles",
+  version: 1,
+  route: "/articles/:slug",
+  fields: {
+    summary: field.textarea(),
+    year: field.number(),
+    featured: field.boolean(),
+    category: field.select({ options: ["news", "events"] }),
+    date: field.date(),
+    updated: field.datetime(),
+    source: field.url(),
+  },
+  listFields: ["year", "category"],
+  listOptions: {
+    sortableFields: ["year", "summary"],
+    filterableFields: ["summary", "year", "featured", "category", "date", "updated", "source"],
+    searchableFields: ["summary"],
+  },
+});
+```
+
+Each list contains at most 16 distinct top-level field keys. Sort/filter targets
+can be text, textarea, number, boolean, select, date, datetime or URL; extra
+search targets are text/textarea only. Nested fields, blocks, SEO, rich text and
+media are excluded. Pages/globals cannot declare `listOptions`. Empty arrays
+normalize away. These capabilities grant the same read controls to all roles;
+they do not grant write permissions.
+
+Admin keeps the existing title/slug search, status filter and system sorts. One
+field sort is active at a time. Missing, null and empty-string values appear last
+in either direction; zero and false are present. String ordering ignores ASCII
+case; selects sort by stored value. Dates use calendar dates; datetime ranges
+and sorting compare UTC instants.
+
+Search and Contains use literal SQLite LIKE: ASCII case is ignored, while
+Cyrillic/non-ASCII case is retained. `Е`, `е`, `Ё` and `ё` are distinct. `%`, `_`
+and backslash match themselves. There is no transliteration or Unicode folding.
+Node/VPS permits 200 UTF-16 code units. Cloudflare permits 48 code units and at
+most 50 UTF-8 bytes **after** escaping and adding the two substring wrappers:
+48 ordinary ASCII characters or 24 Cyrillic letters fit; 24 percent signs fit
+because each is escaped, but adding one ASCII character produces 51 bytes and
+fails. Mixed scripts and emoji must fit both limits. Search trims surrounding
+whitespace; Contains retains it. Text Equals retains 200 code units on both
+runtimes and uses literal `= COLLATE NOCASE`, without a pattern byte budget.
+Admin advertises the active budget and retains invalid editing drafts without
+sending them or truncating them.
+
+Different field filters combine with AND; selected category values combine with
+OR. Text/textarea/URL support Equals and Contains, booleans support Equals,
+numbers support Equals and inclusive ranges, selects support Any of (1–50
+configured values), dates/datetimes support inclusive ranges. Every enabled
+field supports Is set/Is not set. An optional blank bound is omitted; a range
+needs one bound. Date values are `YYYY-MM-DD`; API datetime bounds require an
+explicit offset and normalize to UTC. Text operands have a shared 200-code-unit
+ceiling, and Contains additionally follows the runtime budget. At most 16
+conditions are allowed, one per field, in an 8192-byte JSON filter parameter.
+
+Query settings affect full projection identity, while content structure and
+model version remain unchanged. Run database migrations before deploying the
+new API/admin, then normal configuration sync. Query-only sync avoids a build
+when stored public identity or the legacy hash proves public content unchanged;
+unknown legacy baselines conservatively rebuild once. A combined query/SEO
+change still rebuilds. See [synchronization](synchronization/).
+
+These controls query drafts in Admin. They do not change published content,
+public API/SDK ordering or the order of articles rendered by your site.

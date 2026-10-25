@@ -24,3 +24,30 @@ A revision conflict preserves your unsaved work. Use Copy my JSON before explici
 Check Builds for the configured site's build result. In dev, reload existing routes after publication and restart for new/renamed slugs. A manual build needs a new build and deployment. Automatic Compose serves a new release only after its successful build; failed builds retain the previous release. A Cloudflare hook reported as Accepted does not prove a deployment completed.
 
 Continue with [rich text and media](rich-text-media/) and [users and accounts](accounts/).
+
+## Search, sort and filter collections
+
+Search, status, one active sort and configured field conditions are kept in the
+URL. Reload or Back/Forward restores the query; pagination cursors stay out of
+the URL. Sort includes enabled hidden fields. Enabled column headers also sort,
+and their filter buttons open the same Filters editor as the general control.
+The editor uses field labels and type-appropriate controls, with inclusive UTC
+range bounds. False and zero remain meaningful values. Multiple selected
+options match with OR; conditions on different fields combine with AND.
+
+Active conditions can be removed individually. Clear filters removes search,
+status and field conditions while retaining the sort. Status totals reflect
+search and field filters across all statuses, independently of loaded pages.
+Stale URLs discard unsupported conditions after metadata loads, keeping valid
+peers. Search hints describe extra fields, ASCII-only case behavior and the
+runtime character/escaped-byte budget. An invalid search or filter draft stays
+editable and keeps the last valid results until corrected.
+
+Long string values use bounded opaque continuations (at most 4096 characters),
+without copying those values into a cursor. Any successful save of the boundary
+draft, even an unrelated field, or deletion/replacement of that draft expires
+its string cursor. A rejected stale save does not expire it. If Load more reports
+an expired continuation (`422` at `/after`), the loaded rows remain visible.
+Activate **Restart list** to discard old pages/cursors and load the first page
+with your search, status, sort and filters retained. Restart replaces the results
+and announces recovery; it does not append duplicates or retry the old cursor.

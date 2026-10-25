@@ -5,6 +5,8 @@ type FieldMetadata = FieldMetadataMapDto[string];
 
 /** A configured list-field column: its key, header label, and field metadata. */
 export interface ListFieldColumn {
+  readonly sortable?: boolean;
+  readonly filterable?: boolean;
   readonly field: FieldMetadata;
   readonly key: string;
   readonly label: string;
@@ -14,7 +16,17 @@ export interface ListFieldColumn {
 export function listFieldColumns(model: ContentModelDto): readonly ListFieldColumn[] {
   return (model.listFields ?? []).flatMap((key) => {
     const field = model.fields[key];
-    return field === undefined ? [] : [{ field, key, label: field.label ?? key }];
+    return field === undefined
+      ? []
+      : [
+          {
+            field,
+            key,
+            label: field.label ?? key,
+            ...(model.listOptions?.sortableFields?.includes(key) ? { sortable: true } : {}),
+            ...(model.listOptions?.filterableFields?.includes(key) ? { filterable: true } : {}),
+          },
+        ];
   });
 }
 
@@ -36,7 +48,7 @@ export function formatListValue(field: FieldMetadata, value: unknown): string {
   }
 }
 
-export type SortableColumn = "publishedAt" | "title" | "updatedAt";
+export type SortableColumn = "publishedAt" | "title" | "updatedAt" | `field:${string}`;
 
 /** One-column sorting state equivalent to an API sort value. */
 export function sortingFromSort(sort: ContentEntrySortDto): { desc: boolean; id: SortableColumn } {

@@ -1,4 +1,5 @@
 import { engineVersion } from "./release-version.js";
+import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
   ContentUseCases,
   ContentLinkUseCases,
@@ -278,6 +279,7 @@ export function createCloudflareRuntime(
     work: repository,
   });
   const content = new ContentUseCases({
+    listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
     clock,
     config: input.config.runtime,
     content: repository,

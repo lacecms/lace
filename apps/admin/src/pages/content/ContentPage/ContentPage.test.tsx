@@ -22,7 +22,12 @@ test("content landing explains no configured models without hiding API errors", 
   renderRoute(
     "/content",
     staticSessionSource({ id: "admin-1", role: "admin" }),
-    client({ listModels: async () => ({ items: [] }) }),
+    client({
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [],
+      }),
+    }),
   );
   expect(
     await screen.findByRole("heading", { name: "No content models configured" }),
@@ -171,7 +176,10 @@ test("the Site section summarizes globals without a path and guides a missing sy
               },
             ])
           : Promise.reject(new AdminClientError({ message: "API unavailable" })),
-      listModels: async () => ({ items: [...models.items, settings] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [...models.items, settings],
+      }),
     }),
   );
   const site = within(await screen.findByRole("region", { name: "Site" }));
@@ -193,7 +201,10 @@ test("the Site section summarizes globals without a path and guides a missing sy
     source,
     client({
       listEntries: async () => entryList(),
-      listModels: async () => ({ items: [settings] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [settings],
+      }),
     }),
   );
   expect(

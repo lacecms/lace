@@ -69,7 +69,10 @@ test("validates credentialed shared-contract responses and keeps cursors opaque"
   const fetcher = vi.fn(async () => Response.json({ items: [model] }));
   const client = createAdminClient(fetcher);
 
-  await expect(client.listModels()).resolves.toEqual({ items: [model] });
+  await expect(client.listModels()).resolves.toEqual({
+    items: [model],
+    listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+  });
   expect(fetcher).toHaveBeenCalledWith("/api/v1/admin/content-models", {
     credentials: "same-origin",
     headers: { accept: "application/json" },
@@ -79,14 +82,26 @@ test("validates credentialed shared-contract responses and keeps cursors opaque"
     "entries",
     "posts",
     "list",
-    { q: "launch", sort: "title", status: null },
+    {
+      matchingVersion: "sqlite-like-v1",
+      listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+      q: "launch",
+      sort: "title",
+      status: null,
+    },
   ]);
   expect(adminQueryKeys.entryList("posts", { status: "draft" })).toEqual([
     "admin",
     "entries",
     "posts",
     "list",
-    { q: null, sort: null, status: "draft" },
+    {
+      matchingVersion: "sqlite-like-v1",
+      listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+      q: null,
+      sort: null,
+      status: "draft",
+    },
   ]);
   expect(adminQueryKeys.media).toEqual(["admin", "media"]);
   expect(adminQueryKeys.mediaList({ q: "hero", type: "image/png" })).toEqual([
@@ -1007,4 +1022,31 @@ test("setup transport strips even credential-reflecting server errors", async ()
       token: "A".repeat(43),
     }),
   ).rejects.toMatchObject({ status: 404, message: "Administrator setup could not be confirmed." });
+});
+
+test("collection cache keys canonicalize filter and select order with capability identity", () => {
+  const a = { field: "a", op: "eq" as const, value: false },
+    z = { field: "z", op: "in" as const, values: ["b", "a"] };
+  const key = adminQueryKeys.entryList("posts", { filters: [z, a], capabilities: "one" });
+  expect(key).toEqual(
+    adminQueryKeys.entryList("posts", {
+      filters: [a, { ...z, values: ["a", "b"] }],
+      capabilities: "one",
+    }),
+  );
+  expect(key).not.toEqual(
+    adminQueryKeys.entryList("posts", { filters: [a, z], capabilities: "two" }),
+  );
+  expect(key).not.toEqual(
+    adminQueryKeys.entryList("posts", { filters: [{ ...a, value: true }, z], capabilities: "one" }),
+  );
+});
+
+test("list cache identity binds runtime policy and matching version without wire overrides", () => {
+  const node = adminQueryKeys.entryList("posts", {});
+  const cloud = adminQueryKeys.entryList("posts", {
+    listQueryLimits: { maxSearchLength: 48, maxLikePatternBytes: 50 },
+  });
+  expect(node).not.toEqual(cloud);
+  expect(node[4].matchingVersion).toBe("sqlite-like-v1");
 });

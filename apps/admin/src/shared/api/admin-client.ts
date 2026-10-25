@@ -1,4 +1,7 @@
 import {
+  canonicalCollectionFilters,
+  collectionFieldFiltersSchema,
+  type CollectionFieldFilterDto,
   accountSessionListSchema,
   adminPasswordResetResultSchema,
   adminSessionSchema,
@@ -80,6 +83,8 @@ import {
   type LinkImpactAcknowledgmentDto,
 } from "@lacecms/contracts";
 import * as v from "valibot";
+import { COLLECTION_MATCHING_VERSION, NODE_LIST_QUERY_LIMITS } from "@lacecms/contracts";
+import type { ListQueryLimits } from "@lacecms/contracts";
 
 export const adminQueryKeys = Object.freeze({
   buildSite: ["admin", "build-site"] as const,
@@ -93,13 +98,33 @@ export const adminQueryKeys = Object.freeze({
   accountSessions: ["admin", "account", "sessions"] as const,
   entry: (entryId: string) => ["admin", "entry", entryId] as const,
   /** One searched, filtered, and sorted collection list; pages are held by the infinite query. */
-  entryList: (modelKey: string, query: Pick<EntryListQuery, "q" | "sort" | "status">) =>
+  entryList: (
+    modelKey: string,
+    query: Pick<
+      EntryListQuery,
+      "q" | "sort" | "status" | "filters" | "capabilities" | "listQueryLimits"
+    >,
+  ) =>
     [
       "admin",
       "entries",
       modelKey,
       "list",
-      { q: query.q ?? null, sort: query.sort ?? null, status: query.status ?? null },
+      {
+        matchingVersion: COLLECTION_MATCHING_VERSION,
+        listQueryLimits: query.listQueryLimits ?? NODE_LIST_QUERY_LIMITS,
+        q: query.q ?? null,
+        sort: query.sort ?? null,
+        status: query.status ?? null,
+        ...(query.filters?.length
+          ? {
+              filters: canonicalCollectionFilters(
+                v.parse(collectionFieldFiltersSchema, query.filters),
+              ),
+            }
+          : {}),
+        ...(query.capabilities === undefined ? {} : { capabilities: query.capabilities }),
+      },
     ] as const,
   /** First-page summary (singleton and totals) shared by the shell and content overview. */
   entryOverview: (modelKey: string) => ["admin", "entries", modelKey, "overview"] as const,
@@ -287,6 +312,10 @@ export const DEFAULT_ENTRY_SORT: ContentEntrySortDto = "-updatedAt";
 
 /** Server-side search, status filter, and sort for an admin entry list. */
 export interface EntryListQuery {
+  readonly listQueryLimits?: ListQueryLimits;
+  readonly filters?: readonly CollectionFieldFilterDto[];
+  /** Effective model query capabilities; cache identity only, never sent to the API. */
+  readonly capabilities?: string;
   readonly limit?: number;
   readonly q?: string;
   readonly sort?: ContentEntrySortDto;
@@ -731,6 +760,8 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       if (query.status !== undefined) search.set("status", query.status);
       if (query.sort !== undefined) search.set("sort", query.sort);
       if (query.limit !== undefined) search.set("limit", String(query.limit));
+      if (query.filters?.length)
+        search.set("filters", JSON.stringify(canonicalCollectionFilters(query.filters)));
       const suffix = search.size === 0 ? "" : `?${search.toString()}`;
       return parse(
         contentEntryListSchema,

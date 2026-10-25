@@ -47,6 +47,7 @@ async function fixture({
   sensitiveLimiter,
   defer,
   linkReads,
+  listQueryLimits,
 } = {}) {
   const config = await defineConfig({
     blocks: [
@@ -73,6 +74,7 @@ async function fixture({
   const store = new InMemoryContentStore();
   const storage = new InMemoryObjectStorage();
   const content = new ContentUseCases({
+    listQueryLimits,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: store,
@@ -3037,4 +3039,161 @@ test("internal-link HTTP reads enforce permissions and strict bounded query mode
   const denied = await fixture({ actor: null, linkReads });
   expect((await json(denied.app, "/api/v1/admin/link-targets")).response.status).toBe(403);
   expect(calls.length).toBe(before);
+});
+
+test("configured query API validates JSON, limits and model permissions before list reads", async () => {
+  const models = [
+    defineCollection({
+      key: "posts",
+      route: "/posts/:slug",
+      version: 1,
+      fields: {
+        title: field.text(),
+        count: field.number(),
+        flag: field.boolean(),
+        category: field.select({ options: ["news", "events"] }),
+        time: field.datetime(),
+      },
+      listOptions: {
+        sortableFields: ["title", "count"],
+        filterableFields: ["title", "count", "flag", "category", "time"],
+      },
+    }),
+  ];
+  const { app, store } = await fixture({ models });
+  expect((await json(app, "/api/v1/admin/content-models")).body.items[0].listOptions).toEqual(
+    models[0].listOptions,
+  );
+  const reads = [];
+  store.list = async (query) => {
+    reads.push(query);
+    return { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
+  };
+  const base = "/api/v1/admin/models/posts/entries?";
+  const encode = (filters) => `filters=${encodeURIComponent(JSON.stringify(filters))}`;
+  const valid = await json(
+    app,
+    `${base}sort=-field:count&${encode([
+      { field: "flag", op: "eq", value: false },
+      { field: "count", op: "range", min: 0 },
+    ])}`,
+  );
+  expect(valid.response.status).toBe(200);
+  expect(reads[0].query.filters).toEqual([
+    { field: "count", op: "range", min: 0 },
+    { field: "flag", op: "eq", value: false },
+  ]);
+  for (const [query, pointer] of [
+    ["filters=%7B", "/filters"],
+    ["filters=null", "/filters"],
+    [`filters=${encodeURIComponent("я".repeat(4097))}`, "/filters"],
+    ["q=one&q=two", "/q"],
+    ["filters=[]&filters=[]", "/filters"],
+    ["sort=field:flag", "/sort"],
+    ["searchableFields=title", "/filters"],
+    [encode([{ field: "flag", op: "eq", value: "secret-input" }]), "/filters/0/value"],
+    [encode([{ field: "count", op: "range", min: 5, max: 0 }]), "/filters/0/max"],
+    [encode([{ field: "time", op: "range", from: "2026-10-25T12:00:00" }]), "/filters/0/from"],
+    [encode([{ field: "missing", op: "isSet" }]), "/filters/0/field"],
+    [encode([{ field: "category", op: "eq", value: "news" }]), "/filters/0/op"],
+    [encode([{ field: "count", op: "eq", value: 0, extra: true }]), "/filters/0/extra"],
+    [encode(Array(17).fill({ field: "count", op: "isSet" })), "/filters"],
+  ]) {
+    const response = await json(app, base + query);
+    expect(response).toMatchObject({
+      response: { status: 422 },
+      body: { error: { code: "VALIDATION_FAILED", details: { issues: [{ path: pointer }] } } },
+    });
+    expect(JSON.stringify(response.body)).not.toContain("secret-input");
+  }
+  expect(reads).toHaveLength(1);
+  expect((await json(app, base + "sort=title")).response.status).toBe(200);
+  expect((await json(app, base + "filters=[]")).response.status).toBe(200);
+});
+
+test("runtime search metadata and byte boundaries yield precise value-free API errors before reads", async () => {
+  const models = [
+    defineCollection({
+      key: "posts",
+      route: "/:slug",
+      version: 1,
+      fields: { text: field.text(), count: field.number() },
+      listOptions: { filterableFields: ["text", "count"] },
+    }),
+  ];
+  for (const listQueryLimits of [
+    { maxSearchLength: 200, maxLikePatternBytes: null },
+    { maxSearchLength: 48, maxLikePatternBytes: 50 },
+  ]) {
+    const { app, store, logs } = await fixture({ models, listQueryLimits });
+    expect((await json(app, "/api/v1/admin/content-models")).body.listQueryLimits).toEqual(
+      listQueryLimits,
+    );
+    const calls = [];
+    store.list = async (input) => {
+      calls.push(input);
+      return { items: [], totals: { all: 0, draft: 0, published: 0, changed: 0 } };
+    };
+    const path = "/api/v1/admin/models/posts/entries?";
+    for (const value of ["a".repeat(48), "я".repeat(24), "%".repeat(24), "aя".repeat(16)]) {
+      expect(
+        (await json(app, path + new URLSearchParams({ q: ` ${value} ` }))).response.status,
+      ).toBe(200);
+      expect(
+        (
+          await json(
+            app,
+            path +
+              new URLSearchParams({
+                filters: JSON.stringify([{ field: "text", op: "contains", value }]),
+              }),
+          )
+        ).response.status,
+      ).toBe(200);
+    }
+    for (const value of [
+      "a".repeat(49),
+      "я".repeat(24) + "a",
+      "%".repeat(24) + "a",
+      "aя".repeat(16) + "a",
+      "я".repeat(200),
+    ]) {
+      for (const [query, pointer] of [
+        [{ q: value, maxSearchLength: "200", maxLikePatternBytes: "null" }, "/q"],
+        [
+          {
+            filters: JSON.stringify([
+              { field: "text", op: "contains", value },
+              { field: "count", op: "eq", value: 0 },
+            ]),
+          },
+          "/filters/0/value",
+        ],
+      ]) {
+        const count = calls.length;
+        const result = await json(app, path + new URLSearchParams(query));
+        if (listQueryLimits.maxSearchLength === 200) expect(result.response.status).toBe(200);
+        else {
+          expect(result.response.status).toBe(422);
+          expect(result.body.error.details.issues).toContainEqual(
+            expect.objectContaining({ path: pointer }),
+          );
+          expect(JSON.stringify(result.body)).not.toContain(value);
+          expect(calls).toHaveLength(count);
+        }
+      }
+    }
+    expect(
+      (
+        await json(
+          app,
+          path +
+            new URLSearchParams({
+              filters: JSON.stringify([{ field: "text", op: "eq", value: "я".repeat(200) }]),
+            }),
+        )
+      ).response.status,
+    ).toBe(200);
+    expect(JSON.stringify(logs)).not.toContain("яяяя");
+  }
 });

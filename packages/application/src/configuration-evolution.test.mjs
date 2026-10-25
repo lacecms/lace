@@ -42,6 +42,8 @@ function storedFrom(model, overrides = {}) {
     key: model.key,
     kind: model.kind,
     projectionHash: model.projectionHash,
+    publicProjectionHash: model.publicProjectionHash,
+    publicProjectionSourceHash: model.projectionHash,
     publishedSnapshotCount: 1,
     snapshotFingerprint: "3:5:30:12",
     structure: model.structure,
@@ -1326,4 +1328,40 @@ test("embed restrictions classify narrowing as breaking at root and nested paths
       expect.objectContaining({ class: "breaking", properties: ["embedProviders", "required"] }),
     );
   }
+});
+
+test("query identity classifies trusted, legacy and mixed public changes", async () => {
+  const before = await posts();
+  const after = await posts({ listOptions: { searchableFields: ["summary"] } });
+  const plan = (current, stored) =>
+    planConfigurationSynchronization({ models: [current], storedModels: [stored] });
+  for (const [current, stored] of [
+    [after, storedFrom(before)],
+    [before, storedFrom(after)],
+    [
+      after,
+      storedFrom(before, {
+        publicProjectionHash: undefined,
+        publicProjectionSourceHash: undefined,
+      }),
+    ],
+  ]) {
+    const result = plan(current, stored);
+    expect(result.operations).toMatchObject([
+      { action: "label-update", affectsPublicProjection: false },
+    ]);
+    expect(configurationSyncAdvancesPublicState(result)).toBe(false);
+    expect(configurationSyncContentWrites(result)).toEqual([]);
+  }
+  const unknown = storedFrom(before, {
+    projectionHash: "unknown",
+    publicProjectionSourceHash: "stale",
+  });
+  expect(configurationSyncAdvancesPublicState(plan(after, unknown))).toBe(true);
+  const unchanged = plan(after, storedFrom(after, { publicProjectionSourceHash: "stale" }));
+  expect(unchanged.operations).toMatchObject([{ action: "record-baseline" }]);
+  expect(configurationSyncAdvancesPublicState(unchanged)).toBe(false);
+  expect(plan(after, storedFrom(after)).operations).toEqual([]);
+  const mixed = await posts({ label: "New label", listOptions: { searchableFields: ["summary"] } });
+  expect(configurationSyncAdvancesPublicState(plan(mixed, storedFrom(before)))).toBe(true);
 });

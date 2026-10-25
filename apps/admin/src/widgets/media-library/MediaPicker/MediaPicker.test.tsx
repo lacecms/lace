@@ -65,7 +65,10 @@ function mount({
           throw new AdminClientError({ code: "NOT_FOUND", message: "Not found", status: 404 });
         return { ...found, usage: [] };
       },
-      listModels: async () => ({ items: [model] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [model],
+      }),
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, fields: hero === undefined ? {} : { hero } },

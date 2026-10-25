@@ -894,3 +894,158 @@ test("internal-link migration preserves legacy JSON and only cascades outgoing r
     }
   }
 });
+
+test("public identity migration preserves fresh and populated SQLite state", async () => {
+  for (const populated of [false, true]) {
+    const db = new DatabaseSync(":memory:");
+    try {
+      for (const migration of checkedInMigrations.filter((item) => item.name < "0011"))
+        db.exec(await readFile(new URL(`../drizzle/${migration.name}`, import.meta.url), "utf8"));
+      if (populated) {
+        db.exec(
+          "insert into content_models(key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values('posts','collection','Posts',1,'s','p',1,1)",
+        );
+        db.exec(
+          "insert into content_entries(id,model_key,created_by,created_at,updated_at) values('entry','posts','admin',1,1)",
+        );
+        db.exec(
+          "insert into content_snapshots(id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values('draft','entry',1,'Draft','{\"count\":0}',1,1,1,'admin')",
+        );
+        db.exec("update content_entries set draft_snapshot_id='draft'");
+        db.exec("insert into published_state values(1,7,1)");
+        db.exec(
+          "insert into outbox_events(id,type,payload_json,available_at,created_at) values('event','site.build.requested','{}',1,1)",
+        );
+      }
+      const tables = [
+        "content_models",
+        "content_entries",
+        "content_snapshots",
+        "published_routes",
+        "published_state",
+        "outbox_events",
+      ];
+      const before = tables.map((table) => db.prepare(`select * from ${table}`).all());
+      db.exec(
+        await readFile(
+          new URL("../drizzle/0011_public_projection_identity.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      for (const [index, table] of tables.entries()) {
+        const rows = db
+          .prepare(`select * from ${table}`)
+          .all()
+          .map((row) => {
+            if (table === "content_models") {
+              expect(row.public_projection_hash).toBeNull();
+              expect(row.public_projection_source_hash).toBeNull();
+              const {
+                public_projection_hash: _publicHash,
+                public_projection_source_hash: _publicSourceHash,
+                ...old
+              } = row;
+              return old;
+            }
+            return row;
+          });
+        expect(rows).toEqual(before[index]);
+      }
+      expect(db.prepare("pragma foreign_key_check").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+});
+
+test("entry cursor identity binds canonical operands and effective capabilities", async () => {
+  const { entryCursorKind } = await import("../dist/index.js");
+  const query = {
+    sortableFields: [{ key: "category", type: "select", options: ["b", "a"] }],
+    filterableFields: [
+      { key: "year", type: "number" },
+      { key: "category", type: "select", options: ["a", "b"] },
+    ],
+    searchableFields: [{ key: "description", type: "text" }],
+    filters: [
+      { field: "year", op: "eq", value: 0 },
+      { field: "category", op: "in", values: ["b", "a"] },
+    ],
+  };
+  const input = { modelKey: "posts", sort: "-updatedAt", limit: 1, listFields: [], query };
+  const identity = await entryCursorKind(input);
+  const changed = (delta) => entryCursorKind({ ...input, query: { ...query, ...delta } });
+  expect(
+    await changed({
+      filters: [{ ...query.filters[1], values: ["a", "b"] }, query.filters[0]],
+      filterableFields: [...query.filterableFields].reverse(),
+    }),
+  ).toBe(identity);
+  expect(await entryCursorKind({ ...input, listFields: ["year"], limit: 100 })).toBe(identity);
+  expect(await changed({ filters: [{ field: "year", op: "eq", value: 1 }] })).not.toBe(identity);
+  expect(await changed({ searchableFields: [] })).not.toBe(identity);
+  expect(
+    await changed({
+      sortableFields: [{ key: "category", type: "select", options: ["a", "b", "c"] }],
+    }),
+  ).not.toBe(identity);
+});
+
+test("ordinary literal LIKE escapes wildcards and preserves SQLite case semantics", async () => {
+  const { literalLikePattern } = await import("../dist/index.js");
+  const db = new DatabaseSync(":memory:");
+  try {
+    const match = (value, text) =>
+      db.prepare("select ? like ? escape '\\' as matched").get(value, literalLikePattern(text))
+        .matched;
+    expect(match("Launch", "LAUNCH")).toBe(1);
+    expect(match("Москва", "Москва")).toBe(1);
+    expect(match("Москва", "МОСКВА")).toBe(0);
+    expect(match("Ёлка", "ёЛКА")).toBe(0);
+    expect(match("Ёлка", "Елка")).toBe(0);
+    expect(match("Їжак Ђак AЯ", "Їжак Ђак aЯ")).toBe(1);
+    expect(match("Їжак Ђак AЯ", "їжак Ђак aЯ")).toBe(0);
+    for (const symbol of [
+      "[",
+      "]",
+      "*",
+      "?",
+      "'",
+      '"',
+      "%",
+      "_",
+      "\\",
+      "[]*?%_\\",
+      "[a-z]",
+      "[[]",
+      "é",
+      "😀",
+    ]) {
+      expect(match(`before ${symbol} after`, symbol)).toBe(1);
+      expect(match("unrelated", symbol)).toBe(0);
+    }
+    expect(literalLikePattern("%_\\")).toBe("%\\%\\_\\\\%");
+    expect(Buffer.byteLength(literalLikePattern("a".repeat(48)))).toBe(50);
+    expect(Buffer.byteLength(literalLikePattern("я".repeat(24)))).toBe(50);
+    expect(Buffer.byteLength(literalLikePattern("%".repeat(24)))).toBe(50);
+    expect(Buffer.byteLength(literalLikePattern("я".repeat(24) + "a"))).toBe(51);
+    expect(match("x".repeat(200), "x".repeat(200))).toBe(1);
+  } finally {
+    db.close();
+  }
+});
+
+test("cursor fingerprints expire across matching versions and runtime policy changes", async () => {
+  const { entryCursorKind, decodeEntryCursor, encodeSortCursor } = await import("../dist/index.js");
+  const input = { modelKey: "posts", sort: "title", limit: 1, listFields: [] };
+  const node = await entryCursorKind(input);
+  const cloud = await entryCursorKind({
+    ...input,
+    listQueryLimits: { maxSearchLength: 48, maxLikePatternBytes: 50 },
+  });
+  expect(node).not.toBe(cloud);
+  expect(node).toContain("sqlite-like-v1");
+  const old = JSON.stringify(["entries", "posts", "title", null, null, "old-glob"]);
+  for (const foreign of [old, cloud])
+    expect(() => decodeEntryCursor(encodeSortCursor(foreign, "a", "a"), node, "title")).toThrow();
+});

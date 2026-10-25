@@ -27,6 +27,7 @@ test("routes collections to their entry list and pages back to the landing route
     editor,
     stubClient({
       listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
         items: [
           {
             blocks: [],

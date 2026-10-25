@@ -72,8 +72,22 @@ when selected and do not yet have an implementation order or new CE numbers.
   visibility-only mechanism as CE9. Completed LIST2 implements the bounded scalar
   block-settings exception recorded in the archived roadmap; it does not select general conditional forms.
 
+- **CQ1 Configurable collection queries (implemented 2026-10-25):**
+  `add-configurable-collection-queries` adds opt-in admin draft field sorting,
+  typed filters and extra literal LIKE search on Node and D1. ASCII case is
+  ignored, Cyrillic case is retained. Node/VPS keeps the 200-code-unit search
+  limit; Cloudflare uses 48 code units and at most 50 UTF-8 bytes in the escaped
+  LIKE pattern, advertised to the admin and enforced before reads. Includes an additive public-projection identity migration and
+  guarded sync classification so query-only changes avoid builds while SEO
+  changes retain them; legacy unknown identities rebuild conservatively once.
+  Custom string sorts use bounded entry/revision cursor anchors with indexed
+  continuation lookup and explicit restart after anchor edits/deletion; long
+  field values do not expand transport cursors. Public order/content and bulk
+  actions stay outside this scope. Specs synchronized and change archived at
+  `openspec/changes/archive/2026-10-25-add-configurable-collection-queries`.
+
 Further candidates, not yet ordered: scheduled publication (C2, an MVP
-exclusion), bulk list actions and field-value filters, media folders and tags,
+exclusion), bulk list actions, media folders and tags,
 token-protected draft preview, trash for deleted entries, and an early
 decision on whether localized content will ever be supported, because locales
 would affect snapshot and route keys.

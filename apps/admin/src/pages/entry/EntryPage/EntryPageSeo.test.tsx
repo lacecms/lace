@@ -78,7 +78,11 @@ function seoClient(overrides: Partial<AdminClient> = {}, loaded = post()): Admin
       modelKey === "settings"
         ? entryList([{ ...entry, id: "settings-1", modelKey: "settings", title: "Site settings" }])
         : entryList([entry]),
-    listModels: async () => ({ items: [models.items[0]!, posts, settings] }) as never,
+    listModels: async () =>
+      ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [models.items[0]!, posts, settings],
+      }) as never,
     loadBuildSite: async () => ({
       site: { id: "main", label: "Main", url: "https://example.com/" },
     }),

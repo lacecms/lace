@@ -84,7 +84,11 @@ test("entry editor authors ordered blocks, selects media, and adopts server posi
           },
         ],
       }),
-      listModels: async () => ({ items: [models.items[0]!, model] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, model],
+        }) as never,
       saveDraft,
     }),
   );
@@ -164,7 +168,11 @@ test("server block validation stays on the nested editable block field", async (
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, model] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, model],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, blocks: [existingBlock] },
@@ -249,7 +257,11 @@ function mountCards() {
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, cardModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, cardModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, blocks: existingBlocks },
@@ -359,7 +371,11 @@ test("a block whose type the model no longer allows renders with its error and c
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, cardModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, cardModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: {
@@ -451,7 +467,11 @@ test("saves keep loaded block envelopes, new blocks take setting defaults, copie
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [models.items[0]!, panelModel] }) as never,
+      listModels: async () =>
+        ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [models.items[0]!, panelModel],
+        }) as never,
       loadEntry: async () => ({
         ...draftEntry,
         draft: { ...draftEntry.draft, blocks: [loaded] },
@@ -506,7 +526,10 @@ test("generic video embed authoring validates URLs, selects and clears a poster"
     "/content/posts/entry-1",
     staticSessionSource({ id: "editor-1", role: "editor" }),
     client({
-      listModels: async () => ({ items: [model] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [model],
+      }),
       saveDraft: saveDraft as unknown as AdminClient["saveDraft"],
       listMedia: async () => ({
         items: [
@@ -598,7 +621,10 @@ test.each(["viewer", "editor"] as const)(
       "/content/posts/entry-1",
       staticSessionSource({ id: `${role}-1`, role }),
       client({
-        listModels: async () => ({ items: [model] }),
+        listModels: async () => ({
+          listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+          items: [model],
+        }),
         loadEntry: async () => ({ ...draftEntry, draft: { ...draftEntry.draft, blocks: [block] } }),
         saveDraft,
       }),

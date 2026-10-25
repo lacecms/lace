@@ -43,3 +43,31 @@ test("manual sorting reports the next API sort and marks busy rows", async () =>
   await user.click(within(table).getByRole("button", { name: "Title" }));
   expect(onSortChange).toHaveBeenLastCalledWith("title");
 });
+
+test("configured headers namespace system collisions and expose sort direction", async () => {
+  const user = userEvent.setup();
+  const onSortChange = vi.fn();
+  renderInRouter(
+    <EntryListTable
+      canManage={false}
+      items={[row]}
+      label="Posts"
+      listColumns={[
+        {
+          field: { type: "text", required: false },
+          key: "title",
+          label: "Custom title",
+          sortable: true,
+        },
+      ]}
+      modelKey="posts"
+      onSortChange={onSortChange}
+      sort="-field:title"
+    />,
+  );
+  const header = await screen.findByRole("columnheader", { name: "Custom title" });
+  expect(header).toHaveAttribute("aria-sort", "descending");
+  await user.click(within(header).getByRole("button", { name: "Custom title" }));
+  expect(onSortChange).toHaveBeenLastCalledWith("field:title");
+  expect(screen.getByRole("columnheader", { name: "Title" })).toHaveAttribute("aria-sort", "none");
+});

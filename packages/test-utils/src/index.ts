@@ -233,6 +233,8 @@ function sameStoredModelStates(
       value.version === candidate.version &&
       value.structureHash === candidate.structureHash &&
       value.projectionHash === candidate.projectionHash &&
+      value.publicProjectionHash === candidate.publicProjectionHash &&
+      value.publicProjectionSourceHash === candidate.publicProjectionSourceHash &&
       (value.structure === undefined) === (candidate.structure === undefined) &&
       value.snapshotFingerprint === candidate.snapshotFingerprint &&
       value.entryCount === candidate.entryCount &&
@@ -252,6 +254,10 @@ function stateForModel(
     key: model.key,
     kind: model.kind,
     projectionHash: model.projectionHash,
+    ...(configuration.publicProjectionHash === undefined
+      ? {}
+      : { publicProjectionHash: configuration.publicProjectionHash }),
+    publicProjectionSourceHash: model.projectionHash,
     publishedSnapshotCount: 0,
     ...(configuration.structure === undefined ? {} : { structure: configuration.structure }),
     structureHash: model.structureHash,

@@ -67,7 +67,10 @@ function open(
     "/content/posts/entry-1",
     staticSessionSource({ id: "user-1", role }),
     stubClient({
-      listModels: async () => ({ items: [model] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [model],
+      }),
       loadEntry: async () => structuredClone(initial),
       ...(saveDraft ? { saveDraft } : {}),
       ...extra,

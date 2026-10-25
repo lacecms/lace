@@ -196,7 +196,10 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     deleteMedia: async () => ({}) as never,
     retryMediaDeletion: async () => ({}) as never,
     updateMediaMetadata: async () => ({}) as never,
-    listModels: async () => models,
+    listModels: async () => ({
+      ...models,
+      listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+    }),
     publishEntry: async () => ({}) as never,
     unpublishEntry: async () => ({}) as never,
     revertEntry: async () => ({}) as never,

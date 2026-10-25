@@ -67,6 +67,8 @@ export interface StoredContentModelState {
   readonly key: ContentModelKey;
   readonly kind: ContentModelRoute["kind"];
   readonly projectionHash: string;
+  readonly publicProjectionHash?: string;
+  readonly publicProjectionSourceHash?: string;
   readonly publishedSnapshotCount: number;
   /**
    * Snapshot count, revision sum, update-time sum, and latest update time of
@@ -87,6 +89,7 @@ export interface ConfigurationSyncPlanInput {
 }
 
 export interface ConfigurationSyncModel {
+  readonly publicProjectionHash?: string;
   readonly key: ContentModelKey;
   readonly kind: ContentModelRoute["kind"];
   readonly projectionHash: string;
@@ -163,7 +166,10 @@ interface ConfigurationSyncModelOperation {
 
 export type ConfigurationSyncOperation =
   | (ConfigurationSyncModelOperation & { readonly action: "create" })
-  | (ConfigurationSyncModelOperation & { readonly action: "label-update" })
+  | (ConfigurationSyncModelOperation & {
+      readonly action: "label-update";
+      readonly affectsPublicProjection?: boolean;
+    })
   | (ConfigurationSyncModelOperation & { readonly action: "record-baseline" })
   | (ConfigurationSyncModelOperation & {
       readonly action: "version-update";
@@ -349,6 +355,9 @@ function copyModel(model: NormalizedContentModel): ConfigurationSyncModel {
     key: contentModelKey(model.key),
     kind: model.kind,
     projectionHash: model.projectionHash,
+    ...(model.publicProjectionHash === undefined
+      ? {}
+      : { publicProjectionHash: model.publicProjectionHash }),
     structureHash: model.structureHash,
     version: model.version,
   });
@@ -361,6 +370,12 @@ function copyStoredModel(model: StoredContentModelState): StoredContentModelStat
     key: contentModelKey(model.key),
     kind: model.kind,
     projectionHash: model.projectionHash,
+    ...(model.publicProjectionHash === undefined
+      ? {}
+      : { publicProjectionHash: model.publicProjectionHash }),
+    ...(model.publicProjectionSourceHash === undefined
+      ? {}
+      : { publicProjectionSourceHash: model.publicProjectionSourceHash }),
     publishedSnapshotCount: model.publishedSnapshotCount,
     ...(model.snapshotFingerprint === undefined
       ? {}
@@ -906,6 +921,26 @@ function decideBlockMigration(
   return { planned: refusals.length === 0 && facts.blocks > 0, refusals };
 }
 
+function trustedPublicBaseline(stored: StoredContentModelState): boolean {
+  return (
+    /^[a-f0-9]{64}$/u.test(stored.publicProjectionHash ?? "") &&
+    /^[a-f0-9]{64}$/u.test(stored.publicProjectionSourceHash ?? "") &&
+    stored.publicProjectionSourceHash === stored.projectionHash
+  );
+}
+
+function publicProjectionChanged(
+  current: NormalizedContentModel,
+  stored: StoredContentModelState,
+): boolean {
+  if (trustedPublicBaseline(stored))
+    return current.publicProjectionHash !== stored.publicProjectionHash;
+  return (
+    stored.projectionHash !== current.projectionHash &&
+    stored.projectionHash !== current.publicProjectionHash
+  );
+}
+
 function classifyMatchedModel(
   current: NormalizedContentModel,
   stored: StoredContentModelState,
@@ -1015,9 +1050,16 @@ function classifyMatchedModel(
     });
   }
   if (model.projectionHash !== stored.projectionHash) {
-    return Object.freeze({ action: "label-update", model });
+    return Object.freeze({
+      action: "label-update",
+      affectsPublicProjection: publicProjectionChanged(current, stored),
+      model,
+    });
   }
-  if ((!hasBaseline || legacyMatch) && current.structure !== undefined) {
+  if (
+    (!hasBaseline || legacyMatch || !trustedPublicBaseline(stored)) &&
+    current.structure !== undefined
+  ) {
     return Object.freeze({ action: "record-baseline", model });
   }
   return undefined;
@@ -1260,7 +1302,11 @@ export function configurationSyncBaseline(model: NormalizedContentModel): {
 
 /** Whether applying a plan changes public projections or published content. */
 export function configurationSyncAdvancesPublicState(plan: ConfigurationSyncPlan): boolean {
-  return plan.operations.some((operation) => operation.action !== "record-baseline");
+  return plan.operations.some(
+    (operation) =>
+      operation.action !== "record-baseline" &&
+      (operation.action !== "label-update" || operation.affectsPublicProjection !== false),
+  );
 }
 
 export function checkConfigurationSynchronization(
@@ -1305,7 +1351,9 @@ export function renderConfigurationSyncPlanText(plan: ConfigurationSyncPlan): st
   if (plan.operations.length === 0) lines.push("- none");
   for (const operation of plan.operations) {
     const rename = operation.action === "rename" ? ` from ${operation.renamedFrom}` : "";
-    lines.push(`- ${operation.action} ${operation.model.key}${rename}`);
+    lines.push(
+      `- ${operation.action} ${operation.model.key}${rename}${operation.action === "label-update" ? ` (public impact: ${operation.affectsPublicProjection !== false})` : ""}`,
+    );
     const evolution =
       operation.action === "version-update" ||
       operation.action === "rename" ||

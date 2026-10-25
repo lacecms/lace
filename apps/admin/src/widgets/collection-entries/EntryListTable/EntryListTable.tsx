@@ -60,6 +60,7 @@ export function EntryListTable({
   now = Date.now(),
   onDeleted,
   onSortChange,
+  onFilterField,
   sort,
 }: {
   readonly busy?: boolean;
@@ -73,6 +74,7 @@ export function EntryListTable({
   readonly now?: number;
   readonly onDeleted?: () => void;
   readonly onSortChange: (sort: ContentEntrySortDto) => void;
+  readonly onFilterField?: (field: string) => void;
   readonly sort: ContentEntrySortDto;
 }) {
   const columns = useMemo(
@@ -104,7 +106,9 @@ export function EntryListTable({
           header: "Status",
         }),
         ...listColumns.map((listColumn) =>
-          column.display({
+          column.accessor((row) => row.listValues[listColumn.key], {
+            enableSorting: listColumn.sortable === true,
+            sortDescFirst: false,
             cell: ({ row }) => {
               const text = formatListValue(
                 listColumn.field,
@@ -117,7 +121,7 @@ export function EntryListTable({
               );
             },
             header: listColumn.label,
-            id: `list:${listColumn.key}`,
+            id: `field:${listColumn.key}`,
           }),
         ),
         column.accessor("publishedAt", {
@@ -197,6 +201,17 @@ export function EntryListTable({
                 return (
                   <TableHead key={header.id}>
                     <table.FlexRender header={header} />
+                    {listColumns.find((column) => `field:${column.key}` === header.column.id)
+                      ?.filterable && onFilterField ? (
+                      <Button
+                        aria-label={`Filter ${String(header.column.columnDef.header)}`}
+                        onClick={() => onFilterField(header.column.id.slice(6))}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        Filter
+                      </Button>
+                    ) : undefined}
                   </TableHead>
                 );
               const SortIcon =
@@ -220,6 +235,17 @@ export function EntryListTable({
                       className={sorted === false ? "text-muted-foreground" : undefined}
                     />
                   </Button>
+                  {listColumns.find((column) => `field:${column.key}` === header.column.id)
+                    ?.filterable && onFilterField ? (
+                    <Button
+                      aria-label={`Filter ${String(header.column.columnDef.header)}`}
+                      onClick={() => onFilterField(header.column.id.slice(6))}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Filter
+                    </Button>
+                  ) : undefined}
                 </TableHead>
               );
             })}

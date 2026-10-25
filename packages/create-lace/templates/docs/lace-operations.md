@@ -631,3 +631,51 @@ the proxy, animated GIF variants, link precedence and HTML/hashed-asset headers.
 Keep MinIO/R2 objects and database backups separate from disposable build caches.
 Rollback after synchronization requires matching backed-up content/configuration
 and source alongside compatible packages/images, not just old image tags.
+
+## Collection list queries
+
+Collections may enable Admin draft queries independently of visible columns:
+
+```ts
+listFields: ["year"],
+listOptions: {
+  sortableFields: ["year"],
+  filterableFields: ["year", "summary"],
+  searchableFields: ["summary"],
+},
+```
+
+Here `year` must be a declared number field and `summary` a text/textarea field.
+Each capability list allows at most 16 distinct top-level keys; hidden fields
+can be queried. The API accepts `sort=field:year` (or `-field:year`) and JSON
+filters such as `[{"field":"year","op":"range","min":2020}]`. Filters combine
+with AND; select Any of values combine with OR. Text/URL supports Equals and
+Contains, numbers Equals/ranges, booleans Equals, dates/datetimes inclusive ranges
+and all enabled types existence checks. Blank bounds are omitted; false/zero are
+values. Datetime bounds use explicit offsets and normalize to UTC. Filters are
+bounded to 16 fields, 50 select values and 8192 decoded UTF-8 bytes.
+
+Search/Contains uses literal LIKE with ASCII-only case insensitivity: Cyrillic
+Е/е/Ё/ё remain distinct; percent, underscore and backslash match literally. Node
+permits 200 UTF-16 units. Cloudflare permits 48 units and 50 UTF-8 bytes after
+escaping plus two substring wrappers (48 ASCII or 24 Cyrillic letters fit;
+24 percent signs fit, but one extra ASCII character makes 51 bytes). Text Equals
+keeps 200 units without a pattern budget. Admin reads advertised limits before
+validating URL conditions, retains invalid editing drafts and never truncates.
+
+Queries and status totals use drafts; published API/export/site ordering is
+unchanged. Search/status/sort/filters survive URL reload/history, while cursors
+stay out of URLs. Custom string continuations are bounded to 4096 characters;
+any successful boundary-draft save, deletion or replacement expires them. When
+Load more fails with 422 `/after`, use Restart list: it retains query intent,
+discards old pages/cursors and replaces the results without retrying the cursor.
+
+Migrate the database before deploying the updated API/admin, then sync normally.
+Migration 0011 only adds nullable public identity/source columns. Query-only sync
+avoids builds when trusted public identity or legacy hash equality proves safety;
+unknown legacy identity conservatively rebuilds once. Full projection identity
+includes query settings; public identity omits only root listOptions and keeps
+SEO/labels/columns/blocks. Mixed query/SEO edits still rebuild. On rollback retain
+the additive columns and migration history; older code can leave the public source
+stale, which re-upgrade detects before applying legacy proof/fallback. No content
+backfill, field-query index, persisted cursor state or bulk action is introduced.
