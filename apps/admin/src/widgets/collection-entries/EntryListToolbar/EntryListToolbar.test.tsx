@@ -52,3 +52,19 @@ test("status buttons show totals, mark the active filter, and clear appears with
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(onClear).toHaveBeenCalledTimes(1);
 });
+
+test("over-budget drafts stay editable without debounce requests and recover when valid", async () => {
+  const user = userEvent.setup();
+  const { onSearchChange } = renderToolbar({
+    limits: { maxSearchLength: 48, maxLikePatternBytes: 50 },
+  });
+  const box = screen.getByRole("searchbox", { name: "Search entries" });
+  await user.type(box, "я".repeat(25));
+  await user.keyboard("{Enter}");
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  expect(onSearchChange).not.toHaveBeenCalled();
+  expect(box).toHaveValue("я".repeat(25));
+  expect(screen.getByRole("alert")).toHaveTextContent("50 UTF-8 bytes");
+  await user.keyboard("{Backspace}");
+  await waitFor(() => expect(onSearchChange).toHaveBeenCalledWith("я".repeat(24)));
+});

@@ -59,13 +59,13 @@ label as title (falling back to the stable model key when label is absent).
 Collections never receive generated entries, and required fields without a
 default remain absent until publication.
 
-Every non-no-op applied plan changes public configuration as one unit: it
-increments `published_state.version` once and creates or coalesces one pending
-`site.build.requested` event for that new version. The only exception is a plan
-whose operations all record structure baselines (see below), which changes
-neither. Any failed statement rolls
-back model identities, generated page drafts, public state, and outbox work
-together.
+Applied plans with public impact increment `published_state.version` once and
+create or coalesce one pending `site.build.requested` event for that version.
+Baseline-only recording and collection-query metadata updates with proven
+unchanged public identity change neither; unknown legacy public identity uses
+the conservative proof/fallback rules below. Any failed statement rolls back
+model identities, generated page drafts, identity baselines, public state and
+outbox work together.
 
 ## Schema evolution (CE1A, CE1B, CE1C)
 
@@ -367,3 +367,23 @@ committed units under the old baseline/public version. Retry with the same
 configuration: completed blocks are skipped, remaining blocks are migrated and
 model backfills commit only in the successful final mutation. CE7C's editor and
 CE7D's Gallery/Navigation adoption remain separate.
+
+## Collection query metadata: public identity baseline
+
+CQ1 migration 0011 must run before the new API/admin, followed by normal sync.
+It adds nullable public-projection identity/source-hash columns without content
+backfill or query indexes. Query settings remain full projection metadata and
+need no model version increase. Internal `publicProjectionHash` omits only root
+collection `listOptions`, keeping labels/listFields/SEO/blocks. It is absent from
+serialized metadata and all existing structural/full hash inputs.
+
+The source must equal stored full identity, and both new hashes must be valid,
+for a public baseline to be trusted. Query-only changes with proven unchanged
+public identity update metadata without public state/build work. Missing/stale
+legacy identity seeds safely when stored full identity equals configured full
+or public identity; otherwise it conservatively rebuilds once. Mixed query/SEO
+changes still advance public state and coalesce a build. Baseline-only recording
+is guarded, atomic and idempotent; both raw values participate in stale-plan
+checks. Rollback retains columns/history; re-upgrade detects an older binary's
+full-hash changes through source mismatch. See [collection queries](collection-queries.md)
+for classification, concurrency, rollout and recovery details.

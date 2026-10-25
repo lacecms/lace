@@ -4,6 +4,7 @@ import * as v from "valibot";
 import { decodeEntryLink, MAX_INTERNAL_LINK_REFERENCES } from "./internal-links.js";
 export * from "./internal-links.js";
 export * from "./video-embeds.js";
+export * from "./list-query-policy.js";
 
 /** A JSON primitive that can be transported between Lace runtimes. */
 export type JsonPrimitive = boolean | null | number | string;

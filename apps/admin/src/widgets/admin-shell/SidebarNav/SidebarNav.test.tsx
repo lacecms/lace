@@ -102,7 +102,10 @@ test("lists globals in the Site group with singleton links", async () => {
               { ...entry, id: "settings-1", modelKey: "settings", title: "Site settings" },
             ])
           : entryList(),
-      listModels: async () => ({ items: [...models.items, settings] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [...models.items, settings],
+      }),
     }),
     session: { id: "editor-1", role: "editor" },
   });
@@ -119,7 +122,10 @@ test("lists globals in the Site group with singleton links", async () => {
   renderInRouter(nav(), {
     client: client({
       listEntries: async () => entryList(),
-      listModels: async () => ({ items: [settings] }),
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [settings],
+      }),
     }),
     session: { id: "editor-1", role: "editor" },
   });

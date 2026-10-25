@@ -1,4 +1,13 @@
 import {
+  collectionListOptionsSchema,
+  listQueryLimitsSchema,
+  NODE_LIST_QUERY_LIMITS,
+  COLLECTION_MATCHING_VERSION,
+} from "./collection-queries.js";
+import type { ListQueryLimits } from "./collection-queries.js";
+import type { CollectionListOptionsSource } from "./collection-queries.js";
+export * from "./collection-queries.js";
+import {
   canonicalizeJson,
   defineBlock,
   normalizeFieldDefinition,
@@ -663,13 +672,17 @@ export const unpublishContentEntryResultSchema = v.strictObject({
 });
 
 export const contentEntryStatusSchema = v.picklist(["changed", "draft", "published"]);
-export const contentEntrySortSchema = v.picklist([
+export const contentEntrySystemSortSchema = v.picklist([
   "-publishedAt",
   "-title",
   "-updatedAt",
   "publishedAt",
   "title",
   "updatedAt",
+]);
+export const contentEntrySortSchema = v.union([
+  contentEntrySystemSortSchema,
+  v.pipe(v.string(), v.regex(/^-?field:[A-Za-z][A-Za-z0-9]*$/u)),
 ]);
 export const MAX_ENTRY_SEARCH_LENGTH = 200;
 
@@ -734,9 +747,33 @@ export const contentEntryListSchema = v.strictObject({
 
 /** Query parameters accepted by the admin entry list; unknown keys stay ignored. */
 export const contentEntryListQuerySchema = v.object({
-  after: v.optional(opaqueCursorSchema),
+  filters: v.optional(
+    v.pipe(
+      v.string(),
+      v.description(
+        "JSON array, at most 8192 UTF-8 bytes and 16 distinct field conditions. Strict objects carry field and op. All types: isSet/isNotSet with no operands; text/textarea/url: eq or contains with value (1–200 UTF-16 units, literal ASCII-insensitive/non-ASCII-sensitive); boolean: eq with boolean value; number: eq with finite value or range with inclusive optional min/max; select: in with 1–50 distinct configured strings in values (OR); date/datetime: range with inclusive optional from/to (YYYY-MM-DD or explicit-offset ISO instants normalized to UTC). A range needs at least one bound and cannot be inverted. Different fields combine with AND. Missing/null/empty strings are unset; false and zero are present. Only configured draft fields are supported. contains uses ordinary literal LIKE with ESCAPE: Node 200 code units; Cloudflare 48 code units and 50 UTF-8 bytes after escaping percent, underscore and backslash and adding substring wrappers. Text eq uses = COLLATE NOCASE without a pattern budget. Only ASCII case is ignored. Omission or [] means no filters.",
+      ),
+    ),
+  ),
+  after: v.optional(
+    v.pipe(
+      opaqueCursorSchema,
+      v.description(
+        "Opaque continuation, at most 4096 characters, bound to the canonical query, enabled capabilities, sqlite-like-v1 and runtime limits. Custom string sorts use current-draft/revision anchors: a successful boundary-draft save, deletion or replacement expires the anchor. Invalid or stale continuations return value-free 422 at /after, even for an empty next page. Restart without after while retaining the query.",
+      ),
+    ),
+  ),
   limit: v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/u))),
-  q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_ENTRY_SEARCH_LENGTH))),
+  q: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.maxLength(MAX_ENTRY_SEARCH_LENGTH),
+      v.description(
+        "Literal title/slug and configured draft-field substring search. ASCII case-insensitive; Cyrillic/non-ASCII case-sensitive. Node/VPS: 200 UTF-16 code units; Cloudflare: 48 code units and 50 UTF-8 bytes in the escaped LIKE pattern including two wrappers. Runtime limits are advertised by admin/content-models. Excess input returns 422 at /q; contains excess at /filters/<index>/value. Never truncated.",
+      ),
+    ),
+  ),
   sort: v.optional(contentEntrySortSchema),
   status: v.optional(contentEntryStatusSchema),
 });
@@ -809,6 +846,7 @@ export const contentModelSchema = v.pipe(
     kind: v.picklist(["collection", "global", "page"]),
     label: v.optional(v.string()),
     listFields: v.optional(v.array(identifierSchema)),
+    listOptions: v.optional(collectionListOptionsSchema),
     layout: v.optional(v.custom<FormLayout>((value) => isJsonObject(value))),
     path: v.optional(v.string()),
     route: v.optional(v.string()),
@@ -821,6 +859,24 @@ export const contentModelSchema = v.pipe(
   v.check(hasMatchingBlockDefinitions, "Block definitions must match the model's allowed blocks."),
   v.check(hasValidFormLayout, "Layout must place distinct immediate fields in valid groups."),
   v.check(hasValidListFields, "List fields must name distinct fields of a collection."),
+  v.check(
+    (model) =>
+      model.listOptions === undefined ||
+      (model.kind === "collection" &&
+        Object.entries(model.listOptions).every(
+          ([operation, keys]) =>
+            keys === undefined ||
+            keys.every(
+              (key) =>
+                Object.hasOwn(model.fields, key) &&
+                (operation === "searchableFields"
+                  ? ["text", "textarea"]
+                  : ["text", "textarea", "number", "boolean", "select", "date", "datetime", "url"]
+                ).includes(model.fields[key]!.type),
+            ),
+        )),
+    "List options must name supported collection fields.",
+  ),
   v.check(hasGlobalRouting, "A global model carries no path or route."),
   v.check(
     (model) =>
@@ -828,7 +884,10 @@ export const contentModelSchema = v.pipe(
     "Only pages and collections carry seo, and only a global carries seoDefaults.",
   ),
 );
-export const contentModelListSchema = v.strictObject({ items: v.array(contentModelSchema) });
+export const contentModelListSchema = v.strictObject({
+  items: v.array(contentModelSchema),
+  listQueryLimits: v.optional(listQueryLimitsSchema, () => ({ ...NODE_LIST_QUERY_LIMITS })),
+});
 
 const roleSchema = v.picklist(["admin", "editor", "viewer"]);
 const emailSchema = v.pipe(v.string(), v.email(), v.maxLength(320));
@@ -2286,6 +2345,7 @@ export interface ContentModelSource {
   readonly kind: ContentModelKind;
   readonly label?: string;
   readonly listFields?: readonly string[];
+  readonly listOptions?: CollectionListOptionsSource;
   readonly layout?: FormLayout;
   readonly path?: string;
   readonly route?: string;
@@ -2330,6 +2390,15 @@ export function toContentModelDto(
     kind: model.kind,
     ...(model.label === undefined ? {} : { label: model.label }),
     ...(model.listFields === undefined ? {} : { listFields: [...model.listFields] }),
+    ...(model.listOptions === undefined
+      ? {}
+      : {
+          listOptions: Object.fromEntries(
+            Object.entries(model.listOptions)
+              .filter(([, value]) => value !== undefined)
+              .map(([key, value]) => [key, [...value!]]),
+          ),
+        }),
     ...(model.layout === undefined
       ? {}
       : { layout: normalizeFormLayout(model.layout, model.fields)! }),
@@ -2495,3 +2564,25 @@ export function validationError(issues: readonly ContractValidationIssue[]): Cla
 }
 
 export { contentMetadataOpenApi } from "./field-openapi.js";
+
+/** Cache identity for effective query permissions, independent of labels and column order. */
+export function collectionCapabilityIdentity(
+  model: {
+    readonly fields: FieldMetadataMapDto;
+    readonly listOptions?: CollectionListOptionsSource | undefined;
+  },
+  limits: ListQueryLimits = NODE_LIST_QUERY_LIMITS,
+): string {
+  const targets = (keys: readonly string[] | undefined) =>
+    [...(keys ?? [])].sort().map((key) => {
+      const field = model.fields[key]!;
+      return [key, field.type, field.type === "select" ? [...field.options].sort() : null];
+    });
+  return canonicalizeJson([
+    COLLECTION_MATCHING_VERSION,
+    limits,
+    targets(model.listOptions?.sortableFields),
+    targets(model.listOptions?.filterableFields),
+    targets(model.listOptions?.searchableFields),
+  ] as JsonValue);
+}

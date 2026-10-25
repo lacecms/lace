@@ -451,7 +451,10 @@ describe("shared REST contract DTOs", () => {
       route: "/blog/:slug",
       version: 1,
     });
-    expect(v.parse(contentModelListSchema, { items: [modelDto] })).toEqual({ items: [modelDto] });
+    expect(v.parse(contentModelListSchema, { items: [modelDto] })).toEqual({
+      items: [modelDto],
+      listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+    });
     expect(fromIsoTimestamp(toIsoTimestamp(timestamp))).toBe(timestamp);
   });
 
@@ -817,7 +820,10 @@ describe("admin entry list contracts", () => {
     const dto = toContentModelDto(global);
     expect(dto).not.toHaveProperty("path");
     expect(dto).not.toHaveProperty("route");
-    expect(v.parse(contentModelListSchema, { items: [dto] })).toEqual({ items: [dto] });
+    expect(v.parse(contentModelListSchema, { items: [dto] })).toEqual({
+      items: [dto],
+      listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+    });
     for (const invalid of [
       { ...global, path: "/settings" },
       { ...global, route: "/settings/:slug" },
@@ -2197,4 +2203,168 @@ test("internal-link queries, statuses and impact pages are strict and independen
       linkImpact: { receipt: "receipt", acknowledgePublishedLinks: true },
     }),
   ).toBe(true);
+});
+
+describe("configured collection query contracts", async () => {
+  const {
+    collectionFieldFiltersSchema: filters,
+    collectionListOptionsSchema: options,
+    contentEntrySortSchema: sort,
+    toContentModelDto,
+    canonicalCollectionFilters,
+  } = await import("../dist/index.js");
+  test("runtime metadata round-trips separately and defaults legacy responses", async () => {
+    const { contentModelListSchema, listQueryLimitsSchema } = await import("../dist/index.js");
+    expect(v.parse(contentModelListSchema, { items: [] }).listQueryLimits).toEqual({
+      maxSearchLength: 200,
+      maxLikePatternBytes: null,
+    });
+    for (const limits of [
+      { maxSearchLength: 200, maxLikePatternBytes: null },
+      { maxSearchLength: 48, maxLikePatternBytes: 50 },
+    ]) {
+      const wire = { items: [], listQueryLimits: limits };
+      expect(v.parse(contentModelListSchema, JSON.parse(JSON.stringify(wire)))).toEqual(wire);
+    }
+    for (const limits of [
+      {},
+      { maxSearchLength: 48 },
+      { maxSearchLength: 0, maxLikePatternBytes: null },
+      { maxSearchLength: 201, maxLikePatternBytes: null },
+      { maxSearchLength: 1.5, maxLikePatternBytes: 50 },
+      { maxSearchLength: 48, maxLikePatternBytes: 0 },
+      { maxSearchLength: 48, maxLikePatternBytes: 51 },
+      { maxSearchLength: 48, maxLikePatternBytes: "50" },
+      { maxSearchLength: 48, maxLikePatternBytes: 50, override: true },
+    ])
+      expect(v.safeParse(listQueryLimitsSchema, limits).success).toBe(false);
+  });
+  test.each([
+    { field: "text", op: "contains", value: " Москва " },
+    { field: "url", op: "eq", value: "https://example.com" },
+    { field: "flag", op: "eq", value: false },
+    { field: "count", op: "eq", value: 0 },
+    { field: "any", op: "isSet" },
+    { field: "any", op: "isNotSet" },
+    { field: "choice", op: "in", values: ["b", "a"] },
+    { field: "count", op: "range", min: 0 },
+    { field: "count", op: "range", max: 1 },
+    { field: "date", op: "range", from: "2024-02-29", to: "2026-10-25" },
+  ])("round-trips %j", (filter) =>
+    expect(v.parse(filters, JSON.parse(JSON.stringify([filter])))).toEqual([filter]),
+  );
+  test("datetime endpoints compare UTC instants and canonical operands detach", () => {
+    const parsed = v.parse(filters, [
+      { field: "time", op: "range", from: "2026-10-25T12:00:00+02:00", to: "2026-10-25T10:00:00Z" },
+    ]);
+    expect(parsed).toEqual([
+      {
+        field: "time",
+        op: "range",
+        from: "2026-10-25T10:00:00.000Z",
+        to: "2026-10-25T10:00:00.000Z",
+      },
+    ]);
+    const input = [
+      { field: "z", op: "in", values: ["b", "a"] },
+      { field: "a", op: "eq", value: false },
+    ];
+    expect(canonicalCollectionFilters(input)).toEqual([
+      input[1],
+      { ...input[0], values: ["a", "b"] },
+    ]);
+    expect(input[0].values).toEqual(["b", "a"]);
+  });
+  test.each([
+    [{ field: "n", op: "eq", value: Infinity }],
+    [{ field: "t", op: "eq", value: "" }],
+    [{ field: "t", op: "contains", value: "a".repeat(201) }],
+    [{ field: "t", op: "isSet", value: 0 }],
+    [{ field: "n", op: "range" }],
+    [{ field: "n", op: "range", min: 2, max: 1 }],
+    [{ field: "n", op: "range", min: "1" }],
+    [{ field: "n", op: "range", from: "2026-02-30" }],
+    [{ field: "d", op: "range", from: "2026-10-25T10:00:00" }],
+    [{ field: "d", op: "range", from: "2026-10-25T11:00:00Z", to: "2026-10-25T12:00:00+02:00" }],
+    [{ field: "s", op: "in", values: [] }],
+    [{ field: "s", op: "in", values: ["a", "a"] }],
+    [{ field: "s", op: "in", values: Array.from({ length: 51 }, (_, i) => String(i)) }],
+    [
+      { field: "x", op: "isSet" },
+      { field: "x", op: "isNotSet" },
+    ],
+    Array.from({ length: 17 }, (_, i) => ({ field: `f${i}`, op: "isSet" })),
+  ])("rejects invalid filter input %j", (...items) =>
+    expect(v.safeParse(filters, items).success).toBe(false),
+  );
+  test("sort grammar keeps system controls and namespaces collisions", () => {
+    for (const value of ["title", "-updatedAt", "publishedAt", "field:title", "-field:year"])
+      expect(v.safeParse(sort, value).success).toBe(true);
+    for (const value of ["author", "field:nested.child", "field:", "--title"])
+      expect(v.safeParse(sort, value).success).toBe(false);
+  });
+  test("metadata validates configured targets independently of columns and detaches mapping", () => {
+    const source = {
+      kind: "collection",
+      key: "posts",
+      version: 1,
+      blocks: [],
+      fields: { text: field.text(), count: field.number() },
+      listOptions: { searchableFields: ["text"], sortableFields: ["count"] },
+    };
+    const mapped = toContentModelDto(source);
+    expect(v.safeParse(contentModelSchema, mapped).success).toBe(true);
+    expect(mapped.listFields).toBeUndefined();
+    source.listOptions.searchableFields.push("count");
+    expect(mapped.listOptions.searchableFields).toEqual(["text"]);
+    expect(v.safeParse(contentModelSchema, { ...mapped, kind: "page", path: "/" }).success).toBe(
+      false,
+    );
+    expect(
+      v.safeParse(contentModelSchema, { ...mapped, listOptions: { searchableFields: ["count"] } })
+        .success,
+    ).toBe(false);
+    for (const invalid of [
+      {},
+      { unknown: [] },
+      { sortableFields: [] },
+      { sortableFields: ["text", "text"] },
+      { filterableFields: Array.from({ length: 17 }, (_, i) => `f${i}`) },
+    ])
+      expect(v.safeParse(options, invalid).success).toBe(false);
+    expect(v.safeParse(contentModelSchema, { ...mapped, listOptions: undefined }).success).toBe(
+      true,
+    );
+  });
+});
+
+test("effective capability identity ignores labels and columns but includes select choices", async () => {
+  const { collectionCapabilityIdentity } = await import("../dist/index.js");
+  const source = {
+    fields: { category: field.select({ options: ["a", "b"] }), text: field.text() },
+    listOptions: { sortableFields: ["category", "text"], searchableFields: ["text"] },
+    listFields: ["category"],
+    label: "First",
+  };
+  const identity = collectionCapabilityIdentity(source);
+  expect(
+    collectionCapabilityIdentity({
+      ...source,
+      label: "Second",
+      listFields: [],
+      listOptions: { ...source.listOptions, sortableFields: ["text", "category"] },
+    }),
+  ).toBe(identity);
+  expect(
+    collectionCapabilityIdentity({
+      ...source,
+      fields: { ...source.fields, category: field.select({ options: ["a", "b", "c"] }) },
+    }),
+  ).not.toBe(identity);
+  expect(
+    collectionCapabilityIdentity({
+      ...source,
+      listOptions: { ...source.listOptions, searchableFields: [] },
+    }),
+  ).not.toBe(identity);
 });

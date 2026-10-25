@@ -39,3 +39,46 @@ sources before authoring ID targets. Migration 0010 adds indexed projections;
 back up first and roll back with matching artifacts and the matching database.
 The loader reports bounded `linkDiagnostics` once per assembled view and performs
 no per-link network requests. Manual URLs and anchors retain their limitations.
+
+## Configured Admin collection queries
+
+`GET /api/v1/admin/models/:modelKey/entries` retains `q`, `status`, `limit` and
+`after`, and accepts `sort=field:year` or `sort=-field:year` plus one JSON-encoded
+`filters` array. Namespacing distinguishes a user field named `title` from the
+system `sort=title`. Example filter objects:
+
+```json
+[
+  { "field": "summary", "op": "contains", "value": "Launch" },
+  { "field": "year", "op": "range", "min": 2020 },
+  { "field": "featured", "op": "eq", "value": false },
+  { "field": "category", "op": "in", "values": ["news", "events"] },
+  { "field": "date", "op": "range", "from": "2026-01-01", "to": "2026-12-31" },
+  { "field": "updated", "op": "range", "from": "2026-10-25T12:00:00+02:00" },
+  { "field": "source", "op": "isSet" }
+]
+```
+
+Only configured draft targets are accepted. Text equality uses `eq` with a
+string; numeric equality uses a finite number. Existence uses `isSet` or
+`isNotSet` without operands. Limits are 16 distinct fields, 50 select values,
+200 UTF-16 units per text operand and 8192 decoded UTF-8 bytes for `filters`.
+Objects are strict and duplicate query parameters fail validation.
+
+`GET /api/v1/admin/content-models` emits `listOptions` on collections and
+`listQueryLimits` alongside `items`: Node `{maxSearchLength:200,
+maxLikePatternBytes:null}`, Cloudflare `{maxSearchLength:48,
+maxLikePatternBytes:50}`. Legacy metadata without limits defaults to Node.
+LIKE budgets include literal escaping and two wrappers; see
+[collection query rules](../../content-modeling/#collection-list-queries).
+Limits are runtime metadata, outside model hashes.
+
+Invalid requests return value-free `422 VALIDATION_FAILED` issues at `/q`,
+`/sort`, `/filters/<index>/<member>` or `/after`. A cursor is bound to the model,
+canonical query, effective capabilities, LIKE version and runtime policy.
+Reordering filters/select operands is equivalent; changing operands, targets,
+select options or runtime policy expires it. Labels/column order do not. Custom
+string continuations use bounded draft/revision anchors; any successful boundary
+draft save, deletion or replacement expires them, including an empty next page.
+Restart without `after` while retaining the query. Public collection APIs keep
+their independent published ordering and expose none of these field queries.

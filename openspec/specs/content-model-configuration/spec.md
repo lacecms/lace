@@ -115,11 +115,11 @@ inside default values SHALL be preserved even when they are named `label` or
 `description`, `itemLabel` or `placeholder`. A list descriptor's optional `itemLabel` SHALL also be removed only at descriptor positions;
 field keys and default-value keys named `itemLabel` SHALL remain structural.
 The optional `placeholder` SHALL be removed only at descriptor positions, recursively in model fields, block data and block settings; placeholders SHALL remain in projection hashes. Field keys and default-value keys named `placeholder` SHALL remain structural. Configurations omitting placeholders SHALL retain their prior hashes.
-Structural hashes SHALL exclude a collection's `listFields`
+Structural hashes SHALL exclude a collection's `listOptions` and `listFields`
 presentation metadata and the temporary synchronization hints (`renamedFrom`
 on a model or a field, `removedFields`, `removedBlocks`); projection hashes
 SHALL include the complete serializable normalized definition, including
-`listFields` and list `itemLabel`, except those hints. Normalized field definitions SHALL NOT
+`listOptions`, `listFields` and list `itemLabel`, except those hints. Normalized field definitions SHALL NOT
 contain the field `renamedFrom` hint. Each runtime model SHALL carry its
 temporary hints, its detached canonical structure and, when it differs from
 the structural hash, the structural hash produced by the earlier rule that
@@ -127,6 +127,18 @@ removed every `label` and `description` key at any depth. None of these values
 SHALL appear in the public projection or in any hash. Equal semantic
 configurations SHALL produce equal hashes regardless of object insertion
 order.
+
+Each runtime model SHALL additionally carry an internal `publicProjectionHash`,
+computed with the same canonical JSON and SHA-256 model projection inputs as
+`projectionHash`, omitting only the collection's root `listOptions`. Labels,
+`listFields`, SEO mappings, blocks and consumer field/default keys named
+`listOptions` SHALL remain in that input. The new hash SHALL be excluded from
+the serializable projection and all structural/full projection hash inputs.
+Models without nonempty listOptions SHALL have equal public and full projection
+hashes; introducing this internal identity SHALL NOT change existing hashes.
+Runtime listQueryLimits SHALL remain separate from model definitions and all structural/full/public projection hash inputs; deploying the same model on Node or Cloudflare SHALL NOT cause a configuration hash or sync change solely due to search policy. Synchronization SHALL use the persisted public-identity baseline and legacy
+proof rules in collection-query-options to decide public-state/build impact;
+projection-only SHALL NOT by itself imply that all display changes skip builds.
 
 #### Scenario: Ignore display-only changes in structural identity
 - **WHEN** two otherwise identical model definitions differ only in model,
@@ -189,6 +201,24 @@ order.
 #### Scenario: Content keys named placeholder stay structural
 - **WHEN** a field key or a key inside a default value is named placeholder and its structure or value changes
 - **THEN** the canonical structure retains it and the structural hash changes
+
+#### Scenario: Query options change only projection identity
+- **WHEN** sortableFields, filterableFields or searchableFields changes without a content schema change
+- **THEN** projection hashes change, structural hashes and required model version remain unchanged, and synchronization reports a display-only change without content rewrites
+
+
+
+#### Scenario: Query options preserve public identity
+- **WHEN** a collection's only change is to enable, edit, reorder or remove listOptions
+- **THEN** its full projection hash changes for a different normalized projection, its public-projection hash remains equal, and its structural hash and model version stay unchanged
+
+#### Scenario: Public metadata remains part of public identity
+- **WHEN** listOptions changes together with an SEO fallback mapping or model label
+- **THEN** the public-projection hash changes while listOptions remains excluded only at the root collection descriptor
+
+#### Scenario: Internal public identity preserves serialized hash compatibility
+- **WHEN** an old configuration without listOptions is normalized with the new internal identity
+- **THEN** prior structural/full projection hashes and serialized metadata are unchanged, the runtime public hash equals the model full projection hash, and no internal public hash is exposed through REST metadata
 
 ### Requirement: Collection list fields
 The system SHALL let a collection definition declare an optional ordered

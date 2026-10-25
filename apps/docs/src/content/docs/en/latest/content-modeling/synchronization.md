@@ -23,3 +23,26 @@ Increase the model version for structural changes. Populated snapshots have guar
 Sync may update stored published representation when a schema/default/projection change requires it; it advances public state and requests/coalesces a build according to the accepted synchronization rules. That is distinct from an editor publishing a draft. Never run an older engine against incompatible content without a matching restoration or explicit validated conversion.
 
 For Cloudflare, use the generated local `cf:content:sync` while local dev is stopped, or select the remote target and private operator file explicitly. The local command never updates your account. See [Cloudflare deployment](../../deployment/cloudflare/).
+
+## Collection query metadata and public identity
+
+`listOptions` changes are projection-only and do not require a model version
+increase or content rewrites. Deploy migration `0011_public_projection_identity`
+before the new API/admin, then run normal sync. It adds nullable public identity
+and source-hash columns only; it performs no content backfill or query indexing.
+
+Full projection identity includes query settings. Public identity omits only
+root collection `listOptions`, keeping labels, visible columns, SEO and block
+metadata. With a trusted stored public baseline, query-only enable/edit/remove/
+reorder updates metadata without advancing published state or requesting builds.
+Mixed SEO/public changes still request a build. Legacy records initially have
+unknown public identity: an unchanged full hash, or equality with the configured
+public hash on first enablement, proves safe baseline seeding without a build.
+If neither proof holds, sync conservatively rebuilds once and records the pair
+atomically. Repeating unchanged sync then writes nothing.
+
+Roll back code/config together while retaining the additive columns and migration
+history. Older code can leave public identity stale when it updates the full
+hash. Re-upgrade trusts a baseline only when its source equals that full hash;
+otherwise it uses the same legacy proof/fallback. Do not drop columns, rewrite
+snapshots or claim every legacy query update can skip a build.

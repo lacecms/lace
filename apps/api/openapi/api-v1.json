@@ -1583,6 +1583,40 @@
                             },
                             "type": "array"
                           },
+                          "listOptions": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "filterableFields": {
+                                "items": {
+                                  "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+                                  "type": "string"
+                                },
+                                "maxItems": 16,
+                                "minItems": 1,
+                                "type": "array"
+                              },
+                              "searchableFields": {
+                                "items": {
+                                  "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+                                  "type": "string"
+                                },
+                                "maxItems": 16,
+                                "minItems": 1,
+                                "type": "array"
+                              },
+                              "sortableFields": {
+                                "items": {
+                                  "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+                                  "type": "string"
+                                },
+                                "maxItems": 16,
+                                "minItems": 1,
+                                "type": "array"
+                              }
+                            },
+                            "required": [],
+                            "type": "object"
+                          },
                           "path": {
                             "type": "string"
                           },
@@ -1677,6 +1711,36 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "listQueryLimits": {
+                      "additionalProperties": false,
+                      "default": {
+                        "maxLikePatternBytes": null,
+                        "maxSearchLength": 200
+                      },
+                      "properties": {
+                        "maxLikePatternBytes": {
+                          "anyOf": [
+                            {
+                              "description": "Final literal LIKE UTF-8 byte ceiling after escaping backslash, percent and underscore and adding two substring wrappers. Cloudflare 50; Node/VPS null. ASCII case-insensitive, non-ASCII case-sensitive.",
+                              "maximum": 50,
+                              "minimum": 2,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "maxSearchLength": {
+                          "description": "q/contains UTF-16-code-unit ceiling: Node/VPS 200; Cloudflare 48. q is trimmed before validation; contains preserves whitespace. Text eq retains 200.",
+                          "maximum": 200,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["maxSearchLength", "maxLikePatternBytes"],
+                      "type": "object"
                     }
                   },
                   "required": ["items"],
@@ -6928,6 +6992,15 @@
             }
           },
           {
+            "description": "JSON array, at most 8192 UTF-8 bytes and 16 distinct field conditions. Strict objects carry field and op. All types: isSet/isNotSet with no operands; text/textarea/url: eq or contains with value (1–200 UTF-16 units, literal ASCII-insensitive/non-ASCII-sensitive); boolean: eq with boolean value; number: eq with finite value or range with inclusive optional min/max; select: in with 1–50 distinct configured strings in values (OR); date/datetime: range with inclusive optional from/to (YYYY-MM-DD or explicit-offset ISO instants normalized to UTC). A range needs at least one bound and cannot be inverted. Different fields combine with AND. Missing/null/empty strings are unset; false and zero are present. Only configured draft fields are supported. contains uses ordinary literal LIKE with ESCAPE: Node 200 code units; Cloudflare 48 code units and 50 UTF-8 bytes after escaping percent, underscore and backslash and adding substring wrappers. Text eq uses = COLLATE NOCASE without a pattern budget. Only ASCII case is ignored. Omission or [] means no filters.",
+            "in": "query",
+            "name": "filters",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Opaque continuation, at most 4096 characters, bound to the canonical query, enabled capabilities, sqlite-like-v1 and runtime limits. Custom string sorts use current-draft/revision anchors: a successful boundary-draft save, deletion or replacement expires the anchor. Invalid or stale continuations return value-free 422 at /after, even for an empty next page. Restart without after while retaining the query.",
             "in": "query",
             "name": "after",
             "schema": {
@@ -6945,6 +7018,7 @@
             }
           },
           {
+            "description": "Literal title/slug and configured draft-field substring search. ASCII case-insensitive; Cyrillic/non-ASCII case-sensitive. Node/VPS: 200 UTF-16 code units; Cloudflare: 48 code units and 50 UTF-8 bytes in the escaped LIKE pattern including two wrappers. Runtime limits are advertised by admin/content-models. Excess input returns 422 at /q; contains excess at /filters/<index>/value. Never truncated.",
             "in": "query",
             "name": "q",
             "schema": {
@@ -6956,7 +7030,22 @@
             "in": "query",
             "name": "sort",
             "schema": {
-              "enum": ["-publishedAt", "-title", "-updatedAt", "publishedAt", "title", "updatedAt"]
+              "anyOf": [
+                {
+                  "enum": [
+                    "-publishedAt",
+                    "-title",
+                    "-updatedAt",
+                    "publishedAt",
+                    "title",
+                    "updatedAt"
+                  ]
+                },
+                {
+                  "pattern": "^-?field:[A-Za-z][A-Za-z0-9]*$",
+                  "type": "string"
+                }
+              ]
             }
           },
           {

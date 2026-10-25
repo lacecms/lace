@@ -1,3 +1,5 @@
+export * from "./collection-list.js";
+export * from "./literal-like.js";
 export const packageName = "@lacecms/db";
 
 export const appliedMigrationQuery =
@@ -16,6 +18,7 @@ export const checkedInMigrations = Object.freeze([
   { createdAt: 1791756612246, name: "0008_content_snapshot_seo.sql" },
   { createdAt: 1791794161634, name: "0009_content_block_envelope.sql" },
   { createdAt: 1792774203883, name: "0010_internal_url_links.sql" },
+  { createdAt: 1792919369108, name: "0011_public_projection_identity.sql" },
 ]);
 
 export interface AppliedMigration {

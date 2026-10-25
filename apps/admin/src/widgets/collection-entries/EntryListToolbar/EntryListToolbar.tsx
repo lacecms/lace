@@ -1,7 +1,12 @@
-import type { ContentEntryStatusDto, ContentEntryStatusTotalsDto } from "@lacecms/contracts";
-import { MAX_ENTRY_SEARCH_LENGTH } from "@lacecms/contracts";
+import type {
+  ContentEntryStatusDto,
+  ContentEntryStatusTotalsDto,
+  ListQueryLimits,
+} from "@lacecms/contracts";
+import { NODE_LIST_QUERY_LIMITS, fitsListQueryLimits } from "@lacecms/contracts";
 import { Search, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { listQueryBudgetHint } from "../../../entities/content/index.js";
 import { cn } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
@@ -26,7 +31,13 @@ export function EntryListToolbar({
   search,
   status,
   totals,
+  limits = NODE_LIST_QUERY_LIMITS,
+  searchableLabels = [],
+  hasFieldFilters = false,
 }: {
+  readonly limits?: ListQueryLimits;
+  readonly searchableLabels?: readonly string[];
+  readonly hasFieldFilters?: boolean;
   readonly onClear: () => void;
   readonly onSearchChange: (search: string) => void;
   readonly onStatusChange: (status: ContentEntryStatusDto | undefined) => void;
@@ -38,10 +49,15 @@ export function EntryListToolbar({
   const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latest = useRef(onSearchChange);
   latest.current = onSearchChange;
+  const policy = useRef(limits);
+  policy.current = limits;
+  const hintId = useId();
+  const invalid = !fitsListQueryLimits(draft.trim(), limits);
 
   // Adopt searches applied from outside (clear filters, history navigation)
   // without trimming what the user is still typing.
   useEffect(() => {
+    clearTimeout(pending.current);
     setDraft((current) => (current.trim() === search ? current : search));
   }, [search]);
   useEffect(() => () => clearTimeout(pending.current), []);
@@ -49,7 +65,9 @@ export function EntryListToolbar({
   function changeDraft(next: string) {
     setDraft(next);
     clearTimeout(pending.current);
-    pending.current = setTimeout(() => latest.current(next), SEARCH_DEBOUNCE_MS);
+    pending.current = setTimeout(() => {
+      if (fitsListQueryLimits(next.trim(), policy.current)) latest.current(next);
+    }, SEARCH_DEBOUNCE_MS);
   }
 
   return (
@@ -59,7 +77,7 @@ export function EntryListToolbar({
         onSubmit={(event) => {
           event.preventDefault();
           clearTimeout(pending.current);
-          onSearchChange(draft);
+          if (!invalid) onSearchChange(draft);
         }}
         role="search"
       >
@@ -69,13 +87,23 @@ export function EntryListToolbar({
         />
         <Input
           aria-label="Search entries"
+          aria-describedby={hintId}
+          aria-invalid={invalid}
           className="pl-8"
-          maxLength={MAX_ENTRY_SEARCH_LENGTH}
+          maxLength={limits.maxSearchLength}
           onChange={(event) => changeDraft(event.currentTarget.value)}
-          placeholder="Search title or slug"
+          placeholder={searchableLabels.length ? "Search entries" : "Search title or slug"}
           type="search"
           value={draft}
         />
+        <p
+          id={hintId}
+          className={`mt-1 mb-0 text-xs ${invalid ? "text-destructive" : "text-muted-foreground"}`}
+          role={invalid ? "alert" : undefined}
+        >
+          {searchableLabels.length ? `Search title, slug and ${searchableLabels.join(", ")}. ` : ""}
+          {listQueryBudgetHint(limits)}
+        </p>
       </form>
       <div aria-label="Filter by status" className="flex flex-wrap gap-1" role="group">
         {statusOptions.map((option) => {
@@ -93,14 +121,14 @@ export function EntryListToolbar({
               {totals === undefined ? undefined : (
                 <>
                   {" "}
-                  <span className="text-xs tabular-nums opacity-80">{totals[option.total]}</span>
+                  <span className="text-xs tabular-nums">{totals[option.total]}</span>
                 </>
               )}
             </Button>
           );
         })}
       </div>
-      {search.length > 0 || status !== undefined ? (
+      {search.length > 0 || status !== undefined || hasFieldFilters ? (
         <Button onClick={onClear} size="sm" variant="ghost">
           <X aria-hidden="true" />
           Clear filters

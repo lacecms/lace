@@ -108,12 +108,31 @@ export interface PageModelInput<
   readonly path: string;
 }
 
+/** Keys whose descriptor type supports the given operation. */
+export type ListQueryFieldKey<Fields extends FieldMap, Types extends FieldDefinition["type"]> = {
+  [Key in keyof Fields & string]: Extract<Fields[Key]["type"], Types> extends never ? never : Key;
+}[keyof Fields & string];
+
+/** Independent admin query capabilities; visibility grants no capability. */
+export interface CollectionListOptions<Fields extends FieldMap = FieldMap> {
+  readonly sortableFields?: readonly ListQueryFieldKey<
+    Fields,
+    "text" | "textarea" | "url" | "select" | "number" | "boolean" | "date" | "datetime"
+  >[];
+  readonly filterableFields?: readonly ListQueryFieldKey<
+    Fields,
+    "text" | "textarea" | "url" | "select" | "number" | "boolean" | "date" | "datetime"
+  >[];
+  readonly searchableFields?: readonly ListQueryFieldKey<Fields, "text" | "textarea">[];
+}
+
 /** Input accepted by `defineCollection`. */
 export interface CollectionModelInput<
   Fields extends FieldMap = FieldMap,
 > extends RoutableModelInput<Fields> {
   /** Ordered scalar field keys shown as columns in admin entry lists. */
   readonly listFields?: readonly (keyof Fields & string)[];
+  readonly listOptions?: CollectionListOptions<Fields>;
   readonly route: string;
 }
 
@@ -185,6 +204,7 @@ export type CollectionModelDefinition<Fields extends FieldMap = FieldMap> =
     NormalizedRoutableModel & {
       readonly kind: "collection";
       readonly listFields?: readonly (keyof Fields & string)[];
+      readonly listOptions?: CollectionListOptions;
       readonly route: string;
     };
 
@@ -210,6 +230,8 @@ export type ContentModelDefinition<Fields extends FieldMap = FieldMap> =
 export type ContentModelStructure = JsonObject;
 
 interface NormalizedModelHashes {
+  /** Internal public identity, excluding only collection query options. */
+  readonly publicProjectionHash: string;
   /**
    * Structural hash produced by the pre-baseline algorithm that removed every
    * `label` and `description` key at any depth. Present on runtime models only
@@ -695,6 +717,8 @@ export function definePage<const Fields extends FieldMap = FieldMap>(
   input: PageModelInput<Fields>,
 ): PageModelDefinition<Fields> {
   const common = normalizeCommonModel(input);
+  if (Object.hasOwn(input, "listOptions"))
+    fail(`page "${input.key}" must not declare listOptions.`);
   const definition: PageModelDefinition<Fields> = {
     ...common,
     kind: "page",
@@ -709,7 +733,7 @@ export function defineGlobal<const Fields extends FieldMap = FieldMap>(
   input: GlobalModelInput<Fields>,
 ): GlobalModelDefinition<Fields> {
   const common = normalizeCommonModel(input);
-  for (const option of ["path", "route", "listFields", "seo", "removedSeo"]) {
+  for (const option of ["path", "route", "listFields", "listOptions", "seo", "removedSeo"]) {
     if (Object.hasOwn(input, option)) {
       fail(`global "${input.key}" must not declare ${option}.`);
     }
@@ -753,15 +777,47 @@ function normalizeListFields(value: unknown, fields: FieldMap): readonly string[
   return normalized;
 }
 
+function normalizeListOptions(value: unknown, fields: FieldMap): CollectionListOptions | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    !isPlainObject(value)
+  ) {
+    fail("listOptions must be a plain object.");
+  }
+  const keys = ["sortableFields", "filterableFields", "searchableFields"] as const;
+  assertOnlyKeys(value, keys, "listOptions");
+  const result: Record<string, readonly string[]> = {};
+  for (const operation of keys) {
+    const targets = value[operation];
+    if (targets === undefined) continue;
+    if (!Array.isArray(targets) || targets.length > 16)
+      fail(`listOptions.${operation} must contain at most 16 field keys.`);
+    const normalized = normalizeListFields(targets, fields);
+    if (
+      operation === "searchableFields" &&
+      normalized.some((key) => !SEO_TEXT_FIELD_TYPES.has(fields[key]!.type))
+    ) {
+      fail("listOptions.searchableFields requires text or textarea fields.");
+    }
+    if (normalized.length) result[operation] = normalized;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
 /** Defines a detached collection model with inferred field values. */
 export function defineCollection<const Fields extends FieldMap = FieldMap>(
   input: CollectionModelInput<Fields>,
 ): CollectionModelDefinition<Fields> {
   const common = normalizeCommonModel(input);
   const listFields = normalizeListFields(input.listFields, common.fields);
+  const listOptions = normalizeListOptions(input.listOptions, common.fields);
   const definition: CollectionModelDefinition<Fields> = {
     ...common,
     kind: "collection",
+    ...(listOptions === undefined ? {} : { listOptions }),
     ...(listFields.length === 0
       ? {}
       : { listFields: listFields as readonly (keyof Fields & string)[] }),
@@ -906,6 +962,7 @@ function omitListFields(model: JsonValue): JsonValue {
   }
   const {
     listFields: _listFields,
+    listOptions: _listOptions,
     layout: _layout,
     seo,
     seoDefaults: _seoDefaults,
@@ -1027,6 +1084,7 @@ function modelForHash(model: ContentModelDefinition, registry: BlockRegistry): J
   const {
     legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
+    publicProjectionHash: _publicProjectionHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
     removedSeo: _removedSeo,
@@ -1046,6 +1104,7 @@ function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
   const {
     legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
+    publicProjectionHash: _publicProjectionHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
     removedSeo: _removedSeo,
@@ -1061,6 +1120,7 @@ function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
 function publicModel(model: NormalizedContentModel): NormalizedContentModel {
   const {
     legacyStructureHash: _legacyStructureHash,
+    publicProjectionHash: _publicProjectionHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
     removedSeo: _removedSeo,
@@ -1101,12 +1161,14 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   const normalizedModels = await Promise.all(
     models.map(async (model) => {
       const projection = modelForHash(model, registry);
+      const { listOptions: _listOptions, ...publicIdentity } = projection as JsonObject;
       const structure = contentModelStructure(model, registry);
       const structureHash = await sha256CanonicalJson(structure);
       const legacyStructureHash = await sha256CanonicalJson(legacyStructureForHash(projection));
       const normalized: NormalizedContentModel = {
         ...model,
         ...(legacyStructureHash === structureHash ? {} : { legacyStructureHash }),
+        publicProjectionHash: await sha256CanonicalJson(publicIdentity),
         projectionHash: await sha256CanonicalJson(projection),
         structure,
         structureHash,

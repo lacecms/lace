@@ -114,3 +114,47 @@ defineGlobal({
   fields: { title: field.text() },
   layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["missing"] }] },
 });
+
+const queryFields = {
+  text: field.text(),
+  area: field.textarea(),
+  count: field.number(),
+  flag: field.boolean(),
+  category: field.select({ options: ["one"] }),
+  date: field.date(),
+  time: field.datetime(),
+  link: field.url(),
+  nested: field.group({ fields: { child: field.text() } }),
+};
+defineCollection({
+  key: "queries",
+  route: "/queries/:slug",
+  version: 1,
+  fields: queryFields,
+  listOptions: {
+    sortableFields: ["text", "area", "count", "flag", "category", "date", "time", "link"],
+    searchableFields: ["text", "area"],
+    filterableFields: ["flag"],
+  },
+});
+defineCollection({
+  key: "bad-query",
+  route: "/bad/:slug",
+  version: 1,
+  fields: queryFields,
+  listOptions: {
+    // @ts-expect-error numbers are not searchable
+    searchableFields: ["count"],
+    // @ts-expect-error composite targets cannot sort
+    sortableFields: ["nested"],
+    // @ts-expect-error nested paths are not top-level keys
+    filterableFields: ["nested.child"],
+  },
+});
+definePage({
+  key: "bad-page-query",
+  path: "/bad",
+  version: 1,
+  // @ts-expect-error queries are collection-only
+  listOptions: {},
+});

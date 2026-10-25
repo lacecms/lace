@@ -1,3 +1,5 @@
+export * from "./collection-queries.js";
+import type { ResolvedCollectionQuery, ListQueryLimits } from "./collection-queries.js";
 import type {
   InternalLinkReference,
   PublicInternalLinkReference,
@@ -109,7 +111,9 @@ export type ContentEntrySort =
   | "-updatedAt"
   | "publishedAt"
   | "title"
-  | "updatedAt";
+  | "updatedAt"
+  | `field:${string}`
+  | `-field:${string}`;
 
 export const CONTENT_ENTRY_SORTS: readonly ContentEntrySort[] = Object.freeze([
   "-publishedAt",
@@ -180,6 +184,8 @@ export interface LoadContentEntryInput {
 }
 
 export interface ListContentEntriesInput {
+  readonly listQueryLimits?: ListQueryLimits;
+  readonly query?: ResolvedCollectionQuery;
   readonly after?: OpaqueCursor;
   readonly limit: number;
   /** Draft field keys whose scalar values are copied into each summary. */

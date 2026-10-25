@@ -1,3 +1,6 @@
+import { collectionListPlan } from "@lacecms/db";
+import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import type { CollectionListRow } from "@lacecms/db";
 import {
   actorDisplayName,
   configurationSyncSnapshotRewrites,
@@ -100,10 +103,6 @@ import {
   decodeBuildExportCursor,
   seoJson,
   ENTRY_COLUMNS_SQL,
-  ENTRY_SEARCH_SQL,
-  ENTRY_SORT_SQL,
-  ENTRY_SOURCE_SQL,
-  ENTRY_STATUS_SQL,
   MEDIA_BY_ID_SQL,
   MEDIA_CATALOG_SQL,
   MEDIA_METADATA_UPDATE_SQL,
@@ -141,15 +140,9 @@ import {
   assertTimestamp,
   chunks,
   decodeCursor,
-  decodeEntryCursor,
   decodeMediaCursor,
   encodeCursor,
   encodeSortCursor,
-  entryCursorKind,
-  entryStatus,
-  entrySummary,
-  entryTotals,
-  entryTotalsSql,
   failure,
   copySnapshotBlocksSql,
   copySnapshotReferencesSql,
@@ -209,7 +202,6 @@ import type {
   SyncSnapshotRow,
   StoredModelStateRow,
   StoredSnapshot,
-  SummaryRow,
   TotalsRow,
 } from "@lacecms/db";
 import {
@@ -443,7 +435,7 @@ export class NodeContentRepository
             const baseline = configurationSyncBaseline(configuration);
             this.connection
               .prepare(
-                "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, public_projection_hash, public_projection_source_hash, structure_json, structure_json_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
               )
               .run(
                 operation.model.key,
@@ -451,6 +443,8 @@ export class NodeContentRepository
                 configuration.label ?? configuration.key,
                 operation.model.version,
                 operation.model.structureHash,
+                operation.model.projectionHash,
+                configuration.publicProjectionHash ?? null,
                 operation.model.projectionHash,
                 baseline.json,
                 baseline.hash,
@@ -517,7 +511,7 @@ export class NodeContentRepository
           const baseline = configurationSyncBaseline(configuration);
           const updated = this.connection
             .prepare(
-              "update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ?",
+              "update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, public_projection_hash = ?, public_projection_source_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ?",
             )
             .run(
               operation.model.key,
@@ -525,6 +519,8 @@ export class NodeContentRepository
               configuration.label ?? configuration.key,
               operation.model.version,
               operation.model.structureHash,
+              operation.model.projectionHash,
+              configuration.publicProjectionHash ?? null,
               operation.model.projectionHash,
               baseline.json,
               baseline.hash,
@@ -1335,61 +1331,18 @@ export class NodeContentRepository
   }
 
   public async list(input: ListContentEntriesInput): Promise<ContentEntryListPage> {
-    const limit = assertPageSize(input.limit);
-    const descending = input.sort.startsWith("-");
-    const sort = ENTRY_SORT_SQL[descending ? input.sort.slice(1) : input.sort];
-    if (sort === undefined) failure("Entry sort is unsupported.");
-    if (input.status !== undefined) entryStatus(input.status);
-    const kind = entryCursorKind(input);
-    const after =
-      input.after === undefined ? undefined : decodeEntryCursor(input.after, kind, input.sort);
-    const term = input.q === undefined ? undefined : foldAscii(input.q);
-    const searchBindings = term === undefined ? [] : [term, term];
-    const searchClause = term === undefined ? "" : `and ${ENTRY_SEARCH_SQL}`;
-    const comparison = descending ? "<" : ">";
-    const direction = descending ? "desc" : "asc";
+    const plan = await collectionListPlan({ ...input, listQueryLimits: NODE_LIST_QUERY_LIMITS });
     const rows = this.connection
-      .prepare(
-        `select e.id, e.model_key, e.published_snapshot_id, e.updated_at,
-                d.revision as draft_revision, d.title, d.slug, d.fields_json, d.updated_by,
-                u.name as updated_by_name, p.created_at as published_at,
-                ${ENTRY_STATUS_SQL} as status, ${sort.value} as sort_value
-           from ${ENTRY_SOURCE_SQL}
-           left join user u on u.id = d.updated_by
-          where e.model_key = ? ${searchClause}
-            ${input.status === undefined ? "" : `and ${ENTRY_STATUS_SQL} = ?`}
-            ${
-              after === undefined
-                ? ""
-                : `and (${sort.order} ${comparison} ? or (${sort.order} = ? and e.id ${comparison} ?))`
-            }
-          order by ${sort.order} ${direction}, e.id ${direction} limit ?`,
-      )
+      .prepare(plan.items.sql)
       .all(
-        input.modelKey,
-        ...searchBindings,
-        ...(input.status === undefined ? [] : [input.status]),
-        ...(after === undefined ? [] : [after.value, after.value, after.id]),
-        limit + 1,
-      ) as readonly SummaryRow[];
-    const pageRows = rows.slice(0, limit);
-    const items = pageRows.map((row) => entrySummary(row, input.listFields));
-    const last = pageRows.at(-1);
-    return Object.freeze({
-      items: Object.freeze(items),
-      ...(rows.length > limit && last !== undefined
-        ? { nextCursor: encodeSortCursor(kind, last.sort_value, last.id) }
-        : {}),
-      totals: this.entryTotals(input.modelKey, term),
-    });
-  }
-
-  private entryTotals(modelKey: string, term: string | undefined) {
-    return entryTotals(
-      this.connection
-        .prepare(entryTotalsSql(term !== undefined))
-        .get(modelKey, ...(term === undefined ? [] : [term, term])) as TotalsRow,
-    );
+        Object.fromEntries(plan.items.params.map((value, index) => [String(index + 1), value])),
+      ) as readonly CollectionListRow[];
+    const totals = this.connection
+      .prepare(plan.totals.sql)
+      .get(
+        Object.fromEntries(plan.totals.params.map((value, index) => [String(index + 1), value])),
+      ) as TotalsRow;
+    return plan.page(rows, totals);
   }
 
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {

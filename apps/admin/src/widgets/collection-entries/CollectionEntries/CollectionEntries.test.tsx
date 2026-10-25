@@ -10,7 +10,11 @@ import {
   stubClient as client,
   staticSessionSource,
 } from "../../../app/testing/index.js";
-import { AdminClientError, type EntryListQuery } from "../../../shared/api/index.js";
+import {
+  AdminClientError,
+  type AdminClient,
+  type EntryListQuery,
+} from "../../../shared/api/index.js";
 import { requestFocus } from "../../../shared/lib/index.js";
 import { collectionFocusTarget } from "./CollectionEntries.js";
 
@@ -34,7 +38,10 @@ const postsModel = {
   route: "/posts/:slug",
   version: 1,
 };
-const listModels = async () => ({ items: [models.items[0]!, postsModel] });
+const listModels = async () => ({
+  listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+  items: [models.items[0]!, postsModel],
+});
 
 const changedEntry = {
   ...entry,
@@ -425,4 +432,89 @@ test("Open in the row menu opens the editor", async () => {
   );
   await openRowAction(user, "First post", "Open");
   await waitFor(() => expect(router.state.location.pathname).toBe("/content/posts/entry-1"));
+});
+
+test("metadata precedes URL recovery and hidden sorts/valid peers survive", async () => {
+  let deliver: (value: import("@lacecms/contracts").ContentModelListDto) => void = () => {};
+  const metadata = new Promise<import("@lacecms/contracts").ContentModelListDto>((resolve) => {
+    deliver = resolve;
+  });
+  const model = {
+    ...postsModel,
+    listOptions: { sortableFields: ["category"], filterableFields: ["featured"] },
+  };
+  const listEntries = vi.fn(async () => entryList([entry]));
+  const filters = JSON.stringify([{ field: "featured", op: "eq", value: false }]);
+  const router = renderRoute(
+    `/content/posts?sort=field%3Acategory&q=${encodeURIComponent("я".repeat(25))}&filters=${encodeURIComponent(filters)}`,
+    viewer,
+    client({ listEntries, listModels: () => metadata }),
+  );
+  expect(listCalls(listEntries)).toHaveLength(0);
+  deliver({ items: [model], listQueryLimits: { maxSearchLength: 48, maxLikePatternBytes: 50 } });
+  await screen.findByRole("table", { name: "Posts entries" });
+  await waitFor(() => expect(router.state.location.search.q).toBeUndefined());
+  expect(
+    listCalls(listEntries).every(
+      ([, , query]) => query?.q === undefined && query?.sort === "field:category",
+    ),
+  ).toBe(true);
+  expect(listCalls(listEntries).at(-1)?.[2]?.filters).toEqual([
+    { field: "featured", op: "eq", value: false },
+  ]);
+  expect(screen.getByRole("combobox", { name: "Sort entries" })).toHaveValue("field:category");
+});
+
+test("expired continuation retains rows and restarts with all query intent, replacing pages", async () => {
+  const user = userEvent.setup();
+  const model = {
+    ...postsModel,
+    listOptions: { sortableFields: ["category"], filterableFields: ["featured"] },
+  };
+  let restarted = false;
+  const listEntries = vi.fn(async (_key: string, cursor?: string, query?: EntryListQuery) => {
+    if (query?.limit !== undefined) return entryList([entry]);
+    if (cursor)
+      throw new AdminClientError({
+        status: 422,
+        code: "VALIDATION_FAILED",
+        message: "Invalid cursor",
+        issues: [{ path: "/after", code: "invalid_value", message: "Invalid" }],
+      });
+    return {
+      ...entryList([restarted ? { ...changedEntry, title: "Refreshed" } : entry]),
+      nextCursor: restarted ? undefined : "expired",
+    };
+  });
+  const filters = JSON.stringify([{ field: "featured", op: "eq", value: false }]);
+  const router = renderRoute(
+    `/content/posts?q=launch&status=draft&sort=field%3Acategory&filters=${encodeURIComponent(filters)}`,
+    viewer,
+    client({
+      listEntries: listEntries as AdminClient["listEntries"],
+      listModels: async () => ({
+        items: [model],
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+      }),
+    }),
+  );
+  await screen.findByRole("table", { name: "Posts entries" });
+  await user.click(screen.getByRole("button", { name: "Load more entries" }));
+  const restart = await screen.findByRole("button", { name: "Restart list" });
+  expect(screen.getByRole("link", { name: "First post" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Load more entries" })).not.toBeInTheDocument();
+  restarted = true;
+  restart.focus();
+  await user.keyboard("{Enter}");
+  await screen.findByRole("link", { name: "Refreshed" });
+  expect(screen.queryByRole("link", { name: "First post" })).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("List restarted");
+  expect(listCalls(listEntries).filter(([, cursor]) => cursor === "expired")).toHaveLength(1);
+  expect(listCalls(listEntries).at(-1)?.[2]).toMatchObject({
+    q: "launch",
+    status: "draft",
+    sort: "field:category",
+    filters: [{ field: "featured", op: "eq", value: false }],
+  });
+  expect(router.state.location.search).not.toHaveProperty("after");
 });

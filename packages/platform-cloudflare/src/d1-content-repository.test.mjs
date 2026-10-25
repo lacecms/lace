@@ -662,3 +662,38 @@ test("CE10 high fan-out evidence keeps impact and picker indexed with bounded ro
     }),
   );
 });
+
+test("direct D1 list reads enforce trusted LIKE policy before preparing SQL", async () => {
+  let statements = 0;
+  const repository = new D1ContentRepository(
+    {
+      prepare() {
+        statements++;
+        throw new Error("unexpected SQL");
+      },
+    },
+    resolveModel,
+  );
+  const input = {
+    modelKey: "posts",
+    listFields: [],
+    limit: 5,
+    sort: "title",
+    listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+  };
+  for (const value of ["a".repeat(49), "я".repeat(24) + "a", "%".repeat(24) + "a"]) {
+    await expect(repository.list({ ...input, q: value })).rejects.toMatchObject({ pointer: "/q" });
+    await expect(
+      repository.list({
+        ...input,
+        query: {
+          filters: [{ field: "text", op: "contains", value }],
+          filterableFields: [{ key: "text", type: "text" }],
+          sortableFields: [],
+          searchableFields: [],
+        },
+      }),
+    ).rejects.toMatchObject({ pointer: "/filters/0/value" });
+  }
+  expect(statements).toBe(0);
+});

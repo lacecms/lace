@@ -91,9 +91,11 @@ export function countingD1(database) {
       stats.maxParameters = Math.max(stats.maxParameters, values.length);
       return wrap(statement.bind(...values), values.length);
     },
-    first: (...args) => {
+    first: async (column) => {
       stats.queries += 1;
-      return statement.first(...args);
+      const result = await measure(statement.all());
+      const row = result.results[0];
+      return column === undefined ? (row ?? null) : (row?.[column] ?? null);
     },
     raw: (...args) => {
       stats.queries += 1;

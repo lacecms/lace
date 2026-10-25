@@ -1,4 +1,5 @@
 import { engineVersion } from "./release-version.js";
+import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
   ContentUseCases,
   ContentLinkUseCases,
@@ -487,6 +488,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   });
   const readiness = new NodeSqliteReadiness(database.connection);
   const content = new ContentUseCases({
+    listQueryLimits: NODE_LIST_QUERY_LIMITS,
     clock,
     config: input.config.runtime,
     content: repository,

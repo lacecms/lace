@@ -1,3 +1,6 @@
+import { collectionListPlan } from "@lacecms/db";
+import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import type { CollectionListRow } from "@lacecms/db";
 import {
   actorDisplayName,
   configurationSyncSnapshotRewrites,
@@ -102,10 +105,6 @@ import {
   buildExportPageSql,
   decodeBuildExportCursor,
   ENTRY_COLUMNS_SQL,
-  ENTRY_SEARCH_SQL,
-  ENTRY_SORT_SQL,
-  ENTRY_SOURCE_SQL,
-  ENTRY_STATUS_SQL,
   MEDIA_BY_ID_SQL,
   MEDIA_METADATA_UPDATE_SQL,
   MEDIA_PUBLISHED_REFERENCE_SQL,
@@ -145,15 +144,9 @@ import {
   assertTimestamp,
   chunks,
   decodeCursor,
-  decodeEntryCursor,
   decodeMediaCursor,
   encodeCursor,
   encodeSortCursor,
-  entryCursorKind,
-  entryStatus,
-  entrySummary,
-  entryTotals,
-  entryTotalsSql,
   failure,
   copySnapshotBlocksSql,
   copySnapshotReferencesSql,
@@ -217,7 +210,6 @@ import type {
   SyncSnapshotRow,
   StoredModelStateRow,
   StoredSnapshot,
-  SummaryRow,
   TotalsRow,
 } from "@lacecms/db";
 import {
@@ -557,52 +549,13 @@ export class D1ContentRepository
   }
 
   public async list(input: ListContentEntriesInput): Promise<ContentEntryListPage> {
-    const limit = assertPageSize(input.limit);
-    const descending = input.sort.startsWith("-");
-    const sort = ENTRY_SORT_SQL[descending ? input.sort.slice(1) : input.sort];
-    if (sort === undefined) failure("Entry sort is unsupported.");
-    if (input.status !== undefined) entryStatus(input.status);
-    const kind = entryCursorKind(input);
-    const after =
-      input.after === undefined ? undefined : decodeEntryCursor(input.after, kind, input.sort);
-    const term = input.q === undefined ? undefined : foldAscii(input.q);
-    const comparison = descending ? "<" : ">";
-    const direction = descending ? "desc" : "asc";
-    const rows = await this.all<SummaryRow>(
-      `select e.id, e.model_key, e.published_snapshot_id, e.updated_at,
-              d.revision as draft_revision, d.title, d.slug, d.fields_json, d.updated_by,
-              u.name as updated_by_name, p.created_at as published_at,
-              ${ENTRY_STATUS_SQL} as status, ${sort.value} as sort_value
-         from ${ENTRY_SOURCE_SQL}
-         left join user u on u.id = d.updated_by
-        where e.model_key = ? ${term === undefined ? "" : `and ${ENTRY_SEARCH_SQL}`}
-          ${input.status === undefined ? "" : `and ${ENTRY_STATUS_SQL} = ?`}
-          ${
-            after === undefined
-              ? ""
-              : `and (${sort.order} ${comparison} ? or (${sort.order} = ? and e.id ${comparison} ?))`
-          }
-        order by ${sort.order} ${direction}, e.id ${direction} limit ?`,
-      input.modelKey,
-      ...(term === undefined ? [] : [term, term]),
-      ...(input.status === undefined ? [] : [input.status]),
-      ...(after === undefined ? [] : [after.value, after.value, after.id]),
-      limit + 1,
-    );
-    const pageRows = rows.slice(0, limit);
-    const last = pageRows.at(-1);
-    const totals = await this.first<TotalsRow>(
-      entryTotalsSql(term !== undefined),
-      input.modelKey,
-      ...(term === undefined ? [] : [term, term]),
-    );
-    return Object.freeze({
-      items: Object.freeze(pageRows.map((row) => entrySummary(row, input.listFields))),
-      ...(rows.length > limit && last !== undefined
-        ? { nextCursor: encodeSortCursor(kind, last.sort_value, last.id) }
-        : {}),
-      totals: entryTotals(totals!),
+    const plan = await collectionListPlan({
+      ...input,
+      listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
     });
+    const rows = await this.all<CollectionListRow>(plan.items.sql, ...plan.items.params);
+    const totals = await this.first<TotalsRow>(plan.totals.sql, ...plan.totals.params);
+    return plan.page(rows, totals!);
   }
 
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {
@@ -1353,12 +1306,14 @@ export class D1ContentRepository
         batch.checkpoint("sync.model.create");
         const baseline = configurationSyncBaseline(configuration);
         batch.add(
-          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, structure_json, structure_json_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
+          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, public_projection_hash, public_projection_source_hash, structure_json, structure_json_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
           operation.model.key,
           operation.model.kind,
           configuration.label ?? configuration.key,
           operation.model.version,
           operation.model.structureHash,
+          operation.model.projectionHash,
+          configuration.publicProjectionHash ?? null,
           operation.model.projectionHash,
           baseline.json,
           baseline.hash,
@@ -1422,12 +1377,14 @@ export class D1ContentRepository
       batch.checkpoint(`sync.model.${operation.action}`);
       const baseline = configurationSyncBaseline(configuration);
       batch.add(
-        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
+        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, public_projection_hash = ?, public_projection_source_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
         operation.model.key,
         operation.model.kind,
         configuration.label ?? configuration.key,
         operation.model.version,
         operation.model.structureHash,
+        operation.model.projectionHash,
+        configuration.publicProjectionHash ?? null,
         operation.model.projectionHash,
         baseline.json,
         baseline.hash,
@@ -2210,6 +2167,8 @@ export class D1ContentRepository
       number,
       number,
       string,
+      string | null,
+      string | null,
     ])[];
     const baselines = new Map(
       (
@@ -2230,12 +2189,16 @@ export class D1ContentRepository
         published,
         hasBaseline,
         fingerprint,
+        publicProjection,
+        publicSource,
       ]) => ({
         draft_snapshot_count: drafts,
         entry_count: entries,
         key,
         kind,
         projection_hash: projection,
+        public_projection_hash: publicProjection,
+        public_projection_source_hash: publicSource,
         published_snapshot_count: published,
         snapshot_fingerprint: fingerprint,
         structure_json: hasBaseline === 1 ? (baselines.get(key) ?? null) : null,

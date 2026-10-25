@@ -23,6 +23,8 @@ export const contentModels = sqliteTable(
     configVersion: integer("config_version").notNull(),
     structureHash: text("structure_hash").notNull(),
     projectionHash: text("projection_hash").notNull(),
+    publicProjectionHash: text("public_projection_hash"),
+    publicProjectionSourceHash: text("public_projection_source_hash"),
     /** Canonical structure of the last successful sync; valid only for `structureJsonHash`. */
     structureJson: text("structure_json"),
     structureJsonHash: text("structure_json_hash"),

@@ -4,6 +4,7 @@ import {
   AccountUseCases,
   BuildExportCursorError,
   ContentUseCases,
+  CollectionQueryValidationError,
   ContentLinkUseCases,
   ContentValidationError,
   RateLimitExceededError,
@@ -54,6 +55,7 @@ import {
   adminContentEntrySchema,
   classifyError,
   contentEntryListQuerySchema,
+  MAX_COLLECTION_FILTER_BYTES,
   contentEntryListSchema,
   contentModelListSchema,
   fieldMetadataSchema,
@@ -212,6 +214,7 @@ type ServerContentModel =
   | (ServerModelBase & {
       readonly kind: "collection";
       readonly listFields?: readonly string[];
+      readonly listOptions?: Parameters<typeof toContentModelDto>[0]["listOptions"];
       readonly route: string;
       readonly seo?: ServerModelSeo;
     })
@@ -558,6 +561,9 @@ function modelDto(config: ServerConfig, model: ServerContentModel) {
     ...(model.kind === "collection" && model.listFields !== undefined
       ? { listFields: model.listFields }
       : {}),
+    ...(model.kind === "collection" && model.listOptions !== undefined
+      ? { listOptions: model.listOptions }
+      : {}),
     ...(model.kind === "page" ? { path: model.path } : {}),
     ...(model.kind === "collection" ? { route: model.route } : {}),
     ...(model.kind !== "global" && model.seo !== undefined ? { seo: model.seo } : {}),
@@ -717,19 +723,27 @@ export function createLaceApp(input: LaceAppInput): Hono {
   const app = new Hono();
 
   app.onError((error) =>
-    error instanceof RequestValidationError
-      ? validationResponse(error.issues)
-      : error instanceof ContentValidationError
-        ? validationResponse(contentIssues(error))
-        : error instanceof AuthorizationError
-          ? errorResponse(transportError("AUTHORIZATION_DENIED"))
-          : error instanceof AccountError
-            ? errorResponse(transportError(error.code))
-            : error instanceof RateLimitExceededError
-              ? errorResponse(transportError("RATE_LIMITED"), {
-                  "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
-                })
-              : errorResponse(classifyError(error)),
+    error instanceof CollectionQueryValidationError
+      ? validationResponse([
+          {
+            code: "invalid_value",
+            message: "The submitted value is invalid.",
+            path: error.pointer,
+          },
+        ])
+      : error instanceof RequestValidationError
+        ? validationResponse(error.issues)
+        : error instanceof ContentValidationError
+          ? validationResponse(contentIssues(error))
+          : error instanceof AuthorizationError
+            ? errorResponse(transportError("AUTHORIZATION_DENIED"))
+            : error instanceof AccountError
+              ? errorResponse(transportError(error.code))
+              : error instanceof RateLimitExceededError
+                ? errorResponse(transportError("RATE_LIMITED"), {
+                    "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
+                  })
+                : errorResponse(classifyError(error)),
   );
 
   app.use(async (context, next) => {
@@ -1881,6 +1895,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       await actor(context);
       return response(contentModelListSchema, {
         items: input.config.content.map((model) => modelDto(input.config, model)),
+        listQueryLimits: input.content.listQueryLimits,
       });
     },
   );
@@ -1898,13 +1913,39 @@ export function createLaceApp(input: LaceAppInput): Hono {
       tags: ["admin"],
     }),
     validator("param", modelKeyParams, validationHook),
+    async (context, next) => {
+      const seen = new Set<string>();
+      for (const key of new URL(context.req.url).searchParams.keys()) {
+        if (seen.has(key))
+          invalid(
+            "Duplicate query parameter.",
+            `/${key.replace(/~/gu, "~0").replace(/\//gu, "~1")}`,
+          );
+        seen.add(key);
+        if (["searchableFields", "sortableFields", "filterableFields", "listOptions"].includes(key))
+          invalid("Query targets come from configuration.", "/filters");
+      }
+      const raw = new URL(context.req.url).searchParams.get("filters");
+      if (raw !== null && new TextEncoder().encode(raw).byteLength > MAX_COLLECTION_FILTER_BYTES)
+        invalid("Filters exceed the byte limit.", "/filters");
+      await next();
+    },
     validator("query", contentEntryListQuerySchema, validationHook),
     async (context) => {
       const modelKey = context.req.param("modelKey");
       if (contentModel(input.config, modelKey) === undefined) return notFound();
       const query = context.req.valid("query") as v.InferOutput<typeof contentEntryListQuerySchema>;
+      let filters: unknown;
+      if (query.filters !== undefined) {
+        try {
+          filters = JSON.parse(query.filters);
+        } catch {
+          invalid("Filters must be a JSON array.", "/filters");
+        }
+      }
       const page = await input.content.list({
         actor: await actor(context),
+        ...(filters === undefined ? {} : { filters }),
         modelKey,
         ...pagination(context.req.raw),
         ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),

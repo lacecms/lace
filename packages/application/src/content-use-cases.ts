@@ -1,3 +1,9 @@
+import {
+  resolveCollectionQuery,
+  validateListQueryBudget,
+  NODE_LIST_QUERY_LIMITS,
+} from "./collection-queries.js";
+import type { ListQueryLimits } from "./collection-queries.js";
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import {
   collectFieldMedia,
@@ -55,7 +61,6 @@ import {
   CONTENT_ENTRY_SORTS,
   CONTENT_ENTRY_STATUSES,
   DEFAULT_CONTENT_ENTRY_SORT,
-  MAX_CONTENT_ENTRY_SEARCH_LENGTH,
   publicationIdempotencyKey,
   publicationRequestFingerprint,
 } from "./index.js";
@@ -79,6 +84,7 @@ import type {
 import { internalLinkIssuePath } from "./internal-links.js";
 
 export interface ContentUseCaseDependencies {
+  readonly listQueryLimits?: ListQueryLimits;
   readonly clock: Clock;
   readonly config: RuntimeConfigProjection;
   readonly content: ContentEntryReadPort &
@@ -108,6 +114,7 @@ export interface CreateContentEntryUseCaseInput extends CompleteDraftInput {
 }
 
 export interface ListContentEntriesUseCaseInput {
+  readonly filters?: unknown;
   readonly actor: Actor;
   readonly after?: OpaqueCursor;
   readonly limit: number;
@@ -254,7 +261,12 @@ function commandEntry(result: ContentCommandResult): ContentEntry {
  * persistence adapters remain outside this service.
  */
 export class ContentUseCases {
-  public constructor(private readonly dependencies: ContentUseCaseDependencies) {}
+  public readonly listQueryLimits: ListQueryLimits;
+  public constructor(private readonly dependencies: ContentUseCaseDependencies) {
+    this.listQueryLimits = Object.freeze({
+      ...(dependencies.listQueryLimits ?? NODE_LIST_QUERY_LIMITS),
+    });
+  }
 
   public async create(input: CreateContentEntryUseCaseInput): Promise<ContentEntry> {
     requirePermission(input.actor, "content:write");
@@ -293,25 +305,27 @@ export class ContentUseCases {
     requirePermission(input.actor, "content:read");
     const model = this.model(input.modelKey);
     const q = input.q?.trim();
-    if (q !== undefined && q.length > MAX_CONTENT_ENTRY_SEARCH_LENGTH) {
-      throw new DomainError(
-        "CONTENT_INVALID_STATE",
-        `Search terms must not exceed ${MAX_CONTENT_ENTRY_SEARCH_LENGTH} characters.`,
-      );
-    }
     if (
       input.status !== undefined &&
       !CONTENT_ENTRY_STATUSES.includes(input.status as ContentEntryStatus)
     ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry status filter is unsupported.");
     }
-    if (input.sort !== undefined && !CONTENT_ENTRY_SORTS.includes(input.sort as ContentEntrySort)) {
+    if (
+      input.sort !== undefined &&
+      !CONTENT_ENTRY_SORTS.includes(input.sort as ContentEntrySort) &&
+      !/^-?field:[A-Za-z][A-Za-z0-9]*$/u.test(input.sort)
+    ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry sort is unsupported.");
     }
+    const query = resolveCollectionQuery(model, input.sort, input.filters, this.listQueryLimits);
+    validateListQueryBudget(q, [], this.listQueryLimits);
     return detached(
       await this.dependencies.content.list({
+        ...(query === undefined ? {} : { query }),
         ...(input.after === undefined ? {} : { after: input.after }),
         limit: input.limit,
+        listQueryLimits: this.listQueryLimits,
         listFields: model.kind === "collection" ? [...(model.listFields ?? [])] : [],
         modelKey: contentModelKey(model.key),
         ...(q === undefined || q.length === 0 ? {} : { q }),

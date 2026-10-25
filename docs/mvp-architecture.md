@@ -963,15 +963,44 @@ entry lists show as columns. Rich-text and media fields are rejected: the first
 is a document and the second an opaque identifier. `listFields` is presentation
 metadata like labels.
 
+Collections may independently opt into `listOptions.sortableFields`,
+`filterableFields` and `searchableFields` (at most 16 distinct top-level keys
+per operation). Sort/filter targets use those same scalar types; search targets
+are text/textarea only. Empty options disappear. Pages/globals reject these
+options. Hidden fields may be queried without appearing in `listFields`.
+`listOptions` is projection-only: synchronization requires no version bump,
+content rewrite, published-state advance or build when the public projection is
+proven unchanged by the identity rules below. Legacy unknown identities use a
+conservative one-time rebuild.
+
 Every model definition has an integer `version` starting at `1`. Any structural
 change to fields, allowed blocks, path, or route must increment it; display-only
-label, description, and `listFields` changes do not. Sync compares two canonical
+label, description, `listFields` and `listOptions` changes do not. Sync compares two canonical
 hashes: `structure_hash` excludes display metadata and `projection_hash`
 includes the complete serializable projection. Display metadata means the
 `label` and `description` properties of model, field, and block definitions;
 field keys and default values are structural even when named `label` or
 `description`. A changed structure hash without a version
 bump fails; a projection-only change is safe and does not require a bump.
+
+CQ1 adds a third, internal identity: `publicProjectionHash` hashes the same
+per-model projection as `projectionHash`, omitting only the collection's root
+`listOptions`. It preserves labels, `listFields`, SEO mappings and all other
+existing projection inputs; consumer field/default keys named `listOptions`
+remain included. The new hash is runtime/synchronization metadata, excluded
+from serialized configuration and all existing hash inputs. Structural and full
+projection hashes retain their prior values for configurations without options.
+
+Synchronization persists this hash with the full projection hash it describes.
+Only a valid pair whose source equals the stored `projection_hash` is a trusted
+public baseline. Query-only edits update model metadata atomically without
+public-state/build work; public changes, including SEO changes combined with
+query edits, retain the existing atomic version advance and build coalescing.
+A missing or stale baseline may be seeded without a build if the stored full
+hash equals either the configured full hash or the configured public hash
+(the latter proves equality to a pre-listOptions projection). Otherwise sync
+rebuilds conservatively and records the new baseline. Baseline-only recording
+is idempotent, and both new fields participate in stale-plan guards.
 
 Renames are never guessed. `definePage`, `defineCollection` and `defineGlobal`
 accept a temporary `renamedFrom` key. Sync performs the key migration only when the previous key
@@ -1083,6 +1112,8 @@ content_models
 ├── config_version      INTEGER NOT NULL
 ├── structure_hash      TEXT NOT NULL
 ├── projection_hash     TEXT NOT NULL
+├── public_projection_hash        TEXT NULL
+├── public_projection_source_hash TEXT NULL
 ├── structure_json      TEXT NULL
 ├── structure_json_hash TEXT NULL
 ├── created_at          INTEGER NOT NULL
@@ -1094,6 +1125,15 @@ successful sync and `structure_json_hash` the structural hash it was written
 for. The baseline is valid only while `structure_json_hash` equals
 `structure_hash`; it is synchronization metadata, never an authoritative copy
 of the configuration.
+
+`public_projection_hash` records the model's public-projection identity and
+`public_projection_source_hash` the full `projection_hash` it was computed for.
+Both are nullable for legacy records. A mismatched source invalidates the public
+baseline, including after an older binary changes the full projection during a
+rollback. An additive migration adds these columns on Node and D1 without
+rewriting content, backfilling snapshots or adding query indexes. Sync populates
+both fields in its existing guarded final mutation; migration itself changes no
+published-state version or build work.
 
 `key` is a stable programmatic identifier. Labels may change freely. Renaming a key is a migration, not a display-name edit.
 
@@ -1889,6 +1929,41 @@ storage; a malformed header is ignored. Authorization, eligibility and not-found
 are decided first, so unpublished, deleted or invisible media never receives
 `304`. Consequently a browser may keep media for up to one day after it stops
 being published; unbounded or `immutable` caching is deliberately not used.
+
+### Admin collection queries
+
+Authenticated list reads support system sorts plus one configured `field:<key>`
+or `-field:<key>` sort and JSON `filters`. Filters combine across fields with
+AND; select values combine with OR. Type-specific equality, literal substring,
+inclusive ranges and existence operations apply to current drafts. Missing, null
+and empty strings are unset and sort last in either direction; zero and false
+are present. Datetimes compare UTC instants. Per-status totals apply search and
+field predicates before paging, independently of selected status. Input is
+bounded to 16 filters, 50 select values and 8192 UTF-8 bytes of filters JSON.
+Node/VPS keeps the 200 UTF-16-code-unit q/contains limit. Cloudflare uses a
+48-code-unit upper bound plus a 50-UTF-8-byte limit on the final LIKE pattern,
+including the two surrounding percent signs and escaping of %, _ and backslash.
+The byte bound is authoritative for mixed scripts (for example, at most 24
+ordinary Cyrillic letters fit). Text equality keeps its 200-code-unit limit
+because it uses = COLLATE NOCASE rather than a LIKE pattern. All text matching
+ignores ASCII case only; Cyrillic and other non-ASCII letters are case-sensitive.
+The platform supplies this policy to application and persistence, and the admin
+content-model response exposes listQueryLimits {maxSearchLength,
+maxLikePatternBytes}, with Node values 200/null and Cloudflare 48/50. Limits are
+runtime metadata, not model configuration or content hash inputs. Invalid q or
+contains patterns fail before SQL at /q or /filters/<index>/value without
+truncation; the admin applies the same advertised policy after metadata loads. Invalid direct requests return value-free 422
+issues with precise pointers. Cursors bind canonical query operands and effective
+query capabilities; labels and column order do not invalidate them. Custom
+field cursors remain within the existing 4,096-character transport bound. Custom
+string sorts (text, textarea, select and URL) encode a bounded entry/current-draft
+identity and revision anchor plus missing rank, rather than the string value.
+Continuation resolves the full typed boundary by indexed model/entry lookup and
+rejects deleted, replaced or revision-changed anchors with a value-free
+`422 VALIDATION_FAILED` issue at `/after`. Boundary lookup and use share a read
+snapshot or equivalent atomic validity guard, including empty pages. Numeric,
+boolean, date and datetime boundaries remain embedded and typed. Public and
+system paging behavior and collection/export/SDK ordering remain unchanged.
 
 ### Admin endpoints
 
@@ -2791,6 +2866,22 @@ The architecture responds to those constraints by:
 - retaining only draft and current published snapshots;
 - using focused indexes rather than indexing every field.
 
+Collection queries execute model-scoped, prepared JSON predicates before LIMIT
+on both SQLite and D1, with fixed statement counts and no application JSON scan.
+Literal search/contains use bound ordinary LIKE patterns with ESCAPE, and text
+equality uses = COLLATE NOCASE. ASCII case is ignored; Cyrillic case is retained
+and Е/е/Ё/ё are distinct. Search policy is runtime-specific as in §12; matching
+results and boundaries agree across runtimes for queries accepted by both.
+No GLOB case-pair compiler, segmented/recursive matcher, ICU, FTS or persisted
+search projection is introduced. String sorting retains SQLite NOCASE ordering. Configured queries may scan model drafts; the
+unconfigured indexed default path remains intact. CQ1 adds only the nullable
+public-projection identity columns described in §9.1; queries add no persisted
+field index or content backfill. Node and actual local D1 performance evidence must cover
+1,000 entries and near-limit fields; backend limits must fail visibly. String-sort
+continuations may add at most one constant indexed anchor lookup, independent of
+page size. No per-entry reads or full JSON loads are allowed to resolve anchors;
+query counts must distinguish first pages from anchored continuations.
+
 JSON values are stored as SQLite `TEXT` and validated before persistence. Fields that later require indexed filtering may be promoted to generated columns or a dedicated index table through a future migration.
 
 Additive columns use a plain `ALTER TABLE … ADD` on both runtimes, as
@@ -2917,6 +3008,22 @@ Primary routes:
 The content-model response drives navigation and field forms. Pages and globals open their singleton editor directly; collections open a paginated entry list. The model route of a page or global (`/content/<key>`) shows only a pointer back to the content overview.
 
 The shell groups its sidebar into Pages, Collections (with entry totals from the entry-list API), Site (globals, linked to their singleton editors), Library (Media and Builds, all roles), and Admin (Users with `users:manage`, Settings with `settings:manage`), omitting empty groups, shows the signed-in user's display name and role in a user menu, and locates each screen with breadcrumbs; a page or global editor is located by Content and the model label only. The content overview has Pages, Collections and Site sections; a global's card shows its label, description, status and last edit but no path. Below the medium breakpoint the same navigation opens in a sheet. Shell surfaces never show internal entry or user IDs. Collection lists are TanStack Table views over the entry-list API: title with slug, derived status, the model's `listFields` columns, publication date, and relative last edit with the editor's display name; search, status filter, and sort live in the route's URL search parameters, while the opaque cursor pages with "Load more" and never enters the URL. Writers get a labeled "Actions for {title}" menu in each row with Open, Duplicate and Delete. Delete appears for draft-only entries, and for published ones only with `content:publish`. Creating or duplicating an entry opens it in the editor.
+
+Collection query controls are metadata-driven: a Sort selector includes hidden
+sortable fields, enabled column headers announce direction, and visible column
+filter affordances open the shared Filters editor. Type-appropriate controls
+validate drafts locally; invalid ranges issue no query. Active conditions are
+removable, and clear-all clears search/status/filters while retaining sort.
+Search hints name additional configured fields and explain the active search budget. Invalid search/contains drafts keep the last valid results and show a local error instead of issuing an over-budget query. URL shape parsing precedes
+metadata-aware resolution; stale conditions are dropped independently, valid
+peers survive, and reload/Back/Forward restore canonical queries. Any effective
+query change resets paging. Viewer controls and loading/error/no-match recovery
+remain available. If a continuation is rejected at `/after`, the list keeps its
+loaded entries and offers a keyboard-accessible Restart list action. Activating
+it drops cached pages/cursors and loads the first page with the current valid
+search, status, sort and field filters; it never repeatedly retries the stale
+cursor or appends restarted results to old pages. Recovery is available to every
+read role, and no-match/reset behavior still clears predicates as documented.
 
 The sign-in route is a centered card outside the shell: a focused email field, a password field with a show/hide toggle, errors inside the card, and a "Forgot password?" link. The accept-invite, forgot-password, and reset-password screens are the same kind of public card. Accept and reset read the token from the URL fragment, remove it from the address bar, and keep it only in component state, never in the query string, router state, query cache, or browser storage. Forgot-password shows the same confirmation whether or not the address has an account. `/account` is available to every signed-in user from the user menu: it changes the display name, changes the password (signing out other sessions by default), and lists sessions with a "This device" marker and confirmed Sign out actions. Users lists accounts with a "You" marker, role and status badges, and no raw IDs, and below them the pending invitations with Resend and a confirmed Revoke. Inviting a user, changing a role, disabling or enabling an account, sending a password reset, and signing a user out everywhere each happen in a dialog; no admin screen collects another person's password. When an invitation or reset email is not sent, its dialog shows the link once, like a new build token. A failure, including the final-administrator rule, stays in its dialog, and success is announced with a toast. The signed-in administrator is not offered Disable, Send password reset, or Sign out everywhere for their own account and is warned before demoting it. Settings shows API readiness, configured models, active build tokens, and email delivery (provider and sender, with a rate-limited Send test email action addressed only to the signed-in administrator) as status cards over a token table with relative times and a confirmed Revoke. A new token's plaintext is shown once in its creation dialog and lives only in that dialog's state. Any unmatched admin path is a protected catch-all route that renders "Page not found" inside the shell, so anonymous visitors sign in first. Every retryable read failure offers the shared "Try again" action.
 
