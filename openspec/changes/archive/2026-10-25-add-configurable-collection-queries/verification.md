@@ -412,3 +412,18 @@ format check, direct openapi:check and full strict OpenSpec validation (81 items
 passed. The full root pnpm test run is used in addition to the focused suites;
 PR CI is rechecked on the fix commit rather than relying on the original narrow
 repository checks.
+
+The follow-up GitHub Actions run 40240443188 for cb2b99f passed the complete Test
+and Build steps. It then exposed stale generated-project snapshot hashes for
+the intentionally updated docs/lace-operations.md. Reviewed all six current
+variants: the generated tree, template version, every other digest and manifest
+entry are unchanged; only that guide's digest and managed manifest hash differ.
+Regenerated current snapshots with the existing acceptance command and verified
+them again without --update. Historical template snapshots were not changed.
+
+Local pnpm acceptance:starter and pnpm acceptance:existing-site both passed on
+packed packages after the snapshot correction; the additional docs locale/fixed-
+version build passed as well. All 212 standalone root tests passed. The local
+all-package run encounters the existing Docker safety refusal in four CLI tests
+because this machine has no Docker daemon; that protection was not bypassed.
+The complete Test step was instead confirmed on the GitHub runner above.
