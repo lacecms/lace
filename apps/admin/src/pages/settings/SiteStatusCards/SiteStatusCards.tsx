@@ -7,6 +7,7 @@ import { Button } from "../../../shared/ui/Button/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { cardClass } from "../../../shared/ui/layout/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
+import { McpSettingsCard } from "../McpSettingsCard/index.js";
 import { EmailDeliveryCard } from "../EmailDeliveryCard/index.js";
 
 function StatusCard({
@@ -132,6 +133,7 @@ export function SiteStatusCards({
           recipient={recipient}
         />
       </div>
+      <McpSettingsCard mcp={status?.mcp} loading={status === undefined && error === null} />
     </section>
   );
 }

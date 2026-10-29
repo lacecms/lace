@@ -107,6 +107,7 @@ import {
 test("operational status requires a bounded engine release", () => {
   const status = {
     configuredModels: 2,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
     email: { provider: "none" },
     engineVersion: "0.1.0-alpha.4",
     ready: false,
@@ -119,7 +120,12 @@ test("operational status requires a bounded engine release", () => {
 });
 
 test("operational status reports email delivery without provider settings", () => {
-  const status = { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true };
+  const status = {
+    configuredModels: 0,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
+    engineVersion: "0.1.0-alpha.4",
+    ready: true,
+  };
   const parse = (email) => v.safeParse(adminSettingsStatusSchema, { ...status, email }).success;
   expect(parse({ provider: "none" })).toBe(true);
   expect(parse({ from: "Lace <cms@example.com>", provider: "smtp" })).toBe(true);
@@ -2367,4 +2373,171 @@ test("effective capability identity ignores labels and columns but includes sele
       listOptions: { ...source.listOptions, searchableFields: [] },
     }),
   ).not.toBe(identity);
+});
+
+test("MCP envelopes reuse draft validation, typed filters and explicit revision without actor injection", async () => {
+  const {
+    mcpToolArgumentSchemas,
+    toContractValidationIssues,
+    toContentBlockInput,
+    contentBlockSchema,
+  } = await import("../dist/index.js");
+  const draft = { title: "Draft", fields: { nested: { values: [1, false, null] } }, blocks: [] };
+  expect(v.parse(mcpToolArgumentSchemas.create_entry, { ...draft, modelKey: "posts" })).toEqual({
+    ...draft,
+    modelKey: "posts",
+  });
+  expect(
+    v.safeParse(mcpToolArgumentSchemas.save_draft, { ...draft, entryId: "entry" }).success,
+  ).toBe(false);
+  expect(
+    v.parse(mcpToolArgumentSchemas.save_draft, { ...draft, entryId: "entry", expectedRevision: 3 })
+      .expectedRevision,
+  ).toBe(3);
+  for (const key of ["actor", "authority", "role", "userId"])
+    expect(
+      v.safeParse(mcpToolArgumentSchemas.create_entry, {
+        ...draft,
+        modelKey: "posts",
+        [key]: { id: "admin" },
+      }).success,
+    ).toBe(false);
+  const query = {
+    modelKey: "posts",
+    filters: [{ field: "title", op: "contains", value: "plain" }],
+    limit: 50,
+  };
+  expect(v.parse(mcpToolArgumentSchemas.list_entries, query)).toEqual(query);
+  for (const filters of [
+    "[]",
+    [{ field: "title", op: "contains", value: 1 }],
+    [{ field: "title", op: "isSet", extra: true }],
+  ])
+    expect(v.safeParse(mcpToolArgumentSchemas.list_entries, { ...query, filters }).success).toBe(
+      false,
+    );
+  const bad = v.safeParse(mcpToolArgumentSchemas.create_entry, {
+    ...draft,
+    modelKey: "posts",
+    blocks: [
+      {
+        key: "block",
+        position: 1000,
+        type: "quote",
+        schemaVersion: 1,
+        data: {},
+        secret: "do-not-repeat",
+      },
+    ],
+  });
+  expect(bad.success).toBe(false);
+  const issues = toContractValidationIssues(bad.issues);
+  expect(issues[0].path).toBe("/blocks/0/secret");
+  expect(JSON.stringify(issues)).not.toContain("do-not-repeat");
+  const block = v.parse(contentBlockSchema, {
+    key: "block",
+    position: 1000,
+    type: "quote",
+    schemaVersion: 1,
+    data: {},
+  });
+  expect(toContentBlockInput(block)).toMatchObject({ key: "block", hidden: false, settings: {} });
+});
+
+test("shared content projectors preserve metadata, admin attribution and list timestamps", async () => {
+  const {
+    toAdminEntryProjectionDto,
+    toContentModelDiscoveryDto,
+    toContentEntryListDto,
+    NODE_LIST_QUERY_LIMITS,
+  } = await import("../dist/index.js");
+  const projection = { entry, updatedBy: { id: actor.id, displayName: "Editor" }, seo: false };
+  expect(toAdminEntryProjectionDto(projection)).toEqual(
+    toAdminContentEntryDto(entry, projection.updatedBy),
+  );
+  const model = {
+    kind: "collection",
+    key: "posts",
+    route: "/posts/:slug",
+    blocks: [],
+    version: 1,
+    fields: { nested: field.group({ fields: { items: field.list({ item: field.text() }) } }) },
+  };
+  const models = toContentModelDiscoveryDto({
+    items: [model],
+    listQueryLimits: NODE_LIST_QUERY_LIMITS,
+  });
+  expect(models.items).toEqual([toContentModelDto(model)]);
+  expect(v.safeParse(contentModelListSchema, models).success).toBe(true);
+  const page = toContentEntryListDto({
+    items: [
+      {
+        draftRevision: 1,
+        id: "entry",
+        modelKey: "posts",
+        listValues: { flag: false },
+        status: "draft",
+        title: "Title",
+        updatedAt: unixMilliseconds(1),
+        updatedBy: { id: "user", displayName: "Editor" },
+      },
+    ],
+    totals: { all: 1, draft: 1, changed: 0, published: 0 },
+  });
+  expect(page.items[0].updatedAt).toBe("1970-01-01T00:00:00.001Z");
+  expect(v.safeParse(contentEntryListSchema, page).success).toBe(true);
+});
+
+test("content and query errors share value-free stable codes and escaped pointers", async () => {
+  const { classifyError, contractIssuePointer } = await import("../dist/index.js");
+  const { CollectionQueryValidationError } = await import("@lacecms/domain");
+  const { ContentValidationError } = await import("@lacecms/content");
+  const query = classifyError(new CollectionQueryValidationError("/filters/0/value"));
+  expect(query).toMatchObject({
+    status: 422,
+    body: {
+      error: { code: "VALIDATION_FAILED", details: { issues: [{ path: "/filters/0/value" }] } },
+    },
+  });
+  expect(contractIssuePointer([{ key: "a/b~c" }, 0])).toBe("/a~1b~0c/0");
+  const error = new ContentValidationError([
+    { code: "invalid_value", message: "Invalid field.", path: ["fields", "title"] },
+  ]);
+  expect(classifyError(error)).toMatchObject({
+    status: 422,
+    body: { error: { code: "VALIDATION_FAILED" } },
+  });
+});
+
+test("MCP settings summary is strict and uses a canonical HTTP endpoint", () => {
+  const status = {
+    configuredModels: 0,
+    email: { provider: "none" },
+    engineVersion: "test",
+    ready: true,
+  };
+  const parse = (mcp) => v.safeParse(adminSettingsStatusSchema, { ...status, mcp }).success;
+  for (const enabled of [true, false]) {
+    expect(parse({ enabled, endpoint: "http://127.0.0.1:54321/mcp" })).toBe(true);
+    expect(parse({ enabled, endpoint: "https://cms.example.com/mcp" })).toBe(true);
+  }
+  for (const endpoint of [
+    "/mcp",
+    "file:///mcp",
+    "https://user:pass@cms.test/mcp",
+    "https://cms.test/mcp?token=secret",
+    "https://cms.test/mcp#x",
+    "https://cms.test/mcp/",
+    "https://cms.test/api",
+    "invalid",
+  ]) {
+    expect(parse({ enabled: true, endpoint })).toBe(false);
+  }
+  for (const mcp of [
+    undefined,
+    { enabled: "true", endpoint: "https://cms.test/mcp" },
+    { enabled: true },
+    { enabled: true, endpoint: "https://cms.test/mcp", token: "secret" },
+  ])
+    expect(parse(mcp)).toBe(false);
 });

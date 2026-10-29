@@ -576,3 +576,48 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
     await value.close();
   }
 });
+
+test("development gateway keeps MCP discovery and child paths local without frontend upgrades", async () => {
+  const paths = [
+    "/mcp",
+    "/mcp/unknown",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/oauth-protected-resource/mcp/unknown",
+    "/.well-known/oauth-authorization-server/api/auth",
+    "/api/auth/.well-known/oauth-authorization-server",
+    "/api/auth/oauth2/register",
+  ];
+  const calls = [];
+  const settings = {
+    adminDevOrigin: new URL("http://127.0.0.1:1"),
+    siteDevOrigin: new URL("http://127.0.0.1:1"),
+  };
+  const gateway = createNodeDevelopmentGateway(async (request) => {
+    calls.push(request);
+    return new Response("local-disabled", { status: 404 });
+  }, settings);
+  for (const path of paths) {
+    const request = new Request(`http://127.0.0.1:54321${path}`, {
+      headers: { authorization: "Bearer disposable" },
+    });
+    const response = await gateway(request);
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("local-disabled");
+    expect(calls.at(-1)).toBe(request);
+    let destroyed = false;
+    proxyNodeDevelopmentUpgrade(
+      { url: path },
+      {
+        destroy() {
+          destroyed = true;
+        },
+        end() {
+          throw new Error("Must not proxy a local upgrade");
+        },
+      },
+      Buffer.alloc(0),
+      settings,
+    );
+    expect(destroyed).toBe(true);
+  }
+});

@@ -1,5 +1,6 @@
 import type { NormalizedContentModel } from "@lacecms/config";
-import { DomainError } from "@lacecms/domain";
+import { DomainError, CollectionQueryValidationError } from "@lacecms/domain";
+export { CollectionQueryValidationError } from "@lacecms/domain";
 import { fitsListQueryLimits, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { ListQueryLimits } from "@lacecms/content";
 export { NODE_LIST_QUERY_LIMITS, CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
@@ -49,11 +50,6 @@ export interface ResolvedCollectionQuery {
   readonly sortableFields: readonly CollectionQueryField[];
   readonly filterableFields: readonly CollectionQueryField[];
   readonly searchableFields: readonly CollectionQueryField[];
-}
-export class CollectionQueryValidationError extends DomainError {
-  public constructor(public readonly pointer: string) {
-    super("CONTENT_INVALID_STATE", "Collection query is invalid.");
-  }
 }
 const invalid = (pointer: string): never => {
   throw new CollectionQueryValidationError(pointer);

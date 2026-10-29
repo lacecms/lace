@@ -36,6 +36,7 @@
     "@lacecms/content": "workspace:*",
     "@lacecms/db": "workspace:*",
     "@lacecms/domain": "workspace:*",
+    "@lacecms/mcp": "workspace:*",
     "@lacecms/server": "workspace:*",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",

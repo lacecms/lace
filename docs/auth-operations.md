@@ -147,3 +147,9 @@ No email, password, session credential, build token, or content enters tour stor
 ## Local operations evidence
 
 See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+
+## Optional MCP delegation
+
+See [OAuth content assistant](mcp.md) for opt-in deployment, consent, credential
+boundaries, refresh/replay and account-wide invalidation. Ordinary browser
+sign-out leaves independent grants intact; disable/reset/revoke-others do not.

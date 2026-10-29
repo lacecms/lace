@@ -1,5 +1,32 @@
 # Lace backlog
 
+- **MCP3 Claude Code and Gemini CLI setup (implemented, archived 2026-10-29):**
+  `add-claude-and-gemini-mcp-guides` extends the implemented MCP2 Settings card
+  with client-specific OAuth setup and sign-in examples, preserving selected
+  permissions. Depends on MCP2; no provider or backend changes.
+  Archived at `openspec/changes/archive/2026-10-29-add-claude-and-gemini-mcp-guides`;
+  the capability delta is synchronized.
+
+- **MCP2 MCP Settings and local activation (implemented, archived 2026-10-29):**
+  `add-mcp-settings-and-local-enablement` verifies local Compose flag forwarding
+  and adds an always-visible, read-only MCP configuration section to Admin
+  Settings with canonical endpoint and permission-aware client setup examples.
+  Follows MCP1; preserves OAuth, tool authority, and unrelated roadmap ordering.
+  Archived at `openspec/changes/archive/2026-10-29-add-mcp-settings-and-local-enablement`;
+  all three capability deltas are synchronized.
+
+- **MCP1 Optional OAuth content assistant (implemented, archived 2026-10-29):**
+  `add-oauth-mcp-server` adds opt-in stateless MCP in the existing Node/Worker
+  deployment, Better Auth account delegation, explicit consent and revocable
+  connections. REST and MCP share portable content operations and contract
+  projections. Only model/list/get/create/save-draft are allowed; publication,
+  unpublication and all content deletion remain forbidden. Media and broader
+  administration are deferred. Provider/SDK compatibility and SQLite/D1 atomicity
+  gates pass; all 26 tasks are complete and seven capabilities are synchronized.
+  Archived at `openspec/changes/archive/2026-10-29-add-oauth-mcp-server`; verification
+  records the pre-existing release template identity blocker separately. Other
+  selections below retain their scope and ordering.
+
 - **DOC1 Public documentation (selected):** private Astro/Starlight application,
   English latest (alpha.7), locale/version foundation, changed-input Pages
   publication from main, product README and contributor guide. Delivered through

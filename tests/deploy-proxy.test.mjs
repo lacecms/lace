@@ -82,3 +82,23 @@ test("the starter Pages header rules match the proxy asset cache", async () => {
   const rules = await readFile("packages/create-lace/templates/site/public/_headers", "utf8");
   expect(rules).toBe(`/_astro/*\n  Cache-Control: ${proxyValue.join(" ").replaceAll('"', "")}\n`);
 });
+
+test("MCP and canonical discovery reach the API without buffering or credential query logging", async () => {
+  const source = await readFile(repositoryConfig, "utf8");
+  const { locations } = parse(source);
+  for (const path of [
+    "= /mcp",
+    "/mcp/",
+    "= /.well-known/oauth-protected-resource/mcp",
+    "= /.well-known/oauth-authorization-server/api/auth",
+  ]) {
+    expect(values(locations.get(path), "proxy_pass")).toEqual([["http://api:3000"]]);
+    expect(values(locations.get(path), "proxy_buffering")).toEqual([["off"]]);
+    expect(values(locations.get(path), "proxy_set_header")).toContainEqual(["Host", "$http_host"]);
+  }
+  const format = /log_format lace_safe '([^']+)'/u.exec(source)[1];
+  expect(format).toContain("$uri");
+  expect(format).not.toMatch(
+    /\$request(?:\s|$)|\$request_uri|\$args|\$http_referer|\$http_authorization/,
+  );
+});

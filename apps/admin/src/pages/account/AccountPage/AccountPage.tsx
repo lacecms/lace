@@ -1,3 +1,4 @@
+import { McpConnections } from "../../../features/manage-mcp-connections/index.js";
 import { ChangePasswordForm } from "../../../features/change-password/index.js";
 import { SessionList } from "../../../features/manage-sessions/index.js";
 import { ProfileForm } from "../../../features/update-profile/index.js";
@@ -33,6 +34,7 @@ export function AccountPage() {
         </div>
         <ChangePasswordForm />
       </section>
+      <McpConnections />
       <section aria-labelledby="sessions-title" className={cardSection}>
         <div className="grid gap-1">
           <h2 className="m-0" id="sessions-title">

@@ -71,9 +71,9 @@ export function EntryListToolbar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-start gap-3">
       <form
-        className="relative w-full sm:w-72"
+        className="w-full sm:w-72"
         onSubmit={(event) => {
           event.preventDefault();
           clearTimeout(pending.current);
@@ -81,21 +81,23 @@ export function EntryListToolbar({
         }}
         role="search"
       >
-        <Search
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          aria-label="Search entries"
-          aria-describedby={hintId}
-          aria-invalid={invalid}
-          className="pl-8"
-          maxLength={limits.maxSearchLength}
-          onChange={(event) => changeDraft(event.currentTarget.value)}
-          placeholder={searchableLabels.length ? "Search entries" : "Search title or slug"}
-          type="search"
-          value={draft}
-        />
+        <div className="relative flex">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search entries"
+            aria-describedby={hintId}
+            aria-invalid={invalid}
+            className="pl-8"
+            maxLength={limits.maxSearchLength}
+            onChange={(event) => changeDraft(event.currentTarget.value)}
+            placeholder={searchableLabels.length ? "Search entries" : "Search title or slug"}
+            type="search"
+            value={draft}
+          />
+        </div>
         <p
           id={hintId}
           className={`mt-1 mb-0 text-xs ${invalid ? "text-destructive" : "text-muted-foreground"}`}
@@ -105,7 +107,11 @@ export function EntryListToolbar({
           {listQueryBudgetHint(limits)}
         </p>
       </form>
-      <div aria-label="Filter by status" className="flex flex-wrap gap-1" role="group">
+      <div
+        aria-label="Filter by status"
+        className="flex min-h-8 flex-wrap items-center gap-1"
+        role="group"
+      >
         {statusOptions.map((option) => {
           const pressed = status === option.value;
           return (
@@ -129,7 +135,7 @@ export function EntryListToolbar({
         })}
       </div>
       {search.length > 0 || status !== undefined || hasFieldFilters ? (
-        <Button onClick={onClear} size="sm" variant="ghost">
+        <Button className="h-8" onClick={onClear} size="sm" variant="ghost">
           <X aria-hidden="true" />
           Clear filters
         </Button>

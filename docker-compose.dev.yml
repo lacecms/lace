@@ -99,6 +99,7 @@ services:
       LACE_PORT: 3000
       LACE_PUBLIC_BASE_URL: ${LACE_PUBLIC_BASE_URL:?set LACE_PUBLIC_BASE_URL}
       LACE_SITE_DEV_ORIGIN: ${LACE_SITE_DEV_ORIGIN:?set LACE_SITE_DEV_ORIGIN}
+      LACE_MCP_ENABLED: ${LACE_MCP_ENABLED:-false}
     healthcheck:
       interval: 5s
       retries: 18

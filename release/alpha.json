@@ -28,6 +28,7 @@
     "contracts",
     "db",
     "domain",
+    "mcp",
     "platform-cloudflare",
     "platform-node",
     "render",

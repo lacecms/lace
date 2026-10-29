@@ -18,6 +18,7 @@ const allowedDependencies = new Map([
   ["@lacecms/application", new Set(["@lacecms/domain", "@lacecms/content", "@lacecms/config"])],
   ["@lacecms/contracts", new Set(["@lacecms/domain", "@lacecms/content"])],
   ["@lacecms/db", new Set(["@lacecms/application", "@lacecms/domain", "@lacecms/content"])],
+  ["@lacecms/mcp", new Set(["@lacecms/application", "@lacecms/contracts", "@lacecms/domain"])],
   ["@lacecms/auth", new Set(["@lacecms/application", "@lacecms/domain"])],
   ["@lacecms/server", new Set(["@lacecms/application", "@lacecms/contracts", "@lacecms/auth"])],
   ["@lacecms/sdk", new Set(["@lacecms/contracts"])],
@@ -38,6 +39,7 @@ const allowedDependencies = new Map([
     new Set([
       "@lacecms/application",
       "@lacecms/server",
+      "@lacecms/mcp",
       "@lacecms/db",
       "@lacecms/auth",
       "@lacecms/config",
@@ -50,6 +52,7 @@ const allowedDependencies = new Map([
     new Set([
       "@lacecms/application",
       "@lacecms/server",
+      "@lacecms/mcp",
       "@lacecms/db",
       "@lacecms/auth",
       "@lacecms/config",
@@ -80,6 +83,18 @@ const allowedDependencies = new Map([
 // Framework-neutral packages: every non-relative import must be listed here, which
 // rejects UI frameworks, Node built-ins, and other third-party modules.
 const externalImportAllowlist = new Map([
+  [
+    "@lacecms/mcp",
+    new Set([
+      "@lacecms/application",
+      "@lacecms/contracts",
+      "@lacecms/domain",
+      "@modelcontextprotocol/server",
+      "@valibot/to-json-schema",
+      "valibot",
+    ]),
+  ],
+  ["@lacecms/application", new Set(["@lacecms/domain", "@lacecms/config", "@lacecms/content"])],
   ["@lacecms/render", new Set(["@lacecms/content"])],
   ["@lacecms/sdk", new Set(["@lacecms/contracts", "valibot"])],
 ]);

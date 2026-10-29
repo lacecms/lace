@@ -1,0 +1,48 @@
+{
+  "name": "@lacecms/mcp",
+  "version": "0.1.0-alpha.7",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lacecms/lace.git",
+    "directory": "packages/mcp"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "oxlint src",
+    "test": "vitest run src/index.test.mjs"
+  },
+  "dependencies": {
+    "@lacecms/application": "workspace:*",
+    "@lacecms/contracts": "workspace:*",
+    "@lacecms/domain": "workspace:*",
+    "@modelcontextprotocol/server": "catalog:",
+    "@valibot/to-json-schema": "catalog:",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24.12.0"
+  }
+}

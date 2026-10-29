@@ -30,3 +30,11 @@ Compose mounts a separate `builder-cache` volume for the pnpm store and Astro im
 Check API readiness, Admin login, a published page, media, Builds, and the final HTTPS site after a new publication. Confirm cached responses revalidate. If a build fails, inspect sanitized diagnostics, correct source/token/settings, then Retry in Builds. CMS publication remains committed even if the site build fails.
 
 If publications stop triggering builds after a host SQLite command, stop/restart API and dispatcher and investigate the maintenance window. See [operations](../../operations/) before upgrades, storage moves or restores. Real VPS deployment, restoration and credential rotation require checking your actual infrastructure.
+
+## Optional assistant connections
+
+Apply migrations before setting `LACE_MCP_ENABLED=true` in the API environment.
+Restart the API. Production requires the canonical HTTPS `LACE_PUBLIC_BASE_URL`.
+Forward `/mcp` and its OAuth discovery metadata to the API, disable MCP response
+buffering and log paths without query strings, referrers or credentials. The
+generated Nginx example includes these rules. Missing/`false` disables the feature.

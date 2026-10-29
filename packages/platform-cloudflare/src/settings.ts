@@ -1,6 +1,7 @@
 import { siteBuildTrackingPolicy } from "@lacecms/domain";
 import {
   parseBuildSiteIdentity,
+  parseMcpEnabled,
   parseEmailSettings,
   type EmailSettings,
   type LaceAppInput,
@@ -20,6 +21,7 @@ export interface AssetsFetcher {
 /** Bindings, plain variables, and secrets the Worker reads from `env`. */
 export interface CloudflareWorkerEnv {
   readonly LACE_API_DOCS_ENABLED?: unknown;
+  readonly LACE_MCP_ENABLED?: unknown;
   readonly LACE_BUILD_SITE_ID?: unknown;
   readonly LACE_BUILD_SITE_LABEL?: unknown;
   readonly LACE_BUILD_SITE_URL?: unknown;
@@ -70,6 +72,7 @@ export interface PagesTrackingSettings {
 
 export interface CloudflareSettings {
   readonly apiDocsEnabled?: boolean;
+  readonly mcpEnabled?: boolean;
   readonly buildSite?: LaceAppInput["buildSite"];
   readonly assets?: AssetsFetcher;
   readonly authSecret: string;
@@ -312,6 +315,12 @@ function pagesTracking(
 /** Parses Worker bindings and secrets once, without exposing supplied values in errors. */
 export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSettings {
   const issues: CloudflareEnvironmentIssue[] = [];
+  let mcpEnabled = false;
+  try {
+    mcpEnabled = parseMcpEnabled(env.LACE_MCP_ENABLED);
+  } catch {
+    issues.push({ reason: "invalid", variable: "LACE_MCP_ENABLED" });
+  }
   const docs = env.LACE_API_DOCS_ENABLED;
   if (docs !== undefined && docs !== "true" && docs !== "false")
     issues.push({ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" });
@@ -368,6 +377,7 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
   }
   return Object.freeze({
     apiDocsEnabled: docs === "true",
+    mcpEnabled,
     buildSite,
     ...(assets === undefined ? {} : { assets }),
     authSecret,

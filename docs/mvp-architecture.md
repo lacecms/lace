@@ -43,6 +43,9 @@ The design should also be easy for coding agents to understand and modify. For t
 - Tiptap rich-text blocks.
 - Media upload to R2 or MinIO.
 - Email/password authentication through Better Auth.
+- Optional OAuth-delegated MCP content assistance (`add-oauth-mcp-server`, MCP1):
+  inspect models/entries and create/save drafts; publication, unpublication and
+  all content deletion remain forbidden through MCP.
 - Admin, editor, and viewer roles.
 - Optional transactional email through a provider port (`EmailSender`): SMTP on
   Node, Resend on both runtimes, and the Cloudflare Email Service binding on the
@@ -252,6 +255,11 @@ same rule reaches Cloudflare Pages through the site's `public/_headers`, which
 the VPS proxy refuses to serve; the generated Pages workflow keeps
 `node_modules/.astro` between runs with `actions/cache`.
 
+The optional MCP surface lives in the same CMS deployment on both runtimes.
+Only `LACE_MCP_ENABLED=true` exposes `/mcp` and its OAuth/discovery routes;
+missing/`false` disables them, and other values fail safe configuration validation.
+It requires no extra process, Durable Object or KV binding.
+
 ## 6. Repository structure
 
 The Lace engine repository uses a pnpm workspace with Turborepo for
@@ -270,7 +278,8 @@ packages/
 ├── domain/                    # pure domain types, rules, and errors
 ├── application/               # use cases and capability ports
 ├── server/                    # Hono routes, middleware, app factory
-├── contracts/                 # Valibot REST schemas and DTOs
+├── mcp/                       # portable stateless MCP adapter and five tools
+├── contracts/                 # shared Valibot transport schemas and DTOs
 ├── content/                   # field DSL, block registry, validation
 ├── db/                        # Drizzle SQLite schema and repositories
 ├── auth/                      # Better Auth configuration and authorization
@@ -301,13 +310,14 @@ config       -> content
 domain       -> content
 application  -> domain, content, config
 contracts    -> domain, content
+mcp          -> application, contracts, domain
 db           -> application, domain
 auth         -> application, domain
 server       -> application, contracts, auth
 sdk          -> contracts
 render       -> content
 astro        -> render, sdk
-platform-*   -> application, server, db, auth, config
+platform-*   -> application, server, db, auth, config, mcp
 cli          -> application, config, platform-*
 apps/api     -> platform-*, server
 apps/admin   -> contracts, content
@@ -327,6 +337,12 @@ Rules:
 - `contracts` defines transport DTOs and schemas; it must not become an application-use-case dependency.
 - `db` implements application persistence ports and may depend on Drizzle, domain, and application packages.
 - `server` may use Hono and contracts but receives infrastructure through construction.
+- `mcp` uses application operations and shared contracts, never server/auth/db,
+  platform implementations, configuration loaders or Node-only APIs. Server
+  receives an optional structural MCP handler from the platform composition root.
+- REST and MCP share application discovery, authorization, reads and mutations;
+  contracts own their common pure JSON projections and validation. Application
+  never imports contracts or the MCP SDK.
 - platform packages may depend on application ports and concrete vendor SDKs.
 - `admin` depends on contracts and content metadata and owns a credentialed
   browser transport client; it never depends on database schemas.
@@ -1796,7 +1812,12 @@ The initial admin editor should render block forms from serializable field metad
 
 ## 12. REST API
 
-All product endpoints are versioned under `/api/v1`. Better Auth retains its conventional `/api/auth` base path.
+REST product endpoints are versioned under `/api/v1`. Better Auth retains its conventional `/api/auth` base path.
+The optional stateless Streamable HTTP `/mcp` adapter supports the `2025-11-25`
+initialize/list/call baseline. Its closed tool set is `list_content_models`,
+`list_entries`, `get_entry`, `create_entry` and `save_draft`. It reuses admin
+content contracts, complete-draft validation, runtime query budgets and explicit
+revision guards without loopback HTTP. Draft writes never publish or queue builds.
 
 ```text
 /api/auth/*
@@ -2732,10 +2753,49 @@ current session's identifier comes from the auth boundary alongside the actor.
 
 The auth boundary forwards only `POST /api/auth/sign-in/email`,
 `POST /api/auth/sign-out`, and `GET /api/auth/get-session` to Better Auth.
-Every other `/api/auth/*` path returns `404` before the provider runs, so
+When MCP is disabled, every other `/api/auth/*` path returns `404` before the provider runs, so
 provider routes such as change-password or list-sessions cannot bypass Lace
 rules or reveal session tokens. Exposing another provider route is an explicit,
 tested change.
+
+MCP1 extends this boundary only when explicitly enabled. The Better Auth OAuth
+provider may expose a literal, tested method/path allowlist for authorization,
+consent submission, token exchange/refresh, public-client registration,
+revocation and required discovery/signing-key aliases. Other provider endpoints
+stay closed. Canonical issuer/resource URLs derive from validated
+`LACE_PUBLIC_BASE_URL`, never request forwarding headers. Use S256 PKCE,
+explicit first consent and the existing sign-in form through a short-lived,
+server-bound continuation. No client-controlled URL metadata is fetched.
+
+Browser REST actors still require sessions. Only MCP resolves resource-bound
+OAuth credentials into the current persisted enabled user/role, attenuated by
+an immutable provider-neutral permission and content-operation ceiling.
+`content:read`, `content:write` (including read) and renewal-only `offline_access`
+are the supported scopes. The shared application authorizer checks every
+operation before protected work; delegated operations default to deny.
+Publishing, unpublishing, deletion, revert/duplicate, media and administrative
+operations are never grantable, even to an administrator. A cookie/build token
+does not authenticate MCP and an MCP token does not authenticate admin REST.
+
+Codes last at most five minutes, access tokens fifteen minutes and rotating
+refresh tokens thirty days, bounded by the grant. Code redemption and refresh
+must have one winner through guarded SQLite transactions or D1 batches;
+refresh replay revokes the family. Durable grant state and current roles are
+checked on every request/refresh without positive cross-request caching.
+Credentials are hashed/encrypted at rest and signing keys, if required, durable.
+Disable, password reset, administrator sign-out-everywhere and password-change
+revoke-others invalidate grants alongside sessions, even with MCP disabled;
+re-enabling cannot revive them. Ordinary sign-out leaves connections independent.
+Owner-scoped session-only connection list/revoke routes disclose no credentials.
+Additive migrations and bounded indexed cleanup reuse existing infrastructure.
+
+MCP requests are limited to 60/minute/user, registration to 10/15 minutes/trusted
+client address, token requests to 60/minute/client/address and connection revoke
+to 20/hour/user, using the shared SQL limiter and `Retry-After`. Host/Origin
+policy remains explicit, permitting origin-less native clients without widening
+cookie trust. Bodies retain admin ceilings; logs exclude credentials, arguments
+and authorization query strings. Disabling blocks issuance, renewal and use
+without dropping tables or undoing account-security invalidation.
 
 Rate limits use a portable fixed-window SQL projection so behavior does not
 depend on one process or Worker isolate:
@@ -2903,6 +2963,22 @@ and fails unless the check is empty before restoring enforcement. Application
 connections always keep foreign keys on.
 
 ## 17. Admin application
+
+MCP2 (`add-mcp-settings-and-local-enablement`) adds a read-only MCP section in
+Settings for administrators, visible whether MCP is enabled or disabled. The
+existing authenticated Settings status response supplies the parsed enabled
+state and canonical `/mcp` URL from deployment configuration. The section offers
+copyable client setup examples with read-only access selected by default,
+activation guidance, and a link to owned Account connections. Enabled describes
+configuration, not verified client connectivity. Deployment configuration remains
+operator-owned; no browser toggle or new public status endpoint is introduced.
+
+When MCP is enabled, `/admin/mcp/consent` uses the existing session/sign-in and
+controls to show escaped client identity, callback hostname and read/read-write
+consent, explicitly stating the publication/unpublication/deletion ban.
+`/admin/account` shows owned connections with safe scopes/dates and an explicit
+revoke confirmation, backed by session-only routes. A server-derived capability
+hides this section when disabled; OAuth credentials never enter browser storage.
 
 Select choice cards use generic metadata-driven native radio groups, neutral
 aria-hidden diagrams, visible labels/descriptions and the existing field error/
@@ -3299,6 +3375,11 @@ first imports it. Generated components do not use an animation plugin such as
 - `drizzle-orm/valibot` for database-boundary schemas where it is useful;
 - `better-sqlite3` as the Node SQLite driver, compatible with Better Auth and the selected Node LTS;
 - Better Auth and its Drizzle integration.
+- Compatible catalog-pinned `@better-auth/oauth-provider` for optional MCP OAuth;
+  official MCP TypeScript SDK v2 Web-standard handling and Valibot-derived
+  schemas. An executable Node/Worker compatibility gate must verify the pinned
+  versions, existing login, protocol baseline, portable bundle and SQLite/D1
+  redemption/rotation atomicity before production wiring.
 
 REST DTOs remain independent from Drizzle-generated schemas. The Drizzle/Valibot integration is for internal database-boundary validation and must not make database rows the public API contract.
 

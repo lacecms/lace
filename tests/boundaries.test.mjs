@@ -1,3 +1,5 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,4 +93,28 @@ test.each(["docs-runtime", "runtime-docs"])("rejects %s coupling", (fixture) => 
   expect(result.stderr).toContain(
     fixture === "docs-runtime" ? "forbidden dependency" : "may not import @lacecms/app-docs",
   );
+});
+
+test.each([
+  ["mcp", "@lacecms/db"],
+  ["mcp", "@lacecms/platform-node"],
+  ["mcp", "@lacecms/platform-cloudflare"],
+  ["mcp", "@lacecms/server"],
+  ["mcp", "@lacecms/auth"],
+  ["mcp", "node:fs"],
+  ["application", "@lacecms/contracts"],
+  ["application", "@modelcontextprotocol/server"],
+])("portable %s rejects %s", (name, dependency) => {
+  const root = mkdtempSync(join(tmpdir(), "lace-mcp-boundary-"));
+  try {
+    const directory = join(root, "packages", name);
+    mkdirSync(join(directory, "src"), { recursive: true });
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ name: `@lacecms/${name}` }));
+    writeFileSync(join(directory, "src/index.ts"), `import "${dependency}";\n`);
+    const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(`may not import ${dependency}`);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });

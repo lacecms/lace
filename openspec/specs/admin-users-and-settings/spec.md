@@ -221,3 +221,82 @@ existing Settings access-denied behavior.
 - **WHEN** an editor opens `/settings`
 - **THEN** the screen shows access denied and issues no status or test-email
   request
+
+### Requirement: Settings explains MCP configuration in both states
+Settings SHALL contain an MCP section for users with `settings:manage`, visible for both Enabled and Disabled configurations. It SHALL use the authenticated settings status response for its state and canonical endpoint and refresh through the existing Refresh status action. It SHALL label the value as deployment configuration rather than a connectivity test. The canonical endpoint SHALL be displayed with Copy and accessible success/failure feedback. The UI SHALL retain existing loading, error, retry, stale-value, and expired-session recovery behavior; absent status SHALL NOT display Disabled. A failed refresh SHALL identify retained values as stale.
+
+Disabled state SHALL explain that the operator must set `LACE_MCP_ENABLED=true` and restart/redeploy; local Compose guidance SHALL mention recreating the API container and passing the flag into it. The section SHALL provide no browser enable/disable mutation. Enabled state SHALL offer setup instructions and an internal link to the current user's Account connections. Existing Account visibility, ownership, and revoke behavior SHALL remain unchanged. Users without Settings access SHALL see access denied and issue no settings requests.
+
+#### Scenario: MCP is disabled
+- **WHEN** an administrator opens Settings and confirmed status reports disabled MCP
+- **THEN** the MCP section remains visible with Disabled, the canonical endpoint, and operator activation guidance
+
+#### Scenario: MCP is enabled
+- **WHEN** confirmed status reports enabled MCP
+- **THEN** the section shows Enabled, the endpoint, client setup instructions, and the Account connections link without claiming a successful client connection
+
+#### Scenario: Refresh fails after a successful load
+- **WHEN** Refresh status fails after the MCP summary was loaded
+- **THEN** the section retains the last confirmed values with the existing stale indication and retry action
+
+#### Scenario: No successful status response exists
+- **WHEN** the initial settings request is pending or fails
+- **THEN** the section shows loading or unavailable state and does not infer that MCP is disabled
+
+#### Scenario: Non-administrator opens Settings
+- **WHEN** a viewer or editor opens Settings directly
+- **THEN** access is denied and neither status nor client setup metadata is requested
+
+### Requirement: MCP connection instructions are copyable and permission-aware
+Enabled MCP setup SHALL provide copyable Codex CLI commands to add the canonical endpoint and authorize through public-client DCR. A permission choice SHALL default to read-only (`content:read,offline_access`); choosing draft editing SHALL use `content:read,content:write,offline_access`. An alternative Codex TOML example SHALL describe the same endpoint and selected scopes and SHALL explain that configuration still requires OAuth login. Generic client guidance SHALL identify Streamable HTTP, OAuth authorization code with PKCE, and dynamic client registration, without implying that arbitrary clients are verified.
+
+Examples SHALL use the exact canonical endpoint and syntactically safe quoting for the target shell/TOML format. Copy SHALL copy the displayed text with accessible feedback; a denied clipboard write SHALL report failure and retain manually selectable text. Instructions SHALL explain browser sign-in and explicit consent, that viewers cannot grant write access, that publishing/unpublishing/deletion are unavailable, and that a client may need restart/reload to pick up configuration. They SHALL NOT contain passwords, cookies, build tokens, or generated OAuth credentials. Rendering or copying SHALL NOT register a client, initiate login, or mutate CMS state.
+
+#### Scenario: Administrator copies read-only instructions
+- **WHEN** an administrator opens enabled MCP setup without changing the permission choice and copies the Codex commands
+- **THEN** the copied commands use the returned endpoint, DCR login, and read-only plus offline scopes, with success feedback only after clipboard success
+
+#### Scenario: Administrator selects draft editing
+- **WHEN** the permission choice changes to draft editing
+- **THEN** both CLI and TOML examples include write and read scopes, explain the consent and role limits, and confer no authority merely by being shown
+
+#### Scenario: Configured endpoint differs from browser location
+- **WHEN** Settings is viewed through a development frontend or the deployment uses a non-default port
+- **THEN** displayed and copied examples use the server-returned canonical endpoint and port rather than the browser origin or a hard-coded localhost value
+
+#### Scenario: Clipboard access fails
+- **WHEN** copying the endpoint or example fails
+- **THEN** the UI announces failure and leaves the complete text available for manual selection without claiming success
+
+### Requirement: MCP setup includes Claude Code and Gemini CLI recipes
+The enabled Settings MCP section SHALL offer dedicated choices labelled **Claude Code** and **Gemini CLI**, alongside the existing Codex and generic setup choices. Each SHALL provide copyable client-native setup using the server-returned canonical endpoint and the existing selected content access. Read-only SHALL request `content:read` and `offline_access`; draft editing SHALL additionally request `content:write`. Changing clients SHALL preserve the selected access and SHALL NOT silently broaden it. Client installation/configuration scope SHALL NOT be presented as OAuth content permission.
+
+Claude Code guidance SHALL include an HTTP server definition with explicitly constrained OAuth scopes and a supported way to install that definition, followed by sign-in through the client's MCP authentication flow. Gemini CLI guidance SHALL include a Streamable HTTP definition with explicit OAuth scopes in its settings file, followed by its interactive MCP authentication command. The UI SHALL distinguish terminal commands, configuration text, and commands typed inside a client session. It SHALL instruct users to merge/update the `lace` entry in existing configuration instead of replacing unrelated settings or blindly adding duplicates.
+
+Both guides SHALL retain browser Lace sign-in, explicit consent, current-role limits, the publication/unpublication/deletion ban, and restart/reload guidance. They SHALL use supported discovery and public-client registration without embedded credentials, client secrets, Google service credentials, or manually entered bearer tokens. Opening a guide, changing access or copying text SHALL issue no client-registration/authentication/mutation request. Documentation-based recipes SHALL NOT be labelled as tested client connections without actual acceptance evidence.
+
+Client choices SHALL remain reachable by keyboard and usable at 320px viewport width without horizontal page overflow. Existing disabled/unavailable/stale/session-recovery states and administrator-only Settings access SHALL remain unchanged.
+
+#### Scenario: Claude Code read-only setup
+- **WHEN** an administrator opens Claude Code instructions with the default access choice
+- **THEN** the displayed/copied HTTP configuration uses the canonical endpoint and only read/offline scopes, with a correctly quoted setup command and instructions for browser authentication in Claude Code
+
+#### Scenario: Gemini CLI draft setup
+- **WHEN** an administrator selects draft editing and opens Gemini CLI instructions
+- **THEN** its settings JSON includes the canonical HTTP endpoint and read/write/offline scopes, and the guide identifies the authentication command as an interactive Gemini CLI command
+
+#### Scenario: Switching clients retains the permission choice
+- **WHEN** an administrator switches among Codex, Claude Code and Gemini CLI after selecting read-only or draft access
+- **THEN** every recipe reflects that same access and no network operation or grant change occurs
+
+#### Scenario: Copy succeeds or fails
+- **WHEN** the administrator copies a new client configuration or command
+- **THEN** the clipboard receives exactly the displayed text on success, or accessible failure feedback leaves manually selectable text without reporting success
+
+#### Scenario: Existing client configuration and unusual endpoint
+- **WHEN** the installation uses a non-default port or an endpoint requiring shell/JSON escaping and the client already has settings
+- **THEN** the examples preserve the exact server endpoint safely and instruct updating/merging the `lace` entry without deleting other configuration
+
+#### Scenario: Narrow screen and keyboard navigation
+- **WHEN** the MCP section is used at 320px width or solely by keyboard
+- **THEN** all client choices and copy controls remain reachable, examples remain readable, and the page does not overflow horizontally

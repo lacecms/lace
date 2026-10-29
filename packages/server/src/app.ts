@@ -2,11 +2,10 @@ import { Scalar } from "@scalar/hono-api-reference";
 import {
   AccountError,
   AccountUseCases,
+  OAuthConnectionUseCases,
   BuildExportCursorError,
   ContentUseCases,
-  CollectionQueryValidationError,
   ContentLinkUseCases,
-  ContentValidationError,
   RateLimitExceededError,
   MAX_MEDIA_BYTES,
   MediaUseCases,
@@ -20,7 +19,6 @@ import {
   SiteBuildUseCases,
 } from "@lacecms/application";
 import type {
-  CompleteDraftInput,
   DeferTask,
   EmailSender,
   InvitationIssueResult,
@@ -34,6 +32,10 @@ import type {
   SensitiveRateLimiter,
 } from "@lacecms/application";
 import {
+  accountCapabilitiesSchema,
+  oauthConnectionListSchema,
+  oauthConnectionListQuerySchema,
+  oauthConnectionRevokeSchema,
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
   buildExportQuerySchema,
@@ -104,7 +106,12 @@ import {
   saveDraftRequestSchema,
   setupAdminRequestSchema,
   setupStateSchema,
-  toAdminContentEntryDto,
+  toAdminEntryProjectionDto,
+  toContentModelDiscoveryDto,
+  toContentEntryListDto,
+  toContentBlockInput as blockInput,
+  contractIssuePointer as pointer,
+  toContractValidationIssues as standardIssues,
   toBuildExportContinuationPageDto,
   toBuildExportFirstPageDto,
   toModelSeoDto,
@@ -145,12 +152,7 @@ import {
   MultipartParseError,
   parseMultipartRequest,
 } from "@mjackson/multipart-parser";
-import type {
-  ClassifiedError,
-  ContentBlockDto,
-  ContractValidationIssue,
-  ExportSeoDto,
-} from "@lacecms/contracts";
+import type { ClassifiedError, ContractValidationIssue, ExportSeoDto } from "@lacecms/contracts";
 import { toJsonSchema } from "@valibot/to-json-schema";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
@@ -185,6 +187,7 @@ declare module "hono" {
     "lace.actor": Actor | undefined;
     "lace.requestId": string;
     "lace.sessionId": string | null | undefined;
+    "lace.mcpCompletion": { readonly tool: string; readonly outcome: "success" | "error" };
   }
 }
 
@@ -224,24 +227,6 @@ type ServerContentModel =
       readonly path: string;
       readonly seo?: ServerModelSeo;
     });
-
-/**
- * A request block as use-case input; the contract has already checked that
- * its settings are a JSON object and its envelope values are well formed.
- */
-function blockInput(block: ContentBlockDto): CompleteDraftInput["blocks"][number] {
-  return {
-    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
-    ...(block.className === undefined ? {} : { className: block.className }),
-    data: block.data,
-    hidden: block.hidden,
-    key: block.key as never,
-    position: block.position,
-    schemaVersion: block.schemaVersion,
-    settings: block.settings as CompleteDraftInput["blocks"][number]["data"],
-    type: block.type,
-  };
-}
 
 interface ServerBlockMetadata {
   readonly type: string;
@@ -284,10 +269,22 @@ export interface ServerLogger {
     readonly path: string;
     readonly requestId: string;
     readonly status: number;
+    readonly tool?: string;
+    readonly outcome?: "success" | "error";
   }): void;
 }
 
-export type SensitiveRequestOperation = "auth" | "email" | "invite" | "setup" | "token" | "upload";
+export type SensitiveRequestOperation =
+  | "auth"
+  | "email"
+  | "invite"
+  | "setup"
+  | "token"
+  | "upload"
+  | "mcp"
+  | "oauth-register"
+  | "oauth-token"
+  | "oauth-revoke";
 
 export interface SensitiveRequestLimit {
   readonly operation: SensitiveRequestOperation;
@@ -306,6 +303,14 @@ export function sensitiveRequestLimit(
   method: string,
   pathname: string,
 ): SensitiveRequestLimit | undefined {
+  if (pathname === "/mcp") return { operation: "mcp", scope: "actor" };
+  if (pathname === "/api/auth/oauth2/register" && method === "POST")
+    return { operation: "oauth-register", scope: "client" };
+  if (pathname === "/api/auth/oauth2/token" && method === "POST")
+    return { operation: "oauth-token", scope: "client" };
+  if (/^\/api\/v1\/account\/mcp-connections\/[^/]+\/revoke$/u.test(pathname) && method === "POST")
+    return { operation: "oauth-revoke", scope: "actor" };
+  if (pathname.startsWith("/api/auth/oauth2/")) return undefined;
   if (pathname.startsWith("/api/auth/") && method !== "GET")
     return { operation: "auth", scope: "client" };
   if (
@@ -327,6 +332,24 @@ export function sensitiveRequestLimit(
   return undefined;
 }
 
+/** Same token/client-address subject on Node and Worker, using trusted address input. */
+export async function sensitiveRequestSubject(
+  limit: SensitiveRequestLimit,
+  request: Request,
+  address: string,
+  actorId?: string,
+): Promise<string | undefined> {
+  if (limit.scope === "actor") return actorId === undefined ? undefined : `actor:${actorId}`;
+  if (limit.operation !== "oauth-token") return address;
+  try {
+    const body = await request.clone().formData();
+    const client = body.get("client_id");
+    return JSON.stringify([address, typeof client === "string" ? client : ""]);
+  } catch {
+    return JSON.stringify([address, ""]);
+  }
+}
+
 export interface ReadinessProbe {
   isReady(): Promise<boolean>;
 }
@@ -345,6 +368,22 @@ export interface LaceAppInput {
   readonly apiDocsEnabled?: boolean;
   readonly buildSite?: BuildSiteIdentityDto | null;
   readonly auth?: AuthRouteHandler;
+  readonly oauthConnections?: OAuthConnectionUseCases;
+  readonly mcpEnabled?: boolean;
+  readonly mcp?: {
+    resolve(
+      request: Request,
+      scope?: "content:read" | "content:write",
+    ): Promise<
+      | { readonly actor: Actor; readonly response?: never }
+      | { readonly response: Response; readonly actor?: never }
+    >;
+    fetch(
+      request: Request,
+      actor: Actor,
+      completed: (event: { readonly tool: string; readonly outcome: "success" | "error" }) => void,
+    ): Promise<Response>;
+  };
   readonly actors: ActorResolver;
   readonly adminAssets?: BuiltAdminResponder;
   readonly config: ServerConfig;
@@ -380,41 +419,6 @@ class RequestValidationError extends Error {
 
 class AuthorizationError extends Error {}
 
-function pointer(path: readonly unknown[] | undefined): string {
-  if (path === undefined || path.length === 0) return "";
-  return path
-    .map((part) =>
-      typeof part === "object" && part !== null && "key" in part
-        ? (part as { readonly key: unknown }).key
-        : part,
-    )
-    .map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1"))
-    .map((part) => `/${part}`)
-    .join("");
-}
-
-function standardIssues(
-  issues: readonly { readonly path?: readonly unknown[] | undefined }[],
-): ContractValidationIssue[] {
-  return issues.map((issue) => ({
-    code: "invalid_value",
-    message: "The submitted value is invalid.",
-    path: pointer(issue.path),
-  }));
-}
-
-/**
- * Content validation messages are static text (some embed configured limits),
- * never submitted values, so they are safe to return with their pointers.
- */
-function contentIssues(error: ContentValidationError): ContractValidationIssue[] {
-  return error.issues.map((issue) => ({
-    code: issue.code,
-    message: issue.message,
-    path: pointer(issue.path),
-  }));
-}
-
 function invalid(message = "The submitted value is invalid.", path = ""): never {
   throw new RequestValidationError([{ code: "invalid_value", message, path }]);
 }
@@ -422,13 +426,7 @@ function invalid(message = "The submitted value is invalid.", path = ""): never 
 function parse<Schema extends ServerSchema>(schema: Schema, value: unknown): v.InferOutput<Schema> {
   const result = v.safeParse(schema, value);
   if (!result.success) {
-    throw new RequestValidationError(
-      result.issues.map((issue) => ({
-        code: issue.type,
-        message: "The submitted value is invalid.",
-        path: pointer(issue.path as readonly unknown[] | undefined),
-      })),
-    );
+    throw new RequestValidationError(standardIssues(result.issues, true));
   }
   return result.output;
 }
@@ -539,39 +537,6 @@ function optionalRevision(
 function optionalIdempotencyKey(request: Request): string | undefined {
   const value = request.headers.get("idempotency-key") ?? undefined;
   return value === undefined ? undefined : parse(idempotencyKeySchema, value);
-}
-
-function modelDto(config: ServerConfig, model: ServerContentModel) {
-  const definitions =
-    config.blocks === undefined
-      ? undefined
-      : model.blocks.map((type) => config.blocks?.find((block) => block.type === type));
-  if (definitions?.some((definition) => definition === undefined)) {
-    throw new Error("The model references a block absent from the public configuration.");
-  }
-  return toContentModelDto({
-    ...(definitions === undefined ? {} : { blockDefinitions: definitions as never }),
-    blocks: model.blocks,
-    ...(model.description === undefined ? {} : { description: model.description }),
-    fields: model.fields as never,
-    ...(model.layout === undefined ? {} : { layout: model.layout }),
-    key: model.key,
-    kind: model.kind,
-    ...(model.label === undefined ? {} : { label: model.label }),
-    ...(model.kind === "collection" && model.listFields !== undefined
-      ? { listFields: model.listFields }
-      : {}),
-    ...(model.kind === "collection" && model.listOptions !== undefined
-      ? { listOptions: model.listOptions }
-      : {}),
-    ...(model.kind === "page" ? { path: model.path } : {}),
-    ...(model.kind === "collection" ? { route: model.route } : {}),
-    ...(model.kind !== "global" && model.seo !== undefined ? { seo: model.seo } : {}),
-    ...(model.kind === "global" && model.seoDefaults !== undefined
-      ? { seoDefaults: model.seoDefaults }
-      : {}),
-    version: model.version,
-  });
 }
 
 /** The export's SEO section: fallback fields of SEO-enabled models and the defaults global. */
@@ -722,28 +687,23 @@ export function createLaceApp(input: LaceAppInput): Hono {
     throw new TypeError("maxBodyBytes must be a positive safe integer.");
   const app = new Hono();
 
-  app.onError((error) =>
-    error instanceof CollectionQueryValidationError
-      ? validationResponse([
-          {
-            code: "invalid_value",
-            message: "The submitted value is invalid.",
-            path: error.pointer,
-          },
-        ])
+  app.onError((error, context) =>
+    context.req.path === "/mcp" || context.req.path.startsWith("/api/auth/oauth2/")
+      ? Response.json(
+          { error: "server_error" },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        )
       : error instanceof RequestValidationError
         ? validationResponse(error.issues)
-        : error instanceof ContentValidationError
-          ? validationResponse(contentIssues(error))
-          : error instanceof AuthorizationError
-            ? errorResponse(transportError("AUTHORIZATION_DENIED"))
-            : error instanceof AccountError
-              ? errorResponse(transportError(error.code))
-              : error instanceof RateLimitExceededError
-                ? errorResponse(transportError("RATE_LIMITED"), {
-                    "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
-                  })
-                : errorResponse(classifyError(error)),
+        : error instanceof AuthorizationError
+          ? errorResponse(transportError("AUTHORIZATION_DENIED"))
+          : error instanceof AccountError
+            ? errorResponse(transportError(error.code))
+            : error instanceof RateLimitExceededError
+              ? errorResponse(transportError("RATE_LIMITED"), {
+                  "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
+                })
+              : errorResponse(classifyError(error)),
   );
 
   app.use(async (context, next) => {
@@ -755,7 +715,11 @@ export function createLaceApp(input: LaceAppInput): Hono {
     } finally {
       context.res.headers.set("x-request-id", requestId);
       const actor = context.get("lace.actor") as Actor | undefined;
+      const completion = context.get("lace.mcpCompletion") as
+        | { readonly tool: string; readonly outcome: "success" | "error" }
+        | undefined;
       input.logger.log({
+        ...completion,
         ...(actor === undefined ? {} : { actorId: actor.id }),
         durationMs: performance.now() - startedAt,
         method: context.req.method,
@@ -766,9 +730,37 @@ export function createLaceApp(input: LaceAppInput): Hono {
     }
   });
 
+  const mcpPath = (path: string) =>
+    path === "/mcp" ||
+    path.startsWith("/mcp/") ||
+    path.startsWith("/api/auth/oauth2/") ||
+    path.startsWith("/.well-known/oauth-protected-resource/mcp") ||
+    path.startsWith("/.well-known/oauth-authorization-server/api/auth") ||
+    path.startsWith("/api/auth/.well-known/oauth-authorization-server") ||
+    path.startsWith("/api/v1/account/mcp-connections") ||
+    path === "/admin/mcp/consent";
+  app.use(async (context, next) => {
+    if (!mcpPath(context.req.path)) return next();
+    if (!input.mcpEnabled) return new Response(null, { status: 404 });
+    if (!input.publicBaseUrl) return new Response(null, { status: 503 });
+    const canonical = new URL(input.publicBaseUrl);
+    const request = context.req.raw;
+    const suppliedOrigin = request.headers.get("origin");
+    const host = request.headers.get("host");
+    if (
+      new URL(request.url).host !== canonical.host ||
+      (host !== null && host !== canonical.host) ||
+      (suppliedOrigin !== null && suppliedOrigin !== canonical.origin)
+    )
+      return new Response(null, { status: 403 });
+    return next();
+  });
   const jsonBodyLimit = bodyLimit({
     maxSize: input.maxBodyBytes,
-    onError: () => errorResponse(transportError("PAYLOAD_TOO_LARGE")),
+    onError: (context) =>
+      mcpPath(context.req.path)
+        ? Response.json({ error: "invalid_request" }, { status: 413 })
+        : errorResponse(transportError("PAYLOAD_TOO_LARGE")),
   });
   app.use((context, next) => {
     const request = context.req.raw;
@@ -786,7 +778,10 @@ export function createLaceApp(input: LaceAppInput): Hono {
           const { done, value } = await reader.read();
           if (done) break;
           size += value.byteLength;
-          if (size > input.maxBodyBytes) return errorResponse(transportError("PAYLOAD_TOO_LARGE"));
+          if (size > input.maxBodyBytes)
+            return mcpPath(context.req.path)
+              ? Response.json({ error: "invalid_request" }, { status: 413 })
+              : errorResponse(transportError("PAYLOAD_TOO_LARGE"));
         }
         return next();
       })();
@@ -794,6 +789,32 @@ export function createLaceApp(input: LaceAppInput): Hono {
     return jsonBodyLimit(context, next);
   });
   app.use(async (context, next) => {
+    if (context.req.path === "/mcp") {
+      if (!input.mcp) return new Response(null, { status: 503 });
+      let scope: "content:read" | "content:write" = "content:read";
+      if (context.req.method === "POST") {
+        try {
+          const value: unknown = await context.req.raw.clone().json();
+          if (
+            typeof value === "object" &&
+            value !== null &&
+            "method" in value &&
+            value.method === "tools/call" &&
+            "params" in value &&
+            typeof value.params === "object" &&
+            value.params !== null &&
+            "name" in value.params &&
+            (value.params.name === "create_entry" || value.params.name === "save_draft")
+          )
+            scope = "content:write";
+        } catch {
+          /* Protocol syntax remains SDK-owned. */
+        }
+      }
+      const resolved = await input.mcp.resolve(context.req.raw, scope);
+      if (resolved.response) return resolved.response;
+      context.set("lace.actor", resolved.actor);
+    }
     const actorLimited =
       sensitiveRequestLimit(context.req.method, context.req.path)?.scope === "actor";
     const resolvedActor = actorLimited ? await actor(context) : undefined;
@@ -805,6 +826,14 @@ export function createLaceApp(input: LaceAppInput): Hono {
     const allowed = typeof decision === "boolean" ? decision : decision.allowed;
     if (!allowed) {
       const retryAfterSeconds = typeof decision === "boolean" ? 60 : decision.retryAfterSeconds;
+      if (context.req.path === "/mcp" || context.req.path.startsWith("/api/auth/oauth2/"))
+        return Response.json(
+          { error: "temporarily_unavailable" },
+          {
+            status: 429,
+            headers: { "retry-after": String(retryAfterSeconds), "cache-control": "no-store" },
+          },
+        );
       return errorResponse(transportError("RATE_LIMITED"), {
         "retry-after": String(retryAfterSeconds),
       });
@@ -812,6 +841,20 @@ export function createLaceApp(input: LaceAppInput): Hono {
     await next();
   });
 
+  app.all("/mcp", async (context) => {
+    if (!input.mcp) return new Response(null, { status: 503 });
+    return input.mcp.fetch(context.req.raw, await actor(context), (event) =>
+      context.set("lace.mcpCompletion", event),
+    );
+  });
+  app.all(
+    "/.well-known/oauth-protected-resource/mcp",
+    (context) => input.auth?.fetch(context.req.raw) ?? new Response(null, { status: 404 }),
+  );
+  app.all(
+    "/.well-known/oauth-authorization-server/api/auth",
+    (context) => input.auth?.fetch(context.req.raw) ?? new Response(null, { status: 404 }),
+  );
   if (input.auth !== undefined) {
     const auth = input.auth;
     app.all("/api/auth/*", (context) => auth.fetch(context.req.raw));
@@ -837,13 +880,8 @@ export function createLaceApp(input: LaceAppInput): Hono {
     resolvedActor: Actor,
     entry: Awaited<ReturnType<ContentUseCases["create"]>>,
   ) {
-    return toAdminContentEntryDto(
-      entry,
-      await input.content.describeActor({
-        actor: resolvedActor,
-        actorId: entry.draft.updatedBy.id,
-      }),
-      { seo: seoSection.models[entry.model.key] !== undefined },
+    return toAdminEntryProjectionDto(
+      await input.content.projectAdminEntry({ actor: resolvedActor, entry }),
     );
   }
 
@@ -1059,7 +1097,12 @@ export function createLaceApp(input: LaceAppInput): Hono {
   );
   app.get("/api/v1/admin/settings/status", async (context) => {
     await settingsActor(context);
+    if (!input.publicBaseUrl) throw new Error("Canonical public URL is unavailable.");
     return response(adminSettingsStatusSchema, {
+      mcp: {
+        enabled: input.mcpEnabled === true,
+        endpoint: new URL("/mcp", input.publicBaseUrl).href,
+      },
       configuredModels: input.config.content.length,
       email: emailDeliveryStatus(email),
       engineVersion: input.environment.engineVersion,
@@ -1249,6 +1292,56 @@ export function createLaceApp(input: LaceAppInput): Hono {
       );
     },
   );
+  app.get("/api/v1/account/capabilities", async (context) => {
+    await actor(context);
+    return response(
+      accountCapabilitiesSchema,
+      { mcpEnabled: input.mcpEnabled === true && input.oauthConnections !== undefined },
+      200,
+      noStore,
+    );
+  });
+  if (input.mcpEnabled && input.oauthConnections) {
+    const connections = input.oauthConnections;
+    app.get("/api/v1/account/mcp-connections", async (context) => {
+      const resolvedActor = await actor(context);
+      const query = parse(oauthConnectionListQuerySchema, context.req.query());
+      const limit = query.limit === undefined ? 20 : Number(query.limit);
+      const items = await connections.list(resolvedActor, {
+        ...(query.after === undefined ? {} : { after: query.after }),
+        limit,
+      });
+      return response(
+        oauthConnectionListSchema,
+        {
+          items: items.map((item) => ({
+            id: item.id,
+            clientName: item.clientName,
+            scopes: [...item.scopes],
+            createdAt: toIsoTimestamp(item.createdAt),
+            expiresAt: toIsoTimestamp(item.expiresAt),
+            revokedAt: item.revokedAt === null ? null : toIsoTimestamp(item.revokedAt),
+            ...(item.lastUsedAt === undefined
+              ? {}
+              : { lastUsedAt: toIsoTimestamp(item.lastUsedAt) }),
+          })),
+          nextCursor: items.length === limit ? items.at(-1)!.id : null,
+        },
+        200,
+        noStore,
+      );
+    });
+    app.post("/api/v1/account/mcp-connections/:connectionId/revoke", async (context) => {
+      const resolvedActor = await actor(context);
+      if (context.req.header("origin") !== new URL(input.publicBaseUrl ?? context.req.url).origin)
+        throw new AuthorizationError();
+      parse(oauthConnectionRevokeSchema, await optionalJsonBody(context.req.raw));
+      const connectionId = parse(identifierSchemaPublic, context.req.param("connectionId"));
+      if (!(await connections.revoke(resolvedActor, connectionId))) return notFound();
+      return new Response(null, { status: 204, headers: noStore });
+    });
+  }
+
   app.get(
     "/api/v1/account/sessions",
     describeRoute({
@@ -1892,11 +1985,10 @@ export function createLaceApp(input: LaceAppInput): Hono {
       tags: ["admin"],
     }),
     async (context) => {
-      await actor(context);
-      return response(contentModelListSchema, {
-        items: input.config.content.map((model) => modelDto(input.config, model)),
-        listQueryLimits: input.content.listQueryLimits,
-      });
+      return response(
+        contentModelListSchema,
+        toContentModelDiscoveryDto(input.content.discoverModels({ actor: await actor(context) })),
+      );
     },
   );
 
@@ -1952,27 +2044,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         ...(query.sort === undefined ? {} : { sort: query.sort }),
         ...(query.status === undefined ? {} : { status: query.status }),
       });
-      return response(contentEntryListSchema, {
-        items: page.items.map((entry) => ({
-          draftRevision: entry.draftRevision,
-          id: entry.id,
-          listValues: entry.listValues,
-          modelKey: entry.modelKey,
-          ...(entry.publishedAt === undefined
-            ? {}
-            : { publishedAt: toIsoTimestamp(entry.publishedAt) }),
-          ...(entry.publishedSnapshotId === undefined
-            ? {}
-            : { publishedSnapshotId: entry.publishedSnapshotId }),
-          ...(entry.slug === undefined ? {} : { slug: entry.slug }),
-          status: entry.status,
-          title: entry.title,
-          updatedAt: toIsoTimestamp(entry.updatedAt),
-          updatedBy: entry.updatedBy,
-        })),
-        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
-        totals: page.totals,
-      });
+      return response(contentEntryListSchema, toContentEntryListDto(page));
     },
   );
 
@@ -2121,13 +2193,13 @@ export function createLaceApp(input: LaceAppInput): Hono {
     validator("param", entryIdParams, validationHook),
     async (context) => {
       const resolvedActor = await actor(context);
-      const entry = await input.content.load({
+      const projection = await input.content.loadAdminEntry({
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
       });
-      return entry === null
+      return projection === null
         ? notFound()
-        : response(adminContentEntrySchema, await adminEntryDto(resolvedActor, entry));
+        : response(adminContentEntrySchema, toAdminEntryProjectionDto(projection));
     },
   );
 

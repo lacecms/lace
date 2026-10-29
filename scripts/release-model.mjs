@@ -96,7 +96,7 @@ export function validateReleaseModel(model, { templates = true } = {}) {
       `Release version ${release.version} is already published; select a new prerelease version`,
     );
   const publicNames = new Set(release.packages.map(packageName));
-  if (publicNames.size !== 15 || publicNames.has("@lacecms/test-utils"))
+  if (publicNames.size !== 16 || publicNames.has("@lacecms/test-utils"))
     throw new Error("Invalid public package allowlist");
   if (!model.rootManifest.private) throw new Error("Workspace root must remain private");
   const engineManifests = [["workspace root", model.rootManifest]];

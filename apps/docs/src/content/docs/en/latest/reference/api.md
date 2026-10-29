@@ -82,3 +82,14 @@ string continuations use bounded draft/revision anchors; any successful boundary
 draft save, deletion or replacement expires them, including an empty next page.
 Restart without `after` while retaining the query. Public collection APIs keep
 their independent published ordering and expose none of these field queries.
+
+## Optional MCP content API
+
+`LACE_MCP_ENABLED=true` enables `/mcp` with OAuth code/S256, public client
+registration and explicit account consent. Discovery is at
+`/.well-known/oauth-protected-resource/mcp` and
+`/.well-known/oauth-authorization-server/api/auth`. Only model/list/get/create/save
+draft tools are available. Publishing, unpublishing and deletion are unavailable.
+Use an OAuth-capable Streamable HTTP client; the tested protocol is `2025-11-25`.
+Scopes are `content:read`, `content:write` (including read) and `offline_access`
+for refresh. Follow the client prompts through the existing sign-in form.

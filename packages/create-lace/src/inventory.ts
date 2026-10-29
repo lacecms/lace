@@ -42,6 +42,7 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "docs/lace-cloudflare.md", owner: "managed", cloudflare: true, render: "markers" },
   { path: "docs/lace-compose-dev.md", owner: "managed", render: "markers" },
   { path: "docs/lace-compose-production.md", owner: "managed", render: "markers" },
+  { path: "docs/lace-mcp.md", owner: "managed", render: "markers" },
   { path: "docs/lace-operations.md", owner: "managed", render: "markers" },
   { path: "lace.config.ts", owner: "user" },
   { path: "package.json", owner: "managed", interpolateName: true, render: "root-package" },

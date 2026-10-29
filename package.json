@@ -55,19 +55,30 @@
     "release:acceptance:import": "node scripts/release-evidence.mjs",
     "docs:dev": "pnpm --filter @lacecms/app-docs dev",
     "docs:build": "turbo run build --filter @lacecms/app-docs",
-    "docs:check": "pnpm --filter @lacecms/app-docs check"
+    "docs:check": "pnpm --filter @lacecms/app-docs check",
+    "compat:mcp": "pnpm compat:mcp:types && vitest run scripts/fixtures/oauth-mcp --maxWorkers=1",
+    "compat:mcp:baseline": "vitest run scripts/fixtures/oauth-mcp/compat.test.mjs --maxWorkers=1 -t \"S256|SDK v2|ordinary|inventories|boundary keeps\"",
+    "compat:mcp:types": "tsc -p scripts/fixtures/oauth-mcp/tsconfig.json"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",
     "@lacecms/content": "workspace:*"
   },
   "devDependencies": {
+    "@better-auth/oauth-provider": "catalog:",
     "@fission-ai/openspec": "catalog:",
+    "@lacecms/db": "workspace:*",
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
+    "@valibot/to-json-schema": "catalog:",
+    "better-auth": "catalog:",
     "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
+    "valibot": "catalog:",
     "vitest": "catalog:"
   },
   "engines": {

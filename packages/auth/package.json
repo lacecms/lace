@@ -29,6 +29,8 @@
     "test": "vitest run src/index.test.mjs"
   },
   "dependencies": {
+    "@better-auth/oauth-provider": "catalog:",
+    "@lacecms/application": "workspace:*",
     "@lacecms/domain": "workspace:*",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:"

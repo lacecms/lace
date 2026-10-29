@@ -18,3 +18,18 @@ Use account screens for profile/password and session management. Password reset 
 Settings creates read-only build tokens for published export access. Copy the value once and keep it in server-side site/build configuration. A token cannot be revealed later; create a replacement and revoke the old one if lost. A build token is not an admin session or setup token.
 
 Transactional email is optional. Node can use SMTP or Resend; Workers can use Resend or the configured Cloudflare Email Service binding. Choose a provider appropriate to the runtime, configure sender/secrets, then use Settings' delivery test and inspect diagnostics. Never place mail/API keys in public site variables.
+
+## Assistant connections
+
+When enabled by your operator, Account lists your own assistant connections.
+Review the client, read or draft-write access and dates; confirm Revoke to stop
+future access and token renewal. Every role can manage its own connections.
+An assistant cannot publish, unpublish or delete content. Its writes replace the
+complete draft and require the revision it read; after an uncertain result,
+re-read content rather than automatically creating another entry or overwriting.
+
+Access expires within fifteen minutes. Rotating refresh requires offline access
+and expires within the original thirty-day grant. Replaying a consumed refresh
+token requires reconnection. Account disable, password reset and revoke-others
+invalidate connections; ordinary browser sign-out leaves them independent.
+Changing roles affects future requests but promotion never widens your consent.

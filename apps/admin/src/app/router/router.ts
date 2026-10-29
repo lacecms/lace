@@ -1,3 +1,4 @@
+import { McpConsentPage } from "../../pages/mcp-consent/index.js";
 import {
   createRootRouteWithContext,
   createRoute,
@@ -45,8 +46,9 @@ const rootRoute = createRootRouteWithContext<AdminRouterContext>()({
   notFoundComponent: StandaloneNotFoundPage,
 });
 const loginRoute = createRoute({
-  beforeLoad: async ({ context }) => {
-    if ((await context.sessionSource.get()) !== null) throw redirect({ to: "/content" });
+  beforeLoad: async ({ context, search }) => {
+    if (!search.mcpTransaction && (await context.sessionSource.get()) !== null)
+      throw redirect({ to: "/content" });
   },
   component: LoginPage,
   getParentRoute: () => rootRoute,
@@ -55,14 +57,39 @@ const loginRoute = createRoute({
     search: Record<string, unknown>,
   ): {
     redirect?: string | undefined;
+    mcpTransaction?: string | undefined;
     reset?: boolean | undefined;
     setupComplete?: boolean | undefined;
   } => ({
+    mcpTransaction:
+      typeof search.mcpTransaction === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+        search.mcpTransaction,
+      )
+        ? search.mcpTransaction
+        : undefined,
     setupComplete:
       search.setupComplete === true || search.setupComplete === "true" ? true : undefined,
     redirect: typeof search.redirect === "string" ? safeReturnPath(search.redirect) : undefined,
     // Only a flag: the password-changed notice never carries the reset token.
     reset: search.reset === true || search.reset === "true" ? true : undefined,
+  }),
+});
+// The OAuth provider uses this alias for the existing sign-in form.
+const signInAliasRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sign-in",
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/login", search: { mcpTransaction: search.mcpTransaction } });
+  },
+  validateSearch: (search: Record<string, unknown>) => ({
+    mcpTransaction:
+      typeof search.mcpTransaction === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+        search.mcpTransaction,
+      )
+        ? search.mcpTransaction
+        : undefined,
   }),
 });
 // Account screens reached from emailed links. They stay public even for a
@@ -165,6 +192,14 @@ const buildsRoute = createRoute({
   path: "/builds",
 });
 // Every signed-in role manages its own account; no permission guard applies.
+const mcpConsentRoute = createRoute({
+  component: McpConsentPage,
+  getParentRoute: () => protectedRoute,
+  path: "/mcp/consent",
+  validateSearch: (search: Record<string, unknown>) => ({
+    mcpTransaction: typeof search.mcpTransaction === "string" ? search.mcpTransaction : "",
+  }),
+});
 const accountRoute = createRoute({
   component: AccountPage,
   getParentRoute: () => protectedRoute,
@@ -191,6 +226,7 @@ const notFoundRoute = createRoute({
 });
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  signInAliasRoute,
   acceptInviteRoute,
   forgotPasswordRoute,
   resetPasswordRoute,
@@ -203,6 +239,7 @@ const routeTree = rootRoute.addChildren([
     mediaRoute,
     buildsRoute,
     accountRoute,
+    mcpConsentRoute,
     usersRoute,
     settingsRoute,
     notFoundRoute,

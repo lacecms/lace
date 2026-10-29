@@ -482,7 +482,13 @@ test("a scheduled run with many pending deletions stays within 50 D1 queries", a
   for (const id of ids)
     if ((await fixture.local.bucket.head(`media/${id}`)) !== null) remaining.push(id);
   expect(remaining).toHaveLength(3);
-  await fixture.worker.scheduled({}, env, fixture.ctx);
+  // Exercise all three maintenance phases without widening the per-run budget.
+  for (let phase = 0; phase < 2; phase += 1) {
+    fixture.advance(60_000);
+    const before = counted.stats.queries;
+    await fixture.worker.scheduled({}, env, fixture.ctx);
+    expect(counted.stats.queries - before).toBeLessThanOrEqual(50);
+  }
   for (const id of ids) expect(await fixture.local.bucket.head(`media/${id}`)).toBeNull();
 });
 
@@ -812,7 +818,9 @@ async function trackedFixture(env = {}) {
   const dispatch = async () => {
     const requested = await fixture.call("/api/v1/admin/builds", { method: "POST" });
     expect(requested.response.status).toBe(202);
-    fixture.pending.splice(0);
+    // Finish the immediate post-commit pass before moving the fixture clock.
+    // Dropping these promises races the explicit scheduled dispatch below.
+    await fixture.settle();
     fixture.advance(6_000);
     await run();
     return (await fixture.call("/api/v1/admin/site-builds")).body.items[0];
@@ -1267,3 +1275,35 @@ test("CE10 authenticated Worker destination status and impact acknowledgment con
   await internalLinkBuildContract(journey, expect);
   await fixture.settle();
 }, 60_000);
+
+test("Worker MCP flag shares exact parsing and sanitized 503 diagnostics", async () => {
+  const env = {
+    DB: fakeDatabase,
+    MEDIA: fakeBucket,
+    LACE_AUTH_SECRET: secret,
+    LACE_PUBLIC_BASE_URL: origin,
+  };
+  expect(parseCloudflareSettings(env).mcpEnabled).toBe(false);
+  for (const value of ["true", "false"])
+    expect(parseCloudflareSettings({ ...env, LACE_MCP_ENABLED: value }).mcpEnabled).toBe(
+      value === "true",
+    );
+  for (const value of ["", "1", "TRUE", true, " private-value "]) {
+    expect(() => parseCloudflareSettings({ ...env, LACE_MCP_ENABLED: value })).toThrow(
+      "Invalid Cloudflare environment: LACE_MCP_ENABLED.",
+    );
+    const logs = [];
+    const worker = createCloudflareWorker({
+      config,
+      operationalLogger: { error: (event) => logs.push(event) },
+    });
+    const response = await worker.fetch(new Request(`${origin}/mcp`), {
+      ...env,
+      LACE_MCP_ENABLED: value,
+    });
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(logs)).toContain("LACE_MCP_ENABLED");
+    expect(JSON.stringify(logs)).not.toContain("private-value");
+    expect(await response.text()).not.toContain("LACE_MCP_ENABLED");
+  }
+});

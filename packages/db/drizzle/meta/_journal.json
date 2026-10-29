@@ -85,6 +85,20 @@
       "when": 1792919369108,
       "tag": "0011_public_projection_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793229744933,
+      "tag": "0012_oauth_mcp",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1793232246526,
+      "tag": "0013_oauth_verification_indexes",
+      "breakpoints": true
     }
   ]
 }

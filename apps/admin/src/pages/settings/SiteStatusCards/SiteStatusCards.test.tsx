@@ -14,6 +14,7 @@ test("shows readiness, models, and active tokens with a refresh action", async (
       refreshing={false}
       status={{
         configuredModels: 4,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { provider: "none" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,
@@ -60,6 +61,7 @@ test("unavailable version is never guessed and cached status is labelled stale",
       {...props}
       status={{
         configuredModels: 0,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { provider: "none" as const },
         engineVersion: "1.2.3-alpha.7",
         ready: true,
@@ -67,6 +69,9 @@ test("unavailable version is never guessed and cached status is labelled stale",
     />,
   );
   expect(screen.getByRole("group", { name: "CMS version" })).toHaveTextContent("1.2.3-alpha.7");
-  expect(screen.getByRole("status")).toHaveTextContent("Status is stale");
+  expect(screen.getByText("Status is stale. Showing the last confirmed values.")).toHaveAttribute(
+    "role",
+    "status",
+  );
   expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
 });

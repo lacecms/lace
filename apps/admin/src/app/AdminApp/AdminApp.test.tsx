@@ -129,3 +129,14 @@ test("the application component mounts providers and guards the admin entry", as
   expect(window.location.pathname).toBe("/admin/login");
   window.history.replaceState(null, "", "/");
 });
+
+test("OAuth sign-in alias preserves only an opaque transaction handle", async () => {
+  const handle = "d7df3dd2-e3b3-4f42-a88d-f8c421628fab";
+  const router = renderRoute(
+    `/sign-in?mcpTransaction=${handle}&redirect=https://attacker.test`,
+    staticSessionSource(null),
+  );
+  expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/login");
+  expect(router.state.location.search).toEqual({ mcpTransaction: handle });
+});

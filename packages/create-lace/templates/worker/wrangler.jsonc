@@ -43,6 +43,8 @@
   "triggers": { "crons": ["* * * * *"] },
   // Optional public API reference: add "LACE_API_DOCS_ENABLED": "true" to vars.
   "vars": {
+    // Opt in after migrations; no additional binding is required.
+    "LACE_MCP_ENABLED": "false",
     // The Worker's public origin with a trailing slash: admin login, API and media URLs.
     // Replace before deploying; worker/.dev.vars overrides it for local development.
     "LACE_PUBLIC_BASE_URL": "https://cms.example.com/",
