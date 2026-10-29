@@ -71,3 +71,14 @@ verification and durable exact-artifact acceptance remain required. Source tests
 packed-consumer iterations and historical alpha.7 receipts are not substitutes
 for that evidence. Real VPS/Cloudflare deployment, external-provider video and
 actual assistant-client login remain owner-operated checks.
+
+## Initial preparation and builder repair
+
+The clean source at `9a49e69` prepared sixteen archives and the amd64 API image
+in `.release-artifacts/alpha-8`, then failed the builder compile stage: pnpm's
+native dependency lifecycle invoked node-gyp without Python. No complete
+inventory or success receipt was produced; the failed directory is retained.
+The builder compile stage now installs build-essential/python3, matching its
+existing runtime build toolchain. Its independent amd64 compile-stage build
+passed. No runtime feature or audit-policy exception changed. Full preparation
+retries from a new clean revision into `.release-artifacts/alpha-8-retry-1`.

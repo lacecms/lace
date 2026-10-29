@@ -1,6 +1,9 @@
 FROM node:24.12.0-bookworm-slim AS compile
 
-RUN npm install --global pnpm@12.3.4
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends build-essential python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global pnpm@12.3.4
 WORKDIR /build
 COPY . .
 RUN pnpm install --frozen-lockfile --filter @lacecms/app-builder... \
