@@ -33,3 +33,11 @@ and expires within the original thirty-day grant. Replaying a consumed refresh
 token requires reconnection. Account disable, password reset and revoke-others
 invalidate connections; ordinary browser sign-out leaves them independent.
 Changing roles affects future requests but promotion never widens your consent.
+
+Settings → MCP provides canonical-endpoint copying and setup examples for Codex,
+Claude Code and Gemini CLI. Read access is selected by default. Select draft
+editing only when needed, update the existing client entry, complete browser
+sign-in/consent again and restart the client after configuration changes.
+Changing Settings examples does not widen an existing grant. Client-specific
+recipes ship in the generated `docs/lace-mcp.md`; no client secret or manually
+copied bearer token is needed.

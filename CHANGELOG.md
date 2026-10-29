@@ -3,6 +3,14 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 0.1.0-alpha.8
+
+- Configure reusable list layouts and compact media rows, and embed YouTube or Vimeo videos with optional image previews.
+- Link content by stable entry identity; unavailable destinations render safely, with coordinated SDK/site adoption of build-export format 2.
+- Configure collection sorting, filters and additional search fields for draft editing without changing published order.
+- Optionally connect OAuth assistants through MCP with explicit consent, revocable access and five read/draft tools; publishing and deletion remain unavailable.
+- Upgrade engine, site and builder together, apply migrations 0010–0013 and review installed components and deployment configuration before synchronization ([upgrade guide](docs/compatibility.md#alpha-8-upgrade-and-rollback)).
+
 ## 0.1.0-alpha.7
 
 - Upload GIF images and reuse unchanged originals with conditional media requests; larger valid images now pass the VPS proxy.

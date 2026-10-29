@@ -1,5 +1,13 @@
 # Lace backlog
 
+- **Alpha.8 release preparation (selected 2026-10-29):**
+  `prepare-alpha-eight-release` selects alpha.8/next with template 0.39.0,
+  sixteen packages including MCP and API/builder images for both Linux
+  platforms. It packages accepted work already on main, refreshes compatibility
+  and documentation, and requires fresh source/audit and exact-artifact
+  acceptance. Publication and real deployments remain separate owner actions;
+  deferred capabilities below retain their order.
+
 - **MCP3 Claude Code and Gemini CLI setup (implemented, archived 2026-10-29):**
   `add-claude-and-gemini-mcp-guides` extends the implemented MCP2 Settings card
   with client-specific OAuth setup and sign-in examples, preserving selected

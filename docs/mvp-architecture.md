@@ -3503,7 +3503,7 @@ scalar-only engine needs matching configuration/database backup or an explicit
 validated conversion. Recursive schema evolution is described in section 8;
 admin authoring restrictions remain in section 17 until CE7C expands the editor.
 
-The selected alpha.7 release adds accepted image delivery A–D and the VPS
+The published alpha.7 release adds accepted image delivery A–D and the VPS
 upload proxy fix to alpha.6. GIF originals remain unchanged; Astro builds WebP
 variants, including animation, with eligible blurred placeholders and optional
 lightboxes. Links on image/gallery content take precedence over lightboxes.
@@ -3513,6 +3513,14 @@ before the next build. No new SQL migration is introduced relative to alpha.6.
 See [alpha.7 upgrade and rollback](./compatibility.md#alpha-7-upgrade-and-rollback)
 for matching backups and source-component updates. Automatic database or content
 schema downgrade is not promised.
+
+The selected alpha.8 candidate packages accepted list presentation, video embeds,
+internal URL links/export format 2, configurable collection queries and optional
+OAuth MCP. Upgrade engine/admin/site/builder together and apply migrations
+0010–0013; MCP stays disabled until explicitly activated after migration. Review
+installed source and matching backups as described in
+[alpha.8 upgrade and rollback](./compatibility.md#alpha-8-upgrade-and-rollback).
+Preparation, publication and real deployment acceptance remain separate gates.
 
 Compatibility exists at three boundaries:
 
@@ -3632,8 +3640,9 @@ The implementation plan uses these resolved defaults:
   were owner-confirmed on 2026-10-10. Alpha.5 (template `0.29.0`) was prepared and locally accepted on
   2026-10-14; public npm/image availability was verified read-only on 2026-10-16
   and alpha.5 is now recorded as published and immutable. Alpha.6 (template
-  `0.30.0`) is also confirmed published and immutable. The next selected
-  candidate is `0.1.0-alpha.7` (template `0.35.0`) on `next`; fresh artifact acceptance and
+  `0.30.0`) is also confirmed published and immutable. Alpha.7 (template
+  `0.35.0`) has verified public packages/images and remains immutable. The next selected
+  candidate is `0.1.0-alpha.8` (template `0.39.0`) on `next`; fresh artifact acceptance and
   owner-operated deployment checks remain distinct from historical alpha.4
   evidence. Beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and

@@ -32,7 +32,7 @@ export async function alphaSixJourney({
   const client = createLaceClient({ baseUrl: base, token: buildToken });
   const first = await client.getBuildExportPage({ limit: 1 });
   assert.equal(first.changed, true);
-  assert.equal(first.page.formatVersion, 1);
+  assert.equal(first.page.formatVersion, 2);
   assert.equal(first.page.entries.length, 1);
   assert.ok(first.page.nextCursor, "acceptance requires at least two published entries");
   const complete = await client.getBuildExport({ pageSize: 1 });
@@ -72,7 +72,7 @@ export async function alphaSixJourney({
   );
   await assert.rejects(
     altered((body) => {
-      body.formatVersion = 2;
+      body.formatVersion = 3;
     }).getBuildExport(),
   );
   assert.ok(complete.export.entries.some((entry) => entry.blocks.length > 0));

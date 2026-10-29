@@ -1,3 +1,8 @@
+import {
+  configureAlphaEight,
+  alphaEightJourney,
+  verifyAlphaEightStarter,
+} from "./alpha-eight-acceptance.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
 import {
@@ -179,7 +184,7 @@ async function writeAstroParent(root) {
   await writeFile(join(root, "astro.config.mjs"), "export default {};\n");
   await writeFile(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "existing-site", private: true, dependencies: { astro: "7.3.1" } })}\n`,
+    `${JSON.stringify({ name: "existing-site", private: true, dependencies: { astro: "7.3.3" } })}\n`,
   );
 }
 
@@ -388,6 +393,7 @@ async function waitApiReady(base) {
  * tour and media, and publication through the API.
  */
 async function nodeJourney(context) {
+  await configureAlphaEight(context.project);
   const { project, apiPort } = context;
   const base = `http://127.0.0.1:${apiPort}/`;
   await guideContract(project, "development");
@@ -1021,7 +1027,11 @@ async function starterJourney(project) {
   const exported = JSON.parse(
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
   );
+  const videos = exported.entries
+    .find((entry) => entry.path === "/about")
+    .blocks.filter((block) => block.type === "videoEmbed");
   exported.entries = exported.entries.slice(0, 2);
+  exported.entries[1].blocks.push(...videos);
   // The fixture navigation global has a submenu; the post holds a gallery.
   const navigation = exported.globals.find((global) => global.modelKey === "navigation");
   exported.globals = [
@@ -1114,6 +1124,7 @@ async function starterJourney(project) {
 
   const published = await build("starter-build", exported, { LACE_BUILD_SITE_URL: siteUrl });
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
+  await verifyAlphaEightStarter(project, workspace);
   const html = published.join("\n");
   for (const type of ["hero", "richText", "image", "quote", "cta"]) {
     if (!html.includes(`data-lace-block="${type}"`))
@@ -2196,6 +2207,34 @@ async function main() {
       },
     );
     journeys.push("34c-packed-platform-restore-rotation");
+    const proxyBase = `http://127.0.0.1:${context.httpPort}/`;
+    await alphaEightJourney({
+      ...session,
+      base: proxyBase,
+      project,
+      secretValues,
+      run,
+      enable: async () => {
+        context.values.LACE_MCP_ENABLED = "true";
+        context.values.LACE_EMAIL_PROVIDER = "";
+        context.values.LACE_EMAIL_FROM = "";
+        context.values.LACE_PUBLIC_BASE_URL = proxyBase;
+        await writeEnvironment(context);
+        await compose("alpha-eight-enable-mcp", [
+          "up",
+          "-d",
+          "--force-recreate",
+          "api",
+          "dispatcher",
+        ]);
+        await waitApiReady(proxyBase);
+      },
+    });
+    await inspectShipping(context);
+    journeys.push(
+      "alpha-eight-node-proxy-oauth-drafts-queries-revocation",
+      "alpha-eight-local-cloudflare-oauth-drafts-queries-revocation",
+    );
     if (
       (await run("acceptance-harness-final-revision", "git", ["rev-parse", "HEAD"])).trim() !==
         harnessRevision ||
