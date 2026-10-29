@@ -82,3 +82,25 @@ The builder compile stage now installs build-essential/python3, matching its
 existing runtime build toolchain. Its independent amd64 compile-stage build
 passed. No runtime feature or audit-policy exception changed. Full preparation
 retries from a new clean revision into `.release-artifacts/alpha-8-retry-1`.
+
+## Saved-set verification and acceptance harness follow-up
+
+`.release-artifacts/alpha-8-retry-1` prepared successfully from clean source
+`001ad14b83a228c4ac4ccfb79d5963c86a07801f` with source fingerprint
+`ccd9cc61a2dde784bee9efa3dd41516a157ed3adb9ab4e82880e32c08dc82643`:
+sixteen archives, four images, all platform smokes passed. Independent
+`release:verify` confirmed complete/publication-eligible inventory.
+
+The first exact-artifact run passed starter, Node setup/browser publication,
+security/roles, production Compose, build failure/retry and service persistence,
+then correctly refused an undocumented query-fixture change to lace.config.ts.
+The harness now verifies both the original shipping digest and the exact reviewed
+query-only configuration transform, preserving refusal of every other edit.
+A second shipping scan uses a distinct temporary destination.
+
+The Node MCP test edge also now uses actual HTTPS in front of generated nginx;
+production HTTPS checks remain enabled. A direct TLS probe verified that an
+untrusted certificate fails, the explicit fixture CA succeeds and canonical Host
+is preserved. The paired Undici fetch/Agent are from the same version. These
+are harness-only corrections; saved package/image bytes remain unchanged and the
+next acceptance records the newer committed harness revision separately.

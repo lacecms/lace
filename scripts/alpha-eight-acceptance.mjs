@@ -11,13 +11,12 @@ export async function configureAlphaEight(project) {
   const anchor =
     'fields: { summary: field.text(), relatedUrl: field.url({ label: "Related page" }) },';
   assert.ok(text.includes(anchor), "alpha.8 collection fixture anchor changed");
-  await writeFile(
-    path,
-    text.replace(
-      anchor,
-      `${anchor}\n      listOptions: { sortableFields: ["summary"], filterableFields: ["summary"], searchableFields: ["summary"] },`,
-    ),
+  const configured = text.replace(
+    anchor,
+    `${anchor}\n      listOptions: { sortableFields: ["summary"], filterableFields: ["summary"], searchableFields: ["summary"] },`,
   );
+  await writeFile(path, configured);
+  return { before: text, after: configured };
 }
 
 /** HTTP and SDK probes against saved Node images or the installed consumer Worker. */
@@ -30,11 +29,12 @@ export async function alphaEightJourney({
   enable,
   secretValues,
   run,
+  fetch: requestFetch = globalThis.fetch,
 }) {
   const origin = new URL(base).origin;
   let cookie;
   const invoke = async (path, { json, form, headers, ...options } = {}) => {
-    const response = await fetch(new URL(path, base), {
+    const response = await requestFetch(new URL(path, base), {
       ...options,
       redirect: "manual",
       signal: AbortSignal.timeout(30_000),
@@ -148,7 +148,7 @@ export async function alphaEightJourney({
                 body = JSON.stringify(message);
               }
             }
-            return fetch(url, { ...init, headers, body });
+            return requestFetch(url, { ...init, headers, body });
           },
         }),
       );
@@ -379,4 +379,66 @@ export async function verifyAlphaEightStarter(project, workspace) {
   console.info(
     "Alpha eight packed starter: layout hooks, resolved/missing internal links and isolated video activation passed",
   );
+}
+
+/** A real TLS edge in front of the generated nginx, retaining production HTTPS checks. */
+export async function alphaEightTlsProxy({ parent, upstream, run, workspace, secretValues }) {
+  const { mkdir } = await import("node:fs/promises");
+  const { createServer } = await import("node:https");
+  const { request } = await import("node:http");
+  const { createRequire } = await import("node:module");
+  const directory = join(parent, "alpha-eight-tls");
+  await mkdir(directory);
+  const certificatePath = join(directory, "certificate.pem");
+  const keyPath = join(directory, "key.pem");
+  await run("alpha-eight-tls-certificate", "openssl", [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-keyout",
+    keyPath,
+    "-out",
+    certificatePath,
+  ]);
+  const key = await readFile(keyPath);
+  const cert = await readFile(certificatePath);
+  secretValues.add(key.toString());
+  const server = createServer({ key, cert }, (incoming, outgoing) => {
+    const proxy = request(
+      new URL(incoming.url, upstream),
+      { method: incoming.method, headers: incoming.headers },
+      (response) => {
+        outgoing.writeHead(response.statusCode, response.headers);
+        response.pipe(outgoing);
+      },
+    );
+    proxy.on("error", () => {
+      if (!outgoing.headersSent) outgoing.writeHead(502);
+      outgoing.end();
+    });
+    incoming.pipe(proxy);
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const require = createRequire(join(workspace, "apps/api/package.json"));
+  const { Agent, fetch: undiciFetch } = createRequire(require.resolve("wrangler/package.json"))(
+    "undici",
+  );
+  const dispatcher = new Agent({ connect: { ca: cert } });
+  return {
+    base: `https://127.0.0.1:${server.address().port}/`,
+    fetch: (url, options) => undiciFetch(url, { ...options, dispatcher }),
+    close: async () => {
+      await dispatcher.close();
+      server.closeAllConnections();
+      await new Promise((done) => server.close(done));
+    },
+  };
 }
