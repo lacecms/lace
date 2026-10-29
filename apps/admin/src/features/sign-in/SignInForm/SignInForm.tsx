@@ -18,7 +18,13 @@ import { PasswordField } from "../../../shared/ui/PasswordField/index.js";
  * Signs in with email and password, then continues to the requested local
  * route. The card has one task, so the email field takes focus on open.
  */
-export function SignInForm({ redirectTo }: { readonly redirectTo: string }) {
+export function SignInForm({
+  redirectTo,
+  mcpTransaction,
+}: {
+  readonly redirectTo: string;
+  readonly mcpTransaction?: string | undefined;
+}) {
   const client = useAdminClient();
   const sessionSource = useSessionSource();
   const navigate = useNavigate();
@@ -31,6 +37,12 @@ export function SignInForm({ redirectTo }: { readonly redirectTo: string }) {
       sessionSource.invalidate();
       await sessionSource.get();
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.session });
+      if (mcpTransaction) {
+        window.location.assign(
+          `/api/auth/oauth2/authorize?transaction=${encodeURIComponent(mcpTransaction)}`,
+        );
+        return;
+      }
       await navigate({ to: redirectTo });
     },
   });

@@ -17,3 +17,7 @@ LACE_EMAIL_FROM=Lace Dev <lace@localhost.test>
 
 # Optional public API reference at /api/docs (browser needs jsDelivr access).
 # LACE_API_DOCS_ENABLED=true
+
+# Optional content assistant; apply database migrations before enabling.
+# MCP allows read/create/save-draft only; publishing and deletion are unavailable.
+LACE_MCP_ENABLED=false

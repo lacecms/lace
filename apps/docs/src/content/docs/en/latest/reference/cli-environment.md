@@ -19,16 +19,17 @@ Choose `node`, `cloudflare-local` or `cloudflare-remote` explicitly where the co
 
 ## Environment boundaries
 
-| Setting                 | Use                                                                       |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `LACE_PUBLIC_BASE_URL`  | Public CMS/admin URL, including intended prefix and trailing slash        |
-| `LACE_API_BASE_URL`     | API origin/base read by server-side site builds                           |
-| `LACE_BUILD_TOKEN`      | Private read-only credential for published exports                        |
-| `LACE_AUTH_SECRET`      | CMS authentication secret; never a build token                            |
-| `LACE_BUILD_SITE_URL`   | Public site's canonical/build URL                                         |
-| `LACE_SITE_INDEXING`    | Indexing choice; `off` for staging                                        |
-| `LACE_DEPLOY_HOOK_URL`  | Private provider hook used by configured build triggering                 |
-| `LACE_API_DOCS_ENABLED` | Exact string `true` enables optional `/api/docs`; absent/`false` disables |
+| Setting                 | Use                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `LACE_PUBLIC_BASE_URL`  | Public CMS/admin URL, including intended prefix and trailing slash                      |
+| `LACE_API_BASE_URL`     | API origin/base read by server-side site builds                                         |
+| `LACE_BUILD_TOKEN`      | Private read-only credential for published exports                                      |
+| `LACE_AUTH_SECRET`      | CMS authentication secret; never a build token                                          |
+| `LACE_BUILD_SITE_URL`   | Public site's canonical/build URL                                                       |
+| `LACE_SITE_INDEXING`    | Indexing choice; `off` for staging                                                      |
+| `LACE_DEPLOY_HOOK_URL`  | Private provider hook used by configured build triggering                               |
+| `LACE_MCP_ENABLED`      | Exact string `true` enables OAuth/MCP; absent/`false` disables; migrate before enabling |
+| `LACE_API_DOCS_ENABLED` | Exact string `true` enables optional `/api/docs`; absent/`false` disables               |
 
 Read the generated `.env.example`, Worker vars/bindings and provider-specific guide before adding a setting. Node storage, builder and mail options belong to the relevant service; D1/R2/KV are Worker bindings. Remote management credentials belong in the operator file, not the Worker's application vars. Never copy secrets into `VITE_*`, client JS, HTML, screenshots or source control. Invalid settings are diagnosed by name without echoing supplied secrets.
 

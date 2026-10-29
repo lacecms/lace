@@ -1580,3 +1580,19 @@ test("Node API docs flag accepts only exact string booleans without value disclo
     }
   }
 });
+
+test("Node MCP flag validates exact strings without disclosing values", () => {
+  const base = {
+    ...minioEnvironment,
+    LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+    LACE_DATABASE_PATH: "/tmp/lace-mcp-settings.sqlite",
+    LACE_PUBLIC_BASE_URL: "https://lace.test/",
+  };
+  expect(parseNodeRuntimeSettings(base).mcpEnabled).toBe(false);
+  expect(parseNodeRuntimeSettings({ ...base, LACE_MCP_ENABLED: "false" }).mcpEnabled).toBe(false);
+  expect(parseNodeRuntimeSettings({ ...base, LACE_MCP_ENABLED: "true" }).mcpEnabled).toBe(true);
+  for (const value of ["", "TRUE", "1", " private-value "])
+    expect(() => parseNodeRuntimeSettings({ ...base, LACE_MCP_ENABLED: value })).toThrow(
+      "Invalid Node environment: LACE_MCP_ENABLED.",
+    );
+});

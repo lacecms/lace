@@ -1,12 +1,20 @@
+import { authorizeContentOperation } from "./content-authority.js";
 import {
   resolveCollectionQuery,
   validateListQueryBudget,
   NODE_LIST_QUERY_LIMITS,
 } from "./collection-queries.js";
 import type { ListQueryLimits } from "./collection-queries.js";
-import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
+import type {
+  NormalizedContentModel,
+  RuntimeConfigProjection,
+  CollectionListOptions,
+  ModelSeoDefinition,
+  SeoDefaultsDefinition,
+} from "@lacecms/config";
 import {
   collectFieldMedia,
+  toBlockMetadata,
   collectSnapshotInternalLinks,
   ContentValidationError,
   detachFieldMedia,
@@ -17,6 +25,8 @@ import {
 } from "@lacecms/content";
 import type {
   InternalLinkReference,
+  BlockMetadata,
+  FormLayout,
   FieldDefinition,
   JsonObject,
   JsonValue,
@@ -29,6 +39,7 @@ import type {
 export { ContentValidationError } from "@lacecms/content";
 import {
   DomainError,
+  auditActor,
   assertCollectionEntryOperation,
   assertOrderedBlockPositions,
   blockKey,
@@ -48,6 +59,7 @@ import type {
   ContentBlockInput,
   ContentEntry,
   ContentEntryId,
+  ContentModelKind,
   ContentModelKey,
   ContentModelRoute,
   ContentSnapshotId,
@@ -93,6 +105,34 @@ export interface ContentUseCaseDependencies {
     Partial<ContentLinkReadPort>;
   readonly idGenerator: IdGenerator;
   readonly media: ContentMediaReadPort;
+}
+
+/** Authorized, JSON-safe configuration metadata; no hashes, migrations or validators. */
+export interface DiscoveredContentModel {
+  readonly key: string;
+  readonly kind: ContentModelKind;
+  readonly version: number;
+  readonly label?: string;
+  readonly description?: string;
+  readonly fields: Readonly<Record<string, FieldDefinition>>;
+  readonly blocks: readonly string[];
+  readonly blockDefinitions: readonly BlockMetadata[];
+  readonly layout?: FormLayout;
+  readonly listFields?: readonly string[];
+  readonly listOptions?: CollectionListOptions;
+  readonly path?: string;
+  readonly route?: string;
+  readonly seo?: ModelSeoDefinition;
+  readonly seoDefaults?: SeoDefaultsDefinition;
+}
+export interface ContentModelDiscovery {
+  readonly items: readonly DiscoveredContentModel[];
+  readonly listQueryLimits: ListQueryLimits;
+}
+export interface AdminContentEntryProjection {
+  readonly entry: ContentEntry;
+  readonly updatedBy: ActorSummary;
+  readonly seo: boolean;
 }
 
 export interface CompleteDraftInput {
@@ -268,8 +308,80 @@ export class ContentUseCases {
     });
   }
 
+  public discoverModels(input: { readonly actor: Actor }): ContentModelDiscovery {
+    authorizeContentOperation(input.actor, "discoverModels");
+    return detached({
+      items: this.dependencies.config.content.map((model) => ({
+        key: model.key,
+        kind: model.kind,
+        version: model.version,
+        fields: model.fields,
+        blocks: model.blocks,
+        blockDefinitions: model.blocks.map((type) => {
+          const definition = this.dependencies.config.blocks.get(type);
+          if (!definition)
+            throw new DomainError(
+              "CONTENT_INVALID_STATE",
+              "Configured block metadata is unavailable.",
+            );
+          return toBlockMetadata(definition);
+        }),
+        ...(model.label === undefined ? {} : { label: model.label }),
+        ...(model.description === undefined ? {} : { description: model.description }),
+        ...(model.layout === undefined ? {} : { layout: model.layout }),
+        ...(model.kind === "page" ? { path: model.path } : {}),
+        ...(model.kind === "collection"
+          ? {
+              route: model.route,
+              ...(model.listFields === undefined ? {} : { listFields: model.listFields }),
+              ...(model.listOptions === undefined ? {} : { listOptions: model.listOptions }),
+            }
+          : {}),
+        ...(model.kind !== "global" && model.seo !== undefined ? { seo: model.seo } : {}),
+        ...(model.kind === "global" && model.seoDefaults !== undefined
+          ? { seoDefaults: model.seoDefaults }
+          : {}),
+      })),
+      listQueryLimits: this.listQueryLimits,
+    });
+  }
+
+  /** Full authorized admin read, including safe attribution and SEO visibility. */
+  public async loadAdminEntry(
+    input: LoadContentEntryUseCaseInput,
+  ): Promise<AdminContentEntryProjection | null> {
+    authorizeContentOperation(input.actor, "load");
+    const entry = await this.dependencies.content.load({ entryId: input.entryId });
+    return entry === null ? null : this.adminProjection(entry);
+  }
+
+  /** Prepares the same read projection after a create/save without adapter lookups. */
+  public async projectAdminEntry(input: {
+    readonly actor: Actor;
+    readonly entry: ContentEntry;
+  }): Promise<AdminContentEntryProjection> {
+    authorizeContentOperation(input.actor, "load");
+    return this.adminProjection(input.entry);
+  }
+
+  private async adminProjection(entry: ContentEntry): Promise<AdminContentEntryProjection> {
+    const model = this.model(entry.model.key);
+    return detached({
+      entry,
+      updatedBy: await this.actorSummary(entry.draft.updatedBy.id),
+      seo: seoEnabled(model),
+    });
+  }
+
+  private async actorSummary(id: Actor["id"]): Promise<ActorSummary> {
+    const [summary] = await this.dependencies.content.describeActors([id]);
+    if (!summary || summary.id !== id)
+      throw new DomainError("CONTENT_INVALID_STATE", "Actor description is unavailable.");
+    return { id: summary.id, displayName: summary.displayName };
+  }
+
   public async create(input: CreateContentEntryUseCaseInput): Promise<ContentEntry> {
-    requirePermission(input.actor, "content:write");
+    authorizeContentOperation(input.actor, "create");
     const model = this.model(input.modelKey);
     const draft = await this.validateDraft(
       { ...input, title: systemTitle(model, input.title) },
@@ -287,7 +399,7 @@ export class ContentUseCases {
         revision: 1,
         state: "draft",
         updatedAt: now,
-        updatedBy: input.actor,
+        updatedBy: auditActor(input.actor),
       },
       id,
       model: contentModelRoute(model),
@@ -302,7 +414,7 @@ export class ContentUseCases {
   }
 
   public async list(input: ListContentEntriesUseCaseInput): Promise<ContentEntryListPage> {
-    requirePermission(input.actor, "content:read");
+    authorizeContentOperation(input.actor, "list");
     const model = this.model(input.modelKey);
     const q = input.q?.trim();
     if (
@@ -337,22 +449,18 @@ export class ContentUseCases {
 
   /** Resolves an audit actor's display name so clients never need the users API. */
   public async describeActor(input: DescribeActorUseCaseInput): Promise<ActorSummary> {
-    requirePermission(input.actor, "content:read");
-    const [summary] = await this.dependencies.content.describeActors([input.actorId]);
-    if (summary === undefined || summary.id !== input.actorId) {
-      throw new DomainError("CONTENT_INVALID_STATE", "Actor description is unavailable.");
-    }
-    return detached(summary);
+    authorizeContentOperation(input.actor, "describeActor");
+    return this.actorSummary(input.actorId);
   }
 
   public async load(input: LoadContentEntryUseCaseInput): Promise<ContentEntry | null> {
-    requirePermission(input.actor, "content:read");
+    authorizeContentOperation(input.actor, "load");
     const entry = await this.dependencies.content.load({ entryId: input.entryId });
     return entry === null ? null : detached(entry);
   }
 
   public async loadDraft(input: LoadContentEntryUseCaseInput): Promise<DraftSnapshot | null> {
-    requirePermission(input.actor, "content:read");
+    authorizeContentOperation(input.actor, "loadDraft");
     const draft = await this.dependencies.content.loadDraft({ entryId: input.entryId });
     return draft === null ? null : detached(draft);
   }
@@ -360,13 +468,13 @@ export class ContentUseCases {
   public async loadPublished(
     input: LoadContentEntryUseCaseInput,
   ): Promise<PublishedSnapshot | null> {
-    requirePermission(input.actor, "content:read");
+    authorizeContentOperation(input.actor, "loadPublished");
     const published = await this.dependencies.content.loadPublished({ entryId: input.entryId });
     return published === null ? null : detached(published);
   }
 
   public async save(input: SaveContentDraftUseCaseInput): Promise<ContentEntry> {
-    requirePermission(input.actor, "content:write");
+    authorizeContentOperation(input.actor, "save");
     const entry = await this.entry(input.entryId);
     const model = this.model(entry.model.key);
     const draft = await this.validateDraft(
@@ -382,7 +490,7 @@ export class ContentUseCases {
           ...draft,
           expectedRevision: input.expectedRevision,
           updatedAt: this.dependencies.clock.now(),
-          updatedBy: input.actor,
+          updatedBy: auditActor(input.actor),
         },
       }),
     );
@@ -391,7 +499,7 @@ export class ContentUseCases {
   public async publish(
     input: PublishContentEntryUseCaseInput,
   ): Promise<PublishContentEntryUseCaseResult> {
-    requirePermission(input.actor, "content:publish");
+    authorizeContentOperation(input.actor, "publish");
     const entry = await this.entry(input.entryId);
     const draft = await this.validateDraft(
       entry.draft,
@@ -407,7 +515,7 @@ export class ContentUseCases {
         ? {}
         : { idempotency: await this.idempotency(input, draft) }),
       publishedAt: this.dependencies.clock.now(),
-      publishedBy: input.actor,
+      publishedBy: auditActor(input.actor),
       publishedSnapshotId: contentSnapshotId(this.dependencies.idGenerator.next()),
     });
     return {
@@ -423,7 +531,7 @@ export class ContentUseCases {
   public async unpublish(
     input: UnpublishContentEntryUseCaseInput,
   ): Promise<UnpublishContentEntryUseCaseResult> {
-    requirePermission(input.actor, "content:publish");
+    authorizeContentOperation(input.actor, "unpublish");
     const entry = await this.entry(input.entryId);
     const idempotency =
       input.idempotencyKey === undefined
@@ -451,7 +559,7 @@ export class ContentUseCases {
       ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
       ...(idempotency === undefined ? {} : { idempotency }),
       unpublishedAt: this.dependencies.clock.now(),
-      unpublishedBy: input.actor,
+      unpublishedBy: auditActor(input.actor),
     });
     return {
       build:
@@ -464,7 +572,7 @@ export class ContentUseCases {
   }
 
   public async revertDraft(input: RevertContentDraftUseCaseInput): Promise<ContentEntry> {
-    requirePermission(input.actor, "content:write");
+    authorizeContentOperation(input.actor, "revertDraft");
     const entry = await this.entry(input.entryId);
     const published = requirePublishedSnapshot(entry);
     return commandEntry(
@@ -473,13 +581,13 @@ export class ContentUseCases {
         expectedPublishedSnapshotId: published.id,
         expectedRevision: input.expectedRevision,
         revertedAt: this.dependencies.clock.now(),
-        revertedBy: input.actor,
+        revertedBy: auditActor(input.actor),
       }),
     );
   }
 
   public async duplicate(input: DuplicateContentEntryUseCaseInput): Promise<ContentEntry> {
-    requirePermission(input.actor, "content:write");
+    authorizeContentOperation(input.actor, "duplicate");
     const source = await this.entry(input.entryId);
     assertCollectionEntryOperation(source, "duplicate");
     if (input.expectedRevision !== undefined && input.expectedRevision !== source.draft.revision) {
@@ -513,7 +621,7 @@ export class ContentUseCases {
         revision: 1,
         state: "draft",
         updatedAt: now,
-        updatedBy: input.actor,
+        updatedBy: auditActor(input.actor),
       },
       id,
       model: contentModelRoute(model),
@@ -535,7 +643,7 @@ export class ContentUseCases {
    * that does not use the item is left unchanged. Returns whether it saved.
    */
   public async detachMedia(input: DetachMediaFromDraftUseCaseInput): Promise<boolean> {
-    requirePermission(input.actor, "content:write");
+    authorizeContentOperation(input.actor, "detachMedia");
     const entry = await this.entry(input.entryId);
     const model = this.model(entry.model.key);
     const { draft } = entry;
@@ -570,14 +678,14 @@ export class ContentUseCases {
   }
 
   public async delete(input: DeleteContentEntryUseCaseInput): Promise<void> {
-    requirePermission(input.actor, "content:write");
+    authorizeContentOperation(input.actor, "delete");
     const entry = await this.entry(input.entryId);
     assertCollectionEntryOperation(entry, "delete");
     if (entry.published !== undefined) requirePermission(input.actor, "content:publish");
     await this.dependencies.content.delete({
       deletedAt: this.dependencies.clock.now(),
       ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
-      deletedBy: input.actor,
+      deletedBy: auditActor(input.actor),
       entryId: entry.id,
       ...(entry.published === undefined ? {} : { expectedPublishedSnapshotId: entry.published.id }),
       expectedRevision: input.expectedRevision,

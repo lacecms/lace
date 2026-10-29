@@ -1,5 +1,6 @@
 import {
   collectionListOptionsSchema,
+  collectionFieldFiltersSchema,
   listQueryLimitsSchema,
   NODE_LIST_QUERY_LIMITS,
   COLLECTION_MATCHING_VERSION,
@@ -9,6 +10,7 @@ import type { CollectionListOptionsSource } from "./collection-queries.js";
 export * from "./collection-queries.js";
 import {
   canonicalizeJson,
+  ContentValidationError,
   defineBlock,
   normalizeFieldDefinition,
   normalizeFormLayout,
@@ -28,6 +30,8 @@ import type {
 import {
   BlockOrderError,
   DomainError,
+  CollectionQueryValidationError,
+  blockKey,
   isCanonicalUrl,
   isMediaFocalCoordinate,
   MAX_SEO_CANONICAL_LENGTH,
@@ -792,6 +796,63 @@ export const saveDraftRequestSchema = v.strictObject({
   ...editableDraftFields,
   expectedRevision: v.optional(expectedRevisionSchema),
 });
+/** MCP envelopes compose canonical body/query contracts; no actor fields. */
+export const mcpToolArgumentSchemas = Object.freeze({
+  list_content_models: v.strictObject({}),
+  list_entries: v.strictObject({
+    ...contentEntryListQuerySchema.entries,
+    modelKey: identifierSchema,
+    filters: v.optional(collectionFieldFiltersSchema),
+    limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100)), 50),
+  }),
+  get_entry: v.strictObject({ entryId: identifierSchema }),
+  create_entry: v.strictObject({
+    ...createContentEntryRequestSchema.entries,
+    modelKey: identifierSchema,
+  }),
+  save_draft: v.strictObject({
+    ...saveDraftRequestSchema.entries,
+    entryId: identifierSchema,
+    expectedRevision: expectedRevisionSchema,
+  }),
+});
+
+/** Filter structure and metadata-dependent issues are enforced by the shared
+ * application query policy, preserving the same first error paths as REST.
+ * Discovery still advertises the typed filter schema above. */
+export const mcpListEntriesEnvelopeSchema = v.strictObject({
+  ...mcpToolArgumentSchemas.list_entries.entries,
+  filters: v.optional(v.unknown()),
+});
+
+/** JSON-only constraints for converter custom-schema hooks; validation stays Valibot. */
+export function contractJsonSchemaOverride(
+  schema: unknown,
+): { type: "object"; additionalProperties: true } | Record<string, never> | undefined {
+  return schema === jsonObjectSchema
+    ? { type: "object", additionalProperties: true }
+    : schema === jsonValueSchema
+      ? {}
+      : undefined;
+}
+
+/** Shared normalization of validated block DTOs into portable command values. */
+export function toContentBlockInput(
+  block: ContentBlockDto,
+): import("@lacecms/domain").ContentBlockInput {
+  return {
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
+    data: block.data,
+    hidden: block.hidden,
+    key: blockKey(block.key),
+    position: block.position,
+    schemaVersion: block.schemaVersion,
+    settings: v.parse(jsonObjectSchema, block.settings),
+    type: block.type,
+  };
+}
+
 export const publishContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
 });
@@ -2412,6 +2473,83 @@ export function toContentModelDto(
   };
 }
 
+/** Pure projections of the authorized application results; no lookup lives here. */
+export function toContentModelDiscoveryDto(input: {
+  readonly items: readonly ContentModelSource[];
+  readonly listQueryLimits: ListQueryLimits;
+}): ContentModelListDto {
+  return { items: input.items.map(toContentModelDto), listQueryLimits: input.listQueryLimits };
+}
+export function toAdminEntryProjectionDto(input: {
+  readonly entry: ContentEntry;
+  readonly updatedBy: { readonly id: string; readonly displayName: string };
+  readonly seo: boolean;
+}): AdminContentEntryDto {
+  return toAdminContentEntryDto(input.entry, input.updatedBy, { seo: input.seo });
+}
+export type ContentEntrySummarySource = Omit<
+  ContentEntrySummaryDto,
+  "updatedAt" | "publishedAt"
+> & {
+  readonly updatedAt: UnixMilliseconds;
+  readonly publishedAt?: UnixMilliseconds;
+};
+export function toContentEntryListDto(input: {
+  readonly items: readonly ContentEntrySummarySource[];
+  readonly totals: ContentEntryStatusTotalsDto;
+  readonly nextCursor?: string;
+}): ContentEntryListDto {
+  return {
+    items: input.items.map((entry) => ({
+      draftRevision: entry.draftRevision,
+      id: entry.id,
+      listValues: entry.listValues,
+      modelKey: entry.modelKey,
+      ...(entry.publishedAt === undefined
+        ? {}
+        : { publishedAt: toIsoTimestamp(entry.publishedAt) }),
+      ...(entry.publishedSnapshotId === undefined
+        ? {}
+        : { publishedSnapshotId: entry.publishedSnapshotId }),
+      ...(entry.slug === undefined ? {} : { slug: entry.slug }),
+      status: entry.status,
+      title: entry.title,
+      updatedAt: toIsoTimestamp(entry.updatedAt),
+      updatedBy: entry.updatedBy,
+    })),
+    totals: input.totals,
+    ...(input.nextCursor === undefined ? {} : { nextCursor: input.nextCursor }),
+  };
+}
+
+/** JSON Pointer paths for Valibot and portable content validation issues. */
+export function contractIssuePointer(path: readonly unknown[] | undefined): string {
+  if (!path?.length) return "";
+  return path
+    .map((part) => (typeof part === "object" && part !== null && "key" in part ? part.key : part))
+    .map((part) => `/${String(part).replaceAll("~", "~0").replaceAll("/", "~1")}`)
+    .join("");
+}
+export function toContractValidationIssues(
+  issues: readonly { readonly path?: readonly unknown[] | undefined; readonly type?: string }[],
+  preserveType = false,
+): ContractValidationIssue[] {
+  return issues.map((issue) => ({
+    code: preserveType && issue.type ? issue.type : "invalid_value",
+    message: "The submitted value is invalid.",
+    path: contractIssuePointer(issue.path),
+  }));
+}
+export function toContentValidationIssues(
+  error: ContentValidationError,
+): ContractValidationIssue[] {
+  return error.issues.map((issue) => ({
+    code: issue.code,
+    message: issue.message,
+    path: contractIssuePointer(issue.path),
+  }));
+}
+
 export interface RevisionPreconditionInput {
   readonly expectedRevision?: number;
   readonly ifMatch?: string;
@@ -2523,6 +2661,12 @@ export function transportError(code: TransportErrorCode): ClassifiedError {
 
 /** Converts known domain failures to documented safe transport responses. */
 export function classifyError(error: unknown): ClassifiedError {
+  if (error instanceof CollectionQueryValidationError)
+    return validationError([
+      { code: "invalid_value", message: "The submitted value is invalid.", path: error.pointer },
+    ]);
+  if (error instanceof ContentValidationError)
+    return validationError(toContentValidationIssues(error));
   if (error instanceof DomainError) {
     return {
       body: {
@@ -2586,3 +2730,41 @@ export function collectionCapabilityIdentity(
     targets(model.listOptions?.searchableFields),
   ] as JsonValue);
 }
+
+/** Session-only account capabilities and safe OAuth connection projections. */
+export const accountCapabilitiesSchema = v.strictObject({ mcpEnabled: v.boolean() });
+export const oauthConnectionSchema = v.strictObject({
+  id: identifierSchema,
+  clientName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  scopes: v.array(v.picklist(["content:read", "content:write", "offline_access"])),
+  createdAt: isoTimestampSchema,
+  expiresAt: isoTimestampSchema,
+  revokedAt: v.nullable(isoTimestampSchema),
+  lastUsedAt: v.optional(isoTimestampSchema),
+});
+export const oauthConnectionListSchema = v.strictObject({
+  items: v.array(oauthConnectionSchema),
+  nextCursor: v.nullable(opaqueCursorSchema),
+});
+export const oauthConnectionListQuerySchema = v.strictObject({
+  after: v.optional(identifierSchema),
+  limit: v.optional(v.pipe(v.string(), v.regex(/^(?:[1-9]|[1-4][0-9]|50)$/u))),
+});
+export const oauthConnectionRevokeSchema = v.strictObject({});
+export type AccountCapabilitiesDto = v.InferOutput<typeof accountCapabilitiesSchema>;
+export type OAuthConnectionDto = v.InferOutput<typeof oauthConnectionSchema>;
+export type OAuthConnectionListDto = v.InferOutput<typeof oauthConnectionListSchema>;
+
+export const mcpConsentDetailsSchema = v.strictObject({
+  transaction: identifierSchema,
+  clientName: v.string(),
+  callbackHostname: v.string(),
+  scopes: v.array(v.picklist(["content:read", "content:write", "offline_access"])),
+  canWrite: v.boolean(),
+});
+export const mcpConsentNavigationSchema = v.strictObject({
+  redirect: v.literal(true),
+  url: v.string(),
+});
+export type McpConsentDetailsDto = v.InferOutput<typeof mcpConsentDetailsSchema>;
+export type McpConsentNavigationDto = v.InferOutput<typeof mcpConsentNavigationSchema>;

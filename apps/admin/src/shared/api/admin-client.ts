@@ -1,4 +1,12 @@
 import {
+  accountCapabilitiesSchema,
+  oauthConnectionListSchema,
+  mcpConsentDetailsSchema,
+  mcpConsentNavigationSchema,
+  type AccountCapabilitiesDto,
+  type OAuthConnectionListDto,
+  type McpConsentDetailsDto,
+  type McpConsentNavigationDto,
   canonicalCollectionFilters,
   collectionFieldFiltersSchema,
   type CollectionFieldFilterDto,
@@ -87,6 +95,9 @@ import { COLLECTION_MATCHING_VERSION, NODE_LIST_QUERY_LIMITS } from "@lacecms/co
 import type { ListQueryLimits } from "@lacecms/contracts";
 
 export const adminQueryKeys = Object.freeze({
+  accountCapabilities: ["admin", "account", "capabilities"] as const,
+  mcpConnections: ["admin", "account", "mcp-connections"] as const,
+  mcpConsent: (transaction: string) => ["admin", "mcp-consent", transaction] as const,
   buildSite: ["admin", "build-site"] as const,
   builds: ["admin", "builds"] as const,
   buildDetail: (buildId: string) => ["admin", "builds", buildId] as const,
@@ -212,6 +223,15 @@ export interface AdminClient {
     newPassword: string;
     signOutOtherSessions: boolean;
   }): Promise<SessionRevocationResultDto>;
+  loadAccountCapabilities(): Promise<AccountCapabilitiesDto>;
+  listMcpConnections(after?: string): Promise<OAuthConnectionListDto>;
+  revokeMcpConnection(id: string): Promise<void>;
+  loadMcpConsent(transaction: string): Promise<McpConsentDetailsDto>;
+  submitMcpConsent(input: {
+    transaction: string;
+    accept: boolean;
+    scope: string;
+  }): Promise<McpConsentNavigationDto>;
   listSessions(): Promise<AccountSessionListDto>;
   deleteSession(sessionId: string): Promise<void>;
   revokeOtherSessions(): Promise<SessionRevocationResultDto>;
@@ -633,6 +653,41 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       parse(
         sessionRevocationResultSchema,
         await withoutIssues(postJson(fetcher, "/api/v1/account/password", input)),
+      ),
+    loadAccountCapabilities: async () =>
+      parse(accountCapabilitiesSchema, await request(fetcher, "/api/v1/account/capabilities")),
+    listMcpConnections: async (after?: string) =>
+      parse(
+        oauthConnectionListSchema,
+        await request(
+          fetcher,
+          `/api/v1/account/mcp-connections${after ? `?after=${encodeURIComponent(after)}` : ""}`,
+        ),
+      ),
+    revokeMcpConnection: async (id: string) => {
+      await postJson(
+        fetcher,
+        `/api/v1/account/mcp-connections/${encodeURIComponent(id)}/revoke`,
+        {},
+      );
+    },
+    loadMcpConsent: async (transaction: string) =>
+      parse(
+        mcpConsentDetailsSchema,
+        await request(
+          fetcher,
+          `/api/auth/oauth2/authorize?transaction=${encodeURIComponent(transaction)}`,
+          { headers: { accept: "application/json" } },
+        ),
+      ),
+    submitMcpConsent: async (input: { transaction: string; accept: boolean; scope: string }) =>
+      parse(
+        mcpConsentNavigationSchema,
+        await request(fetcher, "/api/auth/oauth2/consent", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify(input),
+        }),
       ),
     listSessions: async () =>
       parse(accountSessionListSchema, await request(fetcher, "/api/v1/account/sessions")),

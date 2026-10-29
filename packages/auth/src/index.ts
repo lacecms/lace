@@ -1,5 +1,13 @@
+export * from "./mcp-oauth.js";
+export * from "./mcp-actor.js";
+export * from "./mcp-boundary.js";
+export * from "./oauth-guard.js";
 export * from "./client-address.js";
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
+import type { OAuthIssuancePersistence } from "@lacecms/application";
+import { APIError } from "better-auth/api";
+import { createMcpOAuthProvider } from "./mcp-oauth.js";
+import { createMcpOAuthHttpBoundary, type McpOAuthHttpBoundary } from "./mcp-boundary.js";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { actorId, type Actor, type Role } from "@lacecms/domain";
 
@@ -37,10 +45,12 @@ function allowedProviderRoute(request: Request): boolean {
 
 export interface BetterAuthBoundary extends AuthRouteHandler {
   readonly actors: SessionActorResolver;
+  readonly mcp?: McpOAuthHttpBoundary;
 }
 
 export interface CreateBetterAuthBoundaryInput {
   readonly clientAddress?: (request: Request) => string;
+  readonly oauth?: { readonly persistence: OAuthIssuancePersistence };
   readonly database: object;
   readonly origin: URL;
   readonly production: boolean;
@@ -66,7 +76,7 @@ function trustedOrigins(origin: URL, production: boolean): string[] {
 export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): BetterAuthBoundary {
   const origin = input.origin.origin;
   const allowedOrigins = trustedOrigins(input.origin, input.production);
-  const auth = betterAuth({
+  const options = {
     advanced: {
       ipAddress: { ipAddressHeaders: ["x-lace-client-address"], ipv6Subnet: 128 },
       defaultCookieAttributes: {
@@ -116,7 +126,8 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
         },
       },
     },
-  });
+  } satisfies BetterAuthOptions;
+  const auth = betterAuth(options);
 
   type ProviderSession = Awaited<ReturnType<typeof auth.api.getSession>>;
   // One provider lookup per request serves both the actor and the session id.
@@ -149,7 +160,50 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
       : { role, session };
   }
 
+  const mcp = input.oauth
+    ? createMcpOAuthHttpBoundary({
+        origin: input.origin,
+        production: input.production,
+        persistence: input.oauth.persistence,
+        session: async (request) => {
+          const active = await activeSession(request);
+          return active
+            ? {
+                userId: active.session.user.id,
+                sessionId: active.session.session.id,
+                role: active.role,
+                createdAt: new Date(active.session.session.createdAt).getTime(),
+              }
+            : null;
+        },
+        provider: async (guard, reference) => {
+          const provider = betterAuth({
+            ...options,
+            database: guard
+              ? (settings: BetterAuthOptions) => guard.wrap(options.database(settings))
+              : options.database,
+            plugins: [
+              createMcpOAuthProvider({
+                origin: input.origin,
+                production: input.production,
+                consentReferenceId:
+                  reference ??
+                  (async () => {
+                    throw new APIError("BAD_REQUEST", { error: "invalid_request" });
+                  }),
+              }),
+            ],
+            rateLimit: { enabled: false },
+          });
+          return {
+            adapter: (await provider.$context).adapter,
+            fetch: (request) => provider.handler(request),
+          };
+        },
+      })
+    : undefined;
   return Object.freeze({
+    ...(mcp ? { mcp } : {}),
     actors: Object.freeze({
       resolve: async (request: Request) => {
         const active = await activeSession(request);
@@ -163,7 +217,8 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
       },
     }),
     fetch: async (request: Request) => {
-      if (!allowedProviderRoute(request)) return new Response(null, { status: 404 });
+      if (!allowedProviderRoute(request))
+        return mcp ? mcp.fetch(request) : new Response(null, { status: 404 });
       const headers = new Headers(request.headers);
       headers.set("x-lace-client-address", input.clientAddress?.(request) ?? "0.0.0.0");
       // The Node transport may supply a Request-compatible facade; clone materializes

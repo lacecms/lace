@@ -1,3 +1,4 @@
+import { oauthUserInvalidationSql } from "@lacecms/db";
 import { randomBytes, createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import {
@@ -27,6 +28,10 @@ import type Database from "better-sqlite3";
 
 const setupExpiryMs = 60 * 60 * 1000;
 const limits = {
+  mcp: { limit: 60, windowMs: 60 * 1000 },
+  "oauth-register": { limit: 10, windowMs: 15 * 60 * 1000 },
+  "oauth-token": { limit: 60, windowMs: 60 * 1000 },
+  "oauth-revoke": { limit: 20, windowMs: 60 * 60 * 1000 },
   auth: { limit: 10, windowMs: 15 * 60 * 1000 },
   email: { limit: 5, windowMs: 60 * 60 * 1000 },
   invite: { limit: 20, windowMs: 60 * 60 * 1000 },
@@ -285,8 +290,10 @@ export class NodeSecurityService implements SecurityService {
           "update user set role = coalesce(?, role), disabled = coalesce(?, disabled), updated_at = ? where id = ?",
         )
         .run(nextRole ?? null, disabled === undefined ? null : Number(disabled), Date.now(), id);
-      if (disabled === true)
+      if (disabled === true) {
+        this.connection.prepare(oauthUserInvalidationSql()).run(Number(this.now()), id);
         this.connection.prepare("delete from session where user_id = ?").run(id);
+      }
       return user(
         this.connection
           .prepare("select id, email, role, disabled from user where id = ?")
@@ -534,6 +541,7 @@ export class NodeSecurityService implements SecurityService {
           "update account set password = ?, updated_at = ? where user_id = ? and provider_id = 'credential'",
         )
         .run(password, now, row.user_id);
+      this.connection.prepare(oauthUserInvalidationSql()).run(now, row.user_id);
       this.connection.prepare("delete from session where user_id = ?").run(row.user_id);
       return Object.freeze({ status: "reset" as const, userId: row.user_id });
     })();
@@ -575,6 +583,8 @@ export class NodeSecurityService implements SecurityService {
         )
         .run(password, Number(input.now), input.userId, current.password);
       if (changed.changes !== 1) return Object.freeze({ status: "invalid_credentials" });
+      if (input.keepSessionId !== undefined)
+        this.connection.prepare(oauthUserInvalidationSql()).run(Number(input.now), input.userId);
       const revoked =
         input.keepSessionId === undefined
           ? 0
@@ -612,9 +622,12 @@ export class NodeSecurityService implements SecurityService {
     readonly keepSessionId: string;
     readonly userId: string;
   }): Promise<number> {
-    return this.connection
-      .prepare("delete from session where user_id = ? and id <> ?")
-      .run(input.userId, input.keepSessionId).changes;
+    return this.connection.transaction(() => {
+      this.connection.prepare(oauthUserInvalidationSql()).run(Number(this.now()), input.userId);
+      return this.connection
+        .prepare("delete from session where user_id = ? and id <> ?")
+        .run(input.userId, input.keepSessionId).changes;
+    })();
   }
 
   public async deleteUserSessions(input: { readonly userId: string }): Promise<number | null> {
@@ -623,6 +636,7 @@ export class NodeSecurityService implements SecurityService {
         this.connection.prepare("select 1 from user where id = ?").get(input.userId) === undefined
       )
         return null;
+      this.connection.prepare(oauthUserInvalidationSql()).run(Number(this.now()), input.userId);
       return this.connection.prepare("delete from session where user_id = ?").run(input.userId)
         .changes;
     })();

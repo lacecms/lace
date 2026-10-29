@@ -96,6 +96,13 @@ export class BlockOrderError extends DomainError {
   }
 }
 
+/** A value-free collection query issue shared by application and transports. */
+export class CollectionQueryValidationError extends DomainError {
+  public constructor(public readonly pointer: string) {
+    super("CONTENT_INVALID_STATE", "Collection query is invalid.");
+  }
+}
+
 function fail(code: DomainErrorCode, message: string): never {
   throw new DomainError(code, message);
 }
@@ -142,10 +149,41 @@ export function unixMilliseconds(value: number): UnixMilliseconds {
   return value as UnixMilliseconds;
 }
 
+/** A provider-neutral, immutable ceiling which can only reduce an actor's authority. */
+export interface DelegatedAuthority {
+  readonly permissions: readonly Permission[];
+  readonly operations: readonly string[];
+}
 /** The authenticated principal passed from an authentication adapter. */
 export interface Actor {
   readonly id: ActorId;
   readonly role: Role;
+  readonly authority?: DelegatedAuthority;
+}
+
+/** Copies the ceiling and intersects any existing one; never widens delegation. */
+export function attenuateActor(actor: Actor, authority: DelegatedAuthority): Actor {
+  const previous = actor.authority;
+  return Object.freeze({
+    id: actor.id,
+    role: actor.role,
+    authority: Object.freeze({
+      permissions: Object.freeze(
+        [...new Set(authority.permissions)].filter(
+          (permission) => previous === undefined || previous.permissions.includes(permission),
+        ),
+      ),
+      operations: Object.freeze(
+        [...new Set(authority.operations)].filter(
+          (operation) => previous === undefined || previous.operations.includes(operation),
+        ),
+      ),
+    }),
+  });
+}
+/** Historical attribution is identity data, never reusable request authority. */
+export function auditActor(actor: Actor): Actor {
+  return Object.freeze({ id: actor.id, role: actor.role });
 }
 
 /** The installation-wide permission policy. */
@@ -168,7 +206,10 @@ export function permissionsFor(role: Role): readonly Permission[] {
 }
 
 export function hasPermission(actor: Actor, permission: Permission): boolean {
-  return permissionsFor(actor.role).includes(permission);
+  return (
+    permissionsFor(actor.role).includes(permission) &&
+    (actor.authority === undefined || actor.authority.permissions.includes(permission))
+  );
 }
 
 /** Requires a permission without requiring callers to duplicate role policy. */
@@ -389,7 +430,7 @@ function cloneSnapshot<Snapshot extends ContentSnapshot>(snapshot: Snapshot): Sn
     state: snapshot.state,
     title: snapshot.title,
     updatedAt: snapshot.updatedAt,
-    updatedBy: snapshot.updatedBy,
+    updatedBy: auditActor(snapshot.updatedBy),
   } as unknown as Snapshot;
 }
 
@@ -645,7 +686,7 @@ export function saveCompleteDraft(
     state: "draft",
     title: mutation.title,
     updatedAt: mutation.updatedAt,
-    updatedBy: mutation.updatedBy,
+    updatedBy: auditActor(mutation.updatedBy),
   };
   assertSnapshot(draft, entry.id);
   return deepFreeze({
@@ -685,7 +726,7 @@ export function publishContentEntry(
     id: input.publishedSnapshotId,
     state: "published",
     updatedAt: input.publishedAt,
-    updatedBy: input.publishedBy,
+    updatedBy: auditActor(input.publishedBy),
   };
   return deepFreeze({
     draft: cloneSnapshot(entry.draft),
@@ -777,7 +818,7 @@ export function revertContentDraft(
     state: "draft",
     title: content.title,
     updatedAt: input.revertedAt,
-    updatedBy: input.revertedBy,
+    updatedBy: auditActor(input.revertedBy),
   };
   return deepFreeze({
     draft,

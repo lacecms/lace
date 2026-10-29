@@ -1,5 +1,17 @@
 # Lace backlog
 
+- **MCP1 Optional OAuth content assistant (implemented, archived 2026-10-29):**
+  `add-oauth-mcp-server` adds opt-in stateless MCP in the existing Node/Worker
+  deployment, Better Auth account delegation, explicit consent and revocable
+  connections. REST and MCP share portable content operations and contract
+  projections. Only model/list/get/create/save-draft are allowed; publication,
+  unpublication and all content deletion remain forbidden. Media and broader
+  administration are deferred. Provider/SDK compatibility and SQLite/D1 atomicity
+  gates pass; all 26 tasks are complete and seven capabilities are synchronized.
+  Archived at `openspec/changes/archive/2026-10-29-add-oauth-mcp-server`; verification
+  records the pre-existing release template identity blocker separately. Other
+  selections below retain their scope and ordering.
+
 - **DOC1 Public documentation (selected):** private Astro/Starlight application,
   English latest (alpha.7), locale/version foundation, changed-input Pages
   publication from main, product README and contributor guide. Delivered through

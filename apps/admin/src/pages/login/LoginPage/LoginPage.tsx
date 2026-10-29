@@ -20,7 +20,10 @@ export function LoginPage() {
           password.
         </p>
       ) : undefined}
-      <SignInForm redirectTo={search.redirect ?? "/content"} />
+      <SignInForm
+        redirectTo={search.redirect ?? "/content"}
+        mcpTransaction={search.mcpTransaction}
+      />
       <p className="m-0 text-center text-sm">
         <Link
           className="font-medium text-primary underline underline-offset-4"

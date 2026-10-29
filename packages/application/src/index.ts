@@ -1,3 +1,5 @@
+export * from "./content-authority.js";
+export * from "./oauth.js";
 export * from "./collection-queries.js";
 import type { ResolvedCollectionQuery, ListQueryLimits } from "./collection-queries.js";
 import type {
@@ -726,6 +728,10 @@ export interface RateLimitDecision {
  * resets per actor; `reset` counts public reset requests per normalized email.
  */
 export type SensitiveRateLimitOperation =
+  | "mcp"
+  | "oauth-register"
+  | "oauth-token"
+  | "oauth-revoke"
   | "auth"
   | "email"
   | "invite"

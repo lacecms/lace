@@ -44,10 +44,11 @@ async function coherentModel() {
   return model;
 }
 
-test("release closes over fifteen artifacts in dependency order", async () => {
+test("release closes over the complete artifact inventory in dependency order", async () => {
   const model = await coherentModel();
   const order = validateReleaseModel(model);
-  expect(order).toHaveLength(15);
+  expect(order).toHaveLength(model.definition.packages.length);
+  expect(order).toContain("@lacecms/mcp");
   expect(order.indexOf("@lacecms/content")).toBeLessThan(order.indexOf("@lacecms/config"));
   expect(order.indexOf("@lacecms/config")).toBeLessThan(order.indexOf("@lacecms/cli"));
   expect(order.indexOf("@lacecms/content")).toBeLessThan(order.indexOf("@lacecms/render"));

@@ -857,4 +857,40 @@ export const securityContractCases: readonly SecurityContractCase[] = Object.fre
       ).resolves.toMatchObject({ allowed: true });
     },
   },
+  {
+    name: "OAuth and MCP fixed windows isolate subjects and reset exactly at expiry",
+    async run(runtime, expect) {
+      const harness = await runtime.open();
+      const limiter = harness.limiter("oauth-limiter-secret");
+      const now = unixMilliseconds(SECURITY_CONTRACT_EPOCH);
+      for (const [operation, maximum, seconds] of [
+        ["mcp", 60, 60],
+        ["oauth-register", 10, 900],
+        ["oauth-token", 60, 60],
+        ["oauth-revoke", 20, 3600],
+      ] as const) {
+        const decisions = await Promise.all(
+          Array.from({ length: maximum + 1 }, () =>
+            limiter.check({ operation, subject: "subject-a", now }),
+          ),
+        );
+        expect(decisions.filter((value) => value.allowed)).toHaveLength(maximum);
+        expect(decisions.find((value) => !value.allowed)).toEqual({
+          allowed: false,
+          retryAfterSeconds: seconds,
+        });
+        expect(await limiter.check({ operation, subject: "subject-b", now })).toEqual({
+          allowed: true,
+          retryAfterSeconds: seconds,
+        });
+        expect(
+          await limiter.check({
+            operation,
+            subject: "subject-a",
+            now: unixMilliseconds(SECURITY_CONTRACT_EPOCH + seconds * 1000),
+          }),
+        ).toEqual({ allowed: true, retryAfterSeconds: seconds });
+      }
+    },
+  },
 ]);

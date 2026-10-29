@@ -51,3 +51,11 @@ After changing config, sync the explicitly selected remote target and redeploy t
 ## Image assets and build caches
 
 The site's user-owned `public/_headers` gives successful content-hashed `/_astro/` assets thirty-day immutable caching and keeps HTML revalidating. Adopt the file from a matching starter when upgrading an existing site; inspect actual hosted responses after deployment. The generated Pages workflow restores and saves the site's `node_modules/.astro` directory with `actions/cache`, reusing image variants and placeholders. That cache is disposable and does not back up D1, R2 or content. Other build providers need their own equivalent configuration. Local workflow/header checks do not prove a Pages deployment.
+
+## Optional assistant connections
+
+After applying D1 migrations, set the string var `LACE_MCP_ENABLED` to `true` and
+redeploy. Local Worker development uses `.dev.vars`; no extra binding is needed.
+Use the canonical HTTPS public origin in production. Disable with the string
+`false`; retain additive migrations and grant records. Local D1 tests do not
+replace verification of OAuth, scopes and revocation on your deployed Worker.

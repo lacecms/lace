@@ -1,3 +1,4 @@
+export * from "./oauth.js";
 export const packageName = "@lacecms/platform-cloudflare";
 
 export * from "./d1.js";

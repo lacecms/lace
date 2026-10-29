@@ -51,7 +51,13 @@ export async function verifyPublishedInventory(inventory, directory, operations 
   if (
     !inventory.complete ||
     !inventory.publicationEligible ||
-    inventory.packages.length !== 15 ||
+    !Array.isArray(inventory.release.packages) ||
+    inventory.packages.length !== inventory.release.packages.length ||
+    !inventory.release.packages.every((name) =>
+      inventory.packages.some(
+        (item) => item.name === (name === "create-lace" ? name : `@lacecms/${name}`),
+      ),
+    ) ||
     inventory.images.length !== 4 ||
     inventory.release.channel !== "next"
   )

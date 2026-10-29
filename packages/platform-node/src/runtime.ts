@@ -1,7 +1,9 @@
+import { createNodeOAuthPersistence } from "./oauth.js";
 import { engineVersion } from "./release-version.js";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
   ContentUseCases,
+  OAuthConnectionUseCases,
   ContentLinkUseCases,
   MediaUseCases,
   SiteBuildUseCases,
@@ -18,13 +20,18 @@ import type {
 import { type ContentModelDefinition, type NormalizedConfig } from "@lacecms/config";
 import { resolveNodeClientAddress, trustedProxyPolicy } from "./client-address.js";
 import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
+// Load the auth graph before the SDK: their shared Zod ESM initialization
+// otherwise runs after SDK schemas in a combined esbuild bundle.
+import { createMcpContentHandler } from "@lacecms/mcp";
 import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
   createEmailSender,
   createLaceApp,
   sensitiveRequestLimit,
+  sensitiveRequestSubject,
   parseBuildSiteIdentity,
+  parseMcpEnabled,
   parseEmailSettings,
   type EmailSettings,
   type EmailSettingsResult,
@@ -65,6 +72,7 @@ export class NodeEnvironmentError extends Error {
 
 export interface NodeRuntimeSettings {
   readonly apiDocsEnabled?: boolean;
+  readonly mcpEnabled?: boolean;
   readonly buildSite?: LaceAppInput["buildSite"];
   readonly trustedProxyCidrs?: readonly string[];
   readonly authSecret: string;
@@ -151,6 +159,12 @@ export function parseNodeEmailSettings(environment: NodeEnvironment): EmailSetti
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
+  let mcpEnabled = false;
+  try {
+    mcpEnabled = parseMcpEnabled(environment.LACE_MCP_ENABLED);
+  } catch {
+    issues.push({ reason: "invalid", variable: "LACE_MCP_ENABLED" });
+  }
   const docs = environment.LACE_API_DOCS_ENABLED;
   if (docs !== undefined && docs !== "true" && docs !== "false")
     issues.push({ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" });
@@ -240,6 +254,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
   }
   return Object.freeze({
     apiDocsEnabled: docs === "true",
+    mcpEnabled,
     buildSite,
     trustedProxyCidrs,
     ...(adminDevOrigin === undefined ? {} : { adminDevOrigin }),
@@ -361,9 +376,13 @@ class NodeRequestRateLimiter implements RequestRateLimiter {
   }): Promise<boolean | import("@lacecms/application").RateLimitDecision> {
     const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
     if (limit === undefined) return true;
-    if (limit.scope === "actor" && input.actor === undefined) return true;
-    const subject =
-      limit.scope === "actor" ? `actor:${input.actor!.id}` : this.clients.get(input.request);
+    const subject = await sensitiveRequestSubject(
+      limit,
+      input.request,
+      this.clients.get(input.request),
+      input.actor?.id,
+    );
+    if (subject === undefined) return true;
     return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
   }
 }
@@ -374,7 +393,11 @@ export const defaultNodeLogger: ServerLogger = Object.freeze({
 export interface CreateNodeRuntimeInput {
   readonly adminAssets?: BuiltAdminResponder;
   readonly actors?: ActorResolver;
-  readonly auth?: { readonly actors: ActorResolver; fetch(request: Request): Promise<Response> };
+  readonly auth?: {
+    readonly actors: ActorResolver;
+    readonly mcp?: import("@lacecms/auth").McpOAuthHttpBoundary;
+    fetch(request: Request): Promise<Response>;
+  };
   readonly config: NormalizedConfig<readonly ContentModelDefinition[]>;
   readonly environment?: LaceAppInput["environment"];
   readonly logger?: ServerLogger;
@@ -405,6 +428,7 @@ export function createNodeEmailSender(settings: EmailSettings = { provider: "non
 }
 
 export interface NodeRuntime {
+  readonly maintainOAuth: () => Promise<void>;
   readonly setRequestPeer: (request: Request, peer: string | undefined) => void;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly cache: Cache;
@@ -507,6 +531,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     publicMedia: repository,
     storage,
   });
+  const oauth = createNodeOAuthPersistence(database.connection);
   const auth =
     input.auth ??
     createBetterAuthBoundary({
@@ -516,8 +541,18 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
       production: process.env.NODE_ENV === "production",
       schema: betterAuthSchema,
       secret: input.settings.authSecret,
+      ...(input.settings.mcpEnabled ? { oauth: { persistence: oauth } } : {}),
     });
+  const mcp = input.settings.mcpEnabled
+    ? createMcpContentHandler({ content, version: engineVersion })
+    : undefined;
+  const oauthBoundary = auth.mcp;
   const app = createLaceApp({
+    mcpEnabled: input.settings.mcpEnabled ?? false,
+    ...(mcp && oauthBoundary ? { mcp: { resolve: oauthBoundary.resolve, fetch: mcp.fetch } } : {}),
+    ...(input.settings.mcpEnabled
+      ? { oauthConnections: new OAuthConnectionUseCases({ connections: oauth, clock }) }
+      : {}),
     apiDocsEnabled: input.settings.apiDocsEnabled ?? false,
     ...(input.adminAssets === undefined ? {} : { adminAssets: input.adminAssets }),
     actors: input.actors ?? auth.actors,
@@ -562,6 +597,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     repository,
     security,
     storage,
+    maintainOAuth: () => oauth.cleanup(Number(clock.now()), 20),
     verifyStorage: () =>
       hasStartupStorageCheck(storage) ? storage.assertReady() : Promise.resolve(),
   });

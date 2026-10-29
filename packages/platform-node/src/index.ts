@@ -1,3 +1,4 @@
+export * from "./oauth.js";
 import { appliedMigrationQuery } from "@lacecms/db";
 export { checkedInMigrations } from "@lacecms/db";
 import { drizzle } from "drizzle-orm/better-sqlite3";

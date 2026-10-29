@@ -1,5 +1,6 @@
+import { authorizeContentOperation } from "./content-authority.js";
 import { isInternalLinkTargetId } from "@lacecms/content";
-import { DomainError, requirePermission } from "@lacecms/domain";
+import { DomainError } from "@lacecms/domain";
 import type { Actor } from "@lacecms/domain";
 import type { OpaqueCursor } from "./index.js";
 
@@ -104,7 +105,7 @@ export class ContentLinkUseCases {
     actor: Actor,
     ids: readonly string[],
   ): Promise<Readonly<Record<string, LinkTargetStatus>>> {
-    requirePermission(actor, "content:read");
+    authorizeContentOperation(actor, "resolveLinkTargets");
     if (ids.length > 200 || new Set(ids).size !== ids.length || !ids.every(isInternalLinkTargetId))
       throw new DomainError(
         "CONTENT_INVALID_STATE",
@@ -113,7 +114,7 @@ export class ContentLinkUseCases {
     return this.links.resolveLinkTargets(ids);
   }
   public list(actor: Actor, query: LinkTargetQuery): Promise<LinkTargetPage> {
-    requirePermission(actor, "content:read");
+    authorizeContentOperation(actor, "listLinkTargets");
     assertLinkPageLimit(query.limit);
     if (
       (query.search?.length ?? 0) > 100 ||
@@ -126,7 +127,7 @@ export class ContentLinkUseCases {
     });
   }
   public impact(actor: Actor, query: LinkImpactQuery): Promise<LinkImpactPage> {
-    requirePermission(actor, "content:read");
+    authorizeContentOperation(actor, "readLinkImpact");
     assertLinkPageLimit(query.limit);
     const locations =
       query.sourceEntryId !== undefined ||

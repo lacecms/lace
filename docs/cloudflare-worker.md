@@ -301,3 +301,16 @@ normal authorization, validation and concurrency checks. No external request
 proxy or prefilled/persisted credentials are configured. Existing same-origin
 sessions apply; telemetry, remote fonts and optional hosted integrations are
 disabled. Disable or remove the variable and redeploy to turn the UI off.
+
+## Optional content assistant
+
+Set the string var `LACE_MCP_ENABLED` to `true` after D1 migrations and redeploy;
+local development uses `.dev.vars`. No additional binding is required. See
+[OAuth content assistant](mcp.md) for scopes, account revocation, diagnostics and
+the distinct local-versus-remote acceptance requirements.
+
+OAuth maintenance rotates three bounded cleanup phases across minute invocations,
+using at most three D1 statements per run so existing dispatch work retains the
+50-query budget. Revocation and abort of expired pending issuances share one
+atomic phase; dependency rows are removed before parent records. Credential
+expiry and revocation are enforced on every request without waiting for cleanup.

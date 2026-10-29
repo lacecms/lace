@@ -355,3 +355,9 @@ Ordinary literal LIKE ignores ASCII case and retains non-ASCII/Cyrillic case;
 text equality uses `= COLLATE NOCASE`. Public order/content stay independent.
 See [query contracts, cursor recovery and measurements](collection-queries.md)
 and the public content-modeling/API guides for examples and exact limits.
+
+## Optional content assistant
+
+Set `LACE_MCP_ENABLED=true` after migrations and restart the Node API. Keep the
+canonical HTTPS origin and update proxy routing/log redaction as described in
+[OAuth content assistant](mcp.md). Missing or `false` leaves MCP disabled.

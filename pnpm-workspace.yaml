@@ -3,6 +3,9 @@ packages:
   - packages/*
 
 catalog:
+  "@better-auth/oauth-provider": 1.7.3
+  "@modelcontextprotocol/server": 2.4.0
+  "@modelcontextprotocol/client": 2.4.0
   "@astrojs/starlight": 0.42.6
   yaml: 2.9.0
   linkedom: 0.18.12

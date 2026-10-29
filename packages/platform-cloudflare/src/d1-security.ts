@@ -1,3 +1,4 @@
+import { oauthUserInvalidationSql } from "@lacecms/db";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import {
   INVITATION_TTL_MS,
@@ -26,6 +27,10 @@ import type { D1Database, D1PreparedStatement } from "./d1.js";
 
 const setupExpiryMs = 60 * 60 * 1000;
 const limits = {
+  mcp: { limit: 60, windowMs: 60 * 1000 },
+  "oauth-register": { limit: 10, windowMs: 15 * 60 * 1000 },
+  "oauth-token": { limit: 60, windowMs: 60 * 1000 },
+  "oauth-revoke": { limit: 20, windowMs: 60 * 60 * 1000 },
   auth: { limit: 10, windowMs: 15 * 60 * 1000 },
   email: { limit: 5, windowMs: 60 * 60 * 1000 },
   invite: { limit: 20, windowMs: 60 * 60 * 1000 },
@@ -487,7 +492,7 @@ export class D1SecurityService implements SecurityService {
     const guard = randomHex(16);
     const guarded = "exists (select 1 from mutation_guards where token = ?1)";
     const owner = "(select user_id from password_reset_tokens where token_hash = ?2)";
-    const [claimed, , , , , row] = await this.database.batch([
+    const [claimed, , , , , , row] = await this.database.batch([
       this.statement(
         "insert into mutation_guards (token, created_at) select ?1, ?3 where exists (select 1 from password_reset_tokens t join user u on u.id = t.user_id where t.token_hash = ?2 and t.consumed_at is null and t.expires_at > ?3 and u.disabled = 0)",
         guard,
@@ -511,6 +516,14 @@ export class D1SecurityService implements SecurityService {
         `delete from session where user_id = ${owner} and ${guarded}`,
         guard,
         tokenHash,
+      ),
+      this.statement(
+        oauthUserInvalidationSql(
+          "id=(select user_id from password_reset_tokens where token_hash=?) and exists(select 1 from mutation_guards where token=?)",
+        ),
+        now,
+        tokenHash,
+        guard,
       ),
       this.statement("delete from mutation_guards where token = ?", guard),
       this.statement("select user_id from password_reset_tokens where token_hash = ?", tokenHash),
@@ -572,6 +585,18 @@ export class D1SecurityService implements SecurityService {
           password,
         ),
       );
+    if (input.keepSessionId !== undefined)
+      statements.push(
+        this.statement(
+          oauthUserInvalidationSql(
+            "id=? and exists(select 1 from account where user_id=? and provider_id='credential' and password=?)",
+          ),
+          Number(input.now),
+          input.userId,
+          input.userId,
+          password,
+        ),
+      );
     const [changed, revoked] = await this.database.batch(statements);
     if (changed?.meta.changes !== 1) return Object.freeze({ status: "invalid_credentials" });
     return Object.freeze({ revoked: revoked?.meta.changes ?? 0, status: "changed" });
@@ -605,18 +630,22 @@ export class D1SecurityService implements SecurityService {
     readonly keepSessionId: string;
     readonly userId: string;
   }): Promise<number> {
-    const result = await this.statement(
-      "delete from session where user_id = ? and id <> ?",
-      input.userId,
-      input.keepSessionId,
-    ).run();
-    return result.meta.changes;
+    const [result] = await this.database.batch([
+      this.statement(
+        "delete from session where user_id = ? and id <> ?",
+        input.userId,
+        input.keepSessionId,
+      ),
+      this.statement(oauthUserInvalidationSql(), Number(this.now()), input.userId),
+    ]);
+    return result?.meta.changes ?? 0;
   }
 
   public async deleteUserSessions(input: { readonly userId: string }): Promise<number | null> {
     const [found, deleted] = await this.database.batch([
       this.statement("select 1 as found from user where id = ?", input.userId),
       this.statement("delete from session where user_id = ?", input.userId),
+      this.statement(oauthUserInvalidationSql(), Number(this.now()), input.userId),
     ]);
     return found?.results[0] === undefined ? null : (deleted?.meta.changes ?? 0);
   }
@@ -733,7 +762,7 @@ export class D1SecurityService implements SecurityService {
     nextRole?: SecurityRole,
     disabled?: boolean,
   ): Promise<ManagedUser | null> {
-    const [changed, , row] = await this.database.batch([
+    const [changed, , , row] = await this.database.batch([
       this.statement(
         "update user set role = coalesce(?1, role), disabled = coalesce(?2, disabled), updated_at = ?3 where id = ?4 and not (role = 'admin' and disabled = 0 and (coalesce(?2, 0) = 1 or coalesce(?1, 'admin') <> 'admin') and (select count(*) from user where role = 'admin' and disabled = 0) <= 1)",
         nextRole === undefined ? null : role(nextRole),
@@ -744,6 +773,12 @@ export class D1SecurityService implements SecurityService {
       // Disabling ends every session in the same batch; a refused change deletes nothing.
       this.statement(
         "delete from session where user_id = ?1 and ?2 = 1 and exists (select 1 from user where id = ?1 and disabled = 1)",
+        id,
+        disabled === true ? 1 : 0,
+      ),
+      this.statement(
+        oauthUserInvalidationSql("id=? and disabled=1 and ?=1"),
+        Number(this.now()),
         id,
         disabled === true ? 1 : 0,
       ),

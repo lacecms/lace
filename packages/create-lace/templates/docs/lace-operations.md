@@ -679,3 +679,8 @@ SEO/labels/columns/blocks. Mixed query/SEO edits still rebuild. On rollback reta
 the additive columns and migration history; older code can leave the public source
 stale, which re-upgrade detects before applying legacy proof/fallback. No content
 backfill, field-query index, persisted cursor state or bulk action is introduced.
+
+## Optional content assistant
+
+See [OAuth content assistant](lace-mcp.md) for opt-in deployment, the five draft
+tools, consent, connections, refresh/replay, proxy log redaction and disabling.

@@ -41,6 +41,7 @@
     "@lacecms/content": "workspace:*",
     "@lacecms/db": "workspace:*",
     "@lacecms/domain": "workspace:*",
+    "@lacecms/mcp": "workspace:*",
     "@lacecms/server": "workspace:*",
     "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",

@@ -55,7 +55,7 @@ test("shared lock prevents collisions, aliases and releases on failure without p
 test("complete public verification ignores next but rejects subsets, missing versions and image changes", () =>
   use(async (f) => {
     const verified = await verifyPublishedInventory(f.inventory, f.directory, f.operations);
-    expect(verified.npm.items).toHaveLength(15);
+    expect(verified.npm.items).toHaveLength(f.inventory.release.packages.length);
     expect(verified.images.items).toHaveLength(2);
     await expect(
       verifyPublishedInventory(
