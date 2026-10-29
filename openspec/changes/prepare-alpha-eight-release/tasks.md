@@ -22,7 +22,7 @@
 
 ## 4. Immutable preparation and handoff
 
-- [ ] 4.1 Commit the reviewed shipping source, verify clean status and frozen installation on Node 24.12.0/pnpm 12.3.4, and check Docker/Buildx plus both Linux execution platforms; record the revision and any missing prerequisites before claiming eligible preparation.
+- [x] 4.1 Commit the reviewed shipping source, verify clean status and frozen installation on Node 24.12.0/pnpm 12.3.4, and check Docker/Buildx plus both Linux execution platforms; record the revision and any missing prerequisites before claiming eligible preparation.
 - [ ] 4.2 Run `pnpm release:prepare --output .release-artifacts/alpha-8` or a distinct recorded retry destination; verify a complete publication-eligible inventory containing sixteen archives and API/builder images for linux/amd64 and linux/arm64, passing all platform smokes without overwriting saved sets.
 - [ ] 4.3 Run `pnpm release:verify --output <saved-directory>` and `pnpm acceptance:release --artifacts <saved-directory>`; verify checksums/source/IDs, all retained and alpha.8 journeys, successful cleanup and a durable acceptance receipt with actual runtime/platform coverage.
 - [ ] 4.4 Write the readiness handoff with source/fingerprint, inventory path/SHA-256, archive hashes, local image identifiers, harness revision, commands/results and remaining authenticated publication/real-deployment prerequisites; verify final links/format/strict change validation and confirm no publication, remote deployment or historical cleanup occurred.
