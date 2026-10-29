@@ -77,6 +77,36 @@ shows sign-in when setup is already complete. The setup endpoint closes
 permanently after completion. The local stack applies migrations only;
 configuration synchronization remains a deliberate operator operation.
 
+### Connect a local content assistant
+
+MCP defaults to disabled. Set `LACE_MCP_ENABLED=true` in the ignored `.env`, then
+recreate the API container so its environment changes:
+
+```sh
+docker compose --project-name lace-dev --env-file .env --file docker-compose.dev.yml up -d --no-deps --force-recreate api
+```
+
+Compose forwards this flag explicitly; `--env-file` alone does not pass arbitrary
+keys into containers. No new migration or dependency is needed for the Settings
+update beyond the migrations already applied by `dev:node`. Do not reset data.
+
+In Admin, **Settings → MCP** shows Enabled/Disabled and the canonical endpoint.
+Choose Codex, Claude Code or Gemini CLI, select read only or draft editing,
+and copy its setup instructions. Complete browser sign-in and consent from the
+client: Claude Code uses `/mcp`, and Gemini CLI uses `/mcp auth lace` inside its
+interactive session. Codex TOML and generic HTTP/OAuth instructions are also
+available. Existing `lace` client configuration should be updated instead of
+added again; restart/reload the client after configuration changes. Use
+**Account → Assistant connections** to revoke your connection before reconnecting.
+
+For the default local origin, resource discovery at
+`http://127.0.0.1:3000/.well-known/oauth-protected-resource/mcp` returns `200`
+when enabled, and unauthenticated `http://127.0.0.1:3000/mcp` returns `401` with
+an OAuth challenge. Both return `404` when disabled. If registration returns
+`404` while Admin works, check flag forwarding and recreate the API container.
+Enabled in Settings describes configuration, not verified client connectivity.
+See [MCP setup and client-specific commands](docs/mcp.md#inspect-configuration-and-connect-codex).
+
 ### Show published content on the local site
 
 The initial Astro site uses its committed fixture so the stack can start before

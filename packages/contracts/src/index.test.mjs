@@ -107,6 +107,7 @@ import {
 test("operational status requires a bounded engine release", () => {
   const status = {
     configuredModels: 2,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
     email: { provider: "none" },
     engineVersion: "0.1.0-alpha.4",
     ready: false,
@@ -119,7 +120,12 @@ test("operational status requires a bounded engine release", () => {
 });
 
 test("operational status reports email delivery without provider settings", () => {
-  const status = { configuredModels: 0, engineVersion: "0.1.0-alpha.4", ready: true };
+  const status = {
+    configuredModels: 0,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
+    engineVersion: "0.1.0-alpha.4",
+    ready: true,
+  };
   const parse = (email) => v.safeParse(adminSettingsStatusSchema, { ...status, email }).success;
   expect(parse({ provider: "none" })).toBe(true);
   expect(parse({ from: "Lace <cms@example.com>", provider: "smtp" })).toBe(true);
@@ -2501,4 +2507,37 @@ test("content and query errors share value-free stable codes and escaped pointer
     status: 422,
     body: { error: { code: "VALIDATION_FAILED" } },
   });
+});
+
+test("MCP settings summary is strict and uses a canonical HTTP endpoint", () => {
+  const status = {
+    configuredModels: 0,
+    email: { provider: "none" },
+    engineVersion: "test",
+    ready: true,
+  };
+  const parse = (mcp) => v.safeParse(adminSettingsStatusSchema, { ...status, mcp }).success;
+  for (const enabled of [true, false]) {
+    expect(parse({ enabled, endpoint: "http://127.0.0.1:54321/mcp" })).toBe(true);
+    expect(parse({ enabled, endpoint: "https://cms.example.com/mcp" })).toBe(true);
+  }
+  for (const endpoint of [
+    "/mcp",
+    "file:///mcp",
+    "https://user:pass@cms.test/mcp",
+    "https://cms.test/mcp?token=secret",
+    "https://cms.test/mcp#x",
+    "https://cms.test/mcp/",
+    "https://cms.test/api",
+    "invalid",
+  ]) {
+    expect(parse({ enabled: true, endpoint })).toBe(false);
+  }
+  for (const mcp of [
+    undefined,
+    { enabled: "true", endpoint: "https://cms.test/mcp" },
+    { enabled: true },
+    { enabled: true, endpoint: "https://cms.test/mcp", token: "secret" },
+  ])
+    expect(parse(mcp)).toBe(false);
 });

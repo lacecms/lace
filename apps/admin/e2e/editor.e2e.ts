@@ -379,6 +379,7 @@ test("admin routes distinguish empty and failure states at a narrow width", asyn
     if (path === "/api/v1/admin/settings/status")
       return json(route, {
         configuredModels: 0,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { provider: "none" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,

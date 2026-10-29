@@ -173,6 +173,7 @@ test("uses validated credentialed user, status, and token endpoints", async () =
     if (path.endsWith("/settings/status"))
       return Response.json({
         configuredModels: 2,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { provider: "none" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,
@@ -191,6 +192,7 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   });
   await expect(client.loadSettingsStatus()).resolves.toEqual({
     configuredModels: 2,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
     email: { provider: "none" as const },
     engineVersion: "0.1.0-alpha.4",
     ready: true,

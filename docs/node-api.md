@@ -358,6 +358,10 @@ and the public content-modeling/API guides for examples and exact limits.
 
 ## Optional content assistant
 
-Set `LACE_MCP_ENABLED=true` after migrations and restart the Node API. Keep the
+Set `LACE_MCP_ENABLED=true` after migrations and restart the Node API. For local
+Compose development, recreate the API container to apply environment changes;
+the maintained Compose file explicitly forwards this flag. Admin Settings shows
+the MCP configuration and copyable connection examples in both enabled and
+disabled states. See [local setup](../DEVELOPMENT.md#connect-a-local-content-assistant). Keep the
 canonical HTTPS origin and update proxy routing/log redaction as described in
 [OAuth content assistant](mcp.md). Missing or `false` leaves MCP disabled.

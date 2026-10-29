@@ -437,6 +437,7 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
     if (path === "/api/v1/admin/settings/status")
       return json(route, {
         configuredModels: 3,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { from: "Lace <cms@lace.test>", provider: "smtp" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,

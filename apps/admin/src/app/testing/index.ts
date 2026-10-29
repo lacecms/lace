@@ -166,6 +166,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     revokeOtherSessions: async () => ({ revoked: 0 }),
     loadSettingsStatus: async () => ({
       configuredModels: 0,
+      mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
       email: { provider: "none" as const },
       engineVersion: "0.1.0-alpha.4",
       ready: true,

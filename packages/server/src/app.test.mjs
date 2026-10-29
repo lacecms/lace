@@ -32,6 +32,7 @@ const editor = { id: actorId("editor"), role: "editor" };
 async function fixture({
   actor = admin,
   apiDocsEnabled,
+  publicBaseUrl = "https://lace.test/",
   resolveActor,
   auth,
   oauthConnections,
@@ -137,7 +138,7 @@ async function fixture({
     logger: { log: (entry) => logs.push(entry) },
     maxBodyBytes,
     media,
-    publicBaseUrl: "https://lace.test/",
+    publicBaseUrl,
     publicContent: {
       exportBuildContentPage: async (input) => {
         exportLoads += 1;
@@ -3451,4 +3452,35 @@ test("MCP flag parser accepts only absent and exact string booleans", async () =
   for (const value of [null, true, false, 1, "1", "TRUE", "", " private-value "]) {
     expect(() => parseMcpEnabled(value)).toThrow("Invalid LACE_MCP_ENABLED.");
   }
+});
+
+test("settings MCP summary follows configuration, not request forwarding headers", async () => {
+  for (const mcpEnabled of [true, false]) {
+    const { app } = await fixture({ mcpEnabled, publicBaseUrl: "http://127.0.0.1:54321/base/" });
+    const result = await json(app, "/api/v1/admin/settings/status", {
+      headers: {
+        forwarded: "host=attacker.test;proto=https",
+        "x-forwarded-host": "attacker.test",
+        "x-forwarded-proto": "https",
+      },
+    });
+    expect(result.response.status).toBe(200);
+    expect(result.body.mcp).toEqual({
+      enabled: mcpEnabled,
+      endpoint: "http://127.0.0.1:54321/mcp",
+    });
+  }
+  for (const token of ["mcp-token", "build-token"]) {
+    const { app } = await fixture({ actor: null });
+    const result = await json(app, "/api/v1/admin/settings/status", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(result.response.status).toBe(403);
+    expect(result.body).not.toHaveProperty("mcp");
+  }
+  const { app } = await fixture({ publicBaseUrl: null });
+  const missing = await json(app, "/api/v1/admin/settings/status");
+  expect(missing.response.status).toBe(500);
+  expect(missing.body).not.toHaveProperty("mcp");
+  expect(JSON.stringify(missing.body)).not.toContain("Canonical public URL");
 });

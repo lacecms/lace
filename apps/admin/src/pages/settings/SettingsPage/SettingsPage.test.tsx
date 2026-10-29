@@ -39,6 +39,7 @@ test("settings shows status cards, issues a once-shown token, and keeps metadata
       listTokens: async () => ({ items }),
       loadSettingsStatus: async () => ({
         configuredModels: 2,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { provider: "none" as const },
         engineVersion: "0.1.0-alpha.4",
         ready: true,
@@ -99,6 +100,7 @@ test("failed status and token reads offer Try again", async () => {
     if (fail) throw new AdminClientError({ message: "Status unavailable.", status: 503 });
     return {
       configuredModels: 1,
+      mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
       email: { provider: "none" as const },
       engineVersion: "0.1.0-alpha.4",
       ready: false,
@@ -122,6 +124,7 @@ test("failed status and token reads offer Try again", async () => {
 test("viewers see access denied without settings or token requests", async () => {
   const loadSettingsStatus = vi.fn(async () => ({
     configuredModels: 0,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
     email: { provider: "none" as const },
     engineVersion: "0.1.0-alpha.4",
     ready: true,
@@ -148,6 +151,7 @@ test("refresh replaces the server-confirmed release", async () => {
     client({
       loadSettingsStatus: async () => ({
         configuredModels: 0,
+        mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
         email: { provider: "none" as const },
         engineVersion,
         ready: true,
@@ -180,6 +184,7 @@ test("expired status session removes the protected version and returns to sign-i
           });
         return {
           configuredModels: 0,
+          mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
           email: { provider: "none" as const },
           engineVersion: "0.1.0-alpha.4",
           ready: true,

@@ -16,7 +16,13 @@ afterEach(() => {
 const admin = staticSessionSource({ email: "ada@lace.test", id: "admin-1", role: "admin" });
 
 function status(email: AdminSettingsStatusDto["email"]): AdminSettingsStatusDto {
-  return { configuredModels: 1, email, engineVersion: "0.1.0-alpha.4", ready: true };
+  return {
+    configuredModels: 1,
+    mcp: { enabled: false, endpoint: "https://lace.test/mcp" },
+    email,
+    engineVersion: "0.1.0-alpha.4",
+    ready: true,
+  };
 }
 
 function mount(email: AdminSettingsStatusDto["email"], sendTestEmail = vi.fn()) {

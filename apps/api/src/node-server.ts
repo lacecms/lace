@@ -9,7 +9,11 @@ import type {
   NodeRuntimeSettings,
 } from "@lacecms/platform-node";
 
-const protectedLocalPaths = new Set(["/health/live", "/health/ready"]);
+const mcpLocalPaths = [
+  "/mcp",
+  "/.well-known/oauth-protected-resource/mcp",
+  "/.well-known/oauth-authorization-server/api/auth",
+];
 
 function gatewayResponse(status: number, message: string): Response {
   return Response.json({ error: { code: "UPSTREAM_UNAVAILABLE", message } }, { status });
@@ -21,7 +25,7 @@ function isLocalPath(pathname: string): boolean {
     pathname.startsWith("/api/") ||
     pathname === "/health" ||
     pathname.startsWith("/health/") ||
-    protectedLocalPaths.has(pathname)
+    mcpLocalPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
   );
 }
 
@@ -45,7 +49,7 @@ function proxyUpgradeHeaders(
   return headers as Record<string, string | string[]>;
 }
 
-/** Bridges supported frontend development upgrades while API and health paths stay local. */
+/** Bridges supported frontend development upgrades while API, health and MCP paths stay local. */
 export function proxyNodeDevelopmentUpgrade(
   request: IncomingMessage,
   socket: Duplex,
@@ -107,7 +111,7 @@ function proxyHeaders(request: Request): Headers {
   return headers;
 }
 
-/** Routes the API and health namespaces locally, and development frontend paths through one origin. */
+/** Routes the API, health and MCP namespaces locally, and development frontend paths through one origin. */
 export function createNodeDevelopmentGateway(
   apiFetch: (request: Request) => Response | Promise<Response>,
   settings: NodeRuntimeSettings,

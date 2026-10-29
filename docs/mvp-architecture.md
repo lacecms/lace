@@ -2964,6 +2964,15 @@ connections always keep foreign keys on.
 
 ## 17. Admin application
 
+MCP2 (`add-mcp-settings-and-local-enablement`) adds a read-only MCP section in
+Settings for administrators, visible whether MCP is enabled or disabled. The
+existing authenticated Settings status response supplies the parsed enabled
+state and canonical `/mcp` URL from deployment configuration. The section offers
+copyable client setup examples with read-only access selected by default,
+activation guidance, and a link to owned Account connections. Enabled describes
+configuration, not verified client connectivity. Deployment configuration remains
+operator-owned; no browser toggle or new public status endpoint is introduced.
+
 When MCP is enabled, `/admin/mcp/consent` uses the existing session/sign-in and
 controls to show escaped client identity, callback hostname and read/read-write
 consent, explicitly stating the publication/unpublication/deletion ban.

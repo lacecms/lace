@@ -1,5 +1,20 @@
 # Lace backlog
 
+- **MCP3 Claude Code and Gemini CLI setup (implemented, archived 2026-10-29):**
+  `add-claude-and-gemini-mcp-guides` extends the implemented MCP2 Settings card
+  with client-specific OAuth setup and sign-in examples, preserving selected
+  permissions. Depends on MCP2; no provider or backend changes.
+  Archived at `openspec/changes/archive/2026-10-29-add-claude-and-gemini-mcp-guides`;
+  the capability delta is synchronized.
+
+- **MCP2 MCP Settings and local activation (implemented, archived 2026-10-29):**
+  `add-mcp-settings-and-local-enablement` verifies local Compose flag forwarding
+  and adds an always-visible, read-only MCP configuration section to Admin
+  Settings with canonical endpoint and permission-aware client setup examples.
+  Follows MCP1; preserves OAuth, tool authority, and unrelated roadmap ordering.
+  Archived at `openspec/changes/archive/2026-10-29-add-mcp-settings-and-local-enablement`;
+  all three capability deltas are synchronized.
+
 - **MCP1 Optional OAuth content assistant (implemented, archived 2026-10-29):**
   `add-oauth-mcp-server` adds opt-in stateless MCP in the existing Node/Worker
   deployment, Better Auth account delegation, explicit consent and revocable

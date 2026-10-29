@@ -1097,7 +1097,12 @@ export function createLaceApp(input: LaceAppInput): Hono {
   );
   app.get("/api/v1/admin/settings/status", async (context) => {
     await settingsActor(context);
+    if (!input.publicBaseUrl) throw new Error("Canonical public URL is unavailable.");
     return response(adminSettingsStatusSchema, {
+      mcp: {
+        enabled: input.mcpEnabled === true,
+        endpoint: new URL("/mcp", input.publicBaseUrl).href,
+      },
       configuredModels: input.config.content.length,
       email: emailDeliveryStatus(email),
       engineVersion: input.environment.engineVersion,

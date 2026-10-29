@@ -173,3 +173,35 @@ for (const kind of ["SQLite", "D1"]) {
     }
   }, 30000);
 }
+
+for (const kind of ["SQLite", "D1"]) {
+  for (const enabled of [true, false]) {
+    test(`${kind}: MCP settings metadata is canonical and session-only (enabled=${enabled})`, async () => {
+      const origin = "http://127.0.0.1:54321";
+      const f = await openMcpRuntime(kind, { origin, enabled });
+      try {
+        for (const authorization of [undefined, "Bearer unrelated-token"]) {
+          const response = await f.fetch(
+            new Request(`${origin}/api/v1/admin/settings/status`, {
+              headers: authorization ? { authorization } : {},
+            }),
+          );
+          expect(response.status).toBe(403);
+          expect(await response.json()).not.toHaveProperty("mcp");
+        }
+        await f.login();
+        const status = await f.rest("/api/v1/admin/settings/status", {
+          headers: { "x-forwarded-host": "attacker.test" },
+        });
+        expect(status.response.status).toBe(200);
+        expect(status.body.mcp).toEqual({ enabled, endpoint: `${origin}/mcp` });
+        expect(
+          (await f.fetch(new Request(`${origin}/.well-known/oauth-protected-resource/mcp`))).status,
+        ).toBe(enabled ? 200 : 404);
+        expect((await f.fetch(new Request(`${origin}/mcp`))).status).toBe(enabled ? 401 : 404);
+      } finally {
+        await f.close();
+      }
+    }, 60_000);
+  }
+}

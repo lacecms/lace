@@ -40,7 +40,7 @@ function SettingsManager() {
       <div className="grid gap-1">
         <h1 id="settings-title">Settings</h1>
         <p className="m-0 text-muted-foreground">
-          Check the site's API and manage the read-only tokens its builds use.
+          Check the site's API, connect assistants, and manage build tokens.
         </p>
       </div>
       <CurrentBuildSite />

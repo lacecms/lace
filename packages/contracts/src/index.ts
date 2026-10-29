@@ -1020,8 +1020,32 @@ export const emailTestResultSchema = v.union([
   v.strictObject({ reason: emailFailureReasonSchema, status: v.literal("failed") }),
 ]);
 export type EmailTestResultDto = v.InferOutput<typeof emailTestResultSchema>;
+export const mcpSettingsStatusSchema = v.strictObject({
+  enabled: v.boolean(),
+  endpoint: v.pipe(
+    v.string(),
+    v.maxLength(2_048),
+    v.check((value) => {
+      try {
+        const url = new ParsedUrl(value);
+        return (
+          (url.protocol === "http:" || url.protocol === "https:") &&
+          url.pathname === "/mcp" &&
+          !url.username &&
+          !url.password &&
+          !url.search &&
+          !url.hash &&
+          url.href === value
+        );
+      } catch {
+        return false;
+      }
+    }, "Expected a canonical MCP endpoint."),
+  ),
+});
 export const adminSettingsStatusSchema = v.strictObject({
   configuredModels: nonNegativeIntegerSchema,
+  mcp: mcpSettingsStatusSchema,
   email: emailDeliveryStatusSchema,
   engineVersion: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
   ready: v.boolean(),
@@ -1543,6 +1567,9 @@ export const siteBuildListSchema = v.strictObject({
 export const MAX_BUILD_SITE_URL_LENGTH = 2048;
 
 interface ParsedUrl {
+  readonly pathname: string;
+  readonly search: string;
+  readonly hash: string;
   readonly href: string;
   readonly password: string;
   readonly protocol: string;
