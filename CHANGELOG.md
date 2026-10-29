@@ -9,6 +9,7 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 - Link content by stable entry identity; unavailable destinations render safely, with coordinated SDK/site adoption of build-export format 2.
 - Configure collection sorting, filters and additional search fields for draft editing without changing published order.
 - Optionally connect OAuth assistants through MCP with explicit consent, revocable access and five read/draft tools; publishing and deletion remain unavailable.
+- Update authentication, HTTP and build dependencies with upstream security fixes.
 - Upgrade engine, site and builder together, apply migrations 0010–0013 and review installed components and deployment configuration before synchronization ([upgrade guide](docs/compatibility.md#alpha-8-upgrade-and-rollback)).
 
 ## 0.1.0-alpha.7

@@ -104,3 +104,25 @@ untrusted certificate fails, the explicit fixture CA succeeds and canonical Host
 is preserved. The paired Undici fetch/Agent are from the same version. These
 are harness-only corrections; saved package/image bytes remain unchanged and the
 next acceptance records the newer committed harness revision separately.
+
+The focused saved Node production run passed using the original alpha.8 API and
+builder images and archives: actual HTTPS edge/canonical Host, OAuth/SDK, read
+and write scope ceilings, persisted gallery/video drafts, field queries,
+forbidden publishing/deletion, unchanged export, revocation and Viewer consent
+limits. Generated files, package/image filesystems, served releases and service
+logs passed secret scans; temporary containers and files were cleaned. This
+focused phase deliberately writes no full release acceptance receipt.
+The native client callback uses a separate HTTP loopback redirect while the
+protected resource remains HTTPS, as the provider requires. The full run uses
+committed harness `91215e4` and the unchanged source-001ad14 saved set.
+
+Later unified legacy coverage also passed block order, weak ETags and builder
+source diagnostics. Its operations suite exposed stale harness expectations:
+engine alpha.7, Gallery v3 and the pre-CQ1 cursor error code. Expectations now use
+alpha.8, accepted Gallery v4 and 422 VALIDATION_FAILED at /after; all 28 focused
+operations/runner tests passed on Node/Worker. The Node HTTPS/MCP hook now runs
+before the original Compose stack is removed by field-trial teardown. These are
+verification-only updates; the saved runtime/package set remains unchanged.
+The full workspace suite was repeated after the Docker/harness repair: 44 tasks
+and 222 root tests passed again. Final unified acceptance remains pending until
+its durable receipt is present.

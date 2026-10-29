@@ -774,6 +774,13 @@ Alpha.8 adds a sixteenth package, `@lacecms/mcp`. Preparation is not publication
 
 ### Public-contract and component boundaries
 
+Gallery advances from schema v3 to v4 for scalar layout settings; image remains
+v4 and Navigation remains v1. Install the matching Gallery component and
+`ListLayout.css`, remove competing structural CSS while retaining theme/spacing,
+and increment affected model versions before normal content sync. The block
+migration preserves existing data/settings and supplies layout defaults. Older
+Gallery renderers reject v4; rollback after sync needs matching backups and source.
+
 Build-export format 2 carries internal-link manifests. Older format-1-only SDKs
 reject it; update API, SDK, render/Astro site and builder together. Use
 `site.link(value)` for custom URL markup and emit navigation only for resolved

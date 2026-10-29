@@ -2037,6 +2037,7 @@ async function fieldTrialJourneys(parent, context, session, tarballs) {
   const operations = { request, run, secretValues, waitBuild, workspace };
   await blockOrderJourney(context, session, operations);
   await weakEtagJourney(context, session, operations);
+  if (context.shipping) await alphaEightNodeJourney(context, session);
   await compose("compose-release-down", ["down", "--volumes", "--remove-orphans"], {
     timeoutMs: 3 * 60_000,
   });
@@ -2264,7 +2265,6 @@ async function main() {
       },
     );
     journeys.push("34c-packed-platform-restore-rotation");
-    await alphaEightNodeJourney(context, session);
     journeys.push(
       "alpha-eight-node-proxy-oauth-drafts-queries-revocation",
       "alpha-eight-local-cloudflare-oauth-drafts-queries-revocation",
