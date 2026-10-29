@@ -2070,11 +2070,51 @@ async function fieldTrialJourneys(parent, context, session, tarballs) {
   ];
 }
 
+async function alphaEightNodeJourney(context, session) {
+  const { parent, project } = context;
+  const tls = await alphaEightTlsProxy({
+    parent,
+    upstream: `http://127.0.0.1:${context.httpPort}/`,
+    run,
+    workspace,
+    secretValues,
+  });
+  try {
+    await alphaEightJourney({
+      ...session,
+      base: tls.base,
+      fetch: tls.fetch,
+      project,
+      secretValues,
+      run,
+      enable: async () => {
+        context.values.LACE_MCP_ENABLED = "true";
+        context.values.LACE_EMAIL_PROVIDER = "";
+        context.values.LACE_EMAIL_FROM = "";
+        context.values.LACE_PUBLIC_BASE_URL = tls.base;
+        await writeEnvironment(context);
+        await compose("alpha-eight-enable-mcp", [
+          "up",
+          "-d",
+          "--force-recreate",
+          "api",
+          "dispatcher",
+        ]);
+        await waitApiReady(session.base);
+      },
+    });
+  } finally {
+    await tls.close();
+  }
+  await inspectShipping(context, "after-alpha-eight");
+}
+
 async function main() {
   const phase = process.argv[2] ?? "all";
   if (
     ![
       "release",
+      "release-mcp",
       "packages",
       "node",
       "all",
@@ -2110,7 +2150,7 @@ async function main() {
     await verifySnapshots(parent, process.argv.includes("--update"));
     return;
   }
-  if (phase === "release") {
+  if (phase === "release" || phase === "release-mcp") {
     const args = process.argv.slice(3);
     if (args.length !== 2 || args[0] !== "--artifacts")
       throw new Error("release acceptance requires --artifacts <prepared-directory>");
@@ -2180,6 +2220,14 @@ async function main() {
     context.shipping = shipping;
     context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
     const session = await nodeJourney(context);
+    if (phase === "release-mcp") {
+      await productionSmoke(context, session);
+      await alphaEightNodeJourney(context, session);
+      console.info(
+        "Focused saved Node HTTPS/MCP acceptance passed; no full release receipt recorded",
+      );
+      return;
+    }
     await securityJourney(context, session);
     await productionSmoke(context, session);
     await recoveryJourney(context, session);
@@ -2216,41 +2264,7 @@ async function main() {
       },
     );
     journeys.push("34c-packed-platform-restore-rotation");
-    const tls = await alphaEightTlsProxy({
-      parent,
-      upstream: `http://127.0.0.1:${context.httpPort}/`,
-      run,
-      workspace,
-      secretValues,
-    });
-    try {
-      await alphaEightJourney({
-        ...session,
-        base: tls.base,
-        fetch: tls.fetch,
-        project,
-        secretValues,
-        run,
-        enable: async () => {
-          context.values.LACE_MCP_ENABLED = "true";
-          context.values.LACE_EMAIL_PROVIDER = "";
-          context.values.LACE_EMAIL_FROM = "";
-          context.values.LACE_PUBLIC_BASE_URL = tls.base;
-          await writeEnvironment(context);
-          await compose("alpha-eight-enable-mcp", [
-            "up",
-            "-d",
-            "--force-recreate",
-            "api",
-            "dispatcher",
-          ]);
-          await waitApiReady(session.base);
-        },
-      });
-    } finally {
-      await tls.close();
-    }
-    await inspectShipping(context, "after-alpha-eight");
+    await alphaEightNodeJourney(context, session);
     journeys.push(
       "alpha-eight-node-proxy-oauth-drafts-queries-revocation",
       "alpha-eight-local-cloudflare-oauth-drafts-queries-revocation",

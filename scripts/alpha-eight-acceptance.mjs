@@ -32,6 +32,8 @@ export async function alphaEightJourney({
   fetch: requestFetch = globalThis.fetch,
 }) {
   const origin = new URL(base).origin;
+  const callback = new URL("/alpha-eight/callback", base);
+  callback.protocol = "http:"; // Native loopback redirect, independent of the HTTPS resource.
   let cookie;
   const invoke = async (path, { json, form, headers, ...options } = {}) => {
     const response = await requestFetch(new URL(path, base), {
@@ -90,7 +92,7 @@ export async function alphaEightJourney({
         method: "POST",
         json: {
           client_name: `Alpha eight ${write ? "writer" : "reader"}`,
-          redirect_uris: [`${origin}/alpha-eight/callback`],
+          redirect_uris: [callback.href],
           scope: "content:read content:write offline_access",
           application_type: "native",
         },
@@ -100,7 +102,7 @@ export async function alphaEightJourney({
       const query = new URLSearchParams({
         client_id: registered.body.client_id,
         response_type: "code",
-        redirect_uri: `${origin}/alpha-eight/callback`,
+        redirect_uri: callback.href,
         resource: `${origin}/mcp`,
         scope: "content:read content:write offline_access",
         state: "alpha-eight",
@@ -126,7 +128,7 @@ export async function alphaEightJourney({
         form: new URLSearchParams({
           grant_type: "authorization_code",
           client_id: registered.body.client_id,
-          redirect_uri: `${origin}/alpha-eight/callback`,
+          redirect_uri: callback.href,
           code,
           code_verifier: verifier,
           resource: `${origin}/mcp`,
