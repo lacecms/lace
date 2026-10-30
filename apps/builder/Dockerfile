@@ -1,13 +1,16 @@
 FROM node:24.12.0-bookworm-slim AS compile
 
-RUN npm install --global pnpm@12.3.4
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends build-essential python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global pnpm@12.3.4
 WORKDIR /build
 COPY . .
 RUN pnpm install --frozen-lockfile --filter @lacecms/app-builder... \
     && pnpm --filter @lacecms/app-builder build
 
 FROM node:24.12.0-bookworm-slim
-ARG LACE_VERSION=0.1.0-alpha.7
+ARG LACE_VERSION=0.1.0-alpha.8
 ARG LACE_REVISION=unrecorded
 LABEL org.opencontainers.image.source="https://github.com/lacecms/lace" \
     org.opencontainers.image.version=$LACE_VERSION \

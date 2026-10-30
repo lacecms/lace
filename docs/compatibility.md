@@ -1,15 +1,15 @@
 # Compatibility baseline
 
-The current preparation candidate is alpha.7 (`0.1.0-alpha.7`, ownership
-template `0.35.0`), on npm `next`. See
-[alpha.7 upgrade and rollback](#alpha-7-upgrade-and-rollback) and
-[release evidence](../openspec/changes/archive/2026-10-19-prepare-alpha-seven-release/readiness.md).
+The current preparation candidate is alpha.8 (`0.1.0-alpha.8`, ownership
+template `0.39.0`), on npm `next`. See
+[alpha.8 upgrade and rollback](#alpha-8-upgrade-and-rollback) and the
+[archived readiness handoff](../openspec/changes/archive/2026-10-30-prepare-alpha-eight-release/readiness.md).
 
-Read-only registry checks on 2026-10-19 at 18:55 Europe/Rome confirmed all
-fifteen alpha.6 npm versions and both two-platform GHCR indexes are public;
-alpha.7 version endpoints returned 404. Alpha.1–alpha.6 are recorded as published
-and immutable. Availability checks are not reservations or proof of authenticated
-publishing rights; local preparation does not publish or establish real deployment.
+Read-only registry checks on 2026-10-29 confirmed alpha.7's original fifteen
+npm versions and both public image manifests; alpha.8's sixteen package versions
+and both image coordinates returned 404. Alpha.1–alpha.7 are recorded as
+published and immutable. Availability is not reservation or authenticated
+publishing rights; preparation does not publish or prove real deployment.
 
 ## Status
 
@@ -730,3 +730,93 @@ See [internal URL links](./internal-url-links.md) for canonical ID targets, the
 installed source adoption, migration 0010 and matching-backup rollback. URL
 fields remain content fields; block settings, provider URLs, SEO and rich-text
 hrefs retain their existing grammars.
+
+## Alpha 8 upgrade and rollback
+
+Alpha.8 (`0.1.0-alpha.8`, ownership template `0.39.0`) is the selected preparation
+candidate on npm `next`. It adds list presentation settings and compact media
+rows, YouTube/Vimeo embeds, internal URL links and Link blocks, configurable
+draft collection queries and optional OAuth MCP. Alpha.7 remains immutable;
+its original fifteen packages and both images were verified public on 2026-10-29.
+Alpha.8 adds a sixteenth package, `@lacecms/mcp`. Preparation is not publication.
+
+### Upgrade order and migrations
+
+1. Record installed versions, stop writes and dispatch, and back up matching
+   database, media, configuration, site source, lockfiles and deployment files.
+   Stop Node API/dispatcher before copying the complete SQLite data directory.
+   For Cloudflare retain a coordinated D1 export/restore point and R2/configuration
+   backup; select remote operations explicitly.
+2. Generate template 0.39.0 with the same site mode/path and Cloudflare choice.
+   Review managed-file conflicts with `lace upgrade`; `.env`, `lace.config.ts`,
+   site components, README and Worker configuration remain user-owned. Upgrade
+   all Lace packages and both API/builder images to alpha.8 together, including
+   SDK/render/Astro/content in the site; reinstall and rebuild the Worker.
+   The starter pins patched Astro 7.3.3. Existing sites must review and update
+   their user-owned Astro/build dependencies as well; template upgrade does not
+   replace site/package.json or its lockfile.
+3. Apply the release's forward migrations before starting the matching API:
+   `0010_internal_url_links`, `0011_public_projection_identity`, `0012_oauth_mcp`
+   and `0013_oauth_verification_indexes` are new since alpha.7. Use the generated
+   `pnpm db:migrate` for Node; stop local Worker development before
+   `pnpm cf:db:migrate`. Remote D1 uses explicit `lace db migrate --target
+   cloudflare-remote --operator-env .lace/cloudflare-operator.env` after preflight.
+4. Review `pnpm exec lace add block image gallery navigation hero cta link
+   videoEmbed --site <site-path> --dry-run`. Update unedited sources and manually
+   merge `.new` proposals from `--write-new` when components were customized.
+   Preserve matching lock records, video CSS and internal-link resolver helpers.
+   Opt into new blocks/URL fields/list settings/query configuration by editing
+   configuration, advancing affected model versions as required and running the
+   normal content sync for the selected target. Existing site files are never
+   overwritten by a template upgrade.
+5. Recreate affected API/dispatcher/builder/web services or deploy the rebuilt
+   Worker, rebuild the site and verify publication, embeds, internal links,
+   configured queries and media. Query-only configuration changes do not rebuild
+   unchanged public content; Node and Cloudflare search limits differ as described
+   in the content-modeling guide.
+
+### Public-contract and component boundaries
+
+Gallery advances from schema v3 to v4 for scalar layout settings; image remains
+v4 and Navigation remains v1. Install the matching Gallery component and
+`ListLayout.css`, remove competing structural CSS while retaining theme/spacing,
+and increment affected model versions before normal content sync. The block
+migration preserves existing data/settings and supplies layout defaults. Older
+Gallery renderers reject v4; rollback after sync needs matching backups and source.
+
+Build-export format 2 carries internal-link manifests. Older format-1-only SDKs
+reject it; update API, SDK, render/Astro site and builder together. Use
+`site.link(value)` for custom URL markup and emit navigation only for resolved
+results. Missing destinations produce bounded diagnostics and a non-navigating
+fallback. Review [internal links](./internal-url-links.md) for grammar, source
+adoption and destructive-operation confirmation. Video embeds support provider
+URLs and optional image previews; they do not enable uploaded video files.
+
+### Optional OAuth assistant
+
+MCP remains disabled by default. After migrations, set `LACE_MCP_ENABLED=true`
+in the Node API environment or Worker vars and restart/redeploy. Compose forwards
+this value; existing user-owned Worker settings need manual adoption. Use the
+canonical public HTTPS origin, review the generated nginx discovery/transport
+routes and keep query strings, callback codes and credentials out of access logs.
+Connect clients to `/mcp`; approve explicit read or read-plus-draft permissions.
+Only model/list/get/create/save-draft tools exist. Publication, unpublication,
+deletion and media administration remain unavailable even to administrators.
+Current account roles and consent scopes still restrict every operation.
+
+Settings contains client setup for Codex, Claude Code and Gemini CLI. Account
+manages owned connections and revocation. Ordinary browser sign-out preserves
+independent grants; disabling MCP prevents discovery, issuance, refresh and use.
+See [OAuth MCP](./mcp.md) and the generated `docs/lace-mcp.md` for canonical-origin,
+consent, refresh/replay and connection recovery details.
+
+### Rollback boundaries
+
+No automatic database downgrade or token-to-path conversion is supported.
+Template filesystem rollback cannot reverse content/schema synchronization or
+restore OAuth state. Restore the matching database/configuration/media/site
+source and coordinated package/image versions when returning to alpha.7 after
+adoption; older engines cannot maintain internal-link projections or interpret
+the new URL grammar. Test restoration at an isolated origin with replacement
+secrets and production hooks disabled. Local Node/D1/R2 acceptance does not prove
+real VPS or Cloudflare deployment, restore or assistant-client compatibility.

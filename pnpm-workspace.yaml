@@ -3,7 +3,7 @@ packages:
   - packages/*
 
 catalog:
-  "@better-auth/oauth-provider": 1.7.3
+  "@better-auth/oauth-provider": 1.7.7
   "@modelcontextprotocol/server": 2.4.0
   "@modelcontextprotocol/client": 2.4.0
   "@astrojs/starlight": 0.42.6
@@ -54,22 +54,22 @@ catalog:
   "@vitejs/plugin-react": 6.1.1
   "@fission-ai/openspec": 1.12.0
   "@hono/standard-validator": 0.4.0
-  "@hono/node-server": 2.1.1
+  "@hono/node-server": 2.1.3
   "@playwright/test": 1.63.0
   "@valibot/to-json-schema": 1.4.0
-  astro: 7.3.1
-  better-auth: 1.7.3
+  astro: 7.3.3
+  better-auth: 1.7.7
   better-sqlite3: 13.0.3
   class-variance-authority: 0.7.1
   clsx: 2.1.1
   drizzle-orm: 0.45.2
   drizzle-kit: 0.31.10
-  hono: 4.13.7
+  hono: 4.13.11
   hono-openapi: 1.3.3
   jsdom: 30.1.0
   lucide-react: 1.48.0
   miniflare: 5.20260903.0-alpha
-  nodemailer: 10.0.10
+  nodemailer: 10.1.4
   oxfmt: 0.66.0
   oxlint: 1.81.0
   react: 19.2.8
@@ -84,8 +84,8 @@ catalog:
   typescript: 7.0.2
   ulid: 3.0.2
   valibot: 1.4.2
-  vite: 8.2.2
-  vitest: 5.0.0
+  vite: 8.2.4
+  vitest: 5.0.3
   wrangler: 4.129.0
   "@aws-sdk/client-s3": ^3.1133.0
   sharp: ^0.35.5
@@ -104,8 +104,12 @@ overrides:
   "postcss-selector-parser": 7.1.6
   "miniflare>sharp": 0.35.5
   "sharp@0.35.4": 0.35.5
-  "undici@7.29.0": 7.29.1
+  "undici@>=7.0.0 <7.30.1": 7.30.1
   "tinypool@2.1.0": 2.1.2
   "http-cache-semantics@4.2.0": 4.3.0
   "smol-toml@1.8.0": 1.9.0
   "source-map-js@1.2.1": 1.2.2
+  "undici@>=8.0.0 <8.12.2": 8.12.2
+  "zod@>=4.0.0 <4.6.6": 4.6.6
+  "seroval@>=1.4.1 <1.6.11": 1.6.11
+  "vite@>=8.3.0 <=8.3.2": 8.3.3

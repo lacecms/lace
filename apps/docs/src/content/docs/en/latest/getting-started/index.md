@@ -9,14 +9,14 @@ Lace manages one website per installation. Developers define models and renderin
 
 Use Node **>=24.12.0**, pnpm **>=12**, and Docker Compose for the Node workflow. The tested repository baseline is Node **24.12.0** and pnpm **12.3.4**; satisfying minimums with a newer major does not establish tested compatibility.
 
-This guide targets **0.1.0-alpha.7**. Use matching Lace packages, generator and API/builder images. Before using an example, confirm that those artifacts are available in [GitHub Releases](https://github.com/lacecms/lace/releases). Latest documentation follows main and can precede publication. Do not substitute an older alpha and expect the same behavior.
+This guide targets **0.1.0-alpha.8**. Use matching Lace packages, generator and API/builder images. Before using an example, confirm that those artifacts are available in [GitHub Releases](https://github.com/lacecms/lace/releases). Latest documentation follows main and can precede publication. Do not substitute an older alpha and expect the same behavior.
 
 ## Create a project
 
-Once matching alpha.7 artifacts are available:
+Once matching alpha.8 artifacts are available:
 
 ```sh
-pnpm dlx create-lace@0.1.0-alpha.7 my-site --starter
+pnpm dlx create-lace@0.1.0-alpha.8 my-site --starter
 cd my-site
 pnpm install
 pnpm env:prepare

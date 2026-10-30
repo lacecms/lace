@@ -59,7 +59,7 @@
           "key": "gallery-one",
           "type": "gallery",
           "position": 1000,
-          "schemaVersion": 3,
+          "schemaVersion": 4,
           "data": {
             "title": "Published gallery",
             "images": [

@@ -3,7 +3,7 @@ title: Deploy on Docker or a VPS
 description: Run the packaged Node CMS and a private static-site builder.
 ---
 
-Create a matching generated project and complete local setup first. In production retain the generated Compose scenario guides: they name your exact site mode and storage mappings. Use matched alpha.7 package/API/builder versions; deploying the engine checkout is not the consumer installation path.
+Create a matching generated project and complete local setup first. In production retain the generated Compose scenario guides: they name your exact site mode and storage mappings. Use matched alpha.8 package/API/builder versions; deploying the engine checkout is not the consumer installation path.
 
 ## Prepare persistent services
 

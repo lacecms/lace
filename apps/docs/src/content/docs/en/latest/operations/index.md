@@ -32,3 +32,20 @@ There is no new SQL migration since alpha.6. Configuration synchronization is a 
 Issue a replacement build token, update server-side site/build settings, verify a fresh build, then revoke the old token. Rotate object-store, private-builder, email and management credentials through their respective configuration boundaries, restarting/redeploying the consumers. Review user sessions after account compromise. Auth-secret changes affect session behavior and need a deliberate maintenance plan.
 
 If setup is complete, do not try to bootstrap a second first administrator. Use supported account recovery or your tested restore plan. For revision conflicts, preserve local JSON before explicitly reloading a server draft; for invalid config, fix the reported field rather than deleting data to force sync.
+
+## Upgrading to alpha.8
+
+Upgrade all Lace dependencies and API/builder images together, including the
+site SDK/render/Astro packages. Alpha.8 uses build-export format 2 and adds SQL
+migrations 0010–0013 since alpha.7. Back up matching database, object storage,
+configuration, site source and deployment files before migration or content sync.
+Review managed deployment changes and user-owned component conflicts, including
+internal-link renderers, Link and optional videoEmbed. Restore matching backups
+for rollback; changing package tags cannot reverse content or schema changes.
+
+MCP remains disabled by default. Apply migrations before enabling it and follow
+[account connections](../editing-content/accounts/) and the client-specific setup
+in Settings. Review your canonical public origin and proxy routes, keep OAuth
+credentials out of logs, and test owned revocation. Consent and current roles
+limit tools to model/list/get/create/save-draft; publishing and deletion remain
+unavailable. Local checks do not establish your production deployment or restore.

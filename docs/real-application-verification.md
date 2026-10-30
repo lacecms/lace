@@ -65,6 +65,24 @@ build failure/retry against the exact accepted alpha.7 artifacts. See
 Actual VPS/Cloudflare deployment, backup restoration and publishing rights remain
 separate owner-operated checks.
 
+## Alpha.8 handoff — 2026-10-29
+
+The selected preparation candidate is `0.1.0-alpha.8` / `next`, template
+`0.39.0`, including sixteen public packages with MCP. Source and exact-artifact
+acceptance must pass before local readiness is claimed. Historical alpha.7
+receipts and owner confirmations retain their original scope.
+
+On both actual VPS and Cloudflare deployments, back up matching database/media/
+configuration/site source, apply migrations 0010–0013 and upgrade engine/site/
+builder together. Verify list layouts, provider embeds with and without previews,
+format-2 internal links and unavailable-target behavior, draft collection queries
+and unchanged publication ordering. MCP is optional: test default-off behavior,
+canonical public HTTPS/proxy discovery, consent, scoped draft work, revocation
+and actual Codex/Claude Code/Gemini CLI sign-in when used. Publishing and deletion
+through MCP remain forbidden. Rehearse coordinated backup restoration and build
+failure/retry; local Worker/D1/R2 and browser interception are not real provider
+or assistant-client acceptance. See [alpha.8 upgrade notes](./compatibility.md#alpha-8-upgrade-and-rollback).
+
 ## Purpose and ownership
 
 The release owner follows this plan after Step 34 against a real application

@@ -1,3 +1,9 @@
+import {
+  configureAlphaEight,
+  alphaEightJourney,
+  verifyAlphaEightStarter,
+  alphaEightTlsProxy,
+} from "./alpha-eight-acceptance.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
 import {
@@ -179,7 +185,7 @@ async function writeAstroParent(root) {
   await writeFile(join(root, "astro.config.mjs"), "export default {};\n");
   await writeFile(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "existing-site", private: true, dependencies: { astro: "7.3.1" } })}\n`,
+    `${JSON.stringify({ name: "existing-site", private: true, dependencies: { astro: "7.3.3" } })}\n`,
   );
 }
 
@@ -388,6 +394,7 @@ async function waitApiReady(base) {
  * tour and media, and publication through the API.
  */
 async function nodeJourney(context) {
+  context.alphaEightConfiguration = await configureAlphaEight(context.project);
   const { project, apiPort } = context;
   const base = `http://127.0.0.1:${apiPort}/`;
   await guideContract(project, "development");
@@ -1021,7 +1028,11 @@ async function starterJourney(project) {
   const exported = JSON.parse(
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
   );
+  const videos = exported.entries
+    .find((entry) => entry.path === "/about")
+    .blocks.filter((block) => block.type === "videoEmbed");
   exported.entries = exported.entries.slice(0, 2);
+  exported.entries[1].blocks.push(...videos);
   // The fixture navigation global has a submenu; the post holds a gallery.
   const navigation = exported.globals.find((global) => global.modelKey === "navigation");
   exported.globals = [
@@ -1114,6 +1125,7 @@ async function starterJourney(project) {
 
   const published = await build("starter-build", exported, { LACE_BUILD_SITE_URL: siteUrl });
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
+  await verifyAlphaEightStarter(project, workspace);
   const html = published.join("\n");
   for (const type of ["hero", "richText", "image", "quote", "cta"]) {
     if (!html.includes(`data-lace-block="${type}"`))
@@ -1848,14 +1860,22 @@ async function persistenceJourney(context, session) {
   );
 }
 
-async function inspectShipping(context) {
+async function inspectShipping(context, label = "initial") {
   const { project, parent, releaseArtifacts, shipping } = context;
   const substituted = new Set(["package.json", "site/package.json", "pnpm-workspace.yaml"]);
   for (const file of shipping.tree) {
     await scanFile(join(project, file), secretValues, `generated ${file}`);
     if (!substituted.has(file)) {
       const bytes = await readFile(join(project, file));
-      if (file === ".lace/manifest.json") {
+      if (file === "lace.config.ts" && context.alphaEightConfiguration) {
+        // Only the reviewed consumer query configuration may differ from shipping bytes.
+        const configured = context.alphaEightConfiguration;
+        if (
+          createHash("sha256").update(configured.before).digest("hex") !== shipping.digests[file] ||
+          bytes.toString("utf8") !== configured.after
+        )
+          throw new Error("Unreviewed alpha.8 consumer configuration change");
+      } else if (file === ".lace/manifest.json") {
         if (bytes.toString("utf8") !== shipping.manifest)
           throw new Error("Consumer installation changed ownership metadata");
       } else if (createHash("sha256").update(bytes).digest("hex") !== shipping.digests[file]) {
@@ -1866,7 +1886,7 @@ async function inspectShipping(context) {
   for (const root of releaseArtifacts.extracted)
     await scanTree(root, secretValues, "packed package");
   await scanTree(join(project, "site/dist"), secretValues, "static output");
-  const output = join(parent, "served-output");
+  const output = join(parent, `served-output-${label}`);
   await mkdir(output);
   await compose("inspect-served-static", ["cp", "builder:/output/.", output]);
   await scanTree(output, secretValues, "served static releases");
@@ -2017,6 +2037,7 @@ async function fieldTrialJourneys(parent, context, session, tarballs) {
   const operations = { request, run, secretValues, waitBuild, workspace };
   await blockOrderJourney(context, session, operations);
   await weakEtagJourney(context, session, operations);
+  if (context.shipping) await alphaEightNodeJourney(context, session);
   await compose("compose-release-down", ["down", "--volumes", "--remove-orphans"], {
     timeoutMs: 3 * 60_000,
   });
@@ -2050,11 +2071,51 @@ async function fieldTrialJourneys(parent, context, session, tarballs) {
   ];
 }
 
+async function alphaEightNodeJourney(context, session) {
+  const { parent, project } = context;
+  const tls = await alphaEightTlsProxy({
+    parent,
+    upstream: `http://127.0.0.1:${context.httpPort}/`,
+    run,
+    workspace,
+    secretValues,
+  });
+  try {
+    await alphaEightJourney({
+      ...session,
+      base: tls.base,
+      fetch: tls.fetch,
+      project,
+      secretValues,
+      run,
+      enable: async () => {
+        context.values.LACE_MCP_ENABLED = "true";
+        context.values.LACE_EMAIL_PROVIDER = "";
+        context.values.LACE_EMAIL_FROM = "";
+        context.values.LACE_PUBLIC_BASE_URL = tls.base;
+        await writeEnvironment(context);
+        await compose("alpha-eight-enable-mcp", [
+          "up",
+          "-d",
+          "--force-recreate",
+          "api",
+          "dispatcher",
+        ]);
+        await waitApiReady(session.base);
+      },
+    });
+  } finally {
+    await tls.close();
+  }
+  await inspectShipping(context, "after-alpha-eight");
+}
+
 async function main() {
   const phase = process.argv[2] ?? "all";
   if (
     ![
       "release",
+      "release-mcp",
       "packages",
       "node",
       "all",
@@ -2090,7 +2151,7 @@ async function main() {
     await verifySnapshots(parent, process.argv.includes("--update"));
     return;
   }
-  if (phase === "release") {
+  if (phase === "release" || phase === "release-mcp") {
     const args = process.argv.slice(3);
     if (args.length !== 2 || args[0] !== "--artifacts")
       throw new Error("release acceptance requires --artifacts <prepared-directory>");
@@ -2160,6 +2221,14 @@ async function main() {
     context.shipping = shipping;
     context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
     const session = await nodeJourney(context);
+    if (phase === "release-mcp") {
+      await productionSmoke(context, session);
+      await alphaEightNodeJourney(context, session);
+      console.info(
+        "Focused saved Node HTTPS/MCP acceptance passed; no full release receipt recorded",
+      );
+      return;
+    }
     await securityJourney(context, session);
     await productionSmoke(context, session);
     await recoveryJourney(context, session);
@@ -2196,6 +2265,10 @@ async function main() {
       },
     );
     journeys.push("34c-packed-platform-restore-rotation");
+    journeys.push(
+      "alpha-eight-node-proxy-oauth-drafts-queries-revocation",
+      "alpha-eight-local-cloudflare-oauth-drafts-queries-revocation",
+    );
     if (
       (await run("acceptance-harness-final-revision", "git", ["rev-parse", "HEAD"])).trim() !==
         harnessRevision ||

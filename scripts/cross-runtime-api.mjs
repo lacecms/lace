@@ -230,7 +230,7 @@ export async function apiJourney(f) {
       {
         key: "gallery-one",
         type: "gallery",
-        schemaVersion: 3,
+        schemaVersion: 4,
         position: 1000,
         data: {
           title: "Published gallery",
@@ -327,7 +327,8 @@ export async function apiJourney(f) {
     422,
     contracts.errorEnvelopeSchema,
   );
-  assert.equal(invalidCursor.error.code, "CONTENT_INVALID_STATE");
+  assert.equal(invalidCursor.error.code, "VALIDATION_FAILED");
+  assert.equal(invalidCursor.error.details.issues[0].path, "/after");
   const revision = saved.draft.revision;
   const changes = await Promise.all(
     ["DRAFT ONLY A", "DRAFT ONLY B"].map((title) =>

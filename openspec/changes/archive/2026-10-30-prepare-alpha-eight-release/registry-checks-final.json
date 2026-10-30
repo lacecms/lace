@@ -1,0 +1,167 @@
+{
+  "checkedAt": "2026-10-30T09:20:53.069Z",
+  "timezone": "Europe/Rome",
+  "meaning": "Read-only availability, not reservation or authenticated publishing rights",
+  "versions": {
+    "0.1.0-alpha.7": {
+      "npm": [
+        {
+          "name": "@lacecms/application",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/astro",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/auth",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/cli",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/config",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/content",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/contracts",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/db",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/domain",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/mcp",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/platform-cloudflare",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/platform-node",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/render",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/sdk",
+          "status": 200
+        },
+        {
+          "name": "@lacecms/server",
+          "status": 200
+        },
+        {
+          "name": "create-lace",
+          "status": 200
+        }
+      ],
+      "images": [
+        {
+          "name": "api",
+          "status": 200,
+          "digest": "sha256:a56905feab86739308a88e035fa94a0c549d7ecbf40de3a326c3902aefbd413b"
+        },
+        {
+          "name": "builder",
+          "status": 200,
+          "digest": "sha256:f56b21a95b893a6ebeb7dcf019198860325ed5d2ffb4e5ee84b45c37fef559fc"
+        }
+      ]
+    },
+    "0.1.0-alpha.8": {
+      "npm": [
+        {
+          "name": "@lacecms/application",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/astro",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/auth",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/cli",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/config",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/content",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/contracts",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/db",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/domain",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/mcp",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/platform-cloudflare",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/platform-node",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/render",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/sdk",
+          "status": 404
+        },
+        {
+          "name": "@lacecms/server",
+          "status": 404
+        },
+        {
+          "name": "create-lace",
+          "status": 404
+        }
+      ],
+      "images": [
+        {
+          "name": "api",
+          "status": 404,
+          "digest": null
+        },
+        {
+          "name": "builder",
+          "status": 404,
+          "digest": null
+        }
+      ]
+    }
+  }
+}

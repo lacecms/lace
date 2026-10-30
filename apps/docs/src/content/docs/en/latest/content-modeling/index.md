@@ -32,7 +32,7 @@ See [groups, lists and forms](composites/) and [configuration synchronization](s
 
 ## Blocks and SEO
 
-A model declares which block types are allowed. Built-in types include hero, rich text, image, quote, CTA, gallery, navigation and video embed. Blocks are ordered; their content schema and settings are versioned separately from the visual component source. Adding a block definition does not install its renderer into the Astro site.
+A model declares which block types are allowed. Built-in types include hero, rich text, image, quote, CTA, Link, gallery, navigation and video embed. Blocks are ordered; their content schema and settings are versioned separately from the visual component source. Adding a block definition does not install its renderer into the Astro site.
 
 The SEO system group provides metadata such as title/description, social image and indexing settings. Configure site defaults and use per-entry overrides deliberately. Admin shows inheritance; recommended title/description lengths are guidance, while hard validation limits still apply. SEO title/description recommendations are 60/160 characters and hard limits are 200/500. Published SEO reaches the build export and site helpers; saving a draft does not update a public page.
 

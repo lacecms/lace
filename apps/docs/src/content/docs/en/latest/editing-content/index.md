@@ -51,3 +51,12 @@ an expired continuation (`422` at `/after`), the loaded rows remain visible.
 Activate **Restart list** to discard old pages/cursors and load the first page
 with your search, status, sort and filters retained. Restart replaces the results
 and announces recovery; it does not append duplicates or retry the old cursor.
+
+## List presentation and media rows
+
+Where a block declares list layout settings, choose the supported layout and
+its visible controls; settings remain part of the saved draft until publication.
+The installed site components need the matching layout source and CSS. Compact
+media rows keep the same selection, detail and permission behavior; they do not
+change stored media or publication. See [Astro integration](../astro-integration/)
+for adopting list layout hooks in customized components.

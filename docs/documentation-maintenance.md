@@ -26,7 +26,7 @@ should explicitly identify GitHub source.
 ## Locale/version catalog
 
 `apps/docs/src/catalog.json` declares default/supported locales and versions.
-English/latest targets `0.1.0-alpha.7` and follows main; it does not assert npm
+English/latest targets `0.1.0-alpha.8` and follows main; it does not assert npm
 publication or actual deployment verification. Author under `en/latest/`. Future
 variants use `<locale>/<version>/` and stable page slugs; do not rename existing
 routes. The validation/build fixture proves another locale and version without

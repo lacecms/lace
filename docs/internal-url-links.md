@@ -105,8 +105,7 @@ links use a plain label without button styling, role or tabindex. Site-owned CSS
 can select `.link[data-lace-appearance]` and the `link`/`label` part hooks.
 
 Update SDK/render/Astro/content packages and installed sources before authors
-store tokens. Current source manifests require the coordinated, still-unpublished
-alpha.7 candidate; this change does not publish a new package release. Review:
+store tokens. Current source manifests require the coordinated alpha.8 candidate; this change does not publish a new package release. Review:
 
 ```bash
 pnpm exec lace add block image gallery navigation hero cta link --site site --dry-run
