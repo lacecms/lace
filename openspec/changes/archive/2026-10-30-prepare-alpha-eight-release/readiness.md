@@ -129,11 +129,12 @@ pnpm release:github --artifacts .release-artifacts/alpha-8-retry-1 --apply
 ```
 
 Remaining real-deployment/client checks are in
-[real application verification](../../../docs/real-application-verification.md).
+[real application verification](../../../../docs/real-application-verification.md).
 Upgrade guidance covers Gallery v4, export format 2, migrations 0010–0013,
 coordinated dependencies/images, user-owned source conflicts, patched framework
 adoption, matching backups/rollback and optional MCP activation:
-[alpha.8 compatibility](../../../docs/compatibility.md#alpha-8-upgrade-and-rollback).
-[CHANGELOG.md](../../../CHANGELOG.md) is the reviewed source for concise release
+[alpha.8 compatibility](../../../../docs/compatibility.md#alpha-8-upgrade-and-rollback).
+[CHANGELOG.md](../../../../CHANGELOG.md) is the reviewed source for concise release
 prose; historical alpha.7 artifacts and evidence remain immutable. No historical
-release cleanup or OpenSpec archive was performed.
+release cleanup was performed. The verified spec deltas were synchronized and
+this change was archived on 2026-10-30.

@@ -3,7 +3,7 @@
 The current preparation candidate is alpha.8 (`0.1.0-alpha.8`, ownership
 template `0.39.0`), on npm `next`. See
 [alpha.8 upgrade and rollback](#alpha-8-upgrade-and-rollback) and the
-[active preparation plan](../openspec/changes/prepare-alpha-eight-release/proposal.md).
+[archived readiness handoff](../openspec/changes/archive/2026-10-30-prepare-alpha-eight-release/readiness.md).
 
 Read-only registry checks on 2026-10-29 confirmed alpha.7's original fifteen
 npm versions and both public image manifests; alpha.8's sixteen package versions

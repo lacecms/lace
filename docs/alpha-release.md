@@ -23,7 +23,7 @@ fifteen npm packages and both public GHCR version manifests. Alpha.1–alpha.7 a
 published and immutable. MCP was not part of alpha.7. All sixteen alpha.8 npm
 versions and both GHCR version manifests returned 404; these are availability
 checks, not reservations or authenticated publishing rights. The dated record
-is in the active alpha.8 change. Historical alpha.7 acceptance remains attached
+is in the [archived alpha.8 change](../openspec/changes/archive/2026-10-30-prepare-alpha-eight-release/readiness.md). Historical alpha.7 acceptance remains attached
 to its original source and artifacts.
 
 ## Coordinates and ownership

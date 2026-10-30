@@ -1,12 +1,13 @@
 # Lace backlog
 
-- **Alpha.8 release preparation (selected 2026-10-29):**
-  `prepare-alpha-eight-release` selects alpha.8/next with template 0.39.0,
+- **Alpha.8 release preparation (implemented, archived 2026-10-30):**
+  `prepare-alpha-eight-release` prepared alpha.8/next with template 0.39.0,
   sixteen packages including MCP and API/builder images for both Linux
-  platforms. It packages accepted work already on main, refreshes compatibility
-  and documentation, and requires fresh source/audit and exact-artifact
-  acceptance. Publication and real deployments remain separate owner actions;
-  deferred capabilities below retain their order.
+  platforms. Source/audit gates, independent saved-artifact verification and all
+  22 exact-artifact journeys passed for `.release-artifacts/alpha-8-retry-1`.
+  Archived at `openspec/changes/archive/2026-10-30-prepare-alpha-eight-release`;
+  both capability deltas are synchronized. Publication and real deployments
+  remain separate owner actions; deferred capabilities below retain their order.
 
 - **MCP3 Claude Code and Gemini CLI setup (implemented, archived 2026-10-29):**
   `add-claude-and-gemini-mcp-guides` extends the implemented MCP2 Settings card
