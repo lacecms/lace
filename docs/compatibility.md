@@ -752,6 +752,9 @@ Alpha.8 adds a sixteenth package, `@lacecms/mcp`. Preparation is not publication
    site components, README and Worker configuration remain user-owned. Upgrade
    all Lace packages and both API/builder images to alpha.8 together, including
    SDK/render/Astro/content in the site; reinstall and rebuild the Worker.
+   The starter pins patched Astro 7.3.3. Existing sites must review and update
+   their user-owned Astro/build dependencies as well; template upgrade does not
+   replace site/package.json or its lockfile.
 3. Apply the release's forward migrations before starting the matching API:
    `0010_internal_url_links`, `0011_public_projection_identity`, `0012_oauth_mcp`
    and `0013_oauth_verification_indexes` are new since alpha.7. Use the generated
