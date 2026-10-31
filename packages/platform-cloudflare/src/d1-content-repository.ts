@@ -1,3 +1,10 @@
+import {
+  mediaTagFilters,
+  mediaTagCatalogQuery,
+  mediaTagInsert,
+  normalizedMediaWriteTags,
+} from "@lacecms/db";
+import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
@@ -650,8 +657,9 @@ export class D1ContentRepository
       input.after === undefined ? undefined : decodeMediaCursor(input.after, kind, input.sort);
     const comparison = descending ? "<" : ">";
     const direction = descending ? "desc" : "asc";
-    const conditions: string[] = [];
-    const bindings: (number | string)[] = [];
+    const tagFilter = mediaTagFilters(input.tags);
+    const conditions: string[] = [...tagFilter.conditions];
+    const bindings: (number | string)[] = [...tagFilter.bindings];
     if (input.q !== undefined) {
       conditions.push("instr(lower(m.filename), ?) > 0");
       bindings.push(foldAscii(input.q));
@@ -685,6 +693,24 @@ export class D1ContentRepository
           }
         : {}),
     });
+  }
+
+  public async listMediaTags(input: ListMediaTagsInput): Promise<CursorPage<MediaTagCount>> {
+    const query = mediaTagCatalogQuery(input);
+    const rows = (await this.all(query.sql, ...query.params)) as readonly {
+      tag: string;
+      count: number;
+    }[];
+    const items = rows
+      .slice(0, input.limit)
+      .map((row) => ({ tag: row.tag, count: Number(row.count) }));
+    const last = items.at(-1);
+    return {
+      items,
+      ...(rows.length > input.limit && last !== undefined
+        ? { nextCursor: encodeSortCursor(query.kind, last.tag, last.tag) }
+        : {}),
+    };
   }
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {
@@ -1474,23 +1500,23 @@ export class D1ContentRepository
 
   public async createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata> {
     try {
-      await bind(
-        this.database.prepare(
-          "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
-        ),
-        [
-          input.id,
-          input.storageKey,
-          input.filename,
-          input.mimeType,
-          input.size,
-          input.width,
-          input.height,
-          input.createdBy,
-          input.createdAt,
-          input.createdAt,
-        ],
-      ).run();
+      const batch = this.batch();
+      batch.add(
+        "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
+        input.id,
+        input.storageKey,
+        input.filename,
+        input.mimeType,
+        input.size,
+        input.width,
+        input.height,
+        input.createdBy,
+        input.createdAt,
+        input.createdAt,
+      );
+      const insert = mediaTagInsert(input.id, normalizedMediaWriteTags(input.tags ?? []));
+      if (insert !== undefined) batch.add(insert.sql, ...insert.params);
+      await this.execute(batch, false);
     } catch (error) {
       sqliteWriteError(error, false, "D1");
     }
@@ -1516,26 +1542,22 @@ export class D1ContentRepository
     readonly leaseId: DispatcherLeaseId;
     readonly mediaId: string;
   }): Promise<void> {
-    const event = await this.requireLeasedMediaDeletionEvent(
-      input.leaseId,
-      input.completedAt,
-      input.mediaId,
-    );
     const batch = this.batch();
     const token = this.guard(batch, input.completedAt, {
       params: [
-        event.id,
         input.leaseId,
         input.completedAt - DISPATCHER_LEASE_DURATION_MS,
         input.mediaId,
+        input.mediaId,
       ],
-      sql: "exists (select 1 from outbox_events where id = ? and locked_by = ? and processed_at is null and locked_at > ?) and exists (select 1 from media m where m.id = ? and m.status = 'deleting' and not exists (select 1 from content_media_references r where r.media_id = m.id))",
+      sql: "exists (select 1 from outbox_events where locked_by = ? and type = 'media.delete.requested' and processed_at is null and locked_at > ? and case when json_valid(payload_json) then json_extract(payload_json, '$.mediaId') end = ?) and exists (select 1 from media m where m.id = ? and m.status = 'deleting' and not exists (select 1 from content_media_references r where r.media_id = m.id))",
     });
+    batch.add(`delete from media_tags where media_id = ? and ${GUARD_SQL}`, input.mediaId, token);
     batch.add(`delete from media where id = ? and ${GUARD_SQL}`, input.mediaId, token);
     batch.add(
-      `update outbox_events set processed_at = ?, locked_at = null, locked_by = null where id = ? and ${GUARD_SQL}`,
+      `update outbox_events set processed_at = ?, locked_at = null, locked_by = null where locked_by = ? and type = 'media.delete.requested' and ${GUARD_SQL}`,
       input.completedAt,
-      event.id,
+      input.leaseId,
       token,
     );
     this.releaseGuard(batch, token);
@@ -2480,9 +2502,20 @@ export class D1ContentRepository
     });
     batch.checkpoint("media.metadata");
     batch.add(`${MEDIA_METADATA_UPDATE_SQL} and ${GUARD_SQL}`, ...params, token);
+    if (input.tags !== undefined) {
+      batch.add(`delete from media_tags where media_id = ? and ${GUARD_SQL}`, input.mediaId, token);
+      const insert = mediaTagInsert(
+        input.mediaId,
+        normalizedMediaWriteTags(input.tags),
+        GUARD_SQL,
+        token,
+      );
+      if (insert !== undefined) batch.add(insert.sql, ...insert.params);
+    }
+    batch.checkpoint("media.tags");
     const published: Condition = {
       params: [token, input.mediaId],
-      sql: `${GUARD_SQL} and ${MEDIA_PUBLISHED_REFERENCE_SQL}`,
+      sql: `${GUARD_SQL} and ${MEDIA_PUBLISHED_REFERENCE_SQL} and ${input.publishedEffect === false ? "0" : "1"}`,
     };
     const state = this.addPublicStateBump(batch, published, {
       reason: "media_metadata",

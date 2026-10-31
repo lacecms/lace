@@ -412,6 +412,7 @@ test("lists validated media through the credentialed admin API", async () => {
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 0,
   };
   const fetcher = vi.fn(async () => Response.json({ items: [item], nextCursor: "next" }));
@@ -460,6 +461,7 @@ test("reads media details with usage through the credentialed admin API", async 
         title: "Hello",
       },
     ],
+    tags: [],
     usageCount: 1,
   };
   const fetcher = vi.fn(async () => Response.json(detail));
@@ -485,6 +487,7 @@ test("uploads and requests media deletion with validated credentialed responses"
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 0,
   };
   const fetcher = vi.fn(async () => Response.json(item, { status: 201 }));
@@ -535,6 +538,7 @@ test("updates media metadata guarded by the edited item's updatedAt", async () =
     status: "active",
     updatedAt: "2026-09-20T00:00:01.001Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 1,
   };
   const result = { build: { status: "queued", targetVersion: 7 }, media };
@@ -841,6 +845,7 @@ const uploadedItem = {
   status: "active",
   updatedAt: "2026-09-20T00:00:00.000Z",
   url: "https://lace.test/api/v1/public/media/media-1",
+  tags: [],
   usageCount: 0,
 };
 
@@ -1051,4 +1056,21 @@ test("list cache identity binds runtime policy and matching version without wire
   });
   expect(node).not.toEqual(cloud);
   expect(node[4].matchingVersion).toBe("sqlite-like-v1");
+});
+
+test("media tag client sends repeated filters and validates the catalog", async () => {
+  const fetcher = vi.fn(async () => Response.json({ items: [{ tag: "project-2026", count: 2 }] }));
+  await expect(
+    createAdminClient(fetcher).listMediaTags({ q: "pro", limit: 1, after: "cursor" }),
+  ).resolves.toEqual({ items: [{ tag: "project-2026", count: 2 }] });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/media/tags?q=pro&after=cursor&limit=1",
+    expect.objectContaining({ credentials: "same-origin" }),
+  );
+  const list = vi.fn(async () => Response.json({ items: [] }));
+  await createAdminClient(list).listMedia(undefined, { tags: ["cover", "project-2026"] });
+  expect(list).toHaveBeenLastCalledWith(
+    "/api/v1/admin/media?tag=cover&tag=project-2026",
+    expect.anything(),
+  );
 });

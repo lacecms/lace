@@ -1049,3 +1049,21 @@ test("cursor fingerprints expire across matching versions and runtime policy cha
   for (const foreign of [old, cloud])
     expect(() => decodeEntryCursor(encodeSortCursor(foreign, "a", "a"), node, "title")).toThrow();
 });
+
+test("media tag SQL binds canonical sets, literal prefix ranges, and cursors", async () => {
+  const { mediaCursorKind, mediaTagFilters, mediaTagCatalogQuery, encodeSortCursor } =
+    await import("../dist/index.js");
+  expect(mediaCursorKind({ sort: "filename", tags: [" B ", "a", "a"] })).toBe(
+    mediaCursorKind({ sort: "filename", tags: ["a", "b"] }),
+  );
+  expect(mediaCursorKind({ sort: "filename", tags: ["a"] })).not.toBe(
+    mediaCursorKind({ sort: "filename", tags: ["b"] }),
+  );
+  expect(mediaTagFilters(["B", "a"]).bindings).toEqual(["a", "b"]);
+  expect(mediaTagFilters(["B", "a"]).conditions).toHaveLength(2);
+  const query = mediaTagCatalogQuery({ q: " Re ", limit: 2 });
+  expect(query.params).toEqual(["re", "rf", 3]);
+  const after = encodeSortCursor(query.kind, "red", "red");
+  expect(mediaTagCatalogQuery({ q: "RE", limit: 2, after }).params).toEqual(["re", "rf", "red", 3]);
+  expect(() => mediaTagCatalogQuery({ q: "other", limit: 2, after })).toThrow();
+});

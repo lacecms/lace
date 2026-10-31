@@ -365,3 +365,6 @@ the MCP configuration and copyable connection examples in both enabled and
 disabled states. See [local setup](../DEVELOPMENT.md#connect-a-local-content-assistant). Keep the
 canonical HTTPS origin and update proxy routing/log redaction as described in
 [OAuth content assistant](mcp.md). Missing or `false` leaves MCP disabled.
+
+Media organization: [Admin media tags](media-tags.md) documents the tag API,
+validation, concurrency and migration `0014`.

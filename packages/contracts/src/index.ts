@@ -36,6 +36,8 @@ import {
   isMediaFocalCoordinate,
   MAX_SEO_CANONICAL_LENGTH,
   normalizeMediaText,
+  normalizeMediaTag,
+  normalizeMediaTags,
   normalizeSeoText,
   unixMilliseconds,
   siteBuildFailureReasons,
@@ -1236,8 +1238,61 @@ export { effectiveAltText } from "@lacecms/content";
 export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 
+/** Input tags normalize once; element validation preserves JSON Pointer positions. */
+export const mediaTagInputSchema = v.pipe(
+  v.string(),
+  v.description(
+    "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+  ),
+  v.check(
+    (value) => [...value].length <= 200 && normalizeMediaTag(value) !== undefined,
+    "Use 1–40 ASCII letters, digits or hyphens.",
+  ),
+  v.transform((value) => normalizeMediaTag(value)!),
+);
+export const mediaTagsInputSchema = v.pipe(
+  v.array(mediaTagInputSchema),
+  v.rawCheck(({ dataset, addIssue }) => {
+    if (!dataset.typed) return;
+    const result = normalizeMediaTags(dataset.value);
+    if ("issue" in result)
+      addIssue({
+        message: "Supply at most 20 distinct tags.",
+        path: [
+          {
+            type: "array",
+            origin: "value",
+            input: dataset.value,
+            key: result.issue,
+            value: dataset.value[result.issue],
+          },
+        ],
+      });
+  }),
+  v.transform((values) => (normalizeMediaTags(values) as { tags: readonly string[] }).tags.slice()),
+);
+const mediaFilterTagsSchema = v.pipe(
+  v.union([v.string(), v.array(v.string())]),
+  v.transform((value) => (typeof value === "string" ? [value] : value)),
+  v.pipe(v.array(mediaTagInputSchema), v.maxLength(5)),
+  v.transform((tags) => [...new Set(tags)].sort()),
+);
+export const mediaTagCatalogQuerySchema = v.object({
+  after: v.optional(opaqueCursorSchema),
+  limit: v.optional(v.pipe(v.string(), v.regex(/^(?:[1-9]|[1-9][0-9]|100)$/u))),
+  q: v.optional(mediaTagInputSchema),
+});
+export const mediaTagCatalogSchema = cursorPageSchema(
+  v.strictObject({
+    tag: v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,40}(?![\s\S])/u)),
+    count: positiveIntegerSchema,
+  }),
+);
+export type MediaTagCatalogDto = v.InferOutput<typeof mediaTagCatalogSchema>;
+
 /** Query parameters accepted by the admin media list; unknown keys stay ignored. */
 export const mediaListQuerySchema = v.object({
+  tag: v.optional(mediaFilterTagsSchema),
   after: v.optional(opaqueCursorSchema),
   limit: v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/u))),
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_MEDIA_SEARCH_LENGTH))),
@@ -1440,6 +1495,14 @@ export const buildExportFirstPageSchema = v.strictObject({
 export const buildExportContinuationPageSchema = v.strictObject(buildExportPageEntries);
 
 export const mediaMetadataSchema = v.strictObject({
+  tags: v.pipe(
+    v.array(v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,40}(?![\s\S])/u))),
+    v.maxLength(20),
+    v.check(
+      (tags) => tags.every((tag, i) => i === 0 || tags[i - 1]! < tag),
+      "Tags must be unique and sorted.",
+    ),
+  ),
   alt: v.optional(v.pipe(v.string(), v.minLength(1))),
   caption: v.optional(v.pipe(v.string(), v.minLength(1))),
   createdAt: isoTimestampSchema,
@@ -1503,13 +1566,14 @@ export const mediaDetailSchema = v.strictObject({
  */
 export const updateMediaMetadataRequestSchema = v.pipe(
   v.strictObject({
+    tags: v.optional(mediaTagsInputSchema),
     alt: v.optional(v.nullable(mediaAltSchema)),
     caption: v.optional(v.nullable(mediaCaptionSchema)),
     focalPoint: v.optional(v.nullable(mediaFocalPointSchema)),
   }),
   v.check(
     (value) => Object.keys(value).length > 0,
-    "Supply at least one of alt, caption, or focalPoint.",
+    "Supply at least one of alt, caption, focalPoint, or tags.",
   ),
 );
 export const updateMediaMetadataResultSchema = v.strictObject({
@@ -2003,6 +2067,7 @@ export function toUnpublishContentEntryResultDto(input: {
 
 /** Maps metadata without exposing the private storage key. */
 export interface MediaMetadataDtoSource {
+  readonly tags?: readonly string[];
   readonly alt?: string;
   readonly caption?: string;
   readonly createdAt: UnixMilliseconds;
@@ -2021,6 +2086,7 @@ export interface MediaMetadataDtoSource {
 
 export function toMediaMetadataDto(media: MediaMetadataDtoSource, url: string): MediaMetadataDto {
   return {
+    tags: [...(media.tags ?? [])],
     ...(media.alt === undefined ? {} : { alt: media.alt }),
     ...(media.caption === undefined ? {} : { caption: media.caption }),
     createdAt: toIsoTimestamp(media.createdAt),

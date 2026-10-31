@@ -69,6 +69,9 @@ import {
   mediaDetailSchema,
   mediaDeleteQuerySchema,
   mediaListQuerySchema,
+  mediaTagCatalogQuerySchema,
+  mediaTagCatalogSchema,
+  mediaTagsInputSchema,
   mediaListSchema,
   mediaEntityTag,
   mediaMetadataSchema,
@@ -1717,6 +1720,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
         ...(query.sort === undefined ? {} : { sort: query.sort }),
         ...(query.type === undefined ? {} : { type: query.type }),
+        ...(query.tag === undefined ? {} : { tags: query.tag }),
       });
       return response(mediaListSchema, {
         items: page.items.map(mediaDto),
@@ -1725,9 +1729,58 @@ export function createLaceApp(input: LaceAppInput): Hono {
     },
   );
 
+  app.get(
+    "/api/v1/admin/media/tags",
+    describeRoute({
+      summary: "List media tags with counts",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Media tag catalog",
+          content: { "application/json": { schema: resolver(mediaTagCatalogSchema) } },
+        },
+      },
+    }),
+    validator("query", mediaTagCatalogQuerySchema, validationHook),
+    async (context) => {
+      const query = context.req.valid("query");
+      return response(
+        mediaTagCatalogSchema,
+        await media().listTags({
+          actor: await actor(context),
+          ...pagination(context.req.raw),
+          ...(query.q === undefined ? {} : { q: query.q }),
+        }),
+      );
+    },
+  );
+
   app.post(
     "/api/v1/admin/media",
     describeRoute({
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              required: ["file"],
+              properties: {
+                file: { type: "string", format: "binary" },
+                tags: {
+                  type: "array",
+                  maxItems: 20,
+                  items: {
+                    type: "string",
+                    description: "ASCII tag: letters, digits and hyphens; normalized to lowercase",
+                    maxLength: 200,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
         201: {
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
@@ -1743,9 +1796,18 @@ export function createLaceApp(input: LaceAppInput): Hono {
         let upload:
           | { readonly chunks: readonly Uint8Array[]; readonly filename: string }
           | undefined;
+        const tagParts: string[] = [];
         for await (const part of parseMultipartRequest(context.req.raw, {
           maxFileSize: MAX_MEDIA_BYTES,
         })) {
+          if (part.name !== "tags" && part.name !== "file")
+            invalid("The submitted value is invalid.", `/tags/${tagParts.length}`);
+          if (part.name === "tags") {
+            if (part.isFile || tagParts.length >= 20)
+              invalid("The submitted value is invalid.", `/tags/${tagParts.length}`);
+            tagParts.push(part.text);
+            continue;
+          }
           if (
             !part.isFile ||
             part.name !== "file" ||
@@ -1757,7 +1819,17 @@ export function createLaceApp(input: LaceAppInput): Hono {
           upload = { chunks: part.content, filename: part.filename };
         }
         if (upload === undefined) invalid("The submitted value is invalid.", "/file");
+        const parsedTags = v.safeParse(mediaTagsInputSchema, tagParts);
+        if (!parsedTags.success) {
+          const issues = parsedTags.issues.map((issue) => ({
+            code: "invalid_value",
+            message: "The submitted value is invalid.",
+            path: `/tags${v.getDotPath(issue) === null ? "" : "/" + v.getDotPath(issue)?.replaceAll(".", "/")}`,
+          }));
+          return validationResponse(issues);
+        }
         const created = await media().create({
+          tags: parsedTags.output,
           actor: resolvedActor,
           body: mediaByteStream(upload.chunks),
           filename: upload.filename,

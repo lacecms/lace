@@ -684,3 +684,16 @@ backfill, field-query index, persisted cursor state or bulk action is introduced
 
 See [OAuth content assistant](lace-mcp.md) for opt-in deployment, the five draft
 tools, consent, connections, refresh/replay, proxy log redaction and disabling.
+
+## Media tags migration 0014
+
+Before starting an engine with media tags, stop Compose `api` and `dispatcher`,
+back up the stopped `.lace/data` directory and preserve the object store, then
+run `pnpm db:migrate`. On Cloudflare export D1 and preserve R2 objects, run
+`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`,
+then deploy API/admin together. Local Cloudflare uses `pnpm cf:db:migrate`.
+Migration `0014_media_tags` is additive and leaves existing media without tags.
+Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
+spaces trimmed; tags-only edits request no build. An older engine ignores the
+new table. Restore the pre-upgrade database backup to remove tags on rollback;
+do not delete media objects as part of tag rollback.

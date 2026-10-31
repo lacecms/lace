@@ -3,6 +3,8 @@ import {
   isMediaFocalCoordinate,
   mediaId,
   normalizeMediaText,
+  normalizeMediaTag,
+  normalizeMediaTags,
   requirePermission,
   unixMilliseconds,
 } from "@lacecms/domain";
@@ -32,6 +34,8 @@ import type {
   MediaCatalogPort,
   MediaCommandPort,
   MediaListPort,
+  ListMediaTagsInput,
+  MediaTagCount,
   MediaMimeType,
   MediaReadPort,
   MediaSort,
@@ -54,6 +58,7 @@ export const ALLOWED_MEDIA_MIME_TYPES = Object.freeze([
 ] as const);
 
 export interface MediaView {
+  readonly tags: readonly string[];
   readonly alt?: string;
   readonly caption?: string;
   readonly createdAt: UnixMilliseconds;
@@ -76,12 +81,14 @@ export interface MediaDetailView extends MediaView {
 }
 
 export interface CreateMediaUseCaseInput {
+  readonly tags?: readonly string[];
   readonly actor: Actor;
   readonly body: ByteStream;
   readonly filename: string;
 }
 
 export interface ListMediaUseCaseInput {
+  readonly tags?: readonly string[];
   readonly actor: Actor;
   readonly after?: OpaqueCursor;
   readonly limit: number;
@@ -114,6 +121,7 @@ export interface MediaDraftDetachPort {
 
 /** An omitted value stays unchanged; `null` (or empty text) clears it. */
 export interface MediaMetadataPatch {
+  readonly tags?: readonly string[] | undefined;
   readonly alt?: string | null | undefined;
   readonly caption?: string | null | undefined;
   readonly focalPoint?: MediaFocalPoint | null | undefined;
@@ -138,6 +146,7 @@ export interface UpdateMediaMetadataUseCaseResult {
 
 /** Normalized patch values; `undefined` keeps the stored value. */
 export interface NormalizedMediaMetadataPatch {
+  readonly tags?: readonly string[];
   readonly alt?: string | null;
   readonly caption?: string | null;
   readonly focalPoint?: MediaFocalPoint | null;
@@ -273,12 +282,15 @@ export function normalizeMediaMetadataPatch(
 ): NormalizedMediaMetadataPatch {
   if (typeof patch !== "object" || patch === null) failure("Media metadata patch is invalid.");
   const keys = Object.keys(patch);
-  if (keys.some((key) => key !== "alt" && key !== "caption" && key !== "focalPoint")) {
+  if (
+    keys.some((key) => key !== "alt" && key !== "caption" && key !== "focalPoint" && key !== "tags")
+  ) {
     failure("Media metadata patch contains an unknown value.");
   }
   if (keys.every((key) => patch[key as keyof MediaMetadataPatch] === undefined)) {
-    failure("Supply at least one of alt, caption, or focalPoint.");
+    failure("Supply at least one of alt, caption, focalPoint, or tags.");
   }
+  const tags = patch.tags === undefined ? undefined : validatedTags(patch.tags);
   const alt = normalizeText(patch.alt, "alt");
   const caption = normalizeText(patch.caption, "caption");
   let focalPoint: MediaFocalPoint | null | undefined;
@@ -300,10 +312,20 @@ export function normalizeMediaMetadataPatch(
     });
   }
   return Object.freeze({
+    ...(tags === undefined ? {} : { tags }),
     ...(alt === undefined ? {} : { alt }),
     ...(caption === undefined ? {} : { caption }),
     ...(focalPoint === undefined ? {} : { focalPoint }),
   });
+}
+
+function validatedTags(values: readonly string[], maxInputs?: number): readonly string[] {
+  if (!Array.isArray(values)) failure("Media tags must be an array.");
+  if (maxInputs !== undefined && values.length > maxInputs)
+    failure("Supply at most five filter tags.");
+  const result = normalizeMediaTags(values);
+  if ("issue" in result) failure(`Invalid media tag at /tags/${result.issue}.`);
+  return result.tags;
 }
 
 function sameFocalPoint(left: MediaFocalPoint | null, right: MediaFocalPoint | null): boolean {
@@ -323,6 +345,7 @@ function toMediaView(item: MediaCatalogItem): MediaView {
     ...(value.caption === undefined ? {} : { caption: value.caption }),
     createdAt: value.createdAt,
     createdBy: Object.freeze({ displayName: item.createdBy.displayName, id: item.createdBy.id }),
+    tags: Object.freeze([...(value.tags ?? [])]),
     filename: value.filename,
     ...(value.focalPoint === undefined
       ? {}
@@ -358,6 +381,7 @@ export class MediaUseCases {
 
   public async create(input: CreateMediaUseCaseInput): Promise<MediaView> {
     requirePermission(input.actor, "media:write");
+    const tags = validatedTags(input.tags === undefined ? [] : input.tags);
     const bytes = await collectMediaBytes(input.body);
     const mimeType = detectMediaMimeType(bytes);
     const dimensions = await this.dependencies.imageInspector.inspect(bytes, mimeType);
@@ -380,6 +404,7 @@ export class MediaUseCases {
     const now = this.dependencies.clock.now();
     try {
       await this.dependencies.media.createMedia({
+        tags,
         createdAt: now,
         createdBy: input.actor.id,
         filename: sanitizeMediaFilename(input.filename),
@@ -414,6 +439,7 @@ export class MediaUseCases {
 
   public async list(input: ListMediaUseCaseInput): Promise<CursorPage<MediaView>> {
     requirePermission(input.actor, "content:read");
+    const tags = validatedTags(input.tags === undefined ? [] : input.tags, 5);
     const q = input.q?.trim();
     if (q !== undefined && q.length > MAX_MEDIA_SEARCH_LENGTH) {
       failure(`Search terms must not exceed ${MAX_MEDIA_SEARCH_LENGTH} characters.`);
@@ -428,6 +454,7 @@ export class MediaUseCases {
       failure("Media sort is unsupported.");
     }
     const page = await this.dependencies.media.listMedia({
+      tags,
       ...(input.after === undefined ? {} : { after: input.after }),
       limit: input.limit,
       ...(q === undefined || q.length === 0 ? {} : { q }),
@@ -438,6 +465,23 @@ export class MediaUseCases {
       items: Object.freeze(page.items.map((item) => toMediaView(detached(item)))),
       ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
     });
+  }
+
+  public async listTags(
+    input: ListMediaTagsInput & { readonly actor: Actor },
+  ): Promise<CursorPage<MediaTagCount>> {
+    requirePermission(input.actor, "content:read");
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+      failure("Tag catalog limit must be from 1 to 100.");
+    const q = input.q === undefined ? undefined : normalizeMediaTag(input.q);
+    if (input.q !== undefined && q === undefined) failure("Tag prefix is invalid.");
+    return detached(
+      await this.dependencies.media.listMediaTags({
+        limit: input.limit,
+        ...(input.after === undefined ? {} : { after: input.after }),
+        ...(q === undefined ? {} : { q }),
+      }),
+    );
   }
 
   public async requestDeletion(input: DeleteMediaUseCaseInput): Promise<MediaView> {
@@ -482,18 +526,21 @@ export class MediaUseCases {
     const stored = {
       alt: current.alt ?? null,
       caption: current.caption ?? null,
+      tags: current.tags ?? [],
       focalPoint: current.focalPoint ?? null,
     };
     const next = {
+      tags: patch.tags ?? stored.tags,
       alt: patch.alt === undefined ? stored.alt : patch.alt,
       caption: patch.caption === undefined ? stored.caption : patch.caption,
       focalPoint: patch.focalPoint === undefined ? stored.focalPoint : patch.focalPoint,
     };
-    if (
+    const descriptiveChanged = !(
       next.alt === stored.alt &&
       next.caption === stored.caption &&
       sameFocalPoint(next.focalPoint, stored.focalPoint)
-    ) {
+    );
+    if (!descriptiveChanged && JSON.stringify(next.tags) === JSON.stringify(stored.tags)) {
       return Object.freeze({
         build: Object.freeze({ status: "not-dispatched" }),
         media: await this.catalogView(current.id, "Media could not be reloaded."),
@@ -501,6 +548,7 @@ export class MediaUseCases {
     }
     const result = await this.dependencies.media.updateMediaMetadata({
       ...next,
+      publishedEffect: descriptiveChanged,
       expectedUpdatedAt,
       mediaId: current.id,
       requestedBy: input.actor,

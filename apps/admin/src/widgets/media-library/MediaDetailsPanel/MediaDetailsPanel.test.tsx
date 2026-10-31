@@ -157,6 +157,7 @@ test("published usage withholds deletion and says whether publishing releases th
       getMedia: async () => ({
         ...usedItem,
         usage: [usageEntry("Launch", ["published"]), usageEntry("About", ["draft", "published"])],
+        tags: [],
         usageCount: 2,
       }),
     },
@@ -181,6 +182,7 @@ test("truncated or loading usage withholds deletion", async () => {
       getMedia: async () => ({
         ...usedItem,
         usage: [usageEntry("Hello", ["draft"])],
+        tags: [],
         usageCount: 60,
       }),
     },

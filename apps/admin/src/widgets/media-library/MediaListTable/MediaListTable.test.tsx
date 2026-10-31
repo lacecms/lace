@@ -16,6 +16,7 @@ test("rows show media facts without raw user IDs and open details from the filen
           filename: "odd.webp",
           id: "media-2",
           mimeType: "image/webp",
+          tags: [],
           usageCount: 1,
         },
       ]}

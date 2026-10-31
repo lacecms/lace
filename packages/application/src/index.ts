@@ -878,6 +878,7 @@ export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 
 export interface ListMediaInput {
+  readonly tags?: readonly string[];
   readonly after?: OpaqueCursor;
   readonly limit: number;
   /** Trimmed, non-empty filename substring; matched case-insensitively for ASCII. */
@@ -893,7 +894,19 @@ export interface MediaCatalogItem {
   readonly usageCount: number;
 }
 
+export interface ListMediaTagsInput {
+  readonly after?: OpaqueCursor;
+  readonly limit: number;
+  readonly q?: string;
+}
+
+export interface MediaTagCount {
+  readonly tag: string;
+  readonly count: number;
+}
+
 export interface MediaListPort {
+  listMediaTags(input: ListMediaTagsInput): Promise<CursorPage<MediaTagCount>>;
   listMedia(input: ListMediaInput): Promise<CursorPage<MediaCatalogItem>>;
 }
 
@@ -944,6 +957,7 @@ export interface MediaCatalogPort {
 }
 
 export interface CreateMediaMetadataInput {
+  readonly tags?: readonly string[];
   readonly createdAt: UnixMilliseconds;
   readonly createdBy: ActorId;
   readonly filename: string;
@@ -972,6 +986,8 @@ export interface MarkMediaForDeletionResult {
  * by the `updatedAt` the values were merged from.
  */
 export interface UpdateMediaMetadataInput {
+  readonly tags?: readonly string[];
+  readonly publishedEffect?: boolean;
   readonly alt: string | null;
   readonly caption: string | null;
   readonly expectedUpdatedAt: UnixMilliseconds;

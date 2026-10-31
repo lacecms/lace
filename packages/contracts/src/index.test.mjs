@@ -1535,6 +1535,12 @@ describe("media metadata contracts", async () => {
     expect(bare).not.toHaveProperty("alt");
     expect(bare).not.toHaveProperty("caption");
     expect(bare).not.toHaveProperty("focalPoint");
+    expect(bare.tags).toEqual([]);
+    const { tags: _tags, ...withoutTags } = bare;
+    expect(v.safeParse(mediaMetadataSchema, withoutTags).success).toBe(false);
+    for (const tags of [["a\n"], ["A"], ["a", "a"], ["b", "a"]]) {
+      expect(v.safeParse(mediaMetadataSchema, { ...bare, tags }).success).toBe(false);
+    }
     expect(bare.updatedAt).toBe("2026-10-10T15:50:44.998Z");
     const described = toMediaMetadataDto(
       { ...source, alt: "Red bicycle", focalPoint: { x: 0.25, y: 0.75 } },
@@ -2556,4 +2562,42 @@ test("MCP publication requires a revision and uses the REST idempotency key synt
     { entryId: "entry", expectedRevision: 1, idempotencyKey: "invalid\nkey" },
   ])
     expect(v.safeParse(schema, input).success).toBe(false);
+});
+
+test("ASCII media tag contracts normalize input and preserve precise issue pointers", async () => {
+  const c = await import("../dist/index.js");
+  expect(v.parse(c.mediaListQuerySchema, { tag: [" Birch ", "ibiza", "BIRCH"] }).tag).toEqual([
+    "birch",
+    "ibiza",
+  ]);
+  expect(v.parse(c.mediaListQuerySchema, { tag: "Birch" }).tag).toEqual(["birch"]);
+  expect(
+    v.parse(c.updateMediaMetadataRequestSchema, { tags: [" Project-2026 ", "project-2026"] }),
+  ).toEqual({ tags: ["project-2026"] });
+  expect(v.parse(c.mediaTagCatalogQuerySchema, { q: " Re ", limit: "100" })).toMatchObject({
+    q: "re",
+  });
+  for (const [schema, input, path] of [
+    [c.mediaListQuerySchema, { tag: ["a", "a b"] }, "tag.1"],
+    [c.mediaListQuerySchema, { tag: Array(6).fill("a") }, "tag"],
+    [c.updateMediaMetadataRequestSchema, { tags: ["ok", "Выставка"] }, "tags.1"],
+    [
+      c.updateMediaMetadataRequestSchema,
+      { tags: Array.from({ length: 21 }, (_, i) => `t-${i}`) },
+      "tags.20",
+    ],
+    [c.updateMediaMetadataRequestSchema, { tags: ["a".repeat(201)] }, "tags.0"],
+    [c.mediaTagCatalogQuerySchema, { q: "a b" }, "q"],
+  ]) {
+    const parsed = v.safeParse(schema, input);
+    expect(parsed.success).toBe(false);
+    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+  }
+  expect(
+    v.safeParse(c.mediaTagCatalogSchema, { items: [{ tag: "bad tag", count: 1 }] }).success,
+  ).toBe(false);
+  expect(v.safeParse(c.mediaTagCatalogSchema, { items: [{ tag: "a", count: 0 }] }).success).toBe(
+    false,
+  );
+  expect(v.safeParse(c.mediaMetadataSchema, {}).success).toBe(false);
 });

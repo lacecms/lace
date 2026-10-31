@@ -5847,6 +5847,29 @@
         "parameters": [
           {
             "in": "query",
+            "name": "tag",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ],
+              "items": {
+                "description": "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+                "type": "string"
+              },
+              "maxItems": 5,
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
             "name": "after",
             "schema": {
               "maxLength": 4096,
@@ -5957,6 +5980,14 @@
                           "status": {
                             "enum": ["active", "delete_failed", "deleting"]
                           },
+                          "tags": {
+                            "items": {
+                              "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                              "type": "string"
+                            },
+                            "maxItems": 20,
+                            "type": "array"
+                          },
                           "updatedAt": {},
                           "url": {
                             "type": "string"
@@ -5971,6 +6002,7 @@
                           }
                         },
                         "required": [
+                          "tags",
                           "createdAt",
                           "createdBy",
                           "filename",
@@ -6027,6 +6059,32 @@
       },
       "post": {
         "operationId": "postApiV1AdminMedia",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "description": "ASCII tag: letters, digits and hyphens; normalized to lowercase",
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "type": "array"
+                  }
+                },
+                "required": ["file"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -6095,6 +6153,14 @@
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
                     },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
                     "updatedAt": {},
                     "url": {
                       "type": "string"
@@ -6109,6 +6175,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6222,6 +6289,14 @@
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
                     },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
                     "updatedAt": {},
                     "url": {
                       "type": "string"
@@ -6236,6 +6311,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6360,6 +6436,14 @@
                     },
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
+                    },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
                     },
                     "updatedAt": {},
                     "url": {
@@ -6500,6 +6584,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6613,6 +6698,13 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "tags": {
+                    "items": {
+                      "description": "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [],
@@ -6721,6 +6813,14 @@
                         "status": {
                           "enum": ["active", "delete_failed", "deleting"]
                         },
+                        "tags": {
+                          "items": {
+                            "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                            "type": "string"
+                          },
+                          "maxItems": 20,
+                          "type": "array"
+                        },
                         "updatedAt": {},
                         "url": {
                           "type": "string"
@@ -6735,6 +6835,7 @@
                         }
                       },
                       "required": [
+                        "tags",
                         "createdAt",
                         "createdBy",
                         "filename",
@@ -6919,6 +7020,14 @@
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
                     },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
                     "updatedAt": {},
                     "url": {
                       "type": "string"
@@ -6933,6 +7042,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6974,6 +7084,101 @@
           }
         },
         "summary": "Retry media deletion",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/media/tags": {
+      "get": {
+        "operationId": "getApiV1AdminMediaTags",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "count": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "tag": {
+                            "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["tag", "count"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Media tag catalog"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List media tags with counts",
         "tags": ["admin"]
       }
     },

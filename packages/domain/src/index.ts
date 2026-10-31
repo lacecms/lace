@@ -248,6 +248,27 @@ export function normalizeMediaText(value: string, kind: MediaTextKind): string |
   return [...text].length > limit ? undefined : text;
 }
 
+/** ASCII-only media organization; reject controls before trimming can hide them. */
+export function normalizeMediaTag(value: unknown): string | undefined {
+  if (typeof value !== "string" || /\p{Cc}/u.test(value)) return undefined;
+  const tag = value.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+  return /^[a-z0-9-]{1,40}$/.test(tag) ? tag : undefined;
+}
+
+/** Reports the original input position, including the first excessive distinct tag. */
+export function normalizeMediaTags(
+  values: readonly unknown[],
+): { readonly tags: readonly string[] } | { readonly issue: number } {
+  const tags = new Set<string>();
+  for (const [index, value] of values.entries()) {
+    const tag = normalizeMediaTag(value);
+    if (tag === undefined) return { issue: index };
+    tags.add(tag);
+    if (tags.size > 20) return { issue: index };
+  }
+  return { tags: Object.freeze([...tags].sort()) };
+}
+
 /** A focal-point coordinate is a finite number from 0 to 1 inclusive. */
 export function isMediaFocalCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -255,6 +276,7 @@ export function isMediaFocalCoordinate(value: unknown): value is number {
 
 /** Metadata for an object-store asset; binary data never belongs in this value. */
 export interface MediaMetadata {
+  readonly tags: readonly string[];
   readonly alt?: string;
   readonly caption?: string;
   readonly createdAt: UnixMilliseconds;

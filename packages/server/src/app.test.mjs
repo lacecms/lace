@@ -3523,3 +3523,80 @@ test("MCP publish calls require the publication scope before handler work and lo
   expect(calls).toBe(0);
   expect(JSON.stringify(f.logs)).not.toContain("private-publish-token");
 });
+
+test("media tag REST supports upload, replacement, filtering, catalog and precise refusal", async () => {
+  let current = admin;
+  const { app, storage } = await fixture({ resolveActor: async () => current });
+  let storedObjects = 0;
+  const put = storage.put.bind(storage);
+  storage.put = async (input) => {
+    storedObjects++;
+    return put(input);
+  };
+  const upload = async (tags, tagFile = false) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]),
+      "cover.png",
+    );
+    for (const tag of tags) form.append("tags", tagFile ? new File([tag], "tag.txt") : tag);
+    return app.fetch(
+      new Request("https://lace.test/api/v1/admin/media", { method: "POST", body: form }),
+    );
+  };
+  for (const tags of [["a,b"], ["a b"], ["Выставка"], ["\na"], Array(21).fill("a")]) {
+    const result = await upload(tags);
+    expect(result.status).toBe(422);
+    expect((await result.json()).error.details.issues[0].path).toMatch(/^\/tags\//);
+  }
+  expect((await upload(["tag"], true)).status).toBe(422);
+  expect(storedObjects).toBe(0);
+  expect((await json(app, "/api/v1/admin/media")).body.items).toEqual([]);
+  const created = await upload([" Birch ", "IBIZA", "birch"]);
+  expect(created.status).toBe(201);
+  const item = await created.json();
+  expect(item.tags).toEqual(["birch", "ibiza"]);
+  const other = await upload(["birch"]);
+  expect(other.status).toBe(201);
+  current = { id: actorId("viewer"), role: "viewer" };
+  const catalog = await json(app, "/api/v1/admin/media/tags?q=BI");
+  expect(catalog.response.status).toBe(200);
+  expect(catalog.body.items).toEqual([{ tag: "birch", count: 2 }]);
+  expect(
+    (await json(app, "/api/v1/admin/media?tag=birch&tag=ibiza")).body.items.map((x) => x.id),
+  ).toEqual([item.id]);
+  const first = (await json(app, "/api/v1/admin/media?tag=birch&limit=1")).body;
+  expect(
+    (await json(app, `/api/v1/admin/media?tag=ibiza&after=${encodeURIComponent(first.nextCursor)}`))
+      .response.status,
+  ).toBe(422);
+  const bad = await json(app, "/api/v1/admin/media?tag=a&tag=bad%20tag");
+  expect(bad.response.status).toBe(422);
+  expect(bad.body.error.details.issues[0].path).toBe("/tag/1");
+  current = admin;
+  const detail = await app.fetch(new Request(`https://lace.test/api/v1/admin/media/${item.id}`));
+  const changed = await app.fetch(
+    new Request(`https://lace.test/api/v1/admin/media/${item.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "if-match": detail.headers.get("etag") },
+      body: JSON.stringify({ tags: ["Project-2026"] }),
+    }),
+  );
+  expect(changed.status).toBe(200);
+  expect(await changed.json()).toMatchObject({
+    media: { tags: ["project-2026"] },
+    build: { status: "not-dispatched" },
+  });
+  current = null;
+  expect((await json(app, "/api/v1/admin/media/tags")).response.status).toBe(403);
+  // Existing actor resolution must not let an arbitrary build/MCP bearer authenticate admin reads.
+  for (const token of ["build-token", "mcp-token"]) {
+    const result = await app.fetch(
+      new Request("https://lace.test/api/v1/admin/media/tags", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    );
+    expect(result.status).toBe(403);
+  }
+});

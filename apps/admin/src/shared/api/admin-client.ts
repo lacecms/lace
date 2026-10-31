@@ -48,6 +48,8 @@ import {
   mediaDetailSchema,
   mediaListSchema,
   mediaMetadataSchema,
+  mediaTagCatalogSchema,
+  type MediaTagCatalogDto,
   managedUserListSchema,
   managedUserSchema,
   publishContentEntryResultSchema,
@@ -276,6 +278,11 @@ export interface AdminClient {
     query?: EntryListQuery,
   ): Promise<ContentEntryListDto>;
   listMedia(cursor?: string, query?: MediaListQuery): Promise<MediaListDto>;
+  listMediaTags(query?: {
+    q?: string;
+    after?: string;
+    limit?: number;
+  }): Promise<MediaTagCatalogDto>;
   getMedia(mediaId: string): Promise<MediaDetailDto>;
   uploadMedia(file: File, options?: MediaUploadOptions): Promise<MediaMetadataDto>;
   /** With `detachDrafts`, the server first removes the item from every using draft. */
@@ -347,6 +354,7 @@ export const DEFAULT_MEDIA_SORT: MediaSortDto = "-createdAt";
 
 /** Server-side filename search, type filter, and sort for the media library. */
 export interface MediaListQuery {
+  readonly tags?: readonly string[];
   readonly limit?: number;
   readonly q?: string;
   readonly sort?: MediaSortDto;
@@ -355,6 +363,7 @@ export interface MediaListQuery {
 
 /** Per-upload callbacks; `onProgress` receives the sent fraction (0–1) when the browser reports it. */
 export interface MediaUploadOptions {
+  readonly tags?: readonly string[];
   readonly onProgress?: (fraction: number) => void;
 }
 
@@ -828,10 +837,24 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
     },
     listModels: async () =>
       parse(contentModelListSchema, await request(fetcher, "/api/v1/admin/content-models")),
+    listMediaTags: async (query: { q?: string; after?: string; limit?: number } = {}) => {
+      const search = new URLSearchParams();
+      if (query.q !== undefined) search.set("q", query.q);
+      if (query.after !== undefined) search.set("after", query.after);
+      if (query.limit !== undefined) search.set("limit", String(query.limit));
+      return parse(
+        mediaTagCatalogSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/media/tags${search.size ? "?" + search.toString() : ""}`,
+        ),
+      );
+    },
     listMedia: async (cursor?: string, query: MediaListQuery = {}) => {
       const search = new URLSearchParams();
       if (cursor !== undefined) search.set("after", cursor);
       if (query.q !== undefined && query.q.trim().length > 0) search.set("q", query.q.trim());
+      for (const tag of query.tags ?? []) search.append("tag", tag);
       if (query.type !== undefined) search.set("type", query.type);
       if (query.sort !== undefined) search.set("sort", query.sort);
       if (query.limit !== undefined) search.set("limit", String(query.limit));
@@ -846,6 +869,7 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
     uploadMedia: async (file: File, options: MediaUploadOptions = {}) => {
       const body = new FormData();
       body.append("file", file);
+      for (const tag of options.tags ?? []) body.append("tags", tag);
       const exchange = await upload("/api/v1/admin/media", body, options);
       if (exchange.status < 200 || exchange.status >= 300)
         throw responseError(exchange.status, exchange.requestId, exchange.body);

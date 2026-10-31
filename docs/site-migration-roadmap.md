@@ -79,7 +79,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | --- | --- | :---: | --- | --- |
 | SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
 | SM2 | MCP publication scope | S | SM2 | done |
-| SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | planned |
+| SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | SM3A implemented; SM3B/SM3C planned |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | planned |
 | SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
 
@@ -187,8 +187,11 @@ policy change, out of scope by default).
 ### Session SM3A — Tag storage and API
 
 - Migration: `media_tags (media_id, tag)` with a composite primary key and a
-  tag index, on SQLite and D1. Tags are trimmed, NFKC-normalized and
-  lowercased, 1–40 characters, at most 20 per item.
+  tag index, on SQLite and D1. Tags use only ASCII letters, digits and the
+  ordinary hyphen: trim surrounding spaces and lowercase ASCII letters, then
+  require `[a-z0-9-]{1,40}`. Reject controls before trimming and internal spaces
+  or non-ASCII characters; no NFKC, transliteration or space replacement. At most
+  20 distinct tags per item and five input tags per filter.
 - `PATCH /api/v1/admin/media/:mediaId` accepts `tags` (full replacement under
   the existing `If-Match` concurrency); upload accepts optional `tags`.
 - `GET /api/v1/admin/media` filters by one or more `tag` values (AND);
@@ -339,3 +342,5 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | In progress. Applying the approved scope, consent, tool and setup changes. |
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Implemented and verified, 18/18 tasks. Separate publish scope and consent, shared publication tool/results, role attenuation, template 0.41.0. Root tests (3000), typecheck, lint, formatting, build, OpenAPI, OAuth/MCP compatibility (114), Chromium at 320px (3), docs, packed starter/existing-site acceptance and strict OpenSpec validation passed. Awaiting explicit sync/archive; status remains in progress until archived. |
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Archived at `openspec/changes/archive/2026-10-31-sm02-mcp-publication-scope`; all five capability deltas synchronized into main specs, preserving existing scenarios. Strict spec/change validation passed. |
+| 2026-10-31 | SM3A | `sm03a-media-tag-storage-api` | In progress. `media_tags` join table (migration `0014`), shared ASCII normalization (`a-z`, digits, hyphen; trim surrounding spaces and lowercase; 1–40 characters; ≤ 20 per item), tags in update/upload/DTOs without build effects, AND filter (≤ 5 tags) bound to cursors, catalog endpoint with counts and prefix, D1 guarded batches and budgets, template 0.42.0. 16 tasks; implementation started. |
+| 2026-10-31 | SM3A | `sm03a-media-tag-storage-api` | Implemented and verified, 16/16 tasks. ASCII tags, migration 0014, atomic Node/D1 writes, tag-only edits without build effects, upload/PATCH/filter/catalog API, template 0.42.0. Root tests (3015) pass with pinned Node 24.12.0/pnpm 12.3.4; typecheck, lint, formatting, build, OpenAPI generation/temporary-index check, docs, packed starter/existing-site acceptance, D1 budgets and full cross-runtime suites pass. See the change verification record. Awaiting explicit spec sync/archive; SM3B and SM3C remain planned. |

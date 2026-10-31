@@ -1326,6 +1326,17 @@ media
 └── updated_at          INTEGER NOT NULL
 ```
 
+Organizational tags live in `media_tags (media_id, tag)`, with a composite
+primary key, a cascading media foreign key, and a `(tag, media_id)` index.
+Tags reject control characters before trimming surrounding spaces, lowercase
+ASCII letters and require `[a-z0-9-]{1,40}`; internal spaces and non-ASCII
+characters are invalid. No transliteration, NFKC or space replacement is used.
+Duplicates collapse; each item has at most 20 tags, returned in ascending ASCII
+order. Tags are admin-only: absent from public content, build exports and MCP,
+and never counted as usage. Create, replacement and final deletion persist tags
+atomically with metadata. Tags-only updates advance `updatedAt` without changing
+the published version or build work; combined edits retain the descriptive rule.
+
 Content stores `mediaId` references. Storage URLs may be derived or signed and should not be treated as permanent database identity.
 
 Because media IDs occur inside validated JSON, Lace maintains a relational
@@ -1381,7 +1392,7 @@ points. A writer edits the version identified by `updatedAt`: the strong
 `updated_at` to the later of now and the previous value plus one millisecond.
 A submission that changes nothing writes nothing.
 
-Metadata is global and goes live on the next build: when a current published
+Descriptive metadata is global and goes live on the next build: when a current published
 snapshot references the item, the same atomic mutation increments
 `published_state.version` and enqueues or coalesces a site build with the
 reason `media_metadata`. Published snapshots are not rewritten and no
@@ -1957,6 +1968,18 @@ storage; a malformed header is ignored. Authorization, eligibility and not-found
 are decided first, so unpublished, deleted or invisible media never receives
 `304`. Consequently a browser may keep media for up to one day after it stops
 being published; unbounded or `immutable` caching is deliberately not used.
+
+### Admin media tags
+
+Admin media DTOs include required `tags`, empty when unset. Upload accepts up to
+20 repeated text parts `tags`; metadata PATCH accepts an optional replacement
+`tags` array under the existing strong `If-Match` guard. Invalid tags are refused
+before object storage. GET `/api/v1/admin/media` accepts up to five repeated
+`tag` parameters combined with AND, search, type and sort; cursors bind the
+normalized tag set. GET `/api/v1/admin/media/tags` returns `{items: [{tag, count}],
+nextCursor?}` with normalized literal prefix `q`, limit 1–100 (default 50), and
+prefix-bound keyset cursors. Counts include all statuses until final removal.
+Both reads require session `content:read`; writes require `media:write`.
 
 ### Admin collection queries
 
@@ -2955,6 +2978,13 @@ field index or content backfill. Node and actual local D1 performance evidence m
 continuations may add at most one constant indexed anchor lookup, independent of
 page size. No per-entry reads or full JSON loads are allowed to resolve anchors;
 query counts must distinguish first pages from anchored continuations.
+
+Media tag filtering adds at most five indexed EXISTS lookups per candidate in
+the existing single list-page query. Tags are read with a bounded correlated
+projection, with no per-item round trips. Catalog pages use one indexed aggregate
+query over `(tag, media_id)` with a literal prefix range and keyset continuation.
+Tag replacement uses the existing guarded batch and at most 20 inserted rows;
+all statements remain within D1 parameter and invocation budgets.
 
 JSON values are stored as SQLite `TEXT` and validated before persistence. Fields that later require indexed filtering may be promoted to generated columns or a dedicated index table through a future migration.
 

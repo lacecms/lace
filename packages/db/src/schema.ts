@@ -191,6 +191,24 @@ export const media = sqliteTable(
   ],
 );
 
+export const mediaTags = sqliteTable(
+  "media_tags",
+  {
+    mediaId: text("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mediaId, table.tag] }),
+    index("media_tags_tag_media_idx").on(table.tag, table.mediaId),
+    check(
+      "media_tags_tag_check",
+      sql`length(${table.tag}) between 1 and 40 and ${table.tag} not glob '*[^a-z0-9-]*' and instr(${table.tag}, char(0)) = 0`,
+    ),
+  ],
+);
+
 export const contentMediaReferences = sqliteTable(
   "content_media_references",
   {

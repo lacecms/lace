@@ -512,7 +512,7 @@ test("validates and defaults media list queries before reading", async () => {
       }),
     ],
   });
-  expect(reads).toEqual([{ limit: 10, sort: "-createdAt" }]);
+  expect(reads).toEqual([{ limit: 10, sort: "-createdAt", tags: [] }]);
   expect(reads[0]).not.toHaveProperty("q");
 
   await media.list({
@@ -522,9 +522,9 @@ test("validates and defaults media list queries before reading", async () => {
     sort: "size",
     type: "image/png",
   });
-  expect(reads[1]).toEqual({ limit: 5, q: "Cover", sort: "size", type: "image/png" });
+  expect(reads[1]).toEqual({ limit: 5, q: "Cover", sort: "size", type: "image/png", tags: [] });
   await media.list({ actor: mediaViewer, limit: 5, q: "   " });
-  expect(reads[2]).toEqual({ limit: 5, sort: "-createdAt" });
+  expect(reads[2]).toEqual({ limit: 5, sort: "-createdAt", tags: [] });
 
   for (const query of [{ q: "x".repeat(201) }, { type: "image/svg+xml" }, { sort: "width" }]) {
     await expect(media.list({ actor: mediaViewer, limit: 5, ...query })).rejects.toMatchObject({
@@ -1069,6 +1069,8 @@ test("validates media metadata patches before any read and merges onto stored va
   });
   expect(writes).toEqual([
     {
+      tags: [],
+      publishedEffect: true,
       alt: "Old alt",
       caption: "Line\nTwo",
       expectedUpdatedAt: 9,
@@ -1383,4 +1385,81 @@ test("trusted runtime LIKE budgets reject before reads and preserve original fil
     cloud.list({ ...input, actor: { id: "bad", role: "nobody" }, q: "x".repeat(201) }),
   ).rejects.toThrow();
   expect(calls).toHaveLength(finalCount);
+});
+
+test("media tags validate before I/O, preserve authorization, and separate build effects", async () => {
+  let reads = 0;
+  const writes = [];
+  let stored = mediaRecord({ tags: ["a"], updatedAt: 9 });
+  const media = mediaUseCases({
+    loadMedia: async () => {
+      reads++;
+      return stored;
+    },
+    loadMediaCatalogItem: async () => ({ ...catalogItem(), media: stored }),
+    updateMediaMetadata: async (input) => {
+      writes.push(input);
+      stored = { ...stored, tags: input.tags, updatedAt: input.updatedAt };
+      return { media: stored, ...(input.publishedEffect ? { targetVersion: 4 } : {}) };
+    },
+    listMedia: async (input) => {
+      reads++;
+      expect(input.tags).toEqual(["a", "b"]);
+      return { items: [] };
+    },
+    listMediaTags: async (input) => {
+      reads++;
+      expect(input.q).toBe("re");
+      return { items: [{ tag: "red", count: 2 }] };
+    },
+  });
+  const update = (tags, actor = mediaEditor) =>
+    media.updateMetadata({
+      actor,
+      mediaId: "media-1",
+      expectedUpdatedAt: stored.updatedAt,
+      patch: { tags },
+    });
+  await expect(update(["a"], mediaViewer)).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  for (const tags of [
+    ["a b"],
+    ["\na"],
+    ["Выставка"],
+    null,
+    Array.from({ length: 21 }, (_, i) => `t-${i}`),
+  ]) {
+    await expect(update(tags)).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    await expect(
+      media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "x.png", tags }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  }
+  await expect(
+    media.list({ actor: mediaViewer, limit: 10, tags: Array(6).fill("a") }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  await expect(media.listTags({ actor: mediaViewer, limit: 101 })).rejects.toMatchObject({
+    code: "CONTENT_INVALID_STATE",
+  });
+  expect(reads).toBe(0);
+  await expect(update([" A ", "a"])).resolves.toMatchObject({
+    build: { status: "not-dispatched" },
+    media: { updatedAt: 9, tags: ["a"] },
+  });
+  expect(writes).toHaveLength(0);
+  await expect(update(["B"])).resolves.toMatchObject({
+    build: { status: "not-dispatched" },
+    media: { updatedAt: 10, tags: ["b"] },
+  });
+  expect(writes[0]).toMatchObject({ publishedEffect: false, tags: ["b"] });
+  await expect(
+    media.updateMetadata({
+      actor: mediaEditor,
+      mediaId: "media-1",
+      expectedUpdatedAt: 10,
+      patch: { tags: [], caption: "new" },
+    }),
+  ).resolves.toMatchObject({ build: { status: "queued", targetVersion: 4 } });
+  await media.list({ actor: mediaViewer, limit: 10, tags: ["B", "a"] });
+  await expect(media.listTags({ actor: mediaViewer, limit: 50, q: " Re " })).resolves.toEqual({
+    items: [{ tag: "red", count: 2 }],
+  });
 });

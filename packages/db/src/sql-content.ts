@@ -1,3 +1,4 @@
+import { normalizeMediaTags, normalizeMediaTag } from "@lacecms/domain";
 import {
   syncInternalLinkStatements,
   SNAPSHOT_INTERNAL_LINKS_JSON_SQL,
@@ -433,7 +434,9 @@ export const MEDIA_USAGE_COUNT_SQL = `(select count(distinct s.entry_id)
   from content_media_references r
   join content_snapshots s on s.id = r.snapshot_id
   where r.media_id = m.id)`;
-export const MEDIA_CATALOG_SQL = `select ${MEDIA_COLUMNS_SQL}, u.name as created_by_name,
+export const MEDIA_TAGS_JSON_SQL = `(select coalesce(json_group_array(tag), '[]') from
+  (select tag from media_tags where media_id = m.id order by tag))`;
+export const MEDIA_CATALOG_SQL = `select ${MEDIA_COLUMNS_SQL}, ${MEDIA_TAGS_JSON_SQL} as tags_json, u.name as created_by_name,
   ${MEDIA_USAGE_COUNT_SQL} as usage_count`;
 export const MEDIA_SORT_SQL: Readonly<Record<string, SortSql>> = {
   createdAt: { order: "m.created_at", value: "m.created_at" },
@@ -568,7 +571,7 @@ export function buildExportPageSql(globals: boolean): {
   };
 }
 
-export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL} from media m where m.id = ? limit 1`;
+export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL}, ${MEDIA_TAGS_JSON_SQL} as tags_json from media m where m.id = ? limit 1`;
 /** Binds media ID, entry limit, and media ID. */
 export const MEDIA_USAGE_SQL = `with used as (
    select distinct s.entry_id
@@ -1446,7 +1449,13 @@ export function decodeEntryCursor(
 }
 
 export function mediaCursorKind(input: ListMediaInput): string {
-  return JSON.stringify(["media", input.sort, input.type ?? null, input.q ?? null]);
+  return JSON.stringify([
+    "media",
+    input.sort,
+    input.type ?? null,
+    input.q ?? null,
+    normalizedMediaFilterTags(input.tags),
+  ]);
 }
 
 export function decodeMediaCursor(value: string, kind: string, sort: MediaSort): DecodedSortCursor {
@@ -1694,6 +1703,7 @@ export function mediaMetadata(row: Record<string, unknown>): MediaMetadata {
     size: integer("size"),
     status,
     storageKey: string("storage_key"),
+    tags: Object.freeze(JSON.parse(String(row.tags_json ?? "[]")) as string[]),
     updatedAt: unixMilliseconds(integer("updated_at")),
     ...(typeof width === "number" ? { width } : {}),
   });
@@ -2116,4 +2126,80 @@ export interface SyncFieldRewriteRow {
   readonly id: string;
   readonly fields_json: string;
   readonly state: "draft" | "published";
+}
+
+/** Canonical filter tags are also used to bind list cursors. */
+export function normalizedMediaFilterTags(tags: readonly string[] = []): readonly string[] {
+  if (tags.length > 5) failure("Supply at most five filter tags.");
+  const result = normalizeMediaTags(tags);
+  if ("issue" in result) failure(`Invalid media filter tag at ${result.issue}.`);
+  return result.tags;
+}
+
+export function mediaTagFilters(tags: readonly string[] = []): {
+  conditions: string[];
+  bindings: string[];
+} {
+  const normalized = normalizedMediaFilterTags(tags);
+  return {
+    conditions: normalized.map(
+      () => "exists (select 1 from media_tags t where t.tag = ? and t.media_id = m.id)",
+    ),
+    bindings: [...normalized],
+  };
+}
+
+export function mediaTagCatalogQuery(input: { limit: number; q?: string; after?: string }): {
+  sql: string;
+  params: (string | number)[];
+  kind: string;
+} {
+  const limit = assertPageSize(input.limit);
+  const prefix = input.q === undefined ? undefined : normalizeMediaTag(input.q);
+  if (input.q !== undefined && prefix === undefined) failure("Tag prefix is invalid.");
+  const kind = JSON.stringify(["media-tags", prefix ?? null]);
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  if (prefix !== undefined) {
+    conditions.push("tag >= ? and tag < ?");
+    params.push(
+      prefix,
+      prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1),
+    );
+  }
+  if (input.after !== undefined) {
+    const cursor = decodeSortCursor(
+      input.after,
+      kind,
+      (value) => typeof value === "string" && normalizeMediaTag(value) === value,
+    );
+    conditions.push("tag > ?");
+    params.push(cursor.value);
+  }
+  params.push(limit + 1);
+  return {
+    kind,
+    params,
+    sql: `select tag, count(*) as count from media_tags ${conditions.length ? `where ${conditions.join(" and ")}` : ""} group by tag order by tag limit ?`,
+  };
+}
+
+export function normalizedMediaWriteTags(tags: readonly string[]): readonly string[] {
+  const result = normalizeMediaTags(tags);
+  if ("issue" in result) failure(`Invalid media tag at ${result.issue}.`);
+  return result.tags;
+}
+
+/** One bounded insert, optionally conditional on the batch mutation guard. */
+export function mediaTagInsert(
+  id: string,
+  tags: readonly string[],
+  guard = "1",
+  token?: string,
+): { sql: string; params: (string | number)[] } | undefined {
+  if (tags.length === 0) return undefined;
+  return {
+    sql: `insert into media_tags (media_id, tag) select ?, column1 from (values ${tags.map(() => "(?)").join(",")}) where ${guard}`,
+    params: [id, ...tags, ...(token === undefined ? [] : [token])],
+  };
 }

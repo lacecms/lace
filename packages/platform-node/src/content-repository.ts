@@ -1,3 +1,10 @@
+import {
+  mediaTagFilters,
+  mediaTagCatalogQuery,
+  mediaTagInsert,
+  normalizedMediaWriteTags,
+} from "@lacecms/db";
+import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
@@ -1087,10 +1094,16 @@ export class NodeContentRepository
         this.checkpoint("media.metadata");
         const changed = this.connection.prepare(MEDIA_METADATA_UPDATE_SQL).run(...params);
         if (changed.changes !== 1) this.refuseMetadataUpdate(input.mediaId);
+        if (input.tags !== undefined) {
+          this.connection.prepare("delete from media_tags where media_id = ?").run(input.mediaId);
+          const insert = mediaTagInsert(input.mediaId, normalizedMediaWriteTags(input.tags));
+          if (insert !== undefined) this.connection.prepare(insert.sql).run(...insert.params);
+        }
+        this.checkpoint("media.tags");
         const published = this.connection
           .prepare(`select ${MEDIA_PUBLISHED_REFERENCE_SQL} as published`)
           .get(input.mediaId) as { readonly published: number };
-        if (published.published === 1) {
+        if (input.publishedEffect !== false && published.published === 1) {
           targetVersion = this.bumpPublicState(
             input.updatedAt,
             input.requestedBy.id,
@@ -1218,6 +1231,11 @@ export class NodeContentRepository
           input.completedAt,
           input.mediaId,
         );
+        this.connection
+          .prepare(
+            "delete from media_tags where media_id = ? and exists (select 1 from media where id = ? and status = 'deleting' and not exists (select 1 from content_media_references where media_id = ?))",
+          )
+          .run(input.mediaId, input.mediaId, input.mediaId);
         const deleted = this.connection
           .prepare(
             "delete from media where id = ? and status = 'deleting' and not exists (select 1 from content_media_references where media_id = ?)",
@@ -1280,23 +1298,28 @@ export class NodeContentRepository
   }
 
   public async createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata> {
+    const tags = normalizedMediaWriteTags(input.tags ?? []);
     try {
-      this.connection
-        .prepare(
-          "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
-        )
-        .run(
-          input.id,
-          input.storageKey,
-          input.filename,
-          input.mimeType,
-          input.size,
-          input.width,
-          input.height,
-          input.createdBy,
-          input.createdAt,
-          input.createdAt,
-        );
+      this.connection.transaction(() => {
+        this.connection
+          .prepare(
+            "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
+          )
+          .run(
+            input.id,
+            input.storageKey,
+            input.filename,
+            input.mimeType,
+            input.size,
+            input.width,
+            input.height,
+            input.createdBy,
+            input.createdAt,
+            input.createdAt,
+          );
+        const insert = mediaTagInsert(input.id, tags);
+        if (insert !== undefined) this.connection.prepare(insert.sql).run(...insert.params);
+      })();
     } catch (error) {
       this.throwWriteError(error, false);
     }
@@ -1436,8 +1459,9 @@ export class NodeContentRepository
       input.after === undefined ? undefined : decodeMediaCursor(input.after, kind, input.sort);
     const comparison = descending ? "<" : ">";
     const direction = descending ? "desc" : "asc";
-    const conditions: string[] = [];
-    const bindings: (number | string)[] = [];
+    const tagFilter = mediaTagFilters(input.tags);
+    const conditions: string[] = [...tagFilter.conditions];
+    const bindings: (number | string)[] = [...tagFilter.bindings];
     if (input.q !== undefined) {
       conditions.push("instr(lower(m.filename), ?) > 0");
       bindings.push(foldAscii(input.q));
@@ -1472,6 +1496,24 @@ export class NodeContentRepository
           }
         : {}),
     });
+  }
+
+  public async listMediaTags(input: ListMediaTagsInput): Promise<CursorPage<MediaTagCount>> {
+    const query = mediaTagCatalogQuery(input);
+    const rows = this.connection.prepare(query.sql).all(...query.params) as readonly {
+      tag: string;
+      count: number;
+    }[];
+    const items = rows
+      .slice(0, input.limit)
+      .map((row) => ({ tag: row.tag, count: Number(row.count) }));
+    const last = items.at(-1);
+    return {
+      items,
+      ...(rows.length > input.limit && last !== undefined
+        ? { nextCursor: encodeSortCursor(query.kind, last.tag, last.tag) }
+        : {}),
+    };
   }
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {

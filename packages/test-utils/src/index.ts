@@ -1,3 +1,4 @@
+import { normalizeMediaTags } from "@lacecms/domain";
 import {
   actorDisplayName,
   transformConfigurationSyncFields,
@@ -1368,7 +1369,11 @@ export class InMemoryContentStore
         "Media identity or storage key already exists.",
       );
     }
+    const normalized = normalizeMediaTags(input.tags ?? []);
+    if ("issue" in normalized)
+      throw new DomainError("CONTENT_INVALID_STATE", "Invalid media tags.");
     const media: MediaMetadata = {
+      tags: normalized.tags,
       createdAt: input.createdAt,
       createdBy: input.createdBy,
       filename: input.filename,
@@ -1399,12 +1404,37 @@ export class InMemoryContentStore
       .filter(
         (value) =>
           (term === undefined || foldAscii(value.filename).includes(term)) &&
-          (input.type === undefined || value.mimeType === input.type),
+          (input.type === undefined || value.mimeType === input.type) &&
+          (input.tags ?? []).every((tag) => (value.tags ?? []).includes(tag)),
       )
       .sort((left, right) => compareMedia(left, right, input.sort))
       .map((value) => this.catalogItem(value));
-    const prefix = JSON.stringify(["media", input.sort, input.type ?? null, input.q ?? null]);
+    const prefix = JSON.stringify([
+      "media",
+      input.sort,
+      input.type ?? null,
+      input.q ?? null,
+      [...(input.tags ?? [])].sort(),
+    ]);
     return this.page(items, input.after, input.limit, prefix);
+  }
+
+  public async listMediaTags(
+    input: import("@lacecms/application").ListMediaTagsInput,
+  ): Promise<CursorPage<import("@lacecms/application").MediaTagCount>> {
+    const counts = new Map<string, number>();
+    for (const item of this.media.values())
+      for (const tag of item.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    const items = [...counts]
+      .filter(([tag]) => input.q === undefined || tag.startsWith(input.q))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([tag, count]) => ({ tag, count }));
+    return this.page(
+      items,
+      input.after,
+      input.limit,
+      JSON.stringify(["media-tags", input.q ?? null]),
+    );
   }
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {
@@ -1480,6 +1510,7 @@ export class InMemoryContentStore
     const { alt: _alt, caption: _caption, focalPoint: _focalPoint, ...technical } = media;
     const updated: MediaMetadata = {
       ...technical,
+      tags: input.tags ?? media.tags ?? [],
       ...(input.alt === null ? {} : { alt: input.alt }),
       ...(input.caption === null ? {} : { caption: input.caption }),
       ...(input.focalPoint === null
@@ -1491,7 +1522,8 @@ export class InMemoryContentStore
       entry.locations.some((location) => location.states.includes("published")),
     );
     this.media.set(input.mediaId, clone(updated));
-    if (!published) return Object.freeze({ media: clone(updated) });
+    if (!published || input.publishedEffect === false)
+      return Object.freeze({ media: clone(updated) });
     this.publicVersion += 1;
     this.mediaMetadataBuildRequests.push(this.publicVersion);
     return Object.freeze({ media: clone(updated), targetVersion: this.publicVersion });

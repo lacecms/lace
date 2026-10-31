@@ -367,3 +367,57 @@ test("34B D1 exports 100/201/501 published entries in bounded pages with near-li
     await f.close();
   }
 }, 120000);
+
+test("SM3A five-tag media filters and catalog stay bounded with 500 items", async () => {
+  const f = await fixture();
+  try {
+    for (let offset = 0; offset < 500; offset += 20) {
+      const statements = [];
+      for (let i = offset; i < offset + 20; i++) {
+        const id = `tag-budget-${String(i).padStart(3, "0")}`;
+        statements.push(
+          f.database
+            .prepare(
+              "insert into media(id,storage_key,filename,mime_type,size,metadata_json,status,created_by,created_at,updated_at) values (?,?,'cover.png','image/png',1,'{}','active','budget-admin',1,1)",
+            )
+            .bind(id, id),
+        );
+        statements.push(
+          f.database
+            .prepare(
+              "insert into media_tags(media_id,tag) values (?,'a'),(?,'b'),(?,'c'),(?,'d'),(?,'e')",
+            )
+            .bind(id, id, id, id, id),
+        );
+      }
+      await f.database.batch(statements);
+    }
+    const options = { cookie: f.cookies.viewer };
+    const first = await f.measured(
+      "media-500-five-tags",
+      "/api/v1/admin/media?tag=a&tag=b&tag=c&tag=d&tag=e&limit=100",
+      options,
+      200,
+    );
+    expect(first.items).toHaveLength(100);
+    expect(first.items[0].tags).toEqual(["a", "b", "c", "d", "e"]);
+    expect(f.count.stats.queries).toBeLessThanOrEqual(10);
+    await f.measured(
+      "media-500-five-tags-next",
+      `/api/v1/admin/media?tag=a&tag=b&tag=c&tag=d&tag=e&limit=100&after=${encodeURIComponent(first.nextCursor)}`,
+      options,
+      200,
+    );
+    expect(f.count.stats.queries).toBeLessThanOrEqual(10);
+    const catalog = await f.measured(
+      "media-tag-catalog-500",
+      "/api/v1/admin/media/tags?q=a",
+      options,
+      200,
+    );
+    expect(catalog.items).toEqual([{ tag: "a", count: 500 }]);
+    expect(f.count.stats.queries).toBeLessThanOrEqual(10);
+  } finally {
+    await f.close();
+  }
+}, 120000);

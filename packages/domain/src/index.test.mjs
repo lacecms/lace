@@ -637,3 +637,36 @@ test("publication and revert preserve block envelopes and complete legacy blocks
   expect(reverted.draft.blocks[0]).toMatchObject(envelope);
   expect(Object.isFrozen(reverted.draft.blocks[0].settings)).toBe(true);
 });
+
+test("normalizes only ASCII media tags with stable limits and ordering", async () => {
+  const { normalizeMediaTag, normalizeMediaTags } = await import("./index.js");
+  expect(normalizeMediaTag(" Project-2026 ")).toBe("project-2026");
+  expect(normalizeMediaTags(["Z", " a ", "A", "0", "-"])).toEqual({ tags: ["-", "0", "a", "z"] });
+  expect(normalizeMediaTag("a".repeat(40))).toBe("a".repeat(40));
+  for (const value of [
+    "",
+    " ",
+    "a".repeat(41),
+    "a b",
+    "a,b",
+    "a_b",
+    "Выставка",
+    "ＲＥＡＤＹＭＡＧ",
+    "😀",
+    "a\nb",
+    "\ta",
+    "a\r",
+    "a\u0000",
+    "\ud800",
+  ]) {
+    expect(normalizeMediaTag(value)).toBeUndefined();
+    expect(normalizeMediaTags(["valid", value])).toEqual({ issue: 1 });
+  }
+  expect(normalizeMediaTags(Array(21).fill("A"))).toEqual({ tags: ["a"] });
+  expect(normalizeMediaTags(Array.from({ length: 20 }, (_, i) => `tag-${i}`)).tags).toHaveLength(
+    20,
+  );
+  expect(normalizeMediaTags(Array.from({ length: 21 }, (_, i) => `tag-${i}`))).toEqual({
+    issue: 20,
+  });
+});

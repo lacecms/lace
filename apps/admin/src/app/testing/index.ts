@@ -134,6 +134,7 @@ export const mediaItem = {
   status: "active" as const,
   updatedAt: "2026-09-20T00:00:00.000Z",
   url: "https://lace.test/api/v1/public/media/media-1",
+  tags: [],
   usageCount: 0,
 };
 
@@ -191,6 +192,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
       modelKey === "home"
         ? entryList([{ ...entry, id: "home-1", modelKey: "home", title: "Home" }])
         : entryList([entry]),
+    listMediaTags: async () => ({ items: [] }),
     listMedia: async () => ({ items: [] }),
     getMedia: async () => ({ ...mediaItem, usage: [] }),
     uploadMedia: async () => ({}) as never,
