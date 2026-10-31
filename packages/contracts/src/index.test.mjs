@@ -2541,3 +2541,19 @@ test("MCP settings summary is strict and uses a canonical HTTP endpoint", () => 
   ])
     expect(parse(mcp)).toBe(false);
 });
+
+test("MCP publication requires a revision and uses the REST idempotency key syntax", async () => {
+  const { mcpToolArgumentSchemas } = await import("../dist/index.js");
+  const schema = mcpToolArgumentSchemas.publish_entry;
+  expect(
+    v.parse(schema, { entryId: "entry", expectedRevision: 1, idempotencyKey: "retry-key" }),
+  ).toEqual({ entryId: "entry", expectedRevision: 1, idempotencyKey: "retry-key" });
+  for (const input of [
+    { entryId: "entry" },
+    { entryId: "entry", expectedRevision: -1 },
+    { entryId: "entry", expectedRevision: 1, actor: {} },
+    { entryId: "entry", expectedRevision: 1, fields: {} },
+    { entryId: "entry", expectedRevision: 1, idempotencyKey: "invalid\nkey" },
+  ])
+    expect(v.safeParse(schema, input).success).toBe(false);
+});

@@ -44,8 +44,9 @@ The design should also be easy for coding agents to understand and modify. For t
 - Media upload to R2 or MinIO.
 - Email/password authentication through Better Auth.
 - Optional OAuth-delegated MCP content assistance (`add-oauth-mcp-server`, MCP1):
-  inspect models/entries and create/save drafts; publication, unpublication and
-  all content deletion remain forbidden through MCP.
+  inspect models/entries and create/save drafts; publication requires the separate
+  `content:publish` scope with explicit administrator consent. Unpublication and
+  all content deletion remain forbidden through MCP (ADR 0015).
 - Admin, editor, and viewer roles.
 - Optional transactional email through a provider port (`EmailSender`): SMTP on
   Node, Resend on both runtimes, and the Cloudflare Email Service binding on the
@@ -258,7 +259,10 @@ the VPS proxy refuses to serve; the generated Pages workflow keeps
 The optional MCP surface lives in the same CMS deployment on both runtimes.
 Only `LACE_MCP_ENABLED=true` exposes `/mcp` and its OAuth/discovery routes;
 missing/`false` disables them, and other values fail safe configuration validation.
-It requires no extra process, Durable Object or KV binding.
+It requires no extra process, Durable Object or KV binding. Publication requires
+the separate `content:publish` scope, explicit consent by a user whose current
+role has that permission (administrators only), and the shared publication guards.
+Unpublication and deletion remain forbidden (ADR 0015).
 
 ## 6. Repository structure
 
@@ -278,7 +282,7 @@ packages/
 ├── domain/                    # pure domain types, rules, and errors
 ├── application/               # use cases and capability ports
 ├── server/                    # Hono routes, middleware, app factory
-├── mcp/                       # portable stateless MCP adapter and five tools
+├── mcp/                       # portable stateless MCP adapter and six tools
 ├── contracts/                 # shared Valibot transport schemas and DTOs
 ├── content/                   # field DSL, block registry, validation
 ├── db/                        # Drizzle SQLite schema and repositories
@@ -2778,11 +2782,13 @@ server-bound continuation. No client-controlled URL metadata is fetched.
 Browser REST actors still require sessions. Only MCP resolves resource-bound
 OAuth credentials into the current persisted enabled user/role, attenuated by
 an immutable provider-neutral permission and content-operation ceiling.
-`content:read`, `content:write` (including read) and renewal-only `offline_access`
+`content:read`, `content:write` (including read), `content:publish` (including
+write and read, with explicit administrator consent) and renewal-only `offline_access`
 are the supported scopes. The shared application authorizer checks every
 operation before protected work; delegated operations default to deny.
-Publishing, unpublishing, deletion, revert/duplicate, media and administrative
-operations are never grantable, even to an administrator. A cookie/build token
+Publication is grantable only with the publish scope and current role permission.
+Unpublishing, deletion, revert/duplicate, media and administrative operations are
+never grantable, even to an administrator. A cookie/build token
 does not authenticate MCP and an MCP token does not authenticate admin REST.
 
 Codes last at most five minutes, access tokens fifteen minutes and rotating
@@ -2982,8 +2988,9 @@ configuration, not verified client connectivity. Deployment configuration remain
 operator-owned; no browser toggle or new public status endpoint is introduced.
 
 When MCP is enabled, `/admin/mcp/consent` uses the existing session/sign-in and
-controls to show escaped client identity, callback hostname and read/read-write
-consent, explicitly stating the publication/unpublication/deletion ban.
+controls to show escaped client identity, callback hostname and separate read,
+draft editing and publication consent. Only administrators can grant publication;
+the page states the next-build effect and the unpublication/deletion ban.
 `/admin/account` shows owned connections with safe scopes/dates and an explicit
 revoke confirmation, backed by session-only routes. A server-derived capability
 hides this section when disabled; OAuth credentials never enter browser storage.

@@ -1,13 +1,15 @@
-export type McpAccess = "read" | "write";
+export type McpAccess = "read" | "write" | "publish";
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 
 /** Shell, TOML and JSON values stay data, even for unusual but valid URL hosts. */
 export function mcpConnectionExamples(endpoint: string, access: McpAccess) {
   const scopes =
-    access === "write"
-      ? ["content:read", "content:write", "offline_access"]
-      : ["content:read", "offline_access"];
+    access === "publish"
+      ? ["content:read", "content:write", "content:publish", "offline_access"]
+      : access === "write"
+        ? ["content:read", "content:write", "offline_access"]
+        : ["content:read", "offline_access"];
   const shellUrl = shellQuote(endpoint);
   const claude = { type: "http", url: endpoint, oauth: { scopes: scopes.join(" ") } };
   const login = `codex mcp login lace --oauth-client-registration dcr --scopes ${scopes.join(",")}`;

@@ -364,6 +364,18 @@ export class ContentUseCases {
     return this.adminProjection(input.entry);
   }
 
+  /** Shared publication enrichment for REST and MCP, using safe admin metadata. */
+  public async projectPublicationResult(input: {
+    readonly actor: Actor;
+    readonly result: PublishContentEntryUseCaseResult;
+  }): Promise<
+    PublishContentEntryUseCaseResult & Pick<AdminContentEntryProjection, "seo" | "updatedBy">
+  > {
+    authorizeContentOperation(input.actor, "publish");
+    const projection = await this.adminProjection(input.result.entry);
+    return { ...input.result, seo: projection.seo, updatedBy: projection.updatedBy };
+  }
+
   private async adminProjection(entry: ContentEntry): Promise<AdminContentEntryProjection> {
     const model = this.model(entry.model.key);
     return detached({

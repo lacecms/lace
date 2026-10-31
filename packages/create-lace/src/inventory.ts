@@ -16,7 +16,7 @@ export interface TemplateFile {
   readonly metadata?: true;
 }
 
-export const TEMPLATE_VERSION = "0.40.0";
+export const TEMPLATE_VERSION = "0.41.0";
 
 const STARTER = ["starter"] as const;
 const SITE = ["starter", "existing"] as const;

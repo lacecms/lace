@@ -92,9 +92,11 @@ export function McpConnections() {
                     <div className="grid min-w-0 gap-1">
                       <p className="m-0 break-words font-medium">{item.clientName}</p>
                       <p className="m-0 text-sm text-muted-foreground">
-                        {item.scopes.includes("content:write")
-                          ? "Read and edit drafts"
-                          : "Read content"}
+                        {item.scopes.includes("content:publish")
+                          ? "Read, edit drafts and Publish"
+                          : item.scopes.includes("content:write")
+                            ? "Read and edit drafts"
+                            : "Read content"}
                         {inactive ? ` · ${item.revokedAt ? "Revoked" : "Expired"}` : ""}
                       </p>
                       <p className="m-0 text-xs text-muted-foreground">

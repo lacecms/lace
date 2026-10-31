@@ -28,7 +28,10 @@ test("delegated authority is immutable, role-intersected and can only narrow ano
     permissions: ["content:read", "content:publish"],
     operations: ["load", "publish"],
   });
-  expect(narrowed.authority).toEqual({ permissions: ["content:read"], operations: ["load"] });
+  expect(narrowed.authority).toEqual({
+    permissions: ["content:read"],
+    operations: ["load", "publish"],
+  });
   expect(auditActor(actor)).toEqual({ id: "user", role: "admin" });
 });
 
@@ -56,8 +59,12 @@ test("shared operation policy preserves browser roles and denies unregistered/de
     ["content:read", "content:write", "content:publish"],
     [...delegatedContentOperations, "publish", "unpublish", "delete", "future-operation"],
   );
+  expect(canContentOperation(hostileCeiling, "publish")).toBe(true);
+  expect(canContentOperation(grant(), "publish")).toBe(false);
+  expect(canContentOperation(grant("editor", ["content:publish"], ["publish"]), "publish")).toBe(
+    false,
+  );
   for (const op of [
-    "publish",
     "unpublish",
     "delete",
     "revertDraft",
@@ -117,6 +124,37 @@ test("direct delegated content calls deny before any content/media port access, 
       expect.objectContaining({ code: "AUTHORIZATION_DENIED" }),
     );
   expect(calls).toEqual([]);
+});
+
+test("even publication ceilings cannot grant destructive or other lifecycle operations", async () => {
+  const ports = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("Protected port was accessed");
+      },
+    },
+  );
+  const content = new ContentUseCases({ content: ports, media: ports, config: { content: [] } });
+  for (const role of ["admin", "editor", "viewer"]) {
+    for (const permissions of [
+      ["content:read"],
+      ["content:read", "content:write"],
+      ["content:read", "content:write", "content:publish"],
+    ]) {
+      const actor = grant(role, permissions, [
+        ...delegatedContentOperations,
+        "unpublish",
+        "delete",
+        "revertDraft",
+        "duplicate",
+      ]);
+      for (const operation of ["unpublish", "delete", "revertDraft", "duplicate"])
+        await expect(
+          content[operation]({ actor, entryId: "entry", expectedRevision: 1 }),
+        ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+    }
+  }
 });
 
 test("browser deletion keeps unpublished-versus-published permission checks", async () => {

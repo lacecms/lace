@@ -3484,3 +3484,42 @@ test("settings MCP summary follows configuration, not request forwarding headers
   expect(missing.body).not.toHaveProperty("mcp");
   expect(JSON.stringify(missing.body)).not.toContain("Canonical public URL");
 });
+
+test("MCP publish calls require the publication scope before handler work and logs omit bearer credentials", async () => {
+  let calls = 0;
+  const scopes = [];
+  const f = await fixture({
+    mcpEnabled: true,
+    maxBodyBytes: 1024,
+    mcp: {
+      resolve: async (_request, scope) => {
+        scopes.push(scope);
+        return {
+          response: new Response(null, {
+            status: 403,
+            headers: { "www-authenticate": `Bearer error="insufficient_scope", scope="${scope}"` },
+          }),
+        };
+      },
+      fetch: async () => {
+        calls++;
+        throw new Error("must not reach MCP");
+      },
+    },
+  });
+  const response = await f.app.request("https://lace.test/mcp", {
+    method: "POST",
+    headers: { authorization: "Bearer private-publish-token", "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "publish_entry", arguments: { entryId: "missing", expectedRevision: 1 } },
+    }),
+  });
+  expect(response.status).toBe(403);
+  expect(response.headers.get("www-authenticate")).toContain('scope="content:publish"');
+  expect(scopes).toEqual(["content:publish"]);
+  expect(calls).toBe(0);
+  expect(JSON.stringify(f.logs)).not.toContain("private-publish-token");
+});

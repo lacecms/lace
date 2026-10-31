@@ -373,7 +373,7 @@ export interface LaceAppInput {
   readonly mcp?: {
     resolve(
       request: Request,
-      scope?: "content:read" | "content:write",
+      scope?: "content:read" | "content:write" | "content:publish",
     ): Promise<
       | { readonly actor: Actor; readonly response?: never }
       | { readonly response: Response; readonly actor?: never }
@@ -791,7 +791,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
   app.use(async (context, next) => {
     if (context.req.path === "/mcp") {
       if (!input.mcp) return new Response(null, { status: 503 });
-      let scope: "content:read" | "content:write" = "content:read";
+      let scope: "content:read" | "content:write" | "content:publish" = "content:read";
       if (context.req.method === "POST") {
         try {
           const value: unknown = await context.req.raw.clone().json();
@@ -804,9 +804,11 @@ export function createLaceApp(input: LaceAppInput): Hono {
             typeof value.params === "object" &&
             value.params !== null &&
             "name" in value.params &&
-            (value.params.name === "create_entry" || value.params.name === "save_draft")
+            (value.params.name === "create_entry" ||
+              value.params.name === "save_draft" ||
+              value.params.name === "publish_entry")
           )
-            scope = "content:write";
+            scope = value.params.name === "publish_entry" ? "content:publish" : "content:write";
         } catch {
           /* Protocol syntax remains SDK-owned. */
         }
@@ -2268,14 +2270,12 @@ export function createLaceApp(input: LaceAppInput): Hono {
       });
       return response(
         publishContentEntryResultSchema,
-        toPublishContentEntryResultDto({
-          ...published,
-          seo: seoSection.models[published.entry.model.key] !== undefined,
-          updatedBy: await input.content.describeActor({
+        toPublishContentEntryResultDto(
+          await input.content.projectPublicationResult({
             actor: resolvedActor,
-            actorId: published.entry.draft.updatedBy.id,
+            result: published,
           }),
-        }),
+        ),
       );
     },
   );

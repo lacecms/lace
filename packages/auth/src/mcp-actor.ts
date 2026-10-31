@@ -45,7 +45,7 @@ export function createMcpActorResolver(input: {
 }): {
   resolve(
     request: Request,
-    requiredScope?: "content:read" | "content:write",
+    requiredScope?: "content:read" | "content:write" | "content:publish",
   ): Promise<McpActorResolution>;
 } {
   const { resource } = mcpOAuthUrls(input.origin, input.production);
@@ -65,7 +65,7 @@ export function createMcpActorResolver(input: {
   return Object.freeze({
     resolve: async (
       request: Request,
-      requiredScope: "content:read" | "content:write" = "content:read",
+      requiredScope: "content:read" | "content:write" | "content:publish" = "content:read",
     ) => {
       const url = new URL(request.url);
       if (url.searchParams.has("access_token")) return failure(401, "invalid_token");
@@ -108,6 +108,10 @@ export function createMcpActorResolver(input: {
       if (scopes.includes("content:write")) {
         permissions.push("content:write");
         operations.push("create", "save");
+      }
+      if (scopes.includes("content:publish")) {
+        permissions.push("content:publish");
+        operations.push("publish");
       }
       return {
         actor: attenuateActor(

@@ -78,7 +78,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
 | SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
-| SM2 | MCP publication scope | S | SM2 | planned |
+| SM2 | MCP publication scope | S | SM2 | done |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | planned |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | planned |
 | SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
@@ -143,6 +143,8 @@ tests; browser test for reduced motion; starter and reference builds;
 generated-project upgrade phase.
 
 ## Step SM2 — MCP publication scope
+
+**Status:** done (archived). Implementation verified, 18/18 tasks; all five capability deltas synchronized.
 
 **Size:** S. **Depends on:** MCP1–MCP3 (done).
 
@@ -333,3 +335,7 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-10-31 | SM1 | `sm01-video-embed-playback` | Proposed. Owner decisions: ambient mode has no pause control (WCAG 2.2.2 gap documented); reduced motion and no-JS fall back to player; source link visually hidden only while an ambient player is mounted. 17 tasks, not applied. |
 | 2026-10-31 | SM1 | `sm01-video-embed-playback` | Implemented and verified, 17/17 tasks. videoEmbed v2, ambient URLs/playback, aspect ratios, SQLite/D1 migration, registry revision 2 and template 0.40.0. Root tests, typecheck, lint, formatting, OpenAPI, docs, packed starter/existing-site acceptance and strict OpenSpec checks pass. Awaiting explicit sync/archive. |
 | 2026-10-31 | SM1 | `sm01-video-embed-playback` | Archived at `openspec/changes/archive/2026-10-31-sm01-video-embed-playback`; all five capability deltas synchronized into main specs and strict validation passed. |
+| 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Proposed. `content:publish` scope (implies write and read), third consent choice available only to roles with `content:publish`, `publish_entry` tool reusing the REST publication operation and result with optional idempotency key, template 0.41.0. Unpublish/delete stay banned. 18 tasks, not applied. |
+| 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | In progress. Applying the approved scope, consent, tool and setup changes. |
+| 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Implemented and verified, 18/18 tasks. Separate publish scope and consent, shared publication tool/results, role attenuation, template 0.41.0. Root tests (3000), typecheck, lint, formatting, build, OpenAPI, OAuth/MCP compatibility (114), Chromium at 320px (3), docs, packed starter/existing-site acceptance and strict OpenSpec validation passed. Awaiting explicit sync/archive; status remains in progress until archived. |
+| 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Archived at `openspec/changes/archive/2026-10-31-sm02-mcp-publication-scope`; all five capability deltas synchronized into main specs, preserving existing scenarios. Strict spec/change validation passed. |

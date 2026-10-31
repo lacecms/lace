@@ -184,3 +184,64 @@ test("interleaved identities retain their own visibility and draft attribution",
     await expect(admin.callTool({ name, arguments: {} })).rejects.toThrow();
   }
 });
+
+test("publish tool shares publication, replay and guards while lifecycle bans remain closed", async () => {
+  const f = await fixture();
+  const identity = attenuateActor(
+    { id: actorId("publisher"), role: "admin" },
+    {
+      permissions: ["content:read", "content:write", "content:publish"],
+      operations: ["discoverModels", "list", "load", "create", "save", "publish"],
+    },
+  );
+  const client = await f.connect(identity);
+  expect((await client.listTools()).tools.map((t) => t.name)).toEqual(
+    expect.arrayContaining(["publish_entry"]),
+  );
+  expect((await client.listTools()).tools).toHaveLength(6);
+  for (const name of ["unpublish_entry", "delete_entry", "revert_draft", "duplicate_entry"])
+    await expect(client.callTool({ name, arguments: {} })).rejects.toThrow();
+  const created = payload(
+    await client.callTool({ name: "create_entry", arguments: { ...draft, slug: "published" } }),
+  );
+  const args = { entryId: created.id, expectedRevision: 1, idempotencyKey: "publication-retry" };
+  const published = payload(await client.callTool({ name: "publish_entry", arguments: args }));
+  expect(published.publication).toBe("published");
+  expect(published.build).toMatchObject({ status: "queued" });
+  expect(published.entry.published).toBeDefined();
+  const version = await f.store.publishedContentVersion();
+  const replay = payload(await client.callTool({ name: "publish_entry", arguments: args }));
+  expect(replay).toEqual({
+    ...published,
+    publication: "replayed",
+    build: { status: "not-dispatched" },
+  });
+  expect(await f.store.publishedContentVersion()).toBe(version);
+  const stale = await client.callTool({
+    name: "publish_entry",
+    arguments: { ...args, expectedRevision: 0, idempotencyKey: "different-key" },
+  });
+  expect(stale.isError).toBe(true);
+  expect(payload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
+  const conflict = payload(
+    await client.callTool({ name: "create_entry", arguments: { ...draft, slug: "published" } }),
+  );
+  const blocked = await client.callTool({
+    name: "publish_entry",
+    arguments: { entryId: conflict.id, expectedRevision: 1 },
+  });
+  expect(blocked.isError).toBe(true);
+  expect(payload(blocked).error.code).toBe("CONTENT_ROUTE_CONFLICT");
+  for (const code of ["required", "internal_link_unavailable"]) {
+    const { ContentValidationError } = await import("@lacecms/content");
+    f.content.publish = async () => {
+      throw new ContentValidationError([
+        { code, path: ["fields", "link"], message: "Invalid destination." },
+      ]);
+    };
+    const failure = await client.callTool({ name: "publish_entry", arguments: args });
+    expect(failure.isError).toBe(true);
+    expect(payload(failure).error.code).toBe("VALIDATION_FAILED");
+    expect(payload(failure).error.details.issues[0]).toMatchObject({ code, path: "/fields/link" });
+  }
+});

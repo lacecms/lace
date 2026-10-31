@@ -806,6 +806,11 @@ export const mcpToolArgumentSchemas = Object.freeze({
     limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100)), 50),
   }),
   get_entry: v.strictObject({ entryId: identifierSchema }),
+  publish_entry: v.strictObject({
+    entryId: identifierSchema,
+    expectedRevision: expectedRevisionSchema,
+    idempotencyKey: v.optional(idempotencyKeySchema),
+  }),
   create_entry: v.strictObject({
     ...createContentEntryRequestSchema.entries,
     modelKey: identifierSchema,
@@ -2763,7 +2768,9 @@ export const accountCapabilitiesSchema = v.strictObject({ mcpEnabled: v.boolean(
 export const oauthConnectionSchema = v.strictObject({
   id: identifierSchema,
   clientName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  scopes: v.array(v.picklist(["content:read", "content:write", "offline_access"])),
+  scopes: v.array(
+    v.picklist(["content:read", "content:write", "content:publish", "offline_access"]),
+  ),
   createdAt: isoTimestampSchema,
   expiresAt: isoTimestampSchema,
   revokedAt: v.nullable(isoTimestampSchema),
@@ -2786,8 +2793,11 @@ export const mcpConsentDetailsSchema = v.strictObject({
   transaction: identifierSchema,
   clientName: v.string(),
   callbackHostname: v.string(),
-  scopes: v.array(v.picklist(["content:read", "content:write", "offline_access"])),
+  scopes: v.array(
+    v.picklist(["content:read", "content:write", "content:publish", "offline_access"]),
+  ),
   canWrite: v.boolean(),
+  canPublish: v.boolean(),
 });
 export const mcpConsentNavigationSchema = v.strictObject({
   redirect: v.literal(true),

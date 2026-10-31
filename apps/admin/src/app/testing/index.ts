@@ -214,6 +214,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
       callbackHostname: "client.test",
       scopes: ["content:read"],
       canWrite: false,
+      canPublish: false,
     }),
     submitMcpConsent: async () => ({ redirect: true, url: "https://client.test/cb" }),
     signIn: async () => undefined,

@@ -8,7 +8,7 @@ import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 /** Displays only server-bound transaction details; OAuth credentials never enter UI state. */
 export function McpConsentForm({ transaction }: { readonly transaction: string }) {
   const client = useAdminClient();
-  const [write, setWrite] = useState(false);
+  const [access, setAccess] = useState<"read" | "write" | "publish">("read");
   const details = useQuery({
     queryKey: adminQueryKeys.mcpConsent(transaction),
     queryFn: () => client.loadMcpConsent(transaction),
@@ -20,7 +20,11 @@ export function McpConsentForm({ transaction }: { readonly transaction: string }
         transaction,
         accept,
         scope: (details.data?.scopes ?? [])
-          .filter((scope) => scope !== "content:write" || write)
+          .filter(
+            (scope) =>
+              (scope !== "content:write" || access !== "read") &&
+              (scope !== "content:publish" || access === "publish"),
+          )
           .join(" "),
       }),
     onSuccess: (result) => {
@@ -56,7 +60,12 @@ export function McpConsentForm({ transaction }: { readonly transaction: string }
       <fieldset className="grid gap-3" disabled={decision.isPending}>
         <legend className="mb-2 font-medium">Access to content</legend>
         <label className="flex items-start gap-2">
-          <input checked={!write} name="access" type="radio" onChange={() => setWrite(false)} />
+          <input
+            checked={access === "read"}
+            name="access"
+            type="radio"
+            onChange={() => setAccess("read")}
+          />
           <span>
             Read content
             <span className="block text-sm text-muted-foreground">
@@ -67,11 +76,11 @@ export function McpConsentForm({ transaction }: { readonly transaction: string }
         {data.scopes.includes("content:write") ? (
           <label className="flex items-start gap-2">
             <input
-              checked={write}
+              checked={access === "write"}
               disabled={!data.canWrite}
               name="access"
               type="radio"
-              onChange={() => setWrite(true)}
+              onChange={() => setAccess("write")}
             />
             <span>
               Read and edit drafts
@@ -82,10 +91,30 @@ export function McpConsentForm({ transaction }: { readonly transaction: string }
             </span>
           </label>
         ) : null}
+        {data.scopes.includes("content:publish") ? (
+          <label className="flex items-start gap-2">
+            <input
+              checked={access === "publish"}
+              disabled={!data.canPublish}
+              name="access"
+              type="radio"
+              onChange={() => setAccess("publish")}
+            />
+            <span>
+              Read, edit and publish
+              <span className="block text-sm text-muted-foreground">
+                Published content reaches the public site with the next build.
+                {!data.canPublish
+                  ? " Your current role does not allow publishing; only administrators can grant it."
+                  : ""}
+              </span>
+            </span>
+          </label>
+        ) : null}
       </fieldset>
       <p className="m-0 rounded-md bg-muted p-3 text-sm">
-        Publishing, unpublishing, deleting content and media administration are never allowed
-        through this connection. Your current account permissions still apply.
+        Unpublishing, deleting content and media administration are never allowed through this
+        connection. Your current account permissions still apply.
       </p>
       {decision.error ? (
         <ErrorState title="Decision not completed" description={errorDescription(decision.error)} />

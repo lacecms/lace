@@ -80,7 +80,7 @@ role unless an authorized future workflow changes it.
 
 #### Scenario: MCP actor retains its restrictions
 - **WHEN** a valid MCP access token belongs to a currently enabled administrator
-- **THEN** the application receives that user's current identity/role together with delegated limits, and publication, unpublication and deletion remain denied
+- **THEN** the application receives that user's current identity/role together with delegated limits, publication is allowed only when the token's grant includes `content:publish`, and unpublication and deletion remain denied
 
 ### Requirement: Same-origin browser session protections are explicit
 The authentication boundary SHALL use the configured canonical public origin as

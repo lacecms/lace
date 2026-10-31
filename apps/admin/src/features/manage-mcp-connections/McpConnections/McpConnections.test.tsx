@@ -75,3 +75,16 @@ test("failed revocation stays reviewable and succeeds on explicit retry", async 
   expect(revoke).toHaveBeenLastCalledWith(connection.id);
   expect(await screen.findByText(/Read and edit drafts · Revoked/)).toBeInTheDocument();
 });
+
+test("connections display the granted publication scope", async () => {
+  renderInRouter(<McpConnections />, {
+    client: stubClient({
+      loadAccountCapabilities: async () => ({ mcpEnabled: true }),
+      listMcpConnections: async () => ({
+        items: [{ ...connection, scopes: [...connection.scopes, "content:publish"] }],
+        nextCursor: null,
+      }),
+    }),
+  });
+  expect(await screen.findByText("Read, edit drafts and Publish")).toBeInTheDocument();
+});

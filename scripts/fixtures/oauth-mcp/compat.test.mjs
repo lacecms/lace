@@ -1010,7 +1010,7 @@ for (const runtime of ["SQLite", "D1"]) {
       { response_types: ["token"] },
       { token_endpoint_auth_method: "client_secret_basic" },
       { scope: "openid" },
-      { scope: "content:publish" },
+      { scope: "content:delete" },
       { resources: ["https://other.test/mcp"] },
       { logo_uri: "http://169.254.169.254/latest/meta-data" },
       { client_uri: "http://127.0.0.1/private" },
@@ -1108,12 +1108,12 @@ test("OAuth metadata and canonical URLs cannot inherit request authority", async
     issuer: `${origin}/api/auth`,
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: ["content:read", "content:write", "offline_access"],
+    scopes_supported: ["content:read", "content:write", "content:publish", "offline_access"],
   });
   expect(mcpResourceMetadata(new URL(origin), true)).toEqual({
     resource,
     authorization_servers: [`${origin}/api/auth`],
-    scopes_supported: ["content:read", "content:write", "offline_access"],
+    scopes_supported: ["content:read", "content:write", "content:publish", "offline_access"],
     bearer_methods_supported: ["header"],
   });
 });
@@ -1135,7 +1135,7 @@ for (const runtime of ["SQLite", "D1"]) {
     for (const [override, error] of [
       [{ redirect_uri: "https://attacker.test/cb" }, "invalid_redirect"],
       [{ resource: "https://other.test/mcp" }, "invalid_target"],
-      [{ scope: "content:publish" }, "invalid_scope"],
+      [{ scope: "content:delete" }, "invalid_scope"],
       [{ code_challenge_method: "plain" }, "invalid_request"],
     ]) {
       const query = new URLSearchParams({
@@ -1509,7 +1509,7 @@ async function productionConsent(
   const f = await fixture(runtime);
   await f.run(`update user set role='${role}' where id='fixture-user'`);
   await f.run(
-    `update oauth_clients set scopes='["content:read","content:write","offline_access"]'`,
+    `update oauth_clients set scopes='["content:read","content:write","content:publish","offline_access"]'`,
   );
   const { createBetterAuthBoundary } = await import("../../../packages/auth/dist/index.js");
   const clientAddress = `192.0.2.${productionClientAddress}`;
@@ -1606,6 +1606,7 @@ for (const runtime of ["SQLite", "D1"]) {
         callbackHostname: "127.0.0.1",
         scopes: ["content:read", "offline_access"],
         canWrite: true,
+        canPublish: false,
       });
       const approved = await f.consent({ accept: true });
       expect(approved.status).toBe(200);
@@ -1711,4 +1712,46 @@ for (const runtime of ["SQLite", "D1"]) {
     expect((await f.consent({ accept: true })).status).toBe(400);
     expect(await f.rows("select id from oauth_grants where id<>'fixture-grant'")).toHaveLength(0);
   }, 30000);
+}
+
+for (const runtime of ["SQLite", "D1"]) {
+  for (const role of ["admin", "editor", "viewer"]) {
+    test(`${runtime}: ${role} publication consent enforces current role and allows narrower access`, async () => {
+      const f = await productionConsent(runtime, {
+        role,
+        signedIn: true,
+        scopes: "content:publish offline_access",
+      });
+      const details = await f.boundary.fetch(
+        new Request(`${origin}/api/auth/oauth2/authorize?transaction=${f.transaction}`, {
+          headers: { cookie: f.cookie },
+        }),
+      );
+      expect(await details.json()).toMatchObject({
+        canPublish: role === "admin",
+        scopes: ["content:read", "content:write", "content:publish", "offline_access"],
+      });
+      const approved = await f.consent({ accept: true });
+      expect(approved.status).toBe(role === "admin" ? 200 : 403);
+      if (role !== "admin") {
+        expect(await approved.json()).toMatchObject({ error: "access_denied" });
+        expect(await f.rows("select id from oauth_grants where id<>'fixture-grant'")).toHaveLength(
+          0,
+        );
+        expect(
+          (
+            await f.consent({
+              accept: true,
+              scope:
+                role === "editor" ? "content:write offline_access" : "content:read offline_access",
+            })
+          ).status,
+        ).toBe(200);
+      }
+      const grants = await f.rows("select scopes_json from oauth_grants where id<>'fixture-grant'");
+      expect(grants).toHaveLength(1);
+      expect(JSON.parse(grants[0].scopes_json).includes("content:publish")).toBe(role === "admin");
+      expect((await f.rows("select role from user where id='fixture-user'"))[0].role).toBe(role);
+    }, 30000);
+  }
 }
