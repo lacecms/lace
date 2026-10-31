@@ -413,3 +413,22 @@ lightbox, envelope, source ownership and CSS hook behavior SHALL be retained.
 #### Scenario: Target disappears and returns
 - **WHEN** a fixture removes then restores a target under the same ID and a new path
 - **THEN** its builds first preserve non-navigating content and diagnostics, then restore links, without changing source tokens
+
+### Requirement: Reference and generated starter sites deliver video embeds
+
+The reference site and new generated starter sites SHALL register the canonical
+`videoEmbed` component with its matching built-in definition, allow it in their
+editable page model and include a current block installation record. Existing
+consumer sites SHALL opt in through ordinary block installation and configuration
+synchronization, without overwriting local sources. Reference fixtures SHALL cover
+YouTube, Vimeo, a poster and no poster; generated starter builds SHALL work without
+provider credentials, network metadata requests or a running media/video service.
+Public content SHALL use the normal published export and static build path.
+
+#### Scenario: Static builds do not contact video providers
+- **WHEN** a reference or generated starter site builds supported embed fixtures
+- **THEN** it emits canonical player or preview markup with no provider API or thumbnail requests
+
+#### Scenario: A draft edit leaves public output intact
+- **WHEN** an editor changes a published embed's URL or poster only in the draft
+- **THEN** public export and the rebuilt site retain the previous published values until publication

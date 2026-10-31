@@ -1,5 +1,12 @@
 # Lace backlog
 
+- **Site migration roadmap (selected 2026-10-31):** planned in
+  [`docs/site-migration-roadmap.md`](docs/site-migration-roadmap.md) from the
+  tatianae.com migration analysis. Order: SM1 `videoEmbed` aspect ratio and
+  ambient playback → SM2 MCP publication scope (no unpublish/delete) → SM3 media
+  tags and multi-select picker → SM4 `lace import` → SM5 conditional fields. No
+  OpenSpec change created yet; each session gets its own just-in-time proposal.
+
 - **Alpha.8 release preparation (implemented, archived 2026-10-30):**
   `prepare-alpha-eight-release` prepared alpha.8/next with template 0.39.0,
   sixteen packages including MCP and API/builder images for both Linux
@@ -65,7 +72,9 @@ when selected and do not yet have an implementation order or new CE numbers.
   and rich-text internal links remain excluded.
 - **Entry reference fields and rich-text internal links (deferred from CE10):**
   related-content fields and stable destinations inside rich text require their
-  own future scope/planning; no implementation order selected.
+  own future scope/planning; no implementation order selected. Reviewed
+  2026-10-31 and kept deferred outside the site migration roadmap; a numeric
+  order field covers project ordering and "next" links for now.
 - **CE11 Responsive images (C3):** width variants and `srcset` through
   Astro image optimization or Cloudflare Images, using CE3 dimensions and
   focal point.
@@ -85,7 +94,9 @@ when selected and do not yet have an implementation order or new CE numbers.
   first: built-in `videoEmbed`, YouTube/Vimeo URL validation, optional preview
   image from the existing media library, render-core description and a site-owned
   Astro renderer. Without a preview render a lazy iframe; with a preview load the
-  player on explicit activation. No video-file upload dependency.
+  player on explicit activation. No video-file upload dependency. Implemented;
+  specs synchronized and change archived 2026-10-31 at
+  `openspec/changes/archive/2026-10-31-video-embed-block`.
 - **Uploaded video (deferred, no implementation order selected):** MP4/WebM
   storage, streamed upload, byte-range delivery and field-level media kinds;
   then uploaded-video blocks and admin library/picker/player support. Revisit
@@ -101,7 +112,8 @@ when selected and do not yet have an implementation order or new CE numbers.
   remove unsupported styling and unsafe attributes. Define loss handling and
   test representative clipboard samples. Document-file import, tables and
   image import are separate scope decisions, not implied by this item.
-- **Conditional forms (deferred from CE9/B2):** design declarative visibility
+- **Conditional forms (deferred from CE9/B2; selected 2026-10-31 as SM5 of the
+  site migration roadmap):** design declarative visibility
   together with conditional validation, dependencies/cycles, hidden-value
   retention and public delivery. Cover groups, per-item list scope, defaults,
   server enforcement and reachable validation errors; do not ship a partial
@@ -123,7 +135,7 @@ when selected and do not yet have an implementation order or new CE numbers.
   `openspec/changes/archive/2026-10-25-add-configurable-collection-queries`.
 
 Further candidates, not yet ordered: scheduled publication (C2, an MVP
-exclusion), bulk list actions, media folders and tags,
+exclusion), bulk list actions, media folders (tags are selected as SM3),
 token-protected draft preview, trash for deleted entries, and an early
 decision on whether localized content will ever be supported, because locales
 would affect snapshot and route keys.
