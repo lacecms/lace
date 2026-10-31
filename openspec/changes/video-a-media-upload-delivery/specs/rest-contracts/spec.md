@@ -40,9 +40,11 @@ the range behavior of binary responses.
 
 ### Requirement: Admin media-list queries are validated and query-bound
 The admin media-list route SHALL accept optional `q`, `kind`, `type`, `sort`,
-`limit`, and `after` query parameters. `q` SHALL be trimmed; an empty result
-SHALL mean no search, and a term longer than 200 characters SHALL be rejected.
-A search SHALL match media whose display filename contains the term,
+`limit`, `after` and repeated `tag` query parameters. Up to five `tag` values
+SHALL be accepted; each SHALL be normalized like a media tag, and an item SHALL
+match only when it carries every requested tag. `q` SHALL be trimmed; an empty
+result SHALL mean no search, and a term longer than 200 characters SHALL be
+rejected. A search SHALL match media whose display filename contains the term,
 case-insensitively for ASCII letters, as a literal substring. `kind` SHALL be
 `image` or `video` and SHALL restrict items to the MIME types of that kind.
 `type` SHALL be one of `image/avif`, `image/gif`, `image/jpeg`, `image/png`,
@@ -54,10 +56,11 @@ SHALL be one of `createdAt`, `-createdAt`, `filename`, `-filename`, `size`, or
 Every order SHALL break ties by media ID in the same direction. An unsupported
 kind, type or sort, an over-long term, or an invalid limit SHALL return the
 stable `VALIDATION_FAILED` envelope with a JSON Pointer naming the parameter.
-A continuation cursor SHALL be accepted only with the same search term, kind,
-type, and sort that produced it; otherwise the request SHALL fail validation
-without returning a page. The generated OpenAPI document SHALL describe these
-parameters.
+A more-than-five tag list or an invalid tag SHALL fail with the pointer `/tag`
+or `/tag/<index>`. A continuation cursor SHALL be accepted only with the same
+search term, kind, type, sort and normalized tag set that produced it;
+otherwise the request SHALL fail validation without returning a page. The
+generated OpenAPI document SHALL describe these parameters.
 
 #### Scenario: Search, filter, and sort the library
 - **WHEN** an editor requests `q=Cover&type=image/png&sort=-size`
@@ -72,6 +75,10 @@ parameters.
 - **WHEN** an editor requests `kind=video`
 - **THEN** the response contains only `video/mp4` and `video/webm` items
 
+#### Scenario: Filter the library by tags
+- **WHEN** an editor requests `tag=Birch&tag=ibiza&sort=filename`
+- **THEN** the response contains only items tagged both `birch` and `ibiza`, ordered by filename, and a cursor from it is refused with `tag=birch` alone
+
 #### Scenario: The default order is newest first
 - **WHEN** a client lists media without `sort`
 - **THEN** items are ordered by creation time descending and then media ID
@@ -85,7 +92,7 @@ parameters.
 
 #### Scenario: Reject a media cursor from a different query
 - **WHEN** a client reuses a cursor from a `sort=filename` page with
-  `sort=-createdAt`, a different `kind`, a different `type`, or a different
-  `q`
+  `sort=-createdAt`, a different `kind`, a different `type`, a different
+  `q`, or a different tag set
 - **THEN** the API rejects the request with a validation failure instead of
   returning an inconsistent page
