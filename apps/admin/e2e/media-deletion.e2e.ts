@@ -28,6 +28,7 @@ test("deletes media used only by a draft after a confirmation that detaches it",
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 1,
     width: 800,
   };

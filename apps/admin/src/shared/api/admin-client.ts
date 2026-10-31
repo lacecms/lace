@@ -146,13 +146,22 @@ export const adminQueryKeys = Object.freeze({
   /** Invalidation prefix covering every media list and detail query. */
   media: ["admin", "media"] as const,
   /** One searched, filtered, and sorted media list; pages are held by the infinite query. */
-  mediaList: (query: Pick<MediaListQuery, "q" | "sort" | "type">) =>
+  mediaList: (query: Pick<MediaListQuery, "q" | "sort" | "tags" | "type">) =>
     [
       "admin",
       "media",
       "list",
-      { q: query.q ?? null, sort: query.sort ?? null, type: query.type ?? null },
+      {
+        q: query.q ?? null,
+        sort: query.sort ?? null,
+        tags: query.tags === undefined || query.tags.length === 0 ? null : [...query.tags].sort(),
+        type: query.type ?? null,
+      },
     ] as const,
+  /** Invalidation prefix covering every tag-suggestion query. */
+  mediaTagsPrefix: ["admin", "media", "tags"] as const,
+  /** Tag suggestions for one normalized prefix; `null` lists from the start. */
+  mediaTags: (prefix: string | undefined) => ["admin", "media", "tags", prefix ?? null] as const,
   /** One media item with the entries that use it. */
   mediaDetail: (mediaId: string) => ["admin", "media", "detail", mediaId] as const,
   models: ["admin", "models"] as const,

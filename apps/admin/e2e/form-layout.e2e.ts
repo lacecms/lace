@@ -140,6 +140,7 @@ async function mock(page: Page, role: "admin" | "viewer" = "admin") {
           status: "active",
           createdAt: snapshot.createdAt,
           updatedAt: snapshot.updatedAt,
+          tags: [],
           usageCount: 0,
           usage: [],
           createdBy: { id: "admin-1", displayName: "Admin" },

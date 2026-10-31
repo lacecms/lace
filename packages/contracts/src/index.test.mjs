@@ -76,6 +76,7 @@ import {
   mediaListQuerySchema,
   mediaListSchema,
   mediaMetadataSchema,
+  normalizeMediaTag,
   mediaUrl,
   opaqueCursorSchema,
   packageName,
@@ -1556,6 +1557,13 @@ describe("media metadata contracts", async () => {
       { ...described, focalPoint: { x: 0.5 } },
     ]) {
       expect(v.safeParse(mediaMetadataSchema, invalid).success).toBe(false);
+    }
+  });
+
+  test("clients share the server tag normalization", () => {
+    expect(normalizeMediaTag(" Cover-Shot ")).toBe("cover-shot");
+    for (const invalid of ["summer trip", "", "x".repeat(41), "a\n"]) {
+      expect(normalizeMediaTag(invalid)).toBeUndefined();
     }
   });
 

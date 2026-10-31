@@ -326,9 +326,17 @@ test("writers edit the description of active media and the saved item is reporte
 });
 
 test("viewers see the description read-only", async () => {
-  mount({ item: describedItem, session: { id: "viewer-1", role: "viewer" } });
+  const item = { ...describedItem, tags: ["cover"] };
+  mount({
+    client: { getMedia: async () => ({ ...item, usage }) },
+    item,
+    session: { id: "viewer-1", role: "viewer" },
+  });
   const panel = await screen.findByRole("dialog", { name: "cover.png" });
   expect(panel).toHaveTextContent("Alt textRed bicycle");
+  expect(panel).toHaveTextContent("Tagscover");
+  expect(within(panel).queryByRole("combobox", { name: "Tags" })).toBeNull();
+  expect(within(panel).queryByRole("button", { name: "Remove tag cover" })).toBeNull();
   expect(panel).toHaveTextContent("Focal point: 25% from left, 75% from top");
   expect(within(panel).queryByLabelText("Alt text")).toBeNull();
   expect(within(panel).queryByLabelText("Caption")).toBeNull();
@@ -342,6 +350,8 @@ test("an item pending deletion without alt text is read-only and warns", async (
   mount({ client: { getMedia: async () => ({ ...deleting, usage }) }, item: deleting });
   const panel = await screen.findByRole("dialog", { name: "cover.png" });
   expect(panel).toHaveTextContent("Alt textNone");
+  expect(panel).toHaveTextContent("TagsNone");
+  expect(within(panel).queryByRole("combobox", { name: "Tags" })).toBeNull();
   expect(within(panel).getByText(/has no alt text/)).toBeInTheDocument();
   expect(within(panel).queryByLabelText("Alt text")).toBeNull();
 });
@@ -380,4 +390,28 @@ test("a clean panel closes without asking", async () => {
   await user.keyboard("{Escape}");
   expect(onClose).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+});
+
+test("Escape in open tag suggestions keeps the panel open; unsaved tags ask before closing", async () => {
+  const user = userEvent.setup();
+  const { onClose } = mount({
+    client: { listMediaTags: async () => ({ items: [{ count: 4, tag: "travel" }] }) },
+    item: describedItem,
+  });
+  const panel = await screen.findByRole("dialog", { name: "cover.png" });
+  const input = await within(panel).findByRole("combobox", { name: "Tags" });
+  await user.click(input);
+  await within(panel).findByRole("option", { name: "travel, 4 items" });
+  await user.keyboard("{Escape}");
+  expect(input).toHaveAttribute("aria-expanded", "false");
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(within(panel).getByRole("button", { name: "Remove tag travel" })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  const confirm = await screen.findByRole("dialog", { name: "Discard unsaved changes?" });
+  expect(confirm).toHaveTextContent("The alt text, caption, focal point, or tag changes");
+  await user.click(within(confirm).getByRole("button", { name: "Keep editing" }));
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Remove tag travel" })).toBeInTheDocument();
 });

@@ -253,3 +253,104 @@ test("background refreshes replace a clean form but never typed values", async (
   await user.click(screen.getByRole("button", { name: "Refresh in background" }));
   await waitFor(() => expect(alt).toHaveValue("Blue bicycle"));
 });
+
+const tagged: MediaMetadataDto = { ...described, tags: ["cover"] };
+const tagInput = () => screen.getByRole("combobox", { name: "Tags" });
+
+test("a writer tags an image and the tags-only save requests no build", async () => {
+  const saved = { ...tagged, tags: ["project-2026"], updatedAt: "2026-09-20T00:00:02.000Z" };
+  const updateMediaMetadata = vi.fn(async () => ({
+    build: { status: "not-dispatched" as const },
+    media: saved,
+  }));
+  const { onSaved, user } = mount({ updateMediaMetadata }, { initial: tagged });
+  await user.type(await screen.findByRole("combobox", { name: "Tags" }), "project-2026{Enter}");
+  await user.click(screen.getByRole("button", { name: "Remove tag cover" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(updateMediaMetadata).toHaveBeenCalledWith(
+      tagged.id,
+      { tags: ["project-2026"] },
+      tagged.updatedAt,
+    ),
+  );
+  expect(await screen.findByText("Metadata saved.")).toBeInTheDocument();
+  expect(onSaved).toHaveBeenCalledWith(saved);
+  expect(screen.getByRole("button", { name: "Remove tag project-2026" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+});
+
+test("removing every tag sends an empty set and re-adding a tag is not a change", async () => {
+  const updateMediaMetadata = vi.fn(async () => ({
+    build: { status: "not-dispatched" as const },
+    media: { ...tagged, tags: [], updatedAt: "2026-09-20T00:00:02.000Z" },
+  }));
+  const { user } = mount({ updateMediaMetadata }, { initial: tagged });
+  await user.click(await screen.findByRole("button", { name: "Remove tag cover" }));
+  const save = screen.getByRole("button", { name: "Save" });
+  expect(save).toBeEnabled();
+  await user.type(tagInput(), "cover{Enter}");
+  expect(save).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Remove tag cover" }));
+  await user.click(save);
+  await waitFor(() =>
+    expect(updateMediaMetadata).toHaveBeenCalledWith(tagged.id, { tags: [] }, tagged.updatedAt),
+  );
+  expect(screen.queryByRole("list", { name: "Tags: chosen tags" })).toBeNull();
+});
+
+test("the tag editor stops at 20 tags", async () => {
+  const full = { ...described, tags: Array.from({ length: 20 }, (_, index) => `tag-${index}`) };
+  mount({}, { initial: full });
+  const input = await screen.findByRole("combobox", { name: "Tags" });
+  expect(input).toHaveAttribute("readonly");
+  expect(input).toHaveAccessibleDescription("An item can have at most 20 tags.");
+});
+
+test("a rejected tag is named under the tag editor and the values are kept", async () => {
+  const updateMediaMetadata = vi.fn(async () => {
+    throw new AdminClientError({
+      code: "VALIDATION_FAILED",
+      issues: [{ code: "invalid", message: "This tag is not allowed.", path: "/tags/1" }],
+      message: "Invalid.",
+      status: 422,
+    });
+  });
+  const { user } = mount({ updateMediaMetadata }, { initial: tagged });
+  await user.type(await screen.findByRole("combobox", { name: "Tags" }), "travel{Enter}");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByText('Tag "travel": This tag is not allowed.')).toBeInTheDocument();
+  expect(tagInput()).toHaveAttribute("aria-invalid", "true");
+  expect(screen.getByRole("button", { name: "Remove tag travel" })).toBeInTheDocument();
+});
+
+test("saving tags over a newer version replaces its tag set", async () => {
+  const newerTagged = {
+    ...tagged,
+    tags: ["archive", "cover"],
+    updatedAt: "2026-09-20T00:00:05.000Z",
+  };
+  const updateMediaMetadata = vi
+    .fn<AdminClient["updateMediaMetadata"]>()
+    .mockRejectedValueOnce(conflict())
+    .mockResolvedValueOnce({
+      build: { status: "not-dispatched" },
+      media: { ...newerTagged, tags: ["cover", "travel"], updatedAt: "2026-09-20T00:00:06.000Z" },
+    });
+  const { user } = mount({ updateMediaMetadata }, { initial: tagged, newer: newerTagged });
+  await user.type(await screen.findByRole("combobox", { name: "Tags" }), "travel{Enter}");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  const alert = await screen.findByRole("alert");
+  await waitFor(() => expect(alert).toHaveTextContent("Newer tagsarchive, cover"));
+  await user.click(screen.getByRole("button", { name: "Save mine anyway" }));
+  await waitFor(() => expect(updateMediaMetadata).toHaveBeenCalledTimes(2));
+  expect(updateMediaMetadata).toHaveBeenLastCalledWith(
+    tagged.id,
+    { tags: ["cover", "travel"] },
+    newerTagged.updatedAt,
+  );
+  expect(await screen.findByText("Metadata saved.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove tag archive" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Remove tag travel" })).toBeInTheDocument();
+});

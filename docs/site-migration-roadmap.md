@@ -79,7 +79,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | --- | --- | :---: | --- | --- |
 | SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
 | SM2 | MCP publication scope | S | SM2 | done |
-| SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | SM3A implemented; SM3B/SM3C planned |
+| SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | SM3A and SM3B done; SM3C planned |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | planned |
 | SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
 
@@ -206,8 +206,9 @@ limit validation; D1 query budgets for filtered lists.
 
 - Tag editor (chips with autocomplete from existing tags) in the media details
   panel.
-- Tag filter in the media library and the media picker, held in URL state
-  like other list filters.
+- Tag filter in the media library and the media picker. The library holds it
+  in URL state like its other filters; the picker keeps it local to the dialog
+  and resets it on every opening, like the picker's other filters.
 - Uploads made while a tag filter is active receive that tag.
 
 **Acceptance:** browser tests for adding/removing tags, keyboard-only use, and
@@ -344,3 +345,8 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Archived at `openspec/changes/archive/2026-10-31-sm02-mcp-publication-scope`; all five capability deltas synchronized into main specs, preserving existing scenarios. Strict spec/change validation passed. |
 | 2026-10-31 | SM3A | `sm03a-media-tag-storage-api` | In progress. `media_tags` join table (migration `0014`), shared ASCII normalization (`a-z`, digits, hyphen; trim surrounding spaces and lowercase; 1–40 characters; ≤ 20 per item), tags in update/upload/DTOs without build effects, AND filter (≤ 5 tags) bound to cursors, catalog endpoint with counts and prefix, D1 guarded batches and budgets, template 0.42.0. 16 tasks; implementation started. |
 | 2026-10-31 | SM3A | `sm03a-media-tag-storage-api` | Implemented and verified, 16/16 tasks. ASCII tags, migration 0014, atomic Node/D1 writes, tag-only edits without build effects, upload/PATCH/filter/catalog API, template 0.42.0. Root tests (3015) pass with pinned Node 24.12.0/pnpm 12.3.4; typecheck, lint, formatting, build, OpenAPI generation/temporary-index check, docs, packed starter/existing-site acceptance, D1 budgets and full cross-runtime suites pass. See the change verification record. Awaiting explicit spec sync/archive; SM3B and SM3C remain planned. |
+| 2026-10-31 | SM3A | `sm03a-media-tag-storage-api` | Archived at `openspec/changes/archive/2026-10-31-sm03a-media-tag-storage-api`; all five capability deltas synchronized into main specs. |
+| 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | Proposed. Admin-only: shared ARIA tag combobox (catalog prefix suggestions with counts, Enter/comma, client normalization via re-exported `normalizeMediaTag`, Escape closes only suggestions), tag editor in the metadata form under the existing Save/version/conflict flow, library tag filter (≤ 5, AND) in URL state, picker tag filter local per accepted spec (roadmap wording corrected), uploads inherit active filter tags captured per queue entry. No API/schema/template change. 17 tasks, not applied. |
+| 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | In progress. Applying the approved tag input, editor, filters and tagged uploads. |
+| 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | Implemented and verified, 17/17 tasks. Shared tag combobox, metadata-form tag editor, library URL tag filter with canonical rewrite, local picker filter, tagged uploads, docs. Admin unit (902), tag/metadata/accessibility e2e, root tests (release test on pinned Node 24.12.0), typecheck, lint, formatting, build, OpenAPI and packed starter/existing-site acceptance pass. Fixed SM3A-stale e2e media fixtures. Pre-existing: composites pointer-drag e2e fails on HEAD; stale draft `video-a-media-upload-delivery` fails `spec:validate`. Awaiting explicit sync/archive. |
+| 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | Archived at `openspec/changes/archive/2026-10-31-sm03b-admin-media-tagging`; `admin-media-library` delta synchronized (2 added, 3 modified requirements). |

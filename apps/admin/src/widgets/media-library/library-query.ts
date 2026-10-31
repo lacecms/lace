@@ -1,12 +1,14 @@
 import type { MediaMimeTypeDto, MediaSortDto } from "@lacecms/contracts";
+import { canonicalTagFilter } from "../../entities/media/index.js";
 import { DEFAULT_MEDIA_SORT } from "../../shared/api/index.js";
 
 export type MediaView = "grid" | "list";
 
-/** The search, type filter, sort, and view of the library, as carried in the URL. */
+/** The search, type and tag filters, sort, and view of the library, as carried in the URL. */
 export type MediaLibraryQuery = {
   readonly q?: string | undefined;
   readonly sort?: MediaSortDto | undefined;
+  readonly tag?: readonly string[] | undefined;
   readonly type?: MediaMimeTypeDto | undefined;
   readonly view?: "list" | undefined;
 };
@@ -15,16 +17,19 @@ export type MediaLibraryQuery = {
 export type CanonicalMediaQuery = {
   readonly q?: string;
   readonly sort?: MediaSortDto;
+  readonly tag?: readonly string[];
   readonly type?: MediaMimeTypeDto;
   readonly view?: "list";
 };
 
-/** Drops blank and default values so equivalent libraries share one URL and cache entry. */
+/** Drops blank and default values and canonicalizes tags so equivalent libraries share one URL and cache entry. */
 export function normalizedMediaQuery(query: MediaLibraryQuery): CanonicalMediaQuery {
   const q = query.q?.trim() ?? "";
+  const tag = canonicalTagFilter(query.tag);
   return {
     ...(q.length > 0 ? { q } : {}),
     ...(query.type === undefined ? {} : { type: query.type }),
+    ...(tag === undefined ? {} : { tag }),
     ...(query.sort === undefined || query.sort === DEFAULT_MEDIA_SORT ? {} : { sort: query.sort }),
     ...(query.view === "list" ? { view: "list" as const } : {}),
   };

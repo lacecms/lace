@@ -3,12 +3,15 @@ import type {
   MediaMetadataDto,
   UpdateMediaMetadataRequestDto,
 } from "@lacecms/contracts";
+import { sortedTags } from "../../entities/media/index.js";
 
 /** Editable descriptive metadata as form values; empty text means "not set". */
 export interface MediaMetadataValues {
   readonly alt: string;
   readonly caption: string;
   readonly focalPoint: MediaFocalPointDto | null;
+  /** Sorted and duplicate-free, so equal sets compare equal. */
+  readonly tags: readonly string[];
 }
 
 /** Arrow keys that move the focal point. */
@@ -21,6 +24,7 @@ export function metadataValues(item: MediaMetadataDto): MediaMetadataValues {
     alt: item.alt ?? "",
     caption: item.caption ?? "",
     focalPoint: item.focalPoint ?? null,
+    tags: sortedTags(item.tags),
   };
 }
 
@@ -30,9 +34,16 @@ function sameFocalPoint(left: MediaFocalPointDto | null, right: MediaFocalPointD
     : left.x === right.x && left.y === right.y;
 }
 
+function sameTags(left: readonly string[], right: readonly string[]) {
+  const a = sortedTags(left);
+  const b = sortedTags(right);
+  return a.length === b.length && a.every((tag, index) => tag === b[index]);
+}
+
 /**
  * The update that turns `base` into `values`: only differing keys, with empty
- * text and a reset focal point sent as `null` (clear). Empty when unchanged.
+ * text and a reset focal point sent as `null` (clear), and changed tags sent
+ * as the complete sorted set. Empty when unchanged.
  */
 export function metadataPatch(
   base: MediaMetadataValues,
@@ -46,6 +57,7 @@ export function metadataPatch(
     ...(sameFocalPoint(base.focalPoint, values.focalPoint)
       ? {}
       : { focalPoint: values.focalPoint }),
+    ...(sameTags(base.tags, values.tags) ? {} : { tags: [...sortedTags(values.tags)] }),
   };
 }
 

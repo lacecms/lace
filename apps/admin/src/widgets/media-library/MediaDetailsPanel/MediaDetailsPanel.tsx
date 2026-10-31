@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from "react";
 import { EntryStatusBadge } from "../../../entities/content/index.js";
 import {
   formatMediaDimensions,
+  isOpenTagCombobox,
   MediaStatusBadge,
   mediaTypeLabel,
 } from "../../../entities/media/index.js";
@@ -95,6 +96,10 @@ export function MediaDetailsPanel({
               event.preventDefault();
               returnFocus();
             }}
+            // Escape in an open tag suggestion list closes only that list.
+            onEscapeKeyDown={(event) => {
+              if (isOpenTagCombobox(event.target)) event.preventDefault();
+            }}
             // Focus the panel itself rather than its first control.
             onOpenAutoFocus={(event) => {
               event.preventDefault();
@@ -124,7 +129,7 @@ export function MediaDetailsPanel({
           <DialogHeader>
             <DialogTitle>Discard unsaved changes?</DialogTitle>
             <DialogDescription>
-              The alt text, caption, or focal point changes of this media are not saved.
+              The alt text, caption, focal point, or tag changes of this media are not saved.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -441,6 +446,8 @@ function MediaDescription({ item }: { readonly item: MediaMetadataDto }) {
         <dd>{item.alt ?? "None"}</dd>
         <dt>Caption</dt>
         <dd>{item.caption ?? "None"}</dd>
+        <dt>Tags</dt>
+        <dd>{item.tags.length === 0 ? "None" : item.tags.join(", ")}</dd>
       </dl>
     </section>
   );

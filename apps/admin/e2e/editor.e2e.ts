@@ -498,6 +498,7 @@ test("browses, uploads several files, and inspects media in the library", async 
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: `https://lace.test/api/v1/public/media/${id}`,
+    tags: [],
     usageCount,
     width: 800,
   });
@@ -624,6 +625,7 @@ test("uploads in the picker dialog and reuses images in a block from the keyboar
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: `https://lace.test/api/v1/public/media/${id}`,
+    tags: [],
     usageCount: 0,
     width: 800,
   });

@@ -5,6 +5,7 @@ import {
 } from "@lacecms/contracts";
 import { LayoutGrid, List, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { MAX_MEDIA_TAG_FILTERS, MediaTagInput } from "../../../entities/media/index.js";
 import { cn } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
@@ -25,28 +26,33 @@ const viewOptions = [
 ] as const;
 
 /**
- * Filename search, type filter, sort, and grid/list toggle of the media
- * library. Typing updates the search after a pause. The toggle renders only
- * when the caller handles view changes.
+ * Filename search, type and tag filters, sort, and grid/list toggle of the
+ * media library. Typing updates the search after a pause. Tags combine with
+ * AND, up to the API's filter limit. The toggle renders only when the caller
+ * handles view changes.
  */
 export function MediaToolbar({
   onClear,
   onSearchChange,
   onSortChange,
+  onTagsChange,
   onTypeChange,
   onViewChange,
   search,
   sort,
+  tags,
   type,
   view,
 }: {
   readonly onClear: () => void;
   readonly onSearchChange: (search: string) => void;
   readonly onSortChange: (sort: MediaSortDto) => void;
+  readonly onTagsChange: (tags: readonly string[]) => void;
   readonly onTypeChange: (type: MediaMimeTypeDto | undefined) => void;
   readonly onViewChange?: ((view: MediaView) => void) | undefined;
   readonly search: string;
   readonly sort: MediaSortDto;
+  readonly tags: readonly string[];
   readonly type: MediaMimeTypeDto | undefined;
   readonly view?: MediaView | undefined;
 }) {
@@ -110,7 +116,15 @@ export function MediaToolbar({
           );
         })}
       </div>
-      {search.length > 0 || type !== undefined ? (
+      <MediaTagInput
+        className="w-full sm:w-72"
+        label="Filter by tags (all must match)"
+        limit={MAX_MEDIA_TAG_FILTERS}
+        limitMessage={`At most ${MAX_MEDIA_TAG_FILTERS} tags can be combined.`}
+        onChange={onTagsChange}
+        tags={tags}
+      />
+      {search.length > 0 || type !== undefined || tags.length > 0 ? (
         <Button onClick={onClear} size="sm" variant="ghost">
           <X aria-hidden="true" />
           Clear filters

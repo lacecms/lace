@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
@@ -88,5 +88,62 @@ test("picker tiles show each item's alt text", async () => {
   ).toHaveAccessibleDescription("Red bicycle");
   expect(within(dialog).getByRole("button", { name: "plain.png" })).toHaveAccessibleDescription(
     "No alt text",
+  );
+});
+
+test("the picker filters by tag from the first page", async () => {
+  const user = userEvent.setup();
+  const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
+  const { dialog } = await mount({ listMedia });
+  await within(dialog).findByRole("button", { name: "cover.png" });
+  await user.type(
+    within(dialog).getByRole("combobox", { name: "Filter by tags (all must match)" }),
+    "project-2026{Enter}",
+  );
+  await waitFor(() =>
+    expect(listMedia).toHaveBeenLastCalledWith(undefined, { tags: ["project-2026"] }),
+  );
+  expect(
+    within(dialog).getByRole("button", { name: "Remove tag project-2026" }),
+  ).toBeInTheDocument();
+});
+
+test("Escape in open tag suggestions keeps the picker open", async () => {
+  const user = userEvent.setup();
+  const { dialog } = await mount({
+    listMedia: async () => ({ items: [mediaItem] }),
+    listMediaTags: async () => ({ items: [{ count: 2, tag: "cover" }] }),
+  });
+  const input = within(dialog).getByRole("combobox", { name: "Filter by tags (all must match)" });
+  await user.click(input);
+  await within(dialog).findByRole("option", { name: "cover, 2 items" });
+  await user.keyboard("{Escape}");
+  expect(input).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("dialog", { name: "Choose media for Hero" })).toBeInTheDocument();
+});
+
+test("files dropped into a tag-filtered picker carry the filter tags", async () => {
+  const user = userEvent.setup();
+  const uploadMedia = vi.fn(async () => mediaItem);
+  const { dialog } = await mount({ listMedia: async () => ({ items: [mediaItem] }), uploadMedia });
+  await user.type(
+    within(dialog).getByRole("combobox", { name: "Filter by tags (all must match)" }),
+    "cover{Enter}",
+  );
+  expect(within(dialog).getByText("New uploads are tagged cover.")).toBeInTheDocument();
+  const file = new File(["png"], "fresh.png", { type: "image/png" });
+  const dataTransfer = {
+    files: [file],
+    items: [{ getAsFile: () => file, kind: "file", type: file.type }],
+    types: ["Files"],
+  };
+  const target = within(dialog)
+    .getByText(/Drop images here/)
+    .closest("[tabindex], div") as HTMLElement;
+  await act(async () => {
+    fireEvent.drop(target, { dataTransfer });
+  });
+  await waitFor(() =>
+    expect(uploadMedia).toHaveBeenCalledWith(file, expect.objectContaining({ tags: ["cover"] })),
   );
 });

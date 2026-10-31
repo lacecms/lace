@@ -1234,6 +1234,8 @@ export const mediaSortSchema = v.picklist([
 ]);
 /** Descriptive text limits in code points, shared with clients that bound their inputs. */
 export { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_CAPTION_LENGTH } from "@lacecms/domain";
+/** The server's tag normalization, so clients show the stored form before saving. */
+export { normalizeMediaTag } from "@lacecms/domain";
 export { effectiveAltText } from "@lacecms/content";
 export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;

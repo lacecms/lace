@@ -90,3 +90,29 @@ test("reports per-file server errors and retries only failed uploads", async () 
   act(() => queue().dismiss(failed?.key ?? ""));
   expect(screen.queryByText(/bad\.png/)).not.toBeInTheDocument();
 });
+
+test("queued tags are sent with each upload and kept for retries", async () => {
+  const uploadMedia = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Offline."))
+    .mockResolvedValueOnce(mediaItem)
+    .mockResolvedValueOnce(mediaItem);
+  const { queue } = mount(uploadMedia);
+  await screen.findByRole("list");
+  act(() => queue().add([png("travel.png")], { tags: ["travel"] }));
+  expect(await screen.findByText(/travel\.png:failed/)).toBeInTheDocument();
+  expect(uploadMedia).toHaveBeenLastCalledWith(
+    expect.any(File),
+    expect.objectContaining({ tags: ["travel"] }),
+  );
+  const failed = queue().uploads[0]!;
+  act(() => queue().retry(failed.key));
+  expect(await screen.findByText("travel.png:uploaded:1:")).toBeInTheDocument();
+  expect(uploadMedia).toHaveBeenLastCalledWith(
+    expect.any(File),
+    expect.objectContaining({ tags: ["travel"] }),
+  );
+  act(() => queue().add([png("plain.png")]));
+  expect(await screen.findByText("plain.png:uploaded:1:")).toBeInTheDocument();
+  expect(uploadMedia.mock.lastCall?.[1]).not.toHaveProperty("tags");
+});

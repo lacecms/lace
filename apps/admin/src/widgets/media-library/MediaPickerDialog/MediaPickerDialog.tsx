@@ -2,7 +2,7 @@ import type { MediaListDto, MediaMetadataDto } from "@lacecms/contracts";
 import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { type ComponentProps, useState } from "react";
-import { mediaConstraintsText } from "../../../entities/media/index.js";
+import { isOpenTagCombobox, mediaConstraintsText } from "../../../entities/media/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import {
   DropOverlay,
@@ -38,7 +38,7 @@ import { MediaToolbar } from "../MediaToolbar/index.js";
 
 /**
  * The media field picker: a modal around the library grid with local search,
- * type filter, and sort, cursor pagination, and in-dialog upload for writers.
+ * type and tag filters, and sort, cursor pagination, and in-dialog upload for writers.
  * Activating a tile or an upload row's Use chooses that item; the caller
  * closes the dialog. The body mounts only while open, so each opening starts
  * from the default query with an empty upload queue.
@@ -63,6 +63,10 @@ export function MediaPickerDialog({
       <DialogContent
         className="flex max-h-[85vh] flex-col gap-4 sm:max-w-4xl"
         onCloseAutoFocus={onCloseAutoFocus}
+        // Escape in an open tag suggestion list closes only that list.
+        onEscapeKeyDown={(event) => {
+          if (isOpenTagCombobox(event.target)) event.preventDefault();
+        }}
       >
         <DialogHeader>
           <DialogTitle>{`Choose media for ${label}`}</DialogTitle>
@@ -88,10 +92,14 @@ function PickerBody({
   const canWrite = can(session, "media:write");
   const [query, setQuery] = useState<CanonicalMediaQuery>({});
   const uploads = useMediaUploads();
-  const dropzone = useMediaDropzone({ disabled: !canWrite, onFiles: uploads.add });
+  const dropzone = useMediaDropzone({
+    disabled: !canWrite,
+    onFiles: (files) => uploads.add(files, { tags: query.tag }),
+  });
   const listQuery = {
     ...(query.q === undefined ? {} : { q: query.q }),
     ...(query.sort === undefined ? {} : { sort: query.sort }),
+    ...(query.tag === undefined ? {} : { tags: query.tag }),
     ...(query.type === undefined ? {} : { type: query.type }),
   };
   const media = useInfiniteQuery<
@@ -113,10 +121,10 @@ function PickerBody({
   const items = (media.data?.pages.flatMap((page) => page.items) ?? []).filter(
     (item) => item.status === "active",
   );
-  const filtered = query.q !== undefined || query.type !== undefined;
+  const filtered = query.q !== undefined || query.type !== undefined || query.tag !== undefined;
   // A page may hold only items pending deletion; stay quiet while more pages exist.
   const empty = media.data !== undefined && items.length === 0 && !media.hasNextPage;
-  const clear = () => change({ q: undefined, type: undefined });
+  const clear = () => change({ q: undefined, tag: undefined, type: undefined });
 
   return (
     <div
@@ -126,9 +134,16 @@ function PickerBody({
       {canWrite && dropzone.isDragActive ? <DropOverlay /> : undefined}
       {canWrite ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="m-0 text-sm text-muted-foreground">
-            {`Drop images here or choose files. ${mediaConstraintsText}`}
-          </p>
+          <div className="grid gap-1">
+            <p className="m-0 text-sm text-muted-foreground">
+              {`Drop images here or choose files. ${mediaConstraintsText}`}
+            </p>
+            {query.tag === undefined ? undefined : (
+              <p className="m-0 text-sm text-muted-foreground">
+                {`New uploads are tagged ${query.tag.join(", ")}.`}
+              </p>
+            )}
+          </div>
           <div>
             <input {...dropzone.getInputProps()} />
             <Button onClick={dropzone.open} size="sm" variant="outline">
@@ -149,9 +164,11 @@ function PickerBody({
         onClear={clear}
         onSearchChange={(q) => change({ q })}
         onSortChange={(sort) => change({ sort })}
+        onTagsChange={(tag) => change({ tag })}
         onTypeChange={(type) => change({ type })}
         search={query.q ?? ""}
         sort={query.sort ?? DEFAULT_MEDIA_SORT}
+        tags={query.tag ?? []}
         type={query.type}
       />
       {media.isPending ? <LoadingState label="Loading media" lines={3} /> : undefined}
@@ -180,7 +197,7 @@ function PickerBody({
               Clear filters
             </Button>
           }
-          description="No active media matches the current search and type filter."
+          description="No active media matches the current search, type, and tag filters."
           title="No matching media"
         />
       ) : undefined}

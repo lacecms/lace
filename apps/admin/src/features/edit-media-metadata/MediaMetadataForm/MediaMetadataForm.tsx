@@ -5,13 +5,14 @@ import type {
 } from "@lacecms/contracts";
 import { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_CAPTION_LENGTH } from "@lacecms/contracts";
 import { useEffect, useId, useState } from "react";
+import { MAX_MEDIA_TAGS_PER_ITEM, MediaTagInput } from "../../../entities/media/index.js";
 import { useSessionRecovery } from "../../../entities/session/index.js";
 import { errorDescription } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
 import { fieldClass, fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { Textarea } from "../../../shared/ui/Textarea/index.js";
-import { isMediaUpdateConflict, metadataIssue } from "../errors.js";
+import { isMediaUpdateConflict, metadataIssue, metadataTagIssue } from "../errors.js";
 import { FocalPointControl } from "../FocalPointControl/index.js";
 import {
   focalPointText,
@@ -39,7 +40,7 @@ function savedMessage(result: UpdateMediaMetadataResultDto) {
 }
 
 /**
- * Edits an active item's alt text, caption, and focal point with explicit
+ * Edits an active item's alt text, caption, focal point, and tags with explicit
  * Save and Discard. Saves are guarded by the version the form edits; a newer
  * version is never overwritten without the writer's choice. `latest` is the
  * freshest known copy of the item and replaces the form only while it is clean.
@@ -120,6 +121,7 @@ export function MediaMetadataForm({
 
   const altIssue = conflicted ? undefined : metadataIssue(error, "alt");
   const captionIssue = conflicted ? undefined : metadataIssue(error, "caption");
+  const tagIssue = conflicted ? undefined : metadataTagIssue(error, update.variables?.patch.tags);
   const newer = latestIsNewer ? latest : undefined;
   const saving = update.isPending;
 
@@ -181,6 +183,23 @@ export function MediaMetadataForm({
             </small>
           )}
         </div>
+        <div className={fieldClass}>
+          <MediaTagInput
+            describedBy={tagIssue === undefined ? undefined : `${id}-tags-error`}
+            disabled={saving}
+            error={tagIssue !== undefined}
+            label="Tags"
+            limit={MAX_MEDIA_TAGS_PER_ITEM}
+            limitMessage={`An item can have at most ${MAX_MEDIA_TAGS_PER_ITEM} tags.`}
+            onChange={(tags) => change({ tags })}
+            tags={values.tags}
+          />
+          {tagIssue === undefined ? undefined : (
+            <small className={fieldErrorClass} id={`${id}-tags-error`}>
+              {tagIssue}
+            </small>
+          )}
+        </div>
       </fieldset>
       {conflicted ? (
         <div className="grid gap-2 rounded-md border border-destructive p-3 text-sm" role="alert">
@@ -197,6 +216,8 @@ export function MediaMetadataForm({
               <dd>{newer.caption ?? "None"}</dd>
               <dt>Newer focal point</dt>
               <dd>{focalPointText(newer.focalPoint ?? null)}</dd>
+              <dt>Newer tags</dt>
+              <dd>{newer.tags.length === 0 ? "None" : newer.tags.join(", ")}</dd>
             </dl>
           )}
           <div className="flex flex-wrap gap-2">
@@ -208,7 +229,10 @@ export function MediaMetadataForm({
             </Button>
           </div>
         </div>
-      ) : error === null || altIssue !== undefined || captionIssue !== undefined ? undefined : (
+      ) : error === null ||
+        altIssue !== undefined ||
+        captionIssue !== undefined ||
+        tagIssue !== undefined ? undefined : (
         <p className={`${fieldErrorClass} text-sm`} role="alert">
           {`The metadata was not saved. ${errorDescription(error)}`}
         </p>

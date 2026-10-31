@@ -1,8 +1,9 @@
 # Admin media tags
 
-Tags organize media in the admin API. The tagging UI is delivered separately.
-All endpoints require an authenticated session: `content:read` for reads and
-`media:write` for changes. Build and MCP bearer tokens cannot use them.
+Tags organize media in the admin: editors tag items in the media details panel
+and filter the library and the media picker by tag. All endpoints require an
+authenticated session: `content:read` for reads and `media:write` for changes.
+Build and MCP bearer tokens cannot use them.
 
 A tag accepts ASCII letters, digits and the ordinary hyphen `-` only. Surrounding
 spaces are trimmed and uppercase ASCII letters lowercased: ` Project-2026 `
@@ -33,6 +34,33 @@ return `422 VALIDATION_FAILED` with issue pointers such as `/tags/1` or `/tag/2`
 Tags-only edits advance `updatedAt` but never change the published version or
 request builds. Combined descriptive edits retain the ordinary media metadata
 build rule. Public content, build exports and MCP do not expose tags.
+
+## Admin tagging
+
+- **Tag input.** Every tag field shows the chosen tags as chips with a remove
+  button and a text input that suggests existing tags by prefix, with their
+  item counts. Arrow keys move through suggestions; Enter adds the highlighted
+  suggestion or the typed text; a comma adds the typed text; Backspace in an
+  empty input removes the last chip. Typed text is normalized like the API
+  (` Cover-Shot ` becomes `cover-shot`); invalid text stays in the input with
+  an explanation. Escape closes open suggestions without closing the panel or
+  dialog. If suggestions cannot load, typing a tag still works.
+- **Details panel.** Writers edit an active item's tags (up to 20) together
+  with alt text, caption and focal point, using the same Save and Discard,
+  version guard and conflict choice. A tags-only save reports "Metadata saved."
+  and never requests a site build. Choosing "Save mine anyway" after a conflict
+  replaces the newer version's tags with the writer's set. Viewers and items
+  pending deletion show tags as text.
+- **Library filter.** The `/media` toolbar filters by up to five tags; items
+  must have all of them. The filter is part of the URL (`tag`, next to `q`,
+  `type`, `sort` and `view`), so reloads and shared links keep it. Invalid or
+  extra URL tags are dropped and the address is rewritten to the applied
+  filter. Clear filters also clears tags.
+- **Picker filter.** The media picker has the same tag filter, local to the
+  dialog like its search and type filter; it resets on every opening.
+- **Tagged uploads.** While a tag filter is active, files uploaded in the
+  library or the picker receive those tags, and the upload area says so. A
+  retried upload keeps the tags it was queued with.
 
 ## Upgrade and rollback
 

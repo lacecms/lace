@@ -184,6 +184,7 @@ function media(id: string, filename: string, usageCount: number) {
     status: "active",
     updatedAt: createdAt,
     url: `https://lace.test/api/v1/public/media/${id}`,
+    tags: [],
     usageCount,
     width: 800,
   };
@@ -357,6 +358,13 @@ async function mockAdmin(page: Page, options: { role?: Role; signedIn?: boolean 
     }
     if (path.endsWith("/preview")) return route.fulfill({ body: png, contentType: "image/png" });
     if (path === "/api/v1/admin/media" && method === "GET") return json(route, { items: library });
+    if (path === "/api/v1/admin/media/tags")
+      return json(route, {
+        items: [
+          { count: 2, tag: "project-2026" },
+          { count: 1, tag: "team" },
+        ],
+      });
     const mediaDetail = /^\/api\/v1\/admin\/media\/([^/]+)$/u.exec(path);
     if (mediaDetail !== null) {
       const found = library.find((item) => item.id === mediaDetail[1]);
@@ -753,6 +761,14 @@ for (const theme of ["light", "dark"] as const) {
     await expectNoAccessibilityViolations(page, "once-shown token dialog");
 
     await page.goto("/admin/media");
+    const tagFilter = page.getByRole("combobox", { name: "Filter by tags (all must match)" });
+    await tagFilter.fill("team");
+    await tagFilter.press("Enter");
+    await tagFilter.fill("pro");
+    await expect(page.getByRole("option", { name: "project-2026, 2 items" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "media tag filter with chips and suggestions");
+    await tagFilter.fill("");
+    await page.getByRole("button", { name: "Remove tag team" }).click();
     await page
       .getByRole("list", { name: "Media library" })
       .getByRole("button", { name: "team.png" })
@@ -761,6 +777,14 @@ for (const theme of ["light", "dark"] as const) {
     await expect(details.getByRole("img", { name: "Preview of team.png" })).toBeVisible();
     await expect(details.getByRole("slider", { name: "Focal point" })).toBeVisible();
     await expectNoAccessibilityViolations(page, "media details with the metadata form");
+    const tagEditor = details.getByRole("combobox", { name: "Tags" });
+    await tagEditor.fill("team");
+    await tagEditor.press("Enter");
+    await tagEditor.fill("pro");
+    await expect(details.getByRole("option", { name: "project-2026, 2 items" })).toBeVisible();
+    await expectNoAccessibilityViolations(page, "media tag editor with suggestions");
+    await tagEditor.press("Escape");
+    await tagEditor.fill("");
     await details.getByRole("textbox", { name: "Alt text" }).fill("Our team");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
