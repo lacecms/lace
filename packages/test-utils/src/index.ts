@@ -1089,7 +1089,10 @@ export class InMemoryContentStore
 
   public async list(input: ListContentEntriesInput): Promise<ContentEntryListPage> {
     const matching = [...this.entries.values()].filter(
-      (entry) => entry.model.key === input.modelKey && matchesSearch(entry, input.q),
+      (entry) =>
+        entry.model.key === input.modelKey &&
+        matchesSearch(entry, input.q) &&
+        (input.slug === undefined || entry.draft.slug === input.slug),
     );
     const totals = { all: matching.length, changed: 0, draft: 0, published: 0 };
     for (const entry of matching) totals[entryStatus(entry)] += 1;
@@ -1103,6 +1106,7 @@ export class InMemoryContentStore
       input.sort,
       input.status ?? null,
       input.q ?? null,
+      ...(input.slug === undefined ? [] : [input.slug]),
     ]);
     return Object.freeze({
       ...this.page(summaries, input.after, input.limit, prefix),
@@ -1380,6 +1384,7 @@ export class InMemoryContentStore
       height: input.height,
       id: input.id,
       mimeType: input.mimeType,
+      ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
       size: input.size,
       status: "active",
       storageKey: input.storageKey,
@@ -1405,7 +1410,9 @@ export class InMemoryContentStore
         (value) =>
           (term === undefined || foldAscii(value.filename).includes(term)) &&
           (input.type === undefined || value.mimeType === input.type) &&
-          (input.tags ?? []).every((tag) => (value.tags ?? []).includes(tag)),
+          (input.tags ?? []).every((tag) => (value.tags ?? []).includes(tag)) &&
+          (input.sha256 === undefined ||
+            (value.sha256 === input.sha256 && value.status === "active")),
       )
       .sort((left, right) => compareMedia(left, right, input.sort))
       .map((value) => this.catalogItem(value));
@@ -1415,6 +1422,7 @@ export class InMemoryContentStore
       input.type ?? null,
       input.q ?? null,
       [...(input.tags ?? [])].sort(),
+      ...(input.sha256 === undefined ? [] : [input.sha256]),
     ]);
     return this.page(items, input.after, input.limit, prefix);
   }

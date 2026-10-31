@@ -80,7 +80,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
 | SM2 | MCP publication scope | S | SM2 | done |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | done |
-| SM4 | `lace import` | L | SM4A → SM4B → SM4C | planned |
+| SM4 | `lace import` | L | SM4A → SM4B → SM4C | in progress |
 | SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
 
 **Order rationale:** SM1 and SM2 are small and independent; SM1 unblocks the
@@ -254,8 +254,8 @@ resumably.
 **Architecture and specs:** §14 *Authentication and authorization*, §9.7
 *Media*, §12 *Admin endpoints*; ADR for a write-capable token.
 
-**Open question:** token capability (recommended) or an OAuth loopback flow
-reusing the MCP delegation infrastructure.
+**Settled (2026-10-31):** token capability `content:import`, not an OAuth
+loopback flow ([ADR 0016](adr/0016-import-credentials.md)).
 
 ### Session SM4B — CLI import
 
@@ -353,3 +353,7 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-10-31 | SM3C | `sm03c-multi-select-media-picker` | Proposed and in progress. Owner decisions: Add of an eligible list opens the picker directly (no empty item); eligible groups have exactly one direct required media field; media already in the list is marked "Already in <list>" and stays selectable. Picker multiple mode with ordered toggle selection, capacity from `maxItems` and the 500-element budget, auto-selected uploads; admin only, no API or template change. 14 tasks. |
 | 2026-10-31 | SM3C | `sm03c-multi-select-media-picker` | Implemented and verified, 14/14 tasks. Picker multiple mode (ordered toggle selection, capacity and limit message, auto-selected uploads, already-used marking), media-list eligibility and capacity helpers, `mediaListPicker` provider slot, bulk append in `ListNode`. Admin unit (942), new e2e (5, axe at 320 px), root format/lint/typecheck/test (release test on pinned Node 24.12.0), build, packed starter/existing-site acceptance, OpenAPI, docs and strict OpenSpec validation pass. Pre-existing: composites pointer-drag e2e fails on HEAD. Awaiting explicit sync/archive. |
 | 2026-10-31 | SM3C | `sm03c-multi-select-media-picker` | Archived at `openspec/changes/archive/2026-10-31-sm03c-multi-select-media-picker`; `admin-media-library` and `admin-draft-editor` deltas synchronized (1 added, 1 modified requirement each). Step SM3 complete. |
+| 2026-10-31 | SM4A | `sm04a-import-credentials` | Proposed. Owner decisions: API-token capability `content:import` (not OAuth loopback), required expiry 1–7 days, optional publish only for creators with `content:publish`; Bearer accepted on a fixed admin-route allowlist without cookie fallback; creator's account-security events revoke tokens; `sha256` recorded for new uploads only (legacy `NULL`, no backfill); lookups as `slug` / `sha256` list parameters; migration 0015, template 0.43.0, ADR 0016. 23 tasks, not applied. |
+| 2026-10-31 | SM4A | `sm04a-import-credentials` | In progress. Applying import tokens, Bearer allowlist, media hash, slug lookup and migration 0015. |
+| 2026-11-01 | SM4A | `sm04a-import-credentials` | Implemented and verified, 23/23 tasks. Import tokens (1–7 days, optional publish, Settings card, Bearer allowlist without cookie fallback, account-event revocation), capability-filtered build-token verification, media `sha256` and `?sha256=`, exact draft `?slug=`, migration 0015, template 0.43.0, ADR 0016. Root format/lint/typecheck/test (release test on pinned Node 24.12.0), build, packed starter/existing-site acceptance, cross-runtime, D1 budget, admin e2e, docs, OpenAPI and strict OpenSpec checks pass. Awaiting explicit sync/archive. |
+| 2026-11-01 | SM4A | `sm04a-import-credentials` | Archived at `openspec/changes/archive/2026-11-01-sm04a-import-credentials`; nine capability deltas synchronized into main specs (16 added requirements). SM4B and SM4C remain planned. |

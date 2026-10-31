@@ -61,8 +61,8 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  expect(instructions.configuration.at(-1)).toContain("Template 0.42.0");
-  expect(instructions.database.at(-1)).toContain("0014_media_tags");
+  expect(instructions.configuration.at(-1)).toContain("Template 0.43.0");
+  expect(instructions.database.at(-1)).toContain("0015_import_credentials");
   expect(instructions.configuration[0]).toMatch(
     /Template 0\.36\.0: Gallery v4.*No database migration.*ListLayout\.css.*rollback/,
   );
@@ -338,7 +338,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.8");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.8");
-  expect(TEMPLATE_VERSION).toBe("0.42.0");
+  expect(TEMPLATE_VERSION).toBe("0.43.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");

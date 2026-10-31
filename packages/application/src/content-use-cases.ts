@@ -39,6 +39,8 @@ import type {
 export { ContentValidationError } from "@lacecms/content";
 import {
   DomainError,
+  CollectionQueryValidationError,
+  isContentSlug,
   auditActor,
   assertCollectionEntryOperation,
   assertOrderedBlockPositions,
@@ -160,6 +162,8 @@ export interface ListContentEntriesUseCaseInput {
   readonly limit: number;
   readonly modelKey: string;
   readonly q?: string;
+  /** Exact current draft slug; collection models only. */
+  readonly slug?: string;
   readonly sort?: string;
   readonly status?: string;
 }
@@ -442,6 +446,8 @@ export class ContentUseCases {
     ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry sort is unsupported.");
     }
+    if (input.slug !== undefined && (model.kind !== "collection" || !isContentSlug(input.slug)))
+      throw new CollectionQueryValidationError("/slug");
     const query = resolveCollectionQuery(model, input.sort, input.filters, this.listQueryLimits);
     validateListQueryBudget(q, [], this.listQueryLimits);
     return detached(
@@ -453,6 +459,7 @@ export class ContentUseCases {
         listFields: model.kind === "collection" ? [...(model.listFields ?? [])] : [],
         modelKey: contentModelKey(model.key),
         ...(q === undefined || q.length === 0 ? {} : { q }),
+        ...(input.slug === undefined ? {} : { slug: input.slug }),
         sort: (input.sort as ContentEntrySort | undefined) ?? DEFAULT_CONTENT_ENTRY_SORT,
         ...(input.status === undefined ? {} : { status: input.status as ContentEntryStatus }),
       }),

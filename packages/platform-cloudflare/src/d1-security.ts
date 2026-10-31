@@ -1,4 +1,15 @@
-import { oauthUserInvalidationSql } from "@lacecms/db";
+import {
+  BUILD_TOKEN_CAPABILITIES_JSON,
+  BUILD_TOKEN_KIND_SQL,
+  IMPORT_TOKEN_KIND_SQL,
+  IMPORT_TOKEN_RECORD_USE_SQL,
+  IMPORT_TOKEN_SELECT_SQL,
+  importTokenCapabilitiesJson,
+  importTokenMetadata,
+  importTokenRowActive,
+  importTokenUserInvalidationSql,
+  oauthUserInvalidationSql,
+} from "@lacecms/db";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import {
   INVITATION_TTL_MS,
@@ -13,8 +24,13 @@ import {
   type ReissueInvitationResult,
   type SensitiveRateLimitOperation,
   type SessionRecord,
+  IMPORT_TOKEN_USE_RECORD_INTERVAL_MS,
   type BuildTokenMetadata,
+  type ImportTokenCapabilities,
+  type ImportTokenMetadata,
   type IssuedBuildToken,
+  type IssuedImportToken,
+  type ResolvedImportToken,
   type ManagedUser,
   type OpaqueTokenSecret,
   type RateLimitDecision,
@@ -492,7 +508,7 @@ export class D1SecurityService implements SecurityService {
     const guard = randomHex(16);
     const guarded = "exists (select 1 from mutation_guards where token = ?1)";
     const owner = "(select user_id from password_reset_tokens where token_hash = ?2)";
-    const [claimed, , , , , , row] = await this.database.batch([
+    const [claimed, , , , , , , row] = await this.database.batch([
       this.statement(
         "insert into mutation_guards (token, created_at) select ?1, ?3 where exists (select 1 from password_reset_tokens t join user u on u.id = t.user_id where t.token_hash = ?2 and t.consumed_at is null and t.expires_at > ?3 and u.disabled = 0)",
         guard,
@@ -519,6 +535,14 @@ export class D1SecurityService implements SecurityService {
       ),
       this.statement(
         oauthUserInvalidationSql(
+          "id=(select user_id from password_reset_tokens where token_hash=?) and exists(select 1 from mutation_guards where token=?)",
+        ),
+        now,
+        tokenHash,
+        guard,
+      ),
+      this.statement(
+        importTokenUserInvalidationSql(
           "id=(select user_id from password_reset_tokens where token_hash=?) and exists(select 1 from mutation_guards where token=?)",
         ),
         now,
@@ -596,6 +620,15 @@ export class D1SecurityService implements SecurityService {
           input.userId,
           password,
         ),
+        this.statement(
+          importTokenUserInvalidationSql(
+            "id=? and exists(select 1 from account where user_id=? and provider_id='credential' and password=?)",
+          ),
+          Number(input.now),
+          input.userId,
+          input.userId,
+          password,
+        ),
       );
     const [changed, revoked] = await this.database.batch(statements);
     if (changed?.meta.changes !== 1) return Object.freeze({ status: "invalid_credentials" });
@@ -637,6 +670,7 @@ export class D1SecurityService implements SecurityService {
         input.keepSessionId,
       ),
       this.statement(oauthUserInvalidationSql(), Number(this.now()), input.userId),
+      this.statement(importTokenUserInvalidationSql(), Number(this.now()), input.userId),
     ]);
     return result?.meta.changes ?? 0;
   }
@@ -646,6 +680,7 @@ export class D1SecurityService implements SecurityService {
       this.statement("select 1 as found from user where id = ?", input.userId),
       this.statement("delete from session where user_id = ?", input.userId),
       this.statement(oauthUserInvalidationSql(), Number(this.now()), input.userId),
+      this.statement(importTokenUserInvalidationSql(), Number(this.now()), input.userId),
     ]);
     return found?.results[0] === undefined ? null : (deleted?.meta.changes ?? 0);
   }
@@ -662,7 +697,7 @@ export class D1SecurityService implements SecurityService {
       input.name,
       token.slice(0, 8),
       await digest(token),
-      '["content:build:read"]',
+      BUILD_TOKEN_CAPABILITIES_JSON,
       Number(input.now),
     ).run();
     const row = await this.statement("select * from api_tokens where id = ?", id).first();
@@ -671,7 +706,9 @@ export class D1SecurityService implements SecurityService {
   }
 
   public async listBuildTokens(): Promise<readonly BuildTokenMetadata[]> {
-    const rows = await this.statement("select * from api_tokens order by created_at desc").all();
+    const rows = await this.statement(
+      `select * from api_tokens where ${BUILD_TOKEN_KIND_SQL} order by created_at desc`,
+    ).all();
     return rows.results.map((row) => buildToken(row));
   }
 
@@ -681,11 +718,14 @@ export class D1SecurityService implements SecurityService {
   }): Promise<BuildTokenMetadata | null> {
     const [, row] = await this.database.batch([
       this.statement(
-        "update api_tokens set revoked_at = coalesce(revoked_at, ?) where id = ?",
+        `update api_tokens set revoked_at = coalesce(revoked_at, ?) where id = ? and ${BUILD_TOKEN_KIND_SQL}`,
         Number(input.now),
         input.tokenId,
       ),
-      this.statement("select * from api_tokens where id = ?", input.tokenId),
+      this.statement(
+        `select * from api_tokens where id = ? and ${BUILD_TOKEN_KIND_SQL}`,
+        input.tokenId,
+      ),
     ]);
     const value = row?.results[0];
     return value === undefined ? null : buildToken(value);
@@ -697,7 +737,7 @@ export class D1SecurityService implements SecurityService {
   }): Promise<boolean> {
     const candidate = await digest(input.token);
     const rows = await this.statement(
-      "select id, token_hash from api_tokens where revoked_at is null",
+      `select id, token_hash from api_tokens where revoked_at is null and ${BUILD_TOKEN_KIND_SQL}`,
     ).all<{ id: string; token_hash: string }>();
     let matched: string | undefined;
     for (const row of rows.results)
@@ -709,6 +749,94 @@ export class D1SecurityService implements SecurityService {
       matched,
     ).run();
     return used.meta.changes === 1;
+  }
+
+  public async createImportToken(input: {
+    readonly capabilities: ImportTokenCapabilities;
+    readonly createdBy: string;
+    readonly expiresAt: UnixMilliseconds;
+    readonly name: string;
+    readonly now: UnixMilliseconds;
+  }): Promise<IssuedImportToken> {
+    const token = tokenSecret();
+    const id = randomHex(16);
+    const [, row] = await this.database.batch([
+      this.statement(
+        "insert into api_tokens (id, name, token_prefix, token_hash, capabilities_json, created_at, expires_at, created_by) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        id,
+        input.name,
+        token.slice(0, 8),
+        await digest(token),
+        importTokenCapabilitiesJson(input.capabilities),
+        Number(input.now),
+        Number(input.expiresAt),
+        input.createdBy,
+      ),
+      this.statement(`${IMPORT_TOKEN_SELECT_SQL} where t.id = ? and ${IMPORT_TOKEN_KIND_SQL}`, id),
+    ]);
+    const value = row?.results[0];
+    if (value === undefined) throw new Error("Import token could not be reloaded.");
+    return Object.freeze({ ...importTokenMetadata(value), token });
+  }
+
+  public async listImportTokens(): Promise<readonly ImportTokenMetadata[]> {
+    const rows = await this.statement(
+      `${IMPORT_TOKEN_SELECT_SQL} where ${IMPORT_TOKEN_KIND_SQL} order by t.created_at desc`,
+    ).all();
+    return rows.results.map((row) => importTokenMetadata(row));
+  }
+
+  public async revokeImportToken(input: {
+    readonly tokenId: string;
+    readonly now: UnixMilliseconds;
+  }): Promise<ImportTokenMetadata | null> {
+    const [, row] = await this.database.batch([
+      this.statement(
+        `update api_tokens set revoked_at = coalesce(revoked_at, ?) where id = ? and ${IMPORT_TOKEN_KIND_SQL}`,
+        Number(input.now),
+        input.tokenId,
+      ),
+      this.statement(
+        `${IMPORT_TOKEN_SELECT_SQL} where t.id = ? and ${IMPORT_TOKEN_KIND_SQL}`,
+        input.tokenId,
+      ),
+    ]);
+    const value = row?.results[0];
+    return value === undefined ? null : importTokenMetadata(value);
+  }
+
+  public async resolveImportToken(input: {
+    readonly token: OpaqueTokenSecret;
+    readonly now: UnixMilliseconds;
+  }): Promise<ResolvedImportToken | null> {
+    const candidate = await digest(input.token);
+    const rows = await this.statement(
+      `${IMPORT_TOKEN_SELECT_SQL} where t.revoked_at is null and ${IMPORT_TOKEN_KIND_SQL}`,
+    ).all();
+    let matched: Record<string, unknown> | undefined;
+    for (const row of rows.results)
+      if (constantTimeEqual(String(row.token_hash), candidate) && matched === undefined)
+        matched = row;
+    const now = Number(input.now);
+    if (matched === undefined || !importTokenRowActive(matched, now)) return null;
+    const [, row] = await this.database.batch([
+      this.statement(
+        IMPORT_TOKEN_RECORD_USE_SQL,
+        now,
+        matched.id,
+        now - IMPORT_TOKEN_USE_RECORD_INTERVAL_MS,
+      ),
+      this.statement(`${IMPORT_TOKEN_SELECT_SQL} where t.id = ?`, matched.id),
+    ]);
+    const value = row?.results[0];
+    if (value === undefined) return null;
+    return Object.freeze({
+      creator: Object.freeze({
+        id: String(matched.created_by),
+        role: String(matched.creator_role),
+      }),
+      token: importTokenMetadata(value),
+    });
   }
 
   public async isSetupComplete(): Promise<boolean> {
@@ -762,7 +890,7 @@ export class D1SecurityService implements SecurityService {
     nextRole?: SecurityRole,
     disabled?: boolean,
   ): Promise<ManagedUser | null> {
-    const [changed, , , row] = await this.database.batch([
+    const [changed, , , , row] = await this.database.batch([
       this.statement(
         "update user set role = coalesce(?1, role), disabled = coalesce(?2, disabled), updated_at = ?3 where id = ?4 and not (role = 'admin' and disabled = 0 and (coalesce(?2, 0) = 1 or coalesce(?1, 'admin') <> 'admin') and (select count(*) from user where role = 'admin' and disabled = 0) <= 1)",
         nextRole === undefined ? null : role(nextRole),
@@ -778,6 +906,12 @@ export class D1SecurityService implements SecurityService {
       ),
       this.statement(
         oauthUserInvalidationSql("id=? and disabled=1 and ?=1"),
+        Number(this.now()),
+        id,
+        disabled === true ? 1 : 0,
+      ),
+      this.statement(
+        importTokenUserInvalidationSql("id=? and disabled=1 and ?=1"),
         Number(this.now()),
         id,
         disabled === true ? 1 : 0,

@@ -384,7 +384,8 @@ export async function openProductRuntime(kind, options = {}) {
     );
     const call = async (path, options = {}) => {
       const headers = new Headers(options.headers);
-      headers.set("origin", origin);
+      // `origin: null` sends no Origin, like a command-line client.
+      if (options.origin !== null) headers.set("origin", options.origin ?? origin);
       headers.set("cf-connecting-ip", "203.0.113.34");
       if (options.cookie) headers.set("cookie", options.cookie);
       if (options.json !== undefined) headers.set("content-type", "application/json");

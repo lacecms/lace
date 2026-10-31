@@ -191,8 +191,6 @@ SHALL apply the same `System` and `Unknown user` fallbacks as list summaries.
 - **WHEN** an enabled filter field is removed from configuration and a client reuses its query
 - **THEN** the use case rejects the stale query before reading entries
 
-
-
 #### Scenario: Platform limits are enforced before reads
 - **WHEN** a Cloudflare actor submits q or contains whose escaped substring pattern exceeds 50 UTF-8 bytes
 - **THEN** the use case rejects it at /q or /filters/<index>/value without a read-port call, and Node accepts an otherwise valid operand within 200 code units
@@ -589,3 +587,21 @@ truth for both adapters.
 #### Scenario: Model discovery is unauthorized
 - **WHEN** an actor lacks effective read authority and requests model metadata through the portable operation
 - **THEN** it is denied before protected metadata is returned
+
+### Requirement: Entry lists filter by exact draft slug
+The entry-list use case SHALL accept an optional slug for collection models and
+SHALL return only entries whose current draft slug equals it exactly, under
+the existing `list` operation and `content:read` authorization. The predicate
+SHALL apply before paging and to the per-status totals and SHALL combine with
+search, status, filters and sorts. It SHALL be validated before persistence
+reads and SHALL be refused for page and global models. Draft slugs are not
+unique, so a result MAY contain more than one entry; the use case SHALL NOT
+pick one.
+
+#### Scenario: Two drafts share a slug
+- **WHEN** two drafts of `posts` both have slug `about` and a client lists `posts` with slug `about`
+- **THEN** both are returned and the totals count two
+
+#### Scenario: Slug was changed after publication
+- **WHEN** an entry was published with slug `old` and its draft now has slug `new`
+- **THEN** a slug lookup for `new` returns it and a lookup for `old` does not

@@ -65,6 +65,7 @@ import {
   contentModelKey,
   contentSnapshotId,
   isMediaFocalCoordinate,
+  isMediaSha256,
   isSiteBuildProviderStage,
   MAX_MEDIA_ALT_LENGTH,
   MAX_MEDIA_CAPTION_LENGTH,
@@ -436,7 +437,9 @@ export const MEDIA_USAGE_COUNT_SQL = `(select count(distinct s.entry_id)
   where r.media_id = m.id)`;
 export const MEDIA_TAGS_JSON_SQL = `(select coalesce(json_group_array(tag), '[]') from
   (select tag from media_tags where media_id = m.id order by tag))`;
-export const MEDIA_CATALOG_SQL = `select ${MEDIA_COLUMNS_SQL}, ${MEDIA_TAGS_JSON_SQL} as tags_json, u.name as created_by_name,
+/** Admin-only media columns: like tags, the content hash never reaches public projections. */
+const ADMIN_MEDIA_COLUMNS_SQL = `${MEDIA_COLUMNS_SQL}, m.sha256, ${MEDIA_TAGS_JSON_SQL} as tags_json`;
+export const MEDIA_CATALOG_SQL = `select ${ADMIN_MEDIA_COLUMNS_SQL}, u.name as created_by_name,
   ${MEDIA_USAGE_COUNT_SQL} as usage_count`;
 export const MEDIA_SORT_SQL: Readonly<Record<string, SortSql>> = {
   createdAt: { order: "m.created_at", value: "m.created_at" },
@@ -571,7 +574,7 @@ export function buildExportPageSql(globals: boolean): {
   };
 }
 
-export const MEDIA_BY_ID_SQL = `select ${MEDIA_COLUMNS_SQL}, ${MEDIA_TAGS_JSON_SQL} as tags_json from media m where m.id = ? limit 1`;
+export const MEDIA_BY_ID_SQL = `select ${ADMIN_MEDIA_COLUMNS_SQL} from media m where m.id = ? limit 1`;
 /** Binds media ID, entry limit, and media ID. */
 export const MEDIA_USAGE_SQL = `with used as (
    select distinct s.entry_id
@@ -1433,6 +1436,8 @@ export async function entryCursorKind(input: ListContentEntriesInput): Promise<s
     input.status ?? null,
     input.q ?? null,
     await sha256CanonicalJson(collectionQueryIdentity(input.query) as JsonValue),
+    // Appended only when present so cursors issued before slug lookups stay valid.
+    ...(input.slug === undefined ? [] : [input.slug]),
   ]);
 }
 
@@ -1455,6 +1460,8 @@ export function mediaCursorKind(input: ListMediaInput): string {
     input.type ?? null,
     input.q ?? null,
     normalizedMediaFilterTags(input.tags),
+    // Appended only when present so cursors issued before hash lookups stay valid.
+    ...(input.sha256 === undefined ? [] : [input.sha256]),
   ]);
 }
 
@@ -1700,6 +1707,9 @@ export function mediaMetadata(row: Record<string, unknown>): MediaMetadata {
     ...(typeof height === "number" ? { height } : {}),
     id: string("id") as MediaMetadata["id"],
     mimeType: string("mime_type"),
+    ...(row.sha256 === undefined || row.sha256 === null
+      ? {}
+      : { sha256: isMediaSha256(row.sha256) ? row.sha256 : failure("Media sha256 is invalid.") }),
     size: integer("size"),
     status,
     storageKey: string("storage_key"),
@@ -2146,6 +2156,20 @@ export function mediaTagFilters(tags: readonly string[] = []): {
       () => "exists (select 1 from media_tags t where t.tag = ? and t.media_id = m.id)",
     ),
     bindings: [...normalized],
+  };
+}
+
+/** Tag and content-hash predicates shared by both media list implementations. */
+export function mediaListFilters(input: Pick<ListMediaInput, "sha256" | "tags">): {
+  conditions: string[];
+  bindings: string[];
+} {
+  const filters = mediaTagFilters(input.tags);
+  if (input.sha256 === undefined) return filters;
+  if (!isMediaSha256(input.sha256)) failure("Media hash filter is invalid.");
+  return {
+    conditions: [...filters.conditions, "m.sha256 = ? and m.status = 'active'"],
+    bindings: [...filters.bindings, input.sha256],
   };
 }
 

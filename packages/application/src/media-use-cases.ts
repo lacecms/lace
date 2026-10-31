@@ -1,6 +1,7 @@
 import {
   DomainError,
   isMediaFocalCoordinate,
+  isMediaSha256,
   mediaId,
   normalizeMediaText,
   normalizeMediaTag,
@@ -59,6 +60,7 @@ export const ALLOWED_MEDIA_MIME_TYPES = Object.freeze([
 
 export interface MediaView {
   readonly tags: readonly string[];
+  readonly sha256?: string;
   readonly alt?: string;
   readonly caption?: string;
   readonly createdAt: UnixMilliseconds;
@@ -89,6 +91,7 @@ export interface CreateMediaUseCaseInput {
 
 export interface ListMediaUseCaseInput {
   readonly tags?: readonly string[];
+  readonly sha256?: string;
   readonly actor: Actor;
   readonly after?: OpaqueCursor;
   readonly limit: number;
@@ -334,6 +337,19 @@ function sameFocalPoint(left: MediaFocalPoint | null, right: MediaFocalPoint | n
     : left.x === right.x && left.y === right.y;
 }
 
+/** WebCrypto exists in every supported runtime but not in this package's portable lib types. */
+const webCrypto = globalThis as unknown as {
+  readonly crypto: {
+    readonly subtle: { digest(algorithm: "SHA-256", data: Uint8Array): Promise<ArrayBuffer> };
+  };
+};
+
+/** Lowercase-hex SHA-256 of the exact bytes that object storage receives. */
+async function mediaSha256(bytes: Uint8Array): Promise<string> {
+  const digest = new Uint8Array(await webCrypto.crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 function toMediaView(item: MediaCatalogItem): MediaView {
   const value = item.media;
   const mimeType = value.mimeType;
@@ -353,6 +369,7 @@ function toMediaView(item: MediaCatalogItem): MediaView {
     ...(value.height === undefined ? {} : { height: value.height }),
     id: value.id,
     mimeType: mimeType as MediaMimeType,
+    ...(value.sha256 === undefined ? {} : { sha256: value.sha256 }),
     size: value.size,
     status: value.status,
     updatedAt: value.updatedAt,
@@ -386,6 +403,7 @@ export class MediaUseCases {
     const mimeType = detectMediaMimeType(bytes);
     const dimensions = await this.dependencies.imageInspector.inspect(bytes, mimeType);
     validateDimensions(dimensions.width, dimensions.height);
+    const sha256 = await mediaSha256(bytes);
     const id = mediaId(this.dependencies.idGenerator.next());
     const storageKey = `media/${id}`;
     const stored = await this.dependencies.storage.put({
@@ -411,6 +429,7 @@ export class MediaUseCases {
         height: dimensions.height,
         id,
         mimeType,
+        sha256,
         size: bytes.byteLength,
         storageKey,
         width: dimensions.width,
@@ -453,8 +472,12 @@ export class MediaUseCases {
     if (input.sort !== undefined && !MEDIA_SORTS.includes(input.sort as MediaSort)) {
       failure("Media sort is unsupported.");
     }
+    if (input.sha256 !== undefined && !isMediaSha256(input.sha256)) {
+      failure("A media hash must be 64 lowercase hexadecimal characters.");
+    }
     const page = await this.dependencies.media.listMedia({
       tags,
+      ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
       ...(input.after === undefined ? {} : { after: input.after }),
       limit: input.limit,
       ...(q === undefined || q.length === 0 ? {} : { q }),

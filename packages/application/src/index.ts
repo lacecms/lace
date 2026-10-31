@@ -31,7 +31,13 @@ import type {
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
-import { DomainError, permissionsFor, requirePermission, type Permission } from "@lacecms/domain";
+import {
+  DomainError,
+  hasPermission,
+  permissionsFor,
+  requirePermission,
+  type Permission,
+} from "@lacecms/domain";
 import type { AccountSecurityPort } from "./accounts.js";
 import type { UserProfileReader } from "./email.js";
 
@@ -195,6 +201,8 @@ export interface ListContentEntriesInput {
   readonly modelKey: ContentModelKey;
   /** A trimmed, non-empty title-or-slug substring; ASCII letters match case-insensitively. */
   readonly q?: string;
+  /** Collections only: the exact current draft slug (import lookups, ADR 0016). */
+  readonly slug?: string;
   readonly sort: ContentEntrySort;
   readonly status?: ContentEntryStatus;
 }
@@ -681,6 +689,69 @@ export interface IssuedBuildToken extends BuildTokenMetadata {
   readonly token: OpaqueTokenSecret;
 }
 
+/** Import tokens may write content and media; publication is an optional extra (ADR 0016). */
+export type ImportTokenCapabilities =
+  | readonly ["content:import"]
+  | readonly ["content:import", "content:publish"];
+
+export const MIN_IMPORT_TOKEN_LIFETIME_DAYS = 1;
+export const MAX_IMPORT_TOKEN_LIFETIME_DAYS = 7;
+/** `last_used_at` is written at most once per this interval per token. */
+export const IMPORT_TOKEN_USE_RECORD_INTERVAL_MS = 60_000;
+
+export interface ImportTokenMetadata {
+  readonly capabilities: ImportTokenCapabilities;
+  readonly createdAt: UnixMilliseconds;
+  readonly createdBy: {
+    readonly displayName?: string;
+    readonly email: string;
+    readonly id: string;
+  };
+  readonly expiresAt: UnixMilliseconds;
+  readonly id: string;
+  readonly lastUsedAt?: UnixMilliseconds;
+  readonly name: string;
+  readonly revokedAt?: UnixMilliseconds;
+  readonly tokenPrefix: string;
+}
+
+export interface IssuedImportToken extends ImportTokenMetadata {
+  /** Returned exactly once by the creation command; never persisted or logged. */
+  readonly token: OpaqueTokenSecret;
+}
+
+/** An unexpired, unrevoked import token and its enabled creator's current role. */
+export interface ResolvedImportToken {
+  readonly creator: { readonly id: string; readonly role: string };
+  readonly token: ImportTokenMetadata;
+}
+
+/**
+ * Chooses an import token's capabilities. Publication is granted only when the
+ * creating actor currently holds `content:publish`; asking for it otherwise is
+ * refused rather than silently narrowed.
+ */
+export function importTokenCapabilities(
+  actor: Actor,
+  allowPublish: boolean,
+): ImportTokenCapabilities {
+  requireSettingsManager(actor);
+  if (!allowPublish) return ["content:import"];
+  requirePermission(actor, "content:publish");
+  return ["content:import", "content:publish"];
+}
+
+/** Validates a whole-day lifetime and returns the absolute expiry. */
+export function importTokenExpiry(now: UnixMilliseconds, days: number): UnixMilliseconds {
+  if (
+    !Number.isInteger(days) ||
+    days < MIN_IMPORT_TOKEN_LIFETIME_DAYS ||
+    days > MAX_IMPORT_TOKEN_LIFETIME_DAYS
+  )
+    throw new RangeError("Import token lifetime must be 1 to 7 whole days.");
+  return (Number(now) + days * 86_400_000) as UnixMilliseconds;
+}
+
 /** Security lifecycle boundary implemented by each runtime's durable adapter. */
 export interface SecurityService extends UserProfileReader, AccountSecurityPort {
   /** Read-only durable completion marker; never infers completion from users. */
@@ -712,10 +783,34 @@ export interface SecurityService extends UserProfileReader, AccountSecurityPort 
     readonly userId: string;
     readonly disabled?: boolean;
   }): Promise<ManagedUser | null>;
+  /** Accepts only an unrevoked token whose capabilities are exactly `content:build:read`. */
   verifyBuildToken(input: {
     readonly token: OpaqueTokenSecret;
     readonly now: UnixMilliseconds;
   }): Promise<boolean>;
+  createImportToken(input: {
+    readonly capabilities: ImportTokenCapabilities;
+    readonly createdBy: string;
+    readonly expiresAt: UnixMilliseconds;
+    readonly name: string;
+    readonly now: UnixMilliseconds;
+  }): Promise<IssuedImportToken>;
+  /** Newest first, including expired and revoked tokens. */
+  listImportTokens(): Promise<readonly ImportTokenMetadata[]>;
+  /** Idempotent; null when no import token has the identifier. */
+  revokeImportToken(input: {
+    readonly tokenId: string;
+    readonly now: UnixMilliseconds;
+  }): Promise<ImportTokenMetadata | null>;
+  /**
+   * Null for an unknown, revoked or expired token, another token kind, or a
+   * missing or disabled creator. A successful resolution records its use at
+   * most once per `IMPORT_TOKEN_USE_RECORD_INTERVAL_MS`.
+   */
+  resolveImportToken(input: {
+    readonly token: OpaqueTokenSecret;
+    readonly now: UnixMilliseconds;
+  }): Promise<ResolvedImportToken | null>;
 }
 
 export interface RateLimitDecision {
@@ -761,6 +856,11 @@ export function requireSettingsManager(actor: Actor): void {
 /** The permissions the domain policy grants an actor, for session summaries. */
 export function actorPermissions(actor: Actor): readonly Permission[] {
   return permissionsFor(actor.role);
+}
+
+/** The role's permissions narrowed by any delegated ceiling, in the domain's order. */
+export function effectiveActorPermissions(actor: Actor): readonly Permission[] {
+  return permissionsFor(actor.role).filter((permission) => hasPermission(actor, permission));
 }
 
 export interface DispatcherEvent {
@@ -879,6 +979,8 @@ export const MAX_MEDIA_USAGE_ENTRIES = 50;
 
 export interface ListMediaInput {
   readonly tags?: readonly string[];
+  /** Restricts the page to `active` items with this lowercase-hex SHA-256. */
+  readonly sha256?: string;
   readonly after?: OpaqueCursor;
   readonly limit: number;
   /** Trimmed, non-empty filename substring; matched case-insensitively for ASCII. */
@@ -958,6 +1060,8 @@ export interface MediaCatalogPort {
 
 export interface CreateMediaMetadataInput {
   readonly tags?: readonly string[];
+  /** SHA-256 of the stored bytes as lowercase hex. */
+  readonly sha256?: string;
   readonly createdAt: UnixMilliseconds;
   readonly createdBy: ActorId;
   readonly filename: string;

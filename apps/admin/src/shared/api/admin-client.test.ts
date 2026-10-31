@@ -216,6 +216,44 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   ).rejects.toBeInstanceOf(AdminClientError);
 });
 
+test("uses validated import-token endpoints and media hashes", async () => {
+  const token = {
+    capabilities: ["content:import", "content:publish"],
+    createdAt: "2026-10-31T00:00:00.000Z",
+    createdBy: { email: "admin@lace.test", id: "admin-1" },
+    expiresAt: "2026-11-03T00:00:00.000Z",
+    id: "import-1",
+    name: "Framer",
+    tokenPrefix: "abcdefgh",
+  };
+  const bodies: unknown[] = [];
+  const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+    if (init?.body !== undefined) bodies.push(JSON.parse(String(init.body)));
+    if (path.endsWith("/import-tokens") && init?.method === "POST")
+      return Response.json({ ...token, token: "secret" }, { status: 201 });
+    if (path.endsWith("/import-tokens")) return Response.json({ items: [token] });
+    return Response.json({ ...token, revokedAt: "2026-11-01T00:00:00.000Z" });
+  });
+  const client = createAdminClient(fetcher as typeof fetch);
+  await expect(client.listImportTokens()).resolves.toEqual({ items: [token] });
+  await expect(
+    client.createImportToken({ allowPublish: true, expiresInDays: 3, name: "Framer" }),
+  ).resolves.toMatchObject({
+    capabilities: ["content:import", "content:publish"],
+    token: "secret",
+  });
+  expect(bodies).toEqual([{ allowPublish: true, expiresInDays: 3, name: "Framer" }]);
+  await expect(client.revokeImportToken("import/1")).resolves.toMatchObject({
+    revokedAt: "2026-11-01T00:00:00.000Z",
+  });
+  expect(fetcher.mock.calls.at(-1)?.[0]).toBe("/api/v1/admin/import-tokens/import%2F1");
+  await expect(
+    createAdminClient(async () =>
+      Response.json({ items: [{ ...token, token: "secret" }] }),
+    ).listImportTokens(),
+  ).rejects.toBeInstanceOf(AdminClientError);
+});
+
 const invitation = {
   createdAt: "2026-10-01T00:00:00.000Z",
   email: "new@lace.test",

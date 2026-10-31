@@ -161,6 +161,7 @@ export const media = sqliteTable(
     caption: text("caption"),
     focalX: real("focal_x"),
     focalY: real("focal_y"),
+    sha256: text("sha256"),
     status: text("status").notNull(),
     lastError: text("last_error"),
     createdBy: text("created_by").notNull(),
@@ -188,6 +189,12 @@ export const media = sqliteTable(
       "media_focal_point_pair_check",
       sql`(${table.focalX} is null) = (${table.focalY} is null)`,
     ),
+    // Migration 0015 adds the hash as a column check; `NULL` for media uploaded before it.
+    check(
+      "media_sha256_check",
+      sql`${table.sha256} is null or (length(${table.sha256}) = 64 and ${table.sha256} not glob '*[^0-9a-f]*')`,
+    ),
+    index("media_sha256_idx").on(table.sha256),
   ],
 );
 
@@ -386,6 +393,9 @@ export const apiTokens = sqliteTable("api_tokens", {
   createdAt: timestamp("created_at"),
   lastUsedAt: integer("last_used_at"),
   revokedAt: integer("revoked_at"),
+  /** Import tokens only: required expiry and the creating user (ADR 0016). */
+  expiresAt: integer("expires_at"),
+  createdBy: text("created_by"),
 });
 
 export const rateLimitBuckets = sqliteTable("rate_limit_buckets", {

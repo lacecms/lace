@@ -37,6 +37,9 @@ import {
   buildTokenCreatedSchema,
   buildTokenListSchema,
   buildTokenSchema,
+  importTokenCreatedSchema,
+  importTokenListSchema,
+  importTokenSchema,
   buildQueueReceiptSchema,
   siteBuildRecordSchema,
   siteBuildListSchema,
@@ -61,6 +64,9 @@ import {
   type BuildTokenCreatedDto,
   type BuildTokenDto,
   type BuildTokenListDto,
+  type ImportTokenCreatedDto,
+  type ImportTokenDto,
+  type ImportTokenListDto,
   type BuildQueueReceiptDto,
   type SiteBuildRecordDto,
   type SiteBuildListDto,
@@ -105,6 +111,7 @@ export const adminQueryKeys = Object.freeze({
   buildDetail: (buildId: string) => ["admin", "builds", buildId] as const,
   settingsStatus: ["admin", "settings", "status"] as const,
   tokens: ["admin", "tokens"] as const,
+  importTokens: ["admin", "import-tokens"] as const,
   users: ["admin", "users"] as const,
   invitations: ["admin", "invitations"] as const,
   /** The signed-in user's own sessions on the account screen. */
@@ -252,6 +259,13 @@ export interface AdminClient {
   listTokens(): Promise<BuildTokenListDto>;
   createToken(name: string): Promise<BuildTokenCreatedDto>;
   revokeToken(tokenId: string): Promise<BuildTokenDto>;
+  listImportTokens(): Promise<ImportTokenListDto>;
+  createImportToken(input: {
+    readonly allowPublish: boolean;
+    readonly expiresInDays: number;
+    readonly name: string;
+  }): Promise<ImportTokenCreatedDto>;
+  revokeImportToken(tokenId: string): Promise<ImportTokenDto>;
   createEntry(modelKey: string, title: string, slug?: string): Promise<AdminContentEntryDto>;
   deleteEntry(
     entryId: string,
@@ -745,6 +759,32 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       parse(
         buildTokenSchema,
         await request(fetcher, `/api/v1/admin/api-tokens/${encodeURIComponent(tokenId)}`, {
+          method: "DELETE",
+        }),
+      ),
+    listImportTokens: async () =>
+      parse(importTokenListSchema, await request(fetcher, "/api/v1/admin/import-tokens")),
+    createImportToken: async (input: {
+      readonly allowPublish: boolean;
+      readonly expiresInDays: number;
+      readonly name: string;
+    }) =>
+      parse(
+        importTokenCreatedSchema,
+        await request(fetcher, "/api/v1/admin/import-tokens", {
+          body: JSON.stringify({
+            allowPublish: input.allowPublish,
+            expiresInDays: input.expiresInDays,
+            name: input.name,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    revokeImportToken: async (tokenId: string) =>
+      parse(
+        importTokenSchema,
+        await request(fetcher, `/api/v1/admin/import-tokens/${encodeURIComponent(tokenId)}`, {
           method: "DELETE",
         }),
       ),

@@ -3,7 +3,8 @@
 Tags organize media in the admin: editors tag items in the media details panel
 and filter the library and the media picker by tag. All endpoints require an
 authenticated session: `content:read` for reads and `media:write` for changes.
-Build and MCP bearer tokens cannot use them.
+Build and MCP bearer tokens cannot use them; an import token can upload and
+patch tags but cannot read the tag catalog.
 
 A tag accepts ASCII letters, digits and the ordinary hyphen `-` only. Surrounding
 spaces are trimmed and uppercase ASCII letters lowercased: ` Project-2026 `

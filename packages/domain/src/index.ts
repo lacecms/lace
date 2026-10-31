@@ -274,6 +274,11 @@ export function isMediaFocalCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
+/** A media content hash: a SHA-256 digest as 64 lowercase hexadecimal characters. */
+export function isMediaSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+}
+
 /** Metadata for an object-store asset; binary data never belongs in this value. */
 export interface MediaMetadata {
   readonly tags: readonly string[];
@@ -286,6 +291,8 @@ export interface MediaMetadata {
   readonly height?: number;
   readonly id: MediaId;
   readonly mimeType: string;
+  /** SHA-256 of the stored bytes as lowercase hex; absent for media uploaded before 0015. */
+  readonly sha256?: string;
   readonly size: number;
   readonly status: MediaStatus;
   readonly storageKey: string;
@@ -495,6 +502,11 @@ export function normalizeCollectionPublicRoute(route: string): string {
     fail("CONTENT_INVALID_STATE", "route must contain exactly one :slug segment and no others.");
   }
   return route;
+}
+
+/** Lowercase ASCII letters, digits and single hyphens, at most `MAX_SLUG_LENGTH` characters. */
+export function isContentSlug(value: unknown): value is string {
+  return typeof value === "string" && value.length <= MAX_SLUG_LENGTH && SLUG_PATTERN.test(value);
 }
 
 /** Resolves a canonical collection route without interpreting slug syntax as a path. */

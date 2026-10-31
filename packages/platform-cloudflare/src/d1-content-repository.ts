@@ -1,5 +1,5 @@
 import {
-  mediaTagFilters,
+  mediaListFilters,
   mediaTagCatalogQuery,
   mediaTagInsert,
   normalizedMediaWriteTags,
@@ -657,7 +657,7 @@ export class D1ContentRepository
       input.after === undefined ? undefined : decodeMediaCursor(input.after, kind, input.sort);
     const comparison = descending ? "<" : ">";
     const direction = descending ? "desc" : "asc";
-    const tagFilter = mediaTagFilters(input.tags);
+    const tagFilter = mediaListFilters(input);
     const conditions: string[] = [...tagFilter.conditions];
     const bindings: (number | string)[] = [...tagFilter.bindings];
     if (input.q !== undefined) {
@@ -1502,7 +1502,7 @@ export class D1ContentRepository
     try {
       const batch = this.batch();
       batch.add(
-        "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
+        "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, sha256, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', ?, 'active', ?, ?, ?)",
         input.id,
         input.storageKey,
         input.filename,
@@ -1510,6 +1510,7 @@ export class D1ContentRepository
         input.size,
         input.width,
         input.height,
+        input.sha256 ?? null,
         input.createdBy,
         input.createdAt,
         input.createdAt,

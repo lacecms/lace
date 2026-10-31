@@ -85,6 +85,7 @@ function scalar(field: CollectionQueryField, bind: Bindings): { value: string; p
 }
 function predicates(input: ListContentEntriesInput, bind: Bindings): string {
   const clauses = [`e.model_key = ${bind.add(input.modelKey)}`];
+  if (input.slug !== undefined) clauses.push(`d.slug = ${bind.add(input.slug)}`);
   if (input.q !== undefined) {
     const pattern = bind.add(literalLikePattern(input.q));
     const search = [

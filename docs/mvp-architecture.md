@@ -1319,6 +1319,7 @@ media
 ├── caption             TEXT               -- at most 2,000 characters
 ├── focal_x             REAL               -- 0..1, set together with focal_y
 ├── focal_y             REAL               -- 0..1, set together with focal_x
+├── sha256              TEXT               -- lowercase hex; NULL before 0015
 ├── status              TEXT NOT NULL CHECK(status IN ('active', 'deleting', 'delete_failed'))
 ├── last_error          TEXT
 ├── created_by          TEXT NOT NULL
@@ -1336,6 +1337,12 @@ order. Tags are admin-only: absent from public content, build exports and MCP,
 and never counted as usage. Create, replacement and final deletion persist tags
 atomically with metadata. Tags-only updates advance `updatedAt` without changing
 the published version or build work; combined edits retain the descriptive rule.
+
+Every upload records the SHA-256 of its stored bytes as 64 lowercase hex
+characters, indexed but not unique; it never changes and media uploaded before
+migration `0015` keep `NULL`. Admin media DTOs carry optional `sha256` and admin
+lists filter `active` items by it for import deduplication; public DTOs and the
+build export never carry it.
 
 Content stores `mediaId` references. Storage URLs may be derived or signed and should not be treated as permanent database identity.
 
@@ -2059,7 +2066,18 @@ POST   /api/v1/admin/settings/email-test
 GET    /api/v1/admin/api-tokens
 POST   /api/v1/admin/api-tokens
 DELETE /api/v1/admin/api-tokens/:tokenId
+GET    /api/v1/admin/import-tokens
+POST   /api/v1/admin/import-tokens
+DELETE /api/v1/admin/import-tokens/:tokenId
+GET    /api/v1/admin/import-credential
 ```
+
+Import lookups are list parameters: `GET /api/v1/admin/models/:modelKey/entries`
+accepts `slug` (collections only) matching the current draft slug exactly, and
+`GET /api/v1/admin/media` accepts `sha256` (64 lowercase hex) matching `active`
+items. Both apply before paging and bind continuation cursors.
+`GET /api/v1/admin/import-credential` accepts only an import token and returns
+its metadata and effective permissions.
 
 ### Account endpoints
 
@@ -2724,11 +2742,32 @@ api_tokens
 ├── capabilities_json   TEXT NOT NULL
 ├── created_at          INTEGER NOT NULL
 ├── last_used_at        INTEGER
-└── revoked_at          INTEGER
+├── revoked_at          INTEGER
+├── expires_at          INTEGER            -- import tokens only
+└── created_by          TEXT               -- import tokens only
 ```
 
-Only the plaintext token is shown at creation. The initial capability set
-contains only `content:build:read`.
+Only the plaintext token is shown at creation. Two kinds share the table and
+every verifier filters by kind: build tokens carry exactly
+`content:build:read` and authenticate only the build export; import tokens
+carry `content:import`, optionally with `content:publish`
+([ADR 0016](adr/0016-import-credentials.md)).
+
+An actor with `settings:manage` issues an import token with a name, a required
+lifetime of 1 to 7 days and an optional publish permission, granted only when
+the creator currently holds `content:publish`. `Authorization: Bearer` on a
+route below `/api/v1/admin/` or `/api/v1/account/` is an import request: it
+never falls back to a session cookie and is accepted only on a literal
+allowlist (content models, entry list/create/read/draft save/publish, media
+list/upload/read/metadata update and `GET /api/v1/admin/import-credential`);
+every other such route denies it. The actor is the creator's current enabled
+account, attenuated to `content:read`, `content:write`, `media:write` (plus
+`content:publish`) and the delegated content operations. The cross-site Fetch
+Metadata rule does not apply because the credential is not ambient, but an
+explicit untrusted `Origin` is refused. `last_used_at` is written at most once
+per minute. The creator's disable, password reset, administrator
+sign-out-everywhere and password change ending other sessions revoke its import
+tokens in the same operation; re-enabling does not restore them.
 Setup and API tokens contain 32 cryptographically random bytes encoded as
 base64url. Lace stores their SHA-256 digests because the source tokens already
 have high entropy; comparisons are constant-time. Human passwords remain wholly
@@ -2802,7 +2841,8 @@ stay closed. Canonical issuer/resource URLs derive from validated
 explicit first consent and the existing sign-in form through a short-lived,
 server-bound continuation. No client-controlled URL metadata is fetched.
 
-Browser REST actors still require sessions. Only MCP resolves resource-bound
+Browser REST actors still require sessions; the only exception is the import
+token above, limited to its allowlist. Only MCP resolves resource-bound
 OAuth credentials into the current persisted enabled user/role, attenuated by
 an immutable provider-neutral permission and content-operation ceiling.
 `content:read`, `content:write` (including read), `content:publish` (including
@@ -2812,7 +2852,8 @@ operation before protected work; delegated operations default to deny.
 Publication is grantable only with the publish scope and current role permission.
 Unpublishing, deletion, revert/duplicate, media and administrative operations are
 never grantable, even to an administrator. A cookie/build token
-does not authenticate MCP and an MCP token does not authenticate admin REST.
+does not authenticate MCP and an MCP token does not authenticate admin REST; an
+import token authenticates neither MCP nor the build export.
 
 Codes last at most five minutes, access tokens fifteen minutes and rotating
 refresh tokens thirty days, bounded by the grant. Code redemption and refresh

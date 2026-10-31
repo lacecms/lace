@@ -88,3 +88,117 @@ test("SM3A media tags expose identical Node and Worker contracts", async () => {
   }
   expect(results[0]).toEqual(results[1]);
 }, 120000);
+
+test("SM4A import tokens, hash and slug lookups behave identically on Node and Worker", async () => {
+  const results = [];
+  for (const kind of ["node", "worker"]) {
+    const f = await openProductRuntime(kind);
+    try {
+      const admin = { cookie: f.cookies.admin };
+      const issued = await f.call("/api/v1/admin/import-tokens", {
+        ...admin,
+        method: "POST",
+        json: { allowPublish: false, expiresInDays: 1, name: "Framer" },
+      });
+      expect(issued.status, kind).toBe(201);
+      const { token, id } = await issued.json();
+      const bearer = (options = {}) => ({
+        origin: null,
+        ...options,
+        headers: { authorization: `Bearer ${token}`, ...options.headers },
+      });
+      const described = await f.call("/api/v1/admin/import-credential", bearer());
+      expect(described.status, kind).toBe(200);
+      const credential = await described.json();
+
+      const form = new FormData();
+      form.append("file", new Blob([png], { type: "image/png" }), "cover.png");
+      const uploaded = await f.call("/api/v1/admin/media", bearer({ method: "POST", body: form }));
+      expect(uploaded.status, kind).toBe(201);
+      const media = await uploaded.json();
+      const byHash = await f.call(`/api/v1/admin/media?sha256=${media.sha256}`, bearer());
+      const hashIds = (await byHash.json()).items.map((item) => item.id);
+
+      const models = await (await f.call("/api/v1/admin/content-models", bearer())).json();
+      const collection = models.items.find((model) => model.kind === "collection");
+      const created = await f.call(
+        `/api/v1/admin/models/${collection.key}/entries`,
+        bearer({
+          method: "POST",
+          json: { blocks: [], fields: {}, slug: "sm4a-import", title: "SM4A import" },
+        }),
+      );
+      expect(created.status, kind).toBe(201);
+      const entry = await created.json();
+      const bySlug = await (
+        await f.call(`/api/v1/admin/models/${collection.key}/entries?slug=sm4a-import`, bearer())
+      ).json();
+
+      const denied = [];
+      for (const [path, options] of [
+        [`/api/v1/admin/entries/${entry.id}`, { method: "DELETE" }],
+        [
+          `/api/v1/admin/entries/${entry.id}/publish`,
+          { method: "POST", json: { expectedRevision: 1 } },
+        ],
+        [`/api/v1/admin/media/${media.id}`, { method: "DELETE" }],
+        ["/api/v1/admin/users", {}],
+        ["/api/v1/admin/session", {}],
+      ])
+        denied.push((await f.call(path, bearer(options))).status);
+      const foreign = await f.call(
+        `/api/v1/admin/models/${collection.key}/entries`,
+        bearer({
+          method: "POST",
+          origin: "https://evil.example",
+          json: { blocks: [], fields: {}, slug: "foreign", title: "Foreign" },
+        }),
+      );
+      const buildExport = await f.call("/api/v1/public/build-export", bearer());
+      const cookieAndBadBearer = await f.call("/api/v1/admin/content-models", {
+        ...admin,
+        headers: { authorization: "Bearer not-a-token" },
+      });
+      const revoked = await f.call(`/api/v1/admin/import-tokens/${id}`, {
+        ...admin,
+        method: "DELETE",
+      });
+      const afterRevoke = await f.call("/api/v1/admin/import-credential", bearer());
+      const listed = await (await f.call("/api/v1/admin/import-tokens", admin)).json();
+      results.push({
+        afterRevoke: afterRevoke.status,
+        buildExport: buildExport.status,
+        cookieAndBadBearer: cookieAndBadBearer.status,
+        credential: { permissions: credential.permissions, name: credential.token.name },
+        denied,
+        foreign: foreign.status,
+        hashMatches: hashIds.length === 1 && hashIds[0] === media.id,
+        listedRevoked: listed.items.some((item) => item.id === id && item.revokedAt !== undefined),
+        revoked: revoked.status,
+        sha256: /^[0-9a-f]{64}$/u.test(media.sha256),
+        slugMatches: bySlug.items.map((item) => item.id).join() === entry.id,
+        updatedBy: entry.updatedBy.displayName !== undefined,
+      });
+    } finally {
+      await f.close();
+    }
+  }
+  expect(results[0]).toEqual({
+    afterRevoke: 403,
+    buildExport: 403,
+    cookieAndBadBearer: 403,
+    credential: {
+      name: "Framer",
+      permissions: ["content:read", "content:write", "media:write"],
+    },
+    denied: [403, 403, 403, 403, 403],
+    foreign: 403,
+    hashMatches: true,
+    listedRevoked: true,
+    revoked: 200,
+    sha256: true,
+    slugMatches: true,
+    updatedBy: true,
+  });
+  expect(results[1]).toEqual(results[0]);
+}, 360000);

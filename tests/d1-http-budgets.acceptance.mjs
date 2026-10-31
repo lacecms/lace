@@ -421,3 +421,44 @@ test("SM3A five-tag media filters and catalog stay bounded with 500 items", asyn
     await f.close();
   }
 }, 120000);
+
+test("SM4A media hash lookups use the hash index and stay bounded with 500 items", async () => {
+  const f = await fixture();
+  try {
+    const hash = (i) => i.toString(16).padStart(64, "0");
+    for (let offset = 0; offset < 500; offset += 25) {
+      await f.database.batch(
+        Array.from({ length: 25 }, (_, n) => {
+          const i = offset + n;
+          const id = `hash-budget-${String(i).padStart(3, "0")}`;
+          return f.database
+            .prepare(
+              "insert into media(id,storage_key,filename,mime_type,size,metadata_json,sha256,status,created_by,created_at,updated_at) values (?,?,'cover.png','image/png',1,'{}',?,'active','budget-admin',1,1)",
+            )
+            .bind(id, id, hash(i % 250));
+        }),
+      );
+    }
+    const found = await f.measured(
+      "media-500-sha256",
+      `/api/v1/admin/media?sha256=${hash(7)}`,
+      { cookie: f.cookies.viewer },
+      200,
+    );
+    expect(found.items.map((item) => item.id).sort()).toEqual([
+      "hash-budget-007",
+      "hash-budget-257",
+    ]);
+    expect(found.items.every((item) => item.sha256 === hash(7))).toBe(true);
+    expect(f.count.stats.queries).toBeLessThanOrEqual(10);
+    const plan = await f.database
+      .prepare(
+        "explain query plan select id from media m where m.sha256 = ? and m.status = 'active'",
+      )
+      .bind(hash(7))
+      .all();
+    expect(JSON.stringify(plan.results)).toContain("media_sha256_idx");
+  } finally {
+    await f.close();
+  }
+}, 120000);
