@@ -45,6 +45,9 @@ export const packageName = "@lacecms/application";
 
 /** Build-export page failures the HTTP boundary maps to stable responses. */
 export { BuildExportCursorError, BuildExportVersionChangedError } from "@lacecms/domain";
+/** Portable helpers that import clients apply exactly as the server does. */
+export { isMediaFocalCoordinate, normalizeMediaTags, normalizeMediaText } from "@lacecms/domain";
+export { canonicalizeJson, encodeEntryLink } from "@lacecms/content";
 export * from "./accounts.js";
 export * from "./configuration-sync.js";
 export * from "./email.js";

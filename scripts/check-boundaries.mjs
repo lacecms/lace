@@ -65,6 +65,7 @@ const allowedDependencies = new Map([
     new Set([
       "@lacecms/application",
       "@lacecms/config",
+      "@lacecms/contracts",
       "@lacecms/platform-cloudflare",
       "@lacecms/platform-node",
     ]),

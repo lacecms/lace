@@ -293,7 +293,7 @@ packages/
 ├── astro/                     # Astro adapter: LaceBlocks, RichText, loader environment glue
 ├── platform-cloudflare/       # D1, R2, KV, Worker and deploy-hook adapters
 ├── platform-node/             # SQLite, MinIO/S3, Node server adapters
-├── cli/                       # create, sync, migrate, upgrade commands
+├── cli/                       # create, sync, migrate, upgrade, add block, import commands
 └── test-utils/                # factories, fixtures, and contract test suites
 
 registry/                      # versioned, framework-keyed block sources for `lace add block`
@@ -322,7 +322,7 @@ sdk          -> contracts
 render       -> content
 astro        -> render, sdk
 platform-*   -> application, server, db, auth, config, mcp
-cli          -> application, config, platform-*
+cli          -> application, config, contracts, platform-*
 apps/api     -> platform-*, server
 apps/admin   -> contracts, content
 apps/site    -> astro, render, sdk, content
@@ -363,6 +363,11 @@ Rules:
   installed from `registry/` (see sections 7 and 13).
 - `sdk` owns transport and the published-site loader and imports neither
   `content` nor `render`.
+- `cli` reaches a running installation only through the admin REST API for
+  `lace import` ([ADR 0017](adr/0017-content-import-client.md)); it uses
+  `contracts` to validate those responses and never writes content through
+  platform repositories outside the explicit operator commands (`db migrate`,
+  `content sync`, `auth bootstrap`).
 - `site` depends on the public SDK, the render core and its framework adapter,
   `@lacecms/content` for block definitions, and user-owned block markup.
 
@@ -2078,6 +2083,18 @@ accepts `slug` (collections only) matching the current draft slug exactly, and
 items. Both apply before paging and bind continuation cursors.
 `GET /api/v1/admin/import-credential` accepts only an import token and returns
 its metadata and effective permissions.
+
+`lace import <dir>` is a client of these routes
+([ADR 0017](adr/0017-content-import-client.md)). It validates a format-v1
+package against `lace.config.ts`, checks that the server's model and block
+versions match, plans `create`/`update`/`unchanged`/`conflict` from hash and
+slug lookups, uploads media, creates collection entries, saves drafts with
+expected revisions and, with `--publish`, publishes in link-dependency order
+with idempotency keys. Draft normalization is the shared application function
+the content use cases apply, so a rerun of the same package writes nothing. A
+local state file per API origin records written revisions; a draft edited
+after that revision is a conflict unless `--overwrite` is given. Import never
+deletes or unpublishes.
 
 ### Account endpoints
 

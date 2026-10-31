@@ -293,6 +293,77 @@ function systemTitle(model: NormalizedContentModel, title: string): string {
   return model.kind === "global" ? (model.label ?? model.key) : title;
 }
 
+/** Input of {@link normalizeDraftCandidate}. */
+export interface NormalizeDraftCandidateInput {
+  readonly blocks: RuntimeConfigProjection["blocks"];
+  readonly draft: CompleteDraftInput;
+  readonly mode: "draft" | "publish";
+  readonly model: NormalizedContentModel;
+}
+
+/** The draft values a create, save or publish stores for a valid submission. */
+export interface NormalizedDraftCandidate {
+  readonly blocks: readonly ContentBlock[];
+  readonly fields: JsonObject;
+  readonly seo?: EntrySeo;
+  readonly slug?: string;
+  readonly title: string;
+}
+
+/**
+ * Validates and normalizes a submitted draft exactly as the content use cases
+ * store it. Pure: no persistence, authorization, media or link-target checks,
+ * so clients can predict whether a save would change the stored draft.
+ */
+export function normalizeDraftCandidate(
+  input: NormalizeDraftCandidateInput,
+): NormalizedDraftCandidate {
+  const { blocks: registry, draft, mode, model } = input;
+  assertOrderedBlockPositions(draft.blocks);
+  const aggregate = validateEntryAggregate(
+    {
+      blocks: draft.blocks.map(
+        ({ anchor, className, data, hidden, key, schemaVersion, settings, type }) => ({
+          ...(anchor === undefined ? {} : { anchor }),
+          ...(className === undefined ? {} : { className }),
+          data,
+          ...(hidden === undefined ? {} : { hidden }),
+          key,
+          schemaVersion,
+          ...(settings === undefined ? {} : { settings }),
+          type,
+        }),
+      ),
+      fields: draft.fields,
+      kind: model.kind,
+      ...(draft.slug === undefined ? {} : { slug: draft.slug }),
+      title: systemTitle(model, draft.title),
+    },
+    model,
+    registry,
+    mode,
+  );
+  const blocks: ContentBlock[] = aggregate.blocks.map((block, index) => ({
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
+    data: block.data as JsonObject,
+    hidden: block.hidden,
+    key: blockKey(block.key),
+    position: draft.blocks[index]!.position,
+    schemaVersion: block.schemaVersion,
+    settings: block.settings,
+    type: block.type,
+  }));
+  const seo = normalizeEntrySeo(draft.seo ?? null, { enabled: seoEnabled(model) });
+  return {
+    blocks,
+    fields: aggregate.fields as JsonObject,
+    ...(seo === undefined ? {} : { seo }),
+    ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
+    title: aggregate.title,
+  };
+}
+
 function commandEntry(result: ContentCommandResult): ContentEntry {
   if (result.entry === undefined) {
     throw new DomainError("CONTENT_INVALID_STATE", "Content command did not return an entry.");
@@ -755,52 +826,19 @@ export class ContentUseCases {
     mode: "draft" | "publish",
     publishingEntryId?: string,
   ): Promise<NormalizedDraft> {
-    assertOrderedBlockPositions(input.blocks);
-    const aggregate = validateEntryAggregate(
-      {
-        blocks: input.blocks.map(
-          ({ anchor, className, data, hidden, key, schemaVersion, settings, type }) => ({
-            ...(anchor === undefined ? {} : { anchor }),
-            ...(className === undefined ? {} : { className }),
-            data,
-            ...(hidden === undefined ? {} : { hidden }),
-            key,
-            schemaVersion,
-            ...(settings === undefined ? {} : { settings }),
-            type,
-          }),
-        ),
-        fields: input.fields,
-        kind: model.kind,
-        ...(input.slug === undefined ? {} : { slug: input.slug }),
-        title: input.title,
-      },
-      model,
-      this.dependencies.config.blocks,
+    const normalized = normalizeDraftCandidate({
+      blocks: this.dependencies.config.blocks,
+      draft: input,
       mode,
-    );
-    const blocks: ContentBlock[] = aggregate.blocks.map((block, index) => ({
-      ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
-      ...(block.className === undefined ? {} : { className: block.className }),
-      data: block.data as JsonObject,
-      hidden: block.hidden,
-      key: blockKey(block.key),
-      position: input.blocks[index]!.position,
-      schemaVersion: block.schemaVersion,
-      settings: block.settings,
-      type: block.type,
-    }));
-    const seo = normalizeEntrySeo(input.seo ?? null, { enabled: seoEnabled(model) });
-    const normalized = {
-      blocks,
-      fields: aggregate.fields as JsonObject,
-      ...(seo === undefined ? {} : { seo }),
-      ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
-      title: aggregate.title,
-    };
+      model,
+    });
     const mediaReferences = this.collectMedia(normalized.fields, model.fields, "$fields");
-    if (seo?.image !== undefined) {
-      mediaReferences.push({ fieldPath: "image", mediaId: mediaId(seo.image), sourceKey: "$seo" });
+    if (normalized.seo?.image !== undefined) {
+      mediaReferences.push({
+        fieldPath: "image",
+        mediaId: mediaId(normalized.seo.image),
+        sourceKey: "$seo",
+      });
     }
     for (const block of normalized.blocks) {
       mediaReferences.push(
