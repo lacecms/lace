@@ -9,4 +9,5 @@ export {
   type FieldRendererProps,
   type FieldRendererRegistry,
   type ItemPreview,
+  type MediaListPickerProps,
 } from "./FieldRenderer.js";

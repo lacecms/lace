@@ -1,1 +1,1 @@
-export { UploadQueue } from "./UploadQueue.js";
+export { UploadQueue, type UploadSelection } from "./UploadQueue.js";

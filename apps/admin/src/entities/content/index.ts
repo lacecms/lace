@@ -34,6 +34,7 @@ export {
   type FieldRendererProps,
   type FieldRendererRegistry,
   type ItemPreview,
+  type MediaListPickerProps,
 } from "./FieldRenderer/index.js";
 export { mediaAltPair } from "./media-alt.js";
 export { itemSummary } from "./item-summary.js";
@@ -87,3 +88,10 @@ export {
   resolveCollectionListSearch,
   type CollectionListSearch,
 } from "./collection-query.js";
+export {
+  mediaIdsInList,
+  mediaListCapacity,
+  mediaListItems,
+  mediaListTarget,
+  type MediaListTarget,
+} from "./media-list.js";

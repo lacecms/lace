@@ -1,4 +1,5 @@
 import {
+  type ComponentType,
   createContext,
   type ReactNode,
   useContext,
@@ -61,9 +62,16 @@ import {
   type FieldPreviewRegistry,
   type FieldRendererRegistry,
   type ItemPreview,
+  type MediaListPickerProps,
 } from "../field-types.js";
 import { builtInRenderers, groupedFieldTypes } from "../FieldControls/index.js";
 import { itemSummary as summarize, previewLeaf, rowLines } from "../item-summary.js";
+import {
+  mediaIdsInList,
+  mediaListCapacity,
+  mediaListItems,
+  mediaListTarget,
+} from "../media-list.js";
 import {
   cleanValue,
   draftItemValue,
@@ -83,6 +91,7 @@ export type {
   FieldRendererProps,
   FieldRendererRegistry,
   ItemPreview,
+  MediaListPickerProps,
 } from "../field-types.js";
 type Form = UseFormReturn<DraftEditorValues, unknown, DraftEditorValues>;
 interface ContextValue {
@@ -90,6 +99,8 @@ interface ContextValue {
   readonly busy: boolean;
   readonly renderers: FieldRendererRegistry;
   readonly previews?: FieldPreviewRegistry | undefined;
+  /** Adds several items to eligible media lists at once; without it they use the ordinary Add. */
+  readonly mediaListPicker?: ComponentType<MediaListPickerProps> | undefined;
   readonly epoch?: number;
   readonly onTransientChange?: (() => void) | undefined;
   readonly transient?: Map<string, { name: string; message: string }> | undefined;
@@ -103,6 +114,7 @@ export function FieldRendererProvider({
   busy = false,
   renderers,
   previews,
+  mediaListPicker,
   form,
   model,
   transient,
@@ -119,13 +131,25 @@ export function FieldRendererProvider({
       busy,
       renderers,
       previews,
+      mediaListPicker,
       form,
       model,
       transient,
       epoch,
       onTransientChange,
     }),
-    [readOnly, busy, renderers, previews, form, model, transient, epoch, onTransientChange],
+    [
+      readOnly,
+      busy,
+      renderers,
+      previews,
+      mediaListPicker,
+      form,
+      model,
+      transient,
+      epoch,
+      onTransientChange,
+    ],
   );
   return form ? (
     <BoundContext value={value} form={form}>
@@ -780,7 +804,13 @@ function ListNode(
   props: NodeProps & { readonly definition: Extract<FieldDefinition, { type: "list" }> },
 ) {
   const { definition, name, fieldKey, value, onChange, onBlur, errors, onErrors } = props;
-  const { readOnly, busy, growthProblem, epoch } = useCompositeEditing();
+  const {
+    readOnly,
+    busy,
+    growthProblem,
+    epoch,
+    mediaListPicker: MediaListPicker,
+  } = useCompositeEditing();
   const list = Array.isArray(value) ? value : [];
   const [ids, setIds] = useState(() => list.map(newItemIdentity));
   // Group items start collapsed; open rows follow their identity through moves.
@@ -831,6 +861,16 @@ function ListNode(
       ? `This list allows at most ${maximum} items.`
       : growthProblem(name, [...list, initial ?? fieldStartingValue(definition.item, {})]);
   const createProblem = growthProblem(name, []);
+  // Eligible media lists add from the picker in multiple mode instead of one starting item.
+  const mediaTarget = MediaListPicker ? mediaListTarget(definition.item) : undefined;
+  // Kept after closing, so the picker keeps its props while it closes.
+  const [picking, setPicking] = useState<{
+    readonly capacity: number;
+    readonly existingIds: ReadonlySet<string>;
+    readonly limitMessage: string;
+  }>();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickedFocus = useRef<string | undefined>(undefined);
   const clearProblem = growthProblem(name, null);
   const toggle = (token: string, next?: boolean) =>
     setOpen((current) => {
@@ -855,6 +895,43 @@ function ListNode(
       if (error) next[index] = error;
     });
     return next;
+  };
+  const openPicker = () => {
+    if (!mediaTarget) return;
+    const { capacity, cause } = mediaListCapacity({
+      fits: (next) => !growthProblem(name, next),
+      item: definition.item,
+      list,
+      maximum,
+      target: mediaTarget,
+    });
+    if (capacity === 0) return;
+    const over = mediaListItems(definition.item, mediaTarget, Array(capacity + 1).fill("media"));
+    setPicking({
+      capacity,
+      existingIds: mediaIdsInList(mediaTarget, list),
+      limitMessage:
+        cause === "list"
+          ? `${label} allows at most ${maximum} items.`
+          : (growthProblem(name, [...list, ...over]) ?? `${label} cannot take more items.`),
+    });
+    setPickerOpen(true);
+  };
+  const insertMany = (mediaIds: readonly string[]) => {
+    if (!mediaTarget || mediaIds.length === 0) return;
+    const values = mediaListItems(definition.item, mediaTarget, mediaIds);
+    const next = [...list, ...values];
+    if (next.length > maximum || growthProblem(name, next)) return;
+    const added = values.map(() => newItemIdentity());
+    // New rows stay collapsed; focus reaches the first one once the picker has closed.
+    change(next, [...tokens, ...added], errors);
+    setPending(false);
+    pickedFocus.current = added[0];
+    setAnnouncement(
+      values.length === 1
+        ? `Added ${label} item ${list.length + 1}.`
+        : `Added ${values.length} ${label} items.`,
+    );
   };
   const insert = (nextValue: unknown) => {
     if (addProblem || growthProblem(name, [...list, nextValue])) return;
@@ -925,9 +1002,11 @@ function ListNode(
             <Button
               aria-describedby={addProblem ? `${id}:limit` : undefined}
               aria-label={`Add ${label} item`}
+              {...(mediaTarget ? { "aria-haspopup": "dialog" as const } : {})}
               disabled={busy || !!addProblem}
               onClick={() => {
-                if (initial !== undefined) insert(initial);
+                if (mediaTarget) openPicker();
+                else if (initial !== undefined) insert(initial);
                 else {
                   setPending(true);
                   setPendingValue(undefined);
@@ -1203,6 +1282,27 @@ function ListNode(
           ) : (
             <p className="m-0 text-sm text-muted-foreground">No items.</p>
           )}
+          {MediaListPicker && mediaTarget && !readOnly ? (
+            <MediaListPicker
+              capacity={picking?.capacity ?? 1}
+              existingIds={picking?.existingIds ?? new Set()}
+              label={label}
+              limitMessage={picking?.limitMessage ?? ""}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const token = pickedFocus.current;
+                pickedFocus.current = undefined;
+                if (token === undefined) addRef.current?.focus();
+                else setFocusToken(token);
+              }}
+              onConfirm={(mediaIds) => {
+                insertMany(mediaIds);
+                setPickerOpen(false);
+              }}
+              onOpenChange={setPickerOpen}
+              open={pickerOpen}
+            />
+          ) : null}
           {pending ? (
             <div className="grid gap-2 rounded-md border border-border p-2">
               <ValueNode

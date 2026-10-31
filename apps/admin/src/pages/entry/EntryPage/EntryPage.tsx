@@ -53,7 +53,11 @@ import { toast } from "../../../shared/ui/Toaster/index.js";
 import { ShellHeaderActions } from "../../../widgets/admin-shell/index.js";
 import { BlockEditor } from "../../../widgets/block-editor/index.js";
 import { collectionFocusTarget } from "../../../widgets/collection-entries/index.js";
-import { MediaItemPreview, MediaPicker } from "../../../widgets/media-library/index.js";
+import {
+  MediaItemPreview,
+  MediaListPicker,
+  MediaPicker,
+} from "../../../widgets/media-library/index.js";
 import { DiscardChangesDialog } from "../DiscardChangesDialog/index.js";
 import { EntryActionsMenu } from "../EntryActionsMenu/index.js";
 import { EntryConflictAlert } from "../EntryConflictAlert/index.js";
@@ -487,6 +491,7 @@ export function EntryPage() {
           onTransientChange={onTransientChange}
           busy={busy || reloadServerDraft.isPending}
           form={form}
+          mediaListPicker={MediaListPicker}
           model={model}
           previews={mediaPreviews}
           readOnly={readOnly}

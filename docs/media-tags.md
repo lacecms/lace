@@ -58,6 +58,10 @@ build rule. Public content, build exports and MCP do not expose tags.
   filter. Clear filters also clears tags.
 - **Picker filter.** The media picker has the same tag filter, local to the
   dialog like its search and type filter; it resets on every opening.
+- **Picking a tagged set.** Add on a gallery or another media list opens the
+  picker in multiple mode. Filter it by a project's tag, select its images in
+  the order they should appear, and add them all at once; the selection is kept
+  while the filter changes.
 - **Tagged uploads.** While a tag filter is active, files uploaded in the
   library or the picker receive those tags, and the upload area says so. A
   retried upload keeps the tags it was queued with.

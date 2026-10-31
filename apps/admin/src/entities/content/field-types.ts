@@ -29,6 +29,26 @@ export type FieldRendererRegistry = Partial<
   Record<FieldDefinition["type"], ComponentType<FieldRendererProps>>
 >;
 
+/**
+ * The media picker in multiple mode, provided by a higher layer so eligible
+ * media lists can add several items at once. It hands over the selected media
+ * identifiers in selection order; the list closes it.
+ */
+export interface MediaListPickerProps {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** The list's label, naming the dialog and media already in the list. */
+  readonly label: string;
+  /** At most this many items can be selected (at least one). */
+  readonly capacity: number;
+  /** Names the limit that stops the selection at `capacity`. */
+  readonly limitMessage: string;
+  readonly existingIds: ReadonlySet<string>;
+  readonly onConfirm: (ids: readonly string[]) => void;
+  /** Receives the dialog's close focus event; prevent it to focus elsewhere. */
+  readonly onCloseAutoFocus: (event: Event) => void;
+}
+
 /** What a leaf contributes to the collapsed row of the list item that contains it. */
 export interface ItemPreview {
   /** Leading visual, such as a thumbnail; the item's position is shown without one. */

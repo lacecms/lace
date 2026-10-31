@@ -79,7 +79,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | --- | --- | :---: | --- | --- |
 | SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
 | SM2 | MCP publication scope | S | SM2 | done |
-| SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | SM3A and SM3B done; SM3C planned |
+| SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | done |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | planned |
 | SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
 
@@ -350,3 +350,6 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | In progress. Applying the approved tag input, editor, filters and tagged uploads. |
 | 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | Implemented and verified, 17/17 tasks. Shared tag combobox, metadata-form tag editor, library URL tag filter with canonical rewrite, local picker filter, tagged uploads, docs. Admin unit (902), tag/metadata/accessibility e2e, root tests (release test on pinned Node 24.12.0), typecheck, lint, formatting, build, OpenAPI and packed starter/existing-site acceptance pass. Fixed SM3A-stale e2e media fixtures. Pre-existing: composites pointer-drag e2e fails on HEAD; stale draft `video-a-media-upload-delivery` fails `spec:validate`. Awaiting explicit sync/archive. |
 | 2026-10-31 | SM3B | `sm03b-admin-media-tagging` | Archived at `openspec/changes/archive/2026-10-31-sm03b-admin-media-tagging`; `admin-media-library` delta synchronized (2 added, 3 modified requirements). |
+| 2026-10-31 | SM3C | `sm03c-multi-select-media-picker` | Proposed and in progress. Owner decisions: Add of an eligible list opens the picker directly (no empty item); eligible groups have exactly one direct required media field; media already in the list is marked "Already in <list>" and stays selectable. Picker multiple mode with ordered toggle selection, capacity from `maxItems` and the 500-element budget, auto-selected uploads; admin only, no API or template change. 14 tasks. |
+| 2026-10-31 | SM3C | `sm03c-multi-select-media-picker` | Implemented and verified, 14/14 tasks. Picker multiple mode (ordered toggle selection, capacity and limit message, auto-selected uploads, already-used marking), media-list eligibility and capacity helpers, `mediaListPicker` provider slot, bulk append in `ListNode`. Admin unit (942), new e2e (5, axe at 320 px), root format/lint/typecheck/test (release test on pinned Node 24.12.0), build, packed starter/existing-site acceptance, OpenAPI, docs and strict OpenSpec validation pass. Pre-existing: composites pointer-drag e2e fails on HEAD. Awaiting explicit sync/archive. |
+| 2026-10-31 | SM3C | `sm03c-multi-select-media-picker` | Archived at `openspec/changes/archive/2026-10-31-sm03c-multi-select-media-picker`; `admin-media-library` and `admin-draft-editor` deltas synchronized (1 added, 1 modified requirement each). Step SM3 complete. |

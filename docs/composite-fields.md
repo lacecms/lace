@@ -77,7 +77,8 @@ reads as its label and item count followed by the item summaries, such as
 Each list item is one row in a shared bordered list: a drag handle, its summary,
 a chevron and an actions menu with Move up, Move down, Duplicate and Remove.
 Group items start collapsed when an entry opens; Add and Duplicate open the new
-item and focus its first control. Scalar items show their control inline. When
+item and focus its first control (items added from the media picker stay
+collapsed). Scalar items show their control inline. When
 an item's first previewable field holds media, its row shows the thumbnail, the
 filename and type/dimensions, and “No alt” when neither the item's `alt` nor the
 media item has alt text. The editor derives all of this from the field
@@ -96,6 +97,17 @@ without defaults stay absent, and their children are not created automatically.
 Opening an entry applies applicable defaults as its clean starting baseline.
 
 Add uses a detached item default, or a draft-valid group with child defaults.
+Media lists are the exception: when a list's item is `field.media()`, or a group
+with exactly one direct media field that is `required` (such as the built-in
+gallery's images), Add opens the media picker in multiple mode. Writers select
+several images in order, filter by search, type or tag, upload new files (which
+are selected automatically) and confirm with "Add N images". Each selected image
+becomes one item at the end of the list: the identifier itself, or the item's
+starting value with its media field set. Images already in the list are marked
+"Already in <list>" and can still be added again. The picker stops at the list's
+remaining `maxItems` or the entry-wide budget below and says which limit it
+reached. New items start collapsed and focus moves to the first of them. Groups
+with an optional media field or several media fields keep the ordinary Add.
 A scalar without a valid starting value opens an inline Add/Cancel editor;
 for example, a number with `min: 10` must receive a valid number before insertion.
 Clearing a committed scalar item keeps its last committed value and blocks Save
