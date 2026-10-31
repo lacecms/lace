@@ -55,10 +55,10 @@
       }
     },
     "videoEmbed": {
-      "revision": 1,
+      "revision": 2,
       "files": {
-        "src/components/lace/VideoEmbed.css": "eb474820feab7f0dab934dd56d89bda17bc7b771518d4842f5174819df019f5a",
-        "src/components/lace/VideoEmbedBlock.astro": "02fa3e159dc4808c32c6e300534572fd0bdae1708d3212978df6e96f4e5a05b0"
+        "src/components/lace/VideoEmbed.css": "d0ced20f52373325ce006bae34de47cc8b8ee82261f655eba6c4bef57cad0426",
+        "src/components/lace/VideoEmbedBlock.astro": "a5060c874d3d1c9bf9d1c15e94d9f78b8a3667e18b4f90a410017d4eda30408e"
       }
     }
   }

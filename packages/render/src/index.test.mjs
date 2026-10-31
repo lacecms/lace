@@ -754,12 +754,15 @@ test("video embed descriptions canonicalize locally and preserve contextual fail
     provider: "youtube",
     videoId: "dQw4w9WgXcQ",
     src: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    ambientSrc:
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&playsinline=1",
   });
   expect(describeVideoEmbed("https://vimeo.com/123/abc")).toEqual({
     provider: "vimeo",
     videoId: "123",
     privacyHash: "abc",
     src: "https://player.vimeo.com/video/123?h=abc",
+    ambientSrc: "https://player.vimeo.com/video/123?h=abc&background=1",
   });
   expect(() => describeVideoEmbed("https://example.com", context)).toThrow(LaceRenderError);
   try {

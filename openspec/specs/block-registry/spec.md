@@ -158,7 +158,7 @@ returns stored data and settings unchanged; normal setting validation SHALL
 supply any absent defaults. Migration SHALL preserve item order, media usage,
 alt/caption/link overrides, lightbox values and block-envelope values, including
 hidden blocks and both draft and published snapshots. `navigation` SHALL
-be at definition version 1. Except for `link`, the other built-ins SHALL stay at version 1 and
+be at definition version 1. Except for `link` and `videoEmbed`, the other built-ins SHALL stay at version 1 and
 SHALL declare no settings.
 Each built-in SHALL carry a non-empty human-readable label and a non-empty
 one-sentence description, and its serializable metadata projection SHALL
@@ -167,12 +167,21 @@ SHALL contribute to the configuration projection hash and SHALL NOT contribute
 to the structural hash. Adding built-ins SHALL NOT change the normalized
 configuration or hashes of a configuration that does not register them.
 
-`videoEmbed` SHALL be version 1 with no settings or migrations, a non-empty
-label and description, required `url` restricted to YouTube and Vimeo, required
-text `title` with minimum length 1, optional image-media `poster` and optional
-text `caption`. Field labels and guidance SHALL explain the supported providers,
-accessible title, optional poster and deferred player loading. Registering the
-new built-in SHALL NOT change configurations that do not select it.
+`videoEmbed` SHALL be version 2 with a non-empty label and description,
+required `url` restricted to YouTube and Vimeo, required text `title` with
+minimum length 1, optional image-media `poster` and optional text `caption`.
+It SHALL declare two required select settings with choice-card presentation:
+`aspectRatio` with choices `16:9`, `4:3`, `1:1`, `4:5` and `9:16` and default
+`16:9`, and `playback` with choices `player` and `ambient` and default
+`player`, each choice with a label and description. Field and setting labels
+and guidance SHALL explain the supported providers, accessible title, optional
+poster, deferred player loading and the muted, looping, control-free ambient
+mode. It SHALL declare an identity migration to version 2 that returns stored
+data and settings unchanged; normal setting validation SHALL supply the absent
+defaults, so migrated blocks render exactly as before. Migration SHALL preserve
+poster media usage and block-envelope values, including hidden blocks and both
+draft and published snapshots. Registering the built-in SHALL NOT change
+configurations that do not select it.
 
 The `link` built-in SHALL be version 1, label `Link`, with a non-empty description,
 required `label` text (minLength 1, maxLength 200), required ordinary `url`, and
@@ -287,7 +296,11 @@ schema version, or attempts to register a duplicate type
 
 #### Scenario: Embed definition uses only the public DSL
 - **WHEN** the video embed built-in is resolved
-- **THEN** its serializable fields are URL, title, poster and caption with the declared restrictions, and existing definitions keep their versions
+- **THEN** it is version 2, its serializable fields are URL, title, poster and caption with the declared restrictions, its settings are `aspectRatio` and `playback` with their choices and defaults, and other definitions keep their versions
+
+#### Scenario: Version 1 video embeds migrate unchanged
+- **WHEN** configuration sync migrates draft, published and hidden version 1 `videoEmbed` blocks to version 2
+- **THEN** their data, poster usage and envelope values are unchanged and their settings are `16:9` and `player`, so public output is unchanged apart from the block version
 
 #### Scenario: Standalone link variants
 - **WHEN** a Link block has a label and valid manual or internal URL with default settings or appearance `text`

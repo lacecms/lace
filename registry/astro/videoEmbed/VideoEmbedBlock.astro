@@ -5,16 +5,21 @@ import { describeVideoEmbed, type BlockProps } from "@lacecms/render";
 import "./VideoEmbed.css";
 
 type Props = BlockProps<typeof builtInBlocks.videoEmbed>;
-const { anchor, block, className, context, data, image } = Astro.props;
+const { anchor, block, className, context, data, image, settings } = Astro.props;
 const video = describeVideoEmbed(data.url, context);
 const poster = data.poster === undefined ? undefined : { ...image(data.poster), alt: "" };
 const frame = { src: video.src, title: data.title, allow: "fullscreen; picture-in-picture; encrypted-media", allowfullscreen: true, referrerpolicy: "strict-origin-when-cross-origin" as const, tabindex: 0, "data-lace-part": "player" };
 ---
 
-<figure class:list={["video-embed", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor}>
+<figure class:list={["video-embed", className]} data-lace-block={block.type} data-lace-block-key={block.key} id={anchor} data-lace-aspect-ratio={settings.aspectRatio} data-lace-playback={settings.playback}>
   <div data-lace-video-area>
     {poster === undefined ? (
-      <iframe {...frame} loading="lazy" />
+      settings.playback === "ambient" ? (
+        <>
+          <template data-lace-video-template><iframe {...frame} loading="lazy" /></template>
+          <noscript><iframe {...frame} loading="lazy" /></noscript>
+        </>
+      ) : <iframe {...frame} loading="lazy" />
     ) : (
       <>
         <button type="button" data-lace-part="preview" aria-label={`Load video: ${data.title}`}>
@@ -24,18 +29,42 @@ const frame = { src: video.src, title: data.title, allow: "fullscreen; picture-i
         <template data-lace-video-template><iframe {...frame} /></template>
       </>
     )}
+    {settings.playback === "ambient" && (
+      <template data-lace-ambient-template>
+        <iframe src={video.ambientSrc} title={data.title} tabindex="-1" loading="lazy" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" data-lace-part="player" />
+      </template>
+    )}
   </div>
   {data.caption !== undefined && <figcaption data-lace-part="caption">{data.caption}</figcaption>}
   <a data-lace-part="source" href={data.url}>Watch on {video.provider === "youtube" ? "YouTube" : "Vimeo"}</a>
 </figure>
 
 <script>
+  function initializeAmbientVideos() {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    for (const block of document.querySelectorAll<HTMLElement>('[data-lace-block="videoEmbed"][data-lace-playback="ambient"]:not([data-lace-ambient])')) {
+      const area = block.querySelector<HTMLElement>("[data-lace-video-area]");
+      const preview = area?.querySelector<HTMLButtonElement>('[data-lace-part="preview"]');
+      const template = area?.querySelector<HTMLTemplateElement>(reducedMotion ? "template[data-lace-video-template]" : "template[data-lace-ambient-template]");
+      if (!area || (!template && !preview)) continue;
+      if (reducedMotion) {
+        if (!preview && template) area.append(template.content.cloneNode(true));
+        block.dataset.laceAmbient = "fallback";
+      } else if (template) {
+        area.append(template.content.cloneNode(true));
+        if (preview) preview.inert = true;
+        block.dataset.laceAmbient = "active";
+      }
+    }
+  }
+  initializeAmbientVideos();
+  document.addEventListener("astro:page-load", initializeAmbientVideos);
   // Delegation works for multiple blocks and for subsequently inserted markup.
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest<HTMLButtonElement>('[data-lace-block="videoEmbed"] [data-lace-part="preview"]');
-    if (!button) return;
+    if (!button || button.inert) return;
     const area = button.parentElement;
     const template = area?.querySelector<HTMLTemplateElement>("template[data-lace-video-template]");
     if (!template || area?.querySelector("iframe")) return;

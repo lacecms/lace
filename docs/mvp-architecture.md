@@ -461,7 +461,7 @@ which renders a site header from `site.global("settings")` and the published
 back to static values and a static Home link while either global is
 unpublished (a published navigation global without visible blocks renders no
 navigation). Gallery and navigation layout CSS lives in the site stylesheet; the
-components carry no `<style>` elements; only videoEmbed carries its bounded preview activation script. It contains no tests, fixtures, or
+components carry no `<style>` elements; only videoEmbed carries its bounded preview activation and ambient mounting script. It contains no tests, fixtures, or
 engine-development routes.
 
 `apps/site` is the engine development playground and integration fixture. It may
@@ -902,13 +902,16 @@ descriptors.
 ### Initial built-in blocks
 
 The starter and browser editor ship with eight blocks. They use only the public
-field DSL and do not receive special database treatment; only `image` and
-`gallery` declare a setting:
+field DSL and do not receive special database treatment; `image`, `gallery`, `videoEmbed` and `link` declare settings:
 
-- `videoEmbed` (version 1): required YouTube/Vimeo URL and accessible title,
-  optional image-media poster and caption, no settings. A poster defers the
-  external iframe until button activation; without it, the iframe is lazy.
-  Playback never autostarts. Video-file uploads remain outside this selection;
+- `videoEmbed` (version 2): required YouTube/Vimeo URL and accessible title,
+  optional image-media poster and caption. Required select settings `aspectRatio`
+  (`16:9` default, `4:3`, `1:1`, `4:5`, `9:16`) and `playback` (`player` default,
+  `ambient`) use choice cards. An identity migration supplies setting defaults.
+  Player mode defers the iframe until poster activation, or loads it lazily without
+  a poster; it never autostarts. Ambient mode mounts a muted, looping player
+  without controls and keeps the poster underneath. Reduced motion and no
+  JavaScript fall back to player behavior. Video-file uploads remain excluded;
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
@@ -2441,7 +2444,7 @@ attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
 Built-in components carry no `<style>`; only videoEmbed carries its bounded
-activation `<script>`. Presentation stays in the
+activation and ambient mounting `<script>`. Presentation stays in the
 site stylesheet. The `image` (revision 6), `gallery` (revision 3) and `hero`
 (revision 4) components render media through `LaceImage.astro`; `image` and
 `gallery` open the lightbox when their `lightbox` setting is on, with dialog
@@ -2453,13 +2456,18 @@ text is empty. The registry ships `gallery` and `navigation` (CE7D) besides
 the five earlier items; every Lace-maintained site installs all seven.
 
 The `astro/videoEmbed` registry component is the sole exception to script-free
-block sources: a small local activation script replaces an inert player template
+block sources: a small local script replaces an inert player template
 on a native preview button click and focuses its iframe, once per block. It uses
 no player SDK or framework hydration. The adapter remains free of client scripts.
 The optional poster uses LaceImage and ordinary media references; a companion
-structural stylesheet reserves 16:9 geometry. Source links remain available with
-or without JavaScript. Player URLs use youtube-nocookie.com or player.vimeo.com,
-never autoplay, and keep only Vimeo's privacy hash. Rendering stays static.
+structural stylesheet reserves the selected ratio (16:9 by default). Ambient
+mounting happens once after checking reduced motion; no live ambient iframe
+appears in static HTML. Source links remain available with or without JavaScript,
+and are visually hidden only while ambient playback is mounted, until focused.
+Player URLs use youtube-nocookie.com or player.vimeo.com, never autoplay in
+player mode, and retain only Vimeo's privacy hash plus canonical ambient
+parameters when selected. Ambient mode has no pause control (the documented
+WCAG 2.2.2 gap for motion longer than five seconds). Rendering stays static.
 
 ### 13.6 Framework selection
 

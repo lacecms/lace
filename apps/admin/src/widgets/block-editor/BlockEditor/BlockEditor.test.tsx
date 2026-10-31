@@ -579,6 +579,20 @@ test("generic video embed authoring validates URLs, selects and clears a poster"
     title: "Studio film",
     poster: "media-1",
   });
+  expect(saveDraft.mock.calls[0]![1].blocks[0]!.settings).toEqual({
+    aspectRatio: "16:9",
+    playback: "player",
+  });
+  await user.click(within(card()).getByRole("tab", { name: "Settings" }));
+  await user.click(within(card()).getByRole("radio", { name: /1:1/ }));
+  await user.click(within(card()).getByRole("radio", { name: /Ambient/ }));
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(2));
+  expect(saveDraft.mock.calls[1]![1].blocks[0]!.settings).toEqual({
+    aspectRatio: "1:1",
+    playback: "ambient",
+  });
+  await user.click(within(card()).getByRole("tab", { name: "Content" }));
   expect(document.querySelector("iframe")).toBeNull();
   screen.getByRole("button", { name: "Media actions for Preview image" }).focus();
   await user.keyboard("{Enter}");
@@ -604,7 +618,7 @@ test.each(["viewer", "editor"] as const)(
     const block = {
       key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
       type: "videoEmbed",
-      schemaVersion: 1,
+      schemaVersion: 2,
       position: 1000,
       hidden: false,
       settings: {},

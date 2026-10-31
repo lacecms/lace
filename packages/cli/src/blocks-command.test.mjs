@@ -761,11 +761,11 @@ test("videoEmbed installs and protects both component and CSS during updates", a
     const next = await newerRegistry(root, async (directory) => {
       const manifestPath = join(directory, "astro/videoEmbed/item.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.revision = 2;
+      manifest.revision = 3;
       await writeFile(manifestPath, JSON.stringify(manifest));
       for (const filename of ["VideoEmbedBlock.astro", "VideoEmbed.css"]) {
         const path = join(directory, "astro/videoEmbed", filename);
-        await writeFile(path, (await readFile(path, "utf8")) + "\n<!-- revision 2 -->\n");
+        await writeFile(path, (await readFile(path, "utf8")) + "\n<!-- revision 3 -->\n");
       }
     });
     const result = await run(root, ["videoEmbed", "--write-new"], next);

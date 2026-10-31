@@ -482,3 +482,33 @@ test("link-aware sources preserve actions, submenus and image lightboxes without
   expect(html).not.toContain("entry:");
   expect(authored[0].data.primaryActionUrl).toBe("entry:missing");
 });
+
+test.each(["player", "ambient"])(
+  "video %s markup covers poster and direct fallbacks",
+  async (playback) => {
+    for (const poster of [undefined, "bare"]) {
+      const html = await render([
+        block(
+          "videoEmbed",
+          { url: "https://vimeo.com/123/abc", title: "Film", ...(poster ? { poster } : {}) },
+          { settings: { playback, aspectRatio: "4:5" } },
+        ),
+      ]);
+      expect(html).toContain('data-lace-aspect-ratio="4:5"');
+      expect(html).toContain(`data-lace-playback="${playback}"`);
+      expect(html).not.toContain("<style");
+      expect(html).not.toContain("style=");
+      const live = html
+        .replace(/<template[^>]*>[\s\S]*?<\/template>/gu, "")
+        .replace(/<noscript>[\s\S]*?<\/noscript>/gu, "");
+      expect((live.match(/<iframe/gu) ?? []).length).toBe(playback === "player" && !poster ? 1 : 0);
+      expect(html.includes("data-lace-ambient-template")).toBe(playback === "ambient");
+      expect(html.includes("<noscript>")).toBe(playback === "ambient" && !poster);
+      if (playback === "ambient") {
+        expect(html).toContain("h=abc&amp;background=1");
+        expect(html).toContain('tabindex="-1"');
+        expect(html).toContain('allow="autoplay; encrypted-media"');
+      }
+    }
+  },
+);

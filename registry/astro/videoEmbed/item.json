@@ -3,8 +3,8 @@
   "name": "videoEmbed",
   "framework": "astro",
   "blockType": "videoEmbed",
-  "blockVersion": 1,
-  "revision": 1,
+  "blockVersion": 2,
+  "revision": 2,
   "requires": {
     "@lacecms/astro": "0.1.0-alpha.8",
     "@lacecms/render": "0.1.0-alpha.8"

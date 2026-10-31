@@ -431,34 +431,75 @@
         },
         {
           "type": "videoEmbed",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "key": "about-youtube",
           "position": 2000,
           "data": {
             "url": "https://youtu.be/dQw4w9WgXcQ",
             "title": "YouTube film"
+          },
+          "settings": {
+            "aspectRatio": "16:9",
+            "playback": "player"
           }
         },
         {
           "type": "videoEmbed",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "key": "about-vimeo",
           "position": 3000,
           "data": {
             "url": "https://vimeo.com/76979871/abc123def",
             "title": "Vimeo film",
             "poster": "hero-media"
+          },
+          "settings": {
+            "aspectRatio": "16:9",
+            "playback": "player"
           }
         },
         {
           "type": "videoEmbed",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "key": "about-vimeo-second",
           "position": 4000,
           "data": {
             "url": "https://vimeo.com/76979871",
             "title": "Second Vimeo film",
             "poster": "hero-media"
+          },
+          "settings": {
+            "aspectRatio": "16:9",
+            "playback": "player"
+          }
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 2,
+          "key": "about-ambient-0",
+          "position": 5000,
+          "settings": {
+            "aspectRatio": "1:1",
+            "playback": "ambient"
+          },
+          "data": {
+            "url": "https://vimeo.com/76979871/abc123def",
+            "title": "Ambient film 0",
+            "poster": "hero-media"
+          }
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 2,
+          "key": "about-ambient-1",
+          "position": 6000,
+          "settings": {
+            "aspectRatio": "9:16",
+            "playback": "ambient"
+          },
+          "data": {
+            "url": "https://vimeo.com/76979871/abc123def",
+            "title": "Ambient film 1"
           }
         }
       ],

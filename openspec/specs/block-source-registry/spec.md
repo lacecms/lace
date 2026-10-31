@@ -6,7 +6,7 @@ Defines the canonical, framework-keyed registry of user-owned block sources, the
 ## Requirements
 
 ### Requirement: The registry holds one canonical source per framework block
-The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup, apart from the expressly versioned Gallery layout adoption and CE10 link-resolution adoption described below. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Only `videoEmbed` SHALL be allowed a local activation `<script>` implementing the video-embeds preview contract, with no external player SDK or framework hydration; all other built-ins SHALL carry no `<script>` element. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
+The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup, apart from the expressly versioned Gallery layout adoption and CE10 link-resolution adoption described below. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Only `videoEmbed` SHALL be allowed a local `<script>` implementing the video-embeds preview activation and ambient playback contract, with no external player SDK or framework hydration; all other built-ins SHALL carry no `<script>` element. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
 
 The `gallery` component SHALL render a `section` root with class `gallery`, a
 `title` part heading only when the title is a non-empty string, and an
@@ -31,15 +31,21 @@ child. The component SHALL use no JavaScript. A `link` anchor whose URL is a
 root-relative path without query or fragment equal to the current page path,
 ignoring one trailing slash, SHALL carry `aria-current="page"`. Hrefs SHALL be safe resolved URLs from the shared link resolver. Unavailable parent/child targets SHALL render label text while retaining valid descendants and native disclosure behavior.
 
-The `astro/videoEmbed` registry item SHALL ship a site-owned component consuming
-parsed block props and the pure embed description, plus a structural stylesheet
-companion reserving the responsive player area. It SHALL preserve block anchor,
-class name, `data-lace-block` and `data-lace-block-key` hooks and expose
-`data-lace-part` values `preview`, `play`, `player`, `caption` and `source` on
-applicable elements. Preview media SHALL use the image describer and existing
-Astro image component. It SHALL implement the video-embeds activation and source
-fallback contract. Installation and update SHALL use existing manifest, lock,
-conflict protection and `.new` recovery behavior for all item files.
+The `astro/videoEmbed` registry item SHALL target block definition version 2
+with an advanced item revision. It SHALL ship a site-owned component consuming
+parsed block props, typed settings and the pure embed description, plus a
+structural stylesheet companion reserving the responsive player area at the
+selected aspect ratio and visually hiding the source link only while an ambient
+player is mounted. It SHALL preserve block anchor, class name, `data-lace-block`
+and `data-lace-block-key` hooks, SHALL expose the selected settings on the root
+element as `data-lace-aspect-ratio` and `data-lace-playback`, SHALL mark a
+mounted ambient player with `data-lace-ambient="active"` on the root, and SHALL
+expose `data-lace-part` values `preview`, `play`, `player`, `caption` and
+`source` on applicable elements. Preview media SHALL use the image describer and
+existing Astro image component. It SHALL implement the video-embeds activation,
+ambient playback and source fallback contract without inline `style`
+attributes for the ratio. Installation and update SHALL use existing manifest,
+lock, conflict protection and `.new` recovery behavior for all item files.
 
 The `astro/link` item SHALL provide a site-owned component preserving anchor,
 class and root block hooks, with `data-lace-part=link` for a resolved anchor and
@@ -137,6 +143,14 @@ Install/update SHALL retain hash guards, locks and `.new` recovery.
 #### Scenario: Embed install and conflict handling
 - **WHEN** the embed item is installed or updated with a locally modified component or stylesheet
 - **THEN** ordinary installation succeeds for clean targets and conflicts preserve the active component, stylesheet, map and lock according to the existing CLI contract
+
+#### Scenario: Embed settings hooks
+- **WHEN** the embed component renders a block with aspect ratio `4:5` and ambient playback
+- **THEN** its root carries `data-lace-aspect-ratio="4:5"` and `data-lace-playback="ambient"`, and the structural stylesheet gives the video area a 4:5 shape with no inline style
+
+#### Scenario: Updating an older embed component
+- **WHEN** a site with the revision 1 embed component runs block installation for `videoEmbed` after its models were synchronized to version 2
+- **THEN** a clean component and stylesheet are updated to the version 2 revision, while a locally edited one is reported as a conflict with a `.new` proposal and the active files stay unchanged
 
 #### Scenario: Unavailable link and image
 - **WHEN** a Link target and an image target are absent from a valid export

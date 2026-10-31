@@ -6301,6 +6301,117 @@ contract("LIST1 Gallery v3 migrates draft, published and hidden lists", async (r
 });
 
 contract(
+  "SM1 videoEmbed v1 migrates draft, published and hidden blocks",
+  async (runtime, expect) => {
+    const videoEmbed = builtInBlocks.videoEmbed;
+    const old = defineBlock({
+      type: "videoEmbed",
+      version: 1,
+      fields: videoEmbed.fields,
+    });
+    const make = (block: BlockDefinition, version: number) =>
+      defineConfig({
+        blocks: [block],
+        content: [
+          defineCollection({ key: "posts", route: "/blog/:slug", version, blocks: ["videoEmbed"] }),
+        ],
+      });
+    const before = await make(old, 1),
+      after = await make(videoEmbed, 2);
+    const { repository, sql } = await runtime.open({
+      resolveModel: syncResolver(before.runtime.content),
+    });
+    await syncNotes(repository, before, 10);
+    await seedMedia(sql, "m-1");
+    const data = {
+      url: "https://vimeo.com/123/abc",
+      title: "Studio",
+      poster: "m-1",
+      caption: "Film",
+    };
+    const blocks = [false, true].map((hidden, index) => ({
+      key: blockKey(`videoEmbed-${index}`),
+      type: "videoEmbed",
+      schemaVersion: 1,
+      position: 1000 + index * 1000,
+      hidden,
+      anchor: `photos-${index}`,
+      className: "wide",
+      data,
+      settings: {},
+    }));
+    await repository.create({
+      entry: entry("videoEmbed-entry", "posts", {
+        blocks,
+        slug: "video-embed",
+        title: "Video embed",
+        updatedAt: 20,
+      }),
+      mediaReferences: blocks.map((b) => ({
+        sourceKey: b.key,
+        fieldPath: "poster",
+        mediaId: mediaId("m-1"),
+      })),
+    });
+    await repository.publish(publish("videoEmbed-entry", 1, 21, "videoEmbed-published"));
+    const stored = (await repository.load({ entryId: contentEntryId("videoEmbed-entry") }))!;
+    const state = await sql.all("select * from published_state");
+    const references = await sql.all(
+      "select snapshot_id, source_key, field_path, media_id from content_media_references order by snapshot_id, source_key, field_path",
+    );
+    const prepared = await prepareNotes(repository, after);
+    expect(prepared.plan.isValid, JSON.stringify(prepared.plan)).toBe(true);
+    await syncNotes(repository, after, 30, prepared);
+    const migrated = (await repository.load({ entryId: stored.id }))!;
+    for (const snapshot of [migrated.draft, migrated.published!]) {
+      expect(snapshot.blocks).toEqual(
+        blocks.map((b) => ({
+          ...b,
+          schemaVersion: 2,
+          settings: { aspectRatio: "16:9", playback: "player" },
+        })),
+      );
+    }
+    expect(
+      await sql.all(
+        "select snapshot_id, source_key, field_path, media_id from content_media_references order by snapshot_id, source_key, field_path",
+      ),
+    ).toEqual(references);
+    const useCases = new ContentUseCases({
+      clock: { now: () => unixMilliseconds(35) },
+      config: after.runtime,
+      content: repository,
+      media: repository,
+      idGenerator: { next: sequence("video-validation") },
+    });
+    for (const [key, value] of [
+      ["aspectRatio", "21:9"],
+      ["playback", "autoplay"],
+    ] as const) {
+      await expect(
+        useCases.save({
+          actor: editor,
+          entryId: migrated.id,
+          expectedRevision: migrated.draft.revision,
+          title: "Video embed",
+          slug: "video-embed",
+          fields: {},
+          blocks: migrated.draft.blocks.map((block, index) =>
+            index === 0 ? { ...block, settings: { ...block.settings, [key]: value } } : block,
+          ),
+        }),
+      ).rejects.toMatchObject({ issues: [{ path: ["blocks", 0, "settings", key] }] });
+      expect(await repository.load({ entryId: migrated.id })).toEqual(migrated);
+    }
+    expect(migrated.draft.revision).toBe(stored.draft.revision + 1);
+    expect(await sql.all("select * from published_state")).not.toEqual(state);
+    const stable = await repository.load({ entryId: stored.id });
+    await syncNotes(repository, after, 40);
+    expect(await repository.load({ entryId: stored.id })).toEqual(stable);
+  },
+);
+
+contract(
   "LIST2 setting visibility sync preserves content, retains build behavior and validates inactive values",
   async (runtime, expect) => {
     const make = async (values?: readonly string[]) =>

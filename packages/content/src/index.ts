@@ -2914,9 +2914,72 @@ export const builtInBlocks = deepFreeze({
   }),
   videoEmbed: defineBlock({
     type: "videoEmbed",
-    version: 1,
+    version: 2,
     label: "Video embed",
     description: "A YouTube or Vimeo video with an optional image preview.",
+    migrations: { 2: (block) => block },
+    settings: {
+      aspectRatio: field.select({
+        options: ["16:9", "4:3", "1:1", "4:5", "9:16"],
+        required: true,
+        defaultValue: "16:9",
+        label: "Aspect ratio",
+        description: "Reserves the video area before the player loads.",
+        presentation: {
+          control: "cards",
+          choices: [
+            {
+              value: "16:9",
+              label: "16:9",
+              description: "Wide landscape.",
+              diagram: { cells: [{ x: 0, y: 2, width: 12, height: 7 }] },
+            },
+            {
+              value: "4:3",
+              label: "4:3",
+              description: "Classic landscape.",
+              diagram: { cells: [{ x: 0, y: 1, width: 12, height: 9 }] },
+            },
+            {
+              value: "1:1",
+              label: "1:1",
+              description: "Square.",
+              diagram: { cells: [{ x: 1, y: 1, width: 9, height: 9 }] },
+            },
+            {
+              value: "4:5",
+              label: "4:5",
+              description: "Portrait.",
+              diagram: { cells: [{ x: 2, y: 1, width: 8, height: 10 }] },
+            },
+            {
+              value: "9:16",
+              label: "9:16",
+              description: "Tall portrait.",
+              diagram: { cells: [{ x: 3, y: 0, width: 6, height: 11 }] },
+            },
+          ],
+        },
+      }),
+      playback: field.select({
+        options: ["player", "ambient"],
+        required: true,
+        defaultValue: "player",
+        label: "Playback",
+        description: "Ambient videos play muted and loop without controls.",
+        presentation: {
+          control: "cards",
+          choices: [
+            { value: "player", label: "Player", description: "Visitors start the video." },
+            {
+              value: "ambient",
+              label: "Ambient",
+              description: "Muted, looping, no controls; respects reduced motion.",
+            },
+          ],
+        },
+      }),
+    },
     fields: {
       url: field.url({
         required: true,
@@ -2932,7 +2995,8 @@ export const builtInBlocks = deepFreeze({
       }),
       poster: field.media({
         label: "Preview image",
-        description: "Optional. Load the video player only when a visitor selects this preview.",
+        description:
+          "Optional. Defers player loading until selected in Player mode; stays underneath Ambient playback.",
       }),
       caption: field.text({ label: "Caption" }),
     },

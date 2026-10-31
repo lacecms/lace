@@ -648,7 +648,8 @@ test("declares block settings with defaults in metadata only when present", () =
   for (const [type, builtIn] of Object.entries(builtInBlocks)) {
     if (type === "gallery" || type === "image")
       expect(toBlockMetadata(builtIn).settings.lightbox).toEqual(lightbox);
-    else if (type !== "link") expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
+    else if (type !== "link" && type !== "videoEmbed")
+      expect(toBlockMetadata(builtIn)).not.toHaveProperty("settings");
   }
   for (const [settings, message] of [
     [{ image: field.media({ defaultValue: "m" }) }, "settings.image must be a select"],
@@ -2171,8 +2172,30 @@ test("embed descriptor rejects invalid options and preserves ordinary URL metada
 
 test("videoEmbed is a public DSL block with draft and publication semantics", () => {
   const definition = builtInBlocks.videoEmbed;
-  expect(definition.version).toBe(1);
-  expect(definition.settings).toBeUndefined();
+  expect(definition.version).toBe(2);
+  expect(validateBlockSettings(definition, {})).toEqual({
+    aspectRatio: "16:9",
+    playback: "player",
+  });
+  for (const aspectRatio of ["16:9", "4:3", "1:1", "4:5", "9:16"]) {
+    expect(validateBlockSettings(definition, { aspectRatio, playback: "ambient" })).toEqual({
+      aspectRatio,
+      playback: "ambient",
+    });
+  }
+  for (const settings of [{ aspectRatio: "21:9" }, { playback: "autoplay" }])
+    expect(() => validateBlockSettings(definition, settings)).toThrow();
+  const metadata = toBlockMetadata(definition);
+  expect(metadata.settings.aspectRatio.presentation.choices).toHaveLength(5);
+  expect(metadata.settings.playback.presentation.choices).toHaveLength(2);
+  for (const setting of Object.values(metadata.settings)) {
+    expect(setting.required).toBe(true);
+    expect(setting.presentation.control).toBe("cards");
+    for (const choice of setting.presentation.choices) {
+      expect(choice.label.length).toBeGreaterThan(0);
+      expect(choice.description.length).toBeGreaterThan(0);
+    }
+  }
   expect(validateBlockData(definition, {}, "draft")).toEqual({});
   expect(() => validateBlockData(definition, {}, "publish")).toThrow();
   const data = { url: "https://vimeo.com/123", title: "Studio" };
@@ -2210,4 +2233,31 @@ test("Link uses ordinary URLs and scalar presentation settings", () => {
     expect(() => validateBlockData(definition, { label, url: "/" }, "draft")).toThrow();
   expect(() => validateBlockSettings(definition, { appearance: "other" })).toThrow();
   expect(() => validateBlockSettings(definition, { newTab: "yes" })).toThrow();
+});
+
+test("embed ambient URLs are canonical and ignore input playback parameters", async () => {
+  const { parseVideoEmbed } = await import("../dist/index.js");
+  for (const url of [
+    "https://youtu.be/dQw4w9WgXcQ?start=50&autoplay=0&playlist=bad",
+    "https://youtube.com/watch?v=dQw4w9WgXcQ&mute=0",
+  ]) {
+    const result = parseVideoEmbed(url);
+    expect(result.src).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ");
+    expect(result.ambientSrc).toBe(
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&playsinline=1",
+    );
+    expect(Object.isFrozen(result)).toBe(true);
+  }
+  for (const url of [
+    "https://vimeo.com/123/abc?autoplay=0",
+    "https://player.vimeo.com/video/123?h=abc&background=0",
+  ]) {
+    expect(parseVideoEmbed(url)).toMatchObject({
+      src: "https://player.vimeo.com/video/123?h=abc",
+      ambientSrc: "https://player.vimeo.com/video/123?h=abc&background=1",
+    });
+  }
+  expect(parseVideoEmbed("https://vimeo.com/123?background=0&mute=0").ambientSrc).toBe(
+    "https://player.vimeo.com/video/123?background=1",
+  );
 });

@@ -96,6 +96,20 @@ test("the fixture build emits published static routes without CMS access", async
     "utf8",
   );
 
+  const ambientMarkup = [
+    ...about.matchAll(
+      /<figure\b[^>]*data-lace-block-key="about-ambient-[01]"[^>]*>[\s\S]*?<\/figure>/gu,
+    ),
+  ];
+  expect(ambientMarkup).toHaveLength(2);
+  for (const [html] of ambientMarkup) {
+    expect(html).toContain("data-lace-ambient-template");
+    const live = html
+      .replace(/<template[^>]*>[\s\S]*?<\/template>/gu, "")
+      .replace(/<noscript>[\s\S]*?<\/noscript>/gu, "");
+    expect(live).not.toContain("<iframe");
+  }
+
   for (const [html, modelKey, entryId] of [
     [home, "home", "home-entry"],
     [post, "posts", "first-post-entry"],
@@ -133,6 +147,8 @@ test("the fixture build emits published static routes without CMS access", async
         ["videoEmbed", "about-youtube"],
         ["videoEmbed", "about-vimeo"],
         ["videoEmbed", "about-vimeo-second"],
+        ["videoEmbed", "about-ambient-0"],
+        ["videoEmbed", "about-ambient-1"],
       ],
     ],
     [
@@ -206,6 +222,15 @@ test("the fixture build emits published static routes without CMS access", async
         "source",
         "preview",
         "play",
+        "player",
+        "source",
+        "preview",
+        "play",
+        "player",
+        "player",
+        "source",
+        "player",
+        "player",
         "player",
         "source",
       ],

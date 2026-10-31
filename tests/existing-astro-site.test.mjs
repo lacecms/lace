@@ -126,8 +126,9 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   expect(article).toContain(
     '<footer class="site-footer"><p>Content from <a class="external" href="https://lace.example" rel="noopener">Lace</a></p></footer>',
   );
-  expect(home).toContain("[data-lace-block=hero] [data-lace-part=heading]");
+  // Astro can inline small stylesheets or extract them as the registry CSS grows.
   const output = await outputText(join(site, "dist"));
+  expect(output).toContain("[data-lace-block=hero] [data-lace-part=heading]");
   expect(output).not.toContain(token);
   expect(output).not.toContain("DRAFT ONLY");
 }, 60_000);

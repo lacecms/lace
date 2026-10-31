@@ -77,7 +77,7 @@ Gaps found while mapping tatianae.com onto Lace:
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | planned |
+| SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
 | SM2 | MCP publication scope | S | SM2 | planned |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | planned |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | planned |
@@ -108,6 +108,8 @@ video files; `lace export`.
 
 ## Step SM1 — `videoEmbed` aspect ratio and ambient playback
 
+**Status:** done (archived). Implementation verified, 17/17 tasks; delta specs synchronized.
+
 **Size:** S. **Prerequisite:** `video-embed-block` archived and synchronized
 (done 2026-10-31).
 
@@ -121,15 +123,16 @@ autoplaying "ambient" mode for decorative or showcase videos.
   `16:9`) and `playback` (`player`, `ambient`; default `player`). Data is
   unchanged: identity migration, and models that allow the block raise their
   version under the CE1 rule (root config, reference site, starter).
-- `parseVideoEmbed` / `describeVideoEmbed` accept the playback mode and emit
+- `parseVideoEmbed` / `describeVideoEmbed` expose both player and ambient URLs with
   canonical provider parameters: Vimeo `background=1`; YouTube
   `autoplay=1&mute=1&loop=1&playlist=<id>&controls=0&playsinline=1`. Player
   mode URLs stay byte-identical.
-- The registry renderer sets the ratio through a CSS custom property. Ambient
-  mode has no activation button and loads the iframe lazily. Under
-  `prefers-reduced-motion: reduce` it never mounts the iframe and shows the
-  poster (or nothing) instead. This stays inside the existing bounded
-  activation-script exception.
+- The registry renderer exposes the ratio through data attributes and CSS. Ambient
+  mode mounts a lazy iframe after the motion-preference check, retaining an inert
+  poster underneath. Reduced motion and no JavaScript fall back to exact player
+  behavior. Source links are hidden only while ambient is mounted, until focused.
+  No pause control ships; the WCAG 2.2.2 gap is documented. This stays inside the
+  bounded activation and ambient mounting script exception.
 - Template version bump with upgrade notes for user-owned renderer copies.
 
 **Architecture and specs:** §8 *Initial built-in blocks*; narrow the
@@ -327,3 +330,6 @@ publication; `field-descriptors`, `content-validation`,
 | --- | --- | --- | --- |
 | 2026-10-31 | — | — | Roadmap selected from the tatianae.com gap analysis. No OpenSpec change created. |
 | 2026-10-31 | — | `video-embed-block` | SM1 prerequisite: archived and synchronized; `video-embeds` capability created, four specs gained requirements, two MODIFIED requirements were already identical in main specs. |
+| 2026-10-31 | SM1 | `sm01-video-embed-playback` | Proposed. Owner decisions: ambient mode has no pause control (WCAG 2.2.2 gap documented); reduced motion and no-JS fall back to player; source link visually hidden only while an ambient player is mounted. 17 tasks, not applied. |
+| 2026-10-31 | SM1 | `sm01-video-embed-playback` | Implemented and verified, 17/17 tasks. videoEmbed v2, ambient URLs/playback, aspect ratios, SQLite/D1 migration, registry revision 2 and template 0.40.0. Root tests, typecheck, lint, formatting, OpenAPI, docs, packed starter/existing-site acceptance and strict OpenSpec checks pass. Awaiting explicit sync/archive. |
+| 2026-10-31 | SM1 | `sm01-video-embed-playback` | Archived at `openspec/changes/archive/2026-10-31-sm01-video-embed-playback`; all five capability deltas synchronized into main specs and strict validation passed. |
