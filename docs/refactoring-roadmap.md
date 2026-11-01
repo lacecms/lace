@@ -117,7 +117,7 @@ What the roadmap changes, with the numbers to beat:
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| RF1 | Workspace hygiene | M | RF1A → RF1B | planned |
+| RF1 | Workspace hygiene | M | RF1A → RF1B | proposed |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | planned |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
@@ -160,8 +160,8 @@ Proposed, to confirm when writing the first specification:
 
 6. Tests move to source (RF2) before the large splits, even though the owner's
    first concern was file size.
-7. The oldest template version kept as an upgrade fixture is decided in RF1A
-   (open question there).
+7. Decided 2026-11-01 while writing RF1A: only the latest published
+   template's fixtures (`0.35.0`) are kept as the upgrade origin.
 
 ## Step RF1 — Workspace hygiene
 
@@ -174,27 +174,30 @@ or its history. Scripts have current names and one catalog.
 
 - Delete `scripts/not-implemented.mjs` and the root `test:integration`
   script, which only prints "not implemented" and fails.
-- Alpha-era regression journeys become one current journey:
-  `scripts/alpha-six-acceptance.mjs`, `alpha-seven-acceptance.mjs`,
-  `alpha-eight-acceptance.mjs` (called from `generated-project-acceptance.mjs`
-  and `cloudflare-consumer-acceptance.mjs`) and the root
-  `tests/alpha-2-feedback-acceptance.test.mjs`,
-  `onboarding-feedback-acceptance.test.mjs`, `field-trial-acceptance.test.mjs`
-  and `feedback-map.mjs`. Assertions that still describe current behavior
-  move into `scripts/release-acceptance.mjs` keyed only to
-  `release/alpha.json`; the per-alpha files are deleted. Historical findings
-  remain in the archived changes.
+- Release-named journey modules are renamed by what they verify, not
+  deleted: `scripts/alpha-six-acceptance.mjs`, `alpha-seven-acceptance.mjs`,
+  `alpha-eight-acceptance.mjs` and `consumer-34b-security.mjs` are the
+  current exact-artifact acceptance journeys that the accepted specs require
+  by behavior (contracts and media, GIF/proxy caching, list settings/MCP/TLS,
+  security probes); they move to `scripts/journeys/` and their stage names,
+  receipt labels and log prefixes lose alpha and step numbers.
+- Feedback traceability maps are retired: `tests/feedback-map.mjs`,
+  `tests/onboarding-feedback-acceptance.test.mjs` and
+  `tests/alpha-2-feedback-acceptance.test.mjs` are deleted with their two
+  requirements; `tests/field-trial-acceptance.test.mjs` (helper unit tests)
+  is renamed `acceptance-helpers.test.mjs`.
 - Rename roadmap-step-numbered entrypoints to what they verify:
   `verify:34a` → `verify:cross-runtime`, `verify:34b` → `verify:security`,
-  `verify:34c` → `verify:operations`; `scripts/consumer-34b-security.mjs` →
-  `scripts/consumer-security-static.mjs`. Vitest configs
-  `vitest.cross-runtime|d1-budgets|operations|resilience|security-static.config.mjs`
-  collapse into one root `vitest.config.mjs` with named `projects`, each
-  selectable from the verification scripts.
-- Template upgrade fixtures: `tests/fixtures/template-0.4.0`, `0.14.0`,
-  `0.30.0`, `0.35.0` and their root tests keep only the oldest supported
-  upgrade origin plus the previous release's template; the rest are deleted
-  and `template-upgrade-acceptance.mjs` is adjusted.
+  `verify:34c` → `verify:operations`; `LACE_34B_*`/`LACE_34C_*` variables →
+  `LACE_VERIFY_*`; result directories lose `step-34*`. The five root
+  `vitest.<name>.config.mjs` files collapse into one
+  `vitest.verification.config.mjs` with named `projects` (not a root
+  `vitest.config.mjs`, which `pnpm test` would pick up).
+- Template upgrade fixtures: only `tests/fixtures/template-0.35.0` (the
+  latest published template, alpha.7) stays, with a generic fixture-integrity
+  test; `0.4.0`, `0.14.0`, `0.30.0` and their tests are deleted and the
+  acceptance specs' alpha.1/alpha.2 upgrade proofs are withdrawn (owner
+  decision, 2026-11-01).
 - Move `openspec/changes/video-a-media-upload-delivery` (0 of 20 tasks,
   superseded by the embed-first decision, fails strict validation) to
   `openspec/changes/archive/2026-11-01-video-a-media-upload-delivery-superseded`
@@ -210,9 +213,9 @@ or its history. Scripts have current names and one catalog.
 points at a deleted file (a root test asserts every `package.json` script
 target exists).
 
-**Open questions:** the oldest template version that upgrades must still
-support (decides which fixtures stay); whether `scripts/fixtures/oauth-mcp`
-compatibility tests stay a root script or move into `packages/auth`.
+**Open questions:** whether `scripts/fixtures/oauth-mcp` compatibility
+tests stay a root script or move into `packages/auth` (not decided in
+RF1A; they stay).
 
 ### Session RF1B — Documentation pruning and index
 
@@ -223,9 +226,12 @@ compatibility tests stay a root script or move into `packages/auth`.
 - Merge `docs/mvp-traceability.md`, `docs/verification/ce10-internal-url-links.md`,
   `docs/real-application-verification.md`,
   `docs/local-operations-verification.md` and
-  `docs/local-security-verification.md` into one `docs/verification.md`: the
-  suites that exist today, what each proves, how to run it, and where its
-  evidence is written. Step-era identities and dates are dropped.
+  `docs/local-security-verification.md` into one `docs/verification.md`:
+  commands and what each proves, limits, the §3/§14 coverage tables, the
+  recorded D1 budget measurements, and the owner checks on real
+  infrastructure with their recorded status. Step-era identities and
+  per-alpha handoff narratives are dropped; a root link guard test keeps
+  `docs/` free of dangling links and unindexed files.
 - Add `docs/README.md`: one line per file with its status (authoritative,
   internal note, historical) and owner section of the architecture it
   details. Add `docs/adr/README.md` listing ADRs by number and status.
@@ -671,3 +677,5 @@ reference pages.
 | Date | Session | Change | Notes |
 | --- | --- | --- | --- |
 | 2026-11-01 | — | — | Roadmap selected from the workspace audit. Site migration roadmap archived. No OpenSpec change created. |
+| 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Proposed. Corrections to the roadmap text: the alpha-named journey modules are current spec-required acceptance journeys and are renamed, not merged; `field-trial-acceptance.test.mjs` is a helper unit test and is renamed; `make-api-runtime.mjs` stays (Dockerfile). Owner decision: keep only the `0.35.0` upgrade fixtures. Delta specs: `generated-project-acceptance` (2 modified, 2 removed), `prepublication-consumer-security` (2 modified), `workspace-governance` (1 added, 1 removed). 21 tasks, not applied. |
+| 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Proposed. One `docs/verification.md` (commands, limits, coverage, D1 measurements, owner checks), `docs/README.md` and `docs/adr/README.md` indexes, deletion of `docs/archive/step-*`, link repair in ten documents, root link-guard test. Delta specs: `local-operations-verification`, `local-security-resilience-verification`, `cross-runtime-product-verification`, `public-documentation` (1 modified each), `workspace-governance` (1 added). 15 tasks, not applied; depends on RF1A. |
