@@ -1,7 +1,8 @@
 # RC1 release progress
 
-Status: all source gates passed; no rc1 registry publication or GitHub
-release has occurred, and alpha.7 upgrade fixtures have not been retired.
+Status: local rc1 preparation and fresh exact-artifact acceptance passed.
+Publication remains owner-operated. No npm upload, image push or GitHub release
+has occurred in this preparation; alpha.7 upgrade fixtures remain intact.
 
 ## Selection and public baseline
 
@@ -46,12 +47,12 @@ of preparation. Frozen installation passed with the lockfile unchanged.
   `cb74f7af4cab116b827240310d2d6913eee0d2d614c8f74e61865ec397949e12`.
   Detailed local report: `.lace-acceptance/rc1-evidence/dependency-audit.json`.
 
-## Remaining gates
+## Remaining owner operations
 
-Complete two-platform preparation, independent saved-inventory verification and
-fresh exact-artifact Node/Worker acceptance remain outstanding. Acceptance must
-exercise the updated MCP publication grant and conditional/tag/multi-picker
-journeys; source-only tests and packed source probes do not replace this gate.
+Clean-source freeze, both-platform preparation, independent inventory verification
+and fresh complete saved-artifact acceptance have passed. The owner will perform
+registry/GitHub publication separately using the commands below. Real VPS/
+Cloudflare deployment checks remain distinct from local acceptance.
 
 GitHub account authentication is available. npm `whoami` returned E401 during
 preflight; owner local login is needed before publishing. Registry permission,
@@ -104,7 +105,7 @@ Directory: `.release-artifacts/rc1-r2`. Independent `release:verify` passed.
 - Artifact source: `430661f6f27c5108facd6949fba711153068d7dc` (clean, publication-eligible).
 - Source fingerprint: `d03cb499f376216af0b1169df85bf4a38ca77ec3fc3e1292b36ce68ddf3fd581`.
 - [Inventory](../../../.release-artifacts/rc1-r2/inventory.json) SHA-256: `f837cfba99fa2e3deef87261787fe24a2e5692cfe619dd32955df90e0e375bfc`.
-- All sixteen archives and four platform images passed preparation inspection/smokes; exact-artifact acceptance is still running.
+- All sixteen archives and four platform images passed preparation inspection/smokes; fresh complete exact-artifact acceptance passed.
 
 | Package | Archive SHA-256 |
 | --- | --- |
@@ -154,9 +155,9 @@ run uses the same immutable inventory and a separately recorded reviewed harness
 revision; no partial run is substituted for a full acceptance receipt.
 
 
-## Owner publication commands (after successful saved-artifact acceptance)
+## Owner publication commands
 
-Use the pinned toolchain (Node 24.12.0, pnpm 12.3.4), local npm/GHCR/GitHub
+Run these commands from the repository root. Use the pinned toolchain (Node 24.12.0, pnpm 12.3.4), local npm/GHCR/GitHub
 publishing credentials and this exact saved directory. The commands below are
 handoff instructions; they have not been applied by the preparation agent.
 `corepack pnpm` selects the project-pinned pnpm even when a shell fallback is
@@ -204,7 +205,7 @@ to select the actual `main[data-lace-entry]` container and read its descendants.
 Regression fixtures match that shipped layout. Packed starter acceptance also
 checks the helper against real built HTML and the expected exported home keys,
 including a header navigation global; that focused packed run passed. No runtime
-or saved artifact bytes changed. A fresh complete run remains required.
+or saved artifact bytes changed. At that point a fresh complete run was still required; the successful final run is recorded below.
 
 
 A focused saved Node HTTPS/MCP run then reached the new media upload check and
@@ -215,3 +216,52 @@ Request form data to bytes with its matching multipart headers before sending
 through the trusted-certificate Undici agent. The API's strict upload validation
 is unchanged. This correction affects the test driver only and uses existing
 audited dependencies; the saved package/image bytes remain unchanged.
+
+
+## Final exact-artifact acceptance
+
+The fresh full run passed and atomically saved
+[acceptance.json](../../../.release-artifacts/rc1-r2/acceptance.json) after successful
+temporary-environment cleanup on 2026-11-01T22:19:43.231Z.
+
+- Acceptance SHA-256: `3c6db730c95caf7327ded560062d611da781d802e6fdd4d456ed73e736e44f0d`.
+- Bound inventory SHA-256: `f837cfba99fa2e3deef87261787fe24a2e5692cfe619dd32955df90e0e375bfc`.
+- Artifact source: `430661f6f27c5108facd6949fba711153068d7dc`.
+- Reviewed harness: `d6b531a4949b5c0cb0a2bf35a85a21c4cb838b86` (later test-driver fixes; saved bytes unchanged).
+- 23 complete journeys passed, including retained upgrade, browser/setup,
+  served block-order, weak ETag, source diagnostics, import, Node HTTPS/MCP,
+  local Worker MCP, media multi-selection, conditional projection and
+  packed-platform restore/rotation checks.
+- Image smokes: linux/amd64 and linux/arm64. Full consumer journeys selected
+  linux/arm64 images; Worker/D1/R2 is local simulation. No amd64 full-consumer
+  journey or real Cloudflare/VPS deployment is claimed.
+- Final root regression suite: 33 files / 243 tests passed; root typecheck,
+  lint, format and strict change/all-spec validation passed after driver fixes.
+- Receipt records `remotePublicationPerformed: false` and `realDeploymentVerified: false`.
+
+Original failed attempts and their diagnostics were not substituted for this
+fresh success. Local audit/source/acceptance logs are retained separately under
+`.lace-acceptance/rc1-evidence`; private diagnostic logs are not GitHub assets.
+
+
+## Final publication previews and handoff verification
+
+Read-only previews completed after acceptance:
+
+- npm: success, all sixteen exact archives report `would-publish` on next;
+  no upload or dist-tag mutation, no publication/submission receipt written.
+- GHCR: success, both two-platform manifests report `would-publish`; no local
+  image load/tag or remote push was performed by the preview.
+- GitHub: expected blocked preview because public rc1 packages/images have not
+  been published (`Missing published package: @lacecms/content@0.1.0-rc1`).
+  No tag, draft, attachment or release was created. This is an owner publication
+  prerequisite, not a failed local-readiness check.
+- GitHub read-only commit lookup confirms both artifact source 430661f6 and
+  harness d6b531a4 exist remotely. Shipping source and evidence remain immutable.
+- No publication receipt files exist. The acceptance receipt explicitly records
+  no remote publication and no real-deployment verification. Latest is unchanged.
+
+The owner can now run the publication commands above against rc1-r2. The
+preparation change is complete. Alpha.7 fixtures and generic upgrade tests remain;
+retirement follows a separately confirmed complete owner release. No local
+artifact directory was deleted and no OpenSpec archive operation was performed.

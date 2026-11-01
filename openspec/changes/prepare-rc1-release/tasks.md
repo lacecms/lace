@@ -20,13 +20,13 @@
 - [x] 3.4 Refresh dependency/license audit under the existing policy, verifying no unreviewed advisory/license exception; retain current dispositions and stop for a new policy or design decision rather than silently weakening gates.
 - [x] 3.5 Commit reviewed shipping source, verify clean status/frozen installation with Node 24.12.0 and pnpm 12.3.4, and verify Docker/Buildx plus both Linux execution platforms; record source and prerequisites before preparation.
 - [x] 3.6 Run release:prepare --output .release-artifacts/rc1 (or a distinct recorded retry destination); verify complete publication-eligible inventory with sixteen archives and API/builder images for linux/amd64 and linux/arm64, passing both-platform smoke checks without overwriting saved sets.
-- [ ] 3.7 Run release:verify --output <saved-directory> and acceptance:release --artifacts <saved-directory>; verify immutable checksums/source/image identities, retained and new journeys, successful temporary cleanup and durable acceptance.json with actual runtime/platform/harness coverage.
-- [ ] 3.8 Record the readiness handoff with source/fingerprint, inventory SHA-256, archive hashes, local image IDs, harness revision and successful gates; verify publication and real deployment remain separately identified and no alpha.7 retirement has occurred.
+- [x] 3.7 Run release:verify --output <saved-directory> and acceptance:release --artifacts <saved-directory>; verify immutable checksums/source/image identities, retained and new journeys, successful temporary cleanup and durable acceptance.json with actual runtime/platform/harness coverage.
+- [x] 3.8 Record the readiness handoff with source/fingerprint, inventory SHA-256, archive hashes, local image IDs, harness revision and successful gates; verify publication and real deployment remain separately identified and no alpha.7 retirement has occurred.
 
 ## 4. Owner-operated publication handoff
 
-- [ ] 4.1 Run read-only npm/image publication previews and GitHub finalization preview against the accepted saved directory; verify no mutation, record expected missing public rc1 coordinates and publishing-authentication prerequisites, and confirm source/notes commits are available remotely.
-- [ ] 4.2 Deliver the exact saved directory, inventory and acceptance checksums, source/harness revisions, artifact identities and commands for the owner to publish npm, GHCR and GitHub; verify latest remains unchanged, no live publication/tag/draft/deployment/cleanup occurred and alpha.7 fixture retirement is explicitly deferred until after owner-confirmed release completion.
+- [x] 4.1 Run read-only npm/image publication previews and GitHub finalization preview against the accepted saved directory; verify no mutation, record expected missing public rc1 coordinates and publishing-authentication prerequisites, and confirm source/notes commits are available remotely.
+- [x] 4.2 Deliver the exact saved directory, inventory and acceptance checksums, source/harness revisions, artifact identities and commands for the owner to publish npm, GHCR and GitHub; verify latest remains unchanged, no live publication/tag/draft/deployment/cleanup occurred and alpha.7 fixture retirement is explicitly deferred until after owner-confirmed release completion.
 
 Publication and post-release alpha.7 fixture retirement are outside this apply,
 following the owner's 2026-11-01 clarification. They are not completed tasks;
