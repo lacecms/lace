@@ -1,6 +1,11 @@
+import { createRequire } from "node:module";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { moveFirstHeroWithKeyboard } from "../apps/admin/e2e/helpers/block-order-keyboard.ts";
 import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
+
+const { parseHTML } = createRequire(new URL("../apps/docs/package.json", import.meta.url))(
+  "linkedom",
+);
 
 /** The admin's explicit save resequences positions from the displayed order. */
 export const savedPositions = (count) =>
@@ -8,12 +13,16 @@ export const savedPositions = (count) =>
 
 /** `data-lace-block-key` values of rendered HTML, in document order. */
 export function renderedBlockKeys(html, entryId) {
-  return [...html.matchAll(/<[^>]*\bdata-lace-block-key="([^"]+)"[^>]*>/gu)]
-    .filter(
-      (match) =>
-        entryId === undefined || match[0].match(/\bdata-lace-entry="([^"]+)"/u)?.[1] === entryId,
-    )
-    .map((match) => match[1]);
+  const { document } = parseHTML(html);
+  const root =
+    entryId === undefined
+      ? document
+      : [...document.querySelectorAll("main[data-lace-entry]")].find(
+          (element) => element.getAttribute("data-lace-entry") === entryId,
+        );
+  return [...(root?.querySelectorAll("[data-lace-block-key]") ?? [])].map((element) =>
+    element.getAttribute("data-lace-block-key"),
+  );
 }
 
 /**

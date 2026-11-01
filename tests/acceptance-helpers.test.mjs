@@ -15,12 +15,13 @@ test("block-order evidence reads the saved positions and rendered key order", ()
 
 test("served entry order excludes global navigation while retaining all entry blocks", () => {
   const html =
-    '<nav data-lace-entry="navigation" data-lace-block-key="b1"></nav>' +
-    '<section data-lace-entry="post" data-lace-block-key="first"></section>' +
-    '<section data-lace-block-key="second" data-lace-entry="post"></section>' +
+    '<header><nav data-lace-block-key="b1"></nav></header>' +
+    '<main data-lace-model="posts" data-lace-entry="post">' +
+    '<section data-lace-block-key="first"><h1>First</h1></section>' +
+    '<section data-lace-block-key="second"><h1>Second</h1></section></main>' +
     '<footer data-lace-block-key="unscoped"></footer>';
   expect(renderedBlockKeys(html, "post")).toEqual(["first", "second"]);
-  expect(renderedBlockKeys(html, "navigation")).toEqual(["b1"]);
+  expect(renderedBlockKeys(html)).toEqual(["b1", "first", "second", "unscoped"]);
   expect(renderedBlockKeys(html, "absent")).toEqual([]);
 });
 

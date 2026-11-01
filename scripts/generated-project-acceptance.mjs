@@ -14,7 +14,7 @@ import {
 import { createRequire } from "node:module";
 import { nodeContractsMediaJourney } from "./journeys/node-contracts-media.mjs";
 import { consumerSecurityProbes } from "./journeys/consumer-security-probes.mjs";
-import { blockOrderJourney } from "./block-order-acceptance.mjs";
+import { blockOrderJourney, renderedBlockKeys } from "./block-order-acceptance.mjs";
 import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs";
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
 import { cloudflareConsumerJourney } from "./cloudflare-consumer-acceptance.mjs";
@@ -1135,6 +1135,14 @@ async function starterJourney(project) {
   };
 
   const published = await build("starter-build", exported, { LACE_BUILD_SITE_URL: siteUrl });
+  const homeEntry = exported.entries.find((entry) => entry.path === "/");
+  if (
+    JSON.stringify(renderedBlockKeys(published[0], homeEntry.id)) !==
+    JSON.stringify(homeEntry.blocks.map((block) => block.key))
+  )
+    throw new Error(
+      "starter-build: entry-scoped block evidence differs from the packed main container",
+    );
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
   await verifyListSettingsStarter(project, workspace);
   const html = published.join("\n");

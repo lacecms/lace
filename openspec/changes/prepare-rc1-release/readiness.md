@@ -152,3 +152,56 @@ No success receipt was written for the failed run; temporary services were
 stopped/removed. The saved source/packages/images stay unchanged. A fresh full
 run uses the same immutable inventory and a separately recorded reviewed harness
 revision; no partial run is substituted for a full acceptance receipt.
+
+
+## Owner publication commands (after successful saved-artifact acceptance)
+
+Use the pinned toolchain (Node 24.12.0, pnpm 12.3.4), local npm/GHCR/GitHub
+publishing credentials and this exact saved directory. The commands below are
+handoff instructions; they have not been applied by the preparation agent.
+`corepack pnpm` selects the project-pinned pnpm even when a shell fallback is
+older. `npm whoami` must succeed and the account needs publishing rights for
+create-lace and @lacecms. `docker login ghcr.io` uses the owner's local GHCR
+credentials; follow the maintained release guide for scopes/visibility.
+
+```sh
+nvm use 24.12.0
+npm login
+npm whoami
+docker login ghcr.io
+gh auth status
+
+corepack pnpm release:publish:npm --artifacts .release-artifacts/rc1-r2 --dry-run
+corepack pnpm release:publish:npm --artifacts .release-artifacts/rc1-r2
+
+corepack pnpm release:publish:images --artifacts .release-artifacts/rc1-r2 --dry-run
+corepack pnpm release:publish:images --artifacts .release-artifacts/rc1-r2
+
+corepack pnpm release:github --artifacts .release-artifacts/rc1-r2
+corepack pnpm release:github --artifacts .release-artifacts/rc1-r2 --apply
+```
+
+The final command creates/resumes the prerelease and tag `v0.1.0-rc1` at the
+inventory's source `430661f6f27c5108facd6949fba711153068d7dc`, even when current
+HEAD contains newer verification notes or harness fixes. Reviewed changelog links
+use the notes revision. It requires complete verified public npm and both GHCR
+manifests and uploads only inventory, acceptance and complete npm/image reports.
+It leaves latest unchanged. A GitHub preview before registry publication is
+expected to report unmet publication prerequisites, not release completion.
+
+If publication is interrupted, rerun against this same directory: the scripts
+verify matching immutable identities and resume only missing items. Keep the
+saved bytes, receipts and submission journals; do not rebuild or overwrite a
+published coordinate. No local artifact cleanup was requested. The failed
+`.release-artifacts/rc1` attempt is separate and does not establish readiness.
+After the owner confirms a complete public rc1 release, request the separate
+alpha.7 fixture retirement follow-up; keep those fixtures until then.
+
+The second full attempt reached the same served-order assertion but exposed an
+error in the first harness correction: the entry hook belongs to `<main>`, not
+each block root. The checker now uses the already audited linkedom HTML parser
+to select the actual `main[data-lace-entry]` container and read its descendants.
+Regression fixtures match that shipped layout. Packed starter acceptance also
+checks the helper against real built HTML and the expected exported home keys,
+including a header navigation global; that focused packed run passed. No runtime
+or saved artifact bytes changed. A fresh complete run remains required.
