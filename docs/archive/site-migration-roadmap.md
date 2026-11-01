@@ -1,10 +1,16 @@
 # Lace Site Migration Roadmap
 
+> **Archived 2026-11-01.** All five steps (SM1–SM5, twelve sessions) are
+> implemented, synchronized and archived under `openspec/changes/archive/`;
+> merged to `main` in [lacecms/lace#63](https://github.com/lacecms/lace/pull/63).
+> Kept for delivery history. The active roadmap is
+> [`docs/refactoring-roadmap.md`](../refactoring-roadmap.md).
+
 > Selected 2026-10-31 after the alpha.8 release. Motivated by migrating the
 > first real portfolio site (tatianae.com, currently on Framer) to Lace and
 > Astro. Every step is general product work, not a site-specific feature.
 
-Future work outside this roadmap stays in the root [backlog](../backlog.md).
+Future work outside this roadmap stays in the root [backlog](../../backlog.md).
 
 ## 1. Purpose and source of truth
 
@@ -15,21 +21,21 @@ session.
 
 Authority follows `AGENTS.md`:
 
-1. [`mvp-architecture.md`](mvp-architecture.md) owns product scope and
+1. [`mvp-architecture.md`](../mvp-architecture.md) owns product scope and
    invariants.
-2. [`openspec/specs/**`](../openspec/specs) owns accepted capability behavior.
+2. [`openspec/specs/**`](../../openspec/specs) owns accepted capability behavior.
 3. The selected active OpenSpec change owns the proposed delta.
 4. This document owns delivery order, session boundaries and recorded
    decisions for this roadmap.
 
 Steps that change an architecture invariant list the sections to update. The
 architecture is updated in the same OpenSpec change, before code, with a short
-ADR under [`docs/adr/`](adr).
+ADR under [`docs/adr/`](../adr).
 
 ## 2. How to use this roadmap
 
 The conventions of the archived
-[content and editor roadmap](archive/content-editor-roadmap.md) apply:
+[content and editor roadmap](content-editor-roadmap.md) apply:
 
 - A **session unit** is one cohesive change set that can be implemented,
   reviewed and verified independently. It maps to one OpenSpec change.
@@ -255,7 +261,7 @@ resumably.
 *Media*, §12 *Admin endpoints*; ADR for a write-capable token.
 
 **Settled (2026-10-31):** token capability `content:import`, not an OAuth
-loopback flow ([ADR 0016](adr/0016-import-credentials.md)).
+loopback flow ([ADR 0016](../adr/0016-import-credentials.md)).
 
 ### Session SM4B — CLI import
 
@@ -311,7 +317,7 @@ are allowed and an absent one without a default hides its targets; hidden
 fields are validated with draft semantics (refining "type only": lengths,
 ranges and `maxItems` still apply); `seoDefaults` may not name a conditional
 field; block `settingsVisibility` is unchanged. See
-[ADR 0018](adr/0018-conditional-fields.md).
+[ADR 0018](../adr/0018-conditional-fields.md).
 
 - Owner option `visibility` on models, group fields (including list item
   groups) and block data. The controller is a sibling `select` or `boolean`
@@ -425,3 +431,4 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM5D | `sm05d-gallery-video-items` | Proposed. Owner decisions: video markup and ambient-only script inline in the single `GalleryBlock.astro` plus `GalleryVideo.css` (the manifest allows one component; shared `LaceVideo` primitive goes to the backlog); item keys `videoUrl`/`videoTitle`, list key stays `images` (label "Images and videos"); `playback` default `player`; `kind` as choice cards; published types stay optional (copies check `kind` and `media`); admin "Add {choice}" buttons derived from the media field's select controller ("Add Video") and an embed URL row preview; identity migration 5; no new ADR. Owner addition: media library/picker toolbar redesign (two rows, segmented type filter, compact tag filter with the match-all rule in a tooltip). 23 tasks, not applied. |
 | 2026-11-01 | SM5D | `sm05d-gallery-video-items` | Implemented and verified, 23/23 tasks. Gallery v5 item kinds with conditional video fields and shared `videoEmbed` descriptors, identity migration 5; registry revision 7 with inline ambient script and `GalleryVideo.css`; admin "Add Video" derived from the media field's select rule, embed URL row preview, controllers no longer label rows; two-row media toolbar with segmented types and compact tag filter (rule in tooltip and description); template 0.45.0. Content, contract (SQLite/D1), registry, CLI, site browser, admin unit/e2e, starter and existing-site acceptance, cross-runtime 7/7, root format/lint/typecheck/test (pinned Node 24.12.0)/build, OpenAPI, docs and OpenSpec checks pass. Pre-existing: composites pointer-drag e2e. Awaiting explicit archive. |
 | 2026-11-01 | SM5D | `sm05d-gallery-video-items` | Archived at `openspec/changes/archive/2026-11-01-sm05d-gallery-video-items`; deltas synchronized into main specs: `admin-draft-editor` (3 added), `admin-media-library` (1 added, 1 modified), `astro-reference-site` (1 added), `block-registry` (3 modified), `block-source-registry` (1 added, 2 modified) and `public-documentation` (1 added). Step SM5 complete. |
+| 2026-11-01 | — | — | Roadmap complete. Document moved to `docs/archive/`; superseded by the refactoring roadmap. |
