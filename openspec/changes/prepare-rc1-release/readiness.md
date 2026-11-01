@@ -62,3 +62,23 @@ Only after verified rc1 publication will its actual published generator replace
 historical fixtures in a later commit. The released tag/artifacts/evidence will
 not be rewritten for that cleanup. Archiving and local release-data deletion
 are not included.
+
+## Preparation attempt 1 and bounded verifier correction
+
+The first attempt, `.release-artifacts/rc1`, used clean pushed source
+`dbf48e22fd071fdc8b39fed217fa8e15d426a108` (fingerprint
+`eeb62ed825b8eeea98a85a7ee876278c4ff2610d7069bb662aaee0124419d4b9`). It stopped
+while inspecting the CLI archive, before image preparation, with no complete
+inventory: the historical verifier permitted only `dist/` exports, whereas SM4B
+correctly exports `@lacecms/cli/lace-import.schema.json` from
+`schema/lace-import.schema.json`.
+
+The verifier now permits precisely that declared CLI JSON data export and parses
+its bytes. Other non-dist exports, malformed JSON and using this schema as a
+compiled type/executable entry point still fail. A regression test covers these
+boundaries; the exact previously rejected CLI archive passes inspection.
+Root tests were repeated after the correction: 33 files / 241 tests passed;
+typecheck, lint, format check and strict change validation passed again. No
+runtime/package/schema contract changed and no audit exception was introduced.
+The failed directory and its status remain intact. Retry uses the distinct
+`.release-artifacts/rc1-r2` directory and a new clean pushed source revision.

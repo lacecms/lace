@@ -232,3 +232,43 @@ test("archive verification rejects missing exports and forbidden files", async (
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("CLI import schema is a bounded JSON data export, never a compiled entry point", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lace-release-schema-"));
+  try {
+    const schemaExport = "./schema/lace-import.schema.json";
+    const manifest = {
+      name: "@lacecms/cli",
+      version: "0.1.0-rc1",
+      exports: { "./lace-import.schema.json": schemaExport },
+    };
+    const release = { version: manifest.version, packages: ["cli", "content"] };
+    const save = () => writeFile(join(root, "package.json"), JSON.stringify(manifest));
+    await save();
+    await expect(inspectPackage(root, release)).rejects.toThrow("Missing archive entry point");
+    await mkdir(join(root, "schema"));
+    await writeFile(
+      join(root, schemaExport),
+      await readFile(new URL("../packages/cli/schema/lace-import.schema.json", import.meta.url)),
+    );
+    await expect(inspectPackage(root, release)).resolves.toMatchObject({ name: "@lacecms/cli" });
+    manifest.types = schemaExport;
+    await save();
+    await expect(inspectPackage(root, release)).rejects.toThrow("Invalid export path");
+    delete manifest.types;
+    manifest.name = "@lacecms/content";
+    await save();
+    await expect(inspectPackage(root, release)).rejects.toThrow("Invalid export path");
+    manifest.name = "@lacecms/cli";
+    manifest.exports["./other.json"] = "./schema/other.json";
+    await writeFile(join(root, "schema/other.json"), "{}");
+    await save();
+    await expect(inspectPackage(root, release)).rejects.toThrow("Invalid export path");
+    delete manifest.exports["./other.json"];
+    await save();
+    await writeFile(join(root, schemaExport), "not JSON");
+    await expect(inspectPackage(root, release)).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

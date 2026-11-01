@@ -212,15 +212,24 @@ export async function inspectPackage(directory, release) {
     if (typeof value === "string") return [value];
     return Object.values(value ?? {}).flatMap(exportFiles);
   }
-  for (const file of [
-    ...exportFiles(manifest.exports),
-    manifest.types,
-    ...Object.values(manifest.bin ?? {}),
-  ].filter(Boolean)) {
-    if (!file.startsWith("./dist/") || file.includes(".."))
+  const schemaExport = "./schema/lace-import.schema.json";
+  const entries = [
+    ...exportFiles(manifest.exports).map((file) => [
+      file,
+      manifest.name === "@lacecms/cli" &&
+        file === schemaExport &&
+        manifest.exports?.["./lace-import.schema.json"] === schemaExport,
+    ]),
+    ...[manifest.types, ...Object.values(manifest.bin ?? {})]
+      .filter(Boolean)
+      .map((file) => [file, false]),
+  ];
+  for (const [file, dataExport] of entries) {
+    if ((!file.startsWith("./dist/") && !dataExport) || file.includes(".."))
       throw new Error(`Invalid export path: ${manifest.name}: ${file}`);
     if (!(await lstat(join(directory, file)).catch(() => undefined))?.isFile())
       throw new Error(`Missing archive entry point: ${manifest.name}: ${file}`);
+    if (dataExport) await readJson(join(directory, file));
   }
   for (const file of Object.values(manifest.bin ?? {})) {
     if (
