@@ -33,11 +33,13 @@ dependencies, so RF2B and RF2C only repeat the pattern.
   task depends on `build` and `^build`; root `pnpm test` runs both before
   the root `tests/` suite. Every package in scope gains `test:watch`.
 - **Boundary checker exemption for test files.** `scripts/check-boundaries.mjs`
-  lets `*.test.ts` files and `src/test-support/` modules import `vitest`,
-  `node:` builtins and `@lacecms/test-utils` in addition to the package's
-  allowed dependencies; the cross-package source-path ban and every other
-  rule still apply to them. Fixtures in `tests/fixtures/boundaries` cover
-  both the allowed and the still-forbidden cases.
+  excludes `*.test.ts`, `*.test.tsx` and `src/test-support/**` modules from
+  import-boundary checks and from the dependency graph used for cycle
+  detection. Production modules keep all existing import and cycle rules;
+  admin source-structure checks stay unchanged. This lets Astro tests use
+  `@lacecms/content`, `registry/` components and local `test-fixtures/`
+  without changing the runtime package graph. Fixtures cover skipped test
+  imports and equivalent imports still rejected in production modules.
 - **Documentation.** Architecture §6 (rules) and §20 (testing strategy),
   `DEVELOPMENT.md` (verification section: how to run one package's tests
   and watch them) and `docs/verification.md` (commands) describe the two
@@ -59,7 +61,9 @@ None.
 - `workspace-governance`: a new requirement states that package tests run
   from source through the declared package specifiers and that packaged
   output is verified by a separate build-dependent gate; the dependency
-  enforcement requirement gains the test-file exemption and its scenario.
+  enforcement requirement gains the full test-file exclusion and scenarios.
+  Package-specifier imports remain the test convention; the boundary checker
+  does not enforce that convention inside excluded files.
 
 ## Impact
 

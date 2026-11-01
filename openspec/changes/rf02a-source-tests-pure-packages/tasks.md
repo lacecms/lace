@@ -7,8 +7,8 @@
 
 ## 2. Boundary checker
 
-- [ ] 2.1 Implement the test-file exemption in `scripts/check-boundaries.mjs` per design decision 4 (`vitest`, `node:*`, `@lacecms/test-utils` allowed in `*.test.ts`/`*.test.tsx` and `src/test-support/**`; source-path ban and dependency graph unchanged; `@lacecms/test-utils` excluded from the cycle graph); verify `node scripts/check-boundaries.mjs` passes on the current tree.
-- [ ] 2.2 Add fixtures `tests/fixtures/boundaries/test-imports` (a framework-neutral package whose `index.test.ts` imports `vitest`, `node:path` and `@lacecms/test-utils`) and `tests/fixtures/boundaries/test-source-path` (a test importing `../../other/src/index.ts`) and the two cases in `tests/boundaries.test.mjs`; verify the first passes and the second fails naming the specifier.
+- [ ] 2.1 Implement the exclusion in `scripts/check-boundaries.mjs` per design decision 4: skip `*.test.ts`, `*.test.tsx` and member-local `src/test-support/**` before import/re-export checks and graph construction; keep every production import rule and cycle check, and keep admin source-structure checks unchanged. Verify `node scripts/check-boundaries.mjs` passes on the current tree.
+- [ ] 2.2 Add fixtures `tests/fixtures/boundaries/test-imports` and `test-source-path` plus cases in `tests/boundaries.test.mjs`: verify excluded `.test.ts`, `.test.tsx` and test-support files can import the runner, Node builtins, Lace packages outside the runtime graph and relative source/fixture paths without adding cycle edges. Verify equivalent forbidden imports and cycles in production modules still fail naming the violation. Include the Astro test patterns (`@lacecms/content`, `registry/`, `test-fixtures/`) without relocating existing tests.
 
 ## 3. Pure packages
 
@@ -24,6 +24,6 @@
 
 ## 4. Documentation and gates
 
-- [ ] 4.1 Update `docs/mvp-architecture.md` §6 rules (test-file exemption) and §20 (source tests, packaged tests, watch), `DEVELOPMENT.md` Verification section (per-package `test`, `test:watch`, `test:packaged`) and `docs/verification.md` Commands section; verify `pnpm test` (root link guard and script catalog) passes.
+- [ ] 4.1 Update `docs/mvp-architecture.md` §6 rules (full test/test-support import-check exclusion, unchanged production rules and admin structure checks) and §20 (source tests, packaged tests, watch), `DEVELOPMENT.md` Verification section (per-package `test`, `test:watch`, `test:packaged`) and `docs/verification.md` Commands section; verify `pnpm test` (root link guard and script catalog) passes.
 - [ ] 4.2 Run `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm test` and `pnpm spec:validate`; verify all pass and the seven packages report their baseline case counts plus one packaged case each.
 - [ ] 4.3 Measure and record in the verification note: wall time of `pnpm --filter @lacecms/content test` before (with build) and after, and of `pnpm test` before and after; add the progress-log row to `docs/refactoring-roadmap.md`.

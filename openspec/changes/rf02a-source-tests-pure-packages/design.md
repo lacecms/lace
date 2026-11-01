@@ -78,15 +78,33 @@ See proposal.md for motivation. Facts (commit `8e47b9b6`):
    test file that cannot be typed within the session gets a file-level
    `// @ts-nocheck` with a `TODO(rf2)` comment and the count is reported in
    the progress log (target for RF2A: zero).
-4. **Boundary exemption is narrow.** In `checkBoundaries`, a file matching
-   `testFilePattern` or under `src/test-support/` skips the
-   `externalImportAllowlist` check and the content/config Node-builtin ban
-   only for specifiers `vitest`, `node:*` and `@lacecms/test-utils`;
-   `allowedDependencies` is checked for every other `@lacecms/*` target;
-   source-path imports stay forbidden. `@lacecms/test-utils` does not enter
-   the dependency graph used for cycle detection. Fixtures: `test-imports`
-   (allowed) and `test-source-path` (rejected) under
-   `tests/fixtures/boundaries`.
+4. **Boundary checks cover production imports; tests are excluded.** In
+   `checkBoundaries`, skip each file matching `testFilePattern`
+   (`*.test.ts`, `*.test.tsx`) or located under the member's
+   `src/test-support/` directory before collecting imports or applying
+   import/re-export rules. No imports from those files enter the dependency
+   graph used for cycle detection. The exclusion applies to all specifiers,
+   not just `vitest`, `node:*` and `@lacecms/test-utils`. Production files
+   retain the existing dependency allowlists, Node-builtin restrictions,
+   source-path ban, adapter re-export checks and cycle detection.
+   `checkAdminStructure` continues to run with its existing rules.
+
+   Rationale: `.mjs` tests were previously outside the checker's scanned
+   extensions. Renaming them to `.ts` must not impose runtime dependency
+   rules on integration-test setup. Astro tests already import
+   `@lacecms/content`, `../../../registry/astro/...` and
+   `../test-fixtures/...`; the server harness in RF2B likewise needs
+   configuration and content packages. Excluding tests handles both sessions
+   without per-package exceptions or moving existing tests.
+
+   Test code remains subject to TypeScript, Oxlint and Vitest. Imports of
+   other Lace packages continue to use declared package specifiers by
+   convention; shared Vitest aliases resolve them to source. The boundary
+   checker does not enforce that convention in excluded files. Source tests
+   must still pass without `dist/`; packaged tests intentionally use builds.
+   Fixtures `test-imports` and `test-source-path` both pass for excluded
+   files; paired production cases fail for the same forbidden imports and
+   cycles. Cover `.test.ts`, `.test.tsx` and test-support modules.
 5. **Packaged smoke test shape.** `packaged-exports.packaged.test.mjs`:
    `expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([...])`
    with the literal list; for `astro` it also reads each declared `.astro`
@@ -112,6 +130,10 @@ See proposal.md for motivation. Facts (commit `8e47b9b6`):
 - [Interim double build for unconverted packages] RF2B/RF2C packages build
   inside their `test` script until converted → accepted for two sessions;
   removed in RF2C.
+- [Test imports are outside architecture enforcement] Excluded test files
+  can import other packages directly through relative source or build paths;
+  package specifiers remain the convention, and build-free execution is
+  verified separately. No new test-import checker is introduced.
 - [Type-check cost] `tsconfig.test.json` adds a second `tsc` per package →
   tests are small relative to sources; measured in tasks.
 - [Alias masks a broken package entry] Source aliases bypass `exports`
