@@ -205,3 +205,13 @@ Regression fixtures match that shipped layout. Packed starter acceptance also
 checks the helper against real built HTML and the expected exported home keys,
 including a header navigation global; that focused packed run passed. No runtime
 or saved artifact bytes changed. A fresh complete run remains required.
+
+
+A focused saved Node HTTPS/MCP run then reached the new media upload check and
+returned 422. A local TLS echo regression reproduced the harness problem:
+Node-native FormData passed to Wrangler's separate Undici fetch became
+`text/plain` instead of multipart. The test transport now serializes native
+Request form data to bytes with its matching multipart headers before sending
+through the trusted-certificate Undici agent. The API's strict upload validation
+is unchanged. This correction affects the test driver only and uses existing
+audited dependencies; the saved package/image bytes remain unchanged.

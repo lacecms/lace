@@ -528,7 +528,20 @@ export async function tlsEdgeProxy({ parent, upstream, run, workspace, secretVal
   const dispatcher = new Agent({ connect: { ca: cert } });
   return {
     base: `https://127.0.0.1:${server.address().port}/`,
-    fetch: (url, options) => undiciFetch(url, { ...options, dispatcher }),
+    fetch: async (url, options = {}) => {
+      // Node's native FormData and Wrangler's Undici have separate constructors.
+      // Serialize with the native Request before handing bytes to that transport.
+      if (options.body instanceof FormData) {
+        const encoded = new Request(url, options);
+        return undiciFetch(url, {
+          ...options,
+          headers: encoded.headers,
+          body: Buffer.from(await encoded.arrayBuffer()),
+          dispatcher,
+        });
+      }
+      return undiciFetch(url, { ...options, dispatcher });
+    },
     close: async () => {
       await dispatcher.close();
       server.closeAllConnections();

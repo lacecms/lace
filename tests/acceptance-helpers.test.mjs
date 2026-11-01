@@ -1,3 +1,9 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { tlsEdgeProxy } from "../scripts/journeys/list-settings-mcp-proxy.mjs";
 import { createServer } from "node:http";
 import { gunzipSync } from "node:zlib";
 import { expect, test } from "vitest";
@@ -71,5 +77,49 @@ test("the compressing proxy weakens a gzip 200 validator and passes 304 through"
     origin.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
     await new Promise((resolve) => origin.close(resolve));
+  }
+});
+
+test("TLS acceptance transport preserves native multipart form data and file bytes", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "lace-tls-multipart-"));
+  const execute = promisify(execFile);
+  const upstream = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        contentType: request.headers["content-type"],
+        body: Buffer.concat(chunks).toString("utf8"),
+      }),
+    );
+  });
+  let tls;
+  try {
+    tls = await tlsEdgeProxy({
+      parent,
+      upstream: await listen(upstream),
+      workspace: new URL("..", import.meta.url).pathname,
+      secretValues: new Set(),
+      run: async (_stage, tool, args) => {
+        await execute(tool, args);
+      },
+    });
+    const form = new FormData();
+    form.append("file", new Blob(["exact-fixture-bytes"], { type: "image/png" }), "fixture.png");
+    form.append("tags", "rc1-picker");
+    const response = await tls.fetch(new URL("upload", tls.base), { method: "POST", body: form });
+    expect(response.status).toBe(200);
+    const echoed = await response.json();
+    expect(echoed.contentType).toMatch(/^multipart\/form-data; boundary=/u);
+    expect(echoed.body).toContain('name="file"; filename="fixture.png"');
+    expect(echoed.body).toContain("exact-fixture-bytes");
+    expect(echoed.body).toContain('name="tags"');
+    expect(echoed.body).toContain("rc1-picker");
+  } finally {
+    await tls?.close();
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+    await rm(parent, { recursive: true, force: true });
   }
 });
