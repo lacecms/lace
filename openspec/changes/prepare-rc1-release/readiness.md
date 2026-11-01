@@ -6,8 +6,8 @@ release has occurred, and alpha.7 upgrade fixtures have not been retired.
 ## Selection and public baseline
 
 Candidate: `0.1.0-rc1`, ownership template `0.46.0`, npm `next`, sixteen public
-packages and API/builder for `linux/amd64` and `linux/arm64`. Shipping source is
-not frozen yet; the inventory will record its exact revision. The dated [registry preflight](registry-preflight.json) confirms
+packages and API/builder for `linux/amd64` and `linux/arm64`. Shipping changes are committed and clean; the preparation inventory will record
+the exact frozen revision including this verification record. The dated [registry preflight](registry-preflight.json) confirms
 alpha.8's complete public set and rc1 availability on 2026-11-01; availability
 is not reservation or publishing rights.
 
@@ -48,7 +48,7 @@ of preparation. Frozen installation passed with the lockfile unchanged.
 
 ## Remaining gates
 
-Clean-source freeze, complete two-platform preparation, independent saved-inventory verification and
+Complete two-platform preparation, independent saved-inventory verification and
 fresh exact-artifact Node/Worker acceptance remain outstanding. Acceptance must
 exercise the updated MCP publication grant and conditional/tag/multi-picker
 journeys; source-only tests and packed source probes do not replace this gate.
