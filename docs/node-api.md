@@ -148,11 +148,10 @@ styling hooks and the site-owned stylesheet are documented in
 and `posts` uses
 [`apps/site/src/pages/blog/[slug].astro`](../apps/site/src/pages/blog/[slug].astro).
 The additional examples use
-[`apps/site/src/pages/about/[...slug].astro`](../apps/site/src/pages/about/[...slug].astro)
+[`apps/site/src/pages/about/index.astro`](../apps/site/src/pages/about/index.astro)
 and
 [`apps/site/src/pages/notes/[slug].astro`](../apps/site/src/pages/notes/[slug].astro).
-The `about` route uses `getStaticPaths()` so it emits no static page before
-publication. Further pages and collections need matching Astro route files;
+The `about` route returns 404 when its entry is unpublished. Further pages and collections need matching Astro route files;
 collections use `getStaticPaths()`. The existing routes read entries from the
 published-site loader in [`src/lib/lace.ts`](../apps/site/src/lib/lace.ts)
 (`byPath`, `entries`, `bySlug`; `global(modelKey)` returns a published global
@@ -323,7 +322,7 @@ variable.
 
 ## Local operations evidence
 
-See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+See [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) for deployment, restore, rotation and provider evidence beyond local verification.
 
 ## Optional API documentation UI
 

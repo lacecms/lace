@@ -33,7 +33,7 @@ function killGroup(pid) {
 }
 for (const kind of ["node", "worker"]) {
   test(`${kind}: killed dispatcher claim recovers from persisted storage and rejects stale owner`, async () => {
-    const root = await mkdtemp(join(tmpdir(), `lace-34b-restart-${kind}-`));
+    const root = await mkdtemp(join(tmpdir(), `lace-security-restart-${kind}-`));
     const children = [];
     try {
       const path = join(root, kind === "node" ? "lace.sqlite" : "d1");

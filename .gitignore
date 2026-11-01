@@ -14,3 +14,4 @@ dev-data/
 **/test-results/
 .release-artifacts/
 packages/platform-cloudflare/admin/
+packages/platform-node/*.sqlite*

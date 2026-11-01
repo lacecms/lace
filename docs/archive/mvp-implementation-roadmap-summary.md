@@ -16,7 +16,7 @@ and archived with all tasks complete:
 Alpha.4 packages (ownership template 0.20.0) are published. Real VPS/Cloudflare
 application testing, backup/isolated restore, upgrade, credential rotation and
 failed-build recovery were owner-confirmed on 2026-10-10; see the
-[owner verification record](../real-application-verification.md) for scope and evidence limits.
+[owner verification record](../verification.md#owner-checks-on-real-infrastructure) for scope and evidence limits.
 Beta/stable release approval remains separate.
 
 The [architecture](../mvp-architecture.md) and accepted specs remain sources of truth.

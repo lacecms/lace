@@ -172,7 +172,7 @@ test("packed metadata rejects workspace/catalog/local/private dependencies", asy
   ).not.toThrow();
 });
 
-test("published alpha.3 is immutable after the 34A candidate refresh", async () => {
+test("published alpha.3 is immutable after the Cross-runtime candidate refresh", async () => {
   const model = await coherentModel();
   model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.3";
   expect(() => validateReleaseModel(model)).toThrow(/already published/u);

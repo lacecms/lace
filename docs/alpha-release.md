@@ -7,7 +7,7 @@ are recorded in `release/alpha.json` as published and immutable. GHCR manifests
 were not separately verified by this documentation update.
 
 The owner also confirmed completion of real VPS/Cloudflare application testing
-and recovery/upgrade checks; see the [owner status](./real-application-verification.md#owner-confirmed-status--2026-10-10).
+and recovery/upgrade checks; see the [owner status](./verification.md#owner-confirmed-status--2026-10-10).
 Alpha.5 (`0.1.0-alpha.5`, ownership template `0.29.0`) passed local preparation
 and exact-artifact acceptance on 2026-10-14. Those local receipts alone did not
 establish publication; the registry check below now confirms public availability. See [alpha.5 notes](./compatibility.md#alpha-5-upgrade-and-rollback).
@@ -110,7 +110,7 @@ Only the temporary installation substitutes relative tarball references/override
 
 Shipping scans cover generated files, extracted packages, selected image configurations/exported filesystems, host/static-volume releases and captured tool/service diagnostics using the run's exact credential bytes and complete private-key blocks in text files. Intentional bootstrap output, local operator `.env`, installed dependencies and persistent auth database are excluded from shipping scans. Errors redact credential values. The final receipt reports source fingerprint, versions, package checksums and selected image IDs; retain it alongside the inventory. Temporary containers, volumes and consumer files are removed on success/failure; `LACE_ACCEPTANCE_KEEP_TEMP=1` is a diagnostic option that retains sensitive local operator state and must not be used for shared release evidence.
 
-See [step-34a-verification.md](./archive/step-34/step-34a-verification.md) for the current local verification and [step-33h-verification.md](./archive/step-33/step-33h-verification.md) for the immutable alpha.3 baseline, [step-32b-verification.md](./archive/step-32/step-32b-verification.md) for `0.1.0-alpha.2` and [step-25c-verification.md](./archive/step-25/step-25c-verification.md) for the first alpha. Node/D1/Worker checks remain local regression coverage. The alpha remains experimental: the vulnerability/license audit and local fault-injection/backup drills remain sessions 34B/34C; real VPS and Cloudflare deployments belong to the separate owner verification plan. No acceptance command publishes artifacts.
+See [verification](verification.md) for current local commands, coverage and owner checks. Historical readiness remains in the archived [alpha.4 change](../openspec/changes/archive/2026-10-07-step-34a-cross-runtime-browser-verification/), [alpha.3 change](../openspec/changes/archive/2026-10-06-step-33h-alpha3-candidate/), [alpha.2 refresh](../openspec/changes/archive/2026-10-04-step-32b-coherent-artifact-refresh/) and [first release change](../openspec/changes/archive/2026-09-30-step-25c-prepublication-consumer-security/). Node/D1/Worker regression checks remain local; dependency audit, fault injection and restore do not establish real VPS/Cloudflare readiness. No acceptance command publishes artifacts.
 
 ## Owner-operated npm publication
 

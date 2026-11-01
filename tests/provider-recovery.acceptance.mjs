@@ -7,7 +7,7 @@ const require = createRequire(new URL("../apps/admin/package.json", import.meta.
 const { expect: browserExpect } = require("@playwright/test");
 
 for (const kind of ["node", "worker"]) {
-  test(`34B ${kind}: persisted provider outcomes and admin retries remain truthful after dispatch faults`, async () => {
+  test(`Security ${kind}: persisted provider outcomes and admin retries remain truthful after dispatch faults`, async () => {
     const f = await openProductRuntime(kind);
     let browser;
     try {
@@ -93,7 +93,9 @@ for (const kind of ["node", "worker"]) {
       const page = await browser.newPage({ baseURL: f.origin });
       page.setDefaultTimeout(15000);
       await page.goto("/admin/");
-      await page.getByRole("textbox", { name: "Email", exact: true }).fill("admin@34a.test");
+      await page
+        .getByRole("textbox", { name: "Email", exact: true })
+        .fill("admin@cross-runtime.test");
       await page.getByLabel("Password", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await browserExpect(

@@ -2,6 +2,7 @@
   "provenance": {
     "generator": "create-lace@0.1.0-alpha.7",
     "templateVersion": "0.35.0",
+    "sourceRevision": "665bd3499b49180a0873881bd9a93bb2722f556a",
     "registryIntegrity": "sha512-WfJqsKidWj3h1cf0gLcdnG3azhLCPuEmPxddAk1aAESmcgh6vvas9B0LZaicVcu4PI9tqaKD9CkPC+hW3hdYMw==",
     "archiveSha256": "15ae76426e965a6501ab02b5206612b0ad2a52fd3312b742fb5740c590cbdd26",
     "retrievedAt": "2026-10-29T21:19:25.271Z"

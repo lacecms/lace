@@ -1,8 +1,8 @@
 # Documentation maintenance (internal)
 
 This is internal engineering documentation. Public user-facing pages are authored
-in `apps/docs/src/content/docs`; this directory is never published wholesale. All
-existing `docs/` materials remain maintained. Architecture and accepted OpenSpec
+in `apps/docs/src/content/docs`; this directory is never published wholesale. The
+[internal index](README.md) records each document’s status and consolidated replacements. Architecture and accepted OpenSpec
 remain authoritative; public prose does not replace them.
 
 ## Topic ownership
@@ -14,11 +14,11 @@ remain authoritative; public prose does not replace them.
 | Editing content | rich-text-authoring.md, content-import.md (import guide, sample package), composite-fields.md and form-organization.md (conditional fields in the editor), CLI README, admin/media/account and content-import-cli specs |
 | Astro integration | site-styling.md (including video embed activation and provider smoke checks), generated lace-astro-site.md, SDK/render/block-installation specs |
 | Deployment | cloudflare-worker.md, cloudflare-deployment-handoff.md, generated Compose/Cloudflare guides |
-| Operations | auth-operations.md, database-migrations.md, compatibility.md, generated lace-operations.md |
+| Operations | auth-operations.md, database-migrations.md, compatibility.md, [verification.md](verification.md) (commands, coverage and owner checks), generated lace-operations.md |
 | Reference | CLI help/environment declarations, REST/API-docs specs, apps/api/openapi/api-v1.json |
 
 When behavior changes, review the public guide, the related internal documents and
-generated guides separately. Preserve internal evidence and historical records.
+generated guides separately. Keep run evidence in its result directory and release readiness in archived changes; update the index and incoming links when consolidating or deleting internal documents.
 Generated guides remain version-matched consumer assets, not imports of latest
 public prose. Public pages link within the public site; contributor-only links
 should explicitly identify GitHub source.

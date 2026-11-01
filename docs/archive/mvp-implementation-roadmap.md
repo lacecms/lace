@@ -210,7 +210,7 @@ separate.
 
 Steps 0–25 are the completed baseline for this continuation. The owner's
 published-alpha trial in an independent Astro project is recorded in
-[`onboarding-feedback.md`](step-32/onboarding-feedback.md). Steps 26–32 address that
+[`onboarding-feedback.md`](../README.md#consolidated-verification-and-history). Steps 26–32 address that
 feedback and the remaining Cloudflare consumer-installation gap before the
 former Step 26 release gate, now split between local Step 34 and the
 post-roadmap owner verification plan. Existing archived change names and
@@ -235,12 +235,12 @@ After `0.1.0-alpha.2` was published, the owner connected it to an existing Astro
 project, ran it in Docker Compose dev and production, and deployed the CMS
 Worker and the Pages-hosted static site to a real Cloudflare account. The
 defects and documentation gaps from that trial are recorded in
-[`lace-alpha-2-feedback.md`](step-33/lace-alpha-2-feedback.md) (§1–§6 plus a
+[`lace-alpha-2-feedback.md`](../README.md#consolidated-verification-and-history) (§1–§6 plus a
 cross-cutting diagnostics requirement). Step 33 fixes them and prepares the
 next compatible alpha; local release verification moves to Step 34. That trial is
 early field evidence. Real deployment acceptance against the final candidate
 is an owner-operated check after Step 34, following
-[`real-application-verification.md`](../real-application-verification.md). The alpha.2 feedback, like the earlier feedback,
+[owner verification plan](../verification.md#owner-checks-on-real-infrastructure). The alpha.2 feedback, like the earlier feedback,
 is proposal input rather than an accepted spec, and its documented workarounds
 are not product fixes.
 
@@ -1745,8 +1745,8 @@ Step 21's fixed-command, single-site, and atomic-release contracts.
 selection, current-site API/admin identity and ownership-safe template 0.7.0
 guidance are implemented. Real local consumer builds, correction/retry, missing
 binds, concurrent trigger serialization and the reference `apps/site` mount are
-verified. See [29A verification](step-29/step-29a-verification.md) and
-[tested artifacts](step-29/step-29a-artifacts.json). Publication visibility
+verified. See [29A verification (archived change)](../../openspec/changes/archive/2026-10-03-operator-selected-astro-source/) and
+[artifact verification context (archived change)](../../openspec/changes/archive/2026-10-03-operator-selected-astro-source/). Publication visibility
 verification remains 29B; these local checks do not claim a remote deployment.
 
 1. Define deployment-time selection of the site source, installation/workspace
@@ -1776,7 +1776,7 @@ need a dev restart. Manual static output changes only with a fresh build, and
 Compose serves a release after its covering build (pending through the
 synchronous build) with `Cache-Control: no-cache`. Template 0.8.0, generated
 guides, Builds, the entry editor and the tour explain each mode without deployment
-claims. See [29B verification](step-29/step-29b-verification.md).
+claims. See [29B verification (archived change)](../../openspec/changes/archive/2026-10-03-publication-visibility-guidance/).
 
 1. Reproduce publication in generated Astro dev, the independent existing-site
    dev integration, manual static build, and Compose automatic build. Record
@@ -2304,7 +2304,7 @@ an existing Astro project, Docker Compose dev/production, and a real Cloudflare
 account are fixed and diagnosable, each supported scenario has its own guide,
 and a coherent next alpha candidate carries the fixes.
 
-**Basis:** [`lace-alpha-2-feedback.md`](step-33/lace-alpha-2-feedback.md) §1–§6 and
+**Basis:** [`lace-alpha-2-feedback.md`](../README.md#consolidated-verification-and-history) §1–§6 and
 its general diagnostics requirement. Depends on Step 32 and the published
 `0.1.0-alpha.2`. Preserves the fixed-command builder, single-site, atomic
 release, server-only build credential, and protected user-source invariants.
@@ -2319,7 +2319,7 @@ complete subprocess logs in the admin are not required.
 
 Completed 2026-10-05. Save and recovery JSON derive sparse positions from the
 displayed order; safe ordering diagnostics preserve unsaved work. See
-[`step-33a-block-order-acceptance.md`](step-33/step-33a-block-order-acceptance.md) for
+[`step-33a-block-order-acceptance.md` (archived change)](../../openspec/changes/archive/2026-10-05-step-33a-block-order-on-draft-save/) for
 the SQLite/D1, browser, export and Astro verification. Sessions 33C–33H remain.
 
 1. Guarantee that the saved block list satisfies the domain ordering invariant
@@ -2341,7 +2341,7 @@ the SQLite/D1, browser, export and Astro verification. Sessions 33C–33H remain
 Completed 2026-10-05. Shared contracts and SDK accept strong and weak numeric
 validators, both runtimes compare published versions, and standard loaders
 revalidate through compression with default fetch. See
-[`step-33b-build-export-etags-acceptance.md`](step-33/step-33b-build-export-etags-acceptance.md)
+[`step-33b-build-export-etags-acceptance.md` (archived change)](../../openspec/changes/archive/2026-10-05-step-33b-build-export-etags/)
 for contract, SDK, SQLite/D1 and gzip-proxy verification. Real Pages build
 verification with default compression remains in the post-roadmap owner plan.
 
@@ -2384,7 +2384,7 @@ Session 33C completed on 2026-10-05 via
 closed reason/safe-path diagnostics through builder, dispatch, SQLite/D1, REST
 and Builds, plus correction/retry guidance. Packed existing-site Compose
 acceptance verified all source fault cases, unchanged releases and successful
-browser retries; see [acceptance evidence](step-33/step-33c-builder-source-diagnostics-acceptance.md).
+browser retries; see [acceptance evidence (archived change)](../../openspec/changes/archive/2026-10-05-step-33c-builder-source-diagnostics/).
 Sessions 33D–33H remain.
 
 ### Session 33D — Truthful site-build outcome model
@@ -2607,7 +2607,7 @@ required. Dependency advisory access may require the internet, not infrastructur
 credentials.
 
 Real infrastructure checks belong to the owner after the roadmap, following
-[`real-application-verification.md`](../real-application-verification.md). Earlier
+[owner verification plan](../verification.md#owner-checks-on-real-infrastructure). Earlier
 references to real-account checks as “34C” (including historical Step 33 evidence)
 now refer to that separate plan. Existing owner results may be reused when their
 version, configuration, scenario and evidence match the final candidate; local
@@ -2621,8 +2621,8 @@ The suite found and fixed failed-build text contrast and editor session recovery
 The refreshed alpha.4 / template 0.18.0 candidate passed both-platform image
 smokes and full arm64 consumer acceptance without publication. Subsequent
 sessions use this refreshed inventory. See
-[34A verification](step-34/step-34a-verification.md) and
-[artifact inventory](step-34/step-34a-artifacts.json).
+[34A verification (archived change)](../../openspec/changes/archive/2026-10-07-step-34a-cross-runtime-browser-verification/) and
+[artifact verification context (archived change)](../../openspec/changes/archive/2026-10-07-step-34a-cross-runtime-browser-verification/).
 This 34A inventory remains historical; subsequent 34B fixes use the separate
 34B inventory below. Final local completion is recorded in Session 34C; owner
 real-deployment acceptance remains open.
@@ -2650,8 +2650,8 @@ corrected. The full local runner passed ten phases (323 tests without skips);
 the refreshed alpha.4 / template 0.19.0 candidate passed both-platform image
 smokes and full arm64/Worker consumer security and recovery acceptance. Two
 restricted tooling advisory risks remain explicitly dispositioned. See
-[34B verification](step-34/step-34b-verification.md) and the separate
-[artifact/result inventory](step-34/step-34b-artifacts.json).
+[34B verification (archived change)](../../openspec/changes/archive/2026-10-10-step-34b-local-security-resilience/) and the separate
+[artifact/result context (archived change)](../../openspec/changes/archive/2026-10-10-step-34b-local-security-resilience/).
 The 34A and 34B inventories remain historical. Final local completion is recorded
 in Session 34C; owner real-deployment acceptance, remote D1 capacity confirmation
 and publication remain open.
@@ -2684,11 +2684,11 @@ coordinated database/object restores, credential rotation and migration/upgrade
 recovery. The clean alpha.4 / template 0.20.0 candidate passed both-platform image
 smokes and full native arm64 exact-artifact consumer acceptance, including
 installed-platform restore/rotation, generated starter and independent Astro
-ownership. See [34C verification](step-34/step-34c-verification.md),
-[artifact/result inventory](step-34/step-34c-artifacts.json),
-[local operations](../local-operations-verification.md) and
-[MVP traceability](../mvp-traceability.md). Step 34 and the implementation roadmap
-are locally complete. The [separate owner plan](../real-application-verification.md#post-roadmap-owner-evidence)
+ownership. See [34C verification (archived change)](../../openspec/changes/archive/2026-10-10-step-34c-local-operations-owner-handoff/),
+[artifact/result context (archived change)](../../openspec/changes/archive/2026-10-10-step-34c-local-operations-owner-handoff/),
+[local operations](../verification.md#commands) and
+[MVP traceability](../verification.md#coverage). Step 34 and the implementation roadmap
+are locally complete. The [separate owner plan](../verification.md#owner-checks-on-real-infrastructure)
 keeps real VPS/Cloudflare, remote D1 capacity/restore, publication and stable
 approval pending. 34B residual risks remain visible; neither active change is
 archived or synchronized implicitly.
@@ -2808,7 +2808,7 @@ the two runtimes can drift without a shared behavioral oracle.
 The owner confirmed alpha.4 package publication (template 0.20.0), completion
 of real VPS and Cloudflare application testing, and completion of backup/restore,
 upgrade, credential rotation and failed-build recovery, including real D1 limits
-and Pages status checks. See [owner status](../real-application-verification.md#owner-confirmed-status--2026-10-10)
+and Pages status checks. See [owner status](../verification.md#owner-confirmed-status--2026-10-10)
 for scope and evidence limits. Earlier pending statements describe the historical
 local handoff and are superseded by this confirmation for these activities.
 Beta/stable release approval, a new security audit and separate GHCR manifest

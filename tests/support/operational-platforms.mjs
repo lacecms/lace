@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-const packed = process.env.LACE_34C_PACKED_ROOT;
+const packed = process.env.LACE_VERIFY_PACKED_ROOT;
 const cli = packed && realpathSync(join(packed, "node_modules/@lacecms/cli"));
 async function load(name) {
   const url = cli

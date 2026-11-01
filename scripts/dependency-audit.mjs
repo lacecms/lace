@@ -132,7 +132,7 @@ export async function auditDependencies(output) {
   report.complete = true;
   await save();
   console.info(
-    `34B audit: ${Object.keys(audit.advisories).length} explicitly dispositioned tooling advisories; ${licenses.length} locked license records`,
+    `Security audit: ${Object.keys(audit.advisories).length} explicitly dispositioned tooling advisories; ${licenses.length} locked license records`,
   );
   return report;
 }

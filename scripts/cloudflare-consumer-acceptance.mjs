@@ -1,7 +1,10 @@
-import { configureAlphaEight, alphaEightJourney } from "./alpha-eight-acceptance.mjs";
-import { alphaSevenMediaJourney } from "./alpha-seven-acceptance.mjs";
-import { alphaSixJourney } from "./alpha-six-acceptance.mjs";
-import { consumer34bSecurity } from "./consumer-34b-security.mjs";
+import {
+  configureListSettings,
+  listSettingsMcpProxyJourney,
+} from "./journeys/list-settings-mcp-proxy.mjs";
+import { imageDeliveryJourney } from "./journeys/image-delivery.mjs";
+import { nodeContractsMediaJourney } from "./journeys/node-contracts-media.mjs";
+import { consumerSecurityProbes } from "./journeys/consumer-security-probes.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer as createHttpServer } from "node:http";
@@ -257,7 +260,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     "--starter",
     "--cloudflare",
   ]);
-  await configureAlphaEight(project);
+  await configureListSettings(project);
   await installPackedConsumer(project);
   // The journey below runs the local commands of the generated Cloudflare guide.
   await guideContract(project, "cloudflare");
@@ -580,7 +583,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     // Keep the publications adjacent and complete hook recovery before the
     // negative mutation probes: successful probes also trigger post-commit
     // dispatch and must not claim a publication during this coalescing check.
-    await consumer34bSecurity({ base, cookie, png });
+    await consumerSecurityProbes({ base, cookie, png });
 
     console.info("Acceptance: cloudflare-astro-build");
     const issued = await json(base, "api/v1/admin/api-tokens", {
@@ -761,9 +764,17 @@ export async function cloudflareConsumerJourney(parent, operations) {
     assertSecretFree(trackedHistory, [pagesToken, hook.url], "tracked build history");
     if (trackedHistory.includes("stub-secret"))
       throw new Error("cloudflare-pages-tracking: Pages API settings reached build history");
-    await alphaSevenMediaJourney({ base, cookie: tracker, project });
-    await alphaSixJourney({ base, cookie: tracker, png, entryId, mediaId, buildToken, project });
-    await alphaEightJourney({
+    await imageDeliveryJourney({ base, cookie: tracker, project });
+    await nodeContractsMediaJourney({
+      base,
+      cookie: tracker,
+      png,
+      entryId,
+      mediaId,
+      buildToken,
+      project,
+    });
+    await listSettingsMcpProxyJourney({
       base,
       project,
       email,
@@ -785,7 +796,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
             "",
           ),
         );
-        await start("cloudflare-alpha-eight-mcp");
+        await start("cloudflare-list-settings-mcp-proxy-mcp");
       },
     });
     // Last, so the import's publications never change an export baseline above.

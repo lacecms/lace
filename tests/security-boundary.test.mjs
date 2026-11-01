@@ -25,7 +25,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 const origin = "https://security.lace.test";
-const password = "Security-local-password-34B!";
+const password = "Security-local-password-Security!";
 
 async function open(kind, options = {}) {
   const base = options.origin ?? origin;
@@ -33,7 +33,7 @@ async function open(kind, options = {}) {
   let runtime, call, rows, query, sql;
   if (kind === "node") {
     vi.stubEnv("NODE_ENV", production ? "production" : "development");
-    const directory = await mkdtemp(join(tmpdir(), "lace-34b-auth-"));
+    const directory = await mkdtemp(join(tmpdir(), "lace-security-auth-"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
     const path = join(directory, "lace.sqlite");
     migrateNodeDatabase(path);
@@ -826,7 +826,7 @@ for (const kind of ["node", "cloudflare"]) {
 
 for (const kind of ["node", "cloudflare"]) {
   test(`${kind}: credential sentinels never escape runtime or provider diagnostics`, async () => {
-    const sentinel = "credential-sentinel-34b-no-disclosure-long-value";
+    const sentinel = "credential-sentinel-security-no-disclosure-long-value";
     const diagnostics = [];
     vi.spyOn(console, "error").mockImplementation((...values) => diagnostics.push(values));
     vi.spyOn(console, "warn").mockImplementation((...values) => diagnostics.push(values));

@@ -80,7 +80,7 @@ export function canonicalMedia(site, cover, publicBase) {
   };
 }
 export async function apiJourney(f) {
-  const report = (name) => console.info(`34A ${f.kind} API: ${name}`);
+  const report = (name) => console.info(`Cross-runtime ${f.kind} API: ${name}`);
   const json = async (path, options, status, schema) => {
     const response = await f.call(path, options);
     assert.equal(response.status, status, `${f.kind} ${path}: HTTP status`);
@@ -215,10 +215,10 @@ export async function apiJourney(f) {
     blocks,
   });
   report("publication, idempotent replay and immutable public snapshots");
-  const publication = await publish(saved, "34a-home");
+  const publication = await publish(saved, "cross-runtime-home");
   assert.equal(publication.publication, "published");
   assert.equal(publication.build.status, "queued");
-  const replay = await publish(saved, "34a-home");
+  const replay = await publish(saved, "cross-runtime-home");
   assert.equal(replay.publication, "replayed");
   assert.equal(replay.build.status, "not-dispatched");
   // Nested media in a gallery: one item overrides the alt text, one inherits it.
@@ -242,7 +242,7 @@ export async function apiJourney(f) {
       },
     ],
   });
-  await publish(about, "34a-about");
+  await publish(about, "cross-runtime-about");
   const createPost = (slug, title) =>
     json(
       "/api/v1/admin/models/posts/entries",
@@ -255,9 +255,9 @@ export async function apiJourney(f) {
       contracts.adminContentEntrySchema,
     );
   const alpha = await createPost("alpha", "Published alpha");
-  await publish(alpha, "34a-alpha");
+  await publish(alpha, "cross-runtime-alpha");
   const beta = await createPost("beta", "Published beta");
-  await publish(beta, "34a-beta");
+  await publish(beta, "cross-runtime-beta");
   report("published navigation global and an unpublished navigation draft");
   const navigations = await json(
     "/api/v1/admin/models/navigation/entries",
@@ -290,7 +290,7 @@ export async function apiJourney(f) {
     fields: {},
     blocks: [navigationBlock("Blog")],
   });
-  await publish(navigation, "34a-navigation");
+  await publish(navigation, "cross-runtime-navigation");
   await save(navigation.id, {
     expectedRevision: navigation.draft.revision,
     title: navigation.draft.title,
@@ -352,7 +352,7 @@ export async function apiJourney(f) {
   }
   const issued = await json(
     "/api/v1/admin/api-tokens",
-    { ...admin, method: "POST", json: { name: "34a-build" } },
+    { ...admin, method: "POST", json: { name: "cross-runtime-build" } },
     201,
     contracts.buildTokenCreatedSchema,
   );
@@ -454,7 +454,7 @@ export async function apiJourney(f) {
   const site = await createPublishedSiteLoader({
     baseUrl: f.origin,
     token: issued.token,
-    publicBaseUrl: "https://media.34a.test/",
+    publicBaseUrl: "https://media.cross-runtime.test/",
   })();
   for (const model of expected.models)
     for (const entry of site.entries(model)) {
@@ -465,6 +465,9 @@ export async function apiJourney(f) {
   assert.deepEqual(canonical, expected.site);
   const globals = canonicalGlobals(site, cover.id);
   assert.deepEqual(globals, expected.publishedGlobals);
-  assert.deepEqual(canonicalMedia(site, cover.id, "https://media.34a.test/"), expected.media);
+  assert.deepEqual(
+    canonicalMedia(site, cover.id, "https://media.cross-runtime.test/"),
+    expected.media,
+  );
   return { token: issued.token, cover: cover.id, homeId: home.id, canonical, globals };
 }

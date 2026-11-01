@@ -1,19 +1,19 @@
 import {
-  configureAlphaEight,
-  alphaEightJourney,
-  verifyAlphaEightStarter,
-  alphaEightTlsProxy,
-} from "./alpha-eight-acceptance.mjs";
+  configureListSettings,
+  listSettingsMcpProxyJourney,
+  verifyListSettingsStarter,
+  tlsEdgeProxy,
+} from "./journeys/list-settings-mcp-proxy.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
 import {
-  alphaSevenGif,
-  alphaSevenMediaJourney,
-  verifyAlphaSevenImages,
-} from "./alpha-seven-acceptance.mjs";
+  gifFixtureFrames,
+  imageDeliveryJourney,
+  verifyImageDelivery,
+} from "./journeys/image-delivery.mjs";
 import { createRequire } from "node:module";
-import { alphaSixJourney } from "./alpha-six-acceptance.mjs";
-import { consumer34bSecurity } from "./consumer-34b-security.mjs";
+import { nodeContractsMediaJourney } from "./journeys/node-contracts-media.mjs";
+import { consumerSecurityProbes } from "./journeys/consumer-security-probes.mjs";
 import { blockOrderJourney } from "./block-order-acceptance.mjs";
 import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs";
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
@@ -395,7 +395,7 @@ async function waitApiReady(base) {
  * tour and media, and publication through the API.
  */
 async function nodeJourney(context) {
-  context.alphaEightConfiguration = await configureAlphaEight(context.project);
+  context.listSettingsConfiguration = await configureListSettings(context.project);
   const { project, apiPort } = context;
   const base = `http://127.0.0.1:${apiPort}/`;
   await guideContract(project, "development");
@@ -1136,7 +1136,7 @@ async function starterJourney(project) {
 
   const published = await build("starter-build", exported, { LACE_BUILD_SITE_URL: siteUrl });
   await run("starter-typecheck", "pnpm", ["typecheck"], { cwd: project });
-  await verifyAlphaEightStarter(project, workspace);
+  await verifyListSettingsStarter(project, workspace);
   const html = published.join("\n");
   for (const type of ["hero", "richText", "image", "quote", "cta"]) {
     if (!html.includes(`data-lace-block="${type}"`))
@@ -1306,10 +1306,10 @@ async function starterJourney(project) {
         .png()
         .toBuffer(),
     ],
-    ["gif", "image/gif", 320, 240, alphaSevenGif()],
+    ["gif", "image/gif", 320, 240, gifFixtureFrames()],
   ];
   for (const [name, mimeType, width, height, bytes] of cases) {
-    const id = `alpha-seven-${name}`;
+    const id = `image-delivery-${name}`;
     starterMedia.set(id, bytes);
     imageExport.media[id] = {
       id,
@@ -1333,25 +1333,25 @@ async function starterJourney(project) {
   imageExport.entries[0].blocks.push({
     type: "gallery",
     schemaVersion: 5,
-    key: "alpha-seven-gallery",
+    key: "image-delivery-gallery",
     position: 20000,
     data: {
       images: [
-        { media: "alpha-seven-photo", link: "/gallery-destination" },
-        { media: "alpha-seven-transparent" },
+        { media: "image-delivery-photo", link: "/gallery-destination" },
+        { media: "image-delivery-transparent" },
       ],
     },
     settings: { lightbox: true },
   });
-  const optimized = await build("alpha-seven-starter-images", imageExport, {
+  const optimized = await build("image-delivery-starter-images", imageExport, {
     LACE_BUILD_SITE_URL: siteUrl,
   });
-  await verifyAlphaSevenImages(project, optimized[0]);
-  const repeated = await build("alpha-seven-starter-images-warm", imageExport, {
+  await verifyImageDelivery(project, optimized[0]);
+  const repeated = await build("image-delivery-starter-images-warm", imageExport, {
     LACE_BUILD_SITE_URL: siteUrl,
   });
   if (optimized[0] !== repeated[0]) throw new Error("Image cache changed rendered output");
-  await verifyAlphaSevenImages(project, repeated[0]);
+  await verifyImageDelivery(project, repeated[0]);
   await validateImportSample({ project, run, workspace });
   console.info(
     "Packed starter installed, typechecked and built every built-in block, block anchors, site navigation and SEO output with and without published globals and a site URL, and validated the import sample",
@@ -1625,9 +1625,9 @@ async function signInHonoringRetry(base, email, password) {
 
 async function securityJourney(context, session) {
   const { base, cookie, entryId, buildToken, token, email, password } = session;
-  await consumer34bSecurity({ base, cookie, png: session.png });
+  await consumerSecurityProbes({ base, cookie, png: session.png });
   for (const script of ["db:migrate", "content:sync", "auth:bootstrap"]) {
-    const denied = runStatus(`34b-live-host-${script}`, "pnpm", [script, "--json"], {
+    const denied = runStatus(`security-live-host-${script}`, "pnpm", [script, "--json"], {
       cwd: context.project,
     });
     const refusal = JSON.parse(denied.stdout.trim().split("\n").at(-1));
@@ -1639,7 +1639,9 @@ async function securityJourney(context, session) {
     )
       throw new Error("Exact consumer host maintenance guard failed");
   }
-  console.info("34B exact consumer: live Compose host maintenance refused before database access");
+  console.info(
+    "Security exact consumer: live Compose host maintenance refused before database access",
+  );
   const exportPath = "/api/v1/public/build-export";
   const auth = { authorization: `Bearer ${buildToken}` };
   const before = await readExport(base, buildToken);
@@ -1885,9 +1887,9 @@ async function inspectShipping(context, label = "initial") {
     await scanFile(join(project, file), secretValues, `generated ${file}`);
     if (!substituted.has(file)) {
       const bytes = await readFile(join(project, file));
-      if (file === "lace.config.ts" && context.alphaEightConfiguration) {
+      if (file === "lace.config.ts" && context.listSettingsConfiguration) {
         // Only the reviewed consumer query configuration may differ from shipping bytes.
-        const configured = context.alphaEightConfiguration;
+        const configured = context.listSettingsConfiguration;
         if (
           createHash("sha256").update(configured.before).digest("hex") !== shipping.digests[file] ||
           bytes.toString("utf8") !== configured.after
@@ -2021,7 +2023,7 @@ async function feedbackJourneys(parent, context, session, tarballs, upgradeOpera
     "existing-astro",
     "cloudflare-consumer",
     "cloudflare-pages-tracking",
-    "template-0.4.0-and-0.14.0-upgrade",
+    "template-upgrade",
   ];
 }
 
@@ -2055,7 +2057,7 @@ async function fieldTrialJourneys(parent, context, session, tarballs) {
   const operations = { request, run, secretValues, waitBuild, workspace };
   await blockOrderJourney(context, session, operations);
   await weakEtagJourney(context, session, operations);
-  if (context.shipping) await alphaEightNodeJourney(context, session);
+  if (context.shipping) await listSettingsNodeJourney(context, session);
   await compose("compose-release-down", ["down", "--volumes", "--remove-orphans"], {
     timeoutMs: 3 * 60_000,
   });
@@ -2089,9 +2091,9 @@ async function fieldTrialJourneys(parent, context, session, tarballs) {
   ];
 }
 
-async function alphaEightNodeJourney(context, session) {
+async function listSettingsNodeJourney(context, session) {
   const { parent, project } = context;
-  const tls = await alphaEightTlsProxy({
+  const tls = await tlsEdgeProxy({
     parent,
     upstream: `http://127.0.0.1:${context.httpPort}/`,
     run,
@@ -2099,7 +2101,7 @@ async function alphaEightNodeJourney(context, session) {
     secretValues,
   });
   try {
-    await alphaEightJourney({
+    await listSettingsMcpProxyJourney({
       ...session,
       base: tls.base,
       fetch: tls.fetch,
@@ -2112,7 +2114,7 @@ async function alphaEightNodeJourney(context, session) {
         context.values.LACE_EMAIL_FROM = "";
         context.values.LACE_PUBLIC_BASE_URL = tls.base;
         await writeEnvironment(context);
-        await compose("alpha-eight-enable-mcp", [
+        await compose("list-settings-mcp-proxy-enable-mcp", [
           "up",
           "-d",
           "--force-recreate",
@@ -2125,7 +2127,7 @@ async function alphaEightNodeJourney(context, session) {
   } finally {
     await tls.close();
   }
-  await inspectShipping(context, "after-alpha-eight");
+  await inspectShipping(context, "after-list-settings-mcp-proxy");
 }
 
 async function main() {
@@ -2241,7 +2243,7 @@ async function main() {
     const session = await nodeJourney(context);
     if (phase === "release-mcp") {
       await productionSmoke(context, session);
-      await alphaEightNodeJourney(context, session);
+      await listSettingsNodeJourney(context, session);
       console.info(
         "Focused saved Node HTTPS/MCP acceptance passed; no full release receipt recorded",
       );
@@ -2252,12 +2254,12 @@ async function main() {
     await recoveryJourney(context, session);
     await persistenceJourney(context, session);
     await inspectShipping(context);
-    await alphaSevenMediaJourney({
+    await imageDeliveryJourney({
       ...session,
       project: context.project,
       proxyBase: `http://127.0.0.1:${context.httpPort}/`,
     });
-    await alphaSixJourney({ ...session, project: context.project });
+    await nodeContractsMediaJourney({ ...session, project: context.project });
     await restorePublishedBaseline(session);
     const journeys = await feedbackJourneys(parent, context, session, artifacts.tarballs, {
       cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
@@ -2267,26 +2269,32 @@ async function main() {
       workspace,
     });
     journeys.push(
-      "alpha-six-node-contracts-media",
-      "alpha-seven-node-gif-proxy-cache",
-      "alpha-seven-starter-image-variants-lightbox-links-warm-cache",
-      "alpha-seven-local-cloudflare-gif-validators",
-      "alpha-seven-template-upgrade-from-alpha-six",
+      "node-contracts-media",
+      "consumer-security-probes",
+      "gif-proxy-cache",
+      "image-delivery-starter-image-variants-lightbox-links-warm-cache",
+      "image-delivery-local-cloudflare-gif-validators",
+      "published-template-upgrade",
     );
     journeys.push(...(await fieldTrialJourneys(parent, context, session, artifacts.tarballs)));
     await run(
-      "34c-packed-restore-rotation",
+      "packed-restore-rotation",
       "pnpm",
-      ["exec", "vitest", "run", "--config", "vitest.operations.config.mjs"],
+      [
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.verification.config.mjs",
+        "--project",
+        "operations",
+      ],
       {
-        env: { LACE_34C_PACKED_ROOT: project },
+        env: { LACE_VERIFY_PACKED_ROOT: project },
       },
     );
-    journeys.push("34c-packed-platform-restore-rotation");
-    journeys.push(
-      "alpha-eight-node-proxy-oauth-drafts-queries-revocation",
-      "alpha-eight-local-cloudflare-oauth-drafts-queries-revocation",
-    );
+    journeys.push("packed-platform-restore-rotation");
+    journeys.push("list-settings-mcp-proxy", "cloudflare-list-settings-mcp-proxy");
     if (
       (await run("acceptance-harness-final-revision", "git", ["rev-parse", "HEAD"])).trim() !==
         harnessRevision ||
@@ -2430,7 +2438,7 @@ async function main() {
   await feedbackJourneys(parent, context, session, tarballs, upgradeOperations);
   await fieldTrialJourneys(parent, context, session, tarballs);
   console.info(
-    "Feedback regression suite passed: development-guide-driven Node consumer, Compose release, Pages preview, publication visibility, existing-Astro consumer, Cloudflare consumer with Pages tracking, template 0.4.0/0.14.0 upgrade, block order, weak ETags, builder source diagnostics and Cloudflare credentials",
+    "Feedback regression suite passed: development-guide-driven Node consumer, Compose release, Pages preview, publication visibility, existing-Astro consumer, Cloudflare consumer with Pages tracking, retained published-template upgrade, block order, weak ETags, builder source diagnostics and Cloudflare credentials",
   );
 }
 

@@ -71,7 +71,7 @@ export async function executeRequiredPhases(phases, run, save) {
 }
 export async function main() {
   await mkdir(".lace-acceptance", { recursive: true });
-  const output = await mkdtemp(resolve(".lace-acceptance/step-34b-"));
+  const output = await mkdtemp(resolve(".lace-acceptance/verify-security-"));
   const provenance = {
     recordedAt: new Date().toISOString(),
     scope: "local source only",
@@ -103,7 +103,7 @@ export async function main() {
       name: "local-prerequisites",
       async run() {
         assert.ok(
-          process.env.LACE_34B_API_IMAGE && process.env.LACE_34B_BUILDER_IMAGE,
+          process.env.LACE_VERIFY_API_IMAGE && process.env.LACE_VERIFY_BUILDER_IMAGE,
           "explicit local Compose fixture images are required",
         );
         await ownedCommand("docker", ["info", "--format", "{{.ServerVersion}}"]);
@@ -160,20 +160,35 @@ export async function main() {
       "--maxWorkers=2",
     ]),
     { name: "compose-host-safety", command: "node", args: ["scripts/compose-database-safety.mjs"] },
-    phase("storage-and-admin-recovery", ["--config", "vitest.resilience.config.mjs"]),
-    phase("static-secret-exclusion", ["--config", "vitest.security-static.config.mjs"]),
-    phase("d1-http-budgets", ["--config", "vitest.d1-budgets.config.mjs"]),
+    phase("storage-and-admin-recovery", [
+      "--config",
+      "vitest.verification.config.mjs",
+      "--project",
+      "resilience",
+    ]),
+    phase("static-secret-exclusion", [
+      "--config",
+      "vitest.verification.config.mjs",
+      "--project",
+      "security-static",
+    ]),
+    phase("d1-http-budgets", [
+      "--config",
+      "vitest.verification.config.mjs",
+      "--project",
+      "d1-budgets",
+    ]),
     {
       name: "dependency-audit",
       command: "node",
       args: ["scripts/dependency-audit.mjs", "--output", join(output, "dependency-audit.json")],
     },
   ];
-  console.info(`34B report: ${output}/result.json`);
+  console.info(`Security report: ${output}/result.json`);
   await executeRequiredPhases(
     phases,
     async (item) => {
-      console.info(`34B phase: ${item.name}`);
+      console.info(`Security phase: ${item.name}`);
       if (item.run) await item.run();
       else await ownedCommand(item.command, item.args);
     },
@@ -184,7 +199,7 @@ export async function main() {
       ),
   );
   console.info(
-    "34B local source suite passed; exact artifacts and real deployment acceptance are separate gates.",
+    "Security local source suite passed; exact artifacts and real deployment acceptance are separate gates.",
   );
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))

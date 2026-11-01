@@ -74,7 +74,7 @@ The root `README.md` SHALL present concise English product information: what Lac
 
 ### Requirement: Public and internal documentation retain explicit ownership
 
-All existing repository `docs/**` materials SHALL remain maintained internal engineering documents; this change SHALL NOT delete them merely because related public pages are added or publish the directory wholesale. Public guidance SHALL live in the documentation application, internal architecture/specs SHALL retain their existing authority, and generated-project guides SHALL remain version-matched consumer assets. Internal and public overlapping guidance SHALL use an explicit topic/source map so future behavior changes identify both audiences requiring review. Internal-only edits SHALL NOT change public output unless an explicitly declared public build input is also changed.
+Repository `docs/**` materials SHALL remain maintained internal engineering documents listed in the internal documentation index with a status; the public site SHALL NOT publish the directory wholesale. An internal document MAY be consolidated into another or deleted only when the index and every document that linked to it are updated in the same change, so that no link or ownership row names a missing file. Public guidance SHALL live in the documentation application, internal architecture/specs SHALL retain their existing authority, and generated-project guides SHALL remain version-matched consumer assets. Internal and public overlapping guidance SHALL use an explicit topic/source map so future behavior changes identify both audiences requiring review. Internal-only edits SHALL NOT change public output unless an explicitly declared public build input is also changed.
 
 #### Scenario: Public guide derives from internal material
 - **WHEN** a guide is adapted for the public site
@@ -83,6 +83,10 @@ All existing repository `docs/**` materials SHALL remain maintained internal eng
 #### Scenario: Internal report changes
 - **WHEN** only an internal verification report or architecture document is edited
 - **THEN** its content does not automatically become a public page or resource
+
+#### Scenario: Internal document is consolidated
+- **WHEN** an internal document is merged into another and deleted
+- **THEN** the index records the replacement, the ownership map and every linking document point at the replacement, and the link guard passes
 
 ### Requirement: Image guidance matches the alpha seven consumer workflow
 Public media, Astro integration, deployment and upgrade guidance SHALL describe the accepted image formats and 10 MiB limit, original versus optimized delivery, image origin allowlisting and the site's image-service dependency, variant widths and animated GIF conversion, placeholder exceptions, opt-in lightbox, link precedence and safe updates to installed source. Deployment guidance SHALL explain upload proxy configuration, revalidating HTML, thirty-day immutable successful hashed assets and disposable persistent build caches for VPS and Pages where applicable. It SHALL distinguish database migration from content configuration synchronization and retain current routes. Public, internal and delivered generated guides SHALL be reviewed together according to the existing topic ownership map. Documentation SHALL NOT advertise the unapplied video proposal as supported.

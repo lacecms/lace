@@ -100,24 +100,6 @@ commands.
   typecheck, or format command
 - **THEN** no local database or object-store data are deleted implicitly
 
-### Requirement: Explicit unavailable-command behavior
-
-Until a later roadmap step implements a documented developer command's runtime
-feature, invoking that command SHALL print `not implemented in milestone 1` or
-an equally specific milestone message. A non-verification developer command
-such as a development-server launcher SHALL exit successfully after that
-message; an unavailable verification or state-changing command SHALL exit
-unsuccessfully and SHALL not simulate feature execution.
-
-#### Scenario: Deferred development launcher
-
-- **WHEN** a contributor runs an unimplemented development-server command during Step 1
-- **THEN** the command exits successfully after identifying that the feature is not implemented in milestone 1
-
-#### Scenario: Deferred verification command
-
-- **WHEN** a contributor runs an unimplemented integration verification command during Step 1
-- **THEN** the command exits unsuccessfully after identifying that the feature is not implemented in milestone 1
 
 ### Requirement: Site-rendering packages stay framework-neutral
 The dependency-boundary verification SHALL permit the render core to import only the content package and its own modules, rejecting UI-framework, Node built-in, SDK, contract, and other third-party imports. It SHALL permit the SDK to import only the contracts package, its validation library, and its own modules, so the published-site loader cannot import a UI framework or Node-only API.
@@ -199,3 +181,35 @@ catalog dependencies.
 #### Scenario: Application imports a transport schema
 - **WHEN** an application boundary fixture imports a REST contract or MCP SDK
 - **THEN** the existing forbidden-edge check continues to reject it
+
+### Requirement: Root scripts and script files reference each other completely
+
+Every `node scripts/<file>` target of a root `package.json` script SHALL exist, and every file under `scripts/` (excluding `scripts/fixtures/`) SHALL be referenced by a root `package.json` script, another script, a CI workflow, a Dockerfile or a test. A repository test SHALL enforce both directions so that an orphaned or dangling script fails the root test command. Root scripts, script files, acceptance stage names, result directories and verification environment variables SHALL be named by what they run or verify and SHALL NOT encode a prerelease number or roadmap step identifier. `DEVELOPMENT.md` SHALL catalog every root script with its group and when to run it.
+
+#### Scenario: Script file loses its last reference
+- **WHEN** a contributor deletes the only root script, workflow step or import that referenced a file under `scripts/`
+- **THEN** the root test fails naming the orphaned file
+
+#### Scenario: Root script points at a deleted file
+- **WHEN** a root `package.json` script names a `scripts/` file that does not exist
+- **THEN** the root test fails naming the script
+
+#### Scenario: Catalog is incomplete
+- **WHEN** a root script is added without a catalog row in `DEVELOPMENT.md`
+- **THEN** the root test fails naming the uncataloged script
+
+### Requirement: Internal documentation is indexed and link-checked
+
+The repository SHALL keep an index of internal documentation (`docs/README.md`) listing every Markdown file under `docs/`, including archived roadmaps, with a status of `authoritative`, `internal note` or `historical` and the architecture section or capability it details, and an ADR index (`docs/adr/README.md`) listing every ADR by number, title and status. Relative Markdown links in the root `README.md`, `DEVELOPMENT.md`, `AGENTS.md`, `backlog.md` and every file under `docs/` SHALL resolve to an existing file or directory. A repository test SHALL fail when a link target is missing, when a `docs/` file has no index row, or when an ADR has no ADR-index row. Verification run records, per-release readiness narratives and other evidence of completed work SHALL NOT be stored under `docs/`; the archived OpenSpec changes, archived roadmaps and ADRs are the repository's history.
+
+#### Scenario: Document is deleted or moved
+- **WHEN** a contributor deletes or moves a file under `docs/` and another document still links to its old path
+- **THEN** the root test fails naming the linking document and the missing target
+
+#### Scenario: Document is added without an index row
+- **WHEN** a new Markdown file is added under `docs/` or `docs/adr/` without an index row
+- **THEN** the root test fails naming the file
+
+#### Scenario: Index is complete
+- **WHEN** every `docs/` file and ADR has an index row and every relative link resolves
+- **THEN** the root test passes

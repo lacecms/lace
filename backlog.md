@@ -1,11 +1,18 @@
 # Lace backlog
 
-- **Site migration roadmap (selected 2026-10-31):** planned in
-  [`docs/site-migration-roadmap.md`](docs/site-migration-roadmap.md) from the
-  tatianae.com migration analysis. Order: SM1 `videoEmbed` aspect ratio and
-  ambient playback → SM2 MCP publication scope (no unpublish/delete) → SM3 media
-  tags and multi-select picker → SM4 `lace import` → SM5 conditional fields. No
-  OpenSpec change created yet; each session gets its own just-in-time proposal.
+- **Refactoring roadmap (selected 2026-11-01):** planned in
+  [`docs/refactoring-roadmap.md`](docs/refactoring-roadmap.md) from the
+  workspace architecture audit. Order: RF1 workspace hygiene → RF2 tests
+  against source → RF3 shared vocabulary (types, constants, rules) → RF4
+  module splits → RF5 runtime deduplication → RF6 admin editor structure →
+  RF7 CLI and scripts → RF8 documentation. Behavior-preserving sessions carry
+  no delta specs. No OpenSpec change created yet; each session gets its own
+  just-in-time proposal.
+
+- **Site migration roadmap (implemented, archived 2026-11-01):** SM1–SM5
+  (twelve sessions) delivered and merged in lacecms/lace#63; every change is
+  archived and synchronized. The roadmap moved to
+  [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
 - **Shared video primitive (deferred from SM5D, 2026-11-01):** `videoEmbed`
   and gallery video items each carry their own registry markup and ambient
@@ -107,8 +114,10 @@ when selected and do not yet have an implementation order or new CE numbers.
   storage, streamed upload, byte-range delivery and field-level media kinds;
   then uploaded-video blocks and admin library/picker/player support. Revisit
   autoplay/loop/muted/controls and motion accessibility when selecting that work.
-  The existing unapplied `video-a-media-upload-delivery` draft (0 completed tasks)
-  is retained as historical planning input, not the selected next change. Its old
+  The unapplied `video-a-media-upload-delivery` draft (0 completed tasks)
+  is preserved as historical planning input at
+  [`2026-11-01-video-a-media-upload-delivery-superseded`](openspec/changes/archive/2026-11-01-video-a-media-upload-delivery-superseded/),
+  without synchronizing its deltas. It is not the selected next change. Its old
   A → B → C order is superseded by this embed-first selection; rebase and replan
   it against accepted specs before any future apply. Do not include another
   `videoEmbed` implementation in that future uploaded-video scope.
