@@ -162,6 +162,7 @@ async function mock(
     createdAt: date,
     updatedAt: date,
     createdBy: { id: "editor-1", displayName: "Ada" },
+    tags: [],
     usageCount: 0,
     url: "https://site.test/photo.png",
   };

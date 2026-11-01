@@ -1,3 +1,4 @@
+import { normalizeMediaTags } from "@lacecms/domain";
 import {
   actorDisplayName,
   transformConfigurationSyncFields,
@@ -17,6 +18,7 @@ import {
   renderConfigurationSyncPlanJson,
   assertBuildExportPageSize,
   selectBuildExportPage,
+  withPublishedProjection,
 } from "@lacecms/application";
 import type {
   ActorSummary,
@@ -130,7 +132,7 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { NormalizedContentModel } from "@lacecms/config";
-import type { InternalLinkReference, JsonValue } from "@lacecms/content";
+import type { FieldVisibility, InternalLinkReference, JsonValue } from "@lacecms/content";
 
 export const packageName = "@lacecms/test-utils";
 
@@ -909,6 +911,7 @@ export class InMemoryContentStore
               changes,
               snapshot.fields,
               snapshot.state,
+              currentModel?.visibility as FieldVisibility | undefined,
             );
             const kept = (nextReferences.get(snapshot.id) ?? []).filter(
               (reference) =>
@@ -1088,7 +1091,10 @@ export class InMemoryContentStore
 
   public async list(input: ListContentEntriesInput): Promise<ContentEntryListPage> {
     const matching = [...this.entries.values()].filter(
-      (entry) => entry.model.key === input.modelKey && matchesSearch(entry, input.q),
+      (entry) =>
+        entry.model.key === input.modelKey &&
+        matchesSearch(entry, input.q) &&
+        (input.slug === undefined || entry.draft.slug === input.slug),
     );
     const totals = { all: matching.length, changed: 0, draft: 0, published: 0 };
     for (const entry of matching) totals[entryStatus(entry)] += 1;
@@ -1102,6 +1108,7 @@ export class InMemoryContentStore
       input.sort,
       input.status ?? null,
       input.q ?? null,
+      ...(input.slug === undefined ? [] : [input.slug]),
     ]);
     return Object.freeze({
       ...this.page(summaries, input.after, input.limit, prefix),
@@ -1142,7 +1149,9 @@ export class InMemoryContentStore
     const entry = this.entries.get(input.entryId);
     if (entry === undefined)
       throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
-    const published = publishContentEntry(entry, input);
+    const copied = publishContentEntry(entry, input);
+    const published =
+      input.projection === undefined ? copied : withPublishedProjection(copied, input.projection);
     const path = contentPublicPath(published.model, published.published!.slug);
     const nextRoutes = new Map(this.routes);
     // A global has no route; its publication only replaces the snapshot.
@@ -1161,11 +1170,14 @@ export class InMemoryContentStore
     this.entries.set(published.id, published);
     // Publication replaces the prior published snapshot, as SQLite cascades its references.
     if (entry.published !== undefined) this.references.delete(entry.published.id);
-    this.references.set(published.published!.id, clone(this.references.get(entry.draft.id) ?? []));
+    this.references.set(
+      published.published!.id,
+      clone(input.projection?.mediaReferences ?? this.references.get(entry.draft.id) ?? []),
+    );
     if (entry.published !== undefined) this.linkReferences.delete(entry.published.id);
     this.linkReferences.set(
       published.published!.id,
-      clone(this.linkReferences.get(entry.draft.id) ?? []),
+      clone(input.projection?.internalLinks ?? this.linkReferences.get(entry.draft.id) ?? []),
     );
     this.routes.clear();
     for (const [routePath, route] of nextRoutes) this.routes.set(routePath, route);
@@ -1368,13 +1380,18 @@ export class InMemoryContentStore
         "Media identity or storage key already exists.",
       );
     }
+    const normalized = normalizeMediaTags(input.tags ?? []);
+    if ("issue" in normalized)
+      throw new DomainError("CONTENT_INVALID_STATE", "Invalid media tags.");
     const media: MediaMetadata = {
+      tags: normalized.tags,
       createdAt: input.createdAt,
       createdBy: input.createdBy,
       filename: input.filename,
       height: input.height,
       id: input.id,
       mimeType: input.mimeType,
+      ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
       size: input.size,
       status: "active",
       storageKey: input.storageKey,
@@ -1399,12 +1416,40 @@ export class InMemoryContentStore
       .filter(
         (value) =>
           (term === undefined || foldAscii(value.filename).includes(term)) &&
-          (input.type === undefined || value.mimeType === input.type),
+          (input.type === undefined || value.mimeType === input.type) &&
+          (input.tags ?? []).every((tag) => (value.tags ?? []).includes(tag)) &&
+          (input.sha256 === undefined ||
+            (value.sha256 === input.sha256 && value.status === "active")),
       )
       .sort((left, right) => compareMedia(left, right, input.sort))
       .map((value) => this.catalogItem(value));
-    const prefix = JSON.stringify(["media", input.sort, input.type ?? null, input.q ?? null]);
+    const prefix = JSON.stringify([
+      "media",
+      input.sort,
+      input.type ?? null,
+      input.q ?? null,
+      [...(input.tags ?? [])].sort(),
+      ...(input.sha256 === undefined ? [] : [input.sha256]),
+    ]);
     return this.page(items, input.after, input.limit, prefix);
+  }
+
+  public async listMediaTags(
+    input: import("@lacecms/application").ListMediaTagsInput,
+  ): Promise<CursorPage<import("@lacecms/application").MediaTagCount>> {
+    const counts = new Map<string, number>();
+    for (const item of this.media.values())
+      for (const tag of item.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    const items = [...counts]
+      .filter(([tag]) => input.q === undefined || tag.startsWith(input.q))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([tag, count]) => ({ tag, count }));
+    return this.page(
+      items,
+      input.after,
+      input.limit,
+      JSON.stringify(["media-tags", input.q ?? null]),
+    );
   }
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {
@@ -1480,6 +1525,7 @@ export class InMemoryContentStore
     const { alt: _alt, caption: _caption, focalPoint: _focalPoint, ...technical } = media;
     const updated: MediaMetadata = {
       ...technical,
+      tags: input.tags ?? media.tags ?? [],
       ...(input.alt === null ? {} : { alt: input.alt }),
       ...(input.caption === null ? {} : { caption: input.caption }),
       ...(input.focalPoint === null
@@ -1491,7 +1537,8 @@ export class InMemoryContentStore
       entry.locations.some((location) => location.states.includes("published")),
     );
     this.media.set(input.mediaId, clone(updated));
-    if (!published) return Object.freeze({ media: clone(updated) });
+    if (!published || input.publishedEffect === false)
+      return Object.freeze({ media: clone(updated) });
     this.publicVersion += 1;
     this.mediaMetadataBuildRequests.push(this.publicVersion);
     return Object.freeze({ media: clone(updated), targetVersion: this.publicVersion });

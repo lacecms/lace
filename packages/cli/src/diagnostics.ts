@@ -8,6 +8,7 @@ export type Operation =
   | "doctor"
   | "cloudflare preflight"
   | "add block"
+  | "import"
   | "cli";
 export type DiagnosticKind =
   | "compose-active"
@@ -37,6 +38,7 @@ export function identifyOperation(argv: readonly string[]): Operation {
   if (argv[0] === "doctor") return "doctor";
   if (argv[0] === "upgrade") return "upgrade";
   if (argv[0] === "add" && argv[1] === "block") return "add block";
+  if (argv[0] === "import") return "import";
   const words = argv.filter(
     (word, index) =>
       !word.startsWith("--") &&
@@ -220,6 +222,38 @@ export function failureDiagnostic(
     BLOCKS_CONFLICTS: [
       "Some block files, the block map or block versions conflict with the requested installation.",
       "Review the reported diffs (or .new files from --write-new), merge the registry changes into your edited files or add the printed block map lines yourself; edited files are never overwritten.",
+    ],
+    IMPORT_USAGE: [
+      "Import arguments are invalid.",
+      "Run lace import --help, pass exactly one package directory with a supported option set, and retry.",
+    ],
+    IMPORT_SETTINGS: [
+      "Import settings, the project configuration or the state file are missing or unreadable.",
+      "Run lace import from the CMS project root that contains lace.config.ts, set LACE_IMPORT_TOKEN and --url or LACE_API_BASE_URL, and restore or remove a malformed state file.",
+    ],
+    IMPORT_INVALID: [
+      "The import package does not match format v1 or the project configuration.",
+      "Fix the reported lace-import.json locations, or the converter that writes them, and rerun; nothing was written.",
+    ],
+    IMPORT_CONFIG_MISMATCH: [
+      "The installation's content models or block versions differ from lace.config.ts.",
+      "Run lace content sync against this installation, or use its matching configuration, then rerun; nothing was written.",
+    ],
+    IMPORT_CONFLICT: [
+      "Drafts changed on the server after the last import, or a slug matches several drafts.",
+      "Review the listed entries in the admin; rerun with --overwrite to replace edited drafts, or give duplicate slugs distinct values. Nothing was written.",
+    ],
+    IMPORT_UNAUTHORIZED: [
+      "The API refused the import token, or the token lacks a needed capability.",
+      "Issue a current import token in Settings (allow publishing for --publish), set LACE_IMPORT_TOKEN and rerun.",
+    ],
+    IMPORT_RATE_LIMITED: [
+      "The API kept rate limiting the import.",
+      "Wait a few minutes and rerun the same command; completed writes are matched and skipped.",
+    ],
+    IMPORT_FAILED: [
+      "An import request failed or the API returned an unexpected response.",
+      "Check the API, use the @lacecms/cli release that matches the server, and rerun the same command; completed writes are matched and skipped.",
     ],
     UPGRADE_APPLY: [
       "Upgrade or rollback could not complete safely.",

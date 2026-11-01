@@ -192,6 +192,27 @@ In Admin open Home, set its title, add blocks, save and publish as the admin. Up
 
 <!-- lace-site: end -->
 
+## Import content
+
+`lace import` loads an import package (a directory with `lace-import.json` and its images) into this project's running API through the admin API. Use it to move pages, posts and images from another site. It creates and updates drafts and can publish; it never deletes or unpublishes. The format, a sample package and converter guidance are in the public [Import content](https://lacecms.github.io/lace/en/latest/editing-content/import/) guide.
+
+Run it from this project root, where `lace.config.ts` lives, after `pnpm content:sync`. The API must be running with the same Lace release: `http://127.0.0.1:3000` for the Node runtime by default.
+<!-- lace-cloudflare: on -->
+
+For the local Worker start `pnpm cf:dev` and use `http://127.0.0.1:8787` instead.
+<!-- lace-cloudflare: end -->
+
+In Admin open **Settings → Import tokens** and create a token for 1 to 7 days; allow publishing only when you will use `--publish`. Keep the token in your shell session only, never in `.env` or source control:
+
+```sh
+read -rs LACE_IMPORT_TOKEN && export LACE_IMPORT_TOKEN
+pnpm exec lace import ./import --validate-only --publish
+pnpm exec lace import ./import --url http://127.0.0.1:3000 --publish --dry-run
+pnpm exec lace import ./import --url http://127.0.0.1:3000 --publish
+```
+
+`--validate-only` checks the package offline; `--dry-run` prints the plan without writing. A rerun of the same package changes nothing, and an interrupted run continues when rerun. Drafts edited in Admin after the last import are reported as conflicts and left untouched until you rerun with `--overwrite`. The command keeps `lace-import.state.json` in the package directory; keep it out of source control. Revoke the token in Settings when you are done.
+
 ## Full Compose build and persistence
 
 <!-- lace-site: starter existing -->
@@ -684,3 +705,16 @@ backfill, field-query index, persisted cursor state or bulk action is introduced
 
 See [OAuth content assistant](lace-mcp.md) for opt-in deployment, the five draft
 tools, consent, connections, refresh/replay, proxy log redaction and disabling.
+
+## Media tags migration 0014
+
+Before starting an engine with media tags, stop Compose `api` and `dispatcher`,
+back up the stopped `.lace/data` directory and preserve the object store, then
+run `pnpm db:migrate`. On Cloudflare export D1 and preserve R2 objects, run
+`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`,
+then deploy API/admin together. Local Cloudflare uses `pnpm cf:db:migrate`.
+Migration `0014_media_tags` is additive and leaves existing media without tags.
+Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
+spaces trimmed; tags-only edits request no build. An older engine ignores the
+new table. Restore the pre-upgrade database backup to remove tags on rollback;
+do not delete media objects as part of tag rollback.

@@ -18,15 +18,21 @@ test("shell quotes protect unusual endpoint hosts and TOML retains exact text", 
   );
 });
 
-test.each(["read", "write"] as const)(
+test.each(["read", "write", "publish"] as const)(
   "Claude and Gemini preserve %s access and exact endpoint as data",
   (access) => {
     const endpoint = "https://odd'$(echo unwanted).example:54321/mcp";
     const scopes =
-      access === "write"
-        ? ["content:read", "content:write", "offline_access"]
-        : ["content:read", "offline_access"];
+      access === "publish"
+        ? ["content:read", "content:write", "content:publish", "offline_access"]
+        : access === "write"
+          ? ["content:read", "content:write", "offline_access"]
+          : ["content:read", "offline_access"];
     const examples = mcpConnectionExamples(endpoint, access);
+    expect(examples.cli).toContain(`--scopes ${scopes.join(",")}`);
+    expect(examples.toml).toContain(
+      `scopes = [${scopes.map((s) => JSON.stringify(s)).join(", ")}]`,
+    );
     const args = execFileSync(
       "sh",
       ["-c", `claude() { printf '%s\\n' "$@"; }; ${examples.claudeCommand}`],

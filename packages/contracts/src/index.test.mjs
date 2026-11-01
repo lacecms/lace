@@ -26,6 +26,7 @@ import {
   publicGlobalContentSchema,
   toPublicGlobalContentDto,
   publicContentEntrySchema,
+  contentMetadataOpenApi,
   publicContentListSchema,
   publicMediaDictionarySchema,
   toPublicContentEntryDto,
@@ -76,6 +77,7 @@ import {
   mediaListQuerySchema,
   mediaListSchema,
   mediaMetadataSchema,
+  normalizeMediaTag,
   mediaUrl,
   opaqueCursorSchema,
   packageName,
@@ -1535,6 +1537,12 @@ describe("media metadata contracts", async () => {
     expect(bare).not.toHaveProperty("alt");
     expect(bare).not.toHaveProperty("caption");
     expect(bare).not.toHaveProperty("focalPoint");
+    expect(bare.tags).toEqual([]);
+    const { tags: _tags, ...withoutTags } = bare;
+    expect(v.safeParse(mediaMetadataSchema, withoutTags).success).toBe(false);
+    for (const tags of [["a\n"], ["A"], ["a", "a"], ["b", "a"]]) {
+      expect(v.safeParse(mediaMetadataSchema, { ...bare, tags }).success).toBe(false);
+    }
     expect(bare.updatedAt).toBe("2026-10-10T15:50:44.998Z");
     const described = toMediaMetadataDto(
       { ...source, alt: "Red bicycle", focalPoint: { x: 0.25, y: 0.75 } },
@@ -1550,6 +1558,13 @@ describe("media metadata contracts", async () => {
       { ...described, focalPoint: { x: 0.5 } },
     ]) {
       expect(v.safeParse(mediaMetadataSchema, invalid).success).toBe(false);
+    }
+  });
+
+  test("clients share the server tag normalization", () => {
+    expect(normalizeMediaTag(" Cover-Shot ")).toBe("cover-shot");
+    for (const invalid of ["summer trip", "", "x".repeat(41), "a\n"]) {
+      expect(normalizeMediaTag(invalid)).toBeUndefined();
     }
   });
 
@@ -2540,4 +2555,252 @@ test("MCP settings summary is strict and uses a canonical HTTP endpoint", () => 
     { enabled: true, endpoint: "https://cms.test/mcp", token: "secret" },
   ])
     expect(parse(mcp)).toBe(false);
+});
+
+test("MCP publication requires a revision and uses the REST idempotency key syntax", async () => {
+  const { mcpToolArgumentSchemas } = await import("../dist/index.js");
+  const schema = mcpToolArgumentSchemas.publish_entry;
+  expect(
+    v.parse(schema, { entryId: "entry", expectedRevision: 1, idempotencyKey: "retry-key" }),
+  ).toEqual({ entryId: "entry", expectedRevision: 1, idempotencyKey: "retry-key" });
+  for (const input of [
+    { entryId: "entry" },
+    { entryId: "entry", expectedRevision: -1 },
+    { entryId: "entry", expectedRevision: 1, actor: {} },
+    { entryId: "entry", expectedRevision: 1, fields: {} },
+    { entryId: "entry", expectedRevision: 1, idempotencyKey: "invalid\nkey" },
+  ])
+    expect(v.safeParse(schema, input).success).toBe(false);
+});
+
+test("ASCII media tag contracts normalize input and preserve precise issue pointers", async () => {
+  const c = await import("../dist/index.js");
+  expect(v.parse(c.mediaListQuerySchema, { tag: [" Birch ", "ibiza", "BIRCH"] }).tag).toEqual([
+    "birch",
+    "ibiza",
+  ]);
+  expect(v.parse(c.mediaListQuerySchema, { tag: "Birch" }).tag).toEqual(["birch"]);
+  expect(
+    v.parse(c.updateMediaMetadataRequestSchema, { tags: [" Project-2026 ", "project-2026"] }),
+  ).toEqual({ tags: ["project-2026"] });
+  expect(v.parse(c.mediaTagCatalogQuerySchema, { q: " Re ", limit: "100" })).toMatchObject({
+    q: "re",
+  });
+  for (const [schema, input, path] of [
+    [c.mediaListQuerySchema, { tag: ["a", "a b"] }, "tag.1"],
+    [c.mediaListQuerySchema, { tag: Array(6).fill("a") }, "tag"],
+    [c.updateMediaMetadataRequestSchema, { tags: ["ok", "Выставка"] }, "tags.1"],
+    [
+      c.updateMediaMetadataRequestSchema,
+      { tags: Array.from({ length: 21 }, (_, i) => `t-${i}`) },
+      "tags.20",
+    ],
+    [c.updateMediaMetadataRequestSchema, { tags: ["a".repeat(201)] }, "tags.0"],
+    [c.mediaTagCatalogQuerySchema, { q: "a b" }, "q"],
+  ]) {
+    const parsed = v.safeParse(schema, input);
+    expect(parsed.success).toBe(false);
+    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+  }
+  expect(
+    v.safeParse(c.mediaTagCatalogSchema, { items: [{ tag: "bad tag", count: 1 }] }).success,
+  ).toBe(false);
+  expect(v.safeParse(c.mediaTagCatalogSchema, { items: [{ tag: "a", count: 0 }] }).success).toBe(
+    false,
+  );
+  expect(v.safeParse(c.mediaMetadataSchema, {}).success).toBe(false);
+});
+
+test("import-token, slug and hash contracts are strict and point at their parameters", async () => {
+  const c = await import("../dist/index.js");
+  expect(v.parse(c.importTokenCreateRequestSchema, { name: "Framer", expiresInDays: 7 })).toEqual({
+    allowPublish: false,
+    expiresInDays: 7,
+    name: "Framer",
+  });
+  for (const [input, path] of [
+    [{ name: "Import", expiresInDays: 30 }, "expiresInDays"],
+    [{ name: "Import", expiresInDays: 0 }, "expiresInDays"],
+    [{ name: "Import", expiresInDays: 1.5 }, "expiresInDays"],
+    [{ name: "Import" }, "expiresInDays"],
+    [{ name: "", expiresInDays: 1 }, "name"],
+    [{ name: "Import", expiresInDays: 1, allowPublish: "yes" }, "allowPublish"],
+  ]) {
+    const parsed = v.safeParse(c.importTokenCreateRequestSchema, input);
+    expect(parsed.success).toBe(false);
+    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+  }
+  const token = {
+    capabilities: ["content:import", "content:publish"],
+    createdAt: "2026-10-31T00:00:00.000Z",
+    createdBy: { email: "admin@lace.test", id: "admin-1" },
+    expiresAt: "2026-11-07T00:00:00.000Z",
+    id: "token-1",
+    name: "Framer",
+    tokenPrefix: "abcdefgh",
+  };
+  expect(
+    c.toImportTokenDto({
+      ...token,
+      createdAt: Date.parse(token.createdAt),
+      expiresAt: Date.parse(token.expiresAt),
+    }),
+  ).toEqual(token);
+  expect(v.parse(c.importTokenSchema, token).capabilities).toEqual([
+    "content:import",
+    "content:publish",
+  ]);
+  expect(v.safeParse(c.importTokenListSchema, { items: [token] }).success).toBe(true);
+  expect(
+    v.safeParse(c.importTokenListSchema, { items: [{ ...token, token: "secret" }] }).success,
+  ).toBe(false);
+  expect(
+    v.safeParse(c.importTokenSchema, { ...token, capabilities: ["content:build:read"] }).success,
+  ).toBe(false);
+  expect(v.safeParse(c.importTokenCreatedSchema, { ...token, token: "secret" }).success).toBe(true);
+  expect(
+    v.safeParse(c.importCredentialSchema, {
+      permissions: ["content:read", "content:write", "media:write"],
+      token,
+    }).success,
+  ).toBe(true);
+
+  const hash = "0123456789abcdef".repeat(4);
+  expect(v.parse(c.contentEntryListQuerySchema, { slug: "hello-world" }).slug).toBe("hello-world");
+  expect(v.parse(c.mediaListQuerySchema, { sha256: hash }).sha256).toBe(hash);
+  for (const [schema, input, path] of [
+    [c.contentEntryListQuerySchema, { slug: "Hello" }, "slug"],
+    [c.contentEntryListQuerySchema, { slug: "a--b" }, "slug"],
+    [c.contentEntryListQuerySchema, { slug: "a".repeat(101) }, "slug"],
+    [c.contentEntryListQuerySchema, { slug: "a\n" }, "slug"],
+    [c.mediaListQuerySchema, { sha256: hash.toUpperCase() }, "sha256"],
+    [c.mediaListQuerySchema, { sha256: hash.slice(1) }, "sha256"],
+    [c.mediaListQuerySchema, { sha256: `${hash}\n` }, "sha256"],
+  ]) {
+    const parsed = v.safeParse(schema, input);
+    expect(parsed.success).toBe(false);
+    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+  }
+  const media = {
+    createdAt: 1,
+    createdBy: { displayName: "Ada", id: "u" },
+    filename: "a.png",
+    id: "m",
+    mimeType: "image/png",
+    size: 1,
+    status: "active",
+    updatedAt: 1,
+    usageCount: 0,
+  };
+  expect(c.toMediaMetadataDto({ ...media, sha256: hash }, "/m").sha256).toBe(hash);
+  expect(c.toMediaMetadataDto(media, "/m")).not.toHaveProperty("sha256");
+  expect(
+    v.safeParse(c.mediaMetadataSchema, { ...c.toMediaMetadataDto(media, "/m"), sha256: "x" })
+      .success,
+  ).toBe(false);
+});
+
+test("SM5A visibility metadata round trips at every owner and rejects forged rules", () => {
+  const kinds = {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+  };
+  const rules = {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+  };
+  const fields = {
+    ...kinds,
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    gallery: field.list({
+      item: field.group({
+        fields: { ...kinds, media: field.media(), videoUrl: field.url() },
+        visibility: rules,
+      }),
+    }),
+  };
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "conditional",
+      version: 1,
+      fields: { hasCta: field.boolean(), ctaUrl: field.url() },
+      visibility: { ctaUrl: { field: "hasCta", values: [true] } },
+    }),
+  );
+  const model = toContentModelDto({
+    key: "works",
+    kind: "global",
+    version: 1,
+    fields,
+    visibility: rules,
+    blocks: ["conditional"],
+    blockDefinitions: [block],
+  });
+  const json = JSON.parse(JSON.stringify(model));
+  expect(v.parse(contentModelSchema, json)).toEqual(json);
+  expect(json.visibility).toEqual(rules);
+  expect(json.fields.gallery.item.visibility).toEqual(rules);
+  expect(json.blockDefinitions[0].visibility).toEqual({
+    ctaUrl: { field: "hasCta", values: [true] },
+  });
+  const forged = [
+    { media: { field: "missing", values: ["image"] } },
+    { media: { field: "kind", values: ["audio"] } },
+    { media: { field: "kind", values: ["image"], equals: "image" } },
+    { media: { field: "kind", values: ["image"] }, kind: { field: "media", values: ["x"] } },
+  ];
+  for (const visibility of forged) {
+    expect(v.safeParse(contentModelSchema, { ...json, visibility }).success).toBe(false);
+    expect(
+      v.safeParse(contentModelSchema, {
+        ...json,
+        fields: {
+          ...json.fields,
+          gallery: { ...json.fields.gallery, item: { ...json.fields.gallery.item, visibility } },
+        },
+      }).success,
+    ).toBe(false);
+  }
+  expect(
+    v.safeParse(blockMetadataSchema, {
+      ...block,
+      visibility: { ctaUrl: { field: "hasCta", values: ["yes"] } },
+    }).success,
+  ).toBe(false);
+  const plain = toContentModelDto({
+    key: "plain",
+    kind: "global",
+    version: 1,
+    fields: kinds,
+    blocks: [],
+  });
+  expect(plain).not.toHaveProperty("visibility");
+});
+
+test("published values without hidden required targets cross public contracts", () => {
+  const entry = {
+    blocks: [
+      {
+        data: { kind: "image" },
+        key: "feature-1",
+        position: 1_000,
+        schemaVersion: 1,
+        settings: {},
+        type: "feature",
+      },
+    ],
+    fields: { kind: "image", gallery: [{ kind: "video", videoUrl: "https://example.com/v" }] },
+    id: "work",
+    internalLinks: [],
+    modelKey: "works",
+    path: "/works/work",
+    publishedAt: toIsoTimestamp(1_800_000_000_000),
+    slug: "work",
+    title: "Work",
+  };
+  const dto = { entry, media: {} };
+  expect(v.parse(publicContentEntrySchema, dto)).toEqual(dto);
+  expect(contentMetadataOpenApi.FieldVisibility.description).toMatch(
+    /retained in drafts; its value is omitted from published snapshots, public reads and build exports/u,
+  );
 });

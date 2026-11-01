@@ -326,3 +326,111 @@ test("CE9B summaries follow visual order at model, group, block and settings bou
     "First",
   ]);
 });
+
+const conditional = {
+  blockDefinitions: [
+    {
+      fields: {
+        images: {
+          item: {
+            fields: {
+              kind: {
+                defaultValue: "image",
+                label: "Kind",
+                options: ["image", "video"],
+                required: true,
+                type: "select",
+              },
+              media: { label: "Image", required: true, type: "media" },
+              videoUrl: { label: "Video URL", required: true, type: "url" },
+            },
+            required: false,
+            type: "group",
+            visibility: {
+              media: { field: "kind", values: ["image"] },
+              videoUrl: { field: "kind", values: ["video"] },
+            },
+          },
+          label: "Images",
+          required: false,
+          type: "list",
+        },
+      },
+      label: "Gallery",
+      type: "gallery",
+      version: 1,
+    },
+  ],
+  blocks: ["gallery"],
+  fields: {
+    hasCta: { label: "Has call to action", required: false, type: "boolean" },
+    ctaUrl: { label: "Action URL", required: true, type: "url" },
+  },
+  key: "posts",
+  kind: "collection",
+  route: "/posts/:slug",
+  version: 1,
+  visibility: { ctaUrl: { field: "hasCta", values: [true] } },
+} satisfies ContentModelDto;
+
+const publication = { message: "Enter a value.", type: "publication" };
+
+test("publication problems of hidden conditional fields are left out", () => {
+  const errors = {
+    blocks: {
+      0: { data: { images: { 0: { videoUrl: publication }, 1: { videoUrl: publication } } } },
+    },
+    fields: { ctaUrl: publication },
+  } as never;
+  const gallery = {
+    ...block("A", "gallery"),
+    data: { images: [{ kind: "image", media: "m" }, { kind: "video" }] },
+  };
+  const hidden = validationProblems({
+    blocks: [gallery],
+    errors,
+    fields: { hasCta: false },
+    model: conditional,
+  });
+  expect(hidden.map(({ label, target }) => ({ label, target }))).toEqual([
+    {
+      label: "Video URL in Item 2 in Images in Gallery block 1",
+      target: { id: "field-blocks-0-data-images-1-videoUrl", kind: "control" },
+    },
+  ]);
+  const shown = validationProblems({
+    blocks: [gallery],
+    errors,
+    fields: { hasCta: true },
+    model: conditional,
+  });
+  expect(shown.map(({ label }) => label)).toEqual([
+    "Video URL in Item 2 in Images in Gallery block 1",
+    "Action URL",
+  ]);
+});
+
+test("draft problems of hidden conditional fields stay listed at their control", () => {
+  const problems = validationProblems({
+    blocks: [{ ...block("A", "gallery"), data: { images: [{ kind: "image", videoUrl: "bad" }] } }],
+    errors: {
+      blocks: {
+        0: { data: { images: { 0: { videoUrl: { message: "Enter a URL.", type: "validate" } } } } },
+      },
+      fields: { ctaUrl: { message: "Enter a URL.", type: "validate" } },
+    } as never,
+    model: conditional,
+  });
+  expect(problems.map(({ blocking, label, target }) => ({ blocking, label, target }))).toEqual([
+    {
+      blocking: true,
+      label: "Video URL in Item 1 in Images in Gallery block 1",
+      target: { id: "field-blocks-0-data-images-0-videoUrl", kind: "control" },
+    },
+    {
+      blocking: true,
+      label: "Action URL",
+      target: { id: "field-fields-ctaUrl", kind: "control" },
+    },
+  ]);
+});

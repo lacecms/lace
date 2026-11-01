@@ -108,8 +108,16 @@ test("validates credentialed shared-contract responses and keeps cursors opaque"
     "admin",
     "media",
     "list",
-    { q: "hero", sort: null, type: "image/png" },
+    { q: "hero", sort: null, tags: null, type: "image/png" },
   ]);
+  expect(adminQueryKeys.mediaList({ tags: ["travel", "cover"] })).toEqual([
+    "admin",
+    "media",
+    "list",
+    { q: null, sort: null, tags: ["cover", "travel"], type: null },
+  ]);
+  expect(adminQueryKeys.mediaTags("pro")).toEqual(["admin", "media", "tags", "pro"]);
+  expect(adminQueryKeys.mediaTags(undefined).slice(0, 3)).toEqual(adminQueryKeys.mediaTagsPrefix);
   expect(adminQueryKeys.entryOverview("posts")).toEqual(["admin", "entries", "posts", "overview"]);
   const prefix = adminQueryKeys.modelEntries("posts");
   for (const key of [adminQueryKeys.entryList("posts", {}), adminQueryKeys.entryOverview("posts")])
@@ -205,6 +213,44 @@ test("uses validated credentialed user, status, and token endpoints", async () =
   expect(fetcher.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
   await expect(
     createAdminClient(async () => Response.json({ items: [{ token: "secret" }] })).listTokens(),
+  ).rejects.toBeInstanceOf(AdminClientError);
+});
+
+test("uses validated import-token endpoints and media hashes", async () => {
+  const token = {
+    capabilities: ["content:import", "content:publish"],
+    createdAt: "2026-10-31T00:00:00.000Z",
+    createdBy: { email: "admin@lace.test", id: "admin-1" },
+    expiresAt: "2026-11-03T00:00:00.000Z",
+    id: "import-1",
+    name: "Framer",
+    tokenPrefix: "abcdefgh",
+  };
+  const bodies: unknown[] = [];
+  const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+    if (init?.body !== undefined) bodies.push(JSON.parse(String(init.body)));
+    if (path.endsWith("/import-tokens") && init?.method === "POST")
+      return Response.json({ ...token, token: "secret" }, { status: 201 });
+    if (path.endsWith("/import-tokens")) return Response.json({ items: [token] });
+    return Response.json({ ...token, revokedAt: "2026-11-01T00:00:00.000Z" });
+  });
+  const client = createAdminClient(fetcher as typeof fetch);
+  await expect(client.listImportTokens()).resolves.toEqual({ items: [token] });
+  await expect(
+    client.createImportToken({ allowPublish: true, expiresInDays: 3, name: "Framer" }),
+  ).resolves.toMatchObject({
+    capabilities: ["content:import", "content:publish"],
+    token: "secret",
+  });
+  expect(bodies).toEqual([{ allowPublish: true, expiresInDays: 3, name: "Framer" }]);
+  await expect(client.revokeImportToken("import/1")).resolves.toMatchObject({
+    revokedAt: "2026-11-01T00:00:00.000Z",
+  });
+  expect(fetcher.mock.calls.at(-1)?.[0]).toBe("/api/v1/admin/import-tokens/import%2F1");
+  await expect(
+    createAdminClient(async () =>
+      Response.json({ items: [{ ...token, token: "secret" }] }),
+    ).listImportTokens(),
   ).rejects.toBeInstanceOf(AdminClientError);
 });
 
@@ -412,6 +458,7 @@ test("lists validated media through the credentialed admin API", async () => {
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 0,
   };
   const fetcher = vi.fn(async () => Response.json({ items: [item], nextCursor: "next" }));
@@ -460,6 +507,7 @@ test("reads media details with usage through the credentialed admin API", async 
         title: "Hello",
       },
     ],
+    tags: [],
     usageCount: 1,
   };
   const fetcher = vi.fn(async () => Response.json(detail));
@@ -485,6 +533,7 @@ test("uploads and requests media deletion with validated credentialed responses"
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 0,
   };
   const fetcher = vi.fn(async () => Response.json(item, { status: 201 }));
@@ -535,6 +584,7 @@ test("updates media metadata guarded by the edited item's updatedAt", async () =
     status: "active",
     updatedAt: "2026-09-20T00:00:01.001Z",
     url: "https://lace.test/api/v1/public/media/media-1",
+    tags: [],
     usageCount: 1,
   };
   const result = { build: { status: "queued", targetVersion: 7 }, media };
@@ -841,6 +891,7 @@ const uploadedItem = {
   status: "active",
   updatedAt: "2026-09-20T00:00:00.000Z",
   url: "https://lace.test/api/v1/public/media/media-1",
+  tags: [],
   usageCount: 0,
 };
 
@@ -1051,4 +1102,21 @@ test("list cache identity binds runtime policy and matching version without wire
   });
   expect(node).not.toEqual(cloud);
   expect(node[4].matchingVersion).toBe("sqlite-like-v1");
+});
+
+test("media tag client sends repeated filters and validates the catalog", async () => {
+  const fetcher = vi.fn(async () => Response.json({ items: [{ tag: "project-2026", count: 2 }] }));
+  await expect(
+    createAdminClient(fetcher).listMediaTags({ q: "pro", limit: 1, after: "cursor" }),
+  ).resolves.toEqual({ items: [{ tag: "project-2026", count: 2 }] });
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/media/tags?q=pro&after=cursor&limit=1",
+    expect.objectContaining({ credentials: "same-origin" }),
+  );
+  const list = vi.fn(async () => Response.json({ items: [] }));
+  await createAdminClient(list).listMedia(undefined, { tags: ["cover", "project-2026"] });
+  expect(list).toHaveBeenLastCalledWith(
+    "/api/v1/admin/media?tag=cover&tag=project-2026",
+    expect.anything(),
+  );
 });

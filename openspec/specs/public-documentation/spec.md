@@ -109,3 +109,107 @@ English/latest SHALL describe accepted post-alpha.7 functionality and the alpha.
 #### Scenario: Assistant client setup
 - **WHEN** an operator configures a supported MCP client from the documented setup
 - **THEN** examples use the canonical endpoint and explicit permissions, explain sign-in/consent and revocation, and retain the draft-only tool ceiling
+
+### Requirement: Public guidance covers content import
+The public documentation SHALL contain an *Import content* page that explains,
+for a generated project: issuing an import token in Settings (lifetime,
+optional publishing, revocation), setting `LACE_IMPORT_TOKEN` for the shell
+session only and never in `.env` or source control, choosing the origin with
+`--url` for Node and the local Worker, the `--validate-only`, `--dry-run`,
+`--publish`, `--overwrite`, `--state` and `--json` options, the plan's item
+states, reruns and resume, edit protection and its conflicts, exit codes, and
+the limits (images only, 10 MiB per file, upload rate limit, no deletion or
+unpublication, package data at current block versions, CLI and server of the
+same release). It SHALL include a format reference for package format v1 that
+matches the shipped JSON Schema, and a guide for writing a converter from
+another CMS: mapping models and blocks, stable keys, media files,
+`$media`/`$entry` references, validating offline, and rerunning after fixes.
+The CLI reference SHALL list `lace import` and the environment table SHALL list
+`LACE_IMPORT_TOKEN`.
+
+The documentation site SHALL publish a downloadable sample package for the
+starter configuration: `lace-import.json` and original media files created for
+the sample. The guide's sample JSON SHALL equal the published file. A root test
+SHALL run `lace import --validate-only` on the sample against the starter
+template configuration, which applies the format rules the JSON Schema is
+generated from and the model rules.
+The internal topic map SHALL record the page's internal sources.
+
+#### Scenario: A reader writes a converter
+- **WHEN** a reader follows the converter guide and the format reference
+- **THEN** they can produce a package directory that `lace import
+  --validate-only` accepts, using only documented fields and references
+
+#### Scenario: The sample drifts
+- **WHEN** the starter configuration, the format schema or the guide changes
+  so that the published sample no longer validates or no longer equals the
+  guide's JSON
+- **THEN** the root test fails and names the sample
+
+#### Scenario: A reader downloads the sample
+- **WHEN** a reader opens the sample links on the published documentation
+  site
+- **THEN** `lace-import.json` and its media files are served without a running
+  CMS
+
+### Requirement: Public guidance covers conditional fields
+The Content modeling section SHALL explain conditional fields for a generated
+project: declaring `visibility` on models, group fields (including list items)
+and block data; sibling `select` or `boolean` controllers, optional
+controllers and defaults; the rejected forms (chains, self references,
+non-sibling controllers, rules on settings, scalar or list descriptors, SEO
+defaults naming a conditional field); that hidden fields are never required
+but are still validated as drafts; that hidden values stay in drafts and are
+omitted from published content, the public API and the build export; the
+optional published value types for site code; and that changing rules is a
+structural change synchronized like other model or block definition changes.
+It SHALL include a complete example of a list item whose `kind` decides between
+an image and a video URL, and SHALL state that block settings keep
+`settingsVisibility`, which only hides controls.
+
+The Editing content section SHALL explain that switching a controller hides
+and shows fields without losing typed values, that hidden values are saved but
+not published, that a hidden field with an invalid value stays shown until it
+is fixed or cleared, and that revert to published restores only published
+values, so hidden draft values are lost. The internal topic map SHALL record
+the pages' internal sources.
+
+#### Scenario: A reader adds a conditional field
+- **WHEN** a reader follows the conditional-fields guidance in a generated project
+- **THEN** they can declare a `visibility` rule that configuration accepts, synchronize it, see the admin hide and show the target, and read published content without hidden values
+
+#### Scenario: A reader chooses between the two rules
+- **WHEN** a reader wants a setting control to appear only for some layouts
+- **THEN** the guidance directs them to `settingsVisibility` and explains that data `visibility` is the rule that changes requiredness and published content
+
+### Requirement: Public guidance covers gallery video items
+The public block reference SHALL describe the version 5 gallery: item kinds,
+the fields that apply to images and to videos, the supported providers, the
+required accessible video title, playback and aspect ratio per item, captions
+without a media fallback for videos, and that the lightbox and links apply to
+images only. The Editing content section SHALL explain adding images through
+Add and videos through "Add Video", and switching an item's Type without
+losing typed values. The conditional-fields page SHALL name the built-in
+gallery as the shipped example of its list-item example. The Astro
+integration guidance SHALL explain the gallery video markup hooks and
+`GalleryVideo.css`, the ambient fallbacks and the WCAG 2.2.2 pause-control
+gap shared with `videoEmbed`, and how site code that copied the gallery
+component handles published items whose `media` is absent: check the item's
+`kind` and the presence of `media` before describing an image. The starter
+guide SHALL carry the same adoption steps as the template upgrade
+instructions: raise model versions that allow `gallery`, synchronize
+configuration, then update the gallery component, because a revision 6
+component fails with `block_version_mismatch` after synchronization.
+
+#### Scenario: A reader adds a video to a gallery
+- **WHEN** a reader follows the editing guidance in a generated project with
+  a gallery block
+- **THEN** they add a video with "Add Video", fill its URL and title, choose
+  ambient playback and a square ratio, publish, and see it in the built site
+
+#### Scenario: A reader updates a copied gallery component
+- **WHEN** a reader whose site copied and edited the gallery component follows
+  the upgrade guidance
+- **THEN** they synchronize configuration, merge the revision 7 component and
+  `GalleryVideo.css`, and their typed component compiles because it narrows
+  items by `kind` and checks `media`

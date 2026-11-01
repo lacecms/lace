@@ -17,15 +17,19 @@ import {
   toBlockMetadata,
   collectSnapshotInternalLinks,
   ContentValidationError,
+  declaresFieldVisibility,
   detachFieldMedia,
   encodeFieldPath,
   MAX_TITLE_LENGTH,
+  publishedBlockData,
+  publishedFieldValues,
   sha256CanonicalJson,
   validateEntryAggregate,
 } from "@lacecms/content";
 import type {
   InternalLinkReference,
   BlockMetadata,
+  FieldVisibility,
   FormLayout,
   FieldDefinition,
   JsonObject,
@@ -39,6 +43,8 @@ import type {
 export { ContentValidationError } from "@lacecms/content";
 import {
   DomainError,
+  CollectionQueryValidationError,
+  isContentSlug,
   auditActor,
   assertCollectionEntryOperation,
   assertOrderedBlockPositions,
@@ -90,6 +96,7 @@ import type {
   OpaqueCursor,
   PublicationIdempotencyKey,
   PublicContentReadPort,
+  PublishedProjection,
   ContentLinkReadPort,
   LinkImpactAcknowledgment,
 } from "./index.js";
@@ -160,6 +167,8 @@ export interface ListContentEntriesUseCaseInput {
   readonly limit: number;
   readonly modelKey: string;
   readonly q?: string;
+  /** Exact current draft slug; collection models only. */
+  readonly slug?: string;
   readonly sort?: string;
   readonly status?: string;
 }
@@ -289,6 +298,77 @@ function systemTitle(model: NormalizedContentModel, title: string): string {
   return model.kind === "global" ? (model.label ?? model.key) : title;
 }
 
+/** Input of {@link normalizeDraftCandidate}. */
+export interface NormalizeDraftCandidateInput {
+  readonly blocks: RuntimeConfigProjection["blocks"];
+  readonly draft: CompleteDraftInput;
+  readonly mode: "draft" | "publish";
+  readonly model: NormalizedContentModel;
+}
+
+/** The draft values a create, save or publish stores for a valid submission. */
+export interface NormalizedDraftCandidate {
+  readonly blocks: readonly ContentBlock[];
+  readonly fields: JsonObject;
+  readonly seo?: EntrySeo;
+  readonly slug?: string;
+  readonly title: string;
+}
+
+/**
+ * Validates and normalizes a submitted draft exactly as the content use cases
+ * store it. Pure: no persistence, authorization, media or link-target checks,
+ * so clients can predict whether a save would change the stored draft.
+ */
+export function normalizeDraftCandidate(
+  input: NormalizeDraftCandidateInput,
+): NormalizedDraftCandidate {
+  const { blocks: registry, draft, mode, model } = input;
+  assertOrderedBlockPositions(draft.blocks);
+  const aggregate = validateEntryAggregate(
+    {
+      blocks: draft.blocks.map(
+        ({ anchor, className, data, hidden, key, schemaVersion, settings, type }) => ({
+          ...(anchor === undefined ? {} : { anchor }),
+          ...(className === undefined ? {} : { className }),
+          data,
+          ...(hidden === undefined ? {} : { hidden }),
+          key,
+          schemaVersion,
+          ...(settings === undefined ? {} : { settings }),
+          type,
+        }),
+      ),
+      fields: draft.fields,
+      kind: model.kind,
+      ...(draft.slug === undefined ? {} : { slug: draft.slug }),
+      title: systemTitle(model, draft.title),
+    },
+    model,
+    registry,
+    mode,
+  );
+  const blocks: ContentBlock[] = aggregate.blocks.map((block, index) => ({
+    ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
+    ...(block.className === undefined ? {} : { className: block.className }),
+    data: block.data as JsonObject,
+    hidden: block.hidden,
+    key: blockKey(block.key),
+    position: draft.blocks[index]!.position,
+    schemaVersion: block.schemaVersion,
+    settings: block.settings,
+    type: block.type,
+  }));
+  const seo = normalizeEntrySeo(draft.seo ?? null, { enabled: seoEnabled(model) });
+  return {
+    blocks,
+    fields: aggregate.fields as JsonObject,
+    ...(seo === undefined ? {} : { seo }),
+    ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
+    title: aggregate.title,
+  };
+}
+
 function commandEntry(result: ContentCommandResult): ContentEntry {
   if (result.entry === undefined) {
     throw new DomainError("CONTENT_INVALID_STATE", "Content command did not return an entry.");
@@ -300,8 +380,12 @@ function commandEntry(result: ContentCommandResult): ContentEntry {
  * Portable orchestration for content lifecycle commands. Transport handlers and
  * persistence adapters remain outside this service.
  */
+type ModelFieldMap = Readonly<Record<string, FieldDefinition>>;
+
 export class ContentUseCases {
   public readonly listQueryLimits: ListQueryLimits;
+  /** Memoized `declaresFieldVisibility` per model key and block type; config is fixed. */
+  private readonly visibilityOwners = new Map<string, boolean>();
   public constructor(private readonly dependencies: ContentUseCaseDependencies) {
     this.listQueryLimits = Object.freeze({
       ...(dependencies.listQueryLimits ?? NODE_LIST_QUERY_LIMITS),
@@ -329,6 +413,7 @@ export class ContentUseCases {
         ...(model.label === undefined ? {} : { label: model.label }),
         ...(model.description === undefined ? {} : { description: model.description }),
         ...(model.layout === undefined ? {} : { layout: model.layout }),
+        ...(model.visibility === undefined ? {} : { visibility: model.visibility }),
         ...(model.kind === "page" ? { path: model.path } : {}),
         ...(model.kind === "collection"
           ? {
@@ -362,6 +447,18 @@ export class ContentUseCases {
   }): Promise<AdminContentEntryProjection> {
     authorizeContentOperation(input.actor, "load");
     return this.adminProjection(input.entry);
+  }
+
+  /** Shared publication enrichment for REST and MCP, using safe admin metadata. */
+  public async projectPublicationResult(input: {
+    readonly actor: Actor;
+    readonly result: PublishContentEntryUseCaseResult;
+  }): Promise<
+    PublishContentEntryUseCaseResult & Pick<AdminContentEntryProjection, "seo" | "updatedBy">
+  > {
+    authorizeContentOperation(input.actor, "publish");
+    const projection = await this.adminProjection(input.result.entry);
+    return { ...input.result, seo: projection.seo, updatedBy: projection.updatedBy };
   }
 
   private async adminProjection(entry: ContentEntry): Promise<AdminContentEntryProjection> {
@@ -430,6 +527,8 @@ export class ContentUseCases {
     ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry sort is unsupported.");
     }
+    if (input.slug !== undefined && (model.kind !== "collection" || !isContentSlug(input.slug)))
+      throw new CollectionQueryValidationError("/slug");
     const query = resolveCollectionQuery(model, input.sort, input.filters, this.listQueryLimits);
     validateListQueryBudget(q, [], this.listQueryLimits);
     return detached(
@@ -441,6 +540,7 @@ export class ContentUseCases {
         listFields: model.kind === "collection" ? [...(model.listFields ?? [])] : [],
         modelKey: contentModelKey(model.key),
         ...(q === undefined || q.length === 0 ? {} : { q }),
+        ...(input.slug === undefined ? {} : { slug: input.slug }),
         sort: (input.sort as ContentEntrySort | undefined) ?? DEFAULT_CONTENT_ENTRY_SORT,
         ...(input.status === undefined ? {} : { status: input.status as ContentEntryStatus }),
       }),
@@ -508,9 +608,17 @@ export class ContentUseCases {
       entry.id,
     );
     contentPublicPath(entry.model, draft.slug);
+    const projection = this.publishedProjection(this.model(entry.model.key), draft);
+    // A projection belongs to one draft revision; never attach it to another.
+    if (projection !== undefined && entry.draft.revision !== input.expectedRevision)
+      throw new DomainError(
+        "CONTENT_REVISION_CONFLICT",
+        "The draft revision no longer matches the expected revision.",
+      );
     const result = await this.dependencies.content.publish({
       entryId: entry.id,
       expectedRevision: input.expectedRevision,
+      ...(projection === undefined ? {} : { projection }),
       ...(input.idempotencyKey === undefined
         ? {}
         : { idempotency: await this.idempotency(input, draft) }),
@@ -736,52 +844,19 @@ export class ContentUseCases {
     mode: "draft" | "publish",
     publishingEntryId?: string,
   ): Promise<NormalizedDraft> {
-    assertOrderedBlockPositions(input.blocks);
-    const aggregate = validateEntryAggregate(
-      {
-        blocks: input.blocks.map(
-          ({ anchor, className, data, hidden, key, schemaVersion, settings, type }) => ({
-            ...(anchor === undefined ? {} : { anchor }),
-            ...(className === undefined ? {} : { className }),
-            data,
-            ...(hidden === undefined ? {} : { hidden }),
-            key,
-            schemaVersion,
-            ...(settings === undefined ? {} : { settings }),
-            type,
-          }),
-        ),
-        fields: input.fields,
-        kind: model.kind,
-        ...(input.slug === undefined ? {} : { slug: input.slug }),
-        title: input.title,
-      },
-      model,
-      this.dependencies.config.blocks,
+    const normalized = normalizeDraftCandidate({
+      blocks: this.dependencies.config.blocks,
+      draft: input,
       mode,
-    );
-    const blocks: ContentBlock[] = aggregate.blocks.map((block, index) => ({
-      ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
-      ...(block.className === undefined ? {} : { className: block.className }),
-      data: block.data as JsonObject,
-      hidden: block.hidden,
-      key: blockKey(block.key),
-      position: input.blocks[index]!.position,
-      schemaVersion: block.schemaVersion,
-      settings: block.settings,
-      type: block.type,
-    }));
-    const seo = normalizeEntrySeo(input.seo ?? null, { enabled: seoEnabled(model) });
-    const normalized = {
-      blocks,
-      fields: aggregate.fields as JsonObject,
-      ...(seo === undefined ? {} : { seo }),
-      ...(aggregate.slug === undefined ? {} : { slug: aggregate.slug }),
-      title: aggregate.title,
-    };
+      model,
+    });
     const mediaReferences = this.collectMedia(normalized.fields, model.fields, "$fields");
-    if (seo?.image !== undefined) {
-      mediaReferences.push({ fieldPath: "image", mediaId: mediaId(seo.image), sourceKey: "$seo" });
+    if (normalized.seo?.image !== undefined) {
+      mediaReferences.push({
+        fieldPath: "image",
+        mediaId: mediaId(normalized.seo.image),
+        sourceKey: "$seo",
+      });
     }
     for (const block of normalized.blocks) {
       mediaReferences.push(
@@ -808,14 +883,8 @@ export class ContentUseCases {
       if (!active.has(id))
         throw new DomainError("CONTENT_INVALID_STATE", `Media ${id} is unavailable.`);
     }
-    const internalLinks = collectSnapshotInternalLinks(
-      model.fields,
-      normalized.fields,
-      normalized.blocks.map((block) => ({
-        ...block,
-        fields: this.dependencies.config.blocks.get(block.type)!.fields,
-      })),
-    );
+    // Links inside hidden targets are not delivered, so publication never checks them.
+    const internalLinks = this.internalLinks(model, normalized.fields, normalized.blocks);
     if (internalLinks.length > 0) {
       if (this.dependencies.content.resolveLinkTargets === undefined)
         throw new DomainError("CONTENT_INVALID_STATE", "Internal link validation is unavailable.");
@@ -847,6 +916,88 @@ export class ContentUseCases {
       if (issues.length > 0) throw new ContentValidationError(issues);
     }
     return { ...normalized, mediaReferences: Object.freeze(mediaReferences), internalLinks };
+  }
+
+  private internalLinks(
+    model: NormalizedContentModel,
+    fields: JsonObject,
+    blocks: readonly Pick<ContentBlock, "data" | "hidden" | "key" | "type">[],
+  ): readonly InternalLinkReference[] {
+    return collectSnapshotInternalLinks(
+      model.fields,
+      fields,
+      blocks.map((block) => {
+        const definition = this.dependencies.config.blocks.get(block.type)!;
+        return {
+          ...block,
+          fields: definition.fields,
+          ...(definition.visibility === undefined
+            ? {}
+            : { visibility: definition.visibility as FieldVisibility }),
+        };
+      }),
+      model.visibility as FieldVisibility | undefined,
+    );
+  }
+
+  /** Whether a model or block type declares conditional-field rules anywhere. */
+  private declaresVisibility(owner: string, fields: ModelFieldMap, rules: unknown): boolean {
+    let declared = this.visibilityOwners.get(owner);
+    if (declared === undefined) {
+      declared = declaresFieldVisibility(fields, rules as FieldVisibility | undefined);
+      this.visibilityOwners.set(owner, declared);
+    }
+    return declared;
+  }
+
+  /**
+   * The published projection of a validated draft and its references, or
+   * `undefined` when neither its model nor its blocks declare rules, so the
+   * repository copies the draft as before.
+   */
+  private publishedProjection(
+    model: NormalizedContentModel,
+    draft: NormalizedDraft,
+  ): PublishedProjection | undefined {
+    const registry = this.dependencies.config.blocks;
+    if (
+      !this.declaresVisibility(`model:${model.key}`, model.fields, model.visibility) &&
+      !draft.blocks.some((block) => {
+        const definition = registry.get(block.type)!;
+        return this.declaresVisibility(
+          `block:${block.type}`,
+          definition.fields,
+          definition.visibility,
+        );
+      })
+    )
+      return undefined;
+    const fields = publishedFieldValues(
+      model.fields,
+      draft.fields,
+      model.visibility as FieldVisibility | undefined,
+    );
+    const blocks = draft.blocks.map((block) => ({
+      ...block,
+      data: publishedBlockData(registry.get(block.type)!, block.data),
+    }));
+    const mediaReferences = this.collectMedia(fields, model.fields, "$fields");
+    if (draft.seo?.image !== undefined)
+      mediaReferences.push({
+        fieldPath: "image",
+        mediaId: mediaId(draft.seo.image),
+        sourceKey: "$seo",
+      });
+    for (const block of blocks)
+      mediaReferences.push(
+        ...this.collectMedia(block.data, registry.get(block.type)!.fields, block.key),
+      );
+    return detached({
+      blocks: blocks.map(({ data, key }) => ({ data, key })),
+      fields,
+      internalLinks: this.internalLinks(model, fields, blocks),
+      mediaReferences,
+    });
   }
 
   private collectMedia(

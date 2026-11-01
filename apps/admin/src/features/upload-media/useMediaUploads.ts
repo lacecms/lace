@@ -19,6 +19,8 @@ export interface MediaUploadEntry {
   /** Fraction of bytes sent (0–1) while uploading, when the browser reports it. */
   readonly progress?: number;
   readonly state: MediaUploadState;
+  /** Tags captured when the file was queued; a retry sends the same tags. */
+  readonly tags?: readonly string[];
 }
 
 const rejectionMessages = {
@@ -31,7 +33,8 @@ let sequence = 0;
 /**
  * An ordered upload queue. Files failing the local type or size check are
  * rejected without a request; accepted files upload independently with their
- * own progress and server error, and failed ones can be retried.
+ * own progress and server error, and failed ones can be retried. Files may be
+ * queued with tags, which each upload and its retries send.
  */
 export function useMediaUploads() {
   const client = useAdminClient();
@@ -58,6 +61,7 @@ export function useMediaUploads() {
       client
         .uploadMedia(upload.file, {
           onProgress: (progress) => update(upload.key, { progress }),
+          ...(upload.tags === undefined ? {} : { tags: upload.tags }),
         })
         .then(
           async (item) => {
@@ -73,23 +77,33 @@ export function useMediaUploads() {
     }
   }, [client, queryClient, update, uploads]);
 
-  const add = useCallback((files: readonly File[]) => {
-    const added = files.map((file): MediaUploadEntry => {
-      sequence += 1;
-      const key = `upload-${sequence}`;
-      const rejection = validateMediaFile(file);
-      return rejection === undefined
-        ? { file, key, state: "queued" }
-        : { file, key, message: rejectionMessages[rejection], state: "rejected" };
-    });
-    setUploads((current) => [...current, ...added]);
-  }, []);
+  const add = useCallback(
+    (files: readonly File[], options: { readonly tags?: readonly string[] | undefined } = {}) => {
+      const tags =
+        options.tags === undefined || options.tags.length === 0 ? {} : { tags: options.tags };
+      const added = files.map((file): MediaUploadEntry => {
+        sequence += 1;
+        const key = `upload-${sequence}`;
+        const rejection = validateMediaFile(file);
+        return rejection === undefined
+          ? { file, key, state: "queued", ...tags }
+          : { file, key, message: rejectionMessages[rejection], state: "rejected" };
+      });
+      setUploads((current) => [...current, ...added]);
+    },
+    [],
+  );
 
   const retry = useCallback((key: string) => {
     setUploads((current) =>
       current.map((upload) =>
         upload.key === key && upload.state === "failed"
-          ? { file: upload.file, key: upload.key, state: "queued" }
+          ? {
+              file: upload.file,
+              key: upload.key,
+              state: "queued",
+              ...(upload.tags === undefined ? {} : { tags: upload.tags }),
+            }
           : upload,
       ),
     );

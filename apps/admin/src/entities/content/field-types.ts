@@ -29,6 +29,26 @@ export type FieldRendererRegistry = Partial<
   Record<FieldDefinition["type"], ComponentType<FieldRendererProps>>
 >;
 
+/**
+ * The media picker in multiple mode, provided by a higher layer so eligible
+ * media lists can add several items at once. It hands over the selected media
+ * identifiers in selection order; the list closes it.
+ */
+export interface MediaListPickerProps {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** The list's label, naming the dialog and media already in the list. */
+  readonly label: string;
+  /** At most this many items can be selected (at least one). */
+  readonly capacity: number;
+  /** Names the limit that stops the selection at `capacity`. */
+  readonly limitMessage: string;
+  readonly existingIds: ReadonlySet<string>;
+  readonly onConfirm: (ids: readonly string[]) => void;
+  /** Receives the dialog's close focus event; prevent it to focus elsewhere. */
+  readonly onCloseAutoFocus: (event: Event) => void;
+}
+
 /** What a leaf contributes to the collapsed row of the list item that contains it. */
 export interface ItemPreview {
   /** Leading visual, such as a thumbnail; the item's position is shown without one. */
@@ -56,12 +76,18 @@ export interface FieldPreviewProps {
 }
 
 /**
+ * A collapsed-row preview. `appliesTo` narrows it to some fields of its type;
+ * without it the preview applies to every field of the type.
+ */
+export type FieldPreview = ComponentType<FieldPreviewProps> & {
+  readonly appliesTo?: (definition: FieldDefinition) => boolean;
+};
+
+/**
  * Maps field types to the previews of collapsed list items. Like renderers,
  * higher layers provide previews that need their own data (media thumbnails).
  */
-export type FieldPreviewRegistry = Partial<
-  Record<FieldDefinition["type"], ComponentType<FieldPreviewProps>>
->;
+export type FieldPreviewRegistry = Partial<Record<FieldDefinition["type"], FieldPreview>>;
 
 /** The DOM id of the control for a model or block field's form name. */
 export function fieldControlId(

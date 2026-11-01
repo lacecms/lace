@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { mediaItem } from "../../app/testing/index.js";
 import { AdminClientError } from "../../shared/api/index.js";
-import { isMediaUpdateConflict, metadataIssue } from "./errors.js";
+import { isMediaUpdateConflict, metadataIssue, metadataTagIssue } from "./errors.js";
 import {
   focalPointText,
   isMetadataChanged,
@@ -19,7 +19,7 @@ const described = metadataValues({
 });
 
 test("reads unset metadata as empty form values", () => {
-  expect(metadataValues(mediaItem)).toEqual({ alt: "", caption: "", focalPoint: null });
+  expect(metadataValues(mediaItem)).toEqual({ alt: "", caption: "", focalPoint: null, tags: [] });
 });
 
 test("patches only changed values and clears emptied ones", () => {
@@ -38,6 +38,7 @@ test("patches only changed values and clears emptied ones", () => {
       alt: "New",
       caption: "",
       focalPoint: { x: 0.1, y: 0.2 },
+      tags: [],
     }),
   ).toEqual({ alt: "New", focalPoint: { x: 0.1, y: 0.2 } });
   expect(isMetadataChanged(described, { ...described, alt: "Other" })).toBe(true);
@@ -89,4 +90,33 @@ test("classifies conflicts and finds input issues", () => {
   expect(metadataIssue(invalid, "alt")).toBe("Alt text is single-line.");
   expect(metadataIssue(invalid, "caption")).toBeUndefined();
   expect(metadataIssue(new Error("x"), "alt")).toBeUndefined();
+});
+
+test("tags are compared as sets and patched as the complete sorted set", () => {
+  const tagged = metadataValues({ ...mediaItem, tags: ["cover", "travel"] });
+  expect(tagged.tags).toEqual(["cover", "travel"]);
+  expect(metadataPatch(tagged, { ...tagged, tags: ["travel", "cover"] })).toEqual({});
+  expect(isMetadataChanged(tagged, { ...tagged, tags: ["travel", "cover"] })).toBe(false);
+  expect(metadataPatch(tagged, { ...tagged, tags: ["travel", "project-2026"] })).toEqual({
+    tags: ["project-2026", "travel"],
+  });
+  expect(metadataPatch(tagged, { ...tagged, tags: [] })).toEqual({ tags: [] });
+  expect(metadataPatch(tagged, { ...tagged, caption: "Hi" })).toEqual({ caption: "Hi" });
+});
+
+test("tag issues name the rejected tag from the sent set", () => {
+  const invalid = new AdminClientError({
+    code: "VALIDATION_FAILED",
+    issues: [{ code: "invalid", message: "Invalid tag.", path: "/tags/1" }],
+    message: "Invalid.",
+  });
+  expect(metadataTagIssue(invalid, ["cover", "bad"])).toBe('Tag "bad": Invalid tag.');
+  expect(metadataTagIssue(invalid, undefined)).toBe("Invalid tag.");
+  expect(metadataTagIssue(new Error("x"), ["cover"])).toBeUndefined();
+  const other = new AdminClientError({
+    code: "VALIDATION_FAILED",
+    issues: [{ code: "invalid", message: "Too long.", path: "/alt" }],
+    message: "Invalid.",
+  });
+  expect(metadataTagIssue(other, ["cover"])).toBeUndefined();
 });

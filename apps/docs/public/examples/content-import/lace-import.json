@@ -1,0 +1,154 @@
+{
+  "formatVersion": 1,
+  "media": [
+    {
+      "key": "studio",
+      "file": "media/studio.jpg",
+      "alt": "A bright studio with an empty canvas and a lamp",
+      "focalPoint": { "x": 0.68, "y": 0.4 },
+      "tags": ["sample", "studio"]
+    },
+    {
+      "key": "workshop",
+      "file": "media/workshop.jpg",
+      "alt": "A workbench with simple wooden shapes",
+      "caption": "The workshop bench",
+      "tags": ["sample"]
+    }
+  ],
+  "entries": [
+    {
+      "key": "settings",
+      "model": "settings",
+      "fields": {
+        "siteName": "Sample Studio",
+        "tagline": "Imported with lace import",
+        "description": "A small sample site loaded from a Lace import package.",
+        "image": { "$media": "studio" }
+      },
+      "blocks": []
+    },
+    {
+      "key": "navigation",
+      "model": "navigation",
+      "fields": {},
+      "blocks": [
+        {
+          "type": "navigation",
+          "data": {
+            "name": "Main",
+            "links": [
+              { "label": "Journal", "url": { "$entry": "hello-lace" } },
+              { "label": "First project", "url": { "$entry": "first-project" } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "key": "home",
+      "model": "home",
+      "title": "Home",
+      "fields": {},
+      "blocks": [
+        {
+          "type": "hero",
+          "data": {
+            "eyebrow": "Sample Studio",
+            "heading": "Objects, rooms and quiet light",
+            "image": { "$media": "studio" },
+            "primaryActionLabel": "Read the journal",
+            "primaryActionUrl": { "$entry": "hello-lace" }
+          }
+        },
+        {
+          "type": "richText",
+          "data": {
+            "content": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "This page, its images and the journal were imported from one package."
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "gallery",
+          "data": {
+            "title": "From the studio",
+            "images": [
+              { "media": { "$media": "studio" } },
+              { "media": { "$media": "workshop" } },
+              {
+                "kind": "video",
+                "videoUrl": "https://vimeo.com/76979871",
+                "videoTitle": "A walk through the studio",
+                "playback": "ambient",
+                "aspectRatio": "1:1",
+                "caption": "The studio in motion"
+              }
+            ]
+          }
+        }
+      ],
+      "seo": {
+        "title": "Sample Studio",
+        "description": "Objects, rooms and quiet light.",
+        "image": { "$media": "studio" }
+      }
+    },
+    {
+      "key": "hello-lace",
+      "model": "posts",
+      "slug": "hello-lace",
+      "title": "Hello, Lace",
+      "fields": {
+        "summary": "Why this studio moved its site to Lace.",
+        "relatedUrl": { "$entry": "first-project" }
+      },
+      "blocks": [
+        {
+          "type": "richText",
+          "data": {
+            "content": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Every page now lives in a CMS and builds into a static site."
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "key": "first-project",
+      "model": "posts",
+      "slug": "first-project",
+      "title": "First project",
+      "fields": { "summary": "A workbench, three shapes and one afternoon." },
+      "blocks": [
+        {
+          "type": "image",
+          "data": { "media": { "$media": "workshop" }, "caption": "Work in progress" },
+          "settings": { "lightbox": true }
+        }
+      ]
+    }
+  ]
+}

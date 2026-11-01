@@ -134,6 +134,7 @@ export const mediaItem = {
   status: "active" as const,
   updatedAt: "2026-09-20T00:00:00.000Z",
   url: "https://lace.test/api/v1/public/media/media-1",
+  tags: [],
   usageCount: 0,
 };
 
@@ -175,6 +176,9 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     listTokens: async () => ({ items: [] }),
     createToken: async () => ({}) as never,
     revokeToken: async () => ({}) as never,
+    listImportTokens: async () => ({ items: [] }),
+    createImportToken: async () => ({}) as never,
+    revokeImportToken: async () => ({}) as never,
     listLinkTargets: async () => ({ items: [] }),
     resolveLinkTargets: async (ids) =>
       Object.fromEntries(ids.map((id) => [id, { id, state: "missing" as const }])),
@@ -191,6 +195,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
       modelKey === "home"
         ? entryList([{ ...entry, id: "home-1", modelKey: "home", title: "Home" }])
         : entryList([entry]),
+    listMediaTags: async () => ({ items: [] }),
     listMedia: async () => ({ items: [] }),
     getMedia: async () => ({ ...mediaItem, usage: [] }),
     uploadMedia: async () => ({}) as never,
@@ -214,6 +219,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
       callbackHostname: "client.test",
       scopes: ["content:read"],
       canWrite: false,
+      canPublish: false,
     }),
     submitMcpConsent: async () => ({ redirect: true, url: "https://client.test/cb" }),
     signIn: async () => undefined,

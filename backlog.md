@@ -7,6 +7,12 @@
   tags and multi-select picker → SM4 `lace import` → SM5 conditional fields. No
   OpenSpec change created yet; each session gets its own just-in-time proposal.
 
+- **Shared video primitive (deferred from SM5D, 2026-11-01):** `videoEmbed`
+  and gallery video items each carry their own registry markup and ambient
+  mounting script. Extract a `LaceVideo` adapter component (with its
+  structural CSS and script) only when a third consumer, such as a hero video,
+  needs the same playback contract.
+
 - **Alpha.8 release preparation (implemented, archived 2026-10-30):**
   `prepare-alpha-eight-release` prepared alpha.8/next with template 0.39.0,
   sixteen packages including MCP and API/builder images for both Linux

@@ -3,8 +3,8 @@
   "name": "gallery",
   "framework": "astro",
   "blockType": "gallery",
-  "blockVersion": 4,
-  "revision": 6,
+  "blockVersion": 5,
+  "revision": 7,
   "requires": {
     "@lacecms/astro": "0.1.0-alpha.8",
     "@lacecms/render": "0.1.0-alpha.8",
@@ -20,6 +20,11 @@
     {
       "source": "ListLayout.css",
       "target": "ListLayout.css",
+      "role": "stylesheet"
+    },
+    {
+      "source": "GalleryVideo.css",
+      "target": "GalleryVideo.css",
       "role": "stylesheet"
     }
   ],

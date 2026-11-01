@@ -1,5 +1,13 @@
+import {
+  mediaListFilters,
+  mediaTagCatalogQuery,
+  mediaTagInsert,
+  normalizedMediaWriteTags,
+} from "@lacecms/db";
+import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
   actorDisplayName,
@@ -87,6 +95,11 @@ import {
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   INVALID_PUBLISHED_LINK_TARGETS_SQL,
+  INVALID_PROJECTED_LINK_TARGETS_SQL,
+  projectedBlocksSql,
+  projectedInternalLinksSql,
+  projectedMediaReferencesSql,
+  projectedPublicationRows,
   assertPublishedInternalLinkTargets,
   SqlContentLinkReader,
   replaceInternalLinkStatements,
@@ -554,6 +567,7 @@ export class NodeContentRepository
                     fields: parseObject(row.fields_json, "Snapshot fields"),
                     state: row.state,
                   })),
+                  configuration.visibility as FieldVisibility | undefined,
                 ),
               );
               if (rows.length < 100) break;
@@ -731,23 +745,36 @@ export class NodeContentRepository
             };
           }
         }
+        // A projection replaces the copied fields, block data and references (conditional fields).
+        const projected =
+          input.projection === undefined
+            ? undefined
+            : projectedPublicationRows(
+                entry.draft.blocks.map((block) => block.key),
+                input.projection,
+              );
         assertPublishedInternalLinkTargets(
-          this.connection
-            .prepare(INVALID_PUBLISHED_LINK_TARGETS_SQL)
-            .all(
-              entry.draft.id,
-              entry.id,
-              path ?? null,
-            ) as readonly import("@lacecms/db").InvalidPublishedLinkTargetRow[],
+          (projected === undefined
+            ? this.connection
+                .prepare(INVALID_PUBLISHED_LINK_TARGETS_SQL)
+                .all(entry.draft.id, entry.id, path ?? null)
+            : this.connection
+                .prepare(INVALID_PROJECTED_LINK_TARGETS_SQL)
+                .all(
+                  projected.internalLinksJson,
+                  entry.id,
+                  path ?? null,
+                )) as readonly import("@lacecms/db").InvalidPublishedLinkTargetRow[],
           entry.draft.blocks.map((block) => block.key),
         );
         this.checkpoint("publish.snapshot");
         const copied = this.connection
           .prepare(
-            "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?",
+            `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, ${projected === undefined ? "s.fields_json" : "?"}, s.seo_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?`,
           )
           .run(
             input.publishedSnapshotId,
+            ...(projected === undefined ? [] : [projected.fieldsJson]),
             input.publishedAt,
             input.publishedAt,
             input.publishedBy.id,
@@ -760,24 +787,39 @@ export class NodeContentRepository
             "The draft revision no longer matches the expected revision.",
           );
         this.checkpoint("publish.blocks");
-        this.connection
-          .prepare(
-            `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
-          )
-          .run(input.publishedSnapshotId, entry.draft.id);
+        if (projected === undefined)
+          this.connection
+            .prepare(
+              `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
+            )
+            .run(input.publishedSnapshotId, entry.draft.id);
+        else
+          this.connection
+            .prepare(projectedBlocksSql())
+            .run(input.publishedSnapshotId, projected.blockDataJson, entry.draft.id);
         this.bumpLinkGraph([
           entry.draft.id,
           ...(entry.published === undefined ? [] : [entry.published.id]),
         ]);
-        this.connection
-          .prepare(COPY_INTERNAL_LINKS_SQL)
-          .run(input.publishedSnapshotId, entry.draft.id);
+        if (projected === undefined)
+          this.connection
+            .prepare(COPY_INTERNAL_LINKS_SQL)
+            .run(input.publishedSnapshotId, entry.draft.id);
+        else
+          this.connection
+            .prepare(projectedInternalLinksSql())
+            .run(input.publishedSnapshotId, projected.internalLinksJson);
         this.checkpoint("publish.references");
-        this.connection
-          .prepare(
-            "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) select ?, source_key, field_path, media_id, created_at from content_media_references where snapshot_id = ?",
-          )
-          .run(input.publishedSnapshotId, entry.draft.id);
+        if (projected === undefined)
+          this.connection
+            .prepare(
+              "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) select ?, source_key, field_path, media_id, created_at from content_media_references where snapshot_id = ?",
+            )
+            .run(input.publishedSnapshotId, entry.draft.id);
+        else
+          this.connection
+            .prepare(projectedMediaReferencesSql())
+            .run(input.publishedSnapshotId, input.publishedAt, projected.mediaReferencesJson);
         // A global has no route; its publication only replaces the snapshot.
         if (path !== undefined) {
           this.checkpoint("publish.route");
@@ -1087,10 +1129,16 @@ export class NodeContentRepository
         this.checkpoint("media.metadata");
         const changed = this.connection.prepare(MEDIA_METADATA_UPDATE_SQL).run(...params);
         if (changed.changes !== 1) this.refuseMetadataUpdate(input.mediaId);
+        if (input.tags !== undefined) {
+          this.connection.prepare("delete from media_tags where media_id = ?").run(input.mediaId);
+          const insert = mediaTagInsert(input.mediaId, normalizedMediaWriteTags(input.tags));
+          if (insert !== undefined) this.connection.prepare(insert.sql).run(...insert.params);
+        }
+        this.checkpoint("media.tags");
         const published = this.connection
           .prepare(`select ${MEDIA_PUBLISHED_REFERENCE_SQL} as published`)
           .get(input.mediaId) as { readonly published: number };
-        if (published.published === 1) {
+        if (input.publishedEffect !== false && published.published === 1) {
           targetVersion = this.bumpPublicState(
             input.updatedAt,
             input.requestedBy.id,
@@ -1218,6 +1266,11 @@ export class NodeContentRepository
           input.completedAt,
           input.mediaId,
         );
+        this.connection
+          .prepare(
+            "delete from media_tags where media_id = ? and exists (select 1 from media where id = ? and status = 'deleting' and not exists (select 1 from content_media_references where media_id = ?))",
+          )
+          .run(input.mediaId, input.mediaId, input.mediaId);
         const deleted = this.connection
           .prepare(
             "delete from media where id = ? and status = 'deleting' and not exists (select 1 from content_media_references where media_id = ?)",
@@ -1280,23 +1333,29 @@ export class NodeContentRepository
   }
 
   public async createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata> {
+    const tags = normalizedMediaWriteTags(input.tags ?? []);
     try {
-      this.connection
-        .prepare(
-          "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
-        )
-        .run(
-          input.id,
-          input.storageKey,
-          input.filename,
-          input.mimeType,
-          input.size,
-          input.width,
-          input.height,
-          input.createdBy,
-          input.createdAt,
-          input.createdAt,
-        );
+      this.connection.transaction(() => {
+        this.connection
+          .prepare(
+            "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, sha256, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', ?, 'active', ?, ?, ?)",
+          )
+          .run(
+            input.id,
+            input.storageKey,
+            input.filename,
+            input.mimeType,
+            input.size,
+            input.width,
+            input.height,
+            input.sha256 ?? null,
+            input.createdBy,
+            input.createdAt,
+            input.createdAt,
+          );
+        const insert = mediaTagInsert(input.id, tags);
+        if (insert !== undefined) this.connection.prepare(insert.sql).run(...insert.params);
+      })();
     } catch (error) {
       this.throwWriteError(error, false);
     }
@@ -1436,8 +1495,9 @@ export class NodeContentRepository
       input.after === undefined ? undefined : decodeMediaCursor(input.after, kind, input.sort);
     const comparison = descending ? "<" : ">";
     const direction = descending ? "desc" : "asc";
-    const conditions: string[] = [];
-    const bindings: (number | string)[] = [];
+    const tagFilter = mediaListFilters(input);
+    const conditions: string[] = [...tagFilter.conditions];
+    const bindings: (number | string)[] = [...tagFilter.bindings];
     if (input.q !== undefined) {
       conditions.push("instr(lower(m.filename), ?) > 0");
       bindings.push(foldAscii(input.q));
@@ -1472,6 +1532,24 @@ export class NodeContentRepository
           }
         : {}),
     });
+  }
+
+  public async listMediaTags(input: ListMediaTagsInput): Promise<CursorPage<MediaTagCount>> {
+    const query = mediaTagCatalogQuery(input);
+    const rows = this.connection.prepare(query.sql).all(...query.params) as readonly {
+      tag: string;
+      count: number;
+    }[];
+    const items = rows
+      .slice(0, input.limit)
+      .map((row) => ({ tag: row.tag, count: Number(row.count) }));
+    const last = items.at(-1);
+    return {
+      items,
+      ...(rows.length > input.limit && last !== undefined
+        ? { nextCursor: encodeSortCursor(query.kind, last.tag, last.tag) }
+        : {}),
+    };
   }
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {

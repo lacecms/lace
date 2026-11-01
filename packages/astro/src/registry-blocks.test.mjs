@@ -53,7 +53,15 @@ function block(type, data, overrides = {}) {
   return { data, key: `${type}-1`, position: 0, schemaVersion, type, ...overrides };
 }
 
-async function render(entryBlocks, { path = "/", ...entry } = {}) {
+// The gallery's hoisted module script, which the container emits in place.
+const galleryScript =
+  /<script type="module" src="[^"]*\/registry\/astro\/gallery\/GalleryBlock\.astro\?astro&type=script&index=0&lang\.ts"><\/script>/gu;
+
+async function render(entryBlocks, options) {
+  return (await renderWithScripts(entryBlocks, options)).replace(galleryScript, "");
+}
+
+async function renderWithScripts(entryBlocks, { path = "/", ...entry } = {}) {
   const container = await AstroContainer.create();
   return container.renderToString(Blocks, {
     props: {
@@ -98,9 +106,9 @@ test("gallery items follow the media alt and caption fallbacks", async () => {
       '<main><section class="gallery" data-lace-block="gallery" data-lace-block-key="gallery-1" data-lace-layout-container>',
       '<h2 data-lace-part="title">Studio</h2>',
       '<ul data-lace-part="items" data-lace-layout="grid" data-lace-wrap="true" data-lace-preset="auto" role="list">',
-      '<li data-lace-part="item" data-lace-layout-item><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
       // Astro writes an empty alt text as a bare attribute.
-      '<li data-lace-part="item" data-lace-layout-item><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
       "</ul></section></main>",
     ].join(""),
   );
@@ -123,6 +131,94 @@ test("gallery items open their own lightboxes when the setting is on", async () 
   expect(html).toContain(
     '<img alt="Media alt" data-lace-part="lightbox-media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" width="800">',
   );
+});
+
+test("gallery video items render embed players and keep image dialog indexes", async () => {
+  const video = {
+    kind: "video",
+    videoUrl: "https://vimeo.com/123/abc",
+    videoTitle: "<Studio & team>",
+    aspectRatio: "4:5",
+    caption: "Spring",
+  };
+  const html = await render([
+    block(
+      "gallery",
+      { images: [{ media: "studio" }, video, { media: "bare", link: "/work" }, { media: "bare" }] },
+      { key: "shots", settings: { lightbox: true } },
+    ),
+  ]);
+  expect([...html.matchAll(/<dialog[^>]* id="([^"]+)"/gu)].map((match) => match[1])).toEqual([
+    "lace-lightbox-entry-1-shots-0",
+    "lace-lightbox-entry-1-shots-3",
+  ]);
+  const items = [...html.matchAll(/<li data-lace-part="item"[^>]*>[\s\S]*?<\/li>/gu)].map(
+    (match) => match[0],
+  );
+  expect(items.map((item) => /data-lace-kind="(\w+)"/u.exec(item)[1])).toEqual([
+    "image",
+    "video",
+    "image",
+    "image",
+  ]);
+  const cell = items[1];
+  expect(cell).toContain(
+    '<figure data-lace-video data-lace-aspect-ratio="4:5" data-lace-playback="player">',
+  );
+  expect(cell).toContain('src="https://player.vimeo.com/video/123?h=abc"');
+  expect(cell).toContain('title="<Studio &amp; team>"');
+  expect(cell).toContain('loading="lazy"');
+  expect(cell).toContain('allow="fullscreen; picture-in-picture; encrypted-media"');
+  expect(cell).not.toContain("autoplay");
+  expect(cell).toContain('<figcaption data-lace-part="caption">Spring</figcaption>');
+  expect(cell).toContain(
+    '<a data-lace-part="source" href="https://vimeo.com/123/abc">Watch on Vimeo</a>',
+  );
+  expect(cell).not.toContain("<img");
+  expect(cell).not.toContain("<button");
+  expect(html).not.toContain("<style");
+  expect(html).not.toContain("aspect-ratio:");
+
+  // The player matches the videoEmbed block's iframe for the same URL and title.
+  const embed = await render([
+    block("videoEmbed", { url: video.videoUrl, title: video.videoTitle }),
+  ]);
+  const iframe = (markup) => /<iframe[^>]*>/u.exec(markup)[0];
+  expect(iframe(cell)).toBe(iframe(embed));
+});
+
+test.each(["player", "ambient"])("gallery %s video items cover the fallbacks", async (playback) => {
+  const html = await render([
+    block("gallery", {
+      images: [
+        {
+          kind: "video",
+          videoUrl: "https://youtu.be/dQw4w9WgXcQ",
+          videoTitle: "Film",
+          playback,
+          aspectRatio: "1:1",
+          media: "studio",
+        },
+      ],
+    }),
+  ]);
+  expect(html).toContain(`data-lace-playback="${playback}"`);
+  expect(html).toContain('data-lace-aspect-ratio="1:1"');
+  expect(html).toContain("Watch on YouTube");
+  expect(html).not.toContain("<figcaption");
+  // A stale hidden media value is never rendered.
+  expect(html).not.toContain("studio.png");
+  const live = html
+    .replace(/<template[^>]*>[\s\S]*?<\/template>/gu, "")
+    .replace(/<noscript>[\s\S]*?<\/noscript>/gu, "");
+  expect((live.match(/<iframe/gu) ?? []).length).toBe(playback === "player" ? 1 : 0);
+  expect(html.includes("data-lace-ambient-template")).toBe(playback === "ambient");
+  expect(html.includes("<noscript>")).toBe(playback === "ambient");
+  if (playback === "ambient") {
+    expect(html).toContain("youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1");
+    expect(html).toContain('tabindex="-1"');
+    expect(html).toContain('allow="autoplay; encrypted-media"');
+  }
 });
 
 test("an image block with the lightbox on wraps its image and keeps the caption last", async () => {
@@ -333,6 +429,10 @@ test("Gallery emits validated shared hooks for every mode and preset without inl
       expect(html).toContain('data-lace-part="item" data-lace-layout-item');
       expect(html).not.toMatch(/style=|<style|<script/);
     }
+  // Only the gallery's own ambient mounting module is emitted, never inline code.
+  const withScripts = await renderWithScripts([block("gallery", { images: [{ media: "bare" }] })]);
+  expect(withScripts.match(galleryScript)).toHaveLength(1);
+  expect(withScripts.replace(galleryScript, "")).not.toContain("<script");
 });
 
 test("an unrelated card list uses the same scalar settings and layout hooks", async () => {
@@ -482,3 +582,33 @@ test("link-aware sources preserve actions, submenus and image lightboxes without
   expect(html).not.toContain("entry:");
   expect(authored[0].data.primaryActionUrl).toBe("entry:missing");
 });
+
+test.each(["player", "ambient"])(
+  "video %s markup covers poster and direct fallbacks",
+  async (playback) => {
+    for (const poster of [undefined, "bare"]) {
+      const html = await render([
+        block(
+          "videoEmbed",
+          { url: "https://vimeo.com/123/abc", title: "Film", ...(poster ? { poster } : {}) },
+          { settings: { playback, aspectRatio: "4:5" } },
+        ),
+      ]);
+      expect(html).toContain('data-lace-aspect-ratio="4:5"');
+      expect(html).toContain(`data-lace-playback="${playback}"`);
+      expect(html).not.toContain("<style");
+      expect(html).not.toContain("style=");
+      const live = html
+        .replace(/<template[^>]*>[\s\S]*?<\/template>/gu, "")
+        .replace(/<noscript>[\s\S]*?<\/noscript>/gu, "");
+      expect((live.match(/<iframe/gu) ?? []).length).toBe(playback === "player" && !poster ? 1 : 0);
+      expect(html.includes("data-lace-ambient-template")).toBe(playback === "ambient");
+      expect(html.includes("<noscript>")).toBe(playback === "ambient" && !poster);
+      if (playback === "ambient") {
+        expect(html).toContain("h=abc&amp;background=1");
+        expect(html).toContain('tabindex="-1"');
+        expect(html).toContain('allow="autoplay; encrypted-media"');
+      }
+    }
+  },
+);

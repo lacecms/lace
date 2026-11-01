@@ -13,7 +13,7 @@ const { createNodeRuntime, migrateNodeDatabase, parseNodeRuntimeSettings } = nod
 const { createCloudflareWorker } = cloudflare;
 import { openLocalCloudflare } from "../../packages/platform-cloudflare/src/d1-test-harness.mjs";
 import { createNodeAdminAssets } from "../../apps/api/dist/admin-assets.js";
-import config from "../../lace.config.ts";
+import rootConfig from "../../lace.config.ts";
 
 const exec = promisify(execFile);
 const nodeRequire = createRequire(
@@ -30,8 +30,12 @@ export const png = await nodeRequire("sharp")({
   .png()
   .toBuffer();
 
-/** Only fixture-owned state is ever removed. No development paths or remote bindings. */
+/**
+ * Only fixture-owned state is ever removed. No development paths or remote bindings.
+ * `options.config` replaces the root configuration for composition and synchronization.
+ */
 export async function openProductRuntime(kind, options = {}) {
+  const config = options.config ?? rootConfig;
   const cleanups = [];
   let closed = false;
   const close = async () => {
@@ -384,7 +388,8 @@ export async function openProductRuntime(kind, options = {}) {
     );
     const call = async (path, options = {}) => {
       const headers = new Headers(options.headers);
-      headers.set("origin", origin);
+      // `origin: null` sends no Origin, like a command-line client.
+      if (options.origin !== null) headers.set("origin", options.origin ?? origin);
       headers.set("cf-connecting-ip", "203.0.113.34");
       if (options.cookie) headers.set("cookie", options.cookie);
       if (options.json !== undefined) headers.set("content-type", "application/json");

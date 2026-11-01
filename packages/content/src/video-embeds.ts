@@ -5,6 +5,7 @@ export interface VideoEmbedDescription {
   readonly provider: EmbedProvider;
   readonly videoId: string;
   readonly src: string;
+  readonly ambientSrc: string;
   readonly privacyHash?: string;
 }
 
@@ -53,6 +54,7 @@ export function parseVideoEmbed(value: unknown): VideoEmbedDescription | undefin
       provider: "youtube",
       videoId,
       src: `https://www.youtube-nocookie.com/embed/${videoId}`,
+      ambientSrc: `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&playsinline=1`,
     });
   }
   const match = ["vimeo.com", "www.vimeo.com"].includes(host)
@@ -72,5 +74,6 @@ export function parseVideoEmbed(value: unknown): VideoEmbedDescription | undefin
     videoId,
     ...(privacyHash === undefined ? {} : { privacyHash }),
     src: `https://player.vimeo.com/video/${videoId}${privacyHash === undefined ? "" : `?h=${privacyHash}`}`,
+    ambientSrc: `https://player.vimeo.com/video/${videoId}?${privacyHash === undefined ? "" : `h=${privacyHash}&`}background=1`,
   });
 }

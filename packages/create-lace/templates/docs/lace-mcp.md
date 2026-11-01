@@ -12,9 +12,12 @@ available at `/.well-known/oauth-protected-resource/mcp` and
 `/api/auth/oauth2/register` and use authorization code with S256 PKCE.
 
 Sign in with the existing Lace account and explicitly approve read access or
-read plus draft writes. Only model discovery, list, get, create and save draft
-are available. Publishing, unpublishing, deletion and media administration are
-unavailable, including for administrators. The current role still applies.
+draft editing or publishing. Read is the default; only administrators can grant
+`content:publish` (which includes read and write). Model discovery, list, get,
+create, save draft and `publish_entry` are available according to the grant.
+Unpublishing, deletion and media administration remain unavailable, including
+for administrators. The current role still applies; demotion removes publication
+on the next request. Published content reaches the site with the next build.
 
 Manage your own connections under Account. Access tokens expire within fifteen
 minutes. Refresh requires `offline_access`, rotates on use and expires within
@@ -39,7 +42,7 @@ status reloads it; a failed refresh labels the last values as stale. Enabled
 means the deployment enables MCP, not that an external client has connected.
 The section offers endpoint copying, Codex CLI/TOML, Claude Code and Gemini CLI
 examples, and generic Streamable HTTP/OAuth guidance. Read only is selected by default; draft editing
-adds write scope. **Account** lists and revokes your own connections when enabled.
+adds write scope; Publishing adds write and publish. **Account** lists and revokes your own connections when enabled.
 
 For the default local endpoint, run on the computer running Codex:
 
@@ -67,9 +70,9 @@ the example if your origin or port differs. If `lace` is already configured,
 update that entry instead of adding a duplicate. Sign in through the browser,
 approve consent, and restart/reload your client to pick up configuration.
 Selecting different scopes in Settings grants nothing by itself; an existing
-read-only grant needs new write consent. To replace a connection, revoke it in
-Account and repeat OAuth login. Viewers cannot grant write access. Publishing,
-unpublishing and deletion remain unavailable. This guidance does not establish
+connection needs new consent for additional write or publish authority. To replace a connection, revoke it in
+Account and repeat OAuth login. Viewers cannot grant write access. Only administrators can grant publishing.
+Unpublishing and deletion remain unavailable. This guidance does not establish
 acceptance of any particular external client release.
 
 ### Claude Code
@@ -116,4 +119,35 @@ no client secret or manual bearer token is needed. Replace the sample endpoint
 with the canonical URL in Settings and restart/reload your client after changes.
 These recipes follow the [official Gemini CLI MCP guide](https://geminicli.com/docs/tools/mcp-server/);
 they do not describe the consumer Gemini web app or claim a verified client login.
-Lace role limits, explicit consent and the draft-only tool boundary still apply.
+Lace role limits, explicit consent and the unpublish/delete ban still apply.
+
+## Publishing and reconnecting
+
+Choose Publishing in Settings. Use these scopes in the selected client recipe:
+
+```sh
+codex mcp login lace --oauth-client-registration dcr --scopes content:read,content:write,content:publish,offline_access
+```
+
+```toml
+[mcp_servers.lace]
+url = "http://127.0.0.1:3000/mcp"
+scopes = ["content:read", "content:write", "content:publish", "offline_access"]
+```
+
+Claude Code's OAuth string is `"scopes":"content:read content:write content:publish offline_access"`.
+Gemini CLI's OAuth array is `"scopes":["content:read","content:write","content:publish","offline_access"]`.
+Keep the canonical endpoint from Settings and merge existing configuration.
+Re-authorize explicitly as an administrator. Existing grants and refresh tokens
+never gain publication automatically; HTTP 403 `insufficient_scope` naming
+`content:publish` means new consent is needed. No new database migration.
+
+`publish_entry` takes `entryId`, required `expectedRevision` and optional
+`idempotencyKey` with the REST header syntax. It publishes the stored draft through
+the same validation, revision, route and internal-link guards. Keep the same key,
+entry and revision when retrying an uncertain response. The shared REST-shaped
+result is `{entry, publication, build}`; replay reports `replayed` and a
+`not-dispatched` build without a second publication. Builds coalesce and content
+reaches the site on the next build. Unpublish and delete remain forbidden.
+A leaked publish-scoped token can change public content; review and revoke
+connections under Account.

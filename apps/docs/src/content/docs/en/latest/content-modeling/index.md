@@ -28,7 +28,7 @@ Field builders include text, textarea, number, boolean, date, datetime, URL, sel
 
 Text counters count JavaScript UTF-16 units without trimming; SEO counters have their own trimmed/code-point rules. Do not truncate content silently to satisfy a UI counter.
 
-See [groups, lists and forms](composites/) and [configuration synchronization](synchronization/).
+See [groups, lists and forms](composites/), [conditional fields](conditional-fields/) and [configuration synchronization](synchronization/).
 
 ## Blocks and SEO
 
@@ -42,7 +42,16 @@ A global can supply shared header/navigation content. Publish it like another si
 
 Register `builtInBlocks.videoEmbed` and add `"videoEmbed"` to the selected model's
 allowed blocks. Advance existing model versions and run normal configuration sync.
-The block has required Video URL and Title, optional Preview image and Caption.
+The v2 block has required Video URL and Title, optional Preview image and Caption.
+Its Settings contain aspect-ratio cards (`16:9` default, `4:3`, `1:1`, `4:5`,
+`9:16`) and playback cards (`player` default, `ambient`). Ambient plays muted,
+looping, without controls; reduced motion and no JavaScript fall back to player.
+Unknown setting values fail draft save and publication. Version 1 blocks receive
+`16:9` and `player` during configuration sync, preserving content and poster usage.
+Install registry revision 2 before building; see [Astro integration](../astro-integration/)
+for upgrade steps, bandwidth advice and a site-owned stop control example.
+Ambient has no built-in pause control and does not meet WCAG 2.2.2 for videos
+longer than five seconds.
 It supports YouTube watch/share/shorts/embed links and Vimeo video/player links,
 including unlisted privacy hashes. Other providers and pasted iframe code fail
 validation. Custom URL fields can declare the same restriction:

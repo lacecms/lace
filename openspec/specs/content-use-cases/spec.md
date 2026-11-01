@@ -191,8 +191,6 @@ SHALL apply the same `System` and `Unknown user` fallbacks as list summaries.
 - **WHEN** an enabled filter field is removed from configuration and a client reuses its query
 - **THEN** the use case rejects the stale query before reading entries
 
-
-
 #### Scenario: Platform limits are enforced before reads
 - **WHEN** a Cloudflare actor submits q or contains whose escaped substring pattern exceeds 50 UTF-8 bytes
 - **THEN** the use case rejects it at /q or /filters/<index>/value without a read-port call, and Node accepts an otherwise valid operand within 200 code units
@@ -537,9 +535,11 @@ operation and permission ceiling carried by that server-derived grant. The
 ceiling SHALL only reduce the current role's authority and SHALL NOT supply a
 new role. Missing operations in a delegated ceiling SHALL be denied by default.
 Unrestricted browser actors SHALL retain the existing role policy and
-published/unpublished deletion distinctions. Publication, unpublication and
-deletion SHALL fail for the first-phase MCP grant even if invoked directly
-through a portable use case rather than an advertised tool. Revocation of a
+published/unpublished deletion distinctions. Unpublication and deletion SHALL fail for every MCP grant even if invoked
+directly through a portable use case rather than an advertised tool.
+Publication SHALL succeed for a delegated actor only when its ceiling contains
+both the `content:publish` permission and the `publish` operation and the
+current role has `content:publish`; otherwise it SHALL fail the same way. Revocation of a
 connection SHALL remain a separate credential operation. Callers SHALL NOT
 strip delegated authority when composing another application operation.
 
@@ -548,8 +548,12 @@ strip delegated authority when composing another application operation.
 - **THEN** the shared application boundary denies it before reading protected content or invoking a mutation port despite the role having `content:write`
 
 #### Scenario: Direct delegated publication or unpublication
-- **WHEN** the same actor invokes publication or unpublication without going through MCP tool discovery
+- **WHEN** an administrator actor with a read/write MCP grant invokes publication, or any MCP-granted actor invokes unpublication, without going through MCP tool discovery
 - **THEN** authorization fails and no snapshot, route, public-state or outbox change occurs
+
+#### Scenario: Publish-scoped delegated publication
+- **WHEN** an administrator actor whose MCP grant includes publication invokes the publication operation
+- **THEN** it runs with the existing validation, revision, idempotency and build rules, while unpublication and deletion by the same actor still fail
 
 #### Scenario: New lifecycle operation is introduced
 - **WHEN** a new content operation is added without inclusion in the delegated allowlist
@@ -583,3 +587,45 @@ truth for both adapters.
 #### Scenario: Model discovery is unauthorized
 - **WHEN** an actor lacks effective read authority and requests model metadata through the portable operation
 - **THEN** it is denied before protected metadata is returned
+
+### Requirement: Entry lists filter by exact draft slug
+The entry-list use case SHALL accept an optional slug for collection models and
+SHALL return only entries whose current draft slug equals it exactly, under
+the existing `list` operation and `content:read` authorization. The predicate
+SHALL apply before paging and to the per-status totals and SHALL combine with
+search, status, filters and sorts. It SHALL be validated before persistence
+reads and SHALL be refused for page and global models. Draft slugs are not
+unique, so a result MAY contain more than one entry; the use case SHALL NOT
+pick one.
+
+#### Scenario: Two drafts share a slug
+- **WHEN** two drafts of `posts` both have slug `about` and a client lists `posts` with slug `about`
+- **THEN** both are returned and the totals count two
+
+#### Scenario: Slug was changed after publication
+- **WHEN** an entry was published with slug `old` and its draft now has slug `new`
+- **THEN** a slug lookup for `new` returns it and a lookup for `old` does not
+
+### Requirement: Draft normalization is a shared pure function
+The application SHALL expose one pure, runtime-portable function that turns a
+submitted draft (title, slug, fields, blocks with their envelope, SEO input)
+for a given model and block registry into the normalized draft that create,
+save and publish store: validated and defaulted fields and block data, block
+settings with defaults, the block envelope with `hidden` resolved, normalized
+SEO values and, for a global, the model label or key as the title. The create,
+save and publish use cases SHALL use this function, and it SHALL perform no
+persistence, authorization, media existence or link-target check. The same
+input SHALL always produce the same normalized draft, so a client applying it
+can predict whether a save would change the stored draft.
+
+#### Scenario: Client prediction matches the stored draft
+- **WHEN** a client normalizes a valid draft with the shared function and the server saves the same input
+- **THEN** the normalized title, slug, fields, blocks and SEO equal the saved draft's values in canonical JSON
+
+#### Scenario: Global title is replaced
+- **WHEN** the function normalizes a draft of the `settings` global labelled `Site settings` with the title `Anything`
+- **THEN** the normalized title is `Site settings`
+
+#### Scenario: Invalid draft
+- **WHEN** the function receives block data that fails its block definition
+- **THEN** it raises the same validation issue and path as a draft save

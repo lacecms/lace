@@ -96,6 +96,20 @@ test("the fixture build emits published static routes without CMS access", async
     "utf8",
   );
 
+  const ambientMarkup = [
+    ...about.matchAll(
+      /<figure\b[^>]*data-lace-block-key="about-ambient-[01]"[^>]*>[\s\S]*?<\/figure>/gu,
+    ),
+  ];
+  expect(ambientMarkup).toHaveLength(2);
+  for (const [html] of ambientMarkup) {
+    expect(html).toContain("data-lace-ambient-template");
+    const live = html
+      .replace(/<template[^>]*>[\s\S]*?<\/template>/gu, "")
+      .replace(/<noscript>[\s\S]*?<\/noscript>/gu, "");
+    expect(live).not.toContain("<iframe");
+  }
+
   for (const [html, modelKey, entryId] of [
     [home, "home", "home-entry"],
     [post, "posts", "first-post-entry"],
@@ -133,6 +147,10 @@ test("the fixture build emits published static routes without CMS access", async
         ["videoEmbed", "about-youtube"],
         ["videoEmbed", "about-vimeo"],
         ["videoEmbed", "about-vimeo-second"],
+        ["videoEmbed", "about-ambient-0"],
+        ["videoEmbed", "about-ambient-1"],
+        ["gallery", "about-gallery-0"],
+        ["gallery", "about-gallery-1"],
       ],
     ],
     [
@@ -173,8 +191,9 @@ test("the fixture build emits published static routes without CMS access", async
     ],
     [
       post,
-      // Rich text, image with a lightbox, quote, gallery of three items with
-      // lightboxes except the linked second item.
+      // Rich text, image with a lightbox, quote, gallery of three image items
+      // with lightboxes except the linked second item, then an ambient video
+      // item (player template, ambient template, no-script player).
       [
         "content",
         ...lightboxParts,
@@ -192,6 +211,12 @@ test("the fixture build emits published static routes without CMS access", async
         "caption",
         "item",
         ...lightboxParts,
+        "item",
+        "player",
+        "player",
+        "player",
+        "caption",
+        "source",
       ],
     ],
     [
@@ -206,6 +231,33 @@ test("the fixture build emits published static routes without CMS access", async
         "source",
         "preview",
         "play",
+        "player",
+        "source",
+        "preview",
+        "play",
+        "player",
+        "player",
+        "source",
+        "player",
+        "player",
+        "player",
+        "source",
+        // Gallery 0: an ambient item, then a player item with a caption.
+        "items",
+        "item",
+        "player",
+        "player",
+        "player",
+        "source",
+        "item",
+        "player",
+        "caption",
+        "source",
+        // Gallery 1: one ambient item.
+        "items",
+        "item",
+        "player",
+        "player",
         "player",
         "source",
       ],
@@ -281,7 +333,7 @@ test("the fixture build emits published static routes without CMS access", async
   const galleryItem = (index, alt, id, width, height, caption) => {
     const dialog = `lace-lightbox-first-post-entry-post-gallery-${index}`;
     return (
-      `<li data-lace-part="item" data-lace-layout-item><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
+      `<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
       `<img alt="${alt}" data-lace-part="media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></button>` +
       `<dialog aria-label="${alt}" closedby="any" data-lace-part="lightbox" id="${dialog}"><button command="close" commandfor="${dialog}" data-lace-part="lightbox-close" type="button">Close</button>` +
       `<img alt="${alt}" data-lace-part="lightbox-media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></dialog>` +
@@ -294,12 +346,29 @@ test("the fixture build emits published static routes without CMS access", async
   expect(post).toContain(
     '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery" data-lace-layout-container><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" data-lace-layout="grid" data-lace-wrap="true" data-lace-preset="auto" role="list">' +
       galleryItem(0, "Media library description", "post-media", 800, 600, "Media library caption") +
-      '<li data-lace-part="item" data-lace-layout-item><figure><a data-lace-part="link" href="https://lace.example/desk">' +
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><a data-lace-part="link" href="https://lace.example/desk">' +
       `<img alt="A quiet desk" data-lace-part="media" decoding="async" height="480" loading="lazy" src="${media("note-media")}" width="640"></a>` +
       '<figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
       galleryItem(2, "A looping sketch", "sketch-media", 600, 400) +
-      "</ul></section>",
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="video"><figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient"><div data-lace-video-area>' +
+      '<template data-lace-video-template><iframe src="https://player.vimeo.com/video/76979871?h=abc123def" title="Studio loop"',
   );
+  // The ambient video item ships templates and a no-script player, never a live ambient iframe.
+  const videoItem = post.slice(
+    post.indexOf('data-lace-kind="video"'),
+    post.indexOf("</ul></section>"),
+  );
+  expect(videoItem).toContain("<noscript><iframe");
+  expect(videoItem).toContain('<figcaption data-lace-part="caption">Spring loop</figcaption>');
+  expect(videoItem).toContain(
+    '<a data-lace-part="source" href="https://vimeo.com/76979871/abc123def">Watch on Vimeo</a>',
+  );
+  expect(videoItem).not.toContain("lightbox");
+  expect(
+    videoItem
+      .replace(/<template[^>]*>[\s\S]*?<\/template>/gu, "")
+      .replace(/<noscript>[\s\S]*?<\/noscript>/gu, ""),
+  ).not.toContain("<iframe");
 
   expect(home).toMatch(
     /<main data-lace-model="home" data-lace-entry="home-entry"><section class="hero" data-lace-block="hero" data-lace-block-key="home-hero">.*?<h1 data-lace-part="heading">/su,

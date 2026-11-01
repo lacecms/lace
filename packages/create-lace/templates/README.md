@@ -66,6 +66,7 @@ Each guide states its working directory, prerequisites, one-time and repeat step
 ## References
 
 - [Lace operations](docs/lace-operations.md): environment preparation, private setup input, doctor limits and exit codes, configuration sync, build-site selection, publication visibility, diagnostics and, for Cloudflare projects, management credentials.
+- [Import content](docs/lace-operations.md#import-content): load pages, posts and images from another site with `pnpm exec lace import <dir>` and a short-lived import token.
 - [Connect an existing Astro site](docs/lace-astro-site.md): Lace site packages, the server-only loader, routes, block components and styling hooks.
 
 ## Drafts, publication and deployment

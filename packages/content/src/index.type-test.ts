@@ -196,11 +196,19 @@ void [labelledValues, labelOption, badLabelledValue];
 
 type GalleryData = BlockDataValues<typeof builtInBlocks.gallery.fields>;
 const galleryData: GalleryData = {
-  images: [{ media: "media-1" }, { alt: "Override", caption: "Studio", media: "media-2" }],
+  images: [
+    { kind: "image", media: "media-1" },
+    { alt: "Override", caption: "Studio", kind: "image", media: "media-2" },
+    { kind: "video", videoTitle: "Tour", videoUrl: "https://vimeo.com/1", playback: "ambient" },
+  ],
   title: "Studio",
 };
-// @ts-expect-error gallery items require media.
-const galleryWithoutMedia: GalleryData = { images: [{ caption: "No image" }] };
+// Published items carry a kind; conditional targets such as media are optional.
+const galleryWithoutMedia: GalleryData = { images: [{ caption: "Video", kind: "video" }] };
+// @ts-expect-error published gallery items carry their kind.
+const galleryWithoutKind: GalleryData = { images: [{ media: "media-1" }] };
+// @ts-expect-error playback is one of the declared modes.
+const galleryBadPlayback: GalleryData = { images: [{ kind: "video", playback: "loop" }] };
 type NavigationData = BlockDataValues<typeof builtInBlocks.navigation.fields>;
 const navigationData: NavigationData = {
   links: [
@@ -213,7 +221,14 @@ const childWithoutUrl: NavigationData = {
   // @ts-expect-error submenu links require a URL.
   links: [{ children: [{ label: "Guide" }], label: "Docs" }],
 };
-void [galleryData, galleryWithoutMedia, navigationData, childWithoutUrl];
+void [
+  galleryData,
+  galleryWithoutMedia,
+  galleryWithoutKind,
+  galleryBadPlayback,
+  navigationData,
+  childWithoutUrl,
+];
 
 const expandedRichText: SafeRichTextDocument = {
   content: [
@@ -357,3 +372,140 @@ export type LinkAppearance = Expect<
     "button" | "text"
   >
 >;
+
+const conditionalItem = field.group({
+  fields: {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+    hasCaption: field.boolean(),
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    caption: field.text(),
+  },
+  visibility: {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+    caption: { field: "hasCaption", values: [true] },
+  },
+});
+void conditionalItem.visibility;
+field.group({
+  fields: { kind: field.select({ options: ["image", "video"] }), media: field.media() },
+  // @ts-expect-error Visibility values must be the controller's option literals.
+  visibility: { media: { field: "kind", values: ["audio"] } },
+});
+field.group({
+  fields: { title: field.text(), media: field.media() },
+  // @ts-expect-error A text field cannot control visibility.
+  visibility: { media: { field: "title", values: ["x"] } },
+});
+field.group({
+  fields: { kind: field.select({ options: ["a"] }), media: field.media() },
+  // @ts-expect-error Visibility targets must be immediate siblings.
+  visibility: { missing: { field: "kind", values: ["a"] } },
+});
+field.group({
+  fields: { on: field.boolean(), media: field.media() },
+  // @ts-expect-error Boolean controllers take boolean values.
+  visibility: { media: { field: "on", values: ["true"] } },
+});
+defineBlock({
+  type: "conditional-cta",
+  version: 1,
+  fields: { hasCta: field.boolean(), ctaUrl: field.url() },
+  visibility: { ctaUrl: { field: "hasCta", values: [true] } },
+});
+defineBlock({
+  type: "conditional-bad",
+  version: 1,
+  fields: { url: field.url() },
+  settings: { mode: field.select({ options: ["a"], required: true, defaultValue: "a" }) },
+  // @ts-expect-error Data visibility cannot name block settings.
+  visibility: { url: { field: "mode", values: ["a"] } },
+});
+
+type ConditionalItemValue = FieldValue<typeof conditionalItem>;
+export type ConditionalItemKindRequired = Expect<
+  Equal<ConditionalItemValue["kind"], "image" | "video">
+>;
+export type ConditionalTargetsOptional = Expect<
+  Equal<
+    Pick<ConditionalItemValue, "media" | "videoUrl" | "caption">,
+    Readonly<{ media?: string; videoUrl?: string; caption?: string }>
+  >
+>;
+const conditionalGallery = field.list({ item: conditionalItem });
+export type ConditionalListItemsOptional = Expect<
+  Equal<
+    undefined extends FieldValue<typeof conditionalGallery>[number]["media"] ? true : false,
+    true
+  >
+>;
+const conditionalNested = field.group({ fields: { inner: conditionalItem } });
+export type ConditionalNestedOptional = Expect<
+  Equal<
+    undefined extends NonNullable<FieldValue<typeof conditionalNested>["inner"]>["videoUrl"]
+      ? true
+      : false,
+    true
+  >
+>;
+const conditionalMediaBlock = defineBlock({
+  type: "conditional-media",
+  version: 1,
+  fields: {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    title: field.text({ required: true }),
+  },
+  visibility: {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+  },
+});
+type ConditionalBlockData = ReturnType<typeof conditionalMediaBlock.validate>;
+export type ConditionalBlockData_ = Expect<
+  Equal<
+    ConditionalBlockData,
+    BlockDataValues<
+      typeof conditionalMediaBlock.fields,
+      { readonly media: unknown; readonly videoUrl: unknown }
+    >
+  >
+>;
+export type ConditionalBlockRequired = Expect<
+  Equal<
+    Pick<ConditionalBlockData, "kind" | "title">,
+    Readonly<{ kind: "image" | "video"; title: string }>
+  >
+>;
+export type ConditionalBlockTargetsOptional = Expect<
+  Equal<
+    Pick<ConditionalBlockData, "media" | "videoUrl">,
+    Readonly<{ media?: string; videoUrl?: string }>
+  >
+>;
+const unconditionalMediaBlock = defineBlock({
+  type: "plain-media",
+  version: 1,
+  fields: { media: field.media({ required: true }), caption: field.text() },
+});
+export type UnconditionalMediaBlockUnchanged = Expect<
+  Equal<
+    ReturnType<typeof unconditionalMediaBlock.validate>,
+    BlockDataValues<typeof unconditionalMediaBlock.fields>
+  >
+>;
+export type UnconditionalMediaBlockRequired = Expect<
+  Equal<ReturnType<typeof unconditionalMediaBlock.validate>["media"], string>
+>;
+const plainGroup = field.group({ fields: { title: field.text({ required: true }) } });
+export type UnconditionalGroupUnchanged = Expect<
+  Equal<FieldValue<typeof plainGroup>, Readonly<{ title: string } & {}>>
+>;
+// Typed definitions remain usable where any block definition is accepted.
+const anyBlocks: readonly import("./index.js").BlockDefinition[] = [
+  conditionalMediaBlock,
+  unconditionalMediaBlock,
+];
+void anyBlocks;

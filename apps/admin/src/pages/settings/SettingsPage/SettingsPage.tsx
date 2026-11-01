@@ -1,9 +1,10 @@
 import { CurrentBuildSite } from "../../../widgets/current-build-site/index.js";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Upload } from "lucide-react";
 import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { CreateBuildTokenDialog } from "../../../features/create-build-token/index.js";
+import { CreateImportTokenDialog } from "../../../features/create-import-token/index.js";
 import {
   adminQueryKeys,
   errorDescription,
@@ -16,6 +17,7 @@ import { pageClass } from "../../../shared/ui/layout/index.js";
 import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 import { PageAccessDenied } from "../../../shared/ui/PageState/index.js";
 import { BuildTokenTable } from "../BuildTokenTable/index.js";
+import { ImportTokenTable } from "../ImportTokenTable/index.js";
 import { SiteStatusCards } from "../SiteStatusCards/index.js";
 
 const settingsRoute = getRouteApi("/_protected/settings");
@@ -33,14 +35,19 @@ function SettingsManager() {
     queryFn: client.loadSettingsStatus,
   });
   const tokens = useQuery({ queryKey: adminQueryKeys.tokens, queryFn: client.listTokens });
-  useSessionRecovery(status.error ?? tokens.error);
+  const importTokens = useQuery({
+    queryKey: adminQueryKeys.importTokens,
+    queryFn: client.listImportTokens,
+  });
+  useSessionRecovery(status.error ?? tokens.error ?? importTokens.error);
   const items = tokens.data?.items;
+  const importItems = importTokens.data?.items;
   return (
     <section className={pageClass} aria-labelledby="settings-title">
       <div className="grid gap-1">
         <h1 id="settings-title">Settings</h1>
         <p className="m-0 text-muted-foreground">
-          Check the site's API, connect assistants, and manage build tokens.
+          Check the site's API, connect assistants, and manage build and import tokens.
         </p>
       </div>
       <CurrentBuildSite />
@@ -81,6 +88,40 @@ function SettingsManager() {
           />
         ) : undefined}
         {items === undefined || items.length === 0 ? undefined : <BuildTokenTable tokens={items} />}
+      </section>
+      <section aria-labelledby="import-tokens-title" className="grid gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid gap-1">
+            <h2 id="import-tokens-title">Import tokens</h2>
+            <p className="m-0 text-muted-foreground">
+              An import token lets lace import write drafts and media as the person who created it,
+              for up to seven days. Its value is shown only once, when it is created.
+            </p>
+          </div>
+          {/* One stable instance: the list refreshing must not unmount a shown token. */}
+          <CreateImportTokenDialog />
+        </div>
+        {importTokens.isPending ? (
+          <LoadingState label="Loading import tokens" lines={2} />
+        ) : undefined}
+        {importTokens.error === null ? undefined : (
+          <ErrorState
+            description={errorDescription(importTokens.error)}
+            onRetry={() => void importTokens.refetch()}
+            retrying={importTokens.isFetching}
+            technicalDetails={technicalDetails(importTokens.error)}
+          />
+        )}
+        {importItems?.length === 0 ? (
+          <EmptyState
+            description="Create a token when you move content from another site with lace import."
+            icon={Upload}
+            title="No import tokens"
+          />
+        ) : undefined}
+        {importItems === undefined || importItems.length === 0 ? undefined : (
+          <ImportTokenTable tokens={importItems} />
+        )}
       </section>
     </section>
   );

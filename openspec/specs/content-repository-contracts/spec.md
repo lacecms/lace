@@ -323,3 +323,78 @@ media being split across pages.
   byte budget
 - **THEN** each runtime delivers that entry alone on its page and continues
   with the following entries on the next page
+
+### Requirement: Repository contract fixtures cover media tags
+The shared repository contract suite SHALL include identical cases, for every
+SQL runtime, for media tags. They SHALL assert tag storage on create, full
+replacement and clearing through metadata updates with `updatedAt` advancing,
+tags in list, catalog and detail reads in ascending order, AND filtering with
+search, type, every sort and cursor continuation, catalog counts, prefix
+filtering and pagination, and removal of tags with deleted media metadata. They
+SHALL assert that a tags-only update on media used by a current publication
+leaves the published-content version and build work unchanged, that a stale
+`updatedAt` fails with `MEDIA_UPDATE_CONFLICT` without changing tags, that an
+injected checkpoint failure leaves tags unchanged, and that public media reads
+and the build export carry no tags.
+
+#### Scenario: Node and D1 conform for media tags
+- **WHEN** the media tag cases run against migrated file-backed SQLite, in-memory SQLite and local D1
+- **THEN** every case passes without a runtime-specific variant or skipped assertion
+
+### Requirement: Repository contract fixtures cover import lookups
+The shared repository contract suite SHALL include identical cases, for every
+SQL runtime, for content-hash and slug lookups. They SHALL assert that a
+created item stores its hash, that metadata and tag updates keep it, that a
+hash filter returns only `active` matching items and combines with search,
+type, tags, every sort and cursor continuation, that items without a hash never
+match, and that public media reads and the build export carry no hash. They
+SHALL assert that a slug filter matches the current draft slug exactly and not
+the published slug, applies to totals, combines with search, status, field
+filters and sorts, and continues by cursor. The security contract suite SHALL
+assert import-credential issuance, expiry, revocation, kind separation from
+build credentials, rate-limited `last_used_at` and revocation by account
+security events.
+
+#### Scenario: Node and D1 conform for import lookups
+- **WHEN** the lookup and import-credential cases run against migrated file-backed SQLite, in-memory SQLite and local D1
+- **THEN** every case passes without a runtime-specific variant or skipped assertion
+
+#### Scenario: Hash lookup stays within the D1 budget
+- **WHEN** the D1 budget suite lists media by hash in an installation with 500 media items
+- **THEN** the read uses the hash index and stays within the existing media-list query budget
+
+### Requirement: Repository contract fixtures cover conditional publication
+The shared repository contract suite SHALL prove, with identical cases on the
+in-memory fake, Node SQLite and local D1, that a publication supplied with a
+published projection writes exactly the projected fields, block data and
+media and internal-link references while copying the draft's title, slug,
+SEO, block envelopes, settings, keys and positions, and leaves the draft
+snapshot, its references and its revision unchanged. Fixtures SHALL include
+model-level rules, a list of group items with different controller values,
+nested groups and block data, including a hidden block. The atomic link guard
+SHALL refuse a projected delivered link whose target lost its route, and
+SHALL ignore links absent from the projection. A failure injected at any
+publication checkpoint SHALL leave no partial published snapshot or
+reference. A publication without a projection SHALL keep the existing copy
+behavior. D1 SHALL keep one guarded batch within the existing bind and query
+budgets, with no query per item.
+
+#### Scenario: Projected publication on each runtime
+- **WHEN** an entry whose draft list holds an `image` item with a stale `videoUrl` and a block with a stale hidden media value is published with its projection
+- **THEN** every implementation stores the same published fields and block data, publishes no reference for the stale values, and keeps them in the draft and its references
+
+#### Scenario: Atomic guard on projected links
+- **WHEN** a visible projected link's target is unpublished between projection and publication commit
+- **THEN** every implementation refuses with `internal_link_unavailable` and the previous publication, route, public-state version and build queue remain
+
+#### Scenario: Hidden link does not block
+- **WHEN** the draft's only link to an unpublished target is hidden and the projection omits it
+- **THEN** publication commits on every implementation and the published snapshot has no link reference for it
+
+#### Scenario: Failure rolls back projected publication
+- **WHEN** a failure is injected after the projected snapshot is written and before references or routes are written
+- **THEN** no new published snapshot, reference, route change, version increase or build request remains
+
+#### Scenario: Replay with a projection
+- **WHEN** a projected publication is retried with the same idempotency key
+- **THEN** the original result is returned and no second snapshot is written

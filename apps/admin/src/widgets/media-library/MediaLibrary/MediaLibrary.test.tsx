@@ -7,7 +7,7 @@ import {
   stubClient as client,
   staticSessionSource,
 } from "../../../app/testing/index.js";
-import { AdminClientError } from "../../../shared/api/index.js";
+import { AdminClientError, type MediaUploadOptions } from "../../../shared/api/index.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -225,4 +225,134 @@ test("a refused deletion keeps the item and explains the refusal", async () => {
     "content still uses this media",
   );
   expect(within(panel).getByText("Active")).toBeInTheDocument();
+});
+
+const tagUrl = (tags: unknown) => `/media?tag=${encodeURIComponent(JSON.stringify(tags))}`;
+
+test("a tag-filtered library URL restores its chips and API query", async () => {
+  const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
+  const router = renderRoute(tagUrl(["cover", "project-2026"]), editor(), client({ listMedia }));
+  expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
+  expect(listMedia).toHaveBeenCalledWith(undefined, { tags: ["cover", "project-2026"] });
+  expect(screen.getByRole("button", { name: "Remove tag cover" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Remove tag project-2026" })).toBeInTheDocument();
+  expect(router.state.location.search).toEqual({ tag: ["cover", "project-2026"] });
+});
+
+test("invalid and excess URL tags are ignored and the URL is rewritten", async () => {
+  const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
+  const router = renderRoute(
+    tagUrl(["Cover", "summer trip", "a", "b", "c", "d", "e"]),
+    editor(),
+    client({ listMedia }),
+  );
+  expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
+  expect(listMedia).toHaveBeenCalledWith(undefined, { tags: ["a", "b", "c", "cover", "d"] });
+  await waitFor(() =>
+    expect(router.state.location.search).toEqual({ tag: ["a", "b", "c", "cover", "d"] }),
+  );
+  expect(listMedia).not.toHaveBeenCalledWith(undefined, expect.objectContaining({ tags: [] }));
+});
+
+test("a single tag parameter is accepted and canonicalized", async () => {
+  const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
+  const router = renderRoute("/media?tag=Cover", editor(), client({ listMedia }));
+  expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
+  expect(listMedia).toHaveBeenCalledWith(undefined, { tags: ["cover"] });
+  await waitFor(() => expect(router.state.location.search).toEqual({ tag: ["cover"] }));
+});
+
+test("adding a filter tag restarts pagination and writes the URL", async () => {
+  const user = userEvent.setup();
+  const listMedia = vi.fn(async (cursor?: string) =>
+    cursor === undefined
+      ? { items: [mediaItem], nextCursor: "next" }
+      : { items: [{ ...mediaItem, filename: "two.png", id: "media-2" }] },
+  );
+  const router = renderRoute("/media", editor(), client({ listMedia }));
+  await user.click(await screen.findByRole("button", { name: "Load more media" }));
+  await waitFor(() => expect(listMedia).toHaveBeenCalledWith("next", {}));
+  await user.type(
+    screen.getByRole("combobox", { name: "Filter by tags (all must match)" }),
+    "project-2026{Enter}",
+  );
+  await waitFor(() =>
+    expect(listMedia).toHaveBeenLastCalledWith(undefined, { tags: ["project-2026"] }),
+  );
+  expect(router.state.location.search).toEqual({ tag: ["project-2026"] });
+});
+
+test("a tag filter without results offers clearing search, type, and tags", async () => {
+  const user = userEvent.setup();
+  const listMedia = vi.fn(async (_cursor?: string, query?: { tags?: readonly string[] }) =>
+    query?.tags === undefined ? { items: [mediaItem] } : { items: [] },
+  );
+  const router = renderRoute(
+    `${tagUrl(["unused"])}&q=zzz&type=image%2Fpng`,
+    editor(),
+    client({ listMedia }),
+  );
+  const heading = await screen.findByRole("heading", { name: "No matching media" });
+  expect(
+    screen.getByText("No media matches the current search, type, and tag filters."),
+  ).toBeInTheDocument();
+  await user.click(
+    within(heading.closest("section") as HTMLElement).getByRole("button", {
+      name: "Clear filters",
+    }),
+  );
+  await waitFor(() => expect(router.state.location.search).toEqual({}));
+  expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
+});
+
+test("uploads in a tag-filtered library carry the filter tags and refresh suggestions", async () => {
+  const uploadMedia = vi.fn(async (file: File) => ({
+    ...mediaItem,
+    filename: file.name,
+    id: "id-hero",
+    tags: ["project-2026"],
+  }));
+  let listed = [mediaItem];
+  const listMedia = vi.fn(async () => ({ items: listed }));
+  const listMediaTags = vi.fn(async () => ({ items: [] }));
+  renderRoute(
+    tagUrl(["project-2026"]),
+    editor(),
+    client({ listMedia, listMediaTags, uploadMedia }),
+  );
+  expect(await screen.findByText("New uploads are tagged project-2026.")).toBeInTheDocument();
+  listed = [{ ...mediaItem, filename: "hero.png", id: "id-hero" }, mediaItem];
+  fireEvent.change(screen.getByLabelText("Upload images"), {
+    target: { files: [new File(["png"], "hero.png", { type: "image/png" })] },
+  });
+  await waitFor(() =>
+    expect(uploadMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "hero.png" }),
+      expect.objectContaining({ tags: ["project-2026"] }),
+    ),
+  );
+  const grid = screen.getByRole("list", { name: "Media library" });
+  expect(await within(grid).findByRole("button", { name: "hero.png" })).toBeInTheDocument();
+});
+
+test("unfiltered uploads carry no tags or upload hint", async () => {
+  const uploadMedia = vi.fn(async (_file: File, _options?: MediaUploadOptions) => mediaItem);
+  renderRoute("/media", editor(), client({ uploadMedia }));
+  await screen.findByRole("button", { name: "Upload images" });
+  expect(screen.queryByText(/New uploads are tagged/)).toBeNull();
+  fireEvent.change(screen.getByLabelText("Upload images"), {
+    target: { files: [new File(["png"], "plain.png", { type: "image/png" })] },
+  });
+  await waitFor(() => expect(uploadMedia).toHaveBeenCalledTimes(1));
+  expect(uploadMedia.mock.lastCall?.[1]).not.toHaveProperty("tags");
+});
+
+test("viewers filtering by tag see no upload hint", async () => {
+  renderRoute(
+    tagUrl(["cover"]),
+    staticSessionSource({ id: "viewer-1", role: "viewer" }),
+    client({ listMedia: async () => ({ items: [mediaItem] }) }),
+  );
+  expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
+  expect(screen.queryByText(/New uploads are tagged/)).toBeNull();
 });

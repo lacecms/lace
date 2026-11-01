@@ -93,3 +93,32 @@ type NestedTone = Expect<
   Equal<BlockProps<typeof nested>["data"]["rows"][number]["tone"], "light" | "dark">
 >;
 export type CompositeTypeTests = [NestedTone];
+
+const conditional = defineBlock({
+  fields: {
+    kind: field.select({ options: ["image", "video"], required: true }),
+    media: field.media({ required: true }),
+    title: field.text({ required: true }),
+  },
+  type: "conditional",
+  version: 1,
+  visibility: { media: { field: "kind", values: ["image"] } },
+});
+type ConditionalData = BlockProps<typeof conditional>["data"];
+export type ConditionalKind = Expect<Equal<ConditionalData["kind"], "image" | "video">>;
+export type ConditionalTitle = Expect<Equal<ConditionalData["title"], string>>;
+export type ConditionalMedia = Expect<Equal<ConditionalData["media"], string | undefined>>;
+const conditionalData = parseBlock(conditional, renderable, {
+  blockKey: "b",
+  entryId: "e",
+  modelKey: "m",
+});
+export type ParsedConditionalMedia = Expect<
+  Equal<undefined extends typeof conditionalData.media ? true : false, true>
+>;
+// Typed conditional blocks remain valid block-map definitions.
+prepareBlocks(
+  defineBlockMap({ conditional: { component: "ConditionalComponent", definition: conditional } }),
+  entry,
+  (id) => id,
+);

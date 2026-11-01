@@ -44,8 +44,9 @@ The design should also be easy for coding agents to understand and modify. For t
 - Media upload to R2 or MinIO.
 - Email/password authentication through Better Auth.
 - Optional OAuth-delegated MCP content assistance (`add-oauth-mcp-server`, MCP1):
-  inspect models/entries and create/save drafts; publication, unpublication and
-  all content deletion remain forbidden through MCP.
+  inspect models/entries and create/save drafts; publication requires the separate
+  `content:publish` scope with explicit administrator consent. Unpublication and
+  all content deletion remain forbidden through MCP (ADR 0015).
 - Admin, editor, and viewer roles.
 - Optional transactional email through a provider port (`EmailSender`): SMTP on
   Node, Resend on both runtimes, and the Cloudflare Email Service binding on the
@@ -258,7 +259,10 @@ the VPS proxy refuses to serve; the generated Pages workflow keeps
 The optional MCP surface lives in the same CMS deployment on both runtimes.
 Only `LACE_MCP_ENABLED=true` exposes `/mcp` and its OAuth/discovery routes;
 missing/`false` disables them, and other values fail safe configuration validation.
-It requires no extra process, Durable Object or KV binding.
+It requires no extra process, Durable Object or KV binding. Publication requires
+the separate `content:publish` scope, explicit consent by a user whose current
+role has that permission (administrators only), and the shared publication guards.
+Unpublication and deletion remain forbidden (ADR 0015).
 
 ## 6. Repository structure
 
@@ -278,7 +282,7 @@ packages/
 ├── domain/                    # pure domain types, rules, and errors
 ├── application/               # use cases and capability ports
 ├── server/                    # Hono routes, middleware, app factory
-├── mcp/                       # portable stateless MCP adapter and five tools
+├── mcp/                       # portable stateless MCP adapter and six tools
 ├── contracts/                 # shared Valibot transport schemas and DTOs
 ├── content/                   # field DSL, block registry, validation
 ├── db/                        # Drizzle SQLite schema and repositories
@@ -289,7 +293,7 @@ packages/
 ├── astro/                     # Astro adapter: LaceBlocks, RichText, loader environment glue
 ├── platform-cloudflare/       # D1, R2, KV, Worker and deploy-hook adapters
 ├── platform-node/             # SQLite, MinIO/S3, Node server adapters
-├── cli/                       # create, sync, migrate, upgrade commands
+├── cli/                       # create, sync, migrate, upgrade, add block, import commands
 └── test-utils/                # factories, fixtures, and contract test suites
 
 registry/                      # versioned, framework-keyed block sources for `lace add block`
@@ -318,7 +322,7 @@ sdk          -> contracts
 render       -> content
 astro        -> render, sdk
 platform-*   -> application, server, db, auth, config, mcp
-cli          -> application, config, platform-*
+cli          -> application, config, contracts, platform-*
 apps/api     -> platform-*, server
 apps/admin   -> contracts, content
 apps/site    -> astro, render, sdk, content
@@ -359,6 +363,11 @@ Rules:
   installed from `registry/` (see sections 7 and 13).
 - `sdk` owns transport and the published-site loader and imports neither
   `content` nor `render`.
+- `cli` reaches a running installation only through the admin REST API for
+  `lace import` ([ADR 0017](adr/0017-content-import-client.md)); it uses
+  `contracts` to validate those responses and never writes content through
+  platform repositories outside the explicit operator commands (`db migrate`,
+  `content sync`, `auth bootstrap`).
 - `site` depends on the public SDK, the render core and its framework adapter,
   `@lacecms/content` for block definitions, and user-owned block markup.
 
@@ -461,7 +470,7 @@ which renders a site header from `site.global("settings")` and the published
 back to static values and a static Home link while either global is
 unpublished (a published navigation global without visible blocks renders no
 navigation). Gallery and navigation layout CSS lives in the site stylesheet; the
-components carry no `<style>` elements; only videoEmbed carries its bounded preview activation script. It contains no tests, fixtures, or
+components carry no `<style>` elements; only videoEmbed carries its bounded preview activation and ambient mounting script. It contains no tests, fixtures, or
 engine-development routes.
 
 `apps/site` is the engine development playground and integration fixture. It may
@@ -806,16 +815,58 @@ values are retained, submitted and validated unconditionally. Wrap applies to fl
 requires site-defined height. Presets apply to grid. Diagrams explain composition,
 not a preview of site styling.
 
-LIST2 is an explicitly selected, bounded exception to deferred conditional forms:
+LIST2 adds presentation-only conditional settings:
 blocks may declare projection-only `settingsVisibility`, mapping scalar setting
 keys to `{ setting, values }` predicates over an always-visible required sibling
 select with a valid default. Targets/controllers must exist, option lists must
 be nonempty and unique, and self references/chains/cycles are rejected. Metadata
 is portable, detached and frozen. Hidden controls stay registered and their values
-retain ordinary defaults, validation, permissions and public delivery. Rules do
-not apply to model fields, block data, group/list items or envelope fields.
+retain ordinary defaults, validation, permissions and public delivery. These
+rules do not apply to model fields, block data, group/list items or envelope
+fields; data fields use conditional fields (SM5) below.
 `listLayoutSettingsVisibility()` shares the list rules with arbitrary blocks.
-General conditional forms and conditional validation remain deferred.
+
+### Conditional fields (SM5)
+
+Models, group descriptors (including list-item groups at every CE7 depth) and
+block data accept optional `visibility: { target: { field, values } }`. Targets
+and controllers are immediate siblings; the controller is a `select` or
+`boolean`, may be optional, is never the target and never itself conditional
+(no chains). `values` is a nonempty unique subset of its options or booleans.
+Scalar/list descriptors, scalar list items, block settings and system or
+envelope values take no rules. A target is visible when the controller's
+present value, else its default, is listed; an absent controller without a
+default hides its targets. Each occurrence (model fields, group value, list
+item, block data) evaluates only its own values; hidden containers hide their
+subtree.
+
+Validation normalizes unconditional fields first, then visible targets in the
+selected mode and hidden targets in draft mode, recursively: hidden fields are
+never required or held to `minItems`, but keep types, options, safety,
+lengths, ranges and `maxItems`. Drafts retain hidden values and their
+defaults. A pure published projection removes hidden targets recursively
+without changing list shape. Rules are structural (structure identity, model
+version increase; block data rules are block definition changes). Sync
+reports `field-visibility-added` (compatible), `-removed` (validated) and
+`-changed` (compatible when strictly narrowed, else validated), prunes newly
+hidden published values in its guarded mutation with one version advance and
+build request, and checks newly visible published occurrences with publish
+semantics. Global `seoDefaults` must not name a conditional field. Metadata
+crosses REST/OpenAPI as validated JSON. Publication stores the projection
+(SM5B): published fields and block data, including hidden blocks, omit hidden
+targets, and published media and internal-link references are derived from the
+projection, so hidden values count only as draft usage and hidden links are
+neither delivered nor checked. Public reads, globals, the build export and
+published admin/MCP reads therefore never carry hidden values; render removes
+hidden block data after parsing, and published value types make targets
+optional. The admin (SM5C) evaluates each owner's rules with the shared
+evaluator over effective form values and hides targets while keeping them
+mounted with their values; it only presents the rules. Publication-only
+problems of hidden targets are not shown, a hidden target with a draft problem
+stays shown to be fixed, and row summaries, previews and media-list
+eligibility read only applicable fields. Block `settingsVisibility` stays a
+separate presentation-only rule. See
+[ADR 0018](adr/0018-conditional-fields.md).
 
 ### Visual form organization (CE9B)
 
@@ -902,13 +953,16 @@ descriptors.
 ### Initial built-in blocks
 
 The starter and browser editor ship with eight blocks. They use only the public
-field DSL and do not receive special database treatment; only `image` and
-`gallery` declare a setting:
+field DSL and do not receive special database treatment; `image`, `gallery`, `videoEmbed` and `link` declare settings:
 
-- `videoEmbed` (version 1): required YouTube/Vimeo URL and accessible title,
-  optional image-media poster and caption, no settings. A poster defers the
-  external iframe until button activation; without it, the iframe is lazy.
-  Playback never autostarts. Video-file uploads remain outside this selection;
+- `videoEmbed` (version 2): required YouTube/Vimeo URL and accessible title,
+  optional image-media poster and caption. Required select settings `aspectRatio`
+  (`16:9` default, `4:3`, `1:1`, `4:5`, `9:16`) and `playback` (`player` default,
+  `ambient`) use choice cards. An identity migration supplies setting defaults.
+  Player mode defers the iframe until poster activation, or loads it lazily without
+  a poster; it never autostarts. Ambient mode mounts a muted, looping player
+  without controls and keeps the poster underneath. Reduced motion and no
+  JavaScript fall back to player behavior. Video-file uploads remain excluded;
 - `hero`: optional eyebrow, required heading, optional rich-text body, optional
   media, optional primary-action label and URL;
 - `richText`: one required Tiptap document;
@@ -920,12 +974,18 @@ field DSL and do not receive special database treatment; only `image` and
   its link in the same tab instead of the lightbox;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL;
-- `gallery` (CE7D/LIST1, version 4): optional title and an `images` list (default `[]`, at
-  least one item to publish, at most 50) of groups with required media,
-  optional alt text and optional caption that override the media item's and
-  the same optional `link`, plus the same `lightbox` setting, with identity
-  migrations to versions 2, 3 and 4; shared layout settings are added alongside
-  lightbox in Layout/Behavior settings sections;
+- `gallery` (CE7D/LIST1/SM5D, version 5): optional title and an `images` list
+  ("Images and videos", default `[]`, at least one item to publish, at most 50)
+  of groups whose required select `kind` (`image` default, `video`, choice
+  cards) controls conditional fields (SM5): images use required media,
+  optional alt text that overrides the media item's and the same optional
+  `link`; videos use a required YouTube/Vimeo `videoUrl`, a required accessible
+  `videoTitle` and per-item `playback` and `aspectRatio` selects shared with
+  `videoEmbed`; both use an optional caption (images fall back to the media
+  caption). Plus the same `lightbox` setting, with identity migrations to
+  versions 2–5 (stored items without `kind` are images through the default);
+  shared layout settings are added alongside lightbox in Layout/Behavior
+  settings sections. Videos have no poster, so the list keeps multi-select Add;
 - `navigation` (CE7D): optional accessible `name` and a `links` list (default
   `[]`, at least one to publish, at most 20) of groups with a required label,
   an optional URL and an optional `children` list (at most 20) of groups with a
@@ -1207,7 +1267,10 @@ content_snapshots
 objects/arrays without item envelopes or separate value tables. `seo_json` holds the
 normalized SEO group (section 8) as a JSON object, or `NULL` when the snapshot
 has none; an all-empty group is never stored. Save, publication, revert and
-duplication copy it with the rest of the snapshot. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
+duplication copy it with the rest of the snapshot. A published snapshot holds the
+published projection of conditional fields (section 8): `fields_json`, block data
+and the snapshot's media and internal-link references omit hidden targets, while
+the draft keeps them. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
 The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case or removed through the unpublish use case (section 10); configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7). Reverting a draft sets the published snapshot's `revision` to the new draft revision without changing its content, so an entry whose draft equals its publication is derived as published ([ADR 0008](adr/0008-entry-lifecycle-commands.md)).
 
@@ -1312,12 +1375,30 @@ media
 ├── caption             TEXT               -- at most 2,000 characters
 ├── focal_x             REAL               -- 0..1, set together with focal_y
 ├── focal_y             REAL               -- 0..1, set together with focal_x
+├── sha256              TEXT               -- lowercase hex; NULL before 0015
 ├── status              TEXT NOT NULL CHECK(status IN ('active', 'deleting', 'delete_failed'))
 ├── last_error          TEXT
 ├── created_by          TEXT NOT NULL
 ├── created_at          INTEGER NOT NULL
 └── updated_at          INTEGER NOT NULL
 ```
+
+Organizational tags live in `media_tags (media_id, tag)`, with a composite
+primary key, a cascading media foreign key, and a `(tag, media_id)` index.
+Tags reject control characters before trimming surrounding spaces, lowercase
+ASCII letters and require `[a-z0-9-]{1,40}`; internal spaces and non-ASCII
+characters are invalid. No transliteration, NFKC or space replacement is used.
+Duplicates collapse; each item has at most 20 tags, returned in ascending ASCII
+order. Tags are admin-only: absent from public content, build exports and MCP,
+and never counted as usage. Create, replacement and final deletion persist tags
+atomically with metadata. Tags-only updates advance `updatedAt` without changing
+the published version or build work; combined edits retain the descriptive rule.
+
+Every upload records the SHA-256 of its stored bytes as 64 lowercase hex
+characters, indexed but not unique; it never changes and media uploaded before
+migration `0015` keep `NULL`. Admin media DTOs carry optional `sha256` and admin
+lists filter `active` items by it for import deduplication; public DTOs and the
+build export never carry it.
 
 Content stores `mediaId` references. Storage URLs may be derived or signed and should not be treated as permanent database identity.
 
@@ -1374,7 +1455,7 @@ points. A writer edits the version identified by `updatedAt`: the strong
 `updated_at` to the later of now and the previous value plus one millisecond.
 A submission that changes nothing writes nothing.
 
-Metadata is global and goes live on the next build: when a current published
+Descriptive metadata is global and goes live on the next build: when a current published
 snapshot references the item, the same atomic mutation increments
 `published_state.version` and enqueues or coalesces a site build with the
 reason `media_metadata`. Published snapshots are not rewritten and no
@@ -1621,6 +1702,12 @@ batch:
    `expectedDraftRevision`.
 2. Copies draft blocks and media-reference rows with set-based
    `INSERT ... SELECT` statements conditional on the new snapshot existing.
+   When the model or a draft block declares conditional-field rules, the use
+   case supplies the published projection instead: the snapshot takes its
+   fields, blocks keep their envelopes with projected data, media and
+   internal-link references are inserted from the supplied rows, and the
+   internal-link guard checks the supplied delivered links. Entries without
+   rules keep the copy.
 3. Removes the entry's old route and inserts the resolved route, also
    conditional on the new snapshot existing. A path collision aborts and rolls
    back the whole batch.
@@ -1951,6 +2038,18 @@ are decided first, so unpublished, deleted or invisible media never receives
 `304`. Consequently a browser may keep media for up to one day after it stops
 being published; unbounded or `immutable` caching is deliberately not used.
 
+### Admin media tags
+
+Admin media DTOs include required `tags`, empty when unset. Upload accepts up to
+20 repeated text parts `tags`; metadata PATCH accepts an optional replacement
+`tags` array under the existing strong `If-Match` guard. Invalid tags are refused
+before object storage. GET `/api/v1/admin/media` accepts up to five repeated
+`tag` parameters combined with AND, search, type and sort; cursors bind the
+normalized tag set. GET `/api/v1/admin/media/tags` returns `{items: [{tag, count}],
+nextCursor?}` with normalized literal prefix `q`, limit 1–100 (default 50), and
+prefix-bound keyset cursors. Counts include all statuses until final removal.
+Both reads require session `content:read`; writes require `media:write`.
+
 ### Admin collection queries
 
 Authenticated list reads support system sorts plus one configured `field:<key>`
@@ -2029,7 +2128,30 @@ POST   /api/v1/admin/settings/email-test
 GET    /api/v1/admin/api-tokens
 POST   /api/v1/admin/api-tokens
 DELETE /api/v1/admin/api-tokens/:tokenId
+GET    /api/v1/admin/import-tokens
+POST   /api/v1/admin/import-tokens
+DELETE /api/v1/admin/import-tokens/:tokenId
+GET    /api/v1/admin/import-credential
 ```
+
+Import lookups are list parameters: `GET /api/v1/admin/models/:modelKey/entries`
+accepts `slug` (collections only) matching the current draft slug exactly, and
+`GET /api/v1/admin/media` accepts `sha256` (64 lowercase hex) matching `active`
+items. Both apply before paging and bind continuation cursors.
+`GET /api/v1/admin/import-credential` accepts only an import token and returns
+its metadata and effective permissions.
+
+`lace import <dir>` is a client of these routes
+([ADR 0017](adr/0017-content-import-client.md)). It validates a format-v1
+package against `lace.config.ts`, checks that the server's model and block
+versions match, plans `create`/`update`/`unchanged`/`conflict` from hash and
+slug lookups, uploads media, creates collection entries, saves drafts with
+expected revisions and, with `--publish`, publishes in link-dependency order
+with idempotency keys. Draft normalization is the shared application function
+the content use cases apply, so a rerun of the same package writes nothing. A
+local state file per API origin records written revisions; a draft edited
+after that revision is a conflict unless `--overwrite` is given. Import never
+deletes or unpublishes.
 
 ### Account endpoints
 
@@ -2441,8 +2563,9 @@ attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
 Built-in components carry no `<style>`; only videoEmbed carries its bounded
-activation `<script>`. Presentation stays in the
-site stylesheet. The `image` (revision 6), `gallery` (revision 3) and `hero`
+activation and ambient mounting `<script>`, and gallery a script that only
+mounts the ambient players of its video items. Presentation stays in the
+site stylesheet. The `image` (revision 6), `gallery` (revision 7) and `hero`
 (revision 4) components render media through `LaceImage.astro`; `image` and
 `gallery` open the lightbox when their `lightbox` setting is on, with dialog
 identifiers `lace-lightbox-<entry id>-<block key>[-<item index>]`, and the hero
@@ -2453,13 +2576,22 @@ text is empty. The registry ships `gallery` and `navigation` (CE7D) besides
 the five earlier items; every Lace-maintained site installs all seven.
 
 The `astro/videoEmbed` registry component is the sole exception to script-free
-block sources: a small local activation script replaces an inert player template
+block sources: a small local script replaces an inert player template
 on a native preview button click and focuses its iframe, once per block. It uses
 no player SDK or framework hydration. The adapter remains free of client scripts.
 The optional poster uses LaceImage and ordinary media references; a companion
-structural stylesheet reserves 16:9 geometry. Source links remain available with
-or without JavaScript. Player URLs use youtube-nocookie.com or player.vimeo.com,
-never autoplay, and keep only Vimeo's privacy hash. Rendering stays static.
+structural stylesheet reserves the selected ratio (16:9 by default). Ambient
+mounting happens once after checking reduced motion; no live ambient iframe
+appears in static HTML. Source links remain available with or without JavaScript,
+and are visually hidden only while ambient playback is mounted, until focused.
+Gallery (revision 7) renders video items in their layout cell with the same
+player, ambient, reduced-motion and no-JS behavior for a poster-less block,
+reserving each item's ratio through its `GalleryVideo.css` companion; lightbox
+and links stay image-only, and dialog indexes count every stored item.
+Player URLs use youtube-nocookie.com or player.vimeo.com, never autoplay in
+player mode, and retain only Vimeo's privacy hash plus canonical ambient
+parameters when selected. Ambient mode has no pause control (the documented
+WCAG 2.2.2 gap for motion longer than five seconds). Rendering stays static.
 
 ### 13.6 Framework selection
 
@@ -2689,11 +2821,32 @@ api_tokens
 ├── capabilities_json   TEXT NOT NULL
 ├── created_at          INTEGER NOT NULL
 ├── last_used_at        INTEGER
-└── revoked_at          INTEGER
+├── revoked_at          INTEGER
+├── expires_at          INTEGER            -- import tokens only
+└── created_by          TEXT               -- import tokens only
 ```
 
-Only the plaintext token is shown at creation. The initial capability set
-contains only `content:build:read`.
+Only the plaintext token is shown at creation. Two kinds share the table and
+every verifier filters by kind: build tokens carry exactly
+`content:build:read` and authenticate only the build export; import tokens
+carry `content:import`, optionally with `content:publish`
+([ADR 0016](adr/0016-import-credentials.md)).
+
+An actor with `settings:manage` issues an import token with a name, a required
+lifetime of 1 to 7 days and an optional publish permission, granted only when
+the creator currently holds `content:publish`. `Authorization: Bearer` on a
+route below `/api/v1/admin/` or `/api/v1/account/` is an import request: it
+never falls back to a session cookie and is accepted only on a literal
+allowlist (content models, entry list/create/read/draft save/publish, media
+list/upload/read/metadata update and `GET /api/v1/admin/import-credential`);
+every other such route denies it. The actor is the creator's current enabled
+account, attenuated to `content:read`, `content:write`, `media:write` (plus
+`content:publish`) and the delegated content operations. The cross-site Fetch
+Metadata rule does not apply because the credential is not ambient, but an
+explicit untrusted `Origin` is refused. `last_used_at` is written at most once
+per minute. The creator's disable, password reset, administrator
+sign-out-everywhere and password change ending other sessions revoke its import
+tokens in the same operation; re-enabling does not restore them.
 Setup and API tokens contain 32 cryptographically random bytes encoded as
 base64url. Lace stores their SHA-256 digests because the source tokens already
 have high entropy; comparisons are constant-time. Human passwords remain wholly
@@ -2767,15 +2920,19 @@ stay closed. Canonical issuer/resource URLs derive from validated
 explicit first consent and the existing sign-in form through a short-lived,
 server-bound continuation. No client-controlled URL metadata is fetched.
 
-Browser REST actors still require sessions. Only MCP resolves resource-bound
+Browser REST actors still require sessions; the only exception is the import
+token above, limited to its allowlist. Only MCP resolves resource-bound
 OAuth credentials into the current persisted enabled user/role, attenuated by
 an immutable provider-neutral permission and content-operation ceiling.
-`content:read`, `content:write` (including read) and renewal-only `offline_access`
+`content:read`, `content:write` (including read), `content:publish` (including
+write and read, with explicit administrator consent) and renewal-only `offline_access`
 are the supported scopes. The shared application authorizer checks every
 operation before protected work; delegated operations default to deny.
-Publishing, unpublishing, deletion, revert/duplicate, media and administrative
-operations are never grantable, even to an administrator. A cookie/build token
-does not authenticate MCP and an MCP token does not authenticate admin REST.
+Publication is grantable only with the publish scope and current role permission.
+Unpublishing, deletion, revert/duplicate, media and administrative operations are
+never grantable, even to an administrator. A cookie/build token
+does not authenticate MCP and an MCP token does not authenticate admin REST; an
+import token authenticates neither MCP nor the build export.
 
 Codes last at most five minutes, access tokens fifteen minutes and rotating
 refresh tokens thirty days, bounded by the grant. Code redemption and refresh
@@ -2942,6 +3099,13 @@ continuations may add at most one constant indexed anchor lookup, independent of
 page size. No per-entry reads or full JSON loads are allowed to resolve anchors;
 query counts must distinguish first pages from anchored continuations.
 
+Media tag filtering adds at most five indexed EXISTS lookups per candidate in
+the existing single list-page query. Tags are read with a bounded correlated
+projection, with no per-item round trips. Catalog pages use one indexed aggregate
+query over `(tag, media_id)` with a literal prefix range and keyset continuation.
+Tag replacement uses the existing guarded batch and at most 20 inserted rows;
+all statements remain within D1 parameter and invocation budgets.
+
 JSON values are stored as SQLite `TEXT` and validated before persistence. Fields that later require indexed filtering may be promoted to generated columns or a dedicated index table through a future migration.
 
 Additive columns use a plain `ALTER TABLE … ADD` on both runtimes, as
@@ -2974,8 +3138,9 @@ configuration, not verified client connectivity. Deployment configuration remain
 operator-owned; no browser toggle or new public status endpoint is introduced.
 
 When MCP is enabled, `/admin/mcp/consent` uses the existing session/sign-in and
-controls to show escaped client identity, callback hostname and read/read-write
-consent, explicitly stating the publication/unpublication/deletion ban.
+controls to show escaped client identity, callback hostname and separate read,
+draft editing and publication consent. Only administrators can grant publication;
+the page states the next-build effect and the unpublication/deletion ban.
 `/admin/account` shows owned connections with safe scopes/dates and an explicit
 revoke confirmation, backed by session-only routes. A server-derived capability
 hides this section when disabled; OAuth credentials never enter browser storage.
@@ -3105,7 +3270,7 @@ The sign-in route is a centered card outside the shell: a focused email field, a
 
 The media library at `/media` follows the same URL-state rules for its filename search, type filter, sort, and grid/list view. Tiles and rows load their thumbnails lazily through the authenticated admin preview endpoint. Writers can drop files anywhere over the library or choose several at once. Each file is checked for type and size in the browser and then uploads with its own progress and server error. The default browser client sends uploads through `XMLHttpRequest` so it can report bytes sent; every other request uses `fetch`, and both paths share error mapping and response validation. A details side panel shows an item's facts, its usage from the media detail read, and its public URL. Deletion there requires confirmation and is unavailable while content uses the item.
 
-Model and block media fields choose through a picker dialog built from the same grid, search, type filter, sort, and upload queue. Its query is local state that resets on each opening and never enters the URL. It offers only active items, and a confirmed upload can be used directly from its queue row. A field with a value shows a thumbnail card with filename, Replace, and Remove. The card resolves the stored ID through the media detail read, so it never searches loaded pages. It names pending-deletion, missing (`NOT_FOUND`), and unreadable items explicitly, and it keeps the ID in the draft until the writer replaces or removes it. The raw ID is never shown.
+Model and block media fields choose through a picker dialog built from the same grid, search, type filter, sort, and upload queue. Its query is local state that resets on each opening and never enters the URL. It offers only active items, and a confirmed upload can be used directly from its queue row. Eligible media lists (a list of media, or of groups with exactly one required media field, such as the gallery) open the same picker in multiple mode from Add: tiles toggle an ordered selection that survives filtering, confirmed uploads join it, and it is capped by the list's remaining `maxItems` and the 500-element snapshot budget before one confirmation appends an item per image. When the media field depends on a `select` controller, the toolbar adds one "Add {choice}" button per option that hides it (the gallery's "Add Video"), which appends one open item with that option. The library and picker share a two-row filter toolbar whose tag filter is a compact token field with its match-all rule in a tooltip. A field with a value shows a thumbnail card with filename, Replace, and Remove. The card resolves the stored ID through the media detail read, so it never searches loaded pages. It names pending-deletion, missing (`NOT_FOUND`), and unreadable items explicitly, and it keeps the ID in the draft until the writer replaces or removes it. The raw ID is never shown.
 
 The editor must make draft/published/build status visible and must surface optimistic-concurrency conflicts rather than overwriting a newer draft.
 
@@ -3598,6 +3763,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Configuration sync classifies structural changes against a stored baseline
   and applies compatible and validated ones to existing content
   ([ADR 0007](adr/0007-schema-evolution-during-sync.md)).
+- Fields may be conditional on a sibling select or boolean; hidden values stay
+  in drafts and are not required or published
+  ([ADR 0018](adr/0018-conditional-fields.md)).
 - Node uses SQLite and MinIO; Cloudflare uses D1 and R2.
 - Infrastructure-specific behavior is implemented through narrow capability adapters.
 - Publishing writes an outbox event and triggers a static rebuild.

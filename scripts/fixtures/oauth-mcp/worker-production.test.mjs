@@ -121,7 +121,7 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
       json: {
         client_name: "Isolate client",
         redirect_uris: ["https://client.test/callback"],
-        scope: "content:read content:write offline_access",
+        scope: "content:read content:write content:publish offline_access",
       },
     });
     expect(
@@ -144,7 +144,7 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
       redirect_uri: "https://client.test/callback",
       response_type: "code",
       resource: `${origin}/mcp`,
-      scope: "content:read content:write offline_access",
+      scope: "content:read content:write content:publish offline_access",
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
     });
@@ -198,7 +198,7 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(5);
+    expect((await client.listTools()).tools).toHaveLength(6);
     const model = config.runtime.content.find((model) => model.kind === "collection");
     const created = await client.callTool({
       name: "create_entry",
@@ -210,6 +210,41 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
       arguments: { entryId: created.structuredContent.id },
     });
     expect(loaded.structuredContent).toEqual(created.structuredContent);
+    for (const name of ["unpublish_entry", "delete_entry"])
+      await expect(client.callTool({ name, arguments: {} })).rejects.toThrow();
+    const saved = await client.callTool({
+      name: "save_draft",
+      arguments: {
+        entryId: created.structuredContent.id,
+        expectedRevision: 1,
+        title: "Worker published",
+        slug: "worker-published",
+        fields: {},
+        blocks: [],
+      },
+    });
+    expect(saved.isError).not.toBe(true);
+    const args = {
+      entryId: created.structuredContent.id,
+      expectedRevision: saved.structuredContent.draft.revision,
+      idempotencyKey: "worker-publication",
+    };
+    const published = await client.callTool({ name: "publish_entry", arguments: args });
+    expect(published.isError).not.toBe(true);
+    expect(published.structuredContent.publication).toBe("published");
+    expect(
+      (await client.callTool({ name: "publish_entry", arguments: args })).structuredContent
+        .publication,
+    ).toBe("replayed");
+    expect(
+      (
+        await database
+          .prepare(
+            "select id from outbox_events where type='site.build.requested' and processed_at is null",
+          )
+          .all()
+      ).results,
+    ).toHaveLength(1);
   } finally {
     await client?.close();
     await mf.dispose();

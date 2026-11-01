@@ -29,7 +29,7 @@ export interface McpOAuthHttpBoundary {
   fetch(request: Request): Promise<Response>;
   resolve(
     request: Request,
-    requiredScope?: "content:read" | "content:write",
+    requiredScope?: "content:read" | "content:write" | "content:publish",
   ): Promise<McpActorResolution>;
 }
 export const oauthFailure = (error: string, status = 400): Response =>
@@ -107,7 +107,10 @@ export function createMcpOAuthHttpBoundary(input: {
   const { resource } = mcpOAuthUrls(input.origin, input.production);
   const consent = createMcpConsentBoundary(input);
   return Object.freeze({
-    resolve: async (request: Request, requiredScope?: "content:read" | "content:write") => {
+    resolve: async (
+      request: Request,
+      requiredScope?: "content:read" | "content:write" | "content:publish",
+    ) => {
       const provider = await input.provider();
       return createMcpActorResolver({ ...input, adapter: provider.adapter }).resolve(
         request,

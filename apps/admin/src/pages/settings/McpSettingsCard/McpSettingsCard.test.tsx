@@ -114,7 +114,7 @@ test("connection examples use selected scopes, canonical endpoint and DCR withou
   await user.click(within(card).getByRole("tab", { name: "Other clients" }));
   expect(card).toHaveTextContent("Streamable HTTP");
   expect(card).toHaveTextContent("PKCE");
-  expect(card).toHaveTextContent("Publishing, unpublishing, and deletion are always unavailable");
+  expect(card).toHaveTextContent("Unpublishing and deletion are always unavailable");
   expect(register).not.toHaveBeenCalled();
 });
 
@@ -125,12 +125,20 @@ test("Claude Code and Gemini CLI keep selected access, exact endpoint and separa
   renderRoute("/settings", admin, client({ loadSettingsStatus: async () => status() }));
   const card = await screen.findByRole("region", { name: "MCP" });
   await within(card).findByRole("tab", { name: "Claude Code" });
-  for (const editing of [false, true]) {
-    if (editing)
-      await user.click(within(card).getByRole("radio", { name: "Read and edit drafts" }));
-    const scopes = editing
-      ? ["content:read", "content:write", "offline_access"]
-      : ["content:read", "offline_access"];
+  for (const access of ["read", "write", "publish"]) {
+    const label =
+      access === "publish"
+        ? "Publishing"
+        : access === "write"
+          ? "Read and edit drafts"
+          : "Read only";
+    await user.click(within(card).getByRole("radio", { name: label }));
+    const scopes =
+      access === "publish"
+        ? ["content:read", "content:write", "content:publish", "offline_access"]
+        : access === "write"
+          ? ["content:read", "content:write", "offline_access"]
+          : ["content:read", "offline_access"];
     await user.click(within(card).getByRole("tab", { name: "Claude Code" }));
     await user.click(within(card).getByRole("button", { name: "Copy Claude Code command" }));
     expect(write.mock.lastCall?.[0]).toContain(`"url":"${endpoint}"`);
@@ -152,13 +160,15 @@ test("Claude Code and Gemini CLI keep selected access, exact endpoint and separa
     expect(write).toHaveBeenLastCalledWith("/mcp auth lace");
     expect(
       within(card).getByRole("radio", {
-        name: editing ? "Read and edit drafts" : "Read only",
+        name: label,
       }),
     ).toBeChecked();
   }
   await user.click(within(card).getByRole("tab", { name: "Codex CLI" }));
   await user.click(within(card).getByRole("button", { name: "Copy Codex commands" }));
-  expect(write.mock.lastCall?.[0]).toContain("content:read,content:write,offline_access");
+  expect(write.mock.lastCall?.[0]).toContain(
+    "content:read,content:write,content:publish,offline_access",
+  );
   expect(fetch).not.toHaveBeenCalled();
 });
 

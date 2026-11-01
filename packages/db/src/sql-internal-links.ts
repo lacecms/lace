@@ -49,9 +49,11 @@ export function internalLinkRowsJson(references: readonly InternalLinkReference[
     }),
   );
 }
-const INCOMING = `select json_extract(value, '$[0]') as source_key,
+/** Reads one bound `internalLinkRowsJson` rowset as link-reference columns. */
+export const INTERNAL_LINK_ROWS_SQL = `select json_extract(value, '$[0]') as source_key,
   json_extract(value, '$[1]') as area, json_extract(value, '$[2]') as field_path,
   json_extract(value, '$[3]') as target_entry_id, json_extract(value, '$[4]') as delivered from json_each(?)`;
+const INCOMING = INTERNAL_LINK_ROWS_SQL;
 const MATCH = `i.source_key=r.source_key and i.area=r.area and i.field_path=r.field_path
   and i.target_entry_id=r.target_entry_id and i.delivered=r.delivered`;
 

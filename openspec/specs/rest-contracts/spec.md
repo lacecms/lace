@@ -384,7 +384,6 @@ API SHALL NOT truncate or let D1 discover an oversized LIKE pattern.
 - **THEN** the API rejects the request with a validation failure instead of
   returning an inconsistent page
 
-
 #### Scenario: Field sort and typed filters
 - **WHEN** a configured collection receives sort=-field:year and filters=[{"field":"category","op":"in","values":["news"]},{"field":"year","op":"range","min":2020}]
 - **THEN** it returns all matching entries in descending numeric year order, subject to the requested page size, with totals across statuses for those same conditions
@@ -396,8 +395,6 @@ API SHALL NOT truncate or let D1 discover an oversized LIKE pattern.
 #### Scenario: Malformed filters fail safely
 - **WHEN** filters is malformed JSON, over 8192 bytes, names a disabled field or has a wrong operand type
 - **THEN** the server returns 422 with a precise parameter pointer without echoing supplied values or running the list read
-
-
 
 #### Scenario: A string anchor expires after a successful draft edit
 - **WHEN** a caller continues a configured string sort after its boundary draft revision changed
@@ -461,7 +458,9 @@ field absent from the model's field map.
 
 ### Requirement: Admin media-list queries are validated and query-bound
 The admin media-list route SHALL accept optional `q`, `type`, `sort`, `limit`,
-and `after` query parameters. `q` SHALL be trimmed; an empty result SHALL mean
+`after` and repeated `tag` query parameters. Up to five `tag` values SHALL be
+accepted; each SHALL be normalized like a media tag, and an item SHALL match
+only when it carries every requested tag. `q` SHALL be trimmed; an empty result SHALL mean
 no search, and a term longer than 200 characters SHALL be rejected. A search
 SHALL match media whose display filename contains the term, case-insensitively
 for ASCII letters, as a literal substring. `type` SHALL be one of `image/avif`,
@@ -472,8 +471,9 @@ default SHALL be `-createdAt`. Filename ordering SHALL be case-insensitive for
 ASCII letters. Every order SHALL break ties by media ID in the same direction.
 An unsupported type or sort, an over-long term, or an invalid limit SHALL return
 the stable `VALIDATION_FAILED` envelope with a JSON Pointer naming the
-parameter. A continuation cursor SHALL be accepted only with the same search
-term, type, and sort that produced it; otherwise the request SHALL fail
+parameter. A more-than-five tag list or an invalid tag SHALL fail with the
+pointer `/tag` or `/tag/<index>`. A continuation cursor SHALL be accepted only
+with the same search term, type, sort and normalized tag set that produced it; otherwise the request SHALL fail
 validation without returning a page. The generated OpenAPI document SHALL
 describe these parameters.
 
@@ -498,6 +498,10 @@ describe these parameters.
   `sort=-createdAt`, a different `type`, or a different `q`
 - **THEN** the API rejects the request with a validation failure instead of
   returning an inconsistent page
+
+#### Scenario: Filter the library by tags
+- **WHEN** an editor requests `tag=Birch&tag=ibiza&sort=filename`
+- **THEN** the response contains only items tagged both `birch` and `ibiza`, ordered by filename, and a cursor from it is refused with `tag=birch` alone
 
 #### Scenario: Filter the library to GIF
 - **WHEN** an editor requests `type=image/gif`
@@ -684,7 +688,9 @@ SHALL respond `200` with the reverted admin entry. Duplicate SHALL respond
 Every admin media DTO (list items, detail, upload, deletion, retry-deletion and
 metadata update results) SHALL include the item's `alt` string, `caption`
 string and `focalPoint` object `{x, y}` when each is set, and SHALL omit each
-value that is not set. The values SHALL never be `null` in a response. The
+value that is not set. The values SHALL never be `null` in a response. Every admin media DTO SHALL
+also include a required `tags` array of normalized tags in ascending order,
+empty when the item has none. The
 DTO's `updatedAt` SHALL keep millisecond precision, because it identifies the
 version a writer edits.
 
@@ -692,18 +698,22 @@ version a writer edits.
 - **WHEN** a viewer lists media that include an item with alt text and a focal
   point of `{x: 0.25, y: 0.75}` and no caption
 - **THEN** that item's DTO contains `alt`, `focalPoint` with those coordinates,
-  and no `caption` key
+    and no `caption` key, and its `tags` array lists its tags in ascending order
+  or is empty
 
 ### Requirement: Admin media metadata update contract is explicit
 The shared contract SHALL define the media metadata update request as a strict
 JSON object with the optional keys `alt` (string or `null`, at most 1,000 code
 points after trimming), `caption` (string or `null`, at most 2,000 code points
-after trimming) and `focalPoint` (`null` or a strict object with the finite
-numbers `x` and `y`, each from 0 to 1 inclusive). The request SHALL contain at
+after trimming), `focalPoint` (`null` or a strict object with the finite
+numbers `x` and `y`, each from 0 to 1 inclusive) and `tags` (an array of at
+most 20 distinct normalized tags, each string at most 200 code points before
+normalization, following the ASCII `[a-z0-9-]{1,40}` rules, replacing the complete set). The request SHALL contain at
 least one key. Unknown keys, wrong types, out-of-range coordinates, over-long
 text, control characters in `alt`, control characters other than line breaks
-in `caption`, unpaired surrogates, and an empty object SHALL fail with `422` `VALIDATION_FAILED` and JSON Pointer issue paths
-such as `/alt` or `/focalPoint/x`.
+in `caption`, unpaired surrogates, invalid tags, more than 20 distinct tags and an empty object SHALL fail with `422`
+`VALIDATION_FAILED` and JSON Pointer issue paths such as `/alt`,
+`/focalPoint/x` or `/tags/3`.
 
 The update SHALL require an `If-Match` header with exactly one strong entity
 tag whose value is the item's `updatedAt` in Unix milliseconds, for example
@@ -734,6 +744,10 @@ admin media DTO and `build` is the existing build dispatch outcome: `{status:
   "x"}`
 - **THEN** the request fails with `422` `VALIDATION_FAILED` and issues at
   `/focalPoint/x` and `/title`
+
+#### Scenario: A tags-only update
+- **WHEN** an editor sends `{"tags": ["Birch", "ibiza"]}` with the current tag in `If-Match`
+- **THEN** the API returns `200` with `tags` `["birch", "ibiza"]`, build `{status: "not-dispatched"}` and a new `ETag`
 
 #### Scenario: An empty update is rejected
 - **WHEN** an editor sends `{}` with a valid `If-Match` tag
@@ -1377,3 +1391,153 @@ This summary SHALL report configuration, not successful OAuth, public reachabili
 #### Scenario: Status cannot be loaded
 - **WHEN** the settings status request fails
 - **THEN** the client receives the existing safe failure rather than a fabricated successful response containing `enabled: false`
+
+### Requirement: Admin media upload accepts optional tags
+`POST /api/v1/admin/media` SHALL accept, in addition to the single `file` part,
+zero to 20 text parts named `tags`, each holding one tag of at most 200 code
+points before normalization. Any other part name, a file part named `tags`, an
+invalid tag or more than 20 distinct normalized tags SHALL fail with `422`
+`VALIDATION_FAILED` and a pointer `/tags/<index>` before any object is stored.
+The created media DTO SHALL contain the normalized tags. Existing upload
+limits, verification and responses SHALL be unchanged when no `tags` part is
+sent. The generated OpenAPI document SHALL describe the multipart fields.
+
+#### Scenario: Upload with tags
+- **WHEN** an editor uploads a PNG with `tags` parts `Project-A` and `project-a`
+- **THEN** the API returns `201` with `tags` `["project-a"]`
+
+#### Scenario: Upload with an invalid tag stores nothing
+- **WHEN** an editor uploads a valid image with a `tags` part containing a comma
+- **THEN** the API returns `422` with pointer `/tags/0` and no media item or object exists afterwards
+
+### Requirement: Admin media tag catalog is a bounded read
+`GET /api/v1/admin/media/tags` SHALL require an authenticated session with
+`content:read` and SHALL accept optional `q` (a tag prefix, normalized like a
+tag, at most 40 code points after normalization), `limit` (1–100, default 50)
+and `after`. It SHALL return `{items: [{tag, count}], nextCursor?}` in ascending
+tag order, where `count` is a positive integer. A cursor SHALL be accepted only
+with the same normalized `q`. Invalid parameters SHALL fail with `422`
+`VALIDATION_FAILED` and a pointer naming the parameter. Node and Cloudflare SHALL
+expose the same contract, and the generated OpenAPI document SHALL describe it.
+The route SHALL be unavailable to MCP and build tokens.
+
+#### Scenario: List tags with counts
+- **WHEN** a viewer requests the catalog on a library with `birch` on four items and `ibiza` on two
+- **THEN** the response lists `{tag: "birch", count: 4}` then `{tag: "ibiza", count: 2}`
+
+#### Scenario: Unauthorized or token caller
+- **WHEN** an unauthenticated caller, or a caller presenting only a build or MCP token, requests the catalog
+- **THEN** the API refuses it with the existing authentication failure and returns no tags
+
+### Requirement: Import-token contracts reveal the secret only once
+The shared contracts SHALL define a strict import-token DTO with `id`, `name`,
+`tokenPrefix`, `capabilities` (`["content:import"]` or
+`["content:import", "content:publish"]`), `createdAt`, `expiresAt`, optional
+`lastUsedAt` and `revokedAt`, and `createdBy` with the creator's `id`, `email`
+and optional `displayName`. A creation request SHALL be a strict object with
+`name` (1 to 120 characters), `expiresInDays` (an integer from 1 to 7) and
+optional boolean `allowPublish` defaulting to `false`. The creation response
+SHALL be the DTO plus `token`; list and revocation responses SHALL never
+contain the plaintext or its verifier. The list SHALL be `{items}` ordered by
+creation time, newest first. Timestamps SHALL use the shared ISO
+representation. Build-token DTOs SHALL be unchanged.
+
+#### Scenario: Creation request with an out-of-range lifetime
+- **WHEN** a client submits `{"name": "Import", "expiresInDays": 30}`
+- **THEN** the API returns `422` `VALIDATION_FAILED` with the pointer `/expiresInDays`
+
+#### Scenario: Listed token carries no secret
+- **WHEN** a client validates an import-token list response that includes a `token` property
+- **THEN** contract validation rejects the payload
+
+### Requirement: The import-credential description is closed and validated
+`GET /api/v1/admin/import-credential` SHALL return a strict object with
+`token`, the import-token DTO of the presented credential without plaintext,
+and `permissions`, the actor's effective permissions after attenuation and the
+current role, in the domain's permission order. The response SHALL carry
+`cache-control: no-store`.
+
+#### Scenario: Publishing credential of an administrator
+- **WHEN** an administrator's publishing import credential reads its description
+- **THEN** `permissions` is `content:read`, `content:write`, `content:publish` and `media:write` and the response is not cacheable
+
+### Requirement: Admin entry lists accept an exact slug parameter
+The admin entry-list route SHALL accept an optional `slug` parameter. It SHALL
+be a slug of at most 100 characters matching `^[a-z0-9]+(?:-[a-z0-9]+)*$` and
+SHALL be accepted only for collection models. It SHALL restrict the page and
+the per-status totals to entries whose current draft slug equals the value
+exactly, combined with every other list parameter by AND; a published slug
+that differs from the current draft slug SHALL NOT match. An invalid value, or
+any `slug` for a page or global model, SHALL return `422` `VALIDATION_FAILED`
+with the pointer `/slug` and no list content. A continuation cursor SHALL be
+accepted only with the same `slug` that produced it. The generated OpenAPI
+document SHALL describe the parameter.
+
+#### Scenario: Look up a collection entry by slug
+- **WHEN** a client requests `GET /api/v1/admin/models/posts/entries?slug=hello-world`
+- **THEN** the page contains exactly the entries whose current draft slug is `hello-world`, and a draft with slug `hello-world-2` or a title containing `hello world` is excluded
+
+#### Scenario: Slug on a page model
+- **WHEN** a client requests `?slug=home` for a page model
+- **THEN** the API returns `422` with the pointer `/slug`
+
+### Requirement: Admin media lists accept a content-hash parameter
+The admin media-list route SHALL accept an optional `sha256` parameter of
+exactly 64 lowercase hexadecimal characters. It SHALL restrict the page to
+`active` items whose recorded hash equals the value, combined with every other
+media-list parameter by AND; items without a recorded hash SHALL never match.
+An invalid value SHALL return `422` `VALIDATION_FAILED` with the pointer
+`/sha256`. A continuation cursor SHALL be accepted only with the same `sha256`
+that produced it. Admin media DTOs SHALL carry optional `sha256`, absent when
+no hash is recorded. Public media DTOs, media usage DTOs and the build export
+SHALL NOT carry it. The generated OpenAPI document SHALL describe the
+parameter and field.
+
+#### Scenario: Find an uploaded file by hash
+- **WHEN** a client requests `GET /api/v1/admin/media?sha256=<hash of an uploaded file>`
+- **THEN** the page contains the active items with that hash, each DTO carrying the same `sha256`
+
+#### Scenario: Uppercase hash is refused
+- **WHEN** a client sends a 64-character hash with uppercase letters
+- **THEN** the API returns `422` with the pointer `/sha256`
+
+#### Scenario: Public delivery is unchanged
+- **WHEN** a public reader or a build reads a published entry that references hashed media
+- **THEN** the media representation carries no `sha256`
+
+### Requirement: Field visibility crosses metadata boundaries as validated JSON
+Shared model, group and block metadata schemas and converters SHALL retain
+optional `visibility` at model, group (including nested list-item groups at
+every allowed depth) and block-data positions with identical behavior on Node
+and Cloudflare. Validation SHALL apply the `conditional-fields` load-time
+rules against each owner's field map and SHALL accept metadata only when it
+equals its own normalization. Generated OpenAPI SHALL describe `visibility`
+on content models, group field metadata and block metadata as a map of
+`{ field, values }` rules without additional properties, and SHALL state that
+a hidden field is not required, is validated and retained as a draft value,
+and is omitted from published snapshots, public reads and build exports.
+Block settings metadata SHALL keep `settingsVisibility` unchanged. Metadata
+without visibility SHALL retain its existing representation. Content mutation
+payloads, entry DTOs and build-export values SHALL acquire no visibility keys
+or computed visibility state; published values SHALL omit hidden targets
+without changing DTO shapes.
+
+#### Scenario: Round-trip recursive visibility
+- **WHEN** a model response contains model-level rules, block data rules and rules inside a list-item group
+- **THEN** shared schema parsing and JSON serialization preserve them unchanged
+
+#### Scenario: Forged invalid rule
+- **WHEN** a response carries a rule with an unknown controller, a chain, an undeclared option or an extra property at any owner
+- **THEN** metadata validation rejects it before editable forms are rendered
+
+#### Scenario: Content transport unchanged
+- **WHEN** a draft with conditional fields is created, saved or read
+- **THEN** content DTOs keep existing paths and shapes, including retained hidden values, without visibility metadata
+
+#### Scenario: Published values validate without hidden targets
+- **WHEN** a public entry read or build export page omits a required target that its controller hides
+- **THEN** the shared public DTO schemas and the SDK accept the response
+
+#### Scenario: OpenAPI documents published omission
+- **WHEN** the generated OpenAPI document is inspected
+- **THEN** the `FieldVisibility` schema description states that hidden values are retained in drafts and omitted from published content

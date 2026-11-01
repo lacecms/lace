@@ -1,7 +1,12 @@
 import { oauthProvider, type OAuthOptions } from "@better-auth/oauth-provider";
 import { APIError } from "better-auth/api";
 
-export const MCP_OAUTH_SCOPES = Object.freeze(["content:read", "content:write", "offline_access"]);
+export const MCP_OAUTH_SCOPES = Object.freeze([
+  "content:read",
+  "content:write",
+  "content:publish",
+  "offline_access",
+]);
 export const MCP_REGISTRATION_MAX_BYTES = 8192;
 const invalidMetadata = (): never => {
   throw new APIError("BAD_REQUEST", {
@@ -33,13 +38,17 @@ export function mcpOAuthUrls(
 export function normalizeMcpScopes(value: string): string[] {
   const scopes = [...new Set(value.split(/\s+/u).filter(Boolean))];
   if (
-    (!scopes.includes("content:read") && !scopes.includes("content:write")) ||
+    (!scopes.includes("content:read") &&
+      !scopes.includes("content:write") &&
+      !scopes.includes("content:publish")) ||
     scopes.some((scope) => !MCP_OAUTH_SCOPES.includes(scope))
   )
     throw new APIError("BAD_REQUEST", {
       error: "invalid_scope",
       error_description: "Unsupported scope.",
     });
+  if (scopes.includes("content:publish") && !scopes.includes("content:write"))
+    scopes.push("content:write");
   if (scopes.includes("content:write") && !scopes.includes("content:read"))
     scopes.push("content:read");
   return MCP_OAUTH_SCOPES.filter((scope) => scopes.includes(scope));
@@ -168,7 +177,7 @@ export function createMcpOAuthProvider(
     allowDynamicClientRegistration: true,
     allowUnauthenticatedClientRegistration: true,
     clientRegistrationDefaultScopes: ["content:read"],
-    clientRegistrationAllowedScopes: ["content:write", "offline_access"],
+    clientRegistrationAllowedScopes: ["content:write", "content:publish", "offline_access"],
     clientRegistrationRequirePKCE: true,
     resources: [
       { identifier: resource, name: "Lace content", allowedScopes: [...MCP_OAUTH_SCOPES] },

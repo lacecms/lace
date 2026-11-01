@@ -21,3 +21,13 @@ test("the type filter offers every uploadable format", () => {
   ]);
   expect(normalizedMediaQuery({ type: "image/gif" })).toStrictEqual({ type: "image/gif" });
 });
+
+test("library queries canonicalize the tag filter", () => {
+  expect(normalizedMediaQuery({ tag: [" Travel ", "cover", "travel"] })).toStrictEqual({
+    tag: ["cover", "travel"],
+  });
+  expect(normalizedMediaQuery({ tag: [] })).toStrictEqual({});
+  expect(normalizedMediaQuery({ tag: ["a", "b", "c", "d", "e", "f"] })).toStrictEqual({
+    tag: ["a", "b", "c", "d", "e"],
+  });
+});

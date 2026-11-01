@@ -117,8 +117,10 @@ export function createMcpConsentBoundary(input: {
       if (scopes.some((scope) => !allowed.includes(scope))) return denied();
       if (
         approved &&
-        scopes.includes("content:write") &&
-        !hasPermission({ id: actorId(user.id), role }, "content:write")
+        ((scopes.includes("content:write") &&
+          !hasPermission({ id: actorId(user.id), role }, "content:write")) ||
+          (scopes.includes("content:publish") &&
+            !hasPermission({ id: actorId(user.id), role }, "content:publish")))
       )
         throw new APIError("FORBIDDEN", { error: "access_denied" });
       return tx.referenceId;
@@ -204,6 +206,10 @@ export function createMcpConsentBoundary(input: {
                 callbackHostname: new URL(new URLSearchParams(tx.query).get("redirect_uri")!)
                   .hostname,
                 scopes: new URLSearchParams(tx.query).get("scope")!.split(" "),
+                canPublish: hasPermission(
+                  { id: actorId(session.userId), role: session.role },
+                  "content:publish",
+                ),
                 canWrite: hasPermission(
                   { id: actorId(session.userId), role: session.role },
                   "content:write",
@@ -277,8 +283,13 @@ export function createMcpConsentBoundary(input: {
         if (scopes.some((scope) => !requested.includes(scope))) return failure("invalid_scope");
         if (
           body.accept &&
-          scopes.includes("content:write") &&
-          !hasPermission({ id: actorId(session.userId), role: session.role }, "content:write")
+          ((scopes.includes("content:write") &&
+            !hasPermission({ id: actorId(session.userId), role: session.role }, "content:write")) ||
+            (scopes.includes("content:publish") &&
+              !hasPermission(
+                { id: actorId(session.userId), role: session.role },
+                "content:publish",
+              )))
         )
           return failure("access_denied", 403);
         await load(provider, body.transaction, true);

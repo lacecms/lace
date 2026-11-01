@@ -73,8 +73,8 @@ export function McpSettingsCard({
         )}
       </div>
       <p className="m-0 text-sm text-muted-foreground">
-        Connect an assistant to read content and prepare drafts. This status reflects deployment
-        configuration, not a client connectivity test.
+        Connect an assistant to read content, prepare drafts and publish with explicit permission.
+        This status reflects deployment configuration, not a client connectivity test.
       </p>
       {mcp ? (
         <>
@@ -91,7 +91,9 @@ export function McpSettingsCard({
                 invalid={false}
                 onBlur={() => undefined}
                 value={access}
-                onChange={(value) => setAccess(value === "write" ? "write" : "read")}
+                onChange={(value) =>
+                  setAccess(value === "publish" ? "publish" : value === "write" ? "write" : "read")
+                }
                 choices={[
                   {
                     value: "read",
@@ -103,11 +105,17 @@ export function McpSettingsCard({
                     label: "Read and edit drafts",
                     description: "Also create entries and save drafts.",
                   },
+                  {
+                    value: "publish",
+                    label: "Publishing",
+                    description: "Also publish saved drafts; administrators only.",
+                  },
                 ]}
               />
               <p id="mcp-access-help" className="m-0 text-sm text-muted-foreground">
                 Sign in through the browser and explicitly approve access. Viewers cannot grant
-                draft editing. Publishing, unpublishing, and deletion are always unavailable.
+                draft editing. Only administrators can grant publishing. Published content reaches
+                the site with the next build. Unpublishing and deletion are always unavailable.
               </p>
               <Tabs defaultValue="cli" className="min-w-0">
                 <TabsList
@@ -197,7 +205,9 @@ export function McpSettingsCard({
                   </p>
                   <p className="m-0">
                     Request{" "}
-                    {access === "write" ? (
+                    {access === "publish" ? (
+                      <code>content:read, content:write, content:publish, offline_access</code>
+                    ) : access === "write" ? (
                       <code>content:read, content:write, offline_access</code>
                     ) : (
                       <code>content:read, offline_access</code>
@@ -210,8 +220,8 @@ export function McpSettingsCard({
               <p className="m-0 text-sm text-muted-foreground">
                 If a server named <code>lace</code> already exists, update its configuration instead
                 of adding it again. Restart or reload your client to pick up the configuration.
-                Selecting access here does not change an existing grant; draft editing requires new
-                write consent.
+                Selecting access here does not change an existing grant; draft editing or publishing
+                requires new consent for the selected scopes.
               </p>
               <p className="m-0 text-sm text-muted-foreground">
                 Review and revoke your assistant connections in{" "}

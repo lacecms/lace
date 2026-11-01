@@ -23,7 +23,7 @@ sessions, subscriptions, sampling, background tasks and CIMD are not exposed.
    `https://cms.example.com/mcp` endpoint. Discovery advertises the issuer
    `https://cms.example.com/api/auth`, the registration endpoint and S256 PKCE.
 5. Sign in through the existing Lace form. Review the client name, callback host
-   and read versus read/write request, then explicitly approve or deny.
+   and read, draft editing or publishing request, then explicitly approve or deny.
 
 The canonical metadata paths are
 `/.well-known/oauth-protected-resource/mcp` and
@@ -49,7 +49,8 @@ status reloads it; a failed refresh labels the last values as stale. Enabled
 means the deployment enables MCP, not that an external client has connected.
 The section offers endpoint copying, Codex CLI/TOML, Claude Code and Gemini CLI
 examples, and generic Streamable HTTP/OAuth guidance. Read only is selected by default; draft editing
-adds write scope. **Account** lists and revokes your own connections when enabled.
+adds write scope; Publishing adds write and publish scopes. Only administrators
+can grant publishing. **Account** lists and revokes your own connections when enabled.
 
 For the default local endpoint, run on the computer running Codex:
 
@@ -64,6 +65,18 @@ To request draft editing, use:
 codex mcp login lace --oauth-client-registration dcr --scopes content:read,content:write,offline_access
 ```
 
+
+To request publication as an administrator, choose Publishing in Settings or run:
+
+```sh
+codex mcp login lace --oauth-client-registration dcr --scopes content:read,content:write,content:publish,offline_access
+```
+
+For Codex TOML use `scopes = ["content:read", "content:write", "content:publish", "offline_access"]`.
+For Claude Code use `"scopes":"content:read content:write content:publish offline_access"`;
+for Gemini use `"scopes":["content:read","content:write","content:publish","offline_access"]`.
+Re-authorize after changing scopes; configuration alone does not widen a grant.
+
 An alternative configuration in `~/.codex/config.toml` is:
 
 ```toml
@@ -77,9 +90,10 @@ the example if your origin or port differs. If `lace` is already configured,
 update that entry instead of adding a duplicate. Sign in through the browser,
 approve consent, and restart/reload your client to pick up configuration.
 Selecting different scopes in Settings grants nothing by itself; an existing
-read-only grant needs new write consent. To replace a connection, revoke it in
-Account and repeat OAuth login. Viewers cannot grant write access. Publishing,
-unpublishing and deletion remain unavailable. This guidance does not establish
+connection needs new consent for additional write or publish authority. To replace a connection, revoke it in
+Account and repeat OAuth login. Viewers cannot grant write access. Only administrators can grant publishing;
+published content reaches the site with the next build. Unpublishing and deletion
+remain unavailable. This guidance does not establish
 acceptance of any particular external client release.
 
 ### Claude Code
@@ -126,7 +140,7 @@ no client secret or manual bearer token is needed. Replace the sample endpoint
 with the canonical URL in Settings and restart/reload your client after changes.
 These recipes follow the [official Gemini CLI MCP guide](https://geminicli.com/docs/tools/mcp-server/);
 they do not describe the consumer Gemini web app or claim a verified client login.
-Lace role limits, explicit consent and the draft-only tool boundary still apply.
+Lace role limits, explicit consent and the unpublish/delete ban still apply.
 
 For repository Docker development, `.env` is used for Compose interpolation;
 `api.environment` must also forward `LACE_MCP_ENABLED`. The maintained Compose
@@ -154,12 +168,15 @@ dependencies beyond MCP1's existing prerequisites.
 | --- | --- |
 | `content:read` | Model discovery, entry list and entry detail |
 | `content:write` | Create an entry and save a complete draft; includes read |
+| `content:publish` | Publish saved drafts; includes read/write, explicit administrator consent only |
 | `offline_access` | Rotating refresh tokens; grants no content permission |
 
-Only `list_content_models`, `list_entries`, `get_entry`, `create_entry` and
-`save_draft` are exposed. Publishing, unpublishing, deletion, duplication,
-reverting, media, users, settings and build administration are unavailable,
-including for administrators. A viewer cannot approve write authority.
+Only `list_content_models`, `list_entries`, `get_entry`, `create_entry`,
+`save_draft` and `publish_entry` are exposed, filtered by effective authority.
+Unpublishing, deletion, duplication, reverting, media, users, settings and build
+administration are unavailable, including for administrators. A viewer cannot
+approve write authority; an editor cannot approve publication. Read is the
+default consent choice, and users can explicitly choose narrower access.
 
 REST and MCP call the same application operations and use the same content
 contracts, defaults, field/block metadata, query limits, attribution and error
@@ -170,9 +187,39 @@ build outbox unchanged. Existing draft internal-link rules still apply: a
 missing/unpublished destination can remain in a draft, but a global cannot be a
 destination, and publishing requires available routable destinations.
 
+Conditional fields follow the shared rules ([ADR 0018](adr/0018-conditional-fields.md)).
+`list_content_models` returns each owner's `visibility` map in the same model,
+group and block metadata as REST. An agent fills a target only when its
+controller selects it. Values of hidden fields are kept in the draft and
+validated as drafts, so switching the controller back restores them.
+`publish_entry` does not require hidden fields and never publishes their values:
+the published snapshot returned by `get_entry` omits them while the draft keeps
+them. The tool descriptions say the same.
+
 After an uncertain create/save response, re-read content before deciding what
 to do. Creation is not idempotent. Retrying a save must retain its original
 revision; do not substitute the latest revision to force an overwrite.
+
+### Publishing saved drafts
+
+`publish_entry` accepts `{entryId, expectedRevision, idempotencyKey?}`. The
+revision is required and publication uses only the stored draft; content, actor,
+and publication time cannot be supplied. The optional key uses the same syntax
+as the REST `Idempotency-Key` header. Retain it with the same entry and revision
+to retry an uncertain publication. A replay returns `publication: "replayed"`
+with `build: {status: "not-dispatched"}` and does not publish or queue again.
+
+Successful responses use the REST publication shape: `{entry, publication, build}`,
+including SEO visibility and safe author attribution. Validation, singleton,
+route, internal-link and stale-revision guards apply unchanged. Nearby
+publications coalesce into one build; public content reaches the site with the
+next successful build.
+
+An old read/write connection gets HTTP 403 `insufficient_scope` with
+`scope="content:publish"`. Request publishing scopes and obtain fresh explicit
+administrator consent; refresh never expands an existing ceiling. A demoted
+administrator loses publication on the next request even with an unexpired token.
+No new database migration is introduced by this scope.
 
 ## Connections, expiry and revocation
 
@@ -200,7 +247,8 @@ change/revoke-others invalidate delegated authority alongside existing session
 effects, even with MCP disabled. Re-enabling an account does not revive old
 connections. Ordinary browser sign-out leaves independent OAuth grants intact.
 Role demotion affects the next request; promotion cannot widen an existing
-read-only consent. Revocation does not undo content writes already committed.
+consent. A leaked publish-scoped token can change public content; grant it only
+to trusted clients and revoke unused connections. Revocation does not undo content writes already committed.
 
 ## Proxy, limits and observability
 

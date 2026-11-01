@@ -12,6 +12,7 @@ import { userEvent } from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import {
   draftEntry,
+  mediaItem,
   renderRoute,
   stubClient,
   staticSessionSource,
@@ -49,7 +50,7 @@ const initial = {
       {
         key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         type: "gallery",
-        schemaVersion: 4,
+        schemaVersion: 5,
         position: 1000,
         hidden: false,
         data: { images: [] },
@@ -331,3 +332,45 @@ test("discarding navigation retains inactive choices on Stay and leaves without 
   await waitFor(() => expect(router.state.location.pathname).toBe("/content"));
   expect(saveDraft).not.toHaveBeenCalled();
 }, 15000);
+
+test("a gallery's Add picks several images at once and saves them in order", async () => {
+  const user = userEvent.setup();
+  const items = ["a", "b"].map((name) => ({
+    ...mediaItem,
+    filename: `${name}.jpg`,
+    id: `media-${name}`,
+  }));
+  const save = vi.fn<AdminClient["saveDraft"]>(
+    async (_id, input) =>
+      ({ ...initial, draft: { ...initial.draft, ...input, revision: 3 } }) as never,
+  );
+  open(save, "editor", {
+    getMedia: async (id) => ({ ...items.find((item) => item.id === id)!, usage: [] }),
+    listMedia: async () => ({ items }),
+  });
+  await user.click(await screen.findByRole("button", { name: "Add Images and videos item" }));
+  const dialog = await screen.findByRole("dialog", { name: "Add media to Images and videos" });
+  await user.click(await within(dialog).findByRole("button", { name: "b.jpg" }));
+  await user.click(within(dialog).getByRole("button", { name: "a.jpg" }));
+  await user.click(within(dialog).getByRole("button", { name: "Add 2 images" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "Expand Images and videos item 1" })).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await screen.findByText("Saved revision 3");
+  expect(save.mock.calls[0]![1].blocks[0]!.data).toEqual({
+    images: ["media-b", "media-a"].map((media) => ({
+      aspectRatio: "16:9",
+      kind: "image",
+      media,
+      playback: "player",
+    })),
+  });
+});
+
+test("viewers see no Add for a gallery", async () => {
+  open(undefined, "viewer");
+  await screen.findByRole("article");
+  expect(
+    screen.queryByRole("button", { name: "Add Images and videos item" }),
+  ).not.toBeInTheDocument();
+});

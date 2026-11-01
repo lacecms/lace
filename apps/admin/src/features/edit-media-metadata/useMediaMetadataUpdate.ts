@@ -9,7 +9,8 @@ import { adminQueryKeys, useAdminClient } from "../../shared/api/index.js";
 /**
  * Saves descriptive metadata against the version the form edited. The returned
  * item replaces the cached detail (keeping its usage), so every reader of the
- * item, such as open block editors, sees it at once; lists are refreshed.
+ * item, such as open block editors, sees it at once; lists are refreshed, and
+ * so are tag suggestions when the tags changed.
  */
 export function useMediaMetadataUpdate(onSaved: (result: UpdateMediaMetadataResultDto) => void) {
   const client = useAdminClient();
@@ -24,13 +25,18 @@ export function useMediaMetadataUpdate(onSaved: (result: UpdateMediaMetadataResu
       readonly mediaId: string;
       readonly patch: UpdateMediaMetadataRequestDto;
     }) => client.updateMediaMetadata(mediaId, patch, expectedUpdatedAt),
-    onSuccess: async (result) => {
+    onSuccess: async (result, { patch }) => {
       queryClient.setQueryData<MediaDetailDto>(
         adminQueryKeys.mediaDetail(result.media.id),
         (current) => ({ ...result.media, usage: current?.usage ?? [] }),
       );
       onSaved(result);
-      await queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.media, "list"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.media, "list"] }),
+        patch.tags === undefined
+          ? undefined
+          : queryClient.invalidateQueries({ queryKey: adminQueryKeys.mediaTagsPrefix }),
+      ]);
     },
   });
 }

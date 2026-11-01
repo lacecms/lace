@@ -1,5 +1,6 @@
 import {
   defineBlockRegistry,
+  normalizeFieldVisibility,
   normalizeFormLayout,
   parseSchemaPath,
   encodeSchemaPath,
@@ -15,6 +16,8 @@ import type {
   BlockMetadata,
   BlockRegistry,
   FieldDefinition,
+  FieldVisibility,
+  FieldVisibilityTargets,
   FormLayout,
   FieldIsRequired,
   FieldValue,
@@ -58,18 +61,35 @@ export class ConfigurationError extends Error {
 /** Field descriptors indexed by their stable configuration field key. */
 export type FieldMap = Readonly<Record<string, FieldDefinition>>;
 
-/** The values inferred from a model's field descriptors. */
-export type ModelFieldValues<Fields extends FieldMap> = Readonly<
+/**
+ * The values inferred from a model's field descriptors. Conditional targets
+ * named by `Visibility` (for example `typeof model.visibility`) are optional:
+ * published values omit them while hidden.
+ */
+export type ModelFieldValues<Fields extends FieldMap, Visibility = undefined> = Readonly<
   {
-    [Key in keyof Fields as FieldIsRequired<Fields[Key]> extends true ? Key : never]: FieldValue<
-      Fields[Key]
-    >;
+    [
+      Key in keyof Fields as Key extends FieldVisibilityTargets<Visibility>
+        ? never
+        : FieldIsRequired<Fields[Key]> extends true
+          ? Key
+          : never
+    ]: FieldValue<Fields[Key]>;
   } & {
     readonly [
-      Key in keyof Fields as FieldIsRequired<Fields[Key]> extends true ? never : Key
+      Key in keyof Fields as Key extends FieldVisibilityTargets<Visibility>
+        ? Key
+        : FieldIsRequired<Fields[Key]> extends true
+          ? never
+          : Key
     ]?: FieldValue<Fields[Key]>;
   }
 >;
+
+/** Exposes a model's inferred conditional-field rules on its definition type. */
+export type ModelVisibility<Visibility> = [Visibility] extends [undefined]
+  ? {}
+  : { readonly visibility: Visibility };
 
 interface CommonModelInput<Fields extends FieldMap> {
   readonly blocks?: readonly string[];
@@ -84,6 +104,8 @@ interface CommonModelInput<Fields extends FieldMap> {
   /** Temporary hint: former field keys whose stored values sync may prune. */
   readonly removedFields?: readonly string[];
   readonly version: number;
+  /** Conditional-field rules over the model's own fields. */
+  readonly visibility?: FieldVisibility<Fields>;
 }
 
 /** Fallback fields of the same model for SEO values the editor leaves unset. */
@@ -166,7 +188,7 @@ export interface SeoDefaultsDefinition {
   readonly titleTemplate?: string;
 }
 
-interface NormalizedCommonModel<Fields extends FieldMap> {
+export interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: Fields;
@@ -181,10 +203,12 @@ interface NormalizedCommonModel<Fields extends FieldMap> {
   /** Runtime-only synchronization hint: current field key to former field key. */
   readonly renamedFields?: Readonly<Record<string, string>>;
   readonly version: number;
+  /** Conditional-field rules over the model's own fields; structural. */
+  readonly visibility?: FieldVisibility<Fields>;
 }
 
 /** SEO options of a normalized page or collection. */
-interface NormalizedRoutableModel {
+export interface NormalizedRoutableModel {
   /** Runtime-only synchronization hint: stored SEO values may be cleared. */
   readonly removedSeo?: true;
   readonly seo?: ModelSeoDefinition;
@@ -568,6 +592,11 @@ function normalizeCommonModel<Fields extends FieldMap>(
   const blocks = normalizeBlocks(input.blocks);
   const { fields, renamedFields } = normalizeFields(input.fields);
   const layout = normalizeFormLayout(input.layout, fields, `model.${input.key}.layout`);
+  const visibility = normalizeFieldVisibility(
+    input.visibility,
+    fields,
+    `model.${input.key}.visibility`,
+  ) as FieldVisibility<Fields> | undefined;
   const removedFields = normalizeRemovedFields(input.removedFields);
   const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_KEY_PATTERN);
   assertSynchronizationHints(
@@ -591,6 +620,7 @@ function normalizeCommonModel<Fields extends FieldMap>(
     ...(removedFields.length === 0 ? {} : { removedFields }),
     ...(Object.keys(renamedFields).length === 0 ? {} : { renamedFields }),
     version: input.version,
+    ...(visibility === undefined ? {} : { visibility }),
   };
   return deepFreeze(normalized);
 }
@@ -680,6 +710,7 @@ function normalizeRoutableSeo(
 function normalizeSeoDefaults(
   input: { readonly key: string; readonly seoDefaults?: unknown },
   fields: FieldMap,
+  visibility: FieldVisibility | undefined,
 ): SeoDefaultsDefinition | undefined {
   const option: unknown = input.seoDefaults;
   if (option === undefined) return undefined;
@@ -700,22 +731,39 @@ function normalizeSeoDefaults(
   if (mapping.siteName === undefined) {
     fail(`global "${input.key}" seoDefaults must name a siteName field.`);
   }
+  // A site default must always be delivered, so it cannot name a conditional field.
+  const unconditional = (option: string, key: string): string => {
+    if (visibility !== undefined && Object.hasOwn(visibility, key))
+      fail(`global "${input.key}" ${option} must not reference conditional field "${key}".`);
+    return key;
+  };
   const text = (name: string): string =>
-    seoFieldReference(input.key, `seoDefaults.${name}`, mapping[name], fields, false);
+    unconditional(
+      `seoDefaults.${name}`,
+      seoFieldReference(input.key, `seoDefaults.${name}`, mapping[name], fields, false),
+    );
   return {
     ...(mapping.description === undefined ? {} : { description: text("description") }),
     ...(mapping.image === undefined
       ? {}
-      : { image: seoFieldReference(input.key, "seoDefaults.image", mapping.image, fields, true) }),
+      : {
+          image: unconditional(
+            "seoDefaults.image",
+            seoFieldReference(input.key, "seoDefaults.image", mapping.image, fields, true),
+          ),
+        }),
     siteName: text("siteName"),
     ...(mapping.titleTemplate === undefined ? {} : { titleTemplate: text("titleTemplate") }),
   };
 }
 
 /** Defines a detached singleton page model with inferred field values. */
-export function definePage<const Fields extends FieldMap = FieldMap>(
-  input: PageModelInput<Fields>,
-): PageModelDefinition<Fields> {
+export function definePage<
+  const Fields extends FieldMap = FieldMap,
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: PageModelInput<Fields> & { readonly visibility?: Visibility },
+): PageModelDefinition<Fields> & ModelVisibility<Visibility> {
   const common = normalizeCommonModel(input);
   if (Object.hasOwn(input, "listOptions"))
     fail(`page "${input.key}" must not declare listOptions.`);
@@ -725,26 +773,33 @@ export function definePage<const Fields extends FieldMap = FieldMap>(
     path: normalizePagePath(input.path),
     ...normalizeRoutableSeo(input, common.fields),
   };
-  return deepFreeze(definition);
+  return deepFreeze(definition) as PageModelDefinition<Fields> & ModelVisibility<Visibility>;
 }
 
 /** Defines a detached route-less singleton model, such as site settings. */
-export function defineGlobal<const Fields extends FieldMap = FieldMap>(
-  input: GlobalModelInput<Fields>,
-): GlobalModelDefinition<Fields> {
+export function defineGlobal<
+  const Fields extends FieldMap = FieldMap,
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: GlobalModelInput<Fields> & { readonly visibility?: Visibility },
+): GlobalModelDefinition<Fields> & ModelVisibility<Visibility> {
   const common = normalizeCommonModel(input);
   for (const option of ["path", "route", "listFields", "listOptions", "seo", "removedSeo"]) {
     if (Object.hasOwn(input, option)) {
       fail(`global "${input.key}" must not declare ${option}.`);
     }
   }
-  const seoDefaults = normalizeSeoDefaults(input, common.fields);
+  const seoDefaults = normalizeSeoDefaults(
+    input,
+    common.fields,
+    common.visibility as FieldVisibility | undefined,
+  );
   const definition: GlobalModelDefinition<Fields> = {
     ...common,
     kind: "global",
     ...(seoDefaults === undefined ? {} : { seoDefaults }),
   };
-  return deepFreeze(definition);
+  return deepFreeze(definition) as GlobalModelDefinition<Fields> & ModelVisibility<Visibility>;
 }
 
 function normalizeListFields(value: unknown, fields: FieldMap): readonly string[] {
@@ -808,9 +863,12 @@ function normalizeListOptions(value: unknown, fields: FieldMap): CollectionListO
 }
 
 /** Defines a detached collection model with inferred field values. */
-export function defineCollection<const Fields extends FieldMap = FieldMap>(
-  input: CollectionModelInput<Fields>,
-): CollectionModelDefinition<Fields> {
+export function defineCollection<
+  const Fields extends FieldMap = FieldMap,
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: CollectionModelInput<Fields> & { readonly visibility?: Visibility },
+): CollectionModelDefinition<Fields> & ModelVisibility<Visibility> {
   const common = normalizeCommonModel(input);
   const listFields = normalizeListFields(input.listFields, common.fields);
   const listOptions = normalizeListOptions(input.listOptions, common.fields);
@@ -824,7 +882,7 @@ export function defineCollection<const Fields extends FieldMap = FieldMap>(
     route: normalizeCollectionRoute(input.route),
     ...normalizeRoutableSeo(input, common.fields),
   };
-  return deepFreeze(definition);
+  return deepFreeze(definition) as CollectionModelDefinition<Fields> & ModelVisibility<Visibility>;
 }
 
 function pageMatchesCollection(pagePath: string, collectionRoute: string): boolean {

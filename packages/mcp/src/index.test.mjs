@@ -184,3 +184,152 @@ test("interleaved identities retain their own visibility and draft attribution",
     await expect(admin.callTool({ name, arguments: {} })).rejects.toThrow();
   }
 });
+
+test("publish tool shares publication, replay and guards while lifecycle bans remain closed", async () => {
+  const f = await fixture();
+  const identity = attenuateActor(
+    { id: actorId("publisher"), role: "admin" },
+    {
+      permissions: ["content:read", "content:write", "content:publish"],
+      operations: ["discoverModels", "list", "load", "create", "save", "publish"],
+    },
+  );
+  const client = await f.connect(identity);
+  expect((await client.listTools()).tools.map((t) => t.name)).toEqual(
+    expect.arrayContaining(["publish_entry"]),
+  );
+  expect((await client.listTools()).tools).toHaveLength(6);
+  for (const name of ["unpublish_entry", "delete_entry", "revert_draft", "duplicate_entry"])
+    await expect(client.callTool({ name, arguments: {} })).rejects.toThrow();
+  const created = payload(
+    await client.callTool({ name: "create_entry", arguments: { ...draft, slug: "published" } }),
+  );
+  const args = { entryId: created.id, expectedRevision: 1, idempotencyKey: "publication-retry" };
+  const published = payload(await client.callTool({ name: "publish_entry", arguments: args }));
+  expect(published.publication).toBe("published");
+  expect(published.build).toMatchObject({ status: "queued" });
+  expect(published.entry.published).toBeDefined();
+  const version = await f.store.publishedContentVersion();
+  const replay = payload(await client.callTool({ name: "publish_entry", arguments: args }));
+  expect(replay).toEqual({
+    ...published,
+    publication: "replayed",
+    build: { status: "not-dispatched" },
+  });
+  expect(await f.store.publishedContentVersion()).toBe(version);
+  const stale = await client.callTool({
+    name: "publish_entry",
+    arguments: { ...args, expectedRevision: 0, idempotencyKey: "different-key" },
+  });
+  expect(stale.isError).toBe(true);
+  expect(payload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
+  const conflict = payload(
+    await client.callTool({ name: "create_entry", arguments: { ...draft, slug: "published" } }),
+  );
+  const blocked = await client.callTool({
+    name: "publish_entry",
+    arguments: { entryId: conflict.id, expectedRevision: 1 },
+  });
+  expect(blocked.isError).toBe(true);
+  expect(payload(blocked).error.code).toBe("CONTENT_ROUTE_CONFLICT");
+  for (const code of ["required", "internal_link_unavailable"]) {
+    const { ContentValidationError } = await import("@lacecms/content");
+    f.content.publish = async () => {
+      throw new ContentValidationError([
+        { code, path: ["fields", "link"], message: "Invalid destination." },
+      ]);
+    };
+    const failure = await client.callTool({ name: "publish_entry", arguments: args });
+    expect(failure.isError).toBe(true);
+    expect(payload(failure).error.code).toBe("VALIDATION_FAILED");
+    expect(payload(failure).error.details.issues[0]).toMatchObject({ code, path: "/fields/link" });
+  }
+});
+
+test("tools describe conditional fields and publish their projection", async () => {
+  const config = await defineConfig({
+    content: [
+      defineCollection({
+        key: "works",
+        route: "/works/:slug",
+        version: 1,
+        fields: {
+          kind: field.select({
+            options: ["image", "video"],
+            required: true,
+            defaultValue: "image",
+          }),
+          videoUrl: field.url({ required: true }),
+        },
+        visibility: { videoUrl: { field: "kind", values: ["video"] } },
+      }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  const content = new ContentUseCases({
+    config: config.runtime,
+    content: store,
+    media: store,
+    clock: new DeterministicClock(unixMilliseconds(1800000000000)),
+    idGenerator: new DeterministicIdGenerator("conditional-mcp"),
+  });
+  const handler = createMcpContentHandler({ content, version: "0.0.0-test" });
+  const client = new Client({ name: "lace-content-test", version: "0.0.0" });
+  clients.push(client);
+  const identity = attenuateActor(
+    { id: actorId("publisher"), role: "admin" },
+    {
+      permissions: ["content:read", "content:write", "content:publish"],
+      operations: ["discoverModels", "list", "load", "create", "save", "publish"],
+    },
+  );
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL("https://lace.test/mcp"), {
+      fetch: async (url, init) => {
+        let body = init?.body;
+        if (typeof body === "string") {
+          const message = JSON.parse(body);
+          if (message.method === "initialize") {
+            message.params.protocolVersion = "2025-11-25";
+            body = JSON.stringify(message);
+          }
+        }
+        return handler.fetch(new Request(url, { ...init, body }), identity);
+      },
+    }),
+  );
+  const tools = Object.fromEntries(
+    (await client.listTools()).tools.map((tool) => [tool.name, tool.description]),
+  );
+  expect(tools.list_content_models).toMatch(/visibility/u);
+  expect(tools.create_entry).toMatch(/hidden fields are kept and validated as drafts/u);
+  expect(tools.save_draft).toMatch(/hidden conditional fields are kept/u);
+  expect(tools.publish_entry).toMatch(/never published/u);
+  const models = payload(await client.callTool({ name: "list_content_models", arguments: {} }));
+  expect(models.items[0].visibility).toEqual(
+    content.discoverModels({ actor: identity }).items[0].visibility,
+  );
+  const created = payload(
+    await client.callTool({
+      name: "create_entry",
+      arguments: {
+        modelKey: "works",
+        title: "Work",
+        slug: "work",
+        fields: { kind: "image", videoUrl: "https://example.com/left-over" },
+        blocks: [],
+      },
+    }),
+  );
+  payload(
+    await client.callTool({
+      name: "publish_entry",
+      arguments: { entryId: created.id, expectedRevision: created.draft.revision },
+    }),
+  );
+  const read = payload(
+    await client.callTool({ name: "get_entry", arguments: { entryId: created.id } }),
+  );
+  expect(read.draft.fields).toEqual({ kind: "image", videoUrl: "https://example.com/left-over" });
+  expect(read.published.fields).toEqual({ kind: "image" });
+});

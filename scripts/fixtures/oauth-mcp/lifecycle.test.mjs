@@ -94,6 +94,38 @@ for (const kind of ["SQLite", "D1"]) {
       );
       expect(scopeFailure.status).toBe(403);
       expect(scopeFailure.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+      const publishFailure = await f.fetch(
+        new Request(`${f.origin}/mcp`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${tokens.access_token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/call",
+            params: {
+              name: "publish_entry",
+              arguments: { entryId: "missing", expectedRevision: 1 },
+            },
+          }),
+        }),
+      );
+      expect(publishFailure.status).toBe(403);
+      expect(publishFailure.headers.get("www-authenticate")).toContain('scope="content:publish"');
+      const publisherTokens = await f.authorize(true, true);
+      const publisher = await connect(publisherTokens);
+      expect((await publisher.listTools()).tools).toHaveLength(6);
+      await f.runtime.security.updateUser({ userId: f.admin.id, role: "editor" });
+      expect((await publisher.listTools()).tools).toHaveLength(5);
+      const demotedPublication = await publisher.callTool({
+        name: "publish_entry",
+        arguments: { entryId: "missing", expectedRevision: 1 },
+      });
+      expect(demotedPublication.isError).toBe(true);
+      expect(demotedPublication.structuredContent.error.code).toBe("AUTHORIZATION_DENIED");
+      await f.runtime.security.updateUser({ userId: f.admin.id, role: "admin" });
       stage = "rotation";
       const rotated = await refresh(tokens);
       expect(rotated.status).toBe(200);

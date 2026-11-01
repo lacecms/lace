@@ -792,6 +792,18 @@ fallback. Review [internal links](./internal-url-links.md) for grammar, source
 adoption and destructive-operation confirmation. Video embeds support provider
 URLs and optional image previews; they do not enable uploaded video files.
 
+Template 0.40.0 adopts videoEmbed v2: `aspectRatio` choices are `16:9` (default),
+`4:3`, `1:1`, `4:5`, `9:16`; `playback` is `player` (default) or `ambient`.
+Raise every model version allowing videoEmbed, run configuration sync, then
+`pnpm exec lace add block videoEmbed --site <site-path>` to install revision 2
+component and CSS. Review edited copies using `--write-new`. Otherwise an old
+component or block can fail with `block_version_mismatch`. No database migration.
+Reduced motion and no JavaScript fall back to player. Ambient is muted and looping;
+use posters and limit ambient blocks to control bandwidth. It has no pause control
+and does not meet WCAG 2.2.2 for videos longer than five seconds. See
+[site styling](./site-styling.md#video-embeds) for a site-owned stop-control example.
+Rollback after configuration sync requires matching content backup and source.
+
 ### Optional OAuth assistant
 
 MCP remains disabled by default. After migrations, set `LACE_MCP_ENABLED=true`
@@ -820,3 +832,21 @@ adoption; older engines cannot maintain internal-link projections or interpret
 the new URL grammar. Test restoration at an isolated origin with replacement
 secrets and production hooks disabled. Local Node/D1/R2 acceptance does not prove
 real VPS or Cloudflare deployment, restore or assistant-client compatibility.
+
+## Gallery video items (SM5D)
+
+`@lacecms/content` moves the built-in `gallery` to definition version 5: each
+item gains a required `kind` select (`image` default, `video`) that controls
+conditional fields, plus `videoUrl`, `videoTitle`, `playback` and `aspectRatio`
+for videos. Identity migration 5 keeps stored items as images; configuration
+sync materializes the item defaults in drafts and `kind` in publications. No
+SQL migration. `videoEmbed` keeps its version and hashes; its `playback` and
+`aspectRatio` descriptors are now shared with the gallery item.
+
+The registry `gallery` item moves to revision 7 with a new `GalleryVideo.css`
+stylesheet and an ambient-mounting script. Revision 6 components fail with
+`block_version_mismatch` after sync, and published item types make `media`
+optional, so customized copies must check `kind` and `media`. Template 0.45.0
+raises the starter model versions and ships the new component and stylesheet.
+Rollback after sync requires the pre-upgrade content backup with matching code
+and site sources.

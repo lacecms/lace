@@ -1,0 +1,72 @@
+/* Neutral video item structure. Unlayered site CSS overrides every rule here. */
+@layer lace-layout {
+  :where([data-lace-block="gallery"] [data-lace-video-area]) {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    min-width: 0;
+  }
+  :where(
+    [data-lace-block="gallery"]
+      [data-lace-video][data-lace-aspect-ratio="4:3"]
+      [data-lace-video-area]
+  ) {
+    aspect-ratio: 4 / 3;
+  }
+  :where(
+    [data-lace-block="gallery"]
+      [data-lace-video][data-lace-aspect-ratio="1:1"]
+      [data-lace-video-area]
+  ) {
+    aspect-ratio: 1 / 1;
+  }
+  :where(
+    [data-lace-block="gallery"]
+      [data-lace-video][data-lace-aspect-ratio="4:5"]
+      [data-lace-video-area]
+  ) {
+    aspect-ratio: 4 / 5;
+  }
+  :where(
+    [data-lace-block="gallery"]
+      [data-lace-video][data-lace-aspect-ratio="9:16"]
+      [data-lace-video-area]
+  ) {
+    aspect-ratio: 9 / 16;
+  }
+  :where(
+    [data-lace-block="gallery"] [data-lace-video-area] > iframe,
+    [data-lace-block="gallery"] [data-lace-video-area] > noscript > iframe
+  ) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  :where(
+    [data-lace-block="gallery"]
+      [data-lace-video][data-lace-ambient="active"]
+      [data-lace-video-area]
+      > iframe
+  ) {
+    position: absolute;
+    inset: 0;
+  }
+  :where(
+    [data-lace-block="gallery"]
+      [data-lace-video][data-lace-ambient="active"]
+      [data-lace-part="source"]:not(:focus-visible)
+  ) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}

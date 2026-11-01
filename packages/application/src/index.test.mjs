@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, test } from "vitest";
 import {
   actorDisplayName,
@@ -31,6 +32,8 @@ import {
   MAX_BUILD_EXPORT_PAGE_SIZE,
   assertBuildExportPageSize,
   selectBuildExportPage,
+  importTokenCapabilities,
+  importTokenExpiry,
 } from "../dist/index.js";
 import { DomainError } from "@lacecms/domain";
 import { unixMilliseconds } from "@lacecms/domain";
@@ -512,7 +515,7 @@ test("validates and defaults media list queries before reading", async () => {
       }),
     ],
   });
-  expect(reads).toEqual([{ limit: 10, sort: "-createdAt" }]);
+  expect(reads).toEqual([{ limit: 10, sort: "-createdAt", tags: [] }]);
   expect(reads[0]).not.toHaveProperty("q");
 
   await media.list({
@@ -522,9 +525,9 @@ test("validates and defaults media list queries before reading", async () => {
     sort: "size",
     type: "image/png",
   });
-  expect(reads[1]).toEqual({ limit: 5, q: "Cover", sort: "size", type: "image/png" });
+  expect(reads[1]).toEqual({ limit: 5, q: "Cover", sort: "size", type: "image/png", tags: [] });
   await media.list({ actor: mediaViewer, limit: 5, q: "   " });
-  expect(reads[2]).toEqual({ limit: 5, sort: "-createdAt" });
+  expect(reads[2]).toEqual({ limit: 5, sort: "-createdAt", tags: [] });
 
   for (const query of [{ q: "x".repeat(201) }, { type: "image/svg+xml" }, { sort: "width" }]) {
     await expect(media.list({ actor: mediaViewer, limit: 5, ...query })).rejects.toMatchObject({
@@ -1069,6 +1072,8 @@ test("validates media metadata patches before any read and merges onto stored va
   });
   expect(writes).toEqual([
     {
+      tags: [],
+      publishedEffect: true,
       alt: "Old alt",
       caption: "Line\nTwo",
       expectedUpdatedAt: 9,
@@ -1280,6 +1285,10 @@ test("configured list queries resolve before reads with role parity and detached
         ...query,
       }),
     ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE", pointer });
+  for (const slug of ["Hello", "a--b", "-a", "x".repeat(101), ""])
+    await expect(
+      useCases.list({ actor: { id: "reader", role: "viewer" }, modelKey: "posts", limit: 5, slug }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE", pointer: "/slug" });
   expect(calls).toHaveLength(3);
   await expect(
     useCases.list({ actor: { id: "reader", role: "nobody" }, modelKey: "posts", limit: 5 }),
@@ -1383,4 +1392,174 @@ test("trusted runtime LIKE budgets reject before reads and preserve original fil
     cloud.list({ ...input, actor: { id: "bad", role: "nobody" }, q: "x".repeat(201) }),
   ).rejects.toThrow();
   expect(calls).toHaveLength(finalCount);
+});
+
+test("media tags validate before I/O, preserve authorization, and separate build effects", async () => {
+  let reads = 0;
+  const writes = [];
+  let stored = mediaRecord({ tags: ["a"], updatedAt: 9 });
+  const media = mediaUseCases({
+    loadMedia: async () => {
+      reads++;
+      return stored;
+    },
+    loadMediaCatalogItem: async () => ({ ...catalogItem(), media: stored }),
+    updateMediaMetadata: async (input) => {
+      writes.push(input);
+      stored = { ...stored, tags: input.tags, updatedAt: input.updatedAt };
+      return { media: stored, ...(input.publishedEffect ? { targetVersion: 4 } : {}) };
+    },
+    listMedia: async (input) => {
+      reads++;
+      expect(input.tags).toEqual(["a", "b"]);
+      return { items: [] };
+    },
+    listMediaTags: async (input) => {
+      reads++;
+      expect(input.q).toBe("re");
+      return { items: [{ tag: "red", count: 2 }] };
+    },
+  });
+  const update = (tags, actor = mediaEditor) =>
+    media.updateMetadata({
+      actor,
+      mediaId: "media-1",
+      expectedUpdatedAt: stored.updatedAt,
+      patch: { tags },
+    });
+  await expect(update(["a"], mediaViewer)).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  for (const tags of [
+    ["a b"],
+    ["\na"],
+    ["Выставка"],
+    null,
+    Array.from({ length: 21 }, (_, i) => `t-${i}`),
+  ]) {
+    await expect(update(tags)).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    await expect(
+      media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "x.png", tags }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  }
+  await expect(
+    media.list({ actor: mediaViewer, limit: 10, tags: Array(6).fill("a") }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  await expect(media.listTags({ actor: mediaViewer, limit: 101 })).rejects.toMatchObject({
+    code: "CONTENT_INVALID_STATE",
+  });
+  expect(reads).toBe(0);
+  await expect(update([" A ", "a"])).resolves.toMatchObject({
+    build: { status: "not-dispatched" },
+    media: { updatedAt: 9, tags: ["a"] },
+  });
+  expect(writes).toHaveLength(0);
+  await expect(update(["B"])).resolves.toMatchObject({
+    build: { status: "not-dispatched" },
+    media: { updatedAt: 10, tags: ["b"] },
+  });
+  expect(writes[0]).toMatchObject({ publishedEffect: false, tags: ["b"] });
+  await expect(
+    media.updateMetadata({
+      actor: mediaEditor,
+      mediaId: "media-1",
+      expectedUpdatedAt: 10,
+      patch: { tags: [], caption: "new" },
+    }),
+  ).resolves.toMatchObject({ build: { status: "queued", targetVersion: 4 } });
+  await media.list({ actor: mediaViewer, limit: 10, tags: ["B", "a"] });
+  await expect(media.listTags({ actor: mediaViewer, limit: 50, q: " Re " })).resolves.toEqual({
+    items: [{ tag: "red", count: 2 }],
+  });
+});
+
+test("import-token capabilities require settings management and current publish permission", () => {
+  const admin = { id: "admin", role: "admin" };
+  expect(importTokenCapabilities(admin, false)).toEqual(["content:import"]);
+  expect(importTokenCapabilities(admin, true)).toEqual(["content:import", "content:publish"]);
+  const attenuated = {
+    ...admin,
+    authority: { operations: [], permissions: ["settings:manage", "content:read"] },
+  };
+  expect(() => importTokenCapabilities(attenuated, true)).toThrow(DomainError);
+  expect(importTokenCapabilities(attenuated, false)).toEqual(["content:import"]);
+  expect(() => importTokenCapabilities({ id: "editor", role: "editor" }, false)).toThrow(
+    DomainError,
+  );
+});
+
+test("import-token lifetimes are 1 to 7 whole days", () => {
+  const now = unixMilliseconds(1_000);
+  expect(importTokenExpiry(now, 1)).toBe(1_000 + 86_400_000);
+  expect(importTokenExpiry(now, 7)).toBe(1_000 + 7 * 86_400_000);
+  for (const days of [0, 8, 1.5, Number.NaN]) expect(() => importTokenExpiry(now, days)).toThrow();
+});
+
+test("uploads record the stored bytes' SHA-256 and lists filter by a valid hash", async () => {
+  const created = [];
+  const reads = [];
+  const expected = createHash("sha256").update(pngBytes).digest("hex");
+  const media = mediaUseCases({
+    async createMedia(input) {
+      created.push(input);
+      return mediaRecord({ id: input.id, sha256: input.sha256 });
+    },
+    async loadMediaCatalogItem() {
+      return catalogItem({ sha256: expected });
+    },
+    async listMedia(input) {
+      reads.push(input);
+      return { items: [catalogItem({ sha256: expected })] };
+    },
+  });
+  await expect(
+    media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "cover.png" }),
+  ).resolves.toMatchObject({ sha256: expected });
+  expect(created[0].sha256).toBe(expected);
+
+  await expect(
+    media.list({ actor: mediaViewer, limit: 5, sha256: expected }),
+  ).resolves.toMatchObject({ items: [{ sha256: expected }] });
+  expect(reads).toEqual([{ limit: 5, sha256: expected, sort: "-createdAt", tags: [] }]);
+  for (const sha256 of [expected.toUpperCase(), expected.slice(1), "z".repeat(64)])
+    await expect(media.list({ actor: mediaViewer, limit: 5, sha256 })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+  expect(reads).toHaveLength(1);
+
+  // A rejected upload stores no metadata and therefore no hash.
+  await expect(
+    media.create({ actor: mediaEditor, body: bytes(new Uint8Array([1, 2, 3])), filename: "x" }),
+  ).rejects.toThrow();
+  expect(created).toHaveLength(1);
+});
+
+test("entry lists pass an exact collection slug and refuse it for singleton models", async () => {
+  const { ContentUseCases } = await import("../dist/index.js");
+  const config = await defineConfig({
+    content: [
+      defineCollection({ key: "posts", route: "/posts/:slug", version: 1 }),
+      definePage({ key: "home", path: "/", version: 1 }),
+      defineGlobal({ key: "settings", version: 1 }),
+    ],
+  });
+  const calls = [];
+  const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
+  const useCases = new ContentUseCases({
+    config: config.runtime,
+    content: {
+      list: async (query) => {
+        calls.push(query);
+        return page;
+      },
+    },
+  });
+  const actor = { id: "reader", role: "viewer" };
+  await useCases.list({ actor, limit: 5, modelKey: "posts", slug: "hello-world", q: "x" });
+  expect(calls[0]).toMatchObject({ q: "x", slug: "hello-world" });
+  await useCases.list({ actor, limit: 5, modelKey: "posts" });
+  expect(calls[1]).not.toHaveProperty("slug");
+  for (const modelKey of ["home", "settings"])
+    await expect(useCases.list({ actor, limit: 5, modelKey, slug: "home" })).rejects.toMatchObject({
+      pointer: "/slug",
+    });
+  expect(calls).toHaveLength(2);
 });

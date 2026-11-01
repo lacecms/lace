@@ -1,9 +1,23 @@
 import * as React from "react";
 import { cn } from "../../lib/index.js";
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * `scrollRegionLabel` makes the horizontal scroll container a labelled, focusable
+ * region, so keyboard users can scroll a wide table that may hold no controls.
+ */
+function Table({
+  className,
+  scrollRegionLabel,
+  ...props
+}: React.ComponentProps<"table"> & { readonly scrollRegionLabel?: string }) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      data-slot="table-container"
+      className="relative w-full overflow-x-auto"
+      {...(scrollRegionLabel === undefined
+        ? {}
+        : { "aria-label": scrollRegionLabel, role: "region", tabIndex: 0 })}
+    >
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

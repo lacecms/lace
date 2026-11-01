@@ -1,5 +1,13 @@
+import {
+  mediaListFilters,
+  mediaTagCatalogQuery,
+  mediaTagInsert,
+  normalizedMediaWriteTags,
+} from "@lacecms/db";
+import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
   actorDisplayName,
@@ -17,6 +25,7 @@ import {
   renderConfigurationSyncPlanJson,
   SITE_BUILD_DEBOUNCE_MS,
   assertBuildExportPageSize,
+  withPublishedProjection,
 } from "@lacecms/application";
 import type {
   ActorSummary,
@@ -90,6 +99,11 @@ import {
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   INVALID_PUBLISHED_LINK_TARGETS_SQL,
+  INVALID_PROJECTED_LINK_TARGETS_SQL,
+  projectedBlocksSql,
+  projectedInternalLinksSql,
+  projectedMediaReferencesSql,
+  projectedPublicationRows,
   assertPublishedInternalLinkTargets,
   SqlContentLinkReader,
   replaceInternalLinkStatements,
@@ -650,8 +664,9 @@ export class D1ContentRepository
       input.after === undefined ? undefined : decodeMediaCursor(input.after, kind, input.sort);
     const comparison = descending ? "<" : ">";
     const direction = descending ? "desc" : "asc";
-    const conditions: string[] = [];
-    const bindings: (number | string)[] = [];
+    const tagFilter = mediaListFilters(input);
+    const conditions: string[] = [...tagFilter.conditions];
+    const bindings: (number | string)[] = [...tagFilter.bindings];
     if (input.q !== undefined) {
       conditions.push("instr(lower(m.filename), ?) > 0");
       bindings.push(foldAscii(input.q));
@@ -685,6 +700,24 @@ export class D1ContentRepository
           }
         : {}),
     });
+  }
+
+  public async listMediaTags(input: ListMediaTagsInput): Promise<CursorPage<MediaTagCount>> {
+    const query = mediaTagCatalogQuery(input);
+    const rows = (await this.all(query.sql, ...query.params)) as readonly {
+      tag: string;
+      count: number;
+    }[];
+    const items = rows
+      .slice(0, input.limit)
+      .map((row) => ({ tag: row.tag, count: Number(row.count) }));
+    const last = items.at(-1);
+    return {
+      items,
+      ...(rows.length > input.limit && last !== undefined
+        ? { nextCursor: encodeSortCursor(query.kind, last.tag, last.tag) }
+        : {}),
+    };
   }
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {
@@ -909,9 +942,31 @@ export class D1ContentRepository
       "select role from user where id = ?",
       input.publishedBy.id,
     );
-    const committed = this.publishedEntry(entry, input, publisher?.role);
+    // A projection replaces the copied fields, block data and references (conditional fields).
+    const projected =
+      input.projection === undefined
+        ? undefined
+        : projectedPublicationRows(
+            entry.draft.blocks.map((block) => block.key),
+            input.projection,
+          );
+    const copiedEntry = this.publishedEntry(entry, input, publisher?.role);
+    const committed =
+      input.projection === undefined
+        ? copiedEntry
+        : withPublishedProjection(copiedEntry, input.projection);
     const newId = input.publishedSnapshotId;
     const draftId = entry.draft.id;
+    const linkGuard =
+      projected === undefined
+        ? {
+            sql: INVALID_PUBLISHED_LINK_TARGETS_SQL,
+            params: [draftId, input.entryId, path ?? null],
+          }
+        : {
+            sql: INVALID_PROJECTED_LINK_TARGETS_SQL,
+            params: [projected.internalLinksJson, input.entryId, path ?? null],
+          };
     const exists: Condition = {
       params: [newId],
       sql: "exists (select 1 from content_snapshots where id = ?)",
@@ -920,47 +975,72 @@ export class D1ContentRepository
     batch.checkpoint("publish.snapshot");
     const snapshotIndex = batch.add(
       `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by)
-       select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ?
+       select ?, s.entry_id, s.revision, s.slug, s.title, ${projected === undefined ? "s.fields_json" : "?"}, s.seo_json, s.schema_version, ?, ?, ?
          from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id
         where e.id = ? and s.id = ? and s.revision = ?
-          and not exists (${INVALID_PUBLISHED_LINK_TARGETS_SQL})
+          and not exists (${linkGuard.sql})
           ${idempotency === undefined ? "" : "and not exists (select 1 from idempotency_records where scope = ? and key = ?)"}`,
       newId,
+      ...(projected === undefined ? [] : [projected.fieldsJson]),
       input.publishedAt,
       input.publishedAt,
       input.publishedBy.id,
       input.entryId,
       draftId,
       input.expectedRevision,
-      draftId,
-      input.entryId,
-      path ?? null,
+      ...linkGuard.params,
       ...(idempotency === undefined ? [] : [scope, idempotency.key]),
     );
     batch.checkpoint("publish.blocks");
-    batch.add(
-      `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL})
+    if (projected === undefined)
+      batch.add(
+        `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL})
        select ?, ${BLOCK_COPY_COLUMNS_SQL}
          from content_blocks where snapshot_id = ? and ${exists.sql}`,
-      newId,
-      draftId,
-      ...exists.params,
-    );
+        newId,
+        draftId,
+        ...exists.params,
+      );
+    else
+      batch.add(
+        projectedBlocksSql(exists.sql),
+        newId,
+        projected.blockDataJson,
+        draftId,
+        ...exists.params,
+      );
     batch.add(
       `${BUMP_INTERNAL_LINK_GRAPH_SQL} and ${exists.sql}`,
       JSON.stringify([draftId, ...(entry.published === undefined ? [] : [entry.published.id])]),
       ...exists.params,
     );
-    batch.add(`${COPY_INTERNAL_LINKS_SQL} and ${exists.sql}`, newId, draftId, ...exists.params);
+    if (projected === undefined)
+      batch.add(`${COPY_INTERNAL_LINKS_SQL} and ${exists.sql}`, newId, draftId, ...exists.params);
+    else
+      batch.add(
+        projectedInternalLinksSql(exists.sql),
+        newId,
+        projected.internalLinksJson,
+        ...exists.params,
+      );
     batch.checkpoint("publish.references");
-    batch.add(
-      `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
+    if (projected === undefined)
+      batch.add(
+        `insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at)
        select ?, source_key, field_path, media_id, created_at
          from content_media_references where snapshot_id = ? and ${exists.sql}`,
-      newId,
-      draftId,
-      ...exists.params,
-    );
+        newId,
+        draftId,
+        ...exists.params,
+      );
+    else
+      batch.add(
+        projectedMediaReferencesSql(exists.sql),
+        newId,
+        input.publishedAt,
+        projected.mediaReferencesJson,
+        ...exists.params,
+      );
     // A global has no route; its publication only replaces the snapshot.
     if (path !== undefined) {
       batch.checkpoint("publish.route");
@@ -1018,10 +1098,8 @@ export class D1ContentRepository
       }
       assertPublishedInternalLinkTargets(
         await this.all<import("@lacecms/db").InvalidPublishedLinkTargetRow>(
-          INVALID_PUBLISHED_LINK_TARGETS_SQL,
-          draftId,
-          input.entryId,
-          path ?? null,
+          linkGuard.sql,
+          ...linkGuard.params,
         ),
         entry.draft.blocks.map((block) => block.key),
       );
@@ -1417,6 +1495,7 @@ export class D1ContentRepository
                 fields: parseObject(row.fields_json, "Snapshot fields"),
                 state: row.state,
               })),
+              configuration.visibility as FieldVisibility | undefined,
             ),
           );
           if (rows.length < 100) break;
@@ -1474,23 +1553,24 @@ export class D1ContentRepository
 
   public async createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata> {
     try {
-      await bind(
-        this.database.prepare(
-          "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', 'active', ?, ?, ?)",
-        ),
-        [
-          input.id,
-          input.storageKey,
-          input.filename,
-          input.mimeType,
-          input.size,
-          input.width,
-          input.height,
-          input.createdBy,
-          input.createdAt,
-          input.createdAt,
-        ],
-      ).run();
+      const batch = this.batch();
+      batch.add(
+        "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, sha256, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', ?, 'active', ?, ?, ?)",
+        input.id,
+        input.storageKey,
+        input.filename,
+        input.mimeType,
+        input.size,
+        input.width,
+        input.height,
+        input.sha256 ?? null,
+        input.createdBy,
+        input.createdAt,
+        input.createdAt,
+      );
+      const insert = mediaTagInsert(input.id, normalizedMediaWriteTags(input.tags ?? []));
+      if (insert !== undefined) batch.add(insert.sql, ...insert.params);
+      await this.execute(batch, false);
     } catch (error) {
       sqliteWriteError(error, false, "D1");
     }
@@ -1516,26 +1596,22 @@ export class D1ContentRepository
     readonly leaseId: DispatcherLeaseId;
     readonly mediaId: string;
   }): Promise<void> {
-    const event = await this.requireLeasedMediaDeletionEvent(
-      input.leaseId,
-      input.completedAt,
-      input.mediaId,
-    );
     const batch = this.batch();
     const token = this.guard(batch, input.completedAt, {
       params: [
-        event.id,
         input.leaseId,
         input.completedAt - DISPATCHER_LEASE_DURATION_MS,
         input.mediaId,
+        input.mediaId,
       ],
-      sql: "exists (select 1 from outbox_events where id = ? and locked_by = ? and processed_at is null and locked_at > ?) and exists (select 1 from media m where m.id = ? and m.status = 'deleting' and not exists (select 1 from content_media_references r where r.media_id = m.id))",
+      sql: "exists (select 1 from outbox_events where locked_by = ? and type = 'media.delete.requested' and processed_at is null and locked_at > ? and case when json_valid(payload_json) then json_extract(payload_json, '$.mediaId') end = ?) and exists (select 1 from media m where m.id = ? and m.status = 'deleting' and not exists (select 1 from content_media_references r where r.media_id = m.id))",
     });
+    batch.add(`delete from media_tags where media_id = ? and ${GUARD_SQL}`, input.mediaId, token);
     batch.add(`delete from media where id = ? and ${GUARD_SQL}`, input.mediaId, token);
     batch.add(
-      `update outbox_events set processed_at = ?, locked_at = null, locked_by = null where id = ? and ${GUARD_SQL}`,
+      `update outbox_events set processed_at = ?, locked_at = null, locked_by = null where locked_by = ? and type = 'media.delete.requested' and ${GUARD_SQL}`,
       input.completedAt,
-      event.id,
+      input.leaseId,
       token,
     );
     this.releaseGuard(batch, token);
@@ -2480,9 +2556,20 @@ export class D1ContentRepository
     });
     batch.checkpoint("media.metadata");
     batch.add(`${MEDIA_METADATA_UPDATE_SQL} and ${GUARD_SQL}`, ...params, token);
+    if (input.tags !== undefined) {
+      batch.add(`delete from media_tags where media_id = ? and ${GUARD_SQL}`, input.mediaId, token);
+      const insert = mediaTagInsert(
+        input.mediaId,
+        normalizedMediaWriteTags(input.tags),
+        GUARD_SQL,
+        token,
+      );
+      if (insert !== undefined) batch.add(insert.sql, ...insert.params);
+    }
+    batch.checkpoint("media.tags");
     const published: Condition = {
       params: [token, input.mediaId],
-      sql: `${GUARD_SQL} and ${MEDIA_PUBLISHED_REFERENCE_SQL}`,
+      sql: `${GUARD_SQL} and ${MEDIA_PUBLISHED_REFERENCE_SQL} and ${input.publishedEffect === false ? "0" : "1"}`,
     };
     const state = this.addPublicStateBump(batch, published, {
       reason: "media_metadata",

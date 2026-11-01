@@ -41,6 +41,62 @@ it; Settings cannot retrieve its plaintext again. The root
 [README](../README.md#show-published-content-on-the-local-site) also documents
 the same-origin API request and ignored server-side environment setup.
 
+## Import credentials
+
+`lace import` writes into a running installation with a short-lived import
+token instead of a browser session ([ADR 0016](adr/0016-import-credentials.md)).
+In `/admin/settings`, the Import tokens card creates one with a name, a lifetime
+of 1, 3 or 7 days and, for people who may publish, an optional **Allow
+publishing** choice. Its plaintext is shown once, like a build token. The list
+shows the creator, expiry, last use and whether it may publish; Active tokens
+can be revoked, and expired or revoked tokens stay listed. The same lifecycle
+is available at `GET`/`POST /api/v1/admin/import-tokens` (body
+`{ "name", "expiresInDays": 1–7, "allowPublish"? }`) and
+`DELETE /api/v1/admin/import-tokens/:tokenId`, which need a browser session
+with `settings:manage`.
+
+Send the token as `Authorization: Bearer <token>`. A request with a Bearer
+credential on any `/api/v1/admin/` or `/api/v1/account/` route is an import
+request: it never falls back to a session cookie, and only these routes accept
+it:
+
+- `GET /api/v1/admin/content-models`
+- `GET` and `POST /api/v1/admin/models/:modelKey/entries`
+- `GET /api/v1/admin/entries/:entryId`, `PUT …/draft`, `POST …/publish`
+- `GET` and `POST /api/v1/admin/media`, `GET` and `PATCH /api/v1/admin/media/:mediaId`
+- `GET /api/v1/admin/import-credential`, which returns the token's metadata and
+  its effective `permissions`
+
+Every other route answers `403 AUTHORIZATION_DENIED`, including deletion,
+unpublishing, revert, duplication, media deletion and tags, builds, users,
+invitations, settings and token management. The token acts as its creator with
+the creator's current role, narrowed to reading, draft writes and media writes,
+plus publication only when the token carries it; a demoted creator loses what the
+new role lacks. Uploads count against the creator's 30-per-minute upload limit.
+An explicit foreign `Origin` on a write is refused; command-line clients send
+none. Import tokens never authenticate MCP or the build export, and build tokens
+never authenticate admin routes.
+
+Disabling the creator, resetting their password, signing them out everywhere
+and a password change that ends other sessions revoke the creator's import
+tokens; re-enabling does not restore them. Ordinary sign-out and role changes
+keep them. If a token leaks, revoke it in Settings and review the creator's
+recent drafts and media; the token can never delete content.
+
+Two list parameters let an import stay idempotent:
+
+- `GET /api/v1/admin/models/:modelKey/entries?slug=<slug>` (collections only)
+  matches the current draft slug exactly; a published slug that differs never
+  matches. Pages and globals already list at most one entry. Draft slugs are
+  not unique, so the page can hold more than one entry.
+- `GET /api/v1/admin/media?sha256=<64 lowercase hex>` returns active items whose
+  stored bytes have that SHA-256. Every upload after migration
+  `0015_import_credentials` records the hash, shown as `sha256` in admin media
+  DTOs; earlier media have none and never match.
+
+Both parameters combine with the other list options and bind continuation
+cursors. Invalid values return `422` with the pointer `/slug` or `/sha256`.
+
 ## Invitations
 
 Administrators add people with Users → Invite user (`POST
@@ -107,8 +163,9 @@ so account changes always go through the Lace routes above.
 
 ## Request limits
 
-Sensitive authentication, setup, token-management, invitation, and upload
-operations use fixed windows. Invitation inspection and acceptance, reset
+Sensitive authentication, setup, token-management (build and import tokens,
+20 per hour per administrator), invitation, and upload operations use fixed
+windows. Invitation inspection and acceptance, reset
 requests and confirmations count against the per-client authentication limit
 (10 per 15 minutes); password changes count against the same limit per
 signed-in user. Invitation create, resend and revoke, plus administrator

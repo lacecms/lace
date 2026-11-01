@@ -1,4 +1,5 @@
 export * from "./oauth.js";
+export * from "./api-tokens.js";
 export * from "./collection-list.js";
 export * from "./literal-like.js";
 export const packageName = "@lacecms/db";
@@ -22,6 +23,8 @@ export const checkedInMigrations = Object.freeze([
   { createdAt: 1792919369108, name: "0011_public_projection_identity.sql" },
   { createdAt: 1793229744933, name: "0012_oauth_mcp.sql" },
   { createdAt: 1793232246526, name: "0013_oauth_verification_indexes.sql" },
+  { createdAt: 1793472696691, name: "0014_media_tags.sql" },
+  { createdAt: 1793486493913, name: "0015_import_credentials.sql" },
 ]);
 
 export interface AppliedMigration {
@@ -32,4 +35,5 @@ export interface AppliedMigration {
 export * from "./schema.js";
 export * from "./sql-content.js";
 export * from "./sql-internal-links.js";
+export * from "./sql-publication.js";
 export * from "./internal-link-reader.js";

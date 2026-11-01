@@ -13,6 +13,7 @@ import {
   ContentValidationError,
   defineBlock,
   normalizeFieldDefinition,
+  normalizeFieldVisibility,
   normalizeFormLayout,
   isBlockAnchor,
   normalizeBlockClassName,
@@ -21,6 +22,7 @@ import {
 } from "@lacecms/content";
 import type {
   BlockMetadata,
+  FieldVisibility,
   FormLayout,
   FieldMetadata,
   JsonObject,
@@ -36,6 +38,8 @@ import {
   isMediaFocalCoordinate,
   MAX_SEO_CANONICAL_LENGTH,
   normalizeMediaText,
+  normalizeMediaTag,
+  normalizeMediaTags,
   normalizeSeoText,
   unixMilliseconds,
   siteBuildFailureReasons,
@@ -140,6 +144,8 @@ export const identifierSchemaPublic = identifierSchema;
 export const expectedRevisionSchema = nonNegativeIntegerSchema;
 export const opaqueCursorSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4_096));
 export const isoTimestampSchema = v.custom<string>(isUtcTimestamp);
+/** A media content hash: 64 lowercase hexadecimal characters. */
+export const mediaSha256Schema = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}(?![\s\S])/u));
 /** A single strong or weak validator encoding a safe published-state version. */
 export const entityTagSchema = v.pipe(
   v.string(),
@@ -320,6 +326,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     "settingsVisibility",
     "type",
     "version",
+    "visibility",
   ]);
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) return false;
   if (
@@ -355,6 +362,9 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
       ...(value.settings === undefined ? {} : { settings: value.settings }),
       type: value.type,
       version: value.version,
+      ...(value.visibility === undefined
+        ? {}
+        : { visibility: value.visibility as unknown as FieldVisibility }),
     });
     return (
       canonicalizeJson(value) ===
@@ -416,6 +426,8 @@ export const fieldMetadataSchema = v.custom<FieldMetadata>(isFieldMetadata);
 export const fieldMetadataMapSchema = v.custom<FieldMetadataMapDto>(isFieldMetadataMap);
 /** Validated executable-value-free metadata used to render generic block forms. */
 export const blockMetadataSchema = v.custom<BlockMetadata>(isBlockMetadata);
+/** Model-level conditional-field rules; the model schema checks them against its fields. */
+export const fieldVisibilitySchema = v.custom<FieldVisibility>((value) => isJsonObject(value));
 
 /** Converts a portable Unix-millisecond value into the canonical JSON timestamp. */
 export function toIsoTimestamp(value: UnixMilliseconds | number): IsoTimestamp {
@@ -778,6 +790,16 @@ export const contentEntryListQuerySchema = v.object({
       ),
     ),
   ),
+  slug: v.optional(
+    v.pipe(
+      v.string(),
+      v.maxLength(100),
+      v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?![\s\S])/u),
+      v.description(
+        "Collections only: exact current draft slug (a published slug that differs never matches). Applies to the page and totals, combines with the other parameters and binds continuation cursors. Refused for page and global models.",
+      ),
+    ),
+  ),
   sort: v.optional(contentEntrySortSchema),
   status: v.optional(contentEntryStatusSchema),
 });
@@ -806,6 +828,11 @@ export const mcpToolArgumentSchemas = Object.freeze({
     limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100)), 50),
   }),
   get_entry: v.strictObject({ entryId: identifierSchema }),
+  publish_entry: v.strictObject({
+    entryId: identifierSchema,
+    expectedRevision: expectedRevisionSchema,
+    idempotencyKey: v.optional(idempotencyKeySchema),
+  }),
   create_entry: v.strictObject({
     ...createContentEntryRequestSchema.entries,
     modelKey: identifierSchema,
@@ -886,6 +913,21 @@ function hasValidFormLayout<
   }
 }
 
+function hasValidFieldVisibility<
+  Value extends { fields: FieldMetadataMapDto; visibility?: FieldVisibility | undefined },
+>(value: Value): boolean {
+  try {
+    const normalized = normalizeFieldVisibility(value.visibility, value.fields);
+    return (
+      normalized === undefined ||
+      canonicalizeJson(normalized as unknown as JsonValue) ===
+        canonicalizeJson(value.visibility as unknown as JsonValue)
+    );
+  } catch {
+    return false;
+  }
+}
+
 const modelSeoSchema = v.strictObject({
   description: v.nullable(identifierSchema),
   image: v.nullable(identifierSchema),
@@ -916,9 +958,15 @@ export const contentModelSchema = v.pipe(
     /** Site SEO defaults mapped by the one global that declares them. */
     seoDefaults: v.optional(seoDefaultsSchema),
     version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+    /** Conditional-field rules over the model's own fields. */
+    visibility: v.optional(fieldVisibilitySchema),
   }),
   v.check(hasMatchingBlockDefinitions, "Block definitions must match the model's allowed blocks."),
   v.check(hasValidFormLayout, "Layout must place distinct immediate fields in valid groups."),
+  v.check(
+    hasValidFieldVisibility,
+    "Visibility rules must name sibling targets and unconditional select or boolean controllers.",
+  ),
   v.check(hasValidListFields, "List fields must name distinct fields of a collection."),
   v.check(
     (model) =>
@@ -1197,6 +1245,44 @@ export const buildTokenCreatedSchema = v.strictObject({
   token: v.string(),
 });
 export const buildTokenListSchema = v.strictObject({ items: v.array(buildTokenSchema) });
+/** Import tokens let `lace import` write as their creator for 1 to 7 days (ADR 0016). */
+export const importTokenCreateRequestSchema = v.strictObject({
+  allowPublish: v.optional(v.boolean(), false),
+  expiresInDays: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(7)),
+  name: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+});
+export const importTokenSchema = v.strictObject({
+  // Strict tuples: a loose first option would silently drop `content:publish`.
+  capabilities: v.union([
+    v.strictTuple([v.literal("content:import")]),
+    v.strictTuple([v.literal("content:import"), v.literal("content:publish")]),
+  ]),
+  createdAt: isoTimestampSchema,
+  createdBy: v.strictObject({
+    displayName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(320))),
+    email: v.string(),
+    id: identifierSchema,
+  }),
+  expiresAt: isoTimestampSchema,
+  id: identifierSchema,
+  lastUsedAt: v.optional(isoTimestampSchema),
+  name: v.string(),
+  revokedAt: v.optional(isoTimestampSchema),
+  tokenPrefix: v.string(),
+});
+export const importTokenCreatedSchema = v.strictObject({
+  ...importTokenSchema.entries,
+  token: v.string(),
+});
+export const importTokenListSchema = v.strictObject({ items: v.array(importTokenSchema) });
+/** What `GET /api/v1/admin/import-credential` tells an import client about itself. */
+export const importCredentialSchema = v.strictObject({
+  permissions: v.pipe(
+    v.array(permissionSchema),
+    v.check((items) => new Set(items).size === items.length, "Permissions must be unique."),
+  ),
+  token: importTokenSchema,
+});
 export const buildRequestSchema = v.strictObject({});
 export const buildQueueReceiptSchema = v.strictObject({
   coalesced: v.boolean(),
@@ -1206,6 +1292,50 @@ export const buildQueueReceiptSchema = v.strictObject({
 export type BuildQueueReceiptDto = v.InferOutput<typeof buildQueueReceiptSchema>;
 export type BuildTokenDto = v.InferOutput<typeof buildTokenSchema>;
 export type BuildTokenCreatedDto = v.InferOutput<typeof buildTokenCreatedSchema>;
+export type ImportTokenCreateRequestDto = v.InferInput<typeof importTokenCreateRequestSchema>;
+export type ImportTokenDto = v.InferOutput<typeof importTokenSchema>;
+export type ImportTokenCreatedDto = v.InferOutput<typeof importTokenCreatedSchema>;
+export type ImportTokenListDto = v.InferOutput<typeof importTokenListSchema>;
+export type ImportCredentialDto = v.InferOutput<typeof importCredentialSchema>;
+
+export interface ImportTokenDtoSource {
+  readonly capabilities:
+    | readonly ["content:import"]
+    | readonly ["content:import", "content:publish"];
+  readonly createdAt: UnixMilliseconds;
+  readonly createdBy: {
+    readonly displayName?: string;
+    readonly email: string;
+    readonly id: string;
+  };
+  readonly expiresAt: UnixMilliseconds;
+  readonly id: string;
+  readonly lastUsedAt?: UnixMilliseconds;
+  readonly name: string;
+  readonly revokedAt?: UnixMilliseconds;
+  readonly tokenPrefix: string;
+}
+
+/** Maps import-token metadata; the plaintext is added only by the creation response. */
+export function toImportTokenDto(token: ImportTokenDtoSource): ImportTokenDto {
+  return {
+    capabilities: [...token.capabilities] as ImportTokenDto["capabilities"],
+    createdAt: toIsoTimestamp(token.createdAt),
+    createdBy: {
+      ...(token.createdBy.displayName === undefined
+        ? {}
+        : { displayName: token.createdBy.displayName }),
+      email: token.createdBy.email,
+      id: token.createdBy.id,
+    },
+    expiresAt: toIsoTimestamp(token.expiresAt),
+    id: token.id,
+    ...(token.lastUsedAt === undefined ? {} : { lastUsedAt: toIsoTimestamp(token.lastUsedAt) }),
+    name: token.name,
+    ...(token.revokedAt === undefined ? {} : { revokedAt: toIsoTimestamp(token.revokedAt) }),
+    tokenPrefix: token.tokenPrefix,
+  };
+}
 export type BuildTokenListDto = v.InferOutput<typeof buildTokenListSchema>;
 
 const positiveIntegerSchema = v.pipe(v.number(), v.integer(), v.minValue(1));
@@ -1227,12 +1357,75 @@ export const mediaSortSchema = v.picklist([
 ]);
 /** Descriptive text limits in code points, shared with clients that bound their inputs. */
 export { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_CAPTION_LENGTH } from "@lacecms/domain";
+/** The server's tag normalization, so clients show the stored form before saving. */
+export { normalizeMediaTag } from "@lacecms/domain";
 export { effectiveAltText } from "@lacecms/content";
 export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 
+/** Input tags normalize once; element validation preserves JSON Pointer positions. */
+export const mediaTagInputSchema = v.pipe(
+  v.string(),
+  v.description(
+    "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+  ),
+  v.check(
+    (value) => [...value].length <= 200 && normalizeMediaTag(value) !== undefined,
+    "Use 1–40 ASCII letters, digits or hyphens.",
+  ),
+  v.transform((value) => normalizeMediaTag(value)!),
+);
+export const mediaTagsInputSchema = v.pipe(
+  v.array(mediaTagInputSchema),
+  v.rawCheck(({ dataset, addIssue }) => {
+    if (!dataset.typed) return;
+    const result = normalizeMediaTags(dataset.value);
+    if ("issue" in result)
+      addIssue({
+        message: "Supply at most 20 distinct tags.",
+        path: [
+          {
+            type: "array",
+            origin: "value",
+            input: dataset.value,
+            key: result.issue,
+            value: dataset.value[result.issue],
+          },
+        ],
+      });
+  }),
+  v.transform((values) => (normalizeMediaTags(values) as { tags: readonly string[] }).tags.slice()),
+);
+const mediaFilterTagsSchema = v.pipe(
+  v.union([v.string(), v.array(v.string())]),
+  v.transform((value) => (typeof value === "string" ? [value] : value)),
+  v.pipe(v.array(mediaTagInputSchema), v.maxLength(5)),
+  v.transform((tags) => [...new Set(tags)].sort()),
+);
+export const mediaTagCatalogQuerySchema = v.object({
+  after: v.optional(opaqueCursorSchema),
+  limit: v.optional(v.pipe(v.string(), v.regex(/^(?:[1-9]|[1-9][0-9]|100)$/u))),
+  q: v.optional(mediaTagInputSchema),
+});
+export const mediaTagCatalogSchema = cursorPageSchema(
+  v.strictObject({
+    tag: v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,40}(?![\s\S])/u)),
+    count: positiveIntegerSchema,
+  }),
+);
+export type MediaTagCatalogDto = v.InferOutput<typeof mediaTagCatalogSchema>;
+
 /** Query parameters accepted by the admin media list; unknown keys stay ignored. */
 export const mediaListQuerySchema = v.object({
+  tag: v.optional(mediaFilterTagsSchema),
+  sha256: v.optional(
+    v.pipe(
+      mediaSha256Schema,
+      v.description(
+        "Exact SHA-256 of the stored bytes (64 lowercase hex). Restricts the page to active items; media uploaded before migration 0015 never match. Binds continuation cursors.",
+      ),
+    ),
+  ),
   after: v.optional(opaqueCursorSchema),
   limit: v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/u))),
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_MEDIA_SEARCH_LENGTH))),
@@ -1435,6 +1628,14 @@ export const buildExportFirstPageSchema = v.strictObject({
 export const buildExportContinuationPageSchema = v.strictObject(buildExportPageEntries);
 
 export const mediaMetadataSchema = v.strictObject({
+  tags: v.pipe(
+    v.array(v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,40}(?![\s\S])/u))),
+    v.maxLength(20),
+    v.check(
+      (tags) => tags.every((tag, i) => i === 0 || tags[i - 1]! < tag),
+      "Tags must be unique and sorted.",
+    ),
+  ),
   alt: v.optional(v.pipe(v.string(), v.minLength(1))),
   caption: v.optional(v.pipe(v.string(), v.minLength(1))),
   createdAt: isoTimestampSchema,
@@ -1444,6 +1645,8 @@ export const mediaMetadataSchema = v.strictObject({
   height: v.optional(positiveIntegerSchema),
   id: identifierSchema,
   mimeType: v.string(),
+  /** Admin-only SHA-256 of the stored bytes; absent for media uploaded before migration 0015. */
+  sha256: v.optional(mediaSha256Schema),
   size: nonNegativeIntegerSchema,
   status: v.picklist(["active", "delete_failed", "deleting"]),
   updatedAt: isoTimestampSchema,
@@ -1498,13 +1701,14 @@ export const mediaDetailSchema = v.strictObject({
  */
 export const updateMediaMetadataRequestSchema = v.pipe(
   v.strictObject({
+    tags: v.optional(mediaTagsInputSchema),
     alt: v.optional(v.nullable(mediaAltSchema)),
     caption: v.optional(v.nullable(mediaCaptionSchema)),
     focalPoint: v.optional(v.nullable(mediaFocalPointSchema)),
   }),
   v.check(
     (value) => Object.keys(value).length > 0,
-    "Supply at least one of alt, caption, or focalPoint.",
+    "Supply at least one of alt, caption, focalPoint, or tags.",
   ),
 );
 export const updateMediaMetadataResultSchema = v.strictObject({
@@ -1998,6 +2202,7 @@ export function toUnpublishContentEntryResultDto(input: {
 
 /** Maps metadata without exposing the private storage key. */
 export interface MediaMetadataDtoSource {
+  readonly tags?: readonly string[];
   readonly alt?: string;
   readonly caption?: string;
   readonly createdAt: UnixMilliseconds;
@@ -2007,6 +2212,7 @@ export interface MediaMetadataDtoSource {
   readonly height?: number;
   readonly id: string;
   readonly mimeType: string;
+  readonly sha256?: string;
   readonly size: number;
   readonly status: "active" | "delete_failed" | "deleting";
   readonly updatedAt: UnixMilliseconds;
@@ -2016,6 +2222,7 @@ export interface MediaMetadataDtoSource {
 
 export function toMediaMetadataDto(media: MediaMetadataDtoSource, url: string): MediaMetadataDto {
   return {
+    tags: [...(media.tags ?? [])],
     ...(media.alt === undefined ? {} : { alt: media.alt }),
     ...(media.caption === undefined ? {} : { caption: media.caption }),
     createdAt: toIsoTimestamp(media.createdAt),
@@ -2027,6 +2234,7 @@ export function toMediaMetadataDto(media: MediaMetadataDtoSource, url: string): 
     ...(media.height === undefined ? {} : { height: media.height }),
     id: media.id,
     mimeType: media.mimeType,
+    ...(media.sha256 === undefined ? {} : { sha256: media.sha256 }),
     size: media.size,
     status: media.status,
     updatedAt: toIsoTimestamp(media.updatedAt),
@@ -2445,6 +2653,7 @@ export interface ContentModelSource {
     readonly titleTemplate?: string;
   };
   readonly version: number;
+  readonly visibility?: FieldVisibility;
 }
 
 /** Maps a model's SEO fallback fields with `null` for unmapped values. */
@@ -2497,6 +2706,9 @@ export function toContentModelDto(
       ? {}
       : { seoDefaults: toSeoDefaultsDto(model.seoDefaults) }),
     version: model.version,
+    ...(model.visibility === undefined
+      ? {}
+      : { visibility: normalizeFieldVisibility(model.visibility, model.fields)! }),
   };
 }
 
@@ -2763,7 +2975,9 @@ export const accountCapabilitiesSchema = v.strictObject({ mcpEnabled: v.boolean(
 export const oauthConnectionSchema = v.strictObject({
   id: identifierSchema,
   clientName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
-  scopes: v.array(v.picklist(["content:read", "content:write", "offline_access"])),
+  scopes: v.array(
+    v.picklist(["content:read", "content:write", "content:publish", "offline_access"]),
+  ),
   createdAt: isoTimestampSchema,
   expiresAt: isoTimestampSchema,
   revokedAt: v.nullable(isoTimestampSchema),
@@ -2786,8 +3000,11 @@ export const mcpConsentDetailsSchema = v.strictObject({
   transaction: identifierSchema,
   clientName: v.string(),
   callbackHostname: v.string(),
-  scopes: v.array(v.picklist(["content:read", "content:write", "offline_access"])),
+  scopes: v.array(
+    v.picklist(["content:read", "content:write", "content:publish", "offline_access"]),
+  ),
   canWrite: v.boolean(),
+  canPublish: v.boolean(),
 });
 export const mcpConsentNavigationSchema = v.strictObject({
   redirect: v.literal(true),

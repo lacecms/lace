@@ -85,13 +85,13 @@ test("summarizes a block's first non-empty list by its label, count, and items",
   const images = blockSummary(gallery!, {
     images: [{ media: mediaId }, { media: mediaId }, { media: mediaId }],
   });
-  expect(images).toBe("Images (3)");
+  expect(images).toBe("Images and videos (3)");
   expect(images).not.toContain(mediaId);
   expect(
     blockSummary(gallery!, {
       images: [{ caption: "Office", media: mediaId }, { media: mediaId }, { caption: "Team" }],
     }),
-  ).toBe("Images (3): Office, Team");
+  ).toBe("Images and videos (3): Office, Team");
 });
 
 test("keeps top-level text ahead of lists and skips empty lists", () => {
@@ -165,4 +165,24 @@ test("new blocks take the default of every declared setting", () => {
     boxed: { defaultValue: false, required: false, type: "boolean" },
   } as const;
   expect(defaultSettings({ settings } as never)).toEqual({ align: "left", boxed: false });
+});
+
+test("block summaries skip values of hidden conditional fields", () => {
+  const promo = {
+    fields: {
+      hasCta: { required: false, type: "boolean" },
+      ctaLabel: { required: false, type: "text" },
+      body: { required: false, type: "textarea" },
+      image: { required: false, type: "media" },
+    },
+    visibility: {
+      ctaLabel: { field: "hasCta", values: [true] },
+      image: { field: "hasCta", values: [true] },
+    },
+  } as const;
+  expect(blockSummary(promo, { ctaLabel: "Buy now", hasCta: false, image: "m" })).toBe(
+    "Empty block",
+  );
+  expect(blockSummary(promo, { ctaLabel: "Buy now", hasCta: false, body: "Sale" })).toBe("Sale");
+  expect(blockSummary(promo, { ctaLabel: "Buy now", hasCta: true })).toBe("Buy now");
 });

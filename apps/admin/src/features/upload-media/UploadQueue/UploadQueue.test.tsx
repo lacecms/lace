@@ -92,3 +92,74 @@ test("uploaded rows offer their item only when the caller can choose it", async 
   await user.click(screen.getByRole("button", { name: "Use a.png" }));
   expect(onChoose).toHaveBeenCalledWith(mediaItem);
 });
+
+test("a selection replaces Use with a select toggle on uploaded rows only", async () => {
+  const user = userEvent.setup();
+  const onToggle = vi.fn();
+  const onChoose = vi.fn();
+  const { rerender } = render(
+    <UploadQueue
+      onChoose={onChoose}
+      onClearFinished={vi.fn()}
+      onDismiss={vi.fn()}
+      onRetry={vi.fn()}
+      selection={{ blocked: undefined, isSelected: () => false, onToggle }}
+      uploads={uploads}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Use a.png" })).not.toBeInTheDocument();
+  const toggles = screen.getAllByRole("button", { name: /^Select / });
+  expect(toggles).toHaveLength(1);
+  expect(toggles[0]).toHaveAccessibleName("Select a.png");
+  expect(toggles[0]).toHaveAttribute("aria-pressed", "false");
+  await user.click(toggles[0]!);
+  expect(onToggle).toHaveBeenCalledWith(mediaItem);
+  rerender(
+    <UploadQueue
+      onClearFinished={vi.fn()}
+      onDismiss={vi.fn()}
+      onRetry={vi.fn()}
+      selection={{ blocked: "Images allows at most 50 items.", isSelected: () => true, onToggle }}
+      uploads={uploads}
+    />,
+  );
+  const selected = screen.getByRole("button", { name: "Select a.png" });
+  expect(selected).toHaveAttribute("aria-pressed", "true");
+  expect(selected).toHaveTextContent("Selected");
+  expect(selected).not.toHaveAttribute("aria-disabled");
+  expect(screen.queryByText("Selection limit reached")).not.toBeInTheDocument();
+  expect(onChoose).not.toHaveBeenCalled();
+});
+
+test("an unselected upload at capacity says the selection limit is reached", async () => {
+  const user = userEvent.setup();
+  const onToggle = vi.fn();
+  render(
+    <UploadQueue
+      onClearFinished={vi.fn()}
+      onDismiss={vi.fn()}
+      onRetry={vi.fn()}
+      selection={{ blocked: "Images allows at most 50 items.", isSelected: () => false, onToggle }}
+      uploads={uploads}
+    />,
+  );
+  const toggle = screen.getByRole("button", { name: "Select a.png" });
+  expect(toggle).toHaveAttribute("aria-disabled", "true");
+  expect(toggle).toHaveAccessibleDescription("Selection limit reached");
+  await user.click(toggle);
+  expect(onToggle).not.toHaveBeenCalled();
+});
+
+test("without a selection uploaded rows keep their Use action", () => {
+  render(
+    <UploadQueue
+      onChoose={vi.fn()}
+      onClearFinished={vi.fn()}
+      onDismiss={vi.fn()}
+      onRetry={vi.fn()}
+      uploads={uploads}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Use a.png" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Select a.png" })).not.toBeInTheDocument();
+});

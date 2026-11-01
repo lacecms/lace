@@ -11,7 +11,8 @@
     "lace": "./dist/bin.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "type": "module",
   "types": "./dist/index.d.ts",
@@ -19,7 +20,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./lace-import.schema.json": "./schema/lace-import.schema.json"
   },
   "publishConfig": {
     "access": "public",
@@ -29,18 +31,24 @@
     "build": "tsc -p tsconfig.json && node scripts/bundle-registry.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
-    "test": "vitest run src/*.test.mjs"
+    "test": "vitest run src/*.test.mjs",
+    "schema": "node scripts/generate-import-schema.mjs"
   },
   "dependencies": {
     "@lacecms/application": "workspace:*",
     "@lacecms/config": "workspace:*",
+    "@lacecms/contracts": "workspace:*",
     "@lacecms/platform-cloudflare": "workspace:*",
     "@lacecms/platform-node": "workspace:*",
     "miniflare": "catalog:",
-    "semver": "catalog:"
+    "semver": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
+    "@lacecms/content": "workspace:*",
+    "@lacecms/test-utils": "workspace:*",
     "@types/node": "catalog:",
+    "@valibot/to-json-schema": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

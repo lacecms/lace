@@ -1,5 +1,6 @@
 import type { MediaMetadataDto } from "@lacecms/contracts";
 import { CircleAlert, CircleCheck, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { useId } from "react";
 import { formatBytes } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import type { MediaUploadEntry } from "../useMediaUploads.js";
@@ -33,18 +34,29 @@ function stateText(upload: MediaUploadEntry): string {
   }
 }
 
+/** How uploaded rows take part in a multiple selection. */
+export interface UploadSelection {
+  readonly isSelected: (item: MediaMetadataDto) => boolean;
+  readonly onToggle: (item: MediaMetadataDto) => void;
+  /** Why an unselected item cannot be selected now, such as a full selection. */
+  readonly blocked: string | undefined;
+}
+
 /**
  * Per-file upload rows with progress, errors, retry, and dismissal. With
- * `onChoose`, an uploaded row also offers to use its item.
+ * `onChoose`, an uploaded row also offers to use its item; with `selection`,
+ * it offers to select or deselect it instead.
  */
 export function UploadQueue({
   onChoose,
   onClearFinished,
   onDismiss,
   onRetry,
+  selection,
   uploads,
 }: {
   readonly onChoose?: ((item: MediaMetadataDto) => void) | undefined;
+  readonly selection?: UploadSelection | undefined;
   readonly onClearFinished: () => void;
   readonly onDismiss: (key: string) => void;
   readonly onRetry: (key: string) => void;
@@ -105,9 +117,11 @@ export function UploadQueue({
                     <RotateCcw aria-hidden="true" />
                   </Button>
                 ) : undefined}
-                {onChoose !== undefined &&
-                upload.state === "uploaded" &&
-                upload.item !== undefined ? (
+                {selection !== undefined && upload.item !== undefined ? (
+                  <SelectToggle item={upload.item} name={name} selection={selection} />
+                ) : onChoose !== undefined &&
+                  upload.state === "uploaded" &&
+                  upload.item !== undefined ? (
                   <Button
                     aria-label={`Use ${name}`}
                     onClick={() => {
@@ -160,5 +174,40 @@ export function UploadQueue({
         })}
       </ul>
     </section>
+  );
+}
+
+function SelectToggle({
+  item,
+  name,
+  selection,
+}: {
+  readonly item: MediaMetadataDto;
+  readonly name: string;
+  readonly selection: UploadSelection;
+}) {
+  const id = useId();
+  const selected = selection.isSelected(item);
+  const blocked = selected ? undefined : selection.blocked;
+  return (
+    <>
+      {blocked === undefined ? undefined : (
+        <span className="text-xs text-muted-foreground" id={id}>
+          Selection limit reached
+        </span>
+      )}
+      <Button
+        aria-label={`Select ${name}`}
+        aria-pressed={selected}
+        {...(blocked === undefined ? {} : { "aria-describedby": id, "aria-disabled": true })}
+        onClick={() => {
+          if (blocked === undefined) selection.onToggle(item);
+        }}
+        size="xs"
+        variant={selected ? "default" : "outline"}
+      >
+        {selected ? "Selected" : "Select"}
+      </Button>
+    </>
   );
 }

@@ -101,7 +101,7 @@ test("the picker dialog reuses a later page and choosing returns focus to Replac
   expect(saveDraft).not.toHaveBeenCalled();
 });
 
-test("picker search and type filter stay local and reset when reopened", async () => {
+test("picker search, type, and tag filters stay local and reset when reopened", async () => {
   const user = userEvent.setup();
   const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
   const { router } = mount({ overrides: { listMedia } });
@@ -111,9 +111,18 @@ test("picker search and type filter stay local and reset when reopened", async (
   const dialog = screen.getByRole("dialog", { name: "Choose media for Hero" });
   await user.type(within(dialog).getByRole("searchbox", { name: "Search media" }), "hero");
   await user.click(within(dialog).getByRole("button", { name: "PNG" }));
-  await waitFor(() =>
-    expect(listMedia).toHaveBeenLastCalledWith(undefined, { q: "hero", type: "image/png" }),
+  await user.type(
+    within(dialog).getByRole("combobox", { name: "Filter by tags (all must match)" }),
+    "cover{Enter}",
   );
+  await waitFor(() =>
+    expect(listMedia).toHaveBeenLastCalledWith(undefined, {
+      q: "hero",
+      tags: ["cover"],
+      type: "image/png",
+    }),
+  );
+  await user.click(within(dialog).getByRole("button", { name: "PNG" }));
   expect(within(dialog).queryByRole("group", { name: "Layout" })).not.toBeInTheDocument();
   expect(router.state.location.searchStr).toBe("");
   await user.keyboard("{Escape}");
@@ -123,6 +132,7 @@ test("picker search and type filter stay local and reset when reopened", async (
   await user.click(opener);
   const reopened = screen.getByRole("dialog", { name: "Choose media for Hero" });
   expect(within(reopened).getByRole("searchbox", { name: "Search media" })).toHaveValue("");
+  expect(within(reopened).queryByRole("button", { name: "Remove tag cover" })).toBeNull();
   expect(within(reopened).getByRole("button", { name: "All" })).toHaveAttribute(
     "aria-pressed",
     "true",

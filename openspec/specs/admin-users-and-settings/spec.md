@@ -248,9 +248,9 @@ Disabled state SHALL explain that the operator must set `LACE_MCP_ENABLED=true` 
 - **THEN** access is denied and neither status nor client setup metadata is requested
 
 ### Requirement: MCP connection instructions are copyable and permission-aware
-Enabled MCP setup SHALL provide copyable Codex CLI commands to add the canonical endpoint and authorize through public-client DCR. A permission choice SHALL default to read-only (`content:read,offline_access`); choosing draft editing SHALL use `content:read,content:write,offline_access`. An alternative Codex TOML example SHALL describe the same endpoint and selected scopes and SHALL explain that configuration still requires OAuth login. Generic client guidance SHALL identify Streamable HTTP, OAuth authorization code with PKCE, and dynamic client registration, without implying that arbitrary clients are verified.
+Enabled MCP setup SHALL provide copyable Codex CLI commands to add the canonical endpoint and authorize through public-client DCR. A permission choice SHALL default to read-only (`content:read,offline_access`); choosing draft editing SHALL use `content:read,content:write,offline_access`; choosing publishing SHALL use `content:read,content:write,content:publish,offline_access`. An alternative Codex TOML example SHALL describe the same endpoint and selected scopes and SHALL explain that configuration still requires OAuth login. Generic client guidance SHALL identify Streamable HTTP, OAuth authorization code with PKCE, and dynamic client registration, without implying that arbitrary clients are verified.
 
-Examples SHALL use the exact canonical endpoint and syntactically safe quoting for the target shell/TOML format. Copy SHALL copy the displayed text with accessible feedback; a denied clipboard write SHALL report failure and retain manually selectable text. Instructions SHALL explain browser sign-in and explicit consent, that viewers cannot grant write access, that publishing/unpublishing/deletion are unavailable, and that a client may need restart/reload to pick up configuration. They SHALL NOT contain passwords, cookies, build tokens, or generated OAuth credentials. Rendering or copying SHALL NOT register a client, initiate login, or mutate CMS state.
+Examples SHALL use the exact canonical endpoint and syntactically safe quoting for the target shell/TOML format. Copy SHALL copy the displayed text with accessible feedback; a denied clipboard write SHALL report failure and retain manually selectable text. Instructions SHALL explain browser sign-in and explicit consent, that viewers cannot grant write access, that only administrators can grant publishing, that published content reaches the site with the next build, that unpublishing/deletion are unavailable, and that a client may need restart/reload to pick up configuration. They SHALL NOT contain passwords, cookies, build tokens, or generated OAuth credentials. Rendering or copying SHALL NOT register a client, initiate login, or mutate CMS state.
 
 #### Scenario: Administrator copies read-only instructions
 - **WHEN** an administrator opens enabled MCP setup without changing the permission choice and copies the Codex commands
@@ -259,6 +259,10 @@ Examples SHALL use the exact canonical endpoint and syntactically safe quoting f
 #### Scenario: Administrator selects draft editing
 - **WHEN** the permission choice changes to draft editing
 - **THEN** both CLI and TOML examples include write and read scopes, explain the consent and role limits, and confer no authority merely by being shown
+
+#### Scenario: Administrator selects publishing
+- **WHEN** the permission choice changes to publishing
+- **THEN** both CLI and TOML examples include read, write, publish and offline scopes, state the administrator-only consent and the unpublish/delete ban, and confer no authority merely by being shown
 
 #### Scenario: Configured endpoint differs from browser location
 - **WHEN** Settings is viewed through a development frontend or the deployment uses a non-default port
@@ -269,11 +273,11 @@ Examples SHALL use the exact canonical endpoint and syntactically safe quoting f
 - **THEN** the UI announces failure and leaves the complete text available for manual selection without claiming success
 
 ### Requirement: MCP setup includes Claude Code and Gemini CLI recipes
-The enabled Settings MCP section SHALL offer dedicated choices labelled **Claude Code** and **Gemini CLI**, alongside the existing Codex and generic setup choices. Each SHALL provide copyable client-native setup using the server-returned canonical endpoint and the existing selected content access. Read-only SHALL request `content:read` and `offline_access`; draft editing SHALL additionally request `content:write`. Changing clients SHALL preserve the selected access and SHALL NOT silently broaden it. Client installation/configuration scope SHALL NOT be presented as OAuth content permission.
+The enabled Settings MCP section SHALL offer dedicated choices labelled **Claude Code** and **Gemini CLI**, alongside the existing Codex and generic setup choices. Each SHALL provide copyable client-native setup using the server-returned canonical endpoint and the existing selected content access. Read-only SHALL request `content:read` and `offline_access`; draft editing SHALL additionally request `content:write`; publishing SHALL additionally request `content:write` and `content:publish`. Changing clients SHALL preserve the selected access and SHALL NOT silently broaden it. Client installation/configuration scope SHALL NOT be presented as OAuth content permission.
 
 Claude Code guidance SHALL include an HTTP server definition with explicitly constrained OAuth scopes and a supported way to install that definition, followed by sign-in through the client's MCP authentication flow. Gemini CLI guidance SHALL include a Streamable HTTP definition with explicit OAuth scopes in its settings file, followed by its interactive MCP authentication command. The UI SHALL distinguish terminal commands, configuration text, and commands typed inside a client session. It SHALL instruct users to merge/update the `lace` entry in existing configuration instead of replacing unrelated settings or blindly adding duplicates.
 
-Both guides SHALL retain browser Lace sign-in, explicit consent, current-role limits, the publication/unpublication/deletion ban, and restart/reload guidance. They SHALL use supported discovery and public-client registration without embedded credentials, client secrets, Google service credentials, or manually entered bearer tokens. Opening a guide, changing access or copying text SHALL issue no client-registration/authentication/mutation request. Documentation-based recipes SHALL NOT be labelled as tested client connections without actual acceptance evidence.
+Both guides SHALL retain browser Lace sign-in, explicit consent, current-role limits, the administrator-only publishing consent, the unpublication/deletion ban, and restart/reload guidance. They SHALL use supported discovery and public-client registration without embedded credentials, client secrets, Google service credentials, or manually entered bearer tokens. Opening a guide, changing access or copying text SHALL issue no client-registration/authentication/mutation request. Documentation-based recipes SHALL NOT be labelled as tested client connections without actual acceptance evidence.
 
 Client choices SHALL remain reachable by keyboard and usable at 320px viewport width without horizontal page overflow. Existing disabled/unavailable/stale/session-recovery states and administrator-only Settings access SHALL remain unchanged.
 
@@ -286,7 +290,7 @@ Client choices SHALL remain reachable by keyboard and usable at 320px viewport w
 - **THEN** its settings JSON includes the canonical HTTP endpoint and read/write/offline scopes, and the guide identifies the authentication command as an interactive Gemini CLI command
 
 #### Scenario: Switching clients retains the permission choice
-- **WHEN** an administrator switches among Codex, Claude Code and Gemini CLI after selecting read-only or draft access
+- **WHEN** an administrator switches among Codex, Claude Code and Gemini CLI after selecting read-only, draft or publishing access
 - **THEN** every recipe reflects that same access and no network operation or grant change occurs
 
 #### Scenario: Copy succeeds or fails
@@ -300,3 +304,32 @@ Client choices SHALL remain reachable by keyboard and usable at 320px viewport w
 #### Scenario: Narrow screen and keyboard navigation
 - **WHEN** the MCP section is used at 320px width or solely by keyboard
 - **THEN** all client choices and copy controls remain reachable, examples remain readable, and the page does not overflow horizontally
+
+### Requirement: Administrator manages import tokens in Settings
+For an actor with `settings:manage`, the Settings screen SHALL show an Import
+tokens card, separate from build tokens, that explains that an import token
+lets `lace import` write drafts and media as its creator. It SHALL list
+import-token metadata without plaintext: name, token prefix, creator, created
+time, expiry, last-used time or "Never", whether it may publish, and an Active,
+Expired or Revoked badge, with times shown relative to now and the absolute
+local time on hover. A Create import token dialog SHALL collect a name, an
+expiry of 1, 3 or 7 days (default 1 day) and an "Allow publishing" checkbox,
+unchecked by default and offered only when the session has `content:publish`.
+After the API confirms creation, the dialog SHALL show the plaintext once with
+the same Copy, Done, no-outside-dismissal and transient-state rules as build
+tokens, and SHALL state the expiry. Each active token SHALL offer Revoke with a
+confirmation naming the token. Failed operations SHALL keep their dialog open
+with the error and leave confirmed metadata unchanged. The card SHALL be usable
+by keyboard alone and at 320 CSS pixels wide.
+
+#### Scenario: Administrator issues an import token
+- **WHEN** an administrator creates `Framer import` for 3 days with publishing allowed
+- **THEN** the dialog shows the plaintext once with Copy and Done and its expiry date, and the list shows the token as Active with publishing
+
+#### Scenario: Token expires
+- **WHEN** an import token's expiry has passed
+- **THEN** its row shows Expired and offers no Revoke action
+
+#### Scenario: Viewer opens Settings
+- **WHEN** a viewer opens `/settings`
+- **THEN** no import-token request is made and the card is not shown

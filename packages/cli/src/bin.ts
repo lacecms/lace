@@ -5,13 +5,16 @@ import { describeFailure, failureDiagnostic, identifyOperation } from "./diagnos
 import type { Target } from "./index.js";
 import { doctorUsage, parseDoctorArguments } from "./doctor-report.js";
 import { addBlockUsage, runAddBlockCommand } from "./blocks-command.js";
+import { importUsage } from "./import-usage.js";
 
 import { parsePreflightArguments, preflightUsage } from "./preflight-options.js";
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) {
-    console.info(`${usage}\n${doctorUsage}\n${upgradeUsage}\n${addBlockUsage}\n${preflightUsage}`);
+    console.info(
+      `${usage}\n${doctorUsage}\n${upgradeUsage}\n${addBlockUsage}\n${importUsage}\n${preflightUsage}`,
+    );
     return EXIT.OK;
   }
   const json = argv.includes("--json");
@@ -58,6 +61,31 @@ async function main(): Promise<number> {
       }
       const result = await runAddBlockCommand(argv.slice(2));
       console.info(result.output);
+      return result.exitCode;
+    }
+    if (argv[0] === "import") {
+      if (argv.length === 2 && (argv[1] === "--help" || argv[1] === "-h")) {
+        console.info(importUsage);
+        return EXIT.OK;
+      }
+      const { runImportCommand } = await import("./import-command.js");
+      const result = await runImportCommand(argv.slice(1), {
+        cwd: process.cwd(),
+        env: process.env,
+        progress: (line) => console.error(line),
+      });
+      const output = presentResult(
+        {
+          ok: result.ok,
+          code: result.code,
+          message: result.message,
+          ...(result.data === undefined ? {} : { data: result.data }),
+          ...(result.ok ? {} : failureDiagnostic("import", result.code)),
+        },
+        result.json,
+      );
+      if (result.json || result.ok) console.info(output);
+      else console.error(output);
       return result.exitCode;
     }
     const options = parseArguments(argv);

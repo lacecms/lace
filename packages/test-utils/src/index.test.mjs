@@ -3499,3 +3499,60 @@ test.each(["publicProjectionHash", "publicProjectionSourceHash"])(
     expect(store.storedModelStates()[0][key]).toBe("untrusted-concurrent-value");
   },
 );
+
+test("the in-memory store writes a supplied conditional-field projection", async () => {
+  const config = await defineConfig({
+    blocks: [
+      defineBlock({
+        type: "cta",
+        version: 1,
+        fields: { hasUrl: field.boolean(), url: field.url() },
+        visibility: { url: { field: "hasUrl", values: [true] } },
+      }),
+    ],
+    content: [
+      defineCollection({
+        key: "posts",
+        version: 1,
+        route: "/blog/:slug",
+        blocks: ["cta"],
+        fields: {
+          kind: field.select({ options: ["a", "b"], required: true }),
+          extra: field.text({ required: true }),
+        },
+        visibility: { extra: { field: "kind", values: ["b"] } },
+      }),
+    ],
+  });
+  const store = new InMemoryContentStore();
+  const cases = new ContentUseCases({
+    config: config.runtime,
+    content: store,
+    media: { loadMediaMany: async () => [] },
+    clock: new DeterministicClock(unixMilliseconds(1)),
+    idGenerator: new DeterministicIdGenerator("conditional"),
+  });
+  const created = await cases.create({
+    actor: admin,
+    modelKey: "posts",
+    title: "Post",
+    slug: "post",
+    fields: { kind: "a", extra: "kept" },
+    blocks: [
+      {
+        key: blockKey("cta"),
+        type: "cta",
+        schemaVersion: 1,
+        position: 1000,
+        data: { hasUrl: false, url: "https://example.com" },
+      },
+    ],
+  });
+  await cases.publish({ actor: admin, entryId: created.id, expectedRevision: 1 });
+  const loaded = await store.load({ entryId: created.id });
+  expect(loaded.published.fields).toEqual({ kind: "a" });
+  expect(loaded.published.blocks[0].data).toEqual({ hasUrl: false });
+  expect(loaded.draft.fields).toEqual({ kind: "a", extra: "kept" });
+  expect(loaded.draft.blocks[0].data).toEqual({ hasUrl: false, url: "https://example.com" });
+  expect((await store.loadPublic("/blog/post")).entry.published.fields).toEqual({ kind: "a" });
+});

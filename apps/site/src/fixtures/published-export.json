@@ -363,24 +363,35 @@
           "data": {
             "images": [
               {
+                "kind": "image",
                 "media": "post-media"
               },
               {
+                "kind": "image",
                 "alt": "A quiet desk",
                 "caption": "The note desk",
                 "link": "https://lace.example/desk",
                 "media": "note-media"
               },
               {
+                "kind": "image",
                 "alt": "A looping sketch",
                 "media": "sketch-media"
+              },
+              {
+                "kind": "video",
+                "videoUrl": "https://vimeo.com/76979871/abc123def",
+                "videoTitle": "Studio loop",
+                "playback": "ambient",
+                "aspectRatio": "1:1",
+                "caption": "Spring loop"
               }
             ],
             "title": "From the studio"
           },
           "key": "post-gallery",
           "position": 3,
-          "schemaVersion": 4,
+          "schemaVersion": 5,
           "settings": {
             "lightbox": true,
             "layoutMode": "grid",
@@ -431,34 +442,129 @@
         },
         {
           "type": "videoEmbed",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "key": "about-youtube",
           "position": 2000,
           "data": {
             "url": "https://youtu.be/dQw4w9WgXcQ",
             "title": "YouTube film"
+          },
+          "settings": {
+            "aspectRatio": "16:9",
+            "playback": "player"
           }
         },
         {
           "type": "videoEmbed",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "key": "about-vimeo",
           "position": 3000,
           "data": {
             "url": "https://vimeo.com/76979871/abc123def",
             "title": "Vimeo film",
             "poster": "hero-media"
+          },
+          "settings": {
+            "aspectRatio": "16:9",
+            "playback": "player"
           }
         },
         {
           "type": "videoEmbed",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "key": "about-vimeo-second",
           "position": 4000,
           "data": {
             "url": "https://vimeo.com/76979871",
             "title": "Second Vimeo film",
             "poster": "hero-media"
+          },
+          "settings": {
+            "aspectRatio": "16:9",
+            "playback": "player"
+          }
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 2,
+          "key": "about-ambient-0",
+          "position": 5000,
+          "settings": {
+            "aspectRatio": "1:1",
+            "playback": "ambient"
+          },
+          "data": {
+            "url": "https://vimeo.com/76979871/abc123def",
+            "title": "Ambient film 0",
+            "poster": "hero-media"
+          }
+        },
+        {
+          "type": "videoEmbed",
+          "schemaVersion": 2,
+          "key": "about-ambient-1",
+          "position": 6000,
+          "settings": {
+            "aspectRatio": "9:16",
+            "playback": "ambient"
+          },
+          "data": {
+            "url": "https://vimeo.com/76979871/abc123def",
+            "title": "Ambient film 1"
+          }
+        },
+        {
+          "type": "gallery",
+          "schemaVersion": 5,
+          "key": "about-gallery-0",
+          "position": 7000,
+          "data": {
+            "images": [
+              {
+                "kind": "video",
+                "videoUrl": "https://vimeo.com/76979871/abc123def",
+                "videoTitle": "Gallery loop 0",
+                "playback": "ambient",
+                "aspectRatio": "9:16"
+              },
+              {
+                "kind": "video",
+                "videoUrl": "https://youtu.be/dQw4w9WgXcQ",
+                "videoTitle": "Gallery player",
+                "playback": "player",
+                "aspectRatio": "16:9",
+                "caption": "Behind the scenes"
+              }
+            ]
+          },
+          "settings": {
+            "lightbox": false,
+            "layoutMode": "grid",
+            "layoutWrap": true,
+            "layoutPreset": "columns-3"
+          }
+        },
+        {
+          "type": "gallery",
+          "schemaVersion": 5,
+          "key": "about-gallery-1",
+          "position": 8000,
+          "data": {
+            "images": [
+              {
+                "kind": "video",
+                "videoUrl": "https://vimeo.com/76979871/abc123def",
+                "videoTitle": "Gallery loop 1",
+                "playback": "ambient",
+                "aspectRatio": "1:1"
+              }
+            ]
+          },
+          "settings": {
+            "lightbox": false,
+            "layoutMode": "grid",
+            "layoutWrap": true,
+            "layoutPreset": "auto"
           }
         }
       ],
@@ -571,7 +677,7 @@
         "tagline": "Notes from the reference site",
         "description": "The reference site of the Lace CMS.",
         "image": "hero-media",
-        "titleTemplate": "%s \u00b7 Lace Journal",
+        "titleTemplate": "%s · Lace Journal",
         "helpUrl": "entry:about-entry"
       },
       "id": "settings-entry",

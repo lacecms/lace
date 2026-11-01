@@ -19,6 +19,7 @@ import { builderDiagnosticsJourney } from "./builder-diagnostics-acceptance.mjs"
 import { buildSiteJourney } from "./build-site-acceptance.mjs";
 import { cloudflareConsumerJourney } from "./cloudflare-consumer-acceptance.mjs";
 import { existingSiteJourney } from "./existing-site-acceptance.mjs";
+import { importSampleSmoke, validateImportSample } from "./import-smoke.mjs";
 import { publicationVisibilityJourney } from "./publication-visibility-acceptance.mjs";
 import {
   guideCommands,
@@ -686,8 +687,18 @@ async function nodeJourney(context) {
   if (html.includes("Hidden acceptance quote") || html.includes(hiddenKey))
     throw new Error("astro-build: hidden block rendered");
   if (html.includes(buildToken)) throw new Error("astro-build: exposed build token");
+  await importSampleSmoke({
+    stage: "node-import",
+    project,
+    base,
+    cookie,
+    run,
+    readExport,
+    secretValues,
+    workspace,
+  });
   console.info(
-    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish with block envelopes and Astro build passed",
+    "Generated Node journey from the development guide: env prepare, setup doctor, migrate without mkdir, sync, bootstrap, dev:api, browser setup, tour, media, publish with block envelopes, Astro build and sample import passed",
   );
   return { base, cookie, png, entryId, mediaId, blocks, buildToken, token, password, email };
 }
@@ -1186,9 +1197,15 @@ async function starterJourney(project) {
   )?.[0];
   if (
     !gallery ||
-    (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 3 ||
+    (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 4 ||
     !gallery.includes('<img alt="Media library description" data-lace-part="media"') ||
-    !gallery.includes('<img alt="A quiet desk" data-lace-part="media"')
+    !gallery.includes('<img alt="A quiet desk" data-lace-part="media"') ||
+    // SM5D: the ambient video item ships templates and no live ambient player.
+    !gallery.includes(
+      '<figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient">',
+    ) ||
+    !gallery.includes("<template data-lace-ambient-template>") ||
+    !gallery.includes("Watch on Vimeo")
   )
     throw new Error("starter-build: gallery figures or their effective alt text missing");
   if (
@@ -1196,7 +1213,7 @@ async function starterJourney(project) {
     !gallery.includes('data-lace-layout="grid"') ||
     !gallery.includes('data-lace-wrap="true"') ||
     !gallery.includes('data-lace-preset="auto"') ||
-    (gallery.match(/<li\b[^>]*\bdata-lace-layout-item[^>]*>/g) ?? []).length !== 3
+    (gallery.match(/<li\b[^>]*\bdata-lace-layout-item[^>]*>/g) ?? []).length !== 4
   )
     throw new Error("starter-build: gallery list layout hooks missing");
   if (
@@ -1315,7 +1332,7 @@ async function starterJourney(project) {
   }
   imageExport.entries[0].blocks.push({
     type: "gallery",
-    schemaVersion: 4,
+    schemaVersion: 5,
     key: "alpha-seven-gallery",
     position: 20000,
     data: {
@@ -1335,8 +1352,9 @@ async function starterJourney(project) {
   });
   if (optimized[0] !== repeated[0]) throw new Error("Image cache changed rendered output");
   await verifyAlphaSevenImages(project, repeated[0]);
+  await validateImportSample({ project, run, workspace });
   console.info(
-    "Packed starter installed, typechecked and built every built-in block, block anchors, site navigation and SEO output with and without published globals and a site URL",
+    "Packed starter installed, typechecked and built every built-in block, block anchors, site navigation and SEO output with and without published globals and a site URL, and validated the import sample",
   );
 }
 

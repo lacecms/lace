@@ -61,8 +61,8 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  expect(instructions.configuration.at(-1)).toContain("Template 0.39.0");
-  expect(instructions.database.at(-1)).toContain("0013_oauth_verification_indexes");
+  expect(instructions.configuration.at(-1)).toContain("Template 0.45.0");
+  expect(instructions.database.at(-1)).toContain("0015_import_credentials");
   expect(instructions.configuration[0]).toMatch(
     /Template 0\.36\.0: Gallery v4.*No database migration.*ListLayout\.css.*rollback/,
   );
@@ -217,8 +217,11 @@ test("optional Cloudflare files are managed only when selected", async () => {
   expect(guide).toContain("deploy hooks only for projects connected to a Git repository");
   expect(guide).toContain("acceptance is not proof of a successful static deploy");
   expect(guide).not.toContain("future work");
+  expect(guide).toContain("## Import content");
+  expect(guide).toContain("use `http://127.0.0.1:8787` instead");
   const readme = await read("README.md");
   expect(readme).toContain("](docs/lace-cloudflare.md)");
+  expect(readme).toContain("](docs/lace-operations.md#import-content)");
   expect(readme).toContain("separate deployments");
   expect(readme).not.toContain("docs/lace-operations.md#optional-cloudflare");
   const scenario = await read("docs/lace-cloudflare.md");
@@ -243,6 +246,11 @@ test("projects without Cloudflare keep empty operator settings and no Worker scr
   expect(guide).toContain("## Optional Cloudflare");
   expect(guide).not.toContain("## Cloudflare Worker");
   expect(guide).not.toContain("lace-cloudflare.md");
+  expect(guide).toContain("## Import content");
+  expect(guide).toContain("pnpm exec lace import ./import --url http://127.0.0.1:3000 --publish");
+  expect(guide).toContain("never in `.env` or source control");
+  expect(guide).not.toContain("127.0.0.1:8787");
+  expect(Object.keys(manifest.scripts).some((name) => name.includes("import"))).toBe(false);
   expect(await listFiles(project.path)).not.toContain("worker/index.ts");
   expect(await listFiles(project.path)).not.toContain("docs/lace-cloudflare.md");
   const readme = await read("README.md");
@@ -338,7 +346,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.8");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-alpha.8");
-  expect(TEMPLATE_VERSION).toBe("0.39.0");
+  expect(TEMPLATE_VERSION).toBe("0.45.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");

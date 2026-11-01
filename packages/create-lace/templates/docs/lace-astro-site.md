@@ -172,13 +172,25 @@ Two built-in blocks hold repeatable content in group and list fields; editors
 fill them with the generic Add, Remove, Duplicate and reorder controls and must
 add at least one item before publishing:
 
-- `gallery` has an optional `title` and up to 50 `images`, each with `media`,
-  an optional `alt` and an optional `caption`. `GalleryBlock.astro` renders a
-  `<section class="gallery">` with a list of figures. Each image uses
-  `image(item.media, item.alt)`, so its alt text falls back to the media item's
-  alt text and then to `""`; the caption falls back to the media caption. Images
-  carry `width`, `height`, the focal-point `object-position` and
-  `loading="lazy"`.
+- `gallery` (version 5) has an optional `title` and up to 50 `images`. Each
+  item has a `kind`: an `image` item has `media`, an optional `alt`, `caption`
+  and `link`; a `video` item has a YouTube or Vimeo `videoUrl`, a `videoTitle`,
+  `playback` (`player` or `ambient`), `aspectRatio` and an optional `caption`.
+  Editors add images with **Add** and videos with **Add Video**.
+  `GalleryBlock.astro` renders a `<section class="gallery">` with a list of
+  figures. Each image uses `image(item.media, item.alt)`, so its alt text falls
+  back to the media item's alt text and then to `""`; the caption falls back to
+  the media caption. Images carry `width`, `height`, the focal-point
+  `object-position` and `loading="lazy"`. Video items render the player in
+  their cell, sized by `GalleryVideo.css`, with the same ambient, reduced-motion
+  and no-JavaScript behavior as the Video embed block. Published items include
+  only the fields of their kind, so a customized copy checks `item.kind` and
+  that `item.media` is present before describing an image.
+- Upgrading from template 0.44.0: raise the version of every model that allows
+  `gallery` and run `pnpm content:sync`. Before the next build, update the
+  component with `pnpm exec lace add block gallery --site site` or merge the
+  `.new` proposals; a revision 6 component fails with `block_version_mismatch`
+  after sync.
 - `navigation` has an optional `name` (the `aria-label` of its `<nav>`; name
   every navigation when a page has several) and up to 20 `links`, each with a
   `label`, an optional `url` and up to 20 `children` (one submenu level). A
@@ -557,7 +569,8 @@ editors on purpose (and keep those classes in any CSS purge safelist):
 }
 ```
 
-The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`;
+The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`,
+and for video items `player` and `source` inside `[data-lace-video]`;
 the navigation exposes `list`, `item`, `link`, `label`, `submenu`, `toggle` and
 `children`. Neither component ships styles. This CSS lays galleries out as an
 adaptive grid that crops images around their focal point, and navigation as a
@@ -793,7 +806,7 @@ URLs. For example, `https://youtu.be/dQw4w9WgXcQ` or an unlisted Vimeo URL
 Title is required for accessibility; poster image and caption are optional.
 Provider restrictions and media references are validated in the CMS.
 
-Without a poster the component renders a lazy iframe. A poster uses LaceImage,
+In player mode, without a poster the component renders a lazy iframe. A poster uses LaceImage,
 including existing image optimization/focal point, with an empty decorative alt
 inside a named button. Activating it loads one iframe and moves focus there;
 playback never autostarts and can need a second click on Play. No provider
@@ -802,13 +815,69 @@ available without JavaScript or if embedding fails. Provider privacy/domain
 restrictions must permit the site. URL playback/tracking parameters are not
 forwarded; only a Vimeo privacy hash is retained.
 
-The renderer is site-owned. It is the sole built-in with a small local activation
+The renderer is site-owned. It is the sole built-in with a small local activation and ambient mounting
 script; there is no provider SDK or framework hydration. `VideoEmbed.css` reserves
-a responsive 16:9 area in `@layer lace-layout`; site CSS owns decoration. Hooks:
+the selected responsive aspect ratio (16:9 by default) in `@layer lace-layout`; site CSS owns decoration. Hooks:
 `data-lace-part="preview|play|player|caption|source"` on the corresponding elements.
 `describeVideoEmbed` from `@lacecms/render` supplies canonical player data without
 network access. Source URLs are content strings; only posters use media storage.
 Video-file upload support is separate deferred work.
+
+Settings use choice cards: `aspectRatio` is `16:9` (default), `4:3`, `1:1`,
+`4:5` or `9:16`; `playback` is `player` (default) or `ambient`. For example,
+a square showcase video has `settings: { aspectRatio: "1:1", playback: "ambient" }`.
+`data-lace-aspect-ratio` and `data-lace-playback` expose these values on the root.
+The description supplies both `src` and `ambientSrc`; input URL playback options
+never override either canonical URL.
+
+Ambient mode mounts one lazy iframe after checking motion preferences: Vimeo
+uses `background=1`; YouTube uses autoplay, mute, loop with a single-video
+playlist, hidden controls and inline playback. The poster stays underneath and
+its button becomes inert. The ambient iframe is not a keyboard stop. The source
+link is visually hidden only under `data-lace-ambient="active"`, and reappears
+on keyboard focus. No provider request happens before the browser decides.
+Reduced motion and disabled JavaScript use normal player behavior, including a
+non-autoplaying iframe without a poster and a preview button/source link with one.
+The preference is checked on load, not watched for later changes.
+
+Use posters and limit ambient blocks per page: lazy loading still costs bandwidth.
+Browsers may block autoplay (for example in low-power mode); the provider can
+show a still frame instead. Verify real playback with videos allowed on your domain.
+
+**Motion accessibility:** ambient ships without a pause control and does not meet
+WCAG 2.2.2 (Pause, Stop, Hide) for videos longer than five seconds. Prefer player
+mode when this requirement applies, or add a pause/stop control to your site-owned
+component. For example, place this button in the figure and add the handler to
+its local script; it stops the ambient player and restores the player fallback
+(restarting later starts from the beginning, rather than resuming):
+
+```html
+<button type="button" data-stop-ambient>Stop motion</button>
+```
+
+```js
+document.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element)) return;
+  const control = event.target.closest("[data-stop-ambient]");
+  const block = control?.closest('[data-lace-ambient="active"]');
+  if (!block) return;
+  const area = block.querySelector("[data-lace-video-area]");
+  area.querySelector(":scope > iframe")?.remove();
+  const preview = area.querySelector('[data-lace-part="preview"]');
+  if (preview) preview.inert = false;
+  else area.append(area.querySelector("[data-lace-video-template]").content.cloneNode(true));
+  block.dataset.laceAmbient = "fallback";
+  block.querySelector('[data-lace-part="source"]').focus();
+  control.remove();
+});
+```
+
+To adopt v2 in an existing project, raise every model version that allows
+`videoEmbed`, run configuration sync, then run `pnpm exec lace add block videoEmbed
+--site site` before building (substitute your site path). Both component and CSS
+need registry revision 2. Use `--write-new` to review locally edited copies. An
+older component or stored block version can fail with `block_version_mismatch`.
+Template 0.40.0 includes these steps. No database migration is required.
 
 For an optional manual playback smoke check, publish an owner-approved public
 YouTube video and a Vimeo video allowed on your domain, with and without a poster.

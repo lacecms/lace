@@ -64,3 +64,47 @@ test("writes the saved item into the cached detail, keeps usage, and refreshes l
     false,
   );
 });
+
+function TagProbe() {
+  const update = useMediaMetadataUpdate(() => undefined);
+  return (
+    <button
+      onClick={() =>
+        update.mutate({
+          expectedUpdatedAt: mediaItem.updatedAt,
+          mediaId: mediaItem.id,
+          patch: { tags: ["cover"] },
+        })
+      }
+      type="button"
+    >
+      Save tags
+    </button>
+  );
+}
+
+test("a tag change refreshes tag suggestions; other changes keep them", async () => {
+  const updateMediaMetadata = vi.fn(async () => ({
+    build: { status: "not-dispatched" as const },
+    media: { ...mediaItem, tags: ["cover"], updatedAt: "2026-09-20T00:00:01.000Z" },
+  }));
+  const { queryClient } = renderInRouter(
+    <>
+      <TagProbe />
+      <Probe onSaved={() => undefined} />
+    </>,
+    { client: stubClient({ updateMediaMetadata }) },
+  );
+  queryClient.setQueryData(adminQueryKeys.mediaTags("co"), { items: [] });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Save" }));
+  await waitFor(() => expect(updateMediaMetadata).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(queryClient.getQueryState(adminQueryKeys.mediaList({}))).toBeUndefined(),
+  );
+  expect(queryClient.getQueryState(adminQueryKeys.mediaTags("co"))?.isInvalidated).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Save tags" }));
+  await waitFor(() =>
+    expect(queryClient.getQueryState(adminQueryKeys.mediaTags("co"))?.isInvalidated).toBe(true),
+  );
+});

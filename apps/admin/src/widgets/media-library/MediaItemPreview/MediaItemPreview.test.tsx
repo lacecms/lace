@@ -24,11 +24,15 @@ function Line({ preview }: { readonly preview: ItemPreview }) {
   );
 }
 
-function mount(getMedia: AdminClient["getMedia"], value: Record<string, unknown>) {
+function mount(
+  getMedia: AdminClient["getMedia"],
+  value: Record<string, unknown>,
+  definition: Extract<FieldDefinition, { type: "group" }> = item,
+) {
   renderInRouter(
     <MediaItemPreview
       definition={item.fields.media!}
-      group={{ definition: item, value }}
+      group={{ definition, value }}
       value={value.media}
     >
       {(preview) => <Line preview={preview} />}
@@ -69,4 +73,18 @@ test("missing media has a placeholder, an accessible state and no title", async 
   expect(await screen.findByText("Selected media no longer exists.")).toBeInTheDocument();
   expect(screen.getByTestId("line")).toHaveTextContent("(no title)");
   expect(screen.getByTestId("line")).not.toHaveTextContent("media-1");
+});
+
+test("a hidden alt override does not count as alt text", async () => {
+  const conditional: Extract<FieldDefinition, { type: "group" }> = {
+    ...item,
+    fields: { ...item.fields, plain: { required: false, type: "boolean" } },
+    visibility: { alt: { field: "plain", values: [false] } },
+  };
+  mount(
+    async () => ({ ...mediaItem, usage: [] }),
+    { alt: "Stale", media: "media-1", plain: true },
+    conditional,
+  );
+  expect(await screen.findByText(/\| No alt$/u)).toBeInTheDocument();
 });

@@ -194,7 +194,7 @@ export async function alphaEightJourney({
         {
           key: `01J${"801".padStart(23, "0")}`,
           type: "gallery",
-          schemaVersion: 4,
+          schemaVersion: 5,
           position: 1024,
           data: { images: [] },
           settings: { layoutMode: "flex-row" },
@@ -202,7 +202,7 @@ export async function alphaEightJourney({
         {
           key: `01J${"802".padStart(23, "0")}`,
           type: "videoEmbed",
-          schemaVersion: 1,
+          schemaVersion: 2,
           position: 2048,
           data: { url: "https://youtu.be/dQw4w9WgXcQ", title: "Alpha eight video" },
         },

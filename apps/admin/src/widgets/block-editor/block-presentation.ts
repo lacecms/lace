@@ -10,7 +10,7 @@ import {
   QuoteIcon,
   type LucideIcon,
 } from "lucide-react";
-import { fieldLabel, itemSummary } from "../../entities/content/index.js";
+import { fieldLabel, itemSummary, shownFieldKeys } from "../../entities/content/index.js";
 
 export type BlockDefinitionDto = NonNullable<ContentModelDto["blockDefinitions"]>[number];
 
@@ -99,11 +99,13 @@ function compositeSummary(key: string, field: BlockFieldDefinition, value: unkno
  * recognizable. It never exposes stored media identifiers.
  */
 export function blockSummary(
-  definition: Pick<BlockDefinitionDto, "fields" | "layout">,
+  definition: Pick<BlockDefinitionDto, "fields" | "layout" | "visibility">,
   data: Readonly<Record<string, unknown>> | undefined,
 ): string {
-  const entries = Object.entries(definition.fields);
   const values = data ?? {};
+  // Values of fields the block's rules hide never describe it.
+  const shown = shownFieldKeys(definition.fields, definition.visibility, values);
+  const entries = Object.entries(definition.fields).filter(([key]) => shown.has(key));
   const text = (key: string) => {
     const value = values[key];
     return typeof value === "string" ? collapseWhitespace(value) : "";
@@ -132,7 +134,9 @@ export function blockSummary(
     const value = text(key);
     if (value !== "") return truncate(value);
   }
-  for (const key of formFieldKeys(definition.fields, definition.layout)) {
+  for (const key of formFieldKeys(definition.fields, definition.layout).filter((key) =>
+    shown.has(key),
+  )) {
     const value = compositeSummary(key, definition.fields[key]!, values[key]);
     if (value !== "") return truncate(value);
   }

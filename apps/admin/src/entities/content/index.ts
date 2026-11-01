@@ -29,12 +29,15 @@ export {
   FieldRenderer,
   FieldRendererProvider,
   type FieldDefinition,
+  type FieldPreview,
   type FieldPreviewProps,
   type FieldPreviewRegistry,
   type FieldRendererProps,
   type FieldRendererRegistry,
   type ItemPreview,
+  type MediaListPickerProps,
 } from "./FieldRenderer/index.js";
+export { EmbedUrlPreview } from "./EmbedUrlPreview/index.js";
 export { mediaAltPair } from "./media-alt.js";
 export { itemSummary } from "./item-summary.js";
 export { entryActions, hasEntryActions, type EntryActions } from "./entry-actions.js";
@@ -87,3 +90,18 @@ export {
   resolveCollectionListSearch,
   type CollectionListSearch,
 } from "./collection-query.js";
+export {
+  mediaIdsInList,
+  mediaListCapacity,
+  mediaListChoices,
+  mediaListItems,
+  mediaListTarget,
+  type MediaListChoice,
+  type MediaListTarget,
+} from "./media-list.js";
+export {
+  applicableErrors,
+  hiddenFieldNote,
+  renderedFieldKeys,
+  shownFieldKeys,
+} from "./visibility.js";

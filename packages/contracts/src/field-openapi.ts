@@ -108,6 +108,25 @@ export const contentMetadataOpenApi = {
       "Finite descriptors: at most six group/list containers, two consecutive groups, and no direct list of lists. Content has at most 100 items/list and 500 list elements/snapshot.",
     oneOf: [...scalarTypes.map(scalar), ref("GroupFieldDefinition"), ref("ListFieldDefinition")],
   },
+  FieldVisibility: {
+    type: "object",
+    description:
+      "Conditional fields. Keys name immediate sibling fields; each rule names a sibling select or boolean controller that is not itself a target, and a nonempty unique subset of its options or booleans. A hidden field is not required, keeps draft validation and is retained in drafts; its value is omitted from published snapshots, public reads and build exports.",
+    additionalProperties: {
+      type: "object",
+      additionalProperties: false,
+      required: ["field", "values"],
+      properties: {
+        field: { type: "string" },
+        values: {
+          type: "array",
+          minItems: 1,
+          uniqueItems: true,
+          items: { type: ["string", "boolean"] },
+        },
+      },
+    },
+  },
   GroupFieldDefinition: {
     type: "object",
     additionalProperties: false,
@@ -117,6 +136,7 @@ export const contentMetadataOpenApi = {
       type: { const: "group" },
       fields: fieldMap,
       defaultValue: { type: "object" },
+      visibility: ref("FieldVisibility"),
     },
   },
   ListFieldDefinition: {
@@ -149,6 +169,7 @@ export const contentMetadataOpenApi = {
       description: { type: "string" },
       fields: fieldMap,
       defaultValue: { type: "object" },
+      visibility: ref("FieldVisibility"),
       settingsVisibility: {
         type: "object",
         description:

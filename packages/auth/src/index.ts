@@ -1,5 +1,6 @@
 export * from "./mcp-oauth.js";
 export * from "./mcp-actor.js";
+export * from "./import-actor.js";
 export * from "./mcp-boundary.js";
 export * from "./oauth-guard.js";
 export * from "./client-address.js";
@@ -9,6 +10,7 @@ import { APIError } from "better-auth/api";
 import { createMcpOAuthProvider } from "./mcp-oauth.js";
 import { createMcpOAuthHttpBoundary, type McpOAuthHttpBoundary } from "./mcp-boundary.js";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { trustedOrigins } from "./trusted-origins.js";
 import { actorId, type Actor, type Role } from "@lacecms/domain";
 
 export const packageName = "@lacecms/auth";
@@ -60,16 +62,6 @@ export interface CreateBetterAuthBoundaryInput {
 
 function laceRole(value: unknown): Role | undefined {
   return value === "admin" || value === "editor" || value === "viewer" ? value : undefined;
-}
-
-function trustedOrigins(origin: URL, production: boolean): string[] {
-  const canonical = origin.origin;
-  if (production || (origin.hostname !== "localhost" && origin.hostname !== "127.0.0.1")) {
-    return [canonical];
-  }
-  const alternate = new URL(canonical);
-  alternate.hostname = origin.hostname === "localhost" ? "127.0.0.1" : "localhost";
-  return [canonical, alternate.origin];
 }
 
 /** Creates the Node Better Auth boundary without leaking provider types to HTTP routes. */

@@ -24,6 +24,7 @@ interface MediaItem {
   readonly status: "active";
   updatedAt: string;
   readonly url: string;
+  tags: string[];
   readonly usageCount: number;
   readonly width: number;
 }
@@ -45,6 +46,7 @@ function media(id: string, filename: string, extra: Partial<MediaItem> = {}): Me
     status: "active",
     updatedAt: "2026-09-20T00:00:00.000Z",
     url: `https://lace.test/api/v1/public/media/${id}`,
+    tags: [],
     usageCount: 1,
     width: 800,
     ...extra,
@@ -155,7 +157,7 @@ async function mockMedia(
           409,
         );
       }
-      for (const key of ["alt", "caption", "focalPoint"] as const) {
+      for (const key of ["alt", "caption", "focalPoint", "tags"] as const) {
         if (!(key in body)) continue;
         if (body[key] === null) delete item[key];
         else (item as unknown as Record<string, unknown>)[key] = body[key];
@@ -288,8 +290,8 @@ test("sets and resets the focal point with the keyboard only", async ({ page }) 
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Shift+ArrowUp");
 
-  // Reset, Alt text, Caption, then Save.
-  for (let index = 0; index < 4; index += 1) await page.keyboard.press("Tab");
+  // Reset, Alt text, Caption, Tags, then Save.
+  for (let index = 0; index < 5; index += 1) await page.keyboard.press("Tab");
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(panel.getByText("Metadata saved.")).toBeVisible();

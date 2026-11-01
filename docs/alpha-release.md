@@ -60,6 +60,7 @@ Both runtime images support `linux/amd64` and `linux/arm64` only when both platf
 - Git, tar, Docker with buildx and the ability to run both Linux platforms (native or emulated), plus enough disk for build layers and four saved images.
 - Public dependency/network access for frozen installs and image base/toolchain downloads. Build does not need npm or GHCR publishing credentials.
 - A clean reviewed source commit for release-eligible preparation. Registry credentials and local runtime data must remain outside tracked release inputs and build contexts.
+- That source commit pushed to `https://github.com/lacecms/lace` before preparation: `git status -sb` must not report `ahead`. `inventory.json` records the exact SHA, GitHub finalization tags it, and it must reach the remote unchanged — push it directly or merge with a merge commit, never squash or rebase it. Commit unrelated work (roadmaps, docs) after preparation, or push it together with the source commit.
 
 ## Local preparation
 
@@ -241,14 +242,23 @@ New `acceptance:release` runs atomically save `acceptance.json` in the artifact
 directory only after all journeys and temporary-environment cleanup succeed.
 Commit the reviewed acceptance scripts before recording their revision. Existing
 reports are not overwritten; preserving temp projects prevents a success receipt.
-For an older alpha.5/alpha.6 set, import its original acceptance bytes explicitly.
-Supply your retained receipt path; these JSON files are no longer in `docs/`.
-The published [alpha.6 acceptance asset](https://github.com/lacecms/lace/releases/download/v0.1.0-alpha.6/acceptance.json)
-is available with the other preserved reports on its GitHub Release:
+A current set therefore already contains `acceptance.json`; go straight to the
+GitHub commands below.
+
+Before finalizing, confirm the inventory source revision exists on GitHub:
 
 ```sh
-pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt /path/to/original/alpha-6-acceptance.json
-pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt /path/to/original/alpha-6-acceptance.json --apply
+git status -sb
+gh api repos/lacecms/lace/commits/$(jq -r .source.revision .release-artifacts/alpha-8/inventory.json) --jq .sha
+```
+
+The first must not report `ahead`; the second must print the same SHA. If GitHub
+answers `No commit found for SHA` (HTTP 422), push that commit unchanged (see
+[Prerequisites](#prerequisites)). Otherwise preview reports `blocked` with the
+misleading `gh failed (1); check authentication and remote access` even when
+`gh auth status` is fine.
+
+```sh
 pnpm release:github --artifacts .release-artifacts/alpha-8
 pnpm release:github --artifacts .release-artifacts/alpha-8 --apply
 ```
@@ -307,6 +317,23 @@ cleanup keeps a recovery journal under `.release-artifacts/.cleanup`; rerun the
 exact same artifact/evidence/acceptance selection to verify remote identities
 and remove remaining files. Changed scope or remaining artifact bytes cause
 refusal. A successful retry removes its journal.
+
+### Importing acceptance for alpha.5/alpha.6 sets
+
+Only artifact sets prepared before atomic `acceptance.json` saving (alpha.5 and
+alpha.6) need this step; never run it for a current release. It requires that
+older prepared directory to exist locally and your retained original receipt;
+the receipt JSON files are no longer in `docs/`. The published
+[alpha.6 acceptance asset](https://github.com/lacecms/lace/releases/download/v0.1.0-alpha.6/acceptance.json)
+is available with the other preserved reports on its GitHub Release. Replace
+`<receipt>` with the real receipt path:
+
+```sh
+pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt <receipt>
+pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt <receipt> --apply
+```
+
+The first command is a preview. Import keeps the historical bytes unchanged.
 
 ### Retiring historical tracked receipts
 

@@ -164,3 +164,111 @@ for (const kind of ["SQLite", "D1"]) {
     }
   }, 30000);
 }
+
+for (const kind of ["SQLite", "D1"]) {
+  test(`${kind}: delegated publication matches REST results, guards and coalesced builds`, async () => {
+    const f = await openMcpRuntime(kind);
+    let client;
+    try {
+      await f.login();
+      client = await f.connect(await f.authorize(true, true));
+      const names = (await client.listTools()).tools.map((t) => t.name);
+      expect(names).toHaveLength(6);
+      expect(names).toContain("publish_entry");
+      for (const name of ["unpublish_entry", "delete_entry", "revert_draft", "duplicate_entry"])
+        await expect(client.callTool({ name, arguments: {} })).rejects.toThrow();
+      const created = (
+        await f.rest("/api/v1/admin/models/posts/entries", { method: "POST", json: data })
+      ).body;
+      const args = {
+        entryId: created.id,
+        expectedRevision: 1,
+        idempotencyKey: "shared-publication",
+      };
+      const published = result(await client.callTool({ name: "publish_entry", arguments: args }));
+      expect(published.publication).toBe("published");
+      const publicEntry = await f.runtime.repository.loadPublic("/blog/shared-entry");
+      expect(publicEntry.entry.published.title).toBe(data.title);
+      expect(publicEntry.entry.published.id).toBe(published.entry.published.id);
+      expect(published.entry).toEqual((await f.rest(`/api/v1/admin/entries/${created.id}`)).body);
+      const replay = result(await client.callTool({ name: "publish_entry", arguments: args }));
+      const restReplay = await f.rest(`/api/v1/admin/entries/${created.id}/publish`, {
+        method: "POST",
+        json: { expectedRevision: 1 },
+        headers: { "Idempotency-Key": args.idempotencyKey },
+      });
+      expect(restReplay.response.status).toBe(200);
+      expect(replay).toEqual(restReplay.body);
+      expect(replay.publication).toBe("replayed");
+      const second = (
+        await f.rest("/api/v1/admin/models/posts/entries", {
+          method: "POST",
+          json: { ...data, slug: "second" },
+        })
+      ).body;
+      expect(
+        result(
+          await client.callTool({
+            name: "publish_entry",
+            arguments: { entryId: second.id, expectedRevision: 1 },
+          }),
+        ).publication,
+      ).toBe("published");
+      expect(
+        await f.rows(
+          "select id from outbox_events where type='site.build.requested' and processed_at is null",
+        ),
+      ).toHaveLength(1);
+      const version = await f.runtime.repository.publishedContentVersion();
+      const duplicate = (
+        await f.rest("/api/v1/admin/models/posts/entries", { method: "POST", json: data })
+      ).body;
+      const target = (
+        await f.rest("/api/v1/admin/models/posts/entries", {
+          method: "POST",
+          json: { ...data, slug: "target" },
+        })
+      ).body;
+      const linked = (
+        await f.rest("/api/v1/admin/models/posts/entries", {
+          method: "POST",
+          json: { ...data, slug: "linked", fields: { link: `entry:${target.id}` } },
+        })
+      ).body;
+      const invalid = (
+        await f.rest("/api/v1/admin/models/required/entries", {
+          method: "POST",
+          json: { title: "Incomplete draft", slug: "incomplete", fields: {}, blocks: [] },
+        })
+      ).body;
+      for (const [entry, revision] of [
+        [created, 0],
+        [duplicate, 1],
+        [linked, 1],
+        [invalid, 1],
+      ]) {
+        const rest = await f.rest(`/api/v1/admin/entries/${entry.id}/publish`, {
+          method: "POST",
+          json: { expectedRevision: revision },
+        });
+        const mcp = await client.callTool({
+          name: "publish_entry",
+          arguments: { entryId: entry.id, expectedRevision: revision },
+        });
+        expect(rest.response.status).toBeGreaterThanOrEqual(400);
+        expect(mcp.isError).toBe(true);
+        expect(result(mcp)).toEqual(rest.body);
+        expect(await f.runtime.repository.publishedContentVersion()).toBe(version);
+      }
+      expect(
+        await f.rows(
+          "select id from outbox_events where type='site.build.requested' and processed_at is null",
+        ),
+      ).toHaveLength(1);
+      expect(JSON.stringify(f.logs)).not.toMatch(/access_token|refresh_token|code_verifier/);
+    } finally {
+      await client?.close();
+      await f.close();
+    }
+  }, 30000);
+}

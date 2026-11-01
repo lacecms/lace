@@ -1,6 +1,6 @@
 # Lace operational CLI
 
-Build the workspace packages, then run `pnpm lace --help` in this repository or `pnpm exec lace --help` in a generated project. Commands are `db migrate`, `content sync [--check]`, and `auth bootstrap`. Each supports `--json` and `--target node|cloudflare-local|cloudflare-remote`.
+Build the workspace packages, then run `pnpm lace --help` in this repository or `pnpm exec lace --help` in a generated project. Commands are `db migrate`, `content sync [--check]`, and `auth bootstrap`. Each supports `--json` and `--target node|cloudflare-local|cloudflare-remote`. `lace import`, an admin API client without targets, is described under Content import.
 
 Deployment order:
 
@@ -33,6 +33,33 @@ Pending sync retains exit `2`; review the plan before explicitly applying. Block
 `content sync` loads the block registry from `lace.config.ts` and runs block migrations: a block whose `version` increased migrates every stored block of an older version through its declared `migrations`. `--check` executes them in memory and reports `planned block migrations` or a `BLOCK_MIGRATION_*` / `BLOCK_VERSION_AHEAD` refusal naming the entry and block key; a successful apply prints `Migrated blocks: N (drafts=…, published=…)` and JSON `data.migrated`. If sync stops because stored content changed meanwhile (exit `6`), rerun it; it resumes with the blocks still stale.
 
 `lace add block` installs registry components that each target one block version (`blockVersion` in the registry item) and refuses a configured block of another version. When you version a built-in or custom block and ship its migrations in `lace.config.ts`, update its site component yourself; for a custom block, `lace add block <type>` scaffolds a component only when none exists. Completed bootstrap retains `OPERATION_FAILED`/exit `6` and directs you to sign in with the existing administrator; it cannot reveal another setup token. Recovery guidance does not execute commands or switch targets. Upgrade conflicts, locks and interrupted operations retain the reports and recovery rules below.
+
+## Content import
+
+`lace import <dir>` loads a portable import package into a running installation through the admin REST API. The user guide, with the format reference, a sample package and converter guidance, is the public [Import content](https://lacecms.github.io/lace/en/latest/editing-content/import/) page. It never opens the database, so it works the same against Node, a local Worker and a remote Cloudflare installation. Run it from the CMS project root that contains `lace.config.ts`, with the same `@lacecms/cli` release as the server.
+
+```bash
+pnpm exec lace import ./import --validate-only
+LACE_IMPORT_TOKEN=... pnpm exec lace import ./import --url https://cms.example.com --dry-run
+LACE_IMPORT_TOKEN=... pnpm exec lace import ./import --url https://cms.example.com --publish
+```
+
+The token is read only from `LACE_IMPORT_TOKEN`: issue an import token in Admin Settings (allow publishing for `--publish`). The API origin comes from `--url` or `LACE_API_BASE_URL` and must use HTTPS except for `localhost`, `*.localhost`, `127.0.0.1` and `[::1]`.
+
+A package is a directory with `lace-import.json` and its media files. `formatVersion` is `1`; `media[]` items have `key`, `file` (a relative path inside the package) and optional `alt`, `caption`, `focalPoint` and `tags`; `entries[]` have `key`, `model`, `fields`, `blocks` and optional `slug` (required for collections, refused for pages and globals), `title` (refused for globals), `seo` and `publish` (default `true`). Blocks are `{type, data}` with optional `settings`, `anchor`, `className`, `hidden` and `key` (default `b<position>`); data uses each block's current version. `{"$media": "<key>"}` fills a media field or `seo.image`, and `{"$entry": "<key>"}` fills a URL field with the target's `entry:<id>` link. The JSON Schema ships as `@lacecms/cli/lace-import.schema.json` for editors and converters; model rules are checked by the command.
+
+| Option | Effect |
+| --- | --- |
+| `--validate-only` | Check the package against `lace.config.ts` offline; no token or network. |
+| `--dry-run` | Read the server and print the plan; write nothing. |
+| `--publish` | Publish entries whose `publish` is not `false`, link targets first. |
+| `--overwrite` | Replace drafts edited after the last import (otherwise a conflict). |
+| `--state <path>` | State file (default `<dir>/lace-import.state.json`). |
+| `--json` | One JSON result object on stdout. |
+
+The plan lists media as `upload`, `update` or `unchanged` (matched by SHA-256) and entries as `create`, `update`, `unchanged` or `conflict` (pages and globals by model, collections by exact draft slug). Every check runs before the first write. Writes are sequential: media uploads and metadata, collection creates, draft saves with the expected revision, then publications with idempotency keys. A rerun of the same package writes nothing; an interrupted run resumes when rerun. Import never deletes or unpublishes. `429` responses are retried after `Retry-After` (at most 300 seconds per wait, 10 waits per request). The state file holds only origins, keys, IDs, hashes and the draft revisions the import wrote; a draft whose revision changed after that and that differs from the package is a `conflict`.
+
+Exit codes: `0` success, `2` `IMPORT_CONFLICT`, `3` `IMPORT_USAGE`, `4` `IMPORT_SETTINGS`, `IMPORT_INVALID` and `IMPORT_CONFIG_MISMATCH`, `6` `IMPORT_UNAUTHORIZED`, `IMPORT_RATE_LIMITED` and `IMPORT_FAILED`. Output never contains the token or file contents.
 
 ## Read-only environment doctor (Step 27A)
 

@@ -51,6 +51,7 @@ test("settings shows status cards, issues a once-shown token, and keeps metadata
   await waitFor(() => expect(api).toHaveTextContent("Ready"));
   expect(screen.getByRole("group", { name: "Content models" })).toHaveTextContent("2");
   expect(await screen.findByRole("region", { name: "No build tokens" })).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "No import tokens" })).toBeInTheDocument();
   expect(screen.getByRole("group", { name: "Active build tokens" })).toHaveTextContent("0");
 
   await user.click(screen.getByRole("button", { name: "Create build token" }));
@@ -130,10 +131,11 @@ test("viewers see access denied without settings or token requests", async () =>
     ready: true,
   }));
   const listTokens = vi.fn(async () => ({ items: [] }));
+  const listImportTokens = vi.fn(async () => ({ items: [] }));
   renderRoute(
     "/settings",
     staticSessionSource({ id: "viewer-1", role: "viewer" }),
-    client({ listTokens, loadSettingsStatus }),
+    client({ listImportTokens, listTokens, loadSettingsStatus }),
   );
   expect(await screen.findByRole("region", { name: "Access denied" })).toHaveTextContent(
     "Your role does not have permission",
@@ -141,6 +143,8 @@ test("viewers see access denied without settings or token requests", async () =>
   expect(screen.getByRole("link", { name: "Go to Content" })).toBeInTheDocument();
   expect(loadSettingsStatus).not.toHaveBeenCalled();
   expect(listTokens).not.toHaveBeenCalled();
+  expect(listImportTokens).not.toHaveBeenCalled();
+  expect(screen.queryByRole("heading", { name: "Import tokens" })).toBeNull();
 });
 
 test("refresh replaces the server-confirmed release", async () => {

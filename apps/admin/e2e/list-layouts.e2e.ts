@@ -19,7 +19,7 @@ async function mock(page: Page, rejectSave = false) {
       {
         key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         type: "gallery",
-        schemaVersion: 4,
+        schemaVersion: 5,
         position: 1000,
         hidden: false,
         data: { images: [] },

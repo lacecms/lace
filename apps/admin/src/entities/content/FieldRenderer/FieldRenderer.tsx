@@ -1,4 +1,5 @@
 import {
+  type ComponentType,
   createContext,
   type ReactNode,
   useContext,
@@ -61,9 +62,24 @@ import {
   type FieldPreviewRegistry,
   type FieldRendererRegistry,
   type ItemPreview,
+  type MediaListPickerProps,
 } from "../field-types.js";
 import { builtInRenderers, groupedFieldTypes } from "../FieldControls/index.js";
 import { itemSummary as summarize, previewLeaf, rowLines } from "../item-summary.js";
+import {
+  applicableErrors,
+  applicableValueErrors,
+  hiddenFieldNote,
+  renderedFieldKeys,
+  shownFieldKeys,
+} from "../visibility.js";
+import {
+  mediaIdsInList,
+  mediaListCapacity,
+  mediaListChoices,
+  mediaListItems,
+  mediaListTarget,
+} from "../media-list.js";
 import {
   cleanValue,
   draftItemValue,
@@ -78,11 +94,13 @@ import {
 
 export type {
   FieldDefinition,
+  FieldPreview,
   FieldPreviewProps,
   FieldPreviewRegistry,
   FieldRendererProps,
   FieldRendererRegistry,
   ItemPreview,
+  MediaListPickerProps,
 } from "../field-types.js";
 type Form = UseFormReturn<DraftEditorValues, unknown, DraftEditorValues>;
 interface ContextValue {
@@ -90,6 +108,8 @@ interface ContextValue {
   readonly busy: boolean;
   readonly renderers: FieldRendererRegistry;
   readonly previews?: FieldPreviewRegistry | undefined;
+  /** Adds several items to eligible media lists at once; without it they use the ordinary Add. */
+  readonly mediaListPicker?: ComponentType<MediaListPickerProps> | undefined;
   readonly epoch?: number;
   readonly onTransientChange?: (() => void) | undefined;
   readonly transient?: Map<string, { name: string; message: string }> | undefined;
@@ -103,6 +123,7 @@ export function FieldRendererProvider({
   busy = false,
   renderers,
   previews,
+  mediaListPicker,
   form,
   model,
   transient,
@@ -119,13 +140,25 @@ export function FieldRendererProvider({
       busy,
       renderers,
       previews,
+      mediaListPicker,
       form,
       model,
       transient,
       epoch,
       onTransientChange,
     }),
-    [readOnly, busy, renderers, previews, form, model, transient, epoch, onTransientChange],
+    [
+      readOnly,
+      busy,
+      renderers,
+      previews,
+      mediaListPicker,
+      form,
+      model,
+      transient,
+      epoch,
+      onTransientChange,
+    ],
   );
   return form ? (
     <BoundContext value={value} form={form}>
@@ -364,9 +397,27 @@ function ValueNode(props: NodeProps) {
           ? error
           : `${error} Required for publication only.`
       : error;
-  if (definition.type === "list") return <ListNode {...props} definition={definition} />;
+  if (definition.type === "list")
+    return annotation ? (
+      <div className="grid min-w-0 gap-1">
+        <small className="text-xs text-muted-foreground">{annotation}</small>
+        <ListNode {...props} definition={definition} />
+      </div>
+    ) : (
+      <ListNode {...props} definition={definition} />
+    );
   if (definition.type === "group") {
     const present = record(value);
+    // Problems this value's rules make reachable; hidden targets with draft problems stay shown.
+    const shownErrors = (
+      present ? applicableErrors(definition.fields, definition.visibility, value, errors) : errors
+    ) as Errors | undefined;
+    const shownKeys = present
+      ? shownFieldKeys(definition.fields, definition.visibility, value)
+      : undefined;
+    const renderedKeys = present
+      ? renderedFieldKeys(definition.fields, definition.visibility, value, shownErrors)
+      : undefined;
     const candidate = fieldStartingValue(definition, {});
     const createProblem = growthProblem(name, candidate);
     const clearProblem = growthProblem(name, null);
@@ -394,16 +445,22 @@ function ValueNode(props: NodeProps) {
             fields={definition.fields}
             layout={definition.layout}
             label={label}
-            errors={errors}
+            errors={shownErrors}
             hiddenBlock={hidden}
+            visibleKeys={renderedKeys}
             renderField={(key) => {
               const child = definition.fields[key]!;
               return (
                 <ValueNode
+                  annotation={
+                    shownKeys?.has(key) === false && renderedKeys?.has(key) === true
+                      ? hiddenFieldNote(definition.fields, definition.visibility, key)
+                      : undefined
+                  }
                   definition={child}
                   errors={
-                    errors?.[key] !== null && typeof errors?.[key] === "object"
-                      ? (errors[key] as Errors)
+                    shownErrors?.[key] !== null && typeof shownErrors?.[key] === "object"
+                      ? (shownErrors[key] as Errors)
                       : undefined
                   }
                   fieldKey={key}
@@ -448,7 +505,7 @@ function ValueNode(props: NodeProps) {
         description={definition.description}
         guidance={fieldGuidance(definition)}
         required={definition.required}
-        error={errors}
+        error={shownErrors}
         id={id}
         label={label}
         suffix={
@@ -780,7 +837,15 @@ function ListNode(
   props: NodeProps & { readonly definition: Extract<FieldDefinition, { type: "list" }> },
 ) {
   const { definition, name, fieldKey, value, onChange, onBlur, errors, onErrors } = props;
-  const { readOnly, busy, growthProblem, epoch } = useCompositeEditing();
+  // Indicators count only problems the items' rules make reachable; moves keep every error.
+  const shownErrors = applicableValueErrors(definition, value, errors) as Errors | undefined;
+  const {
+    readOnly,
+    busy,
+    growthProblem,
+    epoch,
+    mediaListPicker: MediaListPicker,
+  } = useCompositeEditing();
   const list = Array.isArray(value) ? value : [];
   const [ids, setIds] = useState(() => list.map(newItemIdentity));
   // Group items start collapsed; open rows follow their identity through moves.
@@ -831,6 +896,18 @@ function ListNode(
       ? `This list allows at most ${maximum} items.`
       : growthProblem(name, [...list, initial ?? fieldStartingValue(definition.item, {})]);
   const createProblem = growthProblem(name, []);
+  // Eligible media lists add from the picker in multiple mode instead of one starting item.
+  const mediaTarget = MediaListPicker ? mediaListTarget(definition.item) : undefined;
+  // Options of the media field's controller that hide it get their own Add, such as Video.
+  const mediaChoices = mediaTarget ? mediaListChoices(definition.item, mediaTarget) : [];
+  // Kept after closing, so the picker keeps its props while it closes.
+  const [picking, setPicking] = useState<{
+    readonly capacity: number;
+    readonly existingIds: ReadonlySet<string>;
+    readonly limitMessage: string;
+  }>();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickedFocus = useRef<string | undefined>(undefined);
   const clearProblem = growthProblem(name, null);
   const toggle = (token: string, next?: boolean) =>
     setOpen((current) => {
@@ -855,6 +932,43 @@ function ListNode(
       if (error) next[index] = error;
     });
     return next;
+  };
+  const openPicker = () => {
+    if (!mediaTarget) return;
+    const { capacity, cause } = mediaListCapacity({
+      fits: (next) => !growthProblem(name, next),
+      item: definition.item,
+      list,
+      maximum,
+      target: mediaTarget,
+    });
+    if (capacity === 0) return;
+    const over = mediaListItems(definition.item, mediaTarget, Array(capacity + 1).fill("media"));
+    setPicking({
+      capacity,
+      existingIds: mediaIdsInList(mediaTarget, list),
+      limitMessage:
+        cause === "list"
+          ? `${label} allows at most ${maximum} items.`
+          : (growthProblem(name, [...list, ...over]) ?? `${label} cannot take more items.`),
+    });
+    setPickerOpen(true);
+  };
+  const insertMany = (mediaIds: readonly string[]) => {
+    if (!mediaTarget || mediaIds.length === 0) return;
+    const values = mediaListItems(definition.item, mediaTarget, mediaIds);
+    const next = [...list, ...values];
+    if (next.length > maximum || growthProblem(name, next)) return;
+    const added = values.map(() => newItemIdentity());
+    // New rows stay collapsed; focus reaches the first one once the picker has closed.
+    change(next, [...tokens, ...added], errors);
+    setPending(false);
+    pickedFocus.current = added[0];
+    setAnnouncement(
+      values.length === 1
+        ? `Added ${label} item ${list.length + 1}.`
+        : `Added ${values.length} ${label} items.`,
+    );
   };
   const insert = (nextValue: unknown) => {
     if (addProblem || growthProblem(name, [...list, nextValue])) return;
@@ -916,7 +1030,7 @@ function ListNode(
             {list.length} / {maximum}
           </span>
         ) : null}
-        {hasProblems(errors) ? (
+        {hasProblems(shownErrors) ? (
           <span className="text-xs text-destructive">Has problems</span>
         ) : null}
         <span className="flex-1" />
@@ -925,9 +1039,11 @@ function ListNode(
             <Button
               aria-describedby={addProblem ? `${id}:limit` : undefined}
               aria-label={`Add ${label} item`}
+              {...(mediaTarget ? { "aria-haspopup": "dialog" as const } : {})}
               disabled={busy || !!addProblem}
               onClick={() => {
-                if (initial !== undefined) insert(initial);
+                if (mediaTarget) openPicker();
+                else if (initial !== undefined) insert(initial);
                 else {
                   setPending(true);
                   setPendingValue(undefined);
@@ -940,6 +1056,20 @@ function ListNode(
               <PlusIcon aria-hidden />
               Add
             </Button>
+            {mediaChoices.map((choice) => (
+              <Button
+                aria-describedby={addProblem ? `${id}:limit` : undefined}
+                aria-label={`Add ${choice.label} item to ${label}`}
+                disabled={busy || !!addProblem || !!growthProblem(name, [...list, choice.item])}
+                key={choice.value}
+                onClick={() => insert(choice.item)}
+                size="sm"
+                variant="outline"
+              >
+                <PlusIcon aria-hidden />
+                Add {choice.label}
+              </Button>
+            ))}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -977,7 +1107,7 @@ function ListNode(
           <small
             className={cn(
               "basis-full text-xs text-muted-foreground",
-              !readOnly && !hasProblems(errors) && "sr-only",
+              !readOnly && !hasProblems(shownErrors) && "sr-only",
             )}
             id={`${id}:guidance`}
           >
@@ -1162,7 +1292,7 @@ function ListNode(
                         onReveal={() => flushSync(() => toggle(token, true))}
                         onToggle={() => toggle(token)}
                         open={open.has(token)}
-                        problems={hasProblems(errors?.[index])}
+                        problems={hasProblems(shownErrors?.[index])}
                         readOnly={readOnly}
                         summary={
                           <ItemSummaryLine
@@ -1203,6 +1333,27 @@ function ListNode(
           ) : (
             <p className="m-0 text-sm text-muted-foreground">No items.</p>
           )}
+          {MediaListPicker && mediaTarget && !readOnly ? (
+            <MediaListPicker
+              capacity={picking?.capacity ?? 1}
+              existingIds={picking?.existingIds ?? new Set()}
+              label={label}
+              limitMessage={picking?.limitMessage ?? ""}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const token = pickedFocus.current;
+                pickedFocus.current = undefined;
+                if (token === undefined) addRef.current?.focus();
+                else setFocusToken(token);
+              }}
+              onConfirm={(mediaIds) => {
+                insertMany(mediaIds);
+                setPickerOpen(false);
+              }}
+              onOpenChange={setPickerOpen}
+              open={pickerOpen}
+            />
+          ) : null}
           {pending ? (
             <div className="grid gap-2 rounded-md border border-border p-2">
               <ValueNode

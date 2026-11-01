@@ -1221,3 +1221,106 @@ test("public identity excludes only root query options and stays internal", asyn
     (await named("b")).runtime.content[0].publicProjectionHash,
   );
 });
+
+test("model visibility is structural, normalized and typed against model fields", async () => {
+  const hero = (overrides = {}) =>
+    definePage({
+      blocks: [],
+      fields: {
+        heroKind: field.select({ options: ["image", "video"], required: true }),
+        heroVideo: field.url({ required: true }),
+      },
+      key: "home",
+      path: "/",
+      version: 1,
+      ...overrides,
+    });
+  const rules = { heroVideo: { field: "heroKind", values: ["video"] } };
+  const plain = await defineConfig({ blocks, content: [hero()] });
+  const conditional = await defineConfig({ blocks, content: [hero({ visibility: rules })] });
+  expect(conditional.content[0].visibility).toEqual(rules);
+  expect(conditional.runtime.content[0].visibility).toEqual(rules);
+  expect(plain.content[0]).not.toHaveProperty("visibility");
+  expect(conditional.content[0].structureHash).not.toBe(plain.content[0].structureHash);
+  expect(conditional.content[0].projectionHash).not.toBe(plain.content[0].projectionHash);
+  expect(conditional.runtime.content[0].structure.visibility).toEqual(rules);
+  expect(() =>
+    hero({ visibility: { heroVideo: { field: "heroKind", values: ["audio"] } } }),
+  ).toThrow("model.home.visibility.heroVideo.values");
+  expect(() => hero({ visibility: { missing: { field: "heroKind", values: ["video"] } } })).toThrow(
+    "model.home.visibility.missing",
+  );
+});
+
+test("block data visibility enters structure while settings visibility stays projection-only", async () => {
+  const cta = (extra) =>
+    defineBlock({
+      type: "cta",
+      version: 1,
+      fields: { hasCta: field.boolean(), ctaUrl: field.url() },
+      settings: {
+        mode: field.select({ options: ["a", "b"], required: true, defaultValue: "a" }),
+        wrap: field.boolean({ required: true, defaultValue: true }),
+      },
+      ...extra,
+    });
+  const page = definePage({ blocks: ["cta"], key: "home", path: "/", version: 1 });
+  const base = await defineConfig({ blocks: [cta({})], content: [page] });
+  const settings = await defineConfig({
+    blocks: [cta({ settingsVisibility: { wrap: { setting: "mode", values: ["a"] } } })],
+    content: [page],
+  });
+  const data = await defineConfig({
+    blocks: [cta({ visibility: { ctaUrl: { field: "hasCta", values: [true] } } })],
+    content: [page],
+  });
+  expect(settings.content[0].structureHash).toBe(base.content[0].structureHash);
+  expect(data.content[0].structureHash).not.toBe(base.content[0].structureHash);
+});
+
+test("site SEO defaults cannot reference conditional fields", () => {
+  const global = (seoDefaults) =>
+    defineGlobal({
+      fields: {
+        branded: field.boolean(),
+        brandName: field.text({ required: true }),
+        siteName: field.text({ required: true }),
+        shareImage: field.media(),
+      },
+      key: "settings",
+      version: 1,
+      visibility: {
+        brandName: { field: "branded", values: [true] },
+        shareImage: { field: "branded", values: [true] },
+      },
+      seoDefaults,
+    });
+  expect(global({ siteName: "siteName" }).seoDefaults).toEqual({ siteName: "siteName" });
+  expect(() => global({ siteName: "brandName" })).toThrow(
+    /seoDefaults\.siteName must not reference conditional field "brandName"/u,
+  );
+  expect(() => global({ siteName: "siteName", image: "shareImage" })).toThrow(
+    /seoDefaults\.image must not reference conditional field/u,
+  );
+});
+
+test("routable SEO fallbacks and list fields may name conditional fields", () => {
+  const model = defineCollection({
+    fields: {
+      kind: field.select({ options: ["short", "long"], required: true, defaultValue: "short" }),
+      excerpt: field.textarea(),
+      cover: field.media(),
+    },
+    key: "notes",
+    listFields: ["excerpt"],
+    route: "/notes/:slug",
+    seo: { description: "excerpt", image: "cover" },
+    version: 1,
+    visibility: {
+      excerpt: { field: "kind", values: ["long"] },
+      cover: { field: "kind", values: ["long"] },
+    },
+  });
+  expect(model.seo).toEqual({ description: "excerpt", image: "cover" });
+  expect(model.listFields).toEqual(["excerpt"]);
+});

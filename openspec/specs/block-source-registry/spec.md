@@ -6,17 +6,19 @@ Defines the canonical, framework-keyed registry of user-owned block sources, the
 ## Requirements
 
 ### Requirement: The registry holds one canonical source per framework block
-The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup, apart from the expressly versioned Gallery layout adoption and CE10 link-resolution adoption described below. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Only `videoEmbed` SHALL be allowed a local activation `<script>` implementing the video-embeds preview contract, with no external player SDK or framework hydration; all other built-ins SHALL carry no `<script>` element. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
+The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup, apart from the expressly versioned Gallery layout adoption and CE10 link-resolution adoption described below. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Only `videoEmbed` and `gallery` SHALL be allowed a local `<script>`: `videoEmbed` implementing the video-embeds preview activation and ambient playback contract, and `gallery` implementing only the ambient mounting of its video items; neither SHALL use an external player SDK or framework hydration, and all other built-ins SHALL carry no `<script>` element. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
 
 The `gallery` component SHALL render a `section` root with class `gallery`, a
 `title` part heading only when the title is a non-empty string, and an
-`items` part list holding one `item` part per image in stored order. Each item
-SHALL render a figure with a `media` part image described by the image
+`items` part list holding one `item` part per stored item in stored order,
+each carrying `data-lace-kind` equal to the item's effective kind. Each image
+item SHALL render a figure with a `media` part image described by the image
 describer from the item's media and alt override (effective alt: the item's
 alt text, then the media alt text, then an empty string), with `width`,
 `height` and focal-point `object-position` when known and `loading="lazy"`,
 and a `caption` part only when the item caption, falling back to the media
-caption, is present.
+caption, is present. Video items SHALL render as specified by the gallery
+video-item requirement.
 
 The `navigation` component SHALL render a `nav` root with class `navigation`
 whose `aria-label` is the block's `name` when it is a non-empty string, and a
@@ -31,15 +33,21 @@ child. The component SHALL use no JavaScript. A `link` anchor whose URL is a
 root-relative path without query or fragment equal to the current page path,
 ignoring one trailing slash, SHALL carry `aria-current="page"`. Hrefs SHALL be safe resolved URLs from the shared link resolver. Unavailable parent/child targets SHALL render label text while retaining valid descendants and native disclosure behavior.
 
-The `astro/videoEmbed` registry item SHALL ship a site-owned component consuming
-parsed block props and the pure embed description, plus a structural stylesheet
-companion reserving the responsive player area. It SHALL preserve block anchor,
-class name, `data-lace-block` and `data-lace-block-key` hooks and expose
-`data-lace-part` values `preview`, `play`, `player`, `caption` and `source` on
-applicable elements. Preview media SHALL use the image describer and existing
-Astro image component. It SHALL implement the video-embeds activation and source
-fallback contract. Installation and update SHALL use existing manifest, lock,
-conflict protection and `.new` recovery behavior for all item files.
+The `astro/videoEmbed` registry item SHALL target block definition version 2
+with an advanced item revision. It SHALL ship a site-owned component consuming
+parsed block props, typed settings and the pure embed description, plus a
+structural stylesheet companion reserving the responsive player area at the
+selected aspect ratio and visually hiding the source link only while an ambient
+player is mounted. It SHALL preserve block anchor, class name, `data-lace-block`
+and `data-lace-block-key` hooks, SHALL expose the selected settings on the root
+element as `data-lace-aspect-ratio` and `data-lace-playback`, SHALL mark a
+mounted ambient player with `data-lace-ambient="active"` on the root, and SHALL
+expose `data-lace-part` values `preview`, `play`, `player`, `caption` and
+`source` on applicable elements. Preview media SHALL use the image describer and
+existing Astro image component. It SHALL implement the video-embeds activation,
+ambient playback and source fallback contract without inline `style`
+attributes for the ratio. Installation and update SHALL use existing manifest,
+lock, conflict protection and `.new` recovery behavior for all item files.
 
 The `astro/link` item SHALL provide a site-owned component preserving anchor,
 class and root block hooks, with `data-lace-part=link` for a resolved anchor and
@@ -91,7 +99,8 @@ Install/update SHALL retain hash guards, locks and `.new` recovery.
 #### Scenario: A block without an envelope keeps its markup
 - **WHEN** a site renders any built-in block without an anchor or class name
 - **THEN** its markup equals the output of the previous item revision except
-  for Gallery's declared layout adoption and the explicit CE10 link-resolution adoption
+  for Gallery's declared layout adoption, Gallery's `data-lace-kind` item hook
+  and the explicit CE10 link-resolution adoption
 
 #### Scenario: Gallery items follow the media fallbacks
 - **WHEN** a site renders a gallery titled "Studio" with one item overriding
@@ -130,13 +139,21 @@ Install/update SHALL retain hash guards, locks and `.new` recovery.
 
 #### Scenario: Registry item includes a structural stylesheet
 - **WHEN** the Gallery registry manifest is read
-- **THEN** it declares exactly one component with role `component` and its
-  companion `ListLayout.css` with role `stylesheet`, whose source bytes exist
-  and are included in the bundled registry
+- **THEN** it declares exactly one component with role `component` and the
+  companions `ListLayout.css` and `GalleryVideo.css` with role `stylesheet`,
+  whose source bytes exist and are included in the bundled registry
 
 #### Scenario: Embed install and conflict handling
 - **WHEN** the embed item is installed or updated with a locally modified component or stylesheet
 - **THEN** ordinary installation succeeds for clean targets and conflicts preserve the active component, stylesheet, map and lock according to the existing CLI contract
+
+#### Scenario: Embed settings hooks
+- **WHEN** the embed component renders a block with aspect ratio `4:5` and ambient playback
+- **THEN** its root carries `data-lace-aspect-ratio="4:5"` and `data-lace-playback="ambient"`, and the structural stylesheet gives the video area a 4:5 shape with no inline style
+
+#### Scenario: Updating an older embed component
+- **WHEN** a site with the revision 1 embed component runs block installation for `videoEmbed` after its models were synchronized to version 2
+- **THEN** a clean component and stylesheet are updated to the version 2 revision, while a locally edited one is reported as a conflict with a `.new` proposal and the active files stay unchanged
 
 #### Scenario: Unavailable link and image
 - **WHEN** a Link target and an image target are absent from a valid export
@@ -177,18 +194,21 @@ Every Lace-maintained site that installs registry blocks — the generated start
 
 ### Requirement: Built-in image components render through the adapter image component
 The `image` registry item (revision 6, block version 4), the `gallery` item
-(revision 5, block version 4) and the `hero` item (revision 4, block version 1)
+(revision 7, block version 5) and the `hero` item (revision 4, block version 1)
 SHALL render every media image through the adapter's image component, keeping
 the image element's `media` part, effective alt text, dimensions and
 focal-point object position, and adding the component's variants and
 placeholder. `image` SHALL pass the sizes `(min-width: 64rem) 60rem, 100vw`,
 `gallery` the sizes `(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw`
 for `grid` with `auto`, and the conservative sizes `100vw` for all other layout
-combinations, and `hero` the sizes `(min-width: 64rem) 60rem, 100vw` with eager loading. When
-the block's `lightbox` setting is `true`, `image` and each `gallery` item SHALL
+combinations, and `hero` the sizes `(min-width: 64rem) 60rem, 100vw` with eager loading. Gallery image rules
+apply to image items only; video items SHALL render no `media` image, link or
+lightbox. When
+the block's `lightbox` setting is `true`, `image` and each `gallery` image item SHALL
 enable the lightbox with the identifier `lace-lightbox-<entry id>-<block key>`
 for `image` and `lace-lightbox-<entry id>-<block key>-<item index>` for each
-gallery item; with the setting `false` they SHALL render no button and no
+gallery image item, where the index counts every stored item, so adding video
+items never renames the dialogs of the images before them; with the setting `false` they SHALL render no button and no
 dialog. When an `image` block or a `gallery` item has a `link`, its `media`
 image SHALL be wrapped in an anchor with that `href` and the part `link`,
 opening in the same browsing context, and that image SHALL render no
@@ -196,7 +216,8 @@ lightbox button or dialog even when the setting is `true`; the anchor's
 accessible name SHALL be the effective alt text, or the caption when the alt
 text is empty, or the link URL when both are empty. Images without a `link`
 SHALL keep the lightbox behavior above. `hero` SHALL never render a lightbox. The components SHALL still carry
-no `<style>` or `<script>` element.
+no `<style>` element, and only `gallery` SHALL carry the ambient mounting
+`<script>` of its video items.
 
 #### Scenario: Image block with the lightbox on
 - **WHEN** a site renders a version 4 `image` block with key `photo` of entry
@@ -206,7 +227,7 @@ no `<style>` or `<script>` element.
   the caption after them
 
 #### Scenario: Gallery with the lightbox off
-- **WHEN** a site renders a version 4 `gallery` block with the default settings
+- **WHEN** a site renders a version 5 `gallery` block of image items with the default settings
 - **THEN** each item's figure holds only the optimized `media` image and its
   caption, with no button or dialog
 
@@ -241,7 +262,7 @@ no `<style>` or `<script>` element.
   `fetchpriority="high"` and no lightbox
 
 #### Scenario: Gallery applies the shared list contract without theming
-- **WHEN** a version 4 Gallery renders any layout mode and preset
+- **WHEN** a version 5 Gallery renders any layout mode and preset
 - **THEN** its existing section is marked as the layout container, its items
   list and direct items expose the shared list-layout hooks, its source imports
   `./ListLayout.css`, and it adds no inline layout styles, image aspect ratio,
@@ -251,6 +272,13 @@ no `<style>` or `<script>` element.
 - **WHEN** Gallery uses horizontal flex or a featured-first grid
 - **THEN** optimized images receive sizes `100vw` and retain the existing
   resolution, placeholder, loading and media-fallback behavior
+
+#### Scenario: Video items keep image dialog indexes
+- **WHEN** a gallery with key `shots` of entry `e1` and the lightbox on holds
+  an image, a video and an image
+- **THEN** the images open `lace-lightbox-e1-shots-0` and
+  `lace-lightbox-e1-shots-2`, and the video item renders no lightbox button,
+  dialog or link
 
 ### Requirement: Registry stylesheet companions are portable source files
 Registry items SHALL accept exactly one `component` file and zero or more
@@ -270,3 +298,77 @@ items SHALL remain valid without manifest/lock schema-version changes.
 - **WHEN** an item has two components, a stylesheet target outside the site,
   a non-CSS stylesheet or a target shared by selected/already installed items
 - **THEN** registry/installation validation rejects the item set before writes
+
+### Requirement: Gallery renders video items with embed playback
+The `gallery` registry component SHALL render each video item inside its
+`item` part as a figure carrying `data-lace-video`, `data-lace-aspect-ratio`
+and `data-lace-playback` equal to the item's `aspectRatio` and `playback`,
+holding a video area, a `caption` part only when the item's caption is
+present (videos have no media caption fallback), and a `source` part link to
+the validated `videoUrl` reading "Watch on YouTube" or "Watch on Vimeo". The
+video area and player SHALL follow the video-embeds contract for a block
+without a poster, applied per item: `player` playback renders a lazy iframe
+with the canonical player URL, the item's `videoTitle` as title, restricted
+permissions and no autoplay; `ambient` playback contains no live iframe in
+the initial HTML, mounts exactly one muted, looping, control-free ambient
+iframe with no tab stop once on page load when JavaScript is available and the
+visitor does not prefer reduced motion, marks that figure with
+`data-lace-ambient="active"`, falls back to the `player` iframe under reduced
+motion, and offers a non-autoplaying `<noscript>` player without JavaScript.
+The source link SHALL be visually hidden only while an ambient player is
+mounted and SHALL become visible on focus. Repeated initialization and
+several galleries or video items on one page SHALL NOT create duplicate
+players, and neither the gallery script nor the `videoEmbed` script SHALL
+mount a player into the other's markup.
+
+The `GalleryVideo.css` stylesheet companion SHALL reserve each video area at
+its item's aspect ratio by data attribute (16:9 base) inside the layout cell,
+without inline styles or decorative rules, place a mounted ambient iframe over
+the area, and visually hide the source link as above, all in the
+`lace-layout` cascade layer with zero-specificity selectors so unlayered site
+CSS overrides it. The component SHALL import it with a matching relative
+import. Hidden blocks SHALL emit no player. No provider request SHALL occur
+before a `player` iframe is lazily loaded or an ambient player is mounted.
+
+#### Scenario: Mixed gallery markup
+- **WHEN** a site renders a gallery holding an image item and a `player`
+  Vimeo item titled "Studio tour" with aspect ratio `4:5` and caption "Spring"
+- **THEN** the first `item` part carries `data-lace-kind="image"` with its
+  image figure, and the second carries `data-lace-kind="video"` with a figure
+  whose `data-lace-aspect-ratio` is `4:5`, a lazy iframe titled "Studio tour"
+  with the canonical Vimeo player URL and no autoplay, the caption "Spring"
+  and a "Watch on Vimeo" source link
+
+#### Scenario: Ambient item mounts once
+- **WHEN** a visitor without a reduced-motion preference opens a page with
+  two galleries holding three ambient video items, and initialization runs
+  twice
+- **THEN** each ambient item has exactly one ambient iframe that is not a tab
+  stop, each figure is marked `data-lace-ambient="active"`, and each source
+  link is visually hidden but focusable
+
+#### Scenario: Reduced motion and no JavaScript
+- **WHEN** a visitor who prefers reduced motion opens a gallery with an
+  ambient item, and another visitor opens it with JavaScript disabled
+- **THEN** the first sees a non-autoplaying player iframe and no ambient URL
+  request, and the second sees the `<noscript>` player iframe; both see the
+  visible source link
+
+#### Scenario: Aspect ratio is reserved in the cell
+- **WHEN** a gallery in the `columns-3` grid preset holds a `9:16` and a
+  `1:1` video item
+- **THEN** each video area has its ratio before any player loads, from
+  `GalleryVideo.css` attributes rather than inline styles
+
+#### Scenario: Gallery and videoEmbed on one page
+- **WHEN** a page holds an ambient `videoEmbed` block and a gallery with an
+  ambient video item
+- **THEN** each has exactly one ambient iframe and neither script mounts a
+  player into the other's markup
+
+#### Scenario: Updating a gallery component
+- **WHEN** a site with the revision 6 gallery component runs block
+  installation for `gallery` after its models were synchronized to version 5
+- **THEN** a clean component and stylesheets are updated and
+  `GalleryVideo.css` is added, while a locally edited component is reported as
+  a conflict with a `.new` proposal and the active files stay unchanged

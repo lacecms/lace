@@ -19,7 +19,11 @@ import type {
 } from "@lacecms/application";
 import { type ContentModelDefinition, type NormalizedConfig } from "@lacecms/config";
 import { resolveNodeClientAddress, trustedProxyPolicy } from "./client-address.js";
-import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
+import {
+  TrustedClientAddresses,
+  createBetterAuthBoundary,
+  createImportActorResolver,
+} from "@lacecms/auth";
 // Load the auth graph before the SDK: their shared Zod ESM initialization
 // otherwise runs after SDK schemas in a combined esbuild bundle.
 import { createMcpContentHandler } from "@lacecms/mcp";
@@ -556,6 +560,11 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     apiDocsEnabled: input.settings.apiDocsEnabled ?? false,
     ...(input.adminAssets === undefined ? {} : { adminAssets: input.adminAssets }),
     actors: input.actors ?? auth.actors,
+    importActors: createImportActorResolver({
+      origin: input.settings.publicBaseUrl,
+      production: process.env.NODE_ENV === "production",
+      security,
+    }),
     auth,
     builds,
     buildSite: input.settings.buildSite ?? null,

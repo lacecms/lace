@@ -9,6 +9,7 @@ import {
   MAX_JSON_BYTES,
   canonicalJsonByteLength,
   migrateBlockData,
+  publishedBlockData,
   validateBlockData,
   validateBlockSettings,
 } from "@lacecms/content";
@@ -240,6 +241,8 @@ function migrateSnapshot(
     let settings: JsonObject;
     try {
       validated = validateBlockData(definition, migrated.data, mode, ["data"]) as JsonObject;
+      // Published blocks hold only the published projection of their data.
+      if (published) validated = publishedBlockData(definition, validated);
       settings = validateBlockSettings(definition, migrated.settings, ["settings"]);
     } catch (error) {
       if (!(error instanceof ContentValidationError)) throw error;

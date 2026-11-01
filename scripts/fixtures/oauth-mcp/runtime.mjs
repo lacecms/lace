@@ -35,6 +35,12 @@ export async function openMcpRuntime(
       defineGlobal({ key: "settings", version: 1, fields: {} }),
       definePage({ key: "home", path: "/", version: 1 }),
       defineCollection({
+        key: "required",
+        route: "/required/:slug",
+        version: 1,
+        fields: { body: field.text({ required: true }) },
+      }),
+      defineCollection({
         key: "posts",
         route: "/blog/:slug",
         version: 1,
@@ -192,7 +198,7 @@ export async function openMcpRuntime(
         body: JSON.stringify({
           client_name: "Fixture assistant",
           redirect_uris: [`${origin}/fixture/callback`],
-          scope: "content:read content:write offline_access",
+          scope: "content:read content:write content:publish offline_access",
           ...(origin.startsWith("http:") ? { application_type: "native" } : {}),
         }),
       }),
@@ -208,7 +214,7 @@ export async function openMcpRuntime(
       response_type: "code",
       redirect_uri: `${origin}/fixture/callback`,
       resource: `${origin}/mcp`,
-      scope: "content:read content:write offline_access",
+      scope: "content:read content:write content:publish offline_access",
       state: "runtime-state",
       code_challenge: digest(verifier),
       code_challenge_method: "S256",
@@ -252,7 +258,7 @@ export async function openMcpRuntime(
     );
     return client;
   };
-  const authorize = async (write = true) => {
+  const authorize = async (write = true, publish = false) => {
     const start = await fetch(
       new Request(authorizationUrl(), { headers: { cookie, accept: "application/json" } }),
     );
@@ -264,7 +270,7 @@ export async function openMcpRuntime(
       json: {
         transaction: target.searchParams.get("mcpTransaction"),
         accept: true,
-        scope: `content:read ${write ? "content:write " : ""}offline_access`,
+        scope: `content:read ${write || publish ? "content:write " : ""}${publish ? "content:publish " : ""}offline_access`,
       },
     });
     if (!result.response.ok) throw new Error(`Fixture consent failed (${result.response.status}).`);

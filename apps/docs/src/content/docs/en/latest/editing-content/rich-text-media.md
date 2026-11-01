@@ -15,9 +15,22 @@ Upload JPEG, PNG, GIF, WebP or AVIF images up to **10 MiB**. Lace validates the 
 
 A referenced object cannot simply be deleted while it is still in use. Inspect usage, remove its references from drafts and published content as required, and publish the changes before retrying deletion. A confirmed draft-only detach does not detach published uses. A failed upload/delete should be retried from the actionable UI state rather than manually deleting storage objects behind the CMS.
 
-Gallery uses a list of images, captions and alt overrides; Navigation uses ordered links with bounded children. Editors control content; the installed Astro components and your stylesheet control presentation. Viewers can inspect content and expand disclosures but cannot upload/select media or mutate lists.
+Gallery uses a list of images and videos with captions and alt overrides; Navigation uses ordered links with bounded children. Editors control content; the installed Astro components and your stylesheet control presentation. Viewers can inspect content and expand disclosures but cannot upload/select media or mutate lists.
 
 Image and Gallery blocks have an optional **Lightbox** setting, off by default, which opens the full-size original. An image block or individual gallery item can also have a **Link**. A linked image opens its link in the same tab, taking precedence over the lightbox; unlinked gallery items can still open the lightbox. [Astro integration](../../astro-integration/) explains the matching components and styles needed by the site.
+
+## Mix images and videos in a gallery
+
+Each gallery item has a **Type**: Image or Video. **Add** opens the media library
+so you can add several images at once; **Add Video** adds one video item. An
+image item uses its image, alt text and optional link. A video item takes a
+YouTube or Vimeo **Video URL**, a **Video title** read by assistive technology,
+**Playback** (Player, or Ambient for a muted loop without controls) and an
+**Aspect ratio**. Both kinds take a caption; only image captions fall back to the
+media item's caption. Switching an item's Type keeps what you typed for the
+other kind, but only the fields of the selected Type are published. The
+lightbox and links apply to images only, and collapsed video rows show the
+title and the provider.
 
 ## Embed a video
 

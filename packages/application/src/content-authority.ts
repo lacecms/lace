@@ -28,6 +28,7 @@ export const delegatedContentOperations: readonly ContentOperation[] = Object.fr
   "load",
   "create",
   "save",
+  "publish",
 ]);
 export function canContentOperation(actor: Actor, operation: string): boolean {
   if (!Object.hasOwn(contentOperationPermissions, operation)) return false;

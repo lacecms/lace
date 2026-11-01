@@ -1,4 +1,5 @@
 import { Scalar } from "@scalar/hono-api-reference";
+import { isBearerManagementRequest, isImportRoute } from "./import-routes.js";
 import {
   AccountError,
   AccountUseCases,
@@ -14,6 +15,9 @@ import {
   requireContentReader,
   requireSettingsManager,
   actorPermissions,
+  effectiveActorPermissions,
+  importTokenCapabilities,
+  importTokenExpiry,
   sendTestEmail,
   unconfiguredEmailSender,
   SiteBuildUseCases,
@@ -21,6 +25,7 @@ import {
 import type {
   DeferTask,
   EmailSender,
+  ImportTokenMetadata,
   InvitationIssueResult,
   InvitationView,
   LinkIssueResult,
@@ -46,6 +51,12 @@ import {
   buildTokenCreatedSchema,
   buildTokenListSchema,
   buildTokenSchema,
+  importCredentialSchema,
+  importTokenCreateRequestSchema,
+  importTokenCreatedSchema,
+  importTokenListSchema,
+  importTokenSchema,
+  toImportTokenDto,
   buildRequestSchema,
   buildQueueReceiptSchema,
   siteBuildRecordSchema,
@@ -63,12 +74,16 @@ import {
   fieldMetadataSchema,
   fieldMetadataMapSchema,
   blockMetadataSchema,
+  fieldVisibilitySchema,
   contentMetadataOpenApi,
   managedUserListSchema,
   managedUserSchema,
   mediaDetailSchema,
   mediaDeleteQuerySchema,
   mediaListQuerySchema,
+  mediaTagCatalogQuerySchema,
+  mediaTagCatalogSchema,
+  mediaTagsInputSchema,
   mediaListSchema,
   mediaEntityTag,
   mediaMetadataSchema,
@@ -176,7 +191,9 @@ loadVendor("valibot", {
               ? "FieldMetadataMap"
               : valibotSchema === blockMetadataSchema
                 ? "BlockMetadata"
-                : undefined;
+                : valibotSchema === fieldVisibilitySchema
+                  ? "FieldVisibility"
+                  : undefined;
         return name === undefined ? undefined : { $ref: `#/components/schemas/${name}` };
       },
     })) as never,
@@ -188,6 +205,8 @@ declare module "hono" {
     "lace.requestId": string;
     "lace.sessionId": string | null | undefined;
     "lace.mcpCompletion": { readonly tool: string; readonly outcome: "success" | "error" };
+    /** Set only when an import token authenticated the request (ADR 0016). */
+    "lace.importToken": ImportTokenMetadata | undefined;
   }
 }
 
@@ -321,7 +340,11 @@ export function sensitiveRequestLimit(
   if (pathname === "/api/v1/account/password" && method === "POST")
     return { operation: "auth", scope: "actor" };
   if (pathname === "/api/v1/setup/admin") return { operation: "setup", scope: "client" };
-  if (pathname.startsWith("/api/v1/admin/api-tokens") && method !== "GET")
+  if (
+    (pathname.startsWith("/api/v1/admin/api-tokens") ||
+      pathname.startsWith("/api/v1/admin/import-tokens")) &&
+    method !== "GET"
+  )
     return { operation: "token", scope: "actor" };
   if (pathname === "/api/v1/admin/media" && method === "POST")
     return { operation: "upload", scope: "actor" };
@@ -373,7 +396,7 @@ export interface LaceAppInput {
   readonly mcp?: {
     resolve(
       request: Request,
-      scope?: "content:read" | "content:write",
+      scope?: "content:read" | "content:write" | "content:publish",
     ): Promise<
       | { readonly actor: Actor; readonly response?: never }
       | { readonly response: Response; readonly actor?: never }
@@ -385,6 +408,15 @@ export interface LaceAppInput {
     ): Promise<Response>;
   };
   readonly actors: ActorResolver;
+  /**
+   * Bearer-only import-token resolution (ADR 0016). Absent means no import
+   * credential is accepted; Bearer management requests are then always denied.
+   */
+  readonly importActors?: {
+    resolve(
+      request: Request,
+    ): Promise<{ readonly actor: Actor; readonly token: ImportTokenMetadata } | null>;
+  };
   readonly adminAssets?: BuiltAdminResponder;
   readonly config: ServerConfig;
   readonly content: ContentUseCases;
@@ -788,10 +820,25 @@ export function createLaceApp(input: LaceAppInput): Hono {
     }
     return jsonBodyLimit(context, next);
   });
+  // A Bearer credential on a management route is an import token or nothing:
+  // it never falls back to the session cookie (ADR 0016). This runs before the
+  // rate limiter so upload limits count the import actor.
+  app.use(async (context, next) => {
+    const request = context.req.raw;
+    if (!isBearerManagementRequest(request, context.req.path)) return next();
+    if (input.importActors === undefined || !isImportRoute(request.method, context.req.path))
+      throw new AuthorizationError();
+    const resolved = await input.importActors.resolve(request);
+    if (resolved === null) throw new AuthorizationError();
+    context.set("lace.actor", resolved.actor);
+    context.set("lace.importToken", resolved.token);
+    context.set("lace.sessionId", null);
+    return next();
+  });
   app.use(async (context, next) => {
     if (context.req.path === "/mcp") {
       if (!input.mcp) return new Response(null, { status: 503 });
-      let scope: "content:read" | "content:write" = "content:read";
+      let scope: "content:read" | "content:write" | "content:publish" = "content:read";
       if (context.req.method === "POST") {
         try {
           const value: unknown = await context.req.raw.clone().json();
@@ -804,9 +851,11 @@ export function createLaceApp(input: LaceAppInput): Hono {
             typeof value.params === "object" &&
             value.params !== null &&
             "name" in value.params &&
-            (value.params.name === "create_entry" || value.params.name === "save_draft")
+            (value.params.name === "create_entry" ||
+              value.params.name === "save_draft" ||
+              value.params.name === "publish_entry")
           )
-            scope = "content:write";
+            scope = value.params.name === "publish_entry" ? "content:publish" : "content:write";
         } catch {
           /* Protocol syntax remains SDK-owned. */
         }
@@ -1606,6 +1655,113 @@ export function createLaceApp(input: LaceAppInput): Hono {
     });
     return token === null ? notFound() : response(buildTokenSchema, buildTokenDto(token));
   });
+  /** Import-token administration needs a browser session; Bearer requests never reach it. */
+  app.get(
+    "/api/v1/admin/import-tokens",
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(importTokenListSchema) } },
+          description: "Import-token metadata, newest first; never the plaintext",
+        },
+      },
+      summary: "List import tokens. Requires a session with settings:manage.",
+      tags: ["admin"],
+    }),
+    async (context) => {
+      await settingsActor(context);
+      return response(importTokenListSchema, {
+        items: (await security().listImportTokens()).map(toImportTokenDto),
+      });
+    },
+  );
+  app.post(
+    "/api/v1/admin/import-tokens",
+    describeRoute({
+      requestBody: {
+        content: { "application/json": { schema: resolver(importTokenCreateRequestSchema) } },
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: resolver(importTokenCreatedSchema) } },
+          description: "The created token; the plaintext is returned only here",
+        },
+      },
+      summary:
+        "Create an import token for lace import (1–7 days; publishing only for creators with content:publish). Requires a session with settings:manage.",
+      tags: ["admin"],
+    }),
+    validator("json", importTokenCreateRequestSchema, validationHook),
+    async (context) => {
+      const resolvedActor = await settingsActor(context);
+      const body = context.req.valid("json") as v.InferOutput<
+        typeof importTokenCreateRequestSchema
+      >;
+      const now = Date.now() as never;
+      const token = await security().createImportToken({
+        capabilities: importTokenCapabilities(resolvedActor, body.allowPublish),
+        createdBy: resolvedActor.id,
+        expiresAt: importTokenExpiry(now, body.expiresInDays),
+        name: body.name,
+        now,
+      });
+      return response(
+        importTokenCreatedSchema,
+        { ...toImportTokenDto(token), token: token.token },
+        201,
+      );
+    },
+  );
+  app.delete(
+    "/api/v1/admin/import-tokens/:tokenId",
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(importTokenSchema) } },
+          description: "The revoked token (idempotent)",
+        },
+      },
+      summary: "Revoke an import token. Requires a session with settings:manage.",
+      tags: ["admin"],
+    }),
+    async (context) => {
+      await settingsActor(context);
+      const token = await security().revokeImportToken({
+        now: Date.now() as never,
+        tokenId: context.req.param("tokenId"),
+      });
+      return token === null ? notFound() : response(importTokenSchema, toImportTokenDto(token));
+    },
+  );
+  /** Describes the presented import token; only an import token reaches this route. */
+  app.get(
+    "/api/v1/admin/import-credential",
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(importCredentialSchema) } },
+          description: "The presented import token and the effective permissions",
+        },
+      },
+      summary:
+        "Describe the presented import token. Accepts only Authorization: Bearer <import token>.",
+      tags: ["admin"],
+    }),
+    async (context) => {
+      const token = context.get("lace.importToken");
+      if (token === undefined) throw new AuthorizationError();
+      const resolvedActor = await actor(context);
+      return response(
+        importCredentialSchema,
+        {
+          permissions: [...effectiveActorPermissions(resolvedActor)],
+          token: toImportTokenDto(token),
+        },
+        200,
+        { "cache-control": "no-store" },
+      );
+    },
+  );
 
   app.get(
     "/api/v1/admin/site-builds",
@@ -1715,6 +1871,8 @@ export function createLaceApp(input: LaceAppInput): Hono {
         ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
         ...(query.sort === undefined ? {} : { sort: query.sort }),
         ...(query.type === undefined ? {} : { type: query.type }),
+        ...(query.tag === undefined ? {} : { tags: query.tag }),
+        ...(query.sha256 === undefined ? {} : { sha256: query.sha256 }),
       });
       return response(mediaListSchema, {
         items: page.items.map(mediaDto),
@@ -1723,9 +1881,58 @@ export function createLaceApp(input: LaceAppInput): Hono {
     },
   );
 
+  app.get(
+    "/api/v1/admin/media/tags",
+    describeRoute({
+      summary: "List media tags with counts",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Media tag catalog",
+          content: { "application/json": { schema: resolver(mediaTagCatalogSchema) } },
+        },
+      },
+    }),
+    validator("query", mediaTagCatalogQuerySchema, validationHook),
+    async (context) => {
+      const query = context.req.valid("query");
+      return response(
+        mediaTagCatalogSchema,
+        await media().listTags({
+          actor: await actor(context),
+          ...pagination(context.req.raw),
+          ...(query.q === undefined ? {} : { q: query.q }),
+        }),
+      );
+    },
+  );
+
   app.post(
     "/api/v1/admin/media",
     describeRoute({
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              required: ["file"],
+              properties: {
+                file: { type: "string", format: "binary" },
+                tags: {
+                  type: "array",
+                  maxItems: 20,
+                  items: {
+                    type: "string",
+                    description: "ASCII tag: letters, digits and hyphens; normalized to lowercase",
+                    maxLength: 200,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
         201: {
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
@@ -1741,9 +1948,18 @@ export function createLaceApp(input: LaceAppInput): Hono {
         let upload:
           | { readonly chunks: readonly Uint8Array[]; readonly filename: string }
           | undefined;
+        const tagParts: string[] = [];
         for await (const part of parseMultipartRequest(context.req.raw, {
           maxFileSize: MAX_MEDIA_BYTES,
         })) {
+          if (part.name !== "tags" && part.name !== "file")
+            invalid("The submitted value is invalid.", `/tags/${tagParts.length}`);
+          if (part.name === "tags") {
+            if (part.isFile || tagParts.length >= 20)
+              invalid("The submitted value is invalid.", `/tags/${tagParts.length}`);
+            tagParts.push(part.text);
+            continue;
+          }
           if (
             !part.isFile ||
             part.name !== "file" ||
@@ -1755,7 +1971,17 @@ export function createLaceApp(input: LaceAppInput): Hono {
           upload = { chunks: part.content, filename: part.filename };
         }
         if (upload === undefined) invalid("The submitted value is invalid.", "/file");
+        const parsedTags = v.safeParse(mediaTagsInputSchema, tagParts);
+        if (!parsedTags.success) {
+          const issues = parsedTags.issues.map((issue) => ({
+            code: "invalid_value",
+            message: "The submitted value is invalid.",
+            path: `/tags${v.getDotPath(issue) === null ? "" : "/" + v.getDotPath(issue)?.replaceAll(".", "/")}`,
+          }));
+          return validationResponse(issues);
+        }
         const created = await media().create({
+          tags: parsedTags.output,
           actor: resolvedActor,
           body: mediaByteStream(upload.chunks),
           filename: upload.filename,
@@ -2041,6 +2267,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
         modelKey,
         ...pagination(context.req.raw),
         ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
+        ...(query.slug === undefined ? {} : { slug: query.slug }),
         ...(query.sort === undefined ? {} : { sort: query.sort }),
         ...(query.status === undefined ? {} : { status: query.status }),
       });
@@ -2268,14 +2495,12 @@ export function createLaceApp(input: LaceAppInput): Hono {
       });
       return response(
         publishContentEntryResultSchema,
-        toPublishContentEntryResultDto({
-          ...published,
-          seo: seoSection.models[published.entry.model.key] !== undefined,
-          updatedBy: await input.content.describeActor({
+        toPublishContentEntryResultDto(
+          await input.content.projectPublicationResult({
             actor: resolvedActor,
-            actorId: published.entry.draft.updatedBy.id,
+            result: published,
           }),
-        }),
+        ),
       );
     },
   );

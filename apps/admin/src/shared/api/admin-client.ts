@@ -37,6 +37,9 @@ import {
   buildTokenCreatedSchema,
   buildTokenListSchema,
   buildTokenSchema,
+  importTokenCreatedSchema,
+  importTokenListSchema,
+  importTokenSchema,
   buildQueueReceiptSchema,
   siteBuildRecordSchema,
   siteBuildListSchema,
@@ -48,6 +51,8 @@ import {
   mediaDetailSchema,
   mediaListSchema,
   mediaMetadataSchema,
+  mediaTagCatalogSchema,
+  type MediaTagCatalogDto,
   managedUserListSchema,
   managedUserSchema,
   publishContentEntryResultSchema,
@@ -59,6 +64,9 @@ import {
   type BuildTokenCreatedDto,
   type BuildTokenDto,
   type BuildTokenListDto,
+  type ImportTokenCreatedDto,
+  type ImportTokenDto,
+  type ImportTokenListDto,
   type BuildQueueReceiptDto,
   type SiteBuildRecordDto,
   type SiteBuildListDto,
@@ -103,6 +111,7 @@ export const adminQueryKeys = Object.freeze({
   buildDetail: (buildId: string) => ["admin", "builds", buildId] as const,
   settingsStatus: ["admin", "settings", "status"] as const,
   tokens: ["admin", "tokens"] as const,
+  importTokens: ["admin", "import-tokens"] as const,
   users: ["admin", "users"] as const,
   invitations: ["admin", "invitations"] as const,
   /** The signed-in user's own sessions on the account screen. */
@@ -144,13 +153,22 @@ export const adminQueryKeys = Object.freeze({
   /** Invalidation prefix covering every media list and detail query. */
   media: ["admin", "media"] as const,
   /** One searched, filtered, and sorted media list; pages are held by the infinite query. */
-  mediaList: (query: Pick<MediaListQuery, "q" | "sort" | "type">) =>
+  mediaList: (query: Pick<MediaListQuery, "q" | "sort" | "tags" | "type">) =>
     [
       "admin",
       "media",
       "list",
-      { q: query.q ?? null, sort: query.sort ?? null, type: query.type ?? null },
+      {
+        q: query.q ?? null,
+        sort: query.sort ?? null,
+        tags: query.tags === undefined || query.tags.length === 0 ? null : [...query.tags].sort(),
+        type: query.type ?? null,
+      },
     ] as const,
+  /** Invalidation prefix covering every tag-suggestion query. */
+  mediaTagsPrefix: ["admin", "media", "tags"] as const,
+  /** Tag suggestions for one normalized prefix; `null` lists from the start. */
+  mediaTags: (prefix: string | undefined) => ["admin", "media", "tags", prefix ?? null] as const,
   /** One media item with the entries that use it. */
   mediaDetail: (mediaId: string) => ["admin", "media", "detail", mediaId] as const,
   models: ["admin", "models"] as const,
@@ -241,6 +259,13 @@ export interface AdminClient {
   listTokens(): Promise<BuildTokenListDto>;
   createToken(name: string): Promise<BuildTokenCreatedDto>;
   revokeToken(tokenId: string): Promise<BuildTokenDto>;
+  listImportTokens(): Promise<ImportTokenListDto>;
+  createImportToken(input: {
+    readonly allowPublish: boolean;
+    readonly expiresInDays: number;
+    readonly name: string;
+  }): Promise<ImportTokenCreatedDto>;
+  revokeImportToken(tokenId: string): Promise<ImportTokenDto>;
   createEntry(modelKey: string, title: string, slug?: string): Promise<AdminContentEntryDto>;
   deleteEntry(
     entryId: string,
@@ -276,6 +301,11 @@ export interface AdminClient {
     query?: EntryListQuery,
   ): Promise<ContentEntryListDto>;
   listMedia(cursor?: string, query?: MediaListQuery): Promise<MediaListDto>;
+  listMediaTags(query?: {
+    q?: string;
+    after?: string;
+    limit?: number;
+  }): Promise<MediaTagCatalogDto>;
   getMedia(mediaId: string): Promise<MediaDetailDto>;
   uploadMedia(file: File, options?: MediaUploadOptions): Promise<MediaMetadataDto>;
   /** With `detachDrafts`, the server first removes the item from every using draft. */
@@ -347,6 +377,7 @@ export const DEFAULT_MEDIA_SORT: MediaSortDto = "-createdAt";
 
 /** Server-side filename search, type filter, and sort for the media library. */
 export interface MediaListQuery {
+  readonly tags?: readonly string[];
   readonly limit?: number;
   readonly q?: string;
   readonly sort?: MediaSortDto;
@@ -355,6 +386,7 @@ export interface MediaListQuery {
 
 /** Per-upload callbacks; `onProgress` receives the sent fraction (0–1) when the browser reports it. */
 export interface MediaUploadOptions {
+  readonly tags?: readonly string[];
   readonly onProgress?: (fraction: number) => void;
 }
 
@@ -730,6 +762,32 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
           method: "DELETE",
         }),
       ),
+    listImportTokens: async () =>
+      parse(importTokenListSchema, await request(fetcher, "/api/v1/admin/import-tokens")),
+    createImportToken: async (input: {
+      readonly allowPublish: boolean;
+      readonly expiresInDays: number;
+      readonly name: string;
+    }) =>
+      parse(
+        importTokenCreatedSchema,
+        await request(fetcher, "/api/v1/admin/import-tokens", {
+          body: JSON.stringify({
+            allowPublish: input.allowPublish,
+            expiresInDays: input.expiresInDays,
+            name: input.name,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    revokeImportToken: async (tokenId: string) =>
+      parse(
+        importTokenSchema,
+        await request(fetcher, `/api/v1/admin/import-tokens/${encodeURIComponent(tokenId)}`, {
+          method: "DELETE",
+        }),
+      ),
     createEntry: async (modelKey: string, title: string, slug?: string) =>
       parse(
         adminContentEntrySchema,
@@ -828,10 +886,24 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
     },
     listModels: async () =>
       parse(contentModelListSchema, await request(fetcher, "/api/v1/admin/content-models")),
+    listMediaTags: async (query: { q?: string; after?: string; limit?: number } = {}) => {
+      const search = new URLSearchParams();
+      if (query.q !== undefined) search.set("q", query.q);
+      if (query.after !== undefined) search.set("after", query.after);
+      if (query.limit !== undefined) search.set("limit", String(query.limit));
+      return parse(
+        mediaTagCatalogSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/media/tags${search.size ? "?" + search.toString() : ""}`,
+        ),
+      );
+    },
     listMedia: async (cursor?: string, query: MediaListQuery = {}) => {
       const search = new URLSearchParams();
       if (cursor !== undefined) search.set("after", cursor);
       if (query.q !== undefined && query.q.trim().length > 0) search.set("q", query.q.trim());
+      for (const tag of query.tags ?? []) search.append("tag", tag);
       if (query.type !== undefined) search.set("type", query.type);
       if (query.sort !== undefined) search.set("sort", query.sort);
       if (query.limit !== undefined) search.set("limit", String(query.limit));
@@ -846,6 +918,7 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
     uploadMedia: async (file: File, options: MediaUploadOptions = {}) => {
       const body = new FormData();
       body.append("file", file);
+      for (const tag of options.tags ?? []) body.append("tags", tag);
       const exchange = await upload("/api/v1/admin/media", body, options);
       if (exchange.status < 200 || exchange.status >= 300)
         throw responseError(exchange.status, exchange.requestId, exchange.body);

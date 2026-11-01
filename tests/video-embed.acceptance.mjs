@@ -17,6 +17,17 @@ test("video embeds preserve publication, poster usage and permissions on both ru
         form.append("file", new Blob([png], { type: "image/png" }), "poster.png");
         return json("/api/v1/admin/media", { method: "POST", body: form }, 201);
       };
+      const models = await json("/api/v1/admin/content-models");
+      const embed = models.items
+        .find((model) => model.key === "home")
+        .blockDefinitions.find((block) => block.type === "videoEmbed");
+      expect(embed).toMatchObject({
+        version: 2,
+        settings: {
+          aspectRatio: { defaultValue: "16:9", presentation: { control: "cards" } },
+          playback: { defaultValue: "player", presentation: { control: "cards" } },
+        },
+      });
       const poster = await upload();
       const hiddenPoster = await upload();
       const entries = await json("/api/v1/admin/models/home/entries");
@@ -36,14 +47,19 @@ test("video embeds preserve publication, poster usage and permissions on both ru
       const block = {
         key: "video-one",
         type: "videoEmbed",
-        schemaVersion: 1,
+        schemaVersion: 2,
         position: 1000,
         data: { url: "https://youtu.be/dQw4w9WgXcQ", title: "Film" },
       };
       entry = await save([block]);
+      expect(entry.draft.blocks[0].settings).toEqual({ aspectRatio: "16:9", playback: "player" });
       await publish();
       expect((await f.call(`/api/v1/public/media/${poster.id}`)).status).toBe(404);
-      const withPoster = { ...block, data: { ...block.data, poster: poster.id } };
+      const withPoster = {
+        ...block,
+        settings: { aspectRatio: "1:1", playback: "ambient" },
+        data: { ...block.data, poster: poster.id },
+      };
       const hidden = {
         ...withPoster,
         key: "hidden-video",
@@ -80,6 +96,20 @@ test("video embeds preserve publication, poster usage and permissions on both ru
       const published = before.entries.find((item) => item.id === entry.id);
       expect(published.blocks).toHaveLength(1);
       expect(published.blocks[0].data.poster).toBe(poster.id);
+      expect(published.blocks[0].settings).toEqual({ aspectRatio: "1:1", playback: "ambient" });
+      for (const settings of [{ aspectRatio: "21:9" }, { playback: "autoplay" }]) {
+        const invalid = await f.call(`/api/v1/admin/entries/${entry.id}/draft`, {
+          ...admin,
+          method: "PUT",
+          json: {
+            expectedRevision: entry.draft.revision,
+            title: "Film",
+            fields: {},
+            blocks: [{ ...withPoster, settings }],
+          },
+        });
+        expect(invalid.status).toBe(422);
+      }
       expect(before.media[hiddenPoster.id]).toBeUndefined();
       const previousRevision = entry.draft.revision;
       entry = await save([

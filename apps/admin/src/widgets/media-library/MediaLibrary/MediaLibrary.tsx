@@ -34,8 +34,8 @@ import { MediaToolbar } from "../MediaToolbar/index.js";
 
 /**
  * The `/media` library: a searched, filtered, and sorted grid or list with
- * cursor pagination, drop-zone and multi-file upload for writers, and a
- * details panel. The query is owned by the caller (the route URL); every
+ * cursor pagination, drop-zone and multi-file upload for writers (tagged
+ * with the active tag filter), and a details panel. The query is owned by the caller (the route URL); every
  * change restarts at the first page.
  */
 export function MediaLibrary({
@@ -49,6 +49,7 @@ export function MediaLibrary({
   const listQuery = {
     ...(query.q === undefined ? {} : { q: query.q }),
     ...(query.sort === undefined ? {} : { sort: query.sort }),
+    ...(query.tag === undefined ? {} : { tags: query.tag }),
     ...(query.type === undefined ? {} : { type: query.type }),
   };
   const client = useAdminClient();
@@ -58,7 +59,10 @@ export function MediaLibrary({
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const opener = useRef<HTMLElement | null>(null);
   const uploads = useMediaUploads();
-  const dropzone = useMediaDropzone({ disabled: !canWrite, onFiles: uploads.add });
+  const dropzone = useMediaDropzone({
+    disabled: !canWrite,
+    onFiles: (files) => uploads.add(files, { tags: query.tag }),
+  });
   const media = useInfiniteQuery<
     MediaListDto,
     Error,
@@ -83,7 +87,7 @@ export function MediaLibrary({
     selectedId === undefined
       ? undefined
       : (items.find((item) => item.id === selectedId) ?? updates[selectedId]);
-  const filtered = query.q !== undefined || query.type !== undefined;
+  const filtered = query.q !== undefined || query.type !== undefined || query.tag !== undefined;
   const open = (item: MediaMetadataDto, element: HTMLElement) => {
     opener.current = element;
     setSelectedId(item.id);
@@ -108,6 +112,11 @@ export function MediaLibrary({
               {`Drop images anywhere here or choose files. ${mediaConstraintsText}`}
             </p>
           ) : undefined}
+          {canWrite && query.tag !== undefined ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              {`New uploads are tagged ${query.tag.join(", ")}.`}
+            </p>
+          ) : undefined}
         </div>
         {canWrite ? (
           <div>
@@ -126,13 +135,15 @@ export function MediaLibrary({
         uploads={uploads.uploads}
       />
       <MediaToolbar
-        onClear={() => change({ q: undefined, type: undefined })}
+        onClear={() => change({ q: undefined, tag: undefined, type: undefined })}
         onSearchChange={(q) => change({ q })}
         onSortChange={(sort) => change({ sort })}
+        onTagsChange={(tag) => change({ tag })}
         onTypeChange={(type) => change({ type })}
         onViewChange={(next) => change({ view: next === "list" ? "list" : undefined })}
         search={query.q ?? ""}
         sort={query.sort ?? DEFAULT_MEDIA_SORT}
+        tags={query.tag ?? []}
         type={query.type}
         view={view}
       />
@@ -158,11 +169,14 @@ export function MediaLibrary({
       {media.data !== undefined && items.length === 0 && filtered ? (
         <EmptyState
           action={
-            <Button onClick={() => change({ q: undefined, type: undefined })} variant="outline">
+            <Button
+              onClick={() => change({ q: undefined, tag: undefined, type: undefined })}
+              variant="outline"
+            >
               Clear filters
             </Button>
           }
-          description="No media matches the current search and type filter."
+          description="No media matches the current search, type, and tag filters."
           title="No matching media"
         />
       ) : undefined}

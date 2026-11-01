@@ -23,7 +23,11 @@ import type {
   EmailSender,
 } from "@lacecms/application";
 import { createCloudflareEmailSender, type SendEmailBinding } from "./email.js";
-import { TrustedClientAddresses, createBetterAuthBoundary } from "@lacecms/auth";
+import {
+  TrustedClientAddresses,
+  createBetterAuthBoundary,
+  createImportActorResolver,
+} from "@lacecms/auth";
 // Load the auth graph before the SDK: their shared Zod ESM initialization
 // otherwise runs after SDK schemas in a combined esbuild bundle.
 import { createMcpContentHandler } from "@lacecms/mcp";
@@ -334,6 +338,11 @@ export function createCloudflareRuntime(
       ? {}
       : { adminAssets: createCloudflareAdminAssets(settings.assets) }),
     actors: auth.actors,
+    importActors: createImportActorResolver({
+      origin: settings.publicBaseUrl,
+      production: settings.production,
+      security,
+    }),
     auth,
     builds: new SiteBuildUseCases({ builds: repository, clock }),
     config: input.config,

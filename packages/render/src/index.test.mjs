@@ -754,12 +754,15 @@ test("video embed descriptions canonicalize locally and preserve contextual fail
     provider: "youtube",
     videoId: "dQw4w9WgXcQ",
     src: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    ambientSrc:
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&playsinline=1",
   });
   expect(describeVideoEmbed("https://vimeo.com/123/abc")).toEqual({
     provider: "vimeo",
     videoId: "123",
     privacyHash: "abc",
     src: "https://player.vimeo.com/video/123?h=abc",
+    ambientSrc: "https://player.vimeo.com/video/123?h=abc&background=1",
   });
   expect(() => describeVideoEmbed("https://example.com", context)).toThrow(LaceRenderError);
   try {
@@ -824,4 +827,74 @@ test("block link props resolve manual targets, preserve required tokens and cont
     state: "unavailable",
     targetId: "target",
   });
+});
+
+const conditionalMedia = defineBlock({
+  type: "conditional-media",
+  version: 1,
+  fields: {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    caption: field.text({ defaultValue: "Video caption" }),
+    items: field.list({
+      item: field.group({
+        fields: {
+          kind: field.select({ options: ["image", "video"], required: true }),
+          media: field.media({ required: true }),
+          videoUrl: field.url({ required: true }),
+        },
+        visibility: {
+          media: { field: "kind", values: ["image"] },
+          videoUrl: { field: "kind", values: ["video"] },
+        },
+      }),
+    }),
+  },
+  visibility: {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+    caption: { field: "kind", values: ["video"] },
+  },
+});
+
+test("parsing removes hidden conditional block data, including hidden defaults", () => {
+  expect(
+    parseBlock(
+      conditionalMedia,
+      block("conditional-media", {
+        kind: "image",
+        media: "m1",
+        videoUrl: "https://example.com/stale",
+        items: [
+          { kind: "image", media: "m2", videoUrl: "https://example.com/stale" },
+          { kind: "video", media: "m3", videoUrl: "https://example.com/v" },
+        ],
+      }),
+      context,
+    ),
+  ).toEqual({
+    kind: "image",
+    media: "m1",
+    items: [
+      { kind: "image", media: "m2" },
+      { kind: "video", videoUrl: "https://example.com/v" },
+    ],
+  });
+  expect(
+    parseBlock(
+      conditionalMedia,
+      block("conditional-media", { kind: "video", videoUrl: "https://example.com/v" }),
+      context,
+    ),
+  ).toEqual({ kind: "video", videoUrl: "https://example.com/v", caption: "Video caption" });
+});
+
+test("a visible required conditional target still fails with its path", () => {
+  const error = captureError(() =>
+    parseBlock(conditionalMedia, block("conditional-media", { kind: "video" }), context),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("invalid_block_data");
+  expect(error.fieldPath).toEqual(["videoUrl"]);
 });

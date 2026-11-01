@@ -2,7 +2,13 @@ import { expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import {
+  INVALID_PROJECTED_LINK_TARGETS_SQL,
+  projectedBlocksSql,
+  projectedMediaReferencesSql,
+  projectedPublicationRows,
   BUILD_EXPORT_CANDIDATES_SQL,
+  BUILD_TOKEN_KIND_SQL,
+  importTokenUserInvalidationSql,
   BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
   BUILD_EXPORT_VERSION_SQL,
   buildExportPageRange,
@@ -42,6 +48,31 @@ test("checked-in migration inventory matches the Drizzle journal", async () => {
       createdAt: entry.when,
       name: `${entry.tag}.sql`,
     })),
+  );
+});
+
+test("import-token invalidation revokes only the selected user's import tokens", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`create table user (id text primary key);
+    create table api_tokens (id text primary key, capabilities_json text not null,
+      created_by text, revoked_at integer);
+    insert into user values ('u1'), ('u2');
+    insert into api_tokens values
+      ('build', '["content:build:read"]', null, null),
+      ('import', '["content:import"]', 'u1', null),
+      ('publish', '["content:import","content:publish"]', 'u1', null),
+      ('earlier', '["content:import"]', 'u1', 5),
+      ('other', '["content:import"]', 'u2', null);`);
+  database.prepare(importTokenUserInvalidationSql()).run(9, "u1");
+  expect(database.prepare("select id, revoked_at from api_tokens order by id").all()).toEqual([
+    { id: "build", revoked_at: null },
+    { id: "earlier", revoked_at: 5 },
+    { id: "import", revoked_at: 9 },
+    { id: "other", revoked_at: null },
+    { id: "publish", revoked_at: 9 },
+  ]);
+  expect(database.prepare(`select id from api_tokens where ${BUILD_TOKEN_KIND_SQL}`).all()).toEqual(
+    [{ id: "build" }],
   );
 });
 
@@ -1048,4 +1079,114 @@ test("cursor fingerprints expire across matching versions and runtime policy cha
   const old = JSON.stringify(["entries", "posts", "title", null, null, "old-glob"]);
   for (const foreign of [old, cloud])
     expect(() => decodeEntryCursor(encodeSortCursor(foreign, "a", "a"), node, "title")).toThrow();
+});
+
+test("media tag SQL binds canonical sets, literal prefix ranges, and cursors", async () => {
+  const { mediaCursorKind, mediaTagFilters, mediaTagCatalogQuery, encodeSortCursor } =
+    await import("../dist/index.js");
+  expect(mediaCursorKind({ sort: "filename", tags: [" B ", "a", "a"] })).toBe(
+    mediaCursorKind({ sort: "filename", tags: ["a", "b"] }),
+  );
+  expect(mediaCursorKind({ sort: "filename", tags: ["a"] })).not.toBe(
+    mediaCursorKind({ sort: "filename", tags: ["b"] }),
+  );
+  expect(mediaTagFilters(["B", "a"]).bindings).toEqual(["a", "b"]);
+  expect(mediaTagFilters(["B", "a"]).conditions).toHaveLength(2);
+  const query = mediaTagCatalogQuery({ q: " Re ", limit: 2 });
+  expect(query.params).toEqual(["re", "rf", 3]);
+  const after = encodeSortCursor(query.kind, "red", "red");
+  expect(mediaTagCatalogQuery({ q: "RE", limit: 2, after }).params).toEqual(["re", "rf", "red", 3]);
+  expect(() => mediaTagCatalogQuery({ q: "other", limit: 2, after })).toThrow();
+});
+
+test("encodes and checks a conditional-field publication projection", () => {
+  const projection = {
+    blocks: [
+      { key: "b1", data: { kind: "image" } },
+      { key: "b2", data: {} },
+    ],
+    fields: { kind: "image" },
+    internalLinks: [
+      { sourceKey: "b1", area: "data", pointer: "/url", targetId: "t1", delivered: true },
+    ],
+    mediaReferences: [
+      { sourceKey: "$fields", fieldPath: "/media", mediaId: "m1" },
+      { sourceKey: "b2", fieldPath: "media", mediaId: "m2" },
+    ],
+  };
+  const rows = projectedPublicationRows(["b1", "b2"], projection);
+  expect(JSON.parse(rows.fieldsJson)).toEqual({ kind: "image" });
+  expect(JSON.parse(rows.blockDataJson)).toEqual([
+    { key: "b1", data: '{"kind":"image"}' },
+    { key: "b2", data: "{}" },
+  ]);
+  expect(JSON.parse(rows.mediaReferencesJson)).toEqual([
+    ["$fields", "/media", "m1"],
+    ["b2", "media", "m2"],
+  ]);
+  expect(JSON.parse(rows.internalLinksJson)).toEqual([["b1", "data", "/url", "t1", 1]]);
+  for (const keys of [["b1"], ["b1", "b2", "b3"], ["b1", "other"]])
+    expect(() => projectedPublicationRows(keys, projection)).toThrow(/every draft block/u);
+  expect(() =>
+    projectedPublicationRows(["b1", "b2"], {
+      ...projection,
+      blocks: [...projection.blocks, projection.blocks[0]],
+    }),
+  ).toThrow(/every draft block/u);
+  expect(() =>
+    projectedPublicationRows(["b1", "b2"], {
+      ...projection,
+      mediaReferences: [{ sourceKey: "missing", fieldPath: "media", mediaId: "m1" }],
+    }),
+  ).toThrow(/media projection/u);
+
+  const database = new DatabaseSync(":memory:");
+  database.exec(`create table content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at);
+    create table content_media_references (snapshot_id, source_key, field_path, media_id, created_at);
+    create table content_entries (id, published_snapshot_id);
+    create table published_routes (path, entry_id, snapshot_id);
+    insert into content_blocks values ('d', 'b1', 'feature', 1, 1, '{"stale":1}', 'a', null, 0, '{"s":1}', 1, 2),
+      ('d', 'b2', 'feature', 2, 1, '{}', null, null, 1, '{}', 1, 2);
+    insert into content_entries values ('t1', null), ('t2', 'p2');
+    insert into published_routes values ('/t2', 't2', 'p2');`);
+  database.prepare(projectedBlocksSql()).run("p", rows.blockDataJson, "d");
+  expect(
+    database
+      .prepare(
+        "select block_key, data_json, anchor, hidden, settings_json from content_blocks where snapshot_id = 'p' order by position",
+      )
+      .all()
+      .map((row) => ({ ...row })),
+  ).toEqual([
+    {
+      block_key: "b1",
+      data_json: '{"kind":"image"}',
+      anchor: "a",
+      hidden: 0,
+      settings_json: '{"s":1}',
+    },
+    { block_key: "b2", data_json: "{}", anchor: null, hidden: 1, settings_json: "{}" },
+  ]);
+  database.prepare(projectedMediaReferencesSql()).run("p", 9, rows.mediaReferencesJson);
+  expect(
+    database
+      .prepare("select source_key, field_path, media_id, created_at from content_media_references")
+      .all()
+      .map((row) => ({ ...row })),
+  ).toEqual([
+    { source_key: "$fields", field_path: "/media", media_id: "m1", created_at: 9 },
+    { source_key: "b2", field_path: "media", media_id: "m2", created_at: 9 },
+  ]);
+  const invalid = (links) =>
+    database
+      .prepare(INVALID_PROJECTED_LINK_TARGETS_SQL)
+      .all(JSON.stringify(links), "source", null)
+      .map((row) => row.target_entry_id);
+  expect(
+    invalid([
+      ["b1", "data", "/url", "t1", 1],
+      ["b1", "data", "/hidden", "t1", 0],
+      ["b2", "data", "/url", "t2", 1],
+    ]),
+  ).toEqual(["t1"]);
 });

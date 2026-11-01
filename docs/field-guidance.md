@@ -134,7 +134,10 @@ Gallery keeps its previous image `sizes` for grid/auto and uses conservative
 containers and overrides; geometric thumbnails cannot predict site CSS.
 
 
-Block-level `settingsVisibility` is optional. It maps scalar setting keys to
+Block-level `settingsVisibility` is optional and presentation-only; data fields
+use `visibility` (SM5, [ADR 0018](adr/0018-conditional-fields.md)), which also
+removes requiredness and published values. The two rules stay separate. Required
+markers and publication notes appear only on fields their rules show. It maps scalar setting keys to
 `{ setting, values }`, where the controller is a required sibling select with a
 valid default and `values` is a nonempty unique subset of its options. Controllers
 cannot themselves be conditional; chains, cycles and recursive field conditions

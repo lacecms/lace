@@ -179,6 +179,9 @@
           "version": {
             "minimum": 1,
             "type": "integer"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/FieldVisibility"
           }
         },
         "required": ["type", "version", "fields"],
@@ -475,6 +478,28 @@
         },
         "type": "object"
       },
+      "FieldVisibility": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "values": {
+              "items": {
+                "type": ["string", "boolean"]
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": ["field", "values"],
+          "type": "object"
+        },
+        "description": "Conditional fields. Keys name immediate sibling fields; each rule names a sibling select or boolean controller that is not itself a target, and a nonempty unique subset of its options or booleans. A hidden field is not required, keeps draft validation and is retained in drafts; its value is omitted from published snapshots, public reads and build exports.",
+        "type": "object"
+      },
       "GroupFieldDefinition": {
         "additionalProperties": false,
         "properties": {
@@ -501,6 +526,9 @@
           },
           "type": {
             "const": "group"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/FieldVisibility"
           }
         },
         "required": ["type", "required", "fields"],
@@ -1705,6 +1733,9 @@
                           "version": {
                             "minimum": 1,
                             "type": "integer"
+                          },
+                          "visibility": {
+                            "$ref": "#/components/schemas/FieldVisibility"
                           }
                         },
                         "required": ["blocks", "fields", "key", "kind", "version"],
@@ -5110,6 +5141,470 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/import-credential": {
+      "get": {
+        "operationId": "getApiV1AdminImportCredential",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "permissions": {
+                      "items": {
+                        "enum": [
+                          "content:read",
+                          "content:write",
+                          "content:publish",
+                          "media:write",
+                          "users:manage",
+                          "settings:manage"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "token": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "capabilities": {
+                          "anyOf": [
+                            {
+                              "additionalItems": false,
+                              "items": [
+                                {
+                                  "const": "content:import"
+                                }
+                              ],
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "additionalItems": false,
+                              "items": [
+                                {
+                                  "const": "content:import"
+                                },
+                                {
+                                  "const": "content:publish"
+                                }
+                              ],
+                              "minItems": 2,
+                              "type": "array"
+                            }
+                          ]
+                        },
+                        "createdAt": {},
+                        "createdBy": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayName": {
+                              "maxLength": 320,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": ["email", "id"],
+                          "type": "object"
+                        },
+                        "expiresAt": {},
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "lastUsedAt": {},
+                        "name": {
+                          "type": "string"
+                        },
+                        "revokedAt": {},
+                        "tokenPrefix": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "capabilities",
+                        "createdAt",
+                        "createdBy",
+                        "expiresAt",
+                        "id",
+                        "name",
+                        "tokenPrefix"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["permissions", "token"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The presented import token and the effective permissions"
+          }
+        },
+        "summary": "Describe the presented import token. Accepts only Authorization: Bearer <import token>.",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/import-tokens": {
+      "get": {
+        "operationId": "getApiV1AdminImportTokens",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "capabilities": {
+                            "anyOf": [
+                              {
+                                "additionalItems": false,
+                                "items": [
+                                  {
+                                    "const": "content:import"
+                                  }
+                                ],
+                                "minItems": 1,
+                                "type": "array"
+                              },
+                              {
+                                "additionalItems": false,
+                                "items": [
+                                  {
+                                    "const": "content:import"
+                                  },
+                                  {
+                                    "const": "content:publish"
+                                  }
+                                ],
+                                "minItems": 2,
+                                "type": "array"
+                              }
+                            ]
+                          },
+                          "createdAt": {},
+                          "createdBy": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "displayName": {
+                                "maxLength": 320,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["email", "id"],
+                            "type": "object"
+                          },
+                          "expiresAt": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "lastUsedAt": {},
+                          "name": {
+                            "type": "string"
+                          },
+                          "revokedAt": {},
+                          "tokenPrefix": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "capabilities",
+                          "createdAt",
+                          "createdBy",
+                          "expiresAt",
+                          "id",
+                          "name",
+                          "tokenPrefix"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Import-token metadata, newest first; never the plaintext"
+          }
+        },
+        "summary": "List import tokens. Requires a session with settings:manage.",
+        "tags": ["admin"]
+      },
+      "post": {
+        "operationId": "postApiV1AdminImportTokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "allowPublish": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "expiresInDays": {
+                    "maximum": 7,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "name": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["expiresInDays", "name"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "capabilities": {
+                      "anyOf": [
+                        {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "content:import"
+                            }
+                          ],
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "content:import"
+                            },
+                            {
+                              "const": "content:publish"
+                            }
+                          ],
+                          "minItems": 2,
+                          "type": "array"
+                        }
+                      ]
+                    },
+                    "createdAt": {},
+                    "createdBy": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["email", "id"],
+                      "type": "object"
+                    },
+                    "expiresAt": {},
+                    "id": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "lastUsedAt": {},
+                    "name": {
+                      "type": "string"
+                    },
+                    "revokedAt": {},
+                    "token": {
+                      "type": "string"
+                    },
+                    "tokenPrefix": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "capabilities",
+                    "createdAt",
+                    "createdBy",
+                    "expiresAt",
+                    "id",
+                    "name",
+                    "tokenPrefix",
+                    "token"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The created token; the plaintext is returned only here"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create an import token for lace import (1–7 days; publishing only for creators with content:publish). Requires a session with settings:manage.",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/import-tokens/{tokenId}": {
+      "delete": {
+        "operationId": "deleteApiV1AdminImportTokensByTokenId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tokenId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "capabilities": {
+                      "anyOf": [
+                        {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "content:import"
+                            }
+                          ],
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "content:import"
+                            },
+                            {
+                              "const": "content:publish"
+                            }
+                          ],
+                          "minItems": 2,
+                          "type": "array"
+                        }
+                      ]
+                    },
+                    "createdAt": {},
+                    "createdBy": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 320,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["email", "id"],
+                      "type": "object"
+                    },
+                    "expiresAt": {},
+                    "id": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "lastUsedAt": {},
+                    "name": {
+                      "type": "string"
+                    },
+                    "revokedAt": {},
+                    "tokenPrefix": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "capabilities",
+                    "createdAt",
+                    "createdBy",
+                    "expiresAt",
+                    "id",
+                    "name",
+                    "tokenPrefix"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The revoked token (idempotent)"
+          }
+        },
+        "summary": "Revoke an import token. Requires a session with settings:manage.",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/invitations": {
       "get": {
         "operationId": "getApiV1AdminInvitations",
@@ -5847,6 +6342,38 @@
         "parameters": [
           {
             "in": "query",
+            "name": "tag",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ],
+              "items": {
+                "description": "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+                "type": "string"
+              },
+              "maxItems": 5,
+              "type": "array"
+            }
+          },
+          {
+            "description": "Exact SHA-256 of the stored bytes (64 lowercase hex). Restricts the page to active items; media uploaded before migration 0015 never match. Binds continuation cursors.",
+            "in": "query",
+            "name": "sha256",
+            "schema": {
+              "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "after",
             "schema": {
               "maxLength": 4096,
@@ -5950,12 +6477,24 @@
                           "mimeType": {
                             "type": "string"
                           },
+                          "sha256": {
+                            "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+                            "type": "string"
+                          },
                           "size": {
                             "minimum": 0,
                             "type": "integer"
                           },
                           "status": {
                             "enum": ["active", "delete_failed", "deleting"]
+                          },
+                          "tags": {
+                            "items": {
+                              "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                              "type": "string"
+                            },
+                            "maxItems": 20,
+                            "type": "array"
                           },
                           "updatedAt": {},
                           "url": {
@@ -5971,6 +6510,7 @@
                           }
                         },
                         "required": [
+                          "tags",
                           "createdAt",
                           "createdBy",
                           "filename",
@@ -6027,6 +6567,32 @@
       },
       "post": {
         "operationId": "postApiV1AdminMedia",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "description": "ASCII tag: letters, digits and hyphens; normalized to lowercase",
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "type": "array"
+                  }
+                },
+                "required": ["file"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -6088,12 +6654,24 @@
                     "mimeType": {
                       "type": "string"
                     },
+                    "sha256": {
+                      "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+                      "type": "string"
+                    },
                     "size": {
                       "minimum": 0,
                       "type": "integer"
                     },
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
+                    },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
                     },
                     "updatedAt": {},
                     "url": {
@@ -6109,6 +6687,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6215,12 +6794,24 @@
                     "mimeType": {
                       "type": "string"
                     },
+                    "sha256": {
+                      "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+                      "type": "string"
+                    },
                     "size": {
                       "minimum": 0,
                       "type": "integer"
                     },
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
+                    },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
                     },
                     "updatedAt": {},
                     "url": {
@@ -6236,6 +6827,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6354,12 +6946,24 @@
                     "mimeType": {
                       "type": "string"
                     },
+                    "sha256": {
+                      "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+                      "type": "string"
+                    },
                     "size": {
                       "minimum": 0,
                       "type": "integer"
                     },
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
+                    },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
                     },
                     "updatedAt": {},
                     "url": {
@@ -6500,6 +7104,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6613,6 +7218,13 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "tags": {
+                    "items": {
+                      "description": "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [],
@@ -6714,12 +7326,24 @@
                         "mimeType": {
                           "type": "string"
                         },
+                        "sha256": {
+                          "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+                          "type": "string"
+                        },
                         "size": {
                           "minimum": 0,
                           "type": "integer"
                         },
                         "status": {
                           "enum": ["active", "delete_failed", "deleting"]
+                        },
+                        "tags": {
+                          "items": {
+                            "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                            "type": "string"
+                          },
+                          "maxItems": 20,
+                          "type": "array"
                         },
                         "updatedAt": {},
                         "url": {
@@ -6735,6 +7359,7 @@
                         }
                       },
                       "required": [
+                        "tags",
                         "createdAt",
                         "createdBy",
                         "filename",
@@ -6912,12 +7537,24 @@
                     "mimeType": {
                       "type": "string"
                     },
+                    "sha256": {
+                      "pattern": "^[0-9a-f]{64}(?![\\s\\S])",
+                      "type": "string"
+                    },
                     "size": {
                       "minimum": 0,
                       "type": "integer"
                     },
                     "status": {
                       "enum": ["active", "delete_failed", "deleting"]
+                    },
+                    "tags": {
+                      "items": {
+                        "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                        "type": "string"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
                     },
                     "updatedAt": {},
                     "url": {
@@ -6933,6 +7570,7 @@
                     }
                   },
                   "required": [
+                    "tags",
                     "createdAt",
                     "createdBy",
                     "filename",
@@ -6974,6 +7612,101 @@
           }
         },
         "summary": "Retry media deletion",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/media/tags": {
+      "get": {
+        "operationId": "getApiV1AdminMediaTags",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "count": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "tag": {
+                            "pattern": "^[a-z0-9-]{1,40}(?![\\s\\S])",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["tag", "count"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Media tag catalog"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List media tags with counts",
         "tags": ["admin"]
       }
     },
@@ -7023,6 +7756,16 @@
             "name": "q",
             "schema": {
               "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Collections only: exact current draft slug (a published slug that differs never matches). Applies to the page and totals, combines with the other parameters and binds continuation cursors. Refused for page and global models.",
+            "in": "query",
+            "name": "slug",
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*(?![\\s\\S])",
               "type": "string"
             }
           },

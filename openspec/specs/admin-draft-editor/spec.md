@@ -1348,17 +1348,19 @@ SHALL remain a valid draft starting point.
 
 ### Requirement: List operations preserve item content and editing identity
 Writers SHALL be able to Add, Remove, Duplicate, Move up/down and reorder by
-pointer or keyboard drag within each list, including scalar lists. Add SHALL
-use a detached declared item default, otherwise a draft-valid group with child
-defaults or a draft-valid scalar starting value. When a scalar has no valid
-empty starting value, Add SHALL request a value and commit only when valid;
-cancel SHALL leave the list unchanged. Duplicate SHALL insert an independent
-deep copy immediately after the source. Remove SHALL affect only its item.
-Move boundary actions SHALL be disabled; cancelled drag SHALL preserve order.
-Actions SHALL name the list, item and position accessibly and announce results.
-Focus after insertion SHALL reach the new item, after removal the next item,
-then the previous item, then Add for an empty list; move focus SHALL follow
-the item. Nested lists SHALL reorder only within their own list.
+pointer or keyboard drag within each list, including scalar lists. Add of an
+eligible media list SHALL follow the requirement for adding several media
+items at once. Add of any other list SHALL use a detached declared item
+default, otherwise a draft-valid group with child defaults or a draft-valid
+scalar starting value. When a scalar has no valid empty starting value, Add
+SHALL request a value and commit only when valid; cancel SHALL leave the list
+unchanged. Duplicate SHALL insert an independent deep copy immediately after
+the source. Remove SHALL affect only its item. Move boundary actions SHALL be
+disabled; cancelled drag SHALL preserve order. Actions SHALL name the list,
+item and position accessibly and announce results. Focus after insertion
+SHALL reach the new item, after removal the next item, then the previous
+item, then Add for an empty list; move focus SHALL follow the item. Nested
+lists SHALL reorder only within their own list.
 
 A list SHALL render its items as rows in one bordered container separated by
 dividers, without a separate frame per item. Each row SHALL show a drag
@@ -1368,8 +1370,10 @@ states and limit explanations. Moves through the menu SHALL keep focus on the
 moved item's row. A scalar item row SHALL show its control inline between the
 handle and the menu. A group item row SHALL be collapsible with a chevron
 toggle. Group items SHALL start collapsed when the editor loads or reloads a
-draft. An item created by Add or Duplicate SHALL start open and receive focus
-on its first control. Revealing a validation problem SHALL open the item.
+draft. An item created by Add of a list that is not an eligible media list,
+or by Duplicate, SHALL start open and receive focus on its first control.
+Items appended from the media picker SHALL start collapsed. Revealing a
+validation problem SHALL open the item.
 Each item's open state SHALL be independent of other items and SHALL follow
 its editing identity. A collapsed row SHALL show its summary, item counts
 where applicable and problem indicator. An open row's header SHALL name the
@@ -1413,7 +1417,7 @@ JSON, dirty comparison and public responses.
 - **THEN** the menu offers Move up (disabled), Move down, Duplicate and Remove with accessible names that include the list label and position, and no Up, Down, Duplicate or Remove text buttons are shown on the row
 
 #### Scenario: Added item opens with focus
-- **WHEN** a writer activates Add on a list of collapsed group items
+- **WHEN** a writer activates Add on a navigation submenu list of collapsed link groups
 - **THEN** the new item is appended open, its first control receives focus and the existing items stay collapsed
 
 #### Scenario: Open state is not content
@@ -1841,3 +1845,310 @@ SHALL NOT change solely because of palette ordering.
 #### Scenario: Mixed custom and built-in definitions
 - **WHEN** allowed types are `cta`, `custom`, `hero`, `image`, `link`
 - **THEN** the menu shows `custom`, `image`, `link`, `hero`, `cta` while existing entry blocks retain their order
+
+### Requirement: Eligible media lists add several items from the library at once
+A list SHALL be an eligible media list when its item descriptor is a media
+field, or when its item descriptor is a group whose direct fields include
+exactly one media field, that field is required, and that field is visible in
+the starting value Add would otherwise use (the declared item default,
+otherwise a draft-valid group with child defaults); the group's other fields
+MAY be of any type. Eligibility SHALL be derived from the validated field
+metadata alone and SHALL apply to lists at any depth of model, page, global
+and block data, including the built-in `gallery` block's `images` list. A
+group with no media field, with an optional media field, with more than one
+direct media field, or whose media field is hidden in that starting value SHALL
+NOT make its list eligible.
+
+For a writer, Add of an eligible list SHALL open the media picker in multiple
+mode, labelled with the list's label, instead of inserting an item or
+requesting a value. The editor SHALL supply the picker's capacity as the
+largest number of new items that can be appended while the list stays within
+its effective maximum and the prospective normalized snapshot stays within
+the 500-element list budget, counting each appended item and the normalized
+defaults of its nested lists. The editor SHALL name the cause of the limit:
+the list maximum ("Images allows at most 50 items.") or the entry-wide budget
+("An entry allows at most 500 list items, including nested lists and hidden
+blocks."). When the capacity is zero, Add SHALL stay disabled with the
+existing limit explanation and the picker SHALL NOT open. The editor SHALL
+supply the media identifiers already held by the list's items so the picker
+can mark them.
+
+Confirming the picker SHALL append one item per selected media item, in
+selection order, after the existing items, as one list change. A media item
+SHALL be appended as that media identifier. A group item SHALL be appended as
+an independent copy of the starting value Add would otherwise use — the
+declared item default, otherwise a draft-valid group with child defaults —
+with its media field set to the selected identifier, replacing any media the
+default held. Required fields of the appended items that remain empty SHALL
+be publication-only problems and SHALL NOT prevent saving the draft. Appended
+items SHALL receive new editing identities, SHALL start collapsed, and SHALL
+leave the open state of existing items unchanged. Focus SHALL move to the
+first appended item's row and the editor SHALL announce the result, naming
+the list and the number of items added. Appending SHALL make the draft dirty
+and SHALL NOT save it. Cancelling the picker SHALL leave the list unchanged
+and return focus to Add. Viewers SHALL NOT see Add, and Add SHALL be
+unavailable while the editor is busy. The server SHALL remain authoritative
+for list maxima and the snapshot budget.
+
+#### Scenario: Twenty images are added to a gallery in one step
+- **WHEN** a writer adds a `gallery` block, activates Add on its empty Images list, filters the picker by the tag `project-2026`, selects 20 images and activates "Add 20 images"
+- **THEN** the list shows 20 collapsed rows in selection order with their thumbnails, the header reads "20 / 50", focus is on the first new row, the addition is announced, the draft is dirty, and the next save sends 20 items each holding only its `media` identifier
+
+#### Scenario: Order follows the selection
+- **WHEN** a gallery holds "a.jpg" and a writer selects "d.jpg", then "b.jpg", then "c.jpg" and confirms
+- **THEN** the list reads "a.jpg", "d.jpg", "b.jpg", "c.jpg"
+
+#### Scenario: The list maximum caps the selection
+- **WHEN** a gallery with at most 50 items holds 47 and a writer activates Add
+- **THEN** the picker allows at most 3 selected images and states that Images allows at most 50 items when 3 are selected
+
+#### Scenario: The entry budget caps the selection
+- **WHEN** an entry uses 495 of 500 list elements and a writer activates Add on a media list allowing 100 items that holds 10
+- **THEN** the picker allows at most 5 selected images and names the entry-wide limit when 5 are selected
+
+#### Scenario: Nested defaults count against the budget
+- **WHEN** an eligible custom list's group item has a nested list defaulting to two values, the entry uses 491 of 500 list elements, and a writer activates Add
+- **THEN** the picker allows at most 3 selected images, because each appended item adds 3 elements
+
+#### Scenario: A full list does not open the picker
+- **WHEN** a gallery holds 50 of at most 50 items
+- **THEN** Add is disabled with the explanation that the list allows at most 50 items
+
+#### Scenario: A scalar media list receives identifiers
+- **WHEN** a model field `photos` is a list of media and a writer selects three images through Add and confirms
+- **THEN** three rows with the images' media controls are appended and the saved value is an array of the three media identifiers in selection order
+
+#### Scenario: A custom block list keeps item defaults
+- **WHEN** a custom block's list item is a group with a required media field `cover` and a text field `label` defaulting to "Untitled", and a writer adds two images
+- **THEN** each appended item holds its selected `cover` and `label` "Untitled"
+
+#### Scenario: A conditional media field visible by default keeps eligibility
+- **WHEN** a list item group declares select `kind` (`image`, `video`, default `image`), a required media field `media` visible for `image` and a required URL `videoUrl` visible for `video`, and a writer adds two images
+- **THEN** the picker opens in multiple mode and each appended item holds `kind` `image` and its selected `media`
+
+#### Scenario: Ineligible lists keep the ordinary Add
+- **WHEN** a list's item group has two media fields, a single optional media field, or a required media field hidden by its controller's default
+- **THEN** Add appends one open item with its starting value and does not open the media picker
+
+#### Scenario: Cancelling adds nothing
+- **WHEN** a writer activates Add on a gallery, selects images and presses Escape
+- **THEN** the list and the draft's dirty state are unchanged and focus is on Add
+
+### Requirement: Conditional fields are shown and hidden reactively
+The editor SHALL apply the `visibility` rules of validated metadata to model
+fields, every present group value, every list item and each block's data.
+Each occurrence SHALL evaluate only its own controller value: the controller's
+current form value when it holds one, otherwise the controller's declared
+default; a cleared or absent controller without a default SHALL hide its
+targets. A target SHALL be shown exactly when its rule matches; a field without
+a rule SHALL always be shown. A hidden group or list target SHALL hide its
+whole subtree. Visibility SHALL update as soon as the controller value changes,
+without saving.
+
+Hidden targets SHALL stay mounted but SHALL be absent from the accessibility
+tree and the tab order, and SHALL keep their values, local and transient
+state, rich-text editing identity, media selection, list item identities and
+open or collapsed state. Changing a controller SHALL NOT clear, reset, reorder
+or normalize a target's value, and SHALL change the draft's dirty state only
+through the controller's own value; switching it back SHALL show the earlier
+target values again. The next save SHALL submit hidden values unchanged.
+Layout sections and tabs whose fields are all hidden SHALL be hidden; when the
+selected tab becomes hidden, the first tab with a shown field SHALL be
+selected. Viewers SHALL see the same fields a writer would see for the same
+values, without mutation affordances. Required markers, "Not set · Required
+for publication" notes and other publication guidance SHALL appear only on
+shown fields. Block settings SHALL keep their existing `settingsVisibility`
+behavior.
+
+#### Scenario: Switch a list item between kinds
+- **WHEN** a list item group declares select `kind` (`image`, `video`, default `image`) with `media` and `alt` visible for `image` and `videoUrl` visible for `video`, and a writer opens a new item and selects `video`
+- **THEN** `media` and `alt` disappear, `videoUrl` appears directly, and no save request is sent
+
+#### Scenario: Toggle back restores the hidden value
+- **WHEN** a writer chooses media `a.jpg` for an image item, switches `kind` to `video`, types a video URL, then switches back to `image`
+- **THEN** the item shows `a.jpg` again, the draft is dirty only because of the changed values, and saving submits `kind`, `media` and the typed `videoUrl`
+
+#### Scenario: Items evaluate independently
+- **WHEN** a list holds an `image` item followed by a `video` item
+- **THEN** the first item shows only its image fields and the second only its video fields, and changing one item's `kind` does not change the other's fields
+
+#### Scenario: Absent controller without a default
+- **WHEN** block data declares optional select `layout` without a default and `columns` visible for `grid`, and the block has no `layout`
+- **THEN** `columns` is hidden until the writer selects `grid`, and clearing `layout` again hides it
+
+#### Scenario: Boolean controller in model fields
+- **WHEN** a model declares boolean `hasCta` and `ctaUrl` visible for `true`, and a writer turns `hasCta` on and then off
+- **THEN** `ctaUrl` appears and disappears, keeps its typed value, and is not reachable by Tab while hidden
+
+#### Scenario: A tab with only hidden fields
+- **WHEN** a model layout puts `videoUrl` and `poster` alone in a *Video* tab and both are hidden
+- **THEN** the *Video* tab is not shown, and it reappears with its earlier values when the controller makes them visible
+
+#### Scenario: A viewer sees applicable fields
+- **WHEN** a viewer opens an entry whose list holds an `image` item and a `video` item
+- **THEN** each item shows only its applicable fields as read-only controls
+
+### Requirement: Problems on conditional fields stay reachable
+Validation problems SHALL remain reachable under visibility rules. A hidden
+target holding a value with a draft validation problem, whether found locally
+or reported by the server, SHALL be shown with its error and an accessible
+note that names the controller and the values under which the field applies,
+so the writer can correct or clear the value without changing the controller;
+when the problem is resolved and the rule still does not match, the field
+SHALL be hidden again. A publication-only problem reported for a target that
+is now hidden SHALL NOT be shown on that field, SHALL NOT appear in the
+validation summary, SHALL NOT mark its tab, section or list item as having
+problems, and SHALL NOT keep its block card open; it SHALL reappear if the
+controller makes the target visible again before the next validation replaces
+it. Summary entries SHALL keep the existing reading order, labels and one-based
+positions and SHALL list only problems on shown fields, on fields shown to
+resolve a problem, and on containers or unknown paths as today. Activating an
+entry SHALL reveal the containing block, tab, section and list item and focus
+the exact control. Hidden-block rules SHALL be unchanged.
+
+#### Scenario: A stale publication error disappears with its field
+- **WHEN** publishing a `video` item without `videoUrl` reports `missing_required_field` at its `videoUrl`, and the writer switches the item's `kind` to `image`
+- **THEN** the summary no longer lists the `videoUrl` problem, the item's row and the block card show no problem for it, and switching back to `video` shows the problem again until the next validation
+
+#### Scenario: A hidden invalid value stays fixable
+- **WHEN** a writer types `not a url` into `videoUrl`, switches `kind` to `image` and saves
+- **THEN** the save is refused, `videoUrl` stays shown under the image fields with its error and a note that it applies when Kind is Video, and clearing the value lets the save succeed and hides the field
+
+#### Scenario: Summary reveals a nested conditional field
+- **WHEN** the server reports a draft problem at `/blocks/0/data/images/2/videoUrl` while block 1 is collapsed, item 3 is collapsed and item 3's `kind` is `video`
+- **THEN** activating the summary entry opens the block's Content tab and item 3 and focuses its `videoUrl` control with the error
+
+### Requirement: Summaries and previews use applicable values only
+Collapsed list rows, block card summaries, leaf previews, the media-selected
+fallback and the "No alt" indicator SHALL be derived only from fields shown
+under the occurrence's current visibility. A hidden target's value SHALL NOT
+supply a primary or secondary line, a thumbnail or an indicator. When the
+list's `itemLabel` names a hidden target, the row SHALL fall back to the
+existing summary order over shown fields. Summaries SHALL update when a
+controller changes and SHALL NOT dirty the draft.
+
+#### Scenario: A video item is not labelled by its stale image
+- **WHEN** a list item holds `kind: "video"`, a hidden media `a.jpg` without alt text, a hidden blank `alt` and the caption "Studio walk-through"
+- **THEN** the collapsed row shows "Studio walk-through" and no thumbnail and no "No alt" indicator
+
+#### Scenario: Switching kind updates the row
+- **WHEN** a writer switches that item's `kind` back to `image` and collapses it
+- **THEN** the row shows the `a.jpg` thumbnail, the caption and the "No alt" indicator
+
+### Requirement: Eligible media lists add items for choices that hide their media
+An eligible media list whose group item's media field has a `visibility`
+rule with a `select` controller SHALL offer, for a writer, one additional Add
+button for each controller option, in option order, that the rule's `values`
+do not list. Each button's visible text SHALL be "Add " followed by that
+option's choice-card label, or the option value when the controller declares
+no presentation, and its accessible name SHALL name the option and the list
+(for the gallery, "Add Video" and "Add Video item to Images and videos"). The
+buttons SHALL follow the media Add button, which keeps opening the media
+picker. Lists that are not eligible media lists, media fields without a rule
+and rules whose controller is a `boolean` SHALL show no additional buttons.
+The buttons SHALL be derived from the validated field metadata alone and
+SHALL apply at any depth of model, page, global and block data.
+
+Activating such a button SHALL append exactly one item after the existing
+items, as one list change: an independent copy of the starting value the
+ordinary Add would use (the declared item default, otherwise a draft-valid
+group with child defaults) with the controller set to that option. The item
+SHALL receive a new editing identity, SHALL open, SHALL receive focus and SHALL
+be announced exactly as the ordinary Add of an ineligible list does, leaving
+other items' open state unchanged. Required fields that remain empty SHALL be
+publication-only problems and SHALL NOT prevent saving. Appending SHALL make
+the draft dirty and SHALL NOT save it. The buttons SHALL share the media Add
+limits: they SHALL be disabled with the same explanation when the list
+maximum or the 500-element snapshot budget leaves no room for one item, SHALL
+be unavailable while the editor is busy, and SHALL be absent for viewers. The
+server SHALL remain authoritative for list maxima, the snapshot budget and
+conditional rules.
+
+#### Scenario: Add a video to a gallery
+- **WHEN** a writer activates "Add Video" on a gallery's Images and videos
+  list holding two images
+- **THEN** a third item opens with Type set to Video and its Video URL,
+  Video title, Caption, Playback and Aspect ratio controls shown, focus moves
+  into it, the addition is announced, the draft is dirty, and the next save
+  sends the item with `kind` `video`, `playback` `player` and `aspectRatio`
+  `16:9`
+
+#### Scenario: Images still come from the picker
+- **WHEN** the writer activates Add on the same list
+- **THEN** the media picker opens in multiple mode and confirmed images are
+  appended with `kind` `image`
+
+#### Scenario: A full list disables every Add
+- **WHEN** a gallery holds 50 of at most 50 items
+- **THEN** Add and "Add Video" are disabled with the explanation that the list
+  allows at most 50 items
+
+#### Scenario: Custom block with several hiding options
+- **WHEN** a custom block's eligible list item has select `source` with
+  options `upload`, `embed` and `none` (no presentation), and its required
+  media field is visible for `["upload"]`
+- **THEN** the list shows Add, "Add embed" and "Add none" in that order, and
+  "Add embed" appends one open item with `source` `embed`
+
+#### Scenario: No additional buttons without a select rule
+- **WHEN** an eligible list's media field has no rule, or depends on a
+  boolean controller
+- **THEN** the list shows only Add
+
+#### Scenario: Viewers see no Add buttons
+- **WHEN** a viewer opens an entry with a gallery
+- **THEN** neither Add nor "Add Video" is shown
+
+### Requirement: Embed URL leaves provide a collapsed-row preview
+A URL leaf restricted to embed providers SHALL provide a collapsed-row
+preview when its value is a supported provider URL: a neutral video icon as
+the leading visual and "YouTube video" or "Vimeo video" as the title, with no
+detail and no indicators. The preview SHALL follow the existing collapsed-row
+rules: it is chosen only when it is the first shown direct child leaf with a
+preview and a present value, its title is the secondary line when a text
+summary exists and the primary line otherwise. A value that does not parse as
+a supported provider URL SHALL provide no preview, so the generic summary
+applies. URL leaves without embed providers SHALL provide no preview, so media
+previews and existing URL summaries are unchanged. The preview SHALL derive
+only from the value and field metadata, SHALL make no network request and
+SHALL NOT dirty the draft.
+
+#### Scenario: Video row with a title
+- **WHEN** a collapsed gallery video item holds `videoUrl`
+  `https://vimeo.com/76979871`, `videoTitle` "Studio tour", no caption, and a
+  stale hidden `media` value
+- **THEN** its row shows the video icon, "Studio tour" as primary line and
+  "Vimeo video" as secondary line, with no thumbnail and no "No alt"
+  indicator
+
+#### Scenario: Caption labels a video row
+- **WHEN** the same item has the caption "Spring 2026"
+- **THEN** its primary line is "Spring 2026" and its secondary line is "Vimeo
+  video"
+
+#### Scenario: New video item
+- **WHEN** a video item was just added and holds no URL, title or caption
+- **THEN** its collapsed row shows no video preview and the generic summary
+  fallback
+
+#### Scenario: Ordinary URLs keep their summary
+- **WHEN** a navigation link item has label "Blog" and URL `/blog`
+- **THEN** its collapsed row shows "Blog" and `/blog` with no video icon
+
+### Requirement: Visibility controllers do not summarize list items
+Collapsed-row summaries and block-card list summaries SHALL skip the values of
+fields that control a `visibility` rule of the same group, because a controller
+chooses which fields apply rather than describing the item. The primary line
+SHALL come from the item label or the first useful text of the other shown
+fields, and the secondary line from another shown, non-controller field or the
+preview. When only a controller holds text, the existing preview, media and
+Empty item fallbacks SHALL apply. Controllers SHALL remain ordinary fields in
+the open item form, and fields that control nothing SHALL summarize as before.
+
+#### Scenario: Image item without text
+- **WHEN** a collapsed gallery image item holds `kind` `image` and media `a.png` without caption or alt text
+- **THEN** its primary line is `a.png` from the media preview, not "image"
+
+#### Scenario: Video item without caption
+- **WHEN** a collapsed list item with `kind` `video` holds a caption and a video URL and no media preview applies
+- **THEN** its primary line is the caption and its secondary line is the URL, not "video"

@@ -31,7 +31,13 @@ import type {
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
-import { DomainError, permissionsFor, requirePermission, type Permission } from "@lacecms/domain";
+import {
+  DomainError,
+  hasPermission,
+  permissionsFor,
+  requirePermission,
+  type Permission,
+} from "@lacecms/domain";
 import type { AccountSecurityPort } from "./accounts.js";
 import type { UserProfileReader } from "./email.js";
 
@@ -39,6 +45,9 @@ export const packageName = "@lacecms/application";
 
 /** Build-export page failures the HTTP boundary maps to stable responses. */
 export { BuildExportCursorError, BuildExportVersionChangedError } from "@lacecms/domain";
+/** Portable helpers that import clients apply exactly as the server does. */
+export { isMediaFocalCoordinate, normalizeMediaTags, normalizeMediaText } from "@lacecms/domain";
+export { canonicalizeJson, encodeEntryLink } from "@lacecms/content";
 export * from "./accounts.js";
 export * from "./configuration-sync.js";
 export * from "./email.js";
@@ -195,6 +204,8 @@ export interface ListContentEntriesInput {
   readonly modelKey: ContentModelKey;
   /** A trimmed, non-empty title-or-slug substring; ASCII letters match case-insensitively. */
   readonly q?: string;
+  /** Collections only: the exact current draft slug (import lookups, ADR 0016). */
+  readonly slug?: string;
   readonly sort: ContentEntrySort;
   readonly status?: ContentEntryStatus;
 }
@@ -235,6 +246,65 @@ export interface PublishContentEntryCommand {
   readonly publishedAt: UnixMilliseconds;
   readonly publishedBy: Actor;
   readonly publishedSnapshotId: ContentSnapshotId;
+  /**
+   * The published projection of the draft at `expectedRevision`, present when
+   * its model or a draft block declares conditional-field rules. Repositories
+   * write it instead of copying draft fields, block data and references.
+   */
+  readonly projection?: PublishedProjection;
+}
+
+/** Published values and references of a draft whose hidden targets are removed. */
+export interface PublishedProjection {
+  /** Every draft block exactly once, with its projected data. */
+  readonly blocks: readonly { readonly data: JsonObject; readonly key: BlockKey }[];
+  readonly fields: JsonObject;
+  readonly internalLinks: readonly InternalLinkReference[];
+  readonly mediaReferences: readonly DraftMediaReference[];
+}
+
+/**
+ * Applies a supplied projection to an entry whose draft was copied into its
+ * publication. Fails without a result when the projection does not name every
+ * draft block exactly once.
+ */
+export function withPublishedProjection(
+  entry: ContentEntry,
+  projection: PublishedProjection,
+): ContentEntry {
+  const published = entry.published;
+  if (published === undefined)
+    throw new DomainError("CONTENT_INVALID_STATE", "The entry has no publication to project.");
+  const data = publishedProjectionBlockData(
+    entry.draft.blocks.map((block) => block.key),
+    projection,
+  );
+  return {
+    ...entry,
+    published: {
+      ...published,
+      blocks: published.blocks.map((block) => ({ ...block, data: data.get(block.key)! })),
+      fields: projection.fields,
+    },
+  };
+}
+
+/** Maps projected block data by key after checking it names exactly the draft's blocks. */
+export function publishedProjectionBlockData(
+  draftKeys: readonly BlockKey[],
+  projection: PublishedProjection,
+): ReadonlyMap<BlockKey, JsonObject> {
+  const data = new Map(projection.blocks.map((block) => [block.key, block.data]));
+  if (
+    data.size !== projection.blocks.length ||
+    data.size !== draftKeys.length ||
+    draftKeys.some((key) => !data.has(key))
+  )
+    throw new DomainError(
+      "CONTENT_INVALID_STATE",
+      "The published projection must name every draft block exactly once.",
+    );
+  return data;
 }
 
 /** Atomic idempotency scope retained alongside a successful publication. */
@@ -681,6 +751,69 @@ export interface IssuedBuildToken extends BuildTokenMetadata {
   readonly token: OpaqueTokenSecret;
 }
 
+/** Import tokens may write content and media; publication is an optional extra (ADR 0016). */
+export type ImportTokenCapabilities =
+  | readonly ["content:import"]
+  | readonly ["content:import", "content:publish"];
+
+export const MIN_IMPORT_TOKEN_LIFETIME_DAYS = 1;
+export const MAX_IMPORT_TOKEN_LIFETIME_DAYS = 7;
+/** `last_used_at` is written at most once per this interval per token. */
+export const IMPORT_TOKEN_USE_RECORD_INTERVAL_MS = 60_000;
+
+export interface ImportTokenMetadata {
+  readonly capabilities: ImportTokenCapabilities;
+  readonly createdAt: UnixMilliseconds;
+  readonly createdBy: {
+    readonly displayName?: string;
+    readonly email: string;
+    readonly id: string;
+  };
+  readonly expiresAt: UnixMilliseconds;
+  readonly id: string;
+  readonly lastUsedAt?: UnixMilliseconds;
+  readonly name: string;
+  readonly revokedAt?: UnixMilliseconds;
+  readonly tokenPrefix: string;
+}
+
+export interface IssuedImportToken extends ImportTokenMetadata {
+  /** Returned exactly once by the creation command; never persisted or logged. */
+  readonly token: OpaqueTokenSecret;
+}
+
+/** An unexpired, unrevoked import token and its enabled creator's current role. */
+export interface ResolvedImportToken {
+  readonly creator: { readonly id: string; readonly role: string };
+  readonly token: ImportTokenMetadata;
+}
+
+/**
+ * Chooses an import token's capabilities. Publication is granted only when the
+ * creating actor currently holds `content:publish`; asking for it otherwise is
+ * refused rather than silently narrowed.
+ */
+export function importTokenCapabilities(
+  actor: Actor,
+  allowPublish: boolean,
+): ImportTokenCapabilities {
+  requireSettingsManager(actor);
+  if (!allowPublish) return ["content:import"];
+  requirePermission(actor, "content:publish");
+  return ["content:import", "content:publish"];
+}
+
+/** Validates a whole-day lifetime and returns the absolute expiry. */
+export function importTokenExpiry(now: UnixMilliseconds, days: number): UnixMilliseconds {
+  if (
+    !Number.isInteger(days) ||
+    days < MIN_IMPORT_TOKEN_LIFETIME_DAYS ||
+    days > MAX_IMPORT_TOKEN_LIFETIME_DAYS
+  )
+    throw new RangeError("Import token lifetime must be 1 to 7 whole days.");
+  return (Number(now) + days * 86_400_000) as UnixMilliseconds;
+}
+
 /** Security lifecycle boundary implemented by each runtime's durable adapter. */
 export interface SecurityService extends UserProfileReader, AccountSecurityPort {
   /** Read-only durable completion marker; never infers completion from users. */
@@ -712,10 +845,34 @@ export interface SecurityService extends UserProfileReader, AccountSecurityPort 
     readonly userId: string;
     readonly disabled?: boolean;
   }): Promise<ManagedUser | null>;
+  /** Accepts only an unrevoked token whose capabilities are exactly `content:build:read`. */
   verifyBuildToken(input: {
     readonly token: OpaqueTokenSecret;
     readonly now: UnixMilliseconds;
   }): Promise<boolean>;
+  createImportToken(input: {
+    readonly capabilities: ImportTokenCapabilities;
+    readonly createdBy: string;
+    readonly expiresAt: UnixMilliseconds;
+    readonly name: string;
+    readonly now: UnixMilliseconds;
+  }): Promise<IssuedImportToken>;
+  /** Newest first, including expired and revoked tokens. */
+  listImportTokens(): Promise<readonly ImportTokenMetadata[]>;
+  /** Idempotent; null when no import token has the identifier. */
+  revokeImportToken(input: {
+    readonly tokenId: string;
+    readonly now: UnixMilliseconds;
+  }): Promise<ImportTokenMetadata | null>;
+  /**
+   * Null for an unknown, revoked or expired token, another token kind, or a
+   * missing or disabled creator. A successful resolution records its use at
+   * most once per `IMPORT_TOKEN_USE_RECORD_INTERVAL_MS`.
+   */
+  resolveImportToken(input: {
+    readonly token: OpaqueTokenSecret;
+    readonly now: UnixMilliseconds;
+  }): Promise<ResolvedImportToken | null>;
 }
 
 export interface RateLimitDecision {
@@ -761,6 +918,11 @@ export function requireSettingsManager(actor: Actor): void {
 /** The permissions the domain policy grants an actor, for session summaries. */
 export function actorPermissions(actor: Actor): readonly Permission[] {
   return permissionsFor(actor.role);
+}
+
+/** The role's permissions narrowed by any delegated ceiling, in the domain's order. */
+export function effectiveActorPermissions(actor: Actor): readonly Permission[] {
+  return permissionsFor(actor.role).filter((permission) => hasPermission(actor, permission));
 }
 
 export interface DispatcherEvent {
@@ -878,6 +1040,9 @@ export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 
 export interface ListMediaInput {
+  readonly tags?: readonly string[];
+  /** Restricts the page to `active` items with this lowercase-hex SHA-256. */
+  readonly sha256?: string;
   readonly after?: OpaqueCursor;
   readonly limit: number;
   /** Trimmed, non-empty filename substring; matched case-insensitively for ASCII. */
@@ -893,7 +1058,19 @@ export interface MediaCatalogItem {
   readonly usageCount: number;
 }
 
+export interface ListMediaTagsInput {
+  readonly after?: OpaqueCursor;
+  readonly limit: number;
+  readonly q?: string;
+}
+
+export interface MediaTagCount {
+  readonly tag: string;
+  readonly count: number;
+}
+
 export interface MediaListPort {
+  listMediaTags(input: ListMediaTagsInput): Promise<CursorPage<MediaTagCount>>;
   listMedia(input: ListMediaInput): Promise<CursorPage<MediaCatalogItem>>;
 }
 
@@ -944,6 +1121,9 @@ export interface MediaCatalogPort {
 }
 
 export interface CreateMediaMetadataInput {
+  readonly tags?: readonly string[];
+  /** SHA-256 of the stored bytes as lowercase hex. */
+  readonly sha256?: string;
   readonly createdAt: UnixMilliseconds;
   readonly createdBy: ActorId;
   readonly filename: string;
@@ -972,6 +1152,8 @@ export interface MarkMediaForDeletionResult {
  * by the `updatedAt` the values were merged from.
  */
 export interface UpdateMediaMetadataInput {
+  readonly tags?: readonly string[];
+  readonly publishedEffect?: boolean;
   readonly alt: string | null;
   readonly caption: string | null;
   readonly expectedUpdatedAt: UnixMilliseconds;

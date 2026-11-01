@@ -112,13 +112,19 @@ test("LIST1 real API saves, publishes and validates Gallery layout scalars", asy
       blocks: [
         {
           type: "gallery",
-          schemaVersion: 4,
+          schemaVersion: 5,
           key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
           position: 1000,
           data: {
             images: [
               { media: media.id, alt: "One", link: "/one" },
               { media: media.id, caption: "Two" },
+              {
+                kind: "video",
+                media: media.id,
+                videoUrl: "https://vimeo.com/76979871",
+                videoTitle: "Studio tour",
+              },
             ],
           },
           settings,
@@ -161,6 +167,15 @@ test("LIST1 real API saves, publishes and validates Gallery layout scalars", asy
     );
     expect(publicEntry.blocks[0].settings).toEqual({ ...settings, layoutMode: "grid" });
     expect(JSON.stringify(publicEntry)).not.toMatch(/presentation|diagram|choices/);
+    // SM5D: the video item's stale media is draft-only; images are published as images.
+    expect(publicEntry.blocks[0].data.images[0]).toMatchObject({ kind: "image", media: media.id });
+    expect(publicEntry.blocks[0].data.images[2]).toEqual({
+      kind: "video",
+      videoUrl: "https://vimeo.com/76979871",
+      videoTitle: "Studio tour",
+      playback: "player",
+      aspectRatio: "16:9",
+    });
     const duplicate = await call(`${path}/duplicate`, {}, "POST", 201);
     expect(duplicate.draft.blocks[0].settings).toEqual(publicEntry.blocks[0].settings);
     const token = await call("/api/v1/admin/api-tokens", { name: "LIST1 build" }, "POST", 201);

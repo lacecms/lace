@@ -854,6 +854,9 @@ importers:
       '@lacecms/config':
         specifier: workspace:*
         version: link:../config
+      '@lacecms/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@lacecms/platform-cloudflare':
         specifier: workspace:*
         version: link:../platform-cloudflare
@@ -866,10 +869,22 @@ importers:
       semver:
         specifier: 'catalog:'
         version: 7.8.5
+      valibot:
+        specifier: 'catalog:'
+        version: 1.4.2(typescript@7.0.2)
     devDependencies:
+      '@lacecms/content':
+        specifier: workspace:*
+        version: link:../content
+      '@lacecms/test-utils':
+        specifier: workspace:*
+        version: link:../test-utils
       '@types/node':
         specifier: 'catalog:'
         version: 24.10.1
+      '@valibot/to-json-schema':
+        specifier: 'catalog:'
+        version: 1.4.0(valibot@1.4.2(typescript@7.0.2))
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
