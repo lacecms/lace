@@ -5,6 +5,7 @@ export default defineConfig({
       "tests/cross-runtime-product.acceptance.mjs",
       "tests/video-embed.acceptance.mjs",
       "tests/content-import.acceptance.mjs",
+      "tests/conditional-fields.acceptance.mjs",
     ],
     fileParallelism: false,
     maxWorkers: 1,

@@ -158,3 +158,30 @@ definePage({
   // @ts-expect-error queries are collection-only
   listOptions: {},
 });
+
+definePage({
+  key: "conditional-home",
+  path: "/conditional",
+  version: 1,
+  fields: {
+    heroKind: field.select({ options: ["image", "video"], required: true }),
+    heroVideo: field.url(),
+  },
+  visibility: { heroVideo: { field: "heroKind", values: ["video"] } },
+});
+definePage({
+  key: "conditional-bad-value",
+  path: "/conditional-bad-value",
+  version: 1,
+  fields: { heroKind: field.select({ options: ["image"] }), heroVideo: field.url() },
+  // @ts-expect-error Visibility values must be the controller's option literals.
+  visibility: { heroVideo: { field: "heroKind", values: ["video"] } },
+});
+definePage({
+  key: "conditional-bad-target",
+  path: "/conditional-bad-target",
+  version: 1,
+  fields: { heroKind: field.select({ options: ["image"] }) },
+  // @ts-expect-error Visibility targets must be model fields.
+  visibility: { missing: { field: "heroKind", values: ["image"] } },
+});

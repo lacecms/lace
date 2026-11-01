@@ -6,7 +6,13 @@ import {
   parseSchemaPath,
   validateModelFields,
 } from "@lacecms/content";
-import type { BlockDefinition, BlockRegistry, JsonObject, JsonValue } from "@lacecms/content";
+import type {
+  BlockDefinition,
+  BlockRegistry,
+  FieldVisibility,
+  JsonObject,
+  JsonValue,
+} from "@lacecms/content";
 import {
   DomainError,
   actorId,
@@ -117,6 +123,8 @@ export interface ConfigurationSyncChange {
   readonly schemaPath?: string;
   /** Stored values that do not satisfy a validated change. */
   readonly violations?: number;
+  /** Baseline and configured rules of a `field-visibility-*` change. */
+  readonly visibility?: NonNullable<StructuralChange["visibility"]>;
 }
 
 /** Classified structural changes and planned content writes for one model. */
@@ -558,6 +566,9 @@ function decideEvolution(
         fingerprint,
         ...(migrations.length === 0 ? {} : { migrations: Object.freeze(migrations) }),
         modelKey: stored.key,
+        ...(current.visibility === undefined
+          ? {}
+          : { visibility: current.visibility as FieldVisibility }),
       }),
     );
     const candidate = context.evidence?.[stored.key];
@@ -744,13 +755,18 @@ function decideEvolution(
           );
         }
       }
-    } else if (change.class === "validated") {
+    }
+    if (change.kind.startsWith("field-visibility-"))
+      affected = evidence?.prunes?.[change.target] ?? Object.freeze({ draft: 0, published: 0 });
+    if (change.class === "validated" && change.scope === "field") {
       const findings = evidence?.violations[change.target];
       violations = findings?.count ?? 0;
       if (findings !== undefined && findings.count > 0) {
         refuse(
           "CONSTRAINT_VIOLATED",
-          `Model ${modelKey} tightens field ${change.target} (${(change.properties ?? []).join(", ")}), but ${findings.count} stored snapshots do not satisfy it.`,
+          change.kind.startsWith("field-visibility-")
+            ? `Model ${modelKey} reveals field ${change.target} in ${findings.count} published snapshots that do not satisfy it; make it optional first or update and republish those entries.`
+            : `Model ${modelKey} tightens field ${change.target} (${(change.properties ?? []).join(", ")}), but ${findings.count} stored snapshots do not satisfy it.`,
           {
             affectedCount: findings.count,
             changeClass: change.class,
@@ -818,6 +834,7 @@ function decideEvolution(
           ? { schemaPath: change.target }
           : {}),
         ...(violations === undefined ? {} : { violations }),
+        ...(change.visibility === undefined ? {} : { visibility: change.visibility }),
       }),
     );
   }
@@ -837,7 +854,9 @@ function decideEvolution(
   return {
     evolution: Object.freeze({
       backfills: Object.freeze(backfills.sort()),
-      ...([
+      ...(current.visibility !== undefined ||
+      stored.structure?.visibility !== undefined ||
+      [
         ...Object.values(current.fields),
         ...Object.values((stored.structure?.fields ?? {}) as unknown as typeof current.fields),
       ].some((field) => field.type === "group" || field.type === "list")

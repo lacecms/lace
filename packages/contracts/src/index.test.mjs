@@ -2698,3 +2698,80 @@ test("import-token, slug and hash contracts are strict and point at their parame
       .success,
   ).toBe(false);
 });
+
+test("SM5A visibility metadata round trips at every owner and rejects forged rules", () => {
+  const kinds = {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+  };
+  const rules = {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+  };
+  const fields = {
+    ...kinds,
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    gallery: field.list({
+      item: field.group({
+        fields: { ...kinds, media: field.media(), videoUrl: field.url() },
+        visibility: rules,
+      }),
+    }),
+  };
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "conditional",
+      version: 1,
+      fields: { hasCta: field.boolean(), ctaUrl: field.url() },
+      visibility: { ctaUrl: { field: "hasCta", values: [true] } },
+    }),
+  );
+  const model = toContentModelDto({
+    key: "works",
+    kind: "global",
+    version: 1,
+    fields,
+    visibility: rules,
+    blocks: ["conditional"],
+    blockDefinitions: [block],
+  });
+  const json = JSON.parse(JSON.stringify(model));
+  expect(v.parse(contentModelSchema, json)).toEqual(json);
+  expect(json.visibility).toEqual(rules);
+  expect(json.fields.gallery.item.visibility).toEqual(rules);
+  expect(json.blockDefinitions[0].visibility).toEqual({
+    ctaUrl: { field: "hasCta", values: [true] },
+  });
+  const forged = [
+    { media: { field: "missing", values: ["image"] } },
+    { media: { field: "kind", values: ["audio"] } },
+    { media: { field: "kind", values: ["image"], equals: "image" } },
+    { media: { field: "kind", values: ["image"] }, kind: { field: "media", values: ["x"] } },
+  ];
+  for (const visibility of forged) {
+    expect(v.safeParse(contentModelSchema, { ...json, visibility }).success).toBe(false);
+    expect(
+      v.safeParse(contentModelSchema, {
+        ...json,
+        fields: {
+          ...json.fields,
+          gallery: { ...json.fields.gallery, item: { ...json.fields.gallery.item, visibility } },
+        },
+      }).success,
+    ).toBe(false);
+  }
+  expect(
+    v.safeParse(blockMetadataSchema, {
+      ...block,
+      visibility: { ctaUrl: { field: "hasCta", values: ["yes"] } },
+    }).success,
+  ).toBe(false);
+  const plain = toContentModelDto({
+    key: "plain",
+    kind: "global",
+    version: 1,
+    fields: kinds,
+    blocks: [],
+  });
+  expect(plain).not.toHaveProperty("visibility");
+});

@@ -179,6 +179,9 @@
           "version": {
             "minimum": 1,
             "type": "integer"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/FieldVisibility"
           }
         },
         "required": ["type", "version", "fields"],
@@ -475,6 +478,28 @@
         },
         "type": "object"
       },
+      "FieldVisibility": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "values": {
+              "items": {
+                "type": ["string", "boolean"]
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": ["field", "values"],
+          "type": "object"
+        },
+        "description": "Conditional fields. Keys name immediate sibling fields; each rule names a sibling select or boolean controller that is not itself a target, and a nonempty unique subset of its options or booleans. A hidden field is not required, keeps draft validation and is retained in drafts.",
+        "type": "object"
+      },
       "GroupFieldDefinition": {
         "additionalProperties": false,
         "properties": {
@@ -501,6 +526,9 @@
           },
           "type": {
             "const": "group"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/FieldVisibility"
           }
         },
         "required": ["type", "required", "fields"],
@@ -1705,6 +1733,9 @@
                           "version": {
                             "minimum": 1,
                             "type": "integer"
+                          },
+                          "visibility": {
+                            "$ref": "#/components/schemas/FieldVisibility"
                           }
                         },
                         "required": ["blocks", "fields", "key", "kind", "version"],

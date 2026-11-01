@@ -3237,6 +3237,145 @@ const hintedFieldsV1 = {
   thumb: field.media(),
 };
 
+const conditionalFields = () => ({
+  kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+  media: field.media(),
+  videoUrl: field.url({ required: true }),
+});
+
+contract(
+  "prunes newly hidden published values and refuses revealed gaps without writes",
+  async (runtime, expect) => {
+    const v1 = await evolvingPosts({ fields: conditionalFields() });
+    const { repository, sql } = await runtime.open({ resolveModel: syncResolver([v1]) });
+    await applySync(repository, [v1], 10);
+    await seedMedia(sql, "m-1");
+    await repository.create({
+      entry: entry("draft-only", "posts", {
+        fields: { kind: "image", videoUrl: "https://example.com/draft" },
+        title: "Draft",
+        updatedAt: 20,
+      }),
+      mediaReferences: [],
+    });
+    await repository.create({
+      entry: entry("live", "posts", {
+        fields: { kind: "video", media: "m-1", videoUrl: "https://example.com/live" },
+        slug: "live",
+        title: "Live",
+        updatedAt: 21,
+      }),
+      mediaReferences: [{ fieldPath: "media", mediaId: mediaId("m-1"), sourceKey: "$fields" }],
+    });
+    await repository.publish(publish("live", 1, 22, "live-published"));
+    const before = await syncEvidenceState(sql);
+    const liveReferences = () =>
+      sql.all(
+        "select snapshot_id, field_path from content_media_references where media_id = 'm-1' order by snapshot_id",
+      );
+    expect(await liveReferences()).toEqual([
+      { snapshot_id: "live-draft", field_path: "media" },
+      { snapshot_id: "live-published", field_path: "media" },
+    ]);
+
+    const v2 = await evolvingPosts({
+      fields: conditionalFields(),
+      version: 2,
+      visibility: {
+        media: { field: "kind", values: ["image"] },
+        videoUrl: { field: "kind", values: ["video"] },
+      },
+    } as Partial<CollectionModelInput>);
+    const stale = await prepareConfigurationSynchronization({ models: [v2], state: repository });
+    await sql.run(
+      "update content_models set projection_hash = ? where key = ?",
+      "changed-concurrently",
+      "posts",
+    );
+    await expect(applySync(repository, [v2], 29, stale)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    await sql.run(
+      "update content_models set projection_hash = ? where key = ?",
+      v1.projectionHash,
+      "posts",
+    );
+    expect(await syncEvidenceState(sql)).toEqual(before);
+
+    const prepared = await prepareConfigurationSynchronization({ models: [v2], state: repository });
+    expect(prepared.plan).toMatchObject({
+      isValid: true,
+      operations: [
+        {
+          action: "version-update",
+          evolution: {
+            changes: [
+              {
+                kind: "field-visibility-added",
+                target: "media",
+                affected: { draft: 0, published: 1 },
+              },
+              {
+                kind: "field-visibility-added",
+                target: "videoUrl",
+                affected: { draft: 0, published: 0 },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    await expect(applySync(repository, [v2], 30, prepared)).resolves.toMatchObject({
+      status: "applied",
+      targetVersion: before.version! + 1,
+    });
+    expect(await count(sql, "select count(*) as count from outbox_events")).toBe(1);
+    const draftOnly = await repository.load({ entryId: contentEntryId("draft-only") });
+    const live = await repository.load({ entryId: contentEntryId("live") });
+    expect(draftOnly!.draft).toMatchObject({
+      fields: { kind: "image", videoUrl: "https://example.com/draft" },
+      revision: 1,
+      updatedAt: 20,
+    });
+    expect(live!.draft.fields).toEqual({
+      kind: "video",
+      media: "m-1",
+      videoUrl: "https://example.com/live",
+    });
+    expect(live!.published).toMatchObject({
+      fields: { kind: "video", videoUrl: "https://example.com/live" },
+      revision: 1,
+    });
+    expect(live!.published!.fields).not.toHaveProperty("media");
+    expect(await liveReferences()).toEqual([{ snapshot_id: "live-draft", field_path: "media" }]);
+
+    const settled = await syncEvidenceState(sql);
+    const v3 = await evolvingPosts({
+      fields: conditionalFields(),
+      version: 3,
+      visibility: { media: { field: "kind", values: ["image"] } },
+    } as Partial<CollectionModelInput>);
+    await repository.saveCompleteDraft(
+      save("live", 1, 40, {
+        fields: { kind: "image", media: "m-1" },
+        mediaReferences: [{ fieldPath: "media", mediaId: mediaId("m-1"), sourceKey: "$fields" }],
+        slug: "live",
+        title: "Live",
+      }),
+    );
+    await repository.publish(publish("live", 2, 41, "live-published-2"));
+    const refused = await prepareConfigurationSynchronization({ models: [v3], state: repository });
+    expect(refused.plan.isValid).toBe(false);
+    expect(refused.plan.diagnostics).toMatchObject([
+      { code: "CONSTRAINT_VIOLATED", fieldKey: "videoUrl", affectedCount: 1 },
+    ]);
+    expect(refused.plan.diagnostics[0]!.snapshots).toMatchObject([
+      { entryId: "live", state: "published" },
+    ]);
+    expect((await syncEvidenceState(sql)).models).toEqual(settled.models);
+  },
+);
+
 contract(
   "renames, prunes and drops hinted data with its media references",
   async (runtime, expect) => {

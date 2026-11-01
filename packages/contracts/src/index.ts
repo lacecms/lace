@@ -13,6 +13,7 @@ import {
   ContentValidationError,
   defineBlock,
   normalizeFieldDefinition,
+  normalizeFieldVisibility,
   normalizeFormLayout,
   isBlockAnchor,
   normalizeBlockClassName,
@@ -21,6 +22,7 @@ import {
 } from "@lacecms/content";
 import type {
   BlockMetadata,
+  FieldVisibility,
   FormLayout,
   FieldMetadata,
   JsonObject,
@@ -324,6 +326,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
     "settingsVisibility",
     "type",
     "version",
+    "visibility",
   ]);
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) return false;
   if (
@@ -359,6 +362,9 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
       ...(value.settings === undefined ? {} : { settings: value.settings }),
       type: value.type,
       version: value.version,
+      ...(value.visibility === undefined
+        ? {}
+        : { visibility: value.visibility as unknown as FieldVisibility }),
     });
     return (
       canonicalizeJson(value) ===
@@ -420,6 +426,8 @@ export const fieldMetadataSchema = v.custom<FieldMetadata>(isFieldMetadata);
 export const fieldMetadataMapSchema = v.custom<FieldMetadataMapDto>(isFieldMetadataMap);
 /** Validated executable-value-free metadata used to render generic block forms. */
 export const blockMetadataSchema = v.custom<BlockMetadata>(isBlockMetadata);
+/** Model-level conditional-field rules; the model schema checks them against its fields. */
+export const fieldVisibilitySchema = v.custom<FieldVisibility>((value) => isJsonObject(value));
 
 /** Converts a portable Unix-millisecond value into the canonical JSON timestamp. */
 export function toIsoTimestamp(value: UnixMilliseconds | number): IsoTimestamp {
@@ -905,6 +913,21 @@ function hasValidFormLayout<
   }
 }
 
+function hasValidFieldVisibility<
+  Value extends { fields: FieldMetadataMapDto; visibility?: FieldVisibility | undefined },
+>(value: Value): boolean {
+  try {
+    const normalized = normalizeFieldVisibility(value.visibility, value.fields);
+    return (
+      normalized === undefined ||
+      canonicalizeJson(normalized as unknown as JsonValue) ===
+        canonicalizeJson(value.visibility as unknown as JsonValue)
+    );
+  } catch {
+    return false;
+  }
+}
+
 const modelSeoSchema = v.strictObject({
   description: v.nullable(identifierSchema),
   image: v.nullable(identifierSchema),
@@ -935,9 +958,15 @@ export const contentModelSchema = v.pipe(
     /** Site SEO defaults mapped by the one global that declares them. */
     seoDefaults: v.optional(seoDefaultsSchema),
     version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+    /** Conditional-field rules over the model's own fields. */
+    visibility: v.optional(fieldVisibilitySchema),
   }),
   v.check(hasMatchingBlockDefinitions, "Block definitions must match the model's allowed blocks."),
   v.check(hasValidFormLayout, "Layout must place distinct immediate fields in valid groups."),
+  v.check(
+    hasValidFieldVisibility,
+    "Visibility rules must name sibling targets and unconditional select or boolean controllers.",
+  ),
   v.check(hasValidListFields, "List fields must name distinct fields of a collection."),
   v.check(
     (model) =>
@@ -2624,6 +2653,7 @@ export interface ContentModelSource {
     readonly titleTemplate?: string;
   };
   readonly version: number;
+  readonly visibility?: FieldVisibility;
 }
 
 /** Maps a model's SEO fallback fields with `null` for unmapped values. */
@@ -2676,6 +2706,9 @@ export function toContentModelDto(
       ? {}
       : { seoDefaults: toSeoDefaultsDto(model.seoDefaults) }),
     version: model.version,
+    ...(model.visibility === undefined
+      ? {}
+      : { visibility: normalizeFieldVisibility(model.visibility, model.fields)! }),
   };
 }
 

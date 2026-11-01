@@ -121,3 +121,52 @@ test("application re-exports the portable import helpers", () => {
   expect(normalizeMediaTags(["Project-A", "project-a"])).toEqual({ tags: ["project-a"] });
   expect(encodeEntryLink("abc/1")).toBe("entry:abc%2F1");
 });
+
+test("draft candidates keep hidden values and publish without hidden requirements", async () => {
+  const conditional = await defineConfig({
+    blocks: Object.values(builtInBlocks),
+    content: [
+      defineCollection({
+        key: "works",
+        version: 1,
+        route: "/works/:slug",
+        fields: {
+          kind: field.select({
+            options: ["image", "video"],
+            required: true,
+            defaultValue: "image",
+          }),
+          media: field.media({ required: true }),
+          videoUrl: field.url({ required: true }),
+        },
+        visibility: {
+          media: { field: "kind", values: ["image"] },
+          videoUrl: { field: "kind", values: ["video"] },
+        },
+      }),
+    ],
+  });
+  const model = conditional.runtime.content.find((candidate) => candidate.key === "works");
+  const candidate = (fields, mode) =>
+    normalizeDraftCandidate({
+      blocks: conditional.runtime.blocks,
+      draft: { title: "Work", slug: "work", fields, blocks: [] },
+      mode,
+      model,
+    });
+  const video = candidate({ kind: "video", videoUrl: "https://example.com/v" }, "publish");
+  expect(video.fields).toEqual({ kind: "video", videoUrl: "https://example.com/v" });
+  const switched = candidate({ ...video.fields, kind: "image", media: "media-1" }, "draft");
+  expect(switched.fields).toEqual({
+    kind: "image",
+    media: "media-1",
+    videoUrl: "https://example.com/v",
+  });
+  const restored = candidate({ ...switched.fields, kind: "video" }, "publish");
+  expect(restored.fields.videoUrl).toBe("https://example.com/v");
+  expect(candidate({ kind: "image", media: "media-1" }, "publish").fields).toEqual({
+    kind: "image",
+    media: "media-1",
+  });
+  expect(() => candidate({ kind: "video" }, "publish")).toThrow(/videoUrl/u);
+});

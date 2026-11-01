@@ -9,7 +9,13 @@ import {
   canonicalJsonByteLength,
   canonicalizeJson,
 } from "@lacecms/content";
-import type { FieldDefinition, JsonObject, JsonValue } from "@lacecms/content";
+import type {
+  FieldDefinition,
+  FieldVisibility,
+  FieldVisibilityRule,
+  JsonObject,
+  JsonValue,
+} from "@lacecms/content";
 import type {
   BlockMigrationEvidence,
   ConfigurationSyncMigrationTarget,
@@ -36,6 +42,9 @@ export type StructuralChangeKind =
   | "field-removed"
   | "field-renamed"
   | "field-type-changed"
+  | "field-visibility-added"
+  | "field-visibility-changed"
+  | "field-visibility-removed"
   | "model-property-changed"
   | "route-changed"
   | "seo-disabled"
@@ -58,6 +67,14 @@ export interface StructuralChange {
   readonly schemaPath?: string;
   /** Baseline and configured block versions of a `block-definition-changed` change. */
   readonly version?: { readonly from: number; readonly to: number };
+  /**
+   * Baseline and configured rules of a `field-visibility-*` change; the
+   * baseline controller is expressed by its configured key.
+   */
+  readonly visibility?: {
+    readonly before?: FieldVisibilityRule;
+    readonly after?: FieldVisibilityRule;
+  };
 }
 
 /** Temporary synchronization hints of a configured model. */
@@ -157,6 +174,8 @@ export interface ModelSnapshotEvidence {
   /** Snapshots holding an SEO group; present when SEO is being disabled. */
   readonly seoHolders?: SnapshotHolders;
   readonly snapshots: SnapshotStateCounts;
+  /** Published snapshots whose hidden values the published projection removes, by target. */
+  readonly prunes?: Readonly<Record<string, SnapshotStateCounts>>;
   readonly violations: Readonly<Record<string, ConfigurationSyncSnapshotFindings>>;
 }
 
@@ -173,6 +192,8 @@ export interface ConfigurationSyncScanRequest {
   /** Block types whose stale blocks are migrated in memory; present when non-empty. */
   readonly migrations?: readonly ConfigurationSyncMigrationTarget[];
   readonly modelKey: string;
+  /** Configured model-level conditional-field rules. */
+  readonly visibility?: FieldVisibility;
 }
 
 /** Maximum snapshots read per scan page. */
@@ -194,6 +215,8 @@ const FIELD_PROPERTIES = new Set([
   "options",
   "required",
   "type",
+  // Compared separately by visibility change kinds.
+  "visibility",
 ]);
 const MODEL_IDENTITY_PROPERTIES = new Set([
   "blockDefinitions",
@@ -205,6 +228,7 @@ const MODEL_IDENTITY_PROPERTIES = new Set([
   "route",
   "seo",
   "version",
+  "visibility",
 ]);
 const SCOPE_ORDER = { block: 1, field: 0, model: 2 } as const;
 
@@ -342,6 +366,59 @@ function definitionsByType(structure: ContentModelStructure): Map<string, JsonVa
   return definitions;
 }
 
+function visibilityRules(value: JsonValue | undefined): FieldVisibility {
+  return record(value) as unknown as FieldVisibility;
+}
+
+/**
+ * Classify one target's rule change. Narrowing the same controller's values
+ * only hides occurrences, so it is compatible; anything that can reveal one
+ * is validated against the newly visible published occurrences.
+ */
+function compareVisibility(
+  address: string,
+  before: FieldVisibilityRule | undefined,
+  after: FieldVisibilityRule | undefined,
+): StructuralChange[] {
+  if (before === undefined && after === undefined) return [];
+  const visibility = {
+    ...(before === undefined ? {} : { before }),
+    ...(after === undefined ? {} : { after }),
+  };
+  if (before === undefined)
+    return [
+      {
+        class: "compatible",
+        kind: "field-visibility-added",
+        scope: "field",
+        target: address,
+        visibility,
+      },
+    ];
+  if (after === undefined)
+    return [
+      {
+        class: "validated",
+        kind: "field-visibility-removed",
+        scope: "field",
+        target: address,
+        visibility,
+      },
+    ];
+  const narrowed =
+    before.field === after.field && after.values.every((value) => before.values.includes(value));
+  if (narrowed && after.values.length === before.values.length) return [];
+  return [
+    {
+      class: narrowed ? "compatible" : "validated",
+      kind: "field-visibility-changed",
+      scope: "field",
+      target: address,
+      visibility,
+    },
+  ];
+}
+
 function compareChanges(left: StructuralChange, right: StructuralChange): number {
   return (
     SCOPE_ORDER[left.scope] - SCOPE_ORDER[right.scope] ||
@@ -370,12 +447,27 @@ export function diffContentModelStructures(
     const address = encodeSchemaPath(path);
     changes.push(...compareField(address, before, after));
     if (before.type !== after.type) return;
-    if (after.type === "group") compareMap(path, record(before.fields), record(after.fields));
+    if (after.type === "group")
+      compareMap(
+        path,
+        record(before.fields),
+        record(after.fields),
+        visibilityRules(before.visibility),
+        visibilityRules(after.visibility),
+      );
     if (after.type === "list")
       compareDefinition([...path, "*"], record(before.item), record(after.item));
   };
-  const compareMap = (parent: readonly string[], before: JsonObject, after: JsonObject): void => {
+  const compareMap = (
+    parent: readonly string[],
+    before: JsonObject,
+    after: JsonObject,
+    beforeRules: FieldVisibility,
+    afterRules: FieldVisibility,
+  ): void => {
     const sources = new Set<string>();
+    // Configured key -> baseline key, after applicable rename hints.
+    const baselineKeys = new Map<string, string>();
     for (const key of Object.keys(after)) {
       const path = [...parent, key];
       const address = encodeSchemaPath(path);
@@ -384,6 +476,7 @@ export function diffContentModelStructures(
       const renamed =
         former !== undefined && Object.hasOwn(before, former) && !Object.hasOwn(before, key);
       const old = renamed ? former : key;
+      baselineKeys.set(key, old);
       if (renamed) {
         sources.add(old);
         changes.push({
@@ -415,8 +508,31 @@ export function diffContentModelStructures(
         target: address,
       });
     }
+    // Express baseline controllers by configured keys so pure renames compare equal.
+    const configuredKeys = new Map([...baselineKeys].map(([key, old]) => [old, key]));
+    for (const key of Object.keys(after)) {
+      const old = baselineKeys.get(key)!;
+      if (!Object.hasOwn(before, old)) continue;
+      const prior = Object.hasOwn(beforeRules, old) ? beforeRules[old] : undefined;
+      const next = Object.hasOwn(afterRules, key) ? afterRules[key] : undefined;
+      changes.push(
+        ...compareVisibility(
+          encodeSchemaPath([...parent, key]),
+          prior === undefined
+            ? undefined
+            : { field: configuredKeys.get(prior.field) ?? prior.field, values: prior.values },
+          next,
+        ),
+      );
+    }
   };
-  compareMap([], record(baseline.fields), record(target.fields));
+  compareMap(
+    [],
+    record(baseline.fields),
+    record(target.fields),
+    visibilityRules(baseline.visibility),
+    visibilityRules(target.visibility),
+  );
 
   const beforeBlocks = stringList(baseline.blocks);
   const afterBlocks = stringList(target.blocks);
@@ -584,6 +700,7 @@ export function validateStructureHints(
 export function changeNeedsEvidence(change: StructuralChange): boolean {
   return (
     change.backfill === true ||
+    change.kind.startsWith("field-visibility-") ||
     change.class === "destructive" ||
     change.class === "migration" ||
     change.class === "validated"
@@ -702,6 +819,7 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
   const backfills: Record<string, { draft: number; published: number }> = {};
   const violations: Record<string, MutableFindings> = {};
   const mediaBackfills: Record<string, MutableFindings> = {};
+  const prunes: Record<string, { draft: number; published: number }> = {};
   const oversized: MutableFindings = { count: 0, snapshots: [] };
   const removedFields = new Set<string>();
   const renames = new Map<string, string>();
@@ -741,7 +859,9 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
           request.changes,
           snapshot.fields,
           snapshot.state,
+          request.visibility,
         );
+        for (const key of Object.keys(transformed.prunes)) increment(prunes, key, snapshot.state);
         for (const [key, path] of Object.entries(transformed.holders))
           if (fieldHolders[key] !== undefined)
             addHolder(fieldHolders[key]!, snapshot, key.startsWith("/") ? path : undefined);
@@ -822,6 +942,7 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
           ? {}
           : { seoHolders: freezeHolders({ seo: seoHolders }).seo! }),
         snapshots: Object.freeze({ ...snapshots }),
+        ...(Object.keys(prunes).length === 0 ? {} : { prunes: freezeCounts(prunes) }),
         violations: Object.freeze(
           Object.fromEntries(
             Object.keys(violations)

@@ -1,7 +1,11 @@
 import { contentModelKey } from "@lacecms/domain";
 import type { NormalizedContentModel } from "@lacecms/config";
 import { canonicalizeJson, collectSnapshotInternalLinks } from "@lacecms/content";
-import type { InternalLinkReference, ModelFieldDefinitions } from "@lacecms/content";
+import type {
+  FieldVisibility,
+  InternalLinkReference,
+  ModelFieldDefinitions,
+} from "@lacecms/content";
 import type {
   ConfigurationSyncPlan,
   ConfigurationSyncStateReadPort,
@@ -55,6 +59,7 @@ export async function configurationSyncLinkRewrites(input: {
           configurationSyncFieldChanges(operation.evolution.changes),
           snapshot.fields,
           snapshot.state,
+          model.visibility as FieldVisibility | undefined,
         ).fields;
         const references = collectSnapshotInternalLinks(
           model.fields,

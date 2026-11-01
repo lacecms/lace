@@ -404,6 +404,7 @@ export class ContentUseCases {
         ...(model.label === undefined ? {} : { label: model.label }),
         ...(model.description === undefined ? {} : { description: model.description }),
         ...(model.layout === undefined ? {} : { layout: model.layout }),
+        ...(model.visibility === undefined ? {} : { visibility: model.visibility }),
         ...(model.kind === "page" ? { path: model.path } : {}),
         ...(model.kind === "collection"
           ? {

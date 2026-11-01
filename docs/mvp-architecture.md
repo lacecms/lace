@@ -815,16 +815,46 @@ values are retained, submitted and validated unconditionally. Wrap applies to fl
 requires site-defined height. Presets apply to grid. Diagrams explain composition,
 not a preview of site styling.
 
-LIST2 is an explicitly selected, bounded exception to deferred conditional forms:
+LIST2 adds presentation-only conditional settings:
 blocks may declare projection-only `settingsVisibility`, mapping scalar setting
 keys to `{ setting, values }` predicates over an always-visible required sibling
 select with a valid default. Targets/controllers must exist, option lists must
 be nonempty and unique, and self references/chains/cycles are rejected. Metadata
 is portable, detached and frozen. Hidden controls stay registered and their values
-retain ordinary defaults, validation, permissions and public delivery. Rules do
-not apply to model fields, block data, group/list items or envelope fields.
+retain ordinary defaults, validation, permissions and public delivery. These
+rules do not apply to model fields, block data, group/list items or envelope
+fields; data fields use conditional fields (SM5) below.
 `listLayoutSettingsVisibility()` shares the list rules with arbitrary blocks.
-General conditional forms and conditional validation remain deferred.
+
+### Conditional fields (SM5)
+
+Models, group descriptors (including list-item groups at every CE7 depth) and
+block data accept optional `visibility: { target: { field, values } }`. Targets
+and controllers are immediate siblings; the controller is a `select` or
+`boolean`, may be optional, is never the target and never itself conditional
+(no chains). `values` is a nonempty unique subset of its options or booleans.
+Scalar/list descriptors, scalar list items, block settings and system or
+envelope values take no rules. A target is visible when the controller's
+present value, else its default, is listed; an absent controller without a
+default hides its targets. Each occurrence (model fields, group value, list
+item, block data) evaluates only its own values; hidden containers hide their
+subtree.
+
+Validation normalizes unconditional fields first, then visible targets in the
+selected mode and hidden targets in draft mode, recursively: hidden fields are
+never required or held to `minItems`, but keep types, options, safety,
+lengths, ranges and `maxItems`. Drafts retain hidden values and their
+defaults. A pure published projection removes hidden targets recursively
+without changing list shape. Rules are structural (structure identity, model
+version increase; block data rules are block definition changes). Sync
+reports `field-visibility-added` (compatible), `-removed` (validated) and
+`-changed` (compatible when strictly narrowed, else validated), prunes newly
+hidden published values in its guarded mutation with one version advance and
+build request, and checks newly visible published occurrences with publish
+semantics. Global `seoDefaults` must not name a conditional field. Metadata
+crosses REST/OpenAPI as validated JSON. Publication and delivery adopt the
+projection in SM5B; the admin hides fields in SM5C. See
+[ADR 0018](adr/0018-conditional-fields.md).
 
 ### Visual form organization (CE9B)
 
@@ -3701,6 +3731,9 @@ This is not the detailed implementation plan, but it establishes dependency orde
 - Configuration sync classifies structural changes against a stored baseline
   and applies compatible and validated ones to existing content
   ([ADR 0007](adr/0007-schema-evolution-during-sync.md)).
+- Fields may be conditional on a sibling select or boolean; hidden values stay
+  in drafts and are not required or published
+  ([ADR 0018](adr/0018-conditional-fields.md)).
 - Node uses SQLite and MinIO; Cloudflare uses D1 and R2.
 - Infrastructure-specific behavior is implemented through narrow capability adapters.
 - Publishing writes an outbox event and triggers a static rebuild.

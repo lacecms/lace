@@ -81,7 +81,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | SM2 | MCP publication scope | S | SM2 | done |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | done |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | done |
-| SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
+| SM5 | Conditional fields | L | SM5A → SM5B → SM5C | in progress |
 
 **Order rationale:** SM1 and SM2 are small and independent; SM1 unblocks the
 portfolio site first. SM3 comes before SM4 so the import format can assign
@@ -291,6 +291,8 @@ planning and resume; integration test against a Node API.
 
 ## Step SM5 — Conditional fields
 
+**Status:** in progress (SM5A done; SM5B and SM5C planned).
+
 **Size:** L (three sessions). Lifts the CE9 exclusion of conditional
 visibility.
 
@@ -300,14 +302,25 @@ controller has given values, for example a gallery item `kind` of `image` or
 
 ### Session SM5A — Definition and validation semantics
 
-- Field option `visibleWhen: {field, equals}` or `{field, in}`. The
-  controller is a sibling `select` or `boolean` in the same object scope:
-  model fields, group fields, a list item group or block data.
-- Config load rejects unknown controllers, non-scalar controllers and cycles.
-  Whether chains are allowed is decided in the spec.
-- Hidden fields are never required and are not validated beyond type.
-- Value policy (proposed): hidden values are kept in the draft so toggling
-  back restores them, and omitted from the published snapshot.
+**Status:** done (archived). Implementation verified, 23/23 tasks; six capability deltas synchronized.
+
+Owner decisions (2026-11-01): an owner-level `visibility` map
+`{ target: { field, values } }` replaces the per-field `visibleWhen` draft;
+`values` replaces `equals`/`in`; chains are not allowed; optional controllers
+are allowed and an absent one without a default hides its targets; hidden
+fields are validated with draft semantics (refining "type only": lengths,
+ranges and `maxItems` still apply); `seoDefaults` may not name a conditional
+field; block `settingsVisibility` is unchanged. See
+[ADR 0018](adr/0018-conditional-fields.md).
+
+- Owner option `visibility` on models, group fields (including list item
+  groups) and block data. The controller is a sibling `select` or `boolean`
+  in the same object scope.
+- Config load rejects unknown controllers, non-select/boolean controllers,
+  self references and chains.
+- Hidden fields are never required and use draft validation semantics.
+- Value policy: hidden values are kept in the draft so toggling back restores
+  them, and omitted from the published projection.
 - Schema evolution: classify adding, changing and removing rules; changes
   that alter published shape rewrite snapshots and request a build under
   ADR 0007.
@@ -367,3 +380,6 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Proposed. Owner decisions: two verification tiers (full matrix through the CLI process in the workspace cross-runtime suite on Node and the local Worker; packed-CLI smoke in the Node Compose and Cloudflare consumer journeys, offline validation in the CI starter phase); the user guide is a public page with a downloadable starter sample and `docs/content-import.md` is the internal note (refines the roadmap wording); generated projects get guidance and a Template 0.44.0 note, no import script. 18 tasks, not applied. |
 | 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Implemented and verified, 18/18 tasks. Shared starter sample in `apps/docs/public/examples/content-import` with a root validity/guide-equality test; cross-runtime import journey through the CLI process on Node and Worker (validate, dry run, publish, unchanged reruns with and without state, conflict and `--overwrite`, refused and revoked tokens, equal canonical results); packed smoke in the starter, Node Compose and Cloudflare consumer journeys; public *Import content* page, CLI reference rows, internal `docs/content-import.md`; generated operations guide section and Template 0.44.0. No CLI or server defect found; fixed the stale alpha.8 `videoEmbed` v1 fixture that blocked `acceptance:cloudflare`. Full `acceptance:generated` not run (phase `node` only). Awaiting explicit sync/archive. |
 | 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Archived at `openspec/changes/archive/2026-11-01-sm04c-import-runtime-verification-docs`; four capability deltas synchronized into main specs (4 added requirements). Step SM4 complete. |
+| 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Proposed. Owner decisions: owner-level `visibility` map `{ target: { field, values } }` on models, groups (incl. list items) and block data instead of per-field `visibleWhen`; sibling `select`/`boolean` controllers, optional allowed (absent without default hides); no chains; hidden fields validated with draft semantics (refines "type only"); hidden values kept in drafts, omitted by the published projection; `seoDefaults` may not name a conditional field; `settingsVisibility` unchanged. Structural identity; new `field-visibility-*` sync kinds prune newly hidden published values. Publication omission stays in SM5B. 23 tasks, not applied. |
+| 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Implemented and verified, 23/23 tasks. Owner-level `visibility` on models, groups and block data with shared normalizer, evaluator and published projection; hidden fields validated in draft mode and retained in drafts; structural identity, `seoDefaults` restriction, REST/OpenAPI metadata; `field-visibility-*` sync kinds that prune hidden published values and refuse revealed gaps (refined: all hidden published values are pruned). Content/config/contracts/application tests, repository contract on SQLite and D1, cross-runtime suite, root format/lint/typecheck/test (pinned Node 24.12.0), build, starter and existing-site acceptance, docs, OpenAPI and OpenSpec checks pass. Publication omission remains SM5B. Awaiting explicit sync/archive. |
+| 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Archived at `openspec/changes/archive/2026-11-01-sm05a-conditional-field-semantics`; new `conditional-fields` capability (4 requirements) and deltas for `block-settings-visibility` (1 modified), `content-model-configuration`, `content-validation`, `rest-contracts` (1 added each) and `schema-evolution` (3 added) synchronized into main specs. SM5B and SM5C remain planned. |

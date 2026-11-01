@@ -74,6 +74,7 @@ import {
   fieldMetadataSchema,
   fieldMetadataMapSchema,
   blockMetadataSchema,
+  fieldVisibilitySchema,
   contentMetadataOpenApi,
   managedUserListSchema,
   managedUserSchema,
@@ -190,7 +191,9 @@ loadVendor("valibot", {
               ? "FieldMetadataMap"
               : valibotSchema === blockMetadataSchema
                 ? "BlockMetadata"
-                : undefined;
+                : valibotSchema === fieldVisibilitySchema
+                  ? "FieldVisibility"
+                  : undefined;
         return name === undefined ? undefined : { $ref: `#/components/schemas/${name}` };
       },
     })) as never,

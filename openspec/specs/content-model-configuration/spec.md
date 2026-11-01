@@ -206,8 +206,6 @@ projection-only SHALL NOT by itself imply that all display changes skip builds.
 - **WHEN** sortableFields, filterableFields or searchableFields changes without a content schema change
 - **THEN** projection hashes change, structural hashes and required model version remain unchanged, and synchronization reports a display-only change without content rewrites
 
-
-
 #### Scenario: Query options preserve public identity
 - **WHEN** a collection's only change is to enable, edit, reorder or remove listOptions
 - **THEN** its full projection hash changes for a different normalized projection, its public-projection hash remains equal, and its structural hash and model version stay unchanged
@@ -522,3 +520,39 @@ writes on both runtimes. Setting options/defaults SHALL retain structural rules.
 #### Scenario: Stale visibility plan
 - **WHEN** a visibility-only plan is applied after its baseline changed
 - **THEN** synchronization rejects it without partial writes
+
+### Requirement: Field visibility is structural model configuration
+`definePage`, `defineCollection` and `defineGlobal` SHALL accept optional
+model-level `visibility` over the model's own fields with the rules of the
+`conditional-fields` capability; nested owners use their group or block data
+declarations. Visibility at model, group and block-data positions SHALL be
+part of configuration projection identity and of structural identity, because
+it changes validation and published shape. Content and default values
+containing a `visibility` key SHALL remain ordinary structural data. Any structural
+visibility change SHALL require a model version increase. A block data
+visibility change SHALL be a block definition change under the existing
+block-version and migration rules. Block `settingsVisibility` SHALL remain
+projection-only. Configurations without `visibility` SHALL retain previous
+projection and structure hashes.
+
+A global's `seoDefaults` SHALL NOT reference a field that is a visibility
+target; normalization SHALL reject such a reference naming the global and
+option. Model `seo` fallback fields, `listFields`, `listOptions` and group
+`itemLabel` MAY name a conditional field; a hidden value behaves like an
+absent one there.
+
+#### Scenario: Model-level rule
+- **WHEN** a page model declares `visibility: { heroVideo: { field: "heroKind", values: ["video"] } }` over its own fields and increases its version
+- **THEN** the configuration loads and its structure hash differs from the same model without the rule
+
+#### Scenario: Version increase required
+- **WHEN** a populated model adds a visibility rule without increasing its version
+- **THEN** configuration synchronization refuses the plan as for any structural change without a version increase
+
+#### Scenario: Conditional SEO default rejected
+- **WHEN** a global's `seoDefaults.siteName` names a text field that depends on a select
+- **THEN** configuration fails before startup naming the global and `seoDefaults.siteName`
+
+#### Scenario: Settings visibility unchanged
+- **WHEN** only a block's `settingsVisibility` changes
+- **THEN** structure identity is unchanged and synchronization follows the existing projection-only rules

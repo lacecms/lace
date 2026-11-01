@@ -7,6 +7,7 @@ import {
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
   actorDisplayName,
@@ -1443,6 +1444,7 @@ export class D1ContentRepository
                 fields: parseObject(row.fields_json, "Snapshot fields"),
                 state: row.state,
               })),
+              configuration.visibility as FieldVisibility | undefined,
             ),
           );
           if (rows.length < 100) break;

@@ -1,5 +1,6 @@
 import {
   defineBlockRegistry,
+  normalizeFieldVisibility,
   normalizeFormLayout,
   parseSchemaPath,
   encodeSchemaPath,
@@ -15,6 +16,7 @@ import type {
   BlockMetadata,
   BlockRegistry,
   FieldDefinition,
+  FieldVisibility,
   FormLayout,
   FieldIsRequired,
   FieldValue,
@@ -84,6 +86,8 @@ interface CommonModelInput<Fields extends FieldMap> {
   /** Temporary hint: former field keys whose stored values sync may prune. */
   readonly removedFields?: readonly string[];
   readonly version: number;
+  /** Conditional-field rules over the model's own fields. */
+  readonly visibility?: FieldVisibility<Fields>;
 }
 
 /** Fallback fields of the same model for SEO values the editor leaves unset. */
@@ -181,6 +185,8 @@ interface NormalizedCommonModel<Fields extends FieldMap> {
   /** Runtime-only synchronization hint: current field key to former field key. */
   readonly renamedFields?: Readonly<Record<string, string>>;
   readonly version: number;
+  /** Conditional-field rules over the model's own fields; structural. */
+  readonly visibility?: FieldVisibility<Fields>;
 }
 
 /** SEO options of a normalized page or collection. */
@@ -568,6 +574,11 @@ function normalizeCommonModel<Fields extends FieldMap>(
   const blocks = normalizeBlocks(input.blocks);
   const { fields, renamedFields } = normalizeFields(input.fields);
   const layout = normalizeFormLayout(input.layout, fields, `model.${input.key}.layout`);
+  const visibility = normalizeFieldVisibility(
+    input.visibility,
+    fields,
+    `model.${input.key}.visibility`,
+  ) as FieldVisibility<Fields> | undefined;
   const removedFields = normalizeRemovedFields(input.removedFields);
   const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_KEY_PATTERN);
   assertSynchronizationHints(
@@ -591,6 +602,7 @@ function normalizeCommonModel<Fields extends FieldMap>(
     ...(removedFields.length === 0 ? {} : { removedFields }),
     ...(Object.keys(renamedFields).length === 0 ? {} : { renamedFields }),
     version: input.version,
+    ...(visibility === undefined ? {} : { visibility }),
   };
   return deepFreeze(normalized);
 }
@@ -680,6 +692,7 @@ function normalizeRoutableSeo(
 function normalizeSeoDefaults(
   input: { readonly key: string; readonly seoDefaults?: unknown },
   fields: FieldMap,
+  visibility: FieldVisibility | undefined,
 ): SeoDefaultsDefinition | undefined {
   const option: unknown = input.seoDefaults;
   if (option === undefined) return undefined;
@@ -700,13 +713,27 @@ function normalizeSeoDefaults(
   if (mapping.siteName === undefined) {
     fail(`global "${input.key}" seoDefaults must name a siteName field.`);
   }
+  // A site default must always be delivered, so it cannot name a conditional field.
+  const unconditional = (option: string, key: string): string => {
+    if (visibility !== undefined && Object.hasOwn(visibility, key))
+      fail(`global "${input.key}" ${option} must not reference conditional field "${key}".`);
+    return key;
+  };
   const text = (name: string): string =>
-    seoFieldReference(input.key, `seoDefaults.${name}`, mapping[name], fields, false);
+    unconditional(
+      `seoDefaults.${name}`,
+      seoFieldReference(input.key, `seoDefaults.${name}`, mapping[name], fields, false),
+    );
   return {
     ...(mapping.description === undefined ? {} : { description: text("description") }),
     ...(mapping.image === undefined
       ? {}
-      : { image: seoFieldReference(input.key, "seoDefaults.image", mapping.image, fields, true) }),
+      : {
+          image: unconditional(
+            "seoDefaults.image",
+            seoFieldReference(input.key, "seoDefaults.image", mapping.image, fields, true),
+          ),
+        }),
     siteName: text("siteName"),
     ...(mapping.titleTemplate === undefined ? {} : { titleTemplate: text("titleTemplate") }),
   };
@@ -738,7 +765,11 @@ export function defineGlobal<const Fields extends FieldMap = FieldMap>(
       fail(`global "${input.key}" must not declare ${option}.`);
     }
   }
-  const seoDefaults = normalizeSeoDefaults(input, common.fields);
+  const seoDefaults = normalizeSeoDefaults(
+    input,
+    common.fields,
+    common.visibility as FieldVisibility | undefined,
+  );
   const definition: GlobalModelDefinition<Fields> = {
     ...common,
     kind: "global",

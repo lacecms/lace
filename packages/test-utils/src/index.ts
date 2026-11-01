@@ -131,7 +131,7 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { NormalizedContentModel } from "@lacecms/config";
-import type { InternalLinkReference, JsonValue } from "@lacecms/content";
+import type { FieldVisibility, InternalLinkReference, JsonValue } from "@lacecms/content";
 
 export const packageName = "@lacecms/test-utils";
 
@@ -910,6 +910,7 @@ export class InMemoryContentStore
               changes,
               snapshot.fields,
               snapshot.state,
+              currentModel?.visibility as FieldVisibility | undefined,
             );
             const kept = (nextReferences.get(snapshot.id) ?? []).filter(
               (reference) =>
