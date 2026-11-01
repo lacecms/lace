@@ -1339,6 +1339,13 @@ async function starterJourney(project) {
       images: [
         { media: "image-delivery-photo", link: "/gallery-destination" },
         { media: "image-delivery-transparent" },
+        {
+          kind: "video",
+          videoUrl: "https://youtu.be/dQw4w9WgXcQ",
+          videoTitle: "RC1 ambient gallery",
+          aspectRatio: "4:3",
+          playback: "ambient",
+        },
       ],
     },
     settings: { lightbox: true },
@@ -1347,6 +1354,7 @@ async function starterJourney(project) {
     LACE_BUILD_SITE_URL: siteUrl,
   });
   await verifyImageDelivery(project, optimized[0]);
+  await verifyListSettingsStarter(project, workspace, { gallery: true });
   const repeated = await build("image-delivery-starter-images-warm", imageExport, {
     LACE_BUILD_SITE_URL: siteUrl,
   });
@@ -2103,6 +2111,7 @@ async function listSettingsNodeJourney(context, session) {
   try {
     await listSettingsMcpProxyJourney({
       ...session,
+      workspace,
       base: tls.base,
       fetch: tls.fetch,
       project,

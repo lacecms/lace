@@ -19,5 +19,6 @@ LACE_EMAIL_FROM=Lace Dev <lace@localhost.test>
 # LACE_API_DOCS_ENABLED=true
 
 # Optional content assistant; apply database migrations before enabling.
-# MCP allows read/create/save-draft only; publishing and deletion are unavailable.
+# MCP allows read/create/save-draft; publishing needs separate content:publish consent.
+# Unpublishing and deletion remain unavailable.
 LACE_MCP_ENABLED=false

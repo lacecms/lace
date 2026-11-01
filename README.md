@@ -11,8 +11,8 @@ admin interface for everyday publishing. One installation manages one website.
 - Build a static Astro site through the SDK and customize block components you own.
 - Run on your own VPS with Node, SQLite and MinIO, or on Cloudflare Workers, D1 and R2.
 
-Lace is in **alpha**. Latest documentation tracks `main` and currently targets
-**0.1.0-alpha.6**; check [releases](https://github.com/lacecms/lace/releases) for
+Lace is **pre-release**. Latest documentation tracks `main` and currently targets
+**0.1.0-rc1**; check [releases](https://github.com/lacecms/lace/releases) for
 available artifacts and upgrade instructions.
 
 **[Read the documentation](https://lacecms.github.io/lace/en/latest/)** for setup,

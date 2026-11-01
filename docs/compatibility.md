@@ -1,15 +1,15 @@
 # Compatibility baseline
 
-The current preparation candidate is alpha.8 (`0.1.0-alpha.8`, ownership
-template `0.39.0`), on npm `next`. See
-[alpha.8 upgrade and rollback](#alpha-8-upgrade-and-rollback) and the
-[archived readiness handoff](../openspec/changes/archive/2026-10-30-prepare-alpha-eight-release/readiness.md).
+The current preparation candidate is rc1 (`0.1.0-rc1`, ownership template
+`0.46.0`), on npm `next`. See [rc1 upgrade and rollback](#rc1-upgrade-and-rollback).
 
-Read-only registry checks on 2026-10-29 confirmed alpha.7's original fifteen
-npm versions and both public image manifests; alpha.8's sixteen package versions
-and both image coordinates returned 404. Alpha.1–alpha.7 are recorded as
-published and immutable. Availability is not reservation or authenticated
-publishing rights; preparation does not publish or prove real deployment.
+Read-only checks on 2026-11-01 confirmed alpha.8's sixteen npm versions and both
+public two-platform image manifests, plus its published GitHub prerelease.
+Alpha.1–alpha.8 are published and immutable. All rc1 package/image coordinates
+and its GitHub tag/release returned 404; availability is not reservation or
+publishing rights. The dated evidence is retained in the
+[rc1 change](../openspec/changes/prepare-rc1-release/registry-preflight.json).
+Preparation does not publish or prove real deployment.
 
 ## Status
 
@@ -731,8 +731,8 @@ hrefs retain their existing grammars.
 
 ## Alpha 8 upgrade and rollback
 
-Alpha.8 (`0.1.0-alpha.8`, ownership template `0.39.0`) is the selected preparation
-candidate on npm `next`. It adds list presentation settings and compact media
+Alpha.8 (`0.1.0-alpha.8`, ownership template `0.39.0`) was the preparation
+candidate and is now published on npm `next`. It adds list presentation settings and compact media
 rows, YouTube/Vimeo embeds, internal URL links and Link blocks, configurable
 draft collection queries and optional OAuth MCP. Alpha.7 remains immutable;
 its original fifteen packages and both images were verified public on 2026-10-29.
@@ -848,3 +848,51 @@ optional, so customized copies must check `kind` and `media`. Template 0.45.0
 raises the starter model versions and ships the new component and stylesheet.
 Rollback after sync requires the pre-upgrade content backup with matching code
 and site sources.
+
+
+## Rc1 upgrade and rollback
+
+Rc1 (`0.1.0-rc1`, template `0.46.0`, npm `next`) ships the committed changes after
+alpha.8: video aspect ratios/ambient playback, optional MCP publication consent,
+media tags and multi-selection, content import, conditional fields, gallery video
+items and workspace/documentation hygiene. RC naming does not establish stable
+support or real VPS/Cloudflare deployment readiness.
+
+1. Back up matching database, media objects, `lace.config.ts`, site source,
+   package/lock files and deployment settings. Stop API/dispatchers before a Node
+   database backup; use the maintained D1 export/restore procedure for Cloudflare.
+2. Upgrade all Lace engine, CLI, SDK/render/Astro/site packages and both API and
+   builder images to `0.1.0-rc1` together. Reinstall using the project lockfile,
+   rebuild the Worker and merge user-owned site/deployment changes explicitly.
+3. Before starting the updated runtime, apply forward migrations
+   `0014_media_tags` and `0015_import_credentials`: the former adds tag storage;
+   the latter adds token expiry/creator and nullable media SHA-256. Neither
+   rewrites media objects. Use `pnpm db:migrate` for generated Compose projects;
+   Cloudflare uses the documented `lace db migrate --target cloudflare-remote`
+   operator procedure (or `pnpm cf:db:migrate` for stopped local simulation).
+4. Review installed components with `pnpm exec lace add block --all --site site`
+   (substitute the actual site path). Merge reported source conflicts without
+   overwriting edits. Gallery schema 5 supports image/video item kinds, accessible
+   video titles, per-item playback and aspect ratios; links and lightboxes remain
+   image-only. Upgrade matching components before synchronizing and rebuilding.
+5. Synchronize explicit model/block definitions using `pnpm content:sync` or the
+   selected Cloudflare operator target. Conditional visibility changes structure:
+   hidden draft values persist and remain validated, hidden fields are not
+   required and hidden values are omitted from published APIs/exports. Site types
+   must handle optional published values. Switching an item's kind retains draft
+   values; reverting to published cannot recover omitted hidden draft values.
+6. MCP stays disabled by default. Existing draft grants do not gain publishing:
+   `content:publish` requires separate explicit consent and current role authority.
+   The sixth tool is `publish_entry`; unpublication, deletion and media
+   administration remain forbidden. Revoke connections through account settings.
+   Import tokens are separate credentials with explicit scopes and optional
+   expiry; keep them in operator environment variables, never content packages.
+7. Verify tag persistence, multi-selection, sample import validation/repeat,
+   conditional publication and gallery rendering on the selected runtime before
+   publishing/rebuilding the site. Keep local acceptance distinct from a real
+   deployment check.
+
+Rollback requires matching backed-up database, media, configuration, source and
+compatible package/image versions. A package-only downgrade does not undo forward
+migrations or synchronized gallery/conditional schemas and can expose hidden
+values or reject content; do not promise an automatic downgrade.

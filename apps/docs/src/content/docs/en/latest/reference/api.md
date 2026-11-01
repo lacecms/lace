@@ -88,8 +88,9 @@ their independent published ordering and expose none of these field queries.
 `LACE_MCP_ENABLED=true` enables `/mcp` with OAuth code/S256, public client
 registration and explicit account consent. Discovery is at
 `/.well-known/oauth-protected-resource/mcp` and
-`/.well-known/oauth-authorization-server/api/auth`. Only model/list/get/create/save
-draft tools are available. Publishing, unpublishing and deletion are unavailable.
+`/.well-known/oauth-authorization-server/api/auth`. Model/list/get/create/save draft tools are available according to granted scopes.
+The separate `content:publish` scope adds `publish_entry` after explicit consent
+and current role authorization. Unpublishing and deletion remain unavailable.
 Use an OAuth-capable Streamable HTTP client; the tested protocol is `2025-11-25`.
-Scopes are `content:read`, `content:write` (including read) and `offline_access`
+Scopes are `content:read`, `content:write` (including read), `content:publish` and `offline_access`
 for refresh. Follow the client prompts through the existing sign-in form.

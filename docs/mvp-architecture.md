@@ -379,7 +379,7 @@ import it. Public sources live inside that application; all repository `docs/`
 materials remain maintained internal engineering documentation. The product
 README links to the public site and root `DEVELOPMENT.md` contributor guide.
 Documentation uses explicit locale/version routes, initially English/latest for
-alpha.7 following main, without changing CMS localization scope.
+rc1 following main, without changing CMS localization scope.
 
 ## 7. Generated user project
 
@@ -3690,12 +3690,18 @@ See [alpha.7 upgrade and rollback](./compatibility.md#alpha-7-upgrade-and-rollba
 for matching backups and source-component updates. Automatic database or content
 schema downgrade is not promised.
 
-The selected alpha.8 candidate packages accepted list presentation, video embeds,
+The published alpha.8 release packages list presentation, video embeds,
 internal URL links/export format 2, configurable collection queries and optional
-OAuth MCP. Upgrade engine/admin/site/builder together and apply migrations
-0010–0013; MCP stays disabled until explicitly activated after migration. Review
-installed source and matching backups as described in
-[alpha.8 upgrade and rollback](./compatibility.md#alpha-8-upgrade-and-rollback).
+OAuth MCP with migrations 0010–0013. It remains immutable.
+
+The selected rc1 candidate (`0.1.0-rc1`, ownership template `0.46.0`) includes all
+accepted changes after alpha.8: video presentation, separately consented MCP
+publishing, media tags/multi-selection, content import, conditional fields and
+gallery video items. Upgrade engine/admin/site/builder together, apply migrations
+0014–0015, review installed source and synchronize configuration including gallery
+schema 5. MCP stays optional; publishing requires the separate `content:publish`
+grant and current role authority, while unpublication and deletion remain
+forbidden. See [rc1 upgrade and rollback](./compatibility.md#rc1-upgrade-and-rollback).
 Preparation, publication and real deployment acceptance remain separate gates.
 
 Compatibility exists at three boundaries:
@@ -3820,8 +3826,8 @@ The implementation plan uses these resolved defaults:
   2026-10-14; public npm/image availability was verified read-only on 2026-10-16
   and alpha.5 is now recorded as published and immutable. Alpha.6 (template
   `0.30.0`) is also confirmed published and immutable. Alpha.7 (template
-  `0.35.0`) has verified public packages/images and remains immutable. The next selected
-  candidate is `0.1.0-alpha.8` (template `0.39.0`) on `next`; fresh artifact acceptance and
+  `0.35.0`) has verified public packages/images and remains immutable. Alpha.8 (template `0.39.0`) is verified published and immutable. The next selected
+  candidate is `0.1.0-rc1` (template `0.46.0`) on `next`; fresh artifact acceptance and
   owner-operated deployment checks remain distinct from historical alpha.4
   evidence. Beta/stable approval remains separate;
   `release/alpha.json` records the candidate and published versions. See [`alpha-release.md`](./alpha-release.md) for preparation and

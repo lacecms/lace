@@ -67,7 +67,7 @@ export async function templateUpgradeJourney(temporary, operations) {
       name,
       version: directory.slice("template-".length),
       flags: name === "cloudflare" ? ["--cloudflare"] : [],
-      conflict: "deploy/nginx.conf",
+      conflict: ".env.example",
     })),
   );
   for (const variant of variants) {

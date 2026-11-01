@@ -3,6 +3,15 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 0.1.0-rc1
+
+- Choose video aspect ratios and ambient playback, and mix images with accessible YouTube/Vimeo videos in galleries.
+- Organize media with tags and select several images at once.
+- Import content and media with scoped, expiring credentials, offline validation and repeatable publication.
+- Show fields conditionally while preserving hidden draft values and omitting them from published content.
+- Optionally grant MCP assistants separate publishing permission through explicit consent; unpublication and deletion remain unavailable.
+- Upgrade engine, site and builder together, apply migrations 0014–0015 and review gallery schema 5, conditional definitions and installed source before synchronization ([upgrade guide](docs/compatibility.md#rc1-upgrade-and-rollback)).
+
 ## 0.1.0-alpha.8
 
 - Configure reusable list layouts and compact media rows, and embed YouTube or Vimeo videos with optional image previews.

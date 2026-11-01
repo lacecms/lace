@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.22.0` and Lace `0.1.0-alpha.8` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.8` or a later compatible release. The npm alpha channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.46.0` and Lace `0.1.0-rc1` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.8` or a later compatible release. The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-alpha.8 my-site
+pnpm create lace@0.1.0-rc1 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -234,7 +234,7 @@ The web proxy serves the content-hashed files under `/_astro/` with `Cache-Contr
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-alpha.8` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-rc1` candidate artifacts.
 
 <!-- lace-site: starter -->
 
@@ -703,8 +703,9 @@ backfill, field-query index, persisted cursor state or bulk action is introduced
 
 ## Optional content assistant
 
-See [OAuth content assistant](lace-mcp.md) for opt-in deployment, the five draft
-tools, consent, connections, refresh/replay, proxy log redaction and disabling.
+See [OAuth content assistant](lace-mcp.md) for opt-in deployment, scoped draft
+tools and separately consented publishing, connections, refresh/replay, proxy log
+redaction and disabling. Unpublication and deletion remain forbidden.
 
 ## Media tags migration 0014
 
@@ -718,3 +719,21 @@ Tags are admin-only ASCII letters, digits and hyphens, lowercased with surroundi
 spaces trimmed; tags-only edits request no build. An older engine ignores the
 new table. Restore the pre-upgrade database backup to remove tags on rollback;
 do not delete media objects as part of tag rollback.
+
+## Rc1 upgrade
+
+This template selects rc1 packages and both images together. Before runtime
+startup apply migrations 0014_media_tags and 0015_import_credentials. Back up
+matching database, media, configuration, deployment settings and site source.
+Review installed block source and merge conflicts, then synchronize conditional
+field definitions and gallery schema 5 with matching renderers before rebuilding.
+Hidden draft values persist but are omitted from publication; site code handles
+optional published values. Gallery videos require accessible titles and support
+per-item aspect ratios/playback; links and lightboxes apply to images only.
+
+MCP stays optional. Existing draft grants do not acquire publication permission:
+content:publish needs separate consent and current role authority; unpublication
+and deletion remain forbidden. Import uses separate scoped, optionally expiring
+tokens kept outside content packages. Verify tags, multi-selection, imports and
+conditional/gallery rendering after upgrade. Rollback restores matching backed-up
+state; package downgrade does not reverse synchronized content or SQL migrations.

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { rc1MediaSelection } from "./rc1-media-selection.mjs";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 /** Consumer-owned configuration, applied before the generated runtime synchronizes. */
@@ -10,10 +11,12 @@ export async function configureListSettings(project) {
   const text = await readFile(path, "utf8");
   const anchor =
     'fields: { summary: field.text(), relatedUrl: field.url({ label: "Related page" }) },';
-  assert.ok(text.includes(anchor), "alpha.8 collection fixture anchor changed");
+  assert.ok(text.includes(anchor), "rc1 collection fixture anchor changed");
   const configured = text.replace(
     anchor,
-    `${anchor}\n      listOptions: { sortableFields: ["summary"], filterableFields: ["summary"], searchableFields: ["summary"] },`,
+    `fields: { summary: field.text(), relatedUrl: field.url({ label: "Related page" }), hasDetails: field.boolean({ label: "Show details", defaultValue: false }), conditionalNote: field.text({ label: "Conditional note", required: true }) },
+      visibility: { conditionalNote: { field: "hasDetails", values: [true] } },
+      listOptions: { sortableFields: ["summary"], filterableFields: ["summary"], searchableFields: ["summary"] },`,
   );
   await writeFile(path, configured);
   return { before: text, after: configured };
@@ -23,6 +26,8 @@ export async function configureListSettings(project) {
 export async function listSettingsMcpProxyJourney({
   base,
   project,
+  workspace,
+  png,
   email,
   password,
   buildToken,
@@ -61,7 +66,7 @@ export async function listSettingsMcpProxyJourney({
   };
   const ok = async (path, options) => {
     const result = await invoke(path, options);
-    assert.ok(result.response.ok, `alpha.8 ${path}: HTTP ${result.response.status}`);
+    assert.ok(result.response.ok, `rc1 ${path}: HTTP ${result.response.status}`);
     return result;
   };
   // The initial generated deployment must remain off until the operator opts in.
@@ -87,13 +92,13 @@ export async function listSettingsMcpProxyJourney({
   assert.equal(before.formatVersion, 2);
   const clients = [];
   try {
-    const authorize = async (write) => {
+    const authorize = async (write, publish = false) => {
       const registered = await ok("api/auth/oauth2/register", {
         method: "POST",
         json: {
-          client_name: `Alpha eight ${write ? "writer" : "reader"}`,
+          client_name: `RC1 ${publish ? "publisher" : write ? "writer" : "reader"}`,
           redirect_uris: [callback.href],
-          scope: "content:read content:write offline_access",
+          scope: "content:read content:write content:publish offline_access",
           application_type: "native",
         },
       });
@@ -104,7 +109,7 @@ export async function listSettingsMcpProxyJourney({
         response_type: "code",
         redirect_uri: callback.href,
         resource: `${origin}/mcp`,
-        scope: "content:read content:write offline_access",
+        scope: "content:read content:write content:publish offline_access",
         state: "list-settings-mcp-proxy",
         code_challenge: createHash("sha256").update(verifier).digest("base64url"),
         code_challenge_method: "S256",
@@ -118,7 +123,7 @@ export async function listSettingsMcpProxyJourney({
         json: {
           transaction: new URL(started.body.url).searchParams.get("mcpTransaction"),
           accept: true,
-          scope: `content:read ${write ? "content:write " : ""}offline_access`,
+          scope: `content:read ${publish ? "content:publish " : write ? "content:write " : ""}offline_access`,
         },
       });
       const code = new URL(consent.body.url).searchParams.get("code");
@@ -178,16 +183,18 @@ export async function listSettingsMcpProxyJourney({
       "save_draft",
     ]);
     const result = (value) => {
-      assert.ok(!value.isError, "alpha.8 tool returned an error");
+      assert.ok(!value.isError, "rc1 tool returned an error");
       return value.structuredContent;
     };
     result(await writer.client.callTool({ name: "list_content_models", arguments: {} }));
     const draft = {
       modelKey: "posts",
-      title: "Alpha eight assistant draft",
+      title: "RC1 assistant draft",
       slug: "list-settings-mcp-proxy-assistant",
       fields: {
         summary: "list-settings-mcp-proxy-query-value",
+        hasDetails: false,
+        conditionalNote: "Hidden rc1 draft value",
         relatedUrl: `entry:${encodeURIComponent(before.entries[0].id)}`,
       },
       blocks: [
@@ -196,7 +203,18 @@ export async function listSettingsMcpProxyJourney({
           type: "gallery",
           schemaVersion: 5,
           position: 1024,
-          data: { images: [] },
+          data: {
+            images: [
+              {
+                kind: "video",
+                videoUrl: "https://youtu.be/dQw4w9WgXcQ",
+                videoTitle: "RC1 gallery video",
+                aspectRatio: "4:3",
+                playback: "ambient",
+                link: "https://hidden-gallery.example/",
+              },
+            ],
+          },
           settings: { layoutMode: "flex-row" },
         },
         {
@@ -204,10 +222,16 @@ export async function listSettingsMcpProxyJourney({
           type: "videoEmbed",
           schemaVersion: 2,
           position: 2048,
-          data: { url: "https://youtu.be/dQw4w9WgXcQ", title: "Alpha eight video" },
+          data: { url: "https://youtu.be/dQw4w9WgXcQ", title: "RC1 video" },
         },
       ],
     };
+    const missing = result(
+      await writer.client.callTool({
+        name: "create_entry",
+        arguments: { ...draft, slug: "rc1-missing-visible-note", fields: { hasDetails: true } },
+      }),
+    );
     const created = result(
       await writer.client.callTool({ name: "create_entry", arguments: draft }),
     );
@@ -217,7 +241,7 @@ export async function listSettingsMcpProxyJourney({
         arguments: {
           entryId: created.id,
           expectedRevision: created.draft.revision,
-          title: "Alpha eight updated draft",
+          title: "RC1 updated draft",
           slug: draft.slug,
           fields: draft.fields,
           blocks: draft.blocks,
@@ -230,13 +254,14 @@ export async function listSettingsMcpProxyJourney({
       await writer.client.callTool({ name: "get_entry", arguments: { entryId: created.id } }),
     );
     assert.deepEqual(loaded, saved);
+    assert.equal(loaded.draft.fields.conditionalNote, "Hidden rc1 draft value");
     assert.equal(
       loaded.draft.blocks.find((block) => block.type === "gallery").settings.layoutMode,
       "flex-row",
     );
     assert.equal(
       loaded.draft.blocks.find((block) => block.type === "videoEmbed").data.title,
-      "Alpha eight video",
+      "RC1 video",
     );
     const queried = result(
       await writer.client.callTool({
@@ -264,8 +289,43 @@ export async function listSettingsMcpProxyJourney({
       assert.equal(denied.response.status, 403);
     }
     assert.deepEqual(await published(), before, "MCP draft changes altered the published export");
+    const publisher = await authorize(true, true);
+    assert.equal((await publisher.client.listTools()).tools.length, 6);
+    const required = await publisher.client.callTool({
+      name: "publish_entry",
+      arguments: { entryId: missing.id, expectedRevision: missing.draft.revision },
+    });
+    assert.equal(
+      required.isError,
+      true,
+      "visible conditional field must be required for publication",
+    );
+    const publishArgs = {
+      entryId: created.id,
+      expectedRevision: saved.draft.revision,
+      idempotencyKey: "rc1-publication-retry",
+    };
+    const publishedResult = result(
+      await publisher.client.callTool({ name: "publish_entry", arguments: publishArgs }),
+    );
+    assert.equal(publishedResult.publication, "published");
+    assert.deepEqual(
+      result(await publisher.client.callTool({ name: "publish_entry", arguments: publishArgs })),
+      { ...publishedResult, publication: "replayed", build: { status: "not-dispatched" } },
+    );
+    for (const name of ["unpublish_entry", "delete_entry"])
+      await assert.rejects(publisher.client.callTool({ name, arguments: { entryId: created.id } }));
+    const publicEntry = (await published()).entries.find((entry) => entry.id === created.id);
+    assert.ok(publicEntry);
+    assert.equal(publicEntry.fields.conditionalNote, undefined);
+    const video = publicEntry.blocks.find((block) => block.type === "gallery").data.images[0];
+    assert.equal(video.videoTitle, "RC1 gallery video");
+    assert.equal(video.link, undefined);
+    assert.equal(video.aspectRatio, "4:3");
+    assert.equal(video.playback, "ambient");
+    await rc1MediaSelection({ base, cookie, workspace, png, ok });
     const connections = (await ok("api/v1/account/mcp-connections")).body.items;
-    const owned = connections.find((item) => item.clientName === "Alpha eight writer");
+    const owned = connections.find((item) => item.clientName === "RC1 writer");
     assert.ok(owned);
     const revoked = await ok(`api/v1/account/mcp-connections/${owned.id}/revoke`, {
       method: "POST",
@@ -281,7 +341,7 @@ export async function listSettingsMcpProxyJourney({
     assert.equal(
       typeof invitation.body.link,
       "string",
-      "alpha.8 invitation fallback link unavailable; disable fixture email delivery",
+      "rc1 invitation fallback link unavailable; disable fixture email delivery",
     );
     const invitationToken = new URLSearchParams(new URL(invitation.body.link).hash.slice(1)).get(
       "token",
@@ -304,6 +364,7 @@ export async function listSettingsMcpProxyJourney({
       .join("; ");
     secretValues.add(cookie);
     await assert.rejects(authorize(true), /HTTP 403/);
+    await assert.rejects(authorize(true, true), /HTTP 403/);
     const viewer = await authorize(false);
     assert.equal((await viewer.client.listTools()).tools.length, 3);
     cookie = administratorCookie;
@@ -315,12 +376,12 @@ export async function listSettingsMcpProxyJourney({
     await Promise.all(clients.map((client) => client.close()));
   }
   console.info(
-    "Alpha eight saved consumer: default-off, OAuth/SDK scopes, draft queries, forbidden lifecycle, unchanged export and owned revocation passed",
+    "RC1 saved consumer: default-off, OAuth/SDK scopes, draft queries, forbidden lifecycle, unchanged export and owned revocation passed",
   );
 }
 
 /** Render and activate the installed video source, with provider traffic intercepted. */
-export async function verifyListSettingsStarter(project, workspace) {
+export async function verifyListSettingsStarter(project, workspace, { gallery = false } = {}) {
   const { createServer } = await import("node:http");
   const { resolve, extname } = await import("node:path");
   const { loadBrowser } = await import("../acceptance-browser.mjs");
@@ -351,6 +412,36 @@ export async function verifyListSettingsStarter(project, workspace) {
     await page.route(/https:\/\/(?:www\.youtube-nocookie\.com|player\.vimeo\.com)\//u, (route) =>
       route.fulfill({ contentType: "text/html", body: "<title>Intercepted provider</title>" }),
     );
+    if (gallery) {
+      await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
+      const video = page.locator(
+        '[data-lace-block-key="image-delivery-gallery"] [data-lace-video]',
+      );
+      await video
+        .locator(":scope > [data-lace-video-area] > iframe")
+        .waitFor({ state: "attached" });
+      assert.equal(await video.getAttribute("data-lace-aspect-ratio"), "4:3");
+      assert.equal(await video.getAttribute("data-lace-ambient"), "active");
+      const frame = video.locator(":scope > [data-lace-video-area] > iframe");
+      assert.equal(await frame.getAttribute("title"), "RC1 ambient gallery");
+      const url = new URL(await frame.getAttribute("src"));
+      assert.equal(url.hostname, "www.youtube-nocookie.com");
+      assert.equal(url.searchParams.get("autoplay"), "1");
+      assert.equal(url.searchParams.get("mute"), "1");
+      assert.equal(url.searchParams.get("loop"), "1");
+      assert.equal(await video.locator("dialog").count(), 0);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.reload();
+      await video
+        .locator(":scope > [data-lace-video-area] > iframe")
+        .waitFor({ state: "attached" });
+      assert.equal(await video.getAttribute("data-lace-ambient"), "fallback");
+      assert.notEqual(new URL(await frame.getAttribute("src")).searchParams.get("autoplay"), "1");
+      console.info(
+        "RC1 packed gallery: accessible ambient video, aspect ratio, image-only lightbox and reduced-motion fallback passed",
+      );
+      return;
+    }
     await page.goto(`http://127.0.0.1:${server.address().port}/blog/first-post/index.html`);
     const block = page.locator('[data-lace-block-key="about-vimeo"]');
     assert.equal(await block.locator("iframe").count(), 0);
@@ -380,7 +471,7 @@ export async function verifyListSettingsStarter(project, workspace) {
     await new Promise((done) => server.close(done));
   }
   console.info(
-    "Alpha eight packed starter: layout hooks, resolved/missing internal links and isolated video activation passed",
+    "RC1 packed starter: layout hooks, resolved/missing internal links and isolated video activation passed",
   );
 }
 

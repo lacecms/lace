@@ -15,6 +15,7 @@ export const RELEASE_GUIDES = [
 /** Minimum-only engine declarations; reproducibility pins live in packageManager, CI and images. */
 export const ENGINE_MINIMUMS = Object.freeze({ node: ">=24.12.0", pnpm: ">=12" });
 export const RELEASE_DOCKERFILES = ["apps/api/Dockerfile", "apps/builder/Dockerfile"];
+const RELEASE_VERSION = /^\d+\.\d+\.\d+-(?:alpha\.[1-9]\d*|rc[1-9]\d*)$/u;
 const COORDINATE =
   /(?:create[ -]lace@|@lacecms\/[a-z-]+@|ghcr\.io\/lacecms\/(?:api|builder):)(\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?)/gu;
 
@@ -77,7 +78,7 @@ export function validateReleaseModel(model, { templates = true } = {}) {
   const { definition: release, manifests } = model;
   if (
     release.schemaVersion !== 1 ||
-    !/^\d+\.\d+\.\d+-alpha\.\d+$/u.test(release.version) ||
+    !RELEASE_VERSION.test(release.version) ||
     release.generatorVersion !== release.version ||
     release.channel !== "next" ||
     !/^\d+\.\d+\.\d+$/u.test(release.templateVersion) ||
@@ -85,10 +86,10 @@ export function validateReleaseModel(model, { templates = true } = {}) {
     release.images.builder !== "ghcr.io/lacecms/builder" ||
     JSON.stringify(release.platforms) !== JSON.stringify(["linux/amd64", "linux/arm64"])
   )
-    throw new Error("Invalid alpha release coordinates/version/platforms");
+    throw new Error("Invalid prerelease coordinates/version/platforms");
   if (
     !Array.isArray(release.publishedVersions) ||
-    release.publishedVersions.some((version) => !/^\d+\.\d+\.\d+-alpha\.\d+$/u.test(version))
+    release.publishedVersions.some((version) => !RELEASE_VERSION.test(version))
   )
     throw new Error("Invalid published version record");
   if (release.publishedVersions.includes(release.version))

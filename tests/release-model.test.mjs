@@ -7,8 +7,9 @@ import {
 
 const repositoryRoot = new URL("..", import.meta.url).pathname;
 
-async function coherentModel() {
+async function coherentModel(version) {
   const model = await readReleaseModel(repositoryRoot);
+  if (version) model.definition.version = model.definition.generatorVersion = version;
   // The repository can sit between a recorded publication and the next
   // candidate selection; graph checks treat its coordinates as a candidate.
   model.definition.publishedVersions = model.definition.publishedVersions.filter(
@@ -73,6 +74,7 @@ test("published versions are recorded and cannot be prepared again", async () =>
     "0.1.0-alpha.5",
     "0.1.0-alpha.6",
     "0.1.0-alpha.7",
+    "0.1.0-alpha.8",
   ]);
   for (const version of [
     "0.1.0-alpha.2",
@@ -80,6 +82,7 @@ test("published versions are recorded and cannot be prepared again", async () =>
     "0.1.0-alpha.5",
     "0.1.0-alpha.6",
     "0.1.0-alpha.7",
+    "0.1.0-alpha.8",
   ]) {
     const model = await coherentModel();
     model.definition.publishedVersions = definition.publishedVersions;
@@ -176,4 +179,34 @@ test("published alpha.3 is immutable after the Cross-runtime candidate refresh",
   const model = await coherentModel();
   model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.3";
   expect(() => validateReleaseModel(model)).toThrow(/already published/u);
+});
+
+test.each(["0.1.0-alpha.8", "0.1.0-rc1", "0.1.0-rc12"])(
+  "accepts coherent prerelease %s without renaming",
+  async (version) => {
+    const model = await coherentModel(version);
+    expect(validateReleaseModel(model)).toHaveLength(16);
+    expect(model.definition.version).toBe(version);
+    expect(model.definition.channel).toBe("next");
+    if (version.includes("rc")) {
+      model.definition.publishedVersions.push(version);
+      expect(() => validateReleaseModel(model)).toThrow(`${version} is already published`);
+    }
+  },
+);
+
+test.each([
+  "0.1.0",
+  "0.1.0-rc.1",
+  "0.1.0-rc0",
+  "0.1.0-rc01",
+  "0.1.0-alpha.0",
+  "0.1.0-rc1+build",
+  "rc1",
+])("rejects invalid candidate and history version %s", async (version) => {
+  const candidate = await coherentModel(version);
+  expect(() => validateReleaseModel(candidate)).toThrow("Invalid prerelease");
+  const history = await coherentModel();
+  history.definition.publishedVersions.push(version);
+  expect(() => validateReleaseModel(history)).toThrow("Invalid published version");
 });
