@@ -524,7 +524,8 @@ test("packaged command emits one safe JSON or readable human report without conf
     } else expect(result.stdout).toContain("[fail] settings:");
     expect(result.stdout).not.toContain(sentinel);
   }
-});
+  // Two packaged processes, each loading the Node runtime and spawning pnpm.
+}, 30_000);
 
 async function siteProject(site, parentAstro = false) {
   const parent = await directory();
