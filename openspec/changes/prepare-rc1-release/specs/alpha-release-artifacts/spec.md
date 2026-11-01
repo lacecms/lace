@@ -34,11 +34,15 @@ Readiness SHALL require full workspace/root tests, MCP compatibility, root typec
 
 Saved-artifact acceptance SHALL exercise separately consented MCP publishing with current role/scope checks and denied publication without the grant; unpublication/deletion denial and revocation; persisted media tags and multi-selection; offline import validation, scoped import with publication and idempotent repeat; conditional requiredness, hidden draft preservation and public omission; gallery images/videos, accessible titles, playback/aspect ratios and safe rendering. Existing recovery, image/cache, internal-link/export and upgrade journeys SHALL remain covered. Upgrade guidance SHALL identify migrations 0014–0015, gallery schema 5, explicit configuration synchronization, coordinated dependencies/images/source adoption and backup-based rollback.
 
-Publication SHALL use only accepted saved bytes, publish all sixteen npm archives on `next`, verify both public two-platform GHCR manifests and then finalize `v0.1.0-rc1` as a GitHub prerelease with the four verified JSON assets and reviewed changelog. The tag SHALL select the artifact source commit. Failures SHALL retain recoverable artifacts/journals, report incomplete status and resume only matching missing publication; conflicting immutable artifacts SHALL never be overwritten.
+Preparation SHALL NOT publish npm packages, push images, create GitHub tags/drafts/releases, deploy remotely or delete historical release state. The handoff SHALL identify the exact saved bytes, source, evidence and commands for the owner's later publication of all sixteen archives on next, both public two-platform image manifests and the GitHub prerelease with four verified JSON assets. Missing publishing authentication SHALL be recorded as an owner prerequisite without preventing credential-free local preparation. The handoff SHALL describe matching-only resume, immutable conflict refusal and leaving latest unchanged, without claiming publication success.
 
-#### Scenario: Complete candidate released
-- **WHEN** all source gates, saved-artifact verification/acceptance and full registry publication succeed
-- **THEN** the verified GitHub prerelease names the exact source and exposes inventory, acceptance and complete npm/image reports without marking latest
+#### Scenario: Complete candidate prepared
+- **WHEN** source gates, both-platform preparation, independent verification and saved-artifact acceptance succeed
+- **THEN** the handoff identifies the exact ready inventory and acceptance evidence with owner publication and real-deployment prerequisites separate
+
+#### Scenario: Owner publishes later
+- **WHEN** the owner receives the prepared rc1 handoff
+- **THEN** it provides exact artifact-selection commands for npm, GHCR and GitHub while no live publication or tag creation has occurred during preparation
 
 #### Scenario: MCP authority differs from alpha eight
 - **WHEN** a saved Node or Worker consumer grants content:publish with explicit consent
@@ -48,9 +52,9 @@ Publication SHALL use only accepted saved bytes, publish all sixteen npm archive
 - **WHEN** a saved consumer exposes hidden conditional values publicly, loses draft values on toggling or renders unsafe gallery video content
 - **THEN** rc1 readiness remains incomplete and no success receipt or completed release is claimed
 
-#### Scenario: Partial publication or failed acceptance
-- **WHEN** a required check fails, publication is partial or remote identities cannot be verified
-- **THEN** finalization refuses, diagnostics are sanitized and saved artifacts remain available for recovery
+#### Scenario: Failed or incomplete preparation
+- **WHEN** a required source, platform, verification or acceptance check fails
+- **THEN** readiness remains incomplete, diagnostics are sanitized and saved attempts remain available for recovery without publication
 
 #### Scenario: Concurrent operation
 - **WHEN** preparation or publication already owns the selected artifact lock

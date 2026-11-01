@@ -62,8 +62,10 @@ Status values: `planned`, `proposed`, `in progress`, `done` (archived).
 
 The owner selected `0.1.0-rc1` on `next`, including every committed change after
 published alpha.8 through the reviewed shipping source. OpenSpec change
-`prepare-rc1-release` covers coherent coordinates, fresh acceptance, exact npm/
-GHCR/GitHub publication and then retirement of obsolete alpha.7 upgrade fixtures.
+`prepare-rc1-release` covers coherent coordinates, fresh acceptance and a handoff for owner-operated
+npm/GHCR/GitHub publication. The owner clarified that they will publish themselves;
+obsolete alpha.7 upgrade fixtures stay until a separate verified post-release
+follow-up.
 This release follows completed SM1–SM5 and RF1A/RF1B. Pending RF2–RF8 sessions
 retain their order and are neither included nor prerequisites for rc1. Publication
 and real deployment verification remain distinct; RC naming is not stable-release

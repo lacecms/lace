@@ -7,8 +7,13 @@ export const savedPositions = (count) =>
   Array.from({ length: count }, (_, index) => (index + 1) * 1000);
 
 /** `data-lace-block-key` values of rendered HTML, in document order. */
-export function renderedBlockKeys(html) {
-  return [...html.matchAll(/data-lace-block-key="([^"]+)"/gu)].map((match) => match[1]);
+export function renderedBlockKeys(html, entryId) {
+  return [...html.matchAll(/<[^>]*\bdata-lace-block-key="([^"]+)"[^>]*>/gu)]
+    .filter(
+      (match) =>
+        entryId === undefined || match[0].match(/\bdata-lace-entry="([^"]+)"/u)?.[1] === entryId,
+    )
+    .map((match) => match[1]);
 }
 
 /**
@@ -183,9 +188,9 @@ export async function blockOrderJourney(context, session, operations) {
         signal: AbortSignal.timeout(20_000),
       });
       const html = await served.text();
-      if (!served.ok || !same(renderedBlockKeys(html), expectedKeys))
+      if (!served.ok || !same(renderedBlockKeys(html, entryId), expectedKeys))
         throw new Error(
-          `${stage}: served release order differs from the displayed order (${served.status}: ${JSON.stringify(renderedBlockKeys(html))} vs ${JSON.stringify(expectedKeys)})`,
+          `${stage}: served release order differs from the displayed order (${served.status}: ${JSON.stringify(renderedBlockKeys(html, entryId))} vs ${JSON.stringify(expectedKeys)})`,
         );
       for (const value of expectedValues)
         if (!html.includes(value)) throw new Error(`${stage}: served release lacks "${value}"`);

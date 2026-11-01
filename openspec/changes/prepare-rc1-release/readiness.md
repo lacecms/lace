@@ -82,3 +82,73 @@ typecheck, lint, format check and strict change validation passed again. No
 runtime/package/schema contract changed and no audit exception was introduced.
 The failed directory and its status remain intact. Retry uses the distinct
 `.release-artifacts/rc1-r2` directory and a new clean pushed source revision.
+
+
+## Owner clarification: preparation only
+
+On 2026-11-01 the owner clarified that they will publish the release themselves.
+This apply ends at a verified local artifact set and exact publication commands.
+No npm upload, image push, GitHub tag/draft/release creation or post-release
+fixture retirement is authorized in this preparation. The observed npm E401 is
+therefore an owner prerequisite for a later publication, not a blocker to local
+readiness. Alpha.7 fixtures remain; their replacement/removal is a later requested
+follow-up after owner-confirmed rc1 publication. Planning artifacts and the
+roadmap checkpoint were reconciled with this clarification; immutable prepared
+bytes and source identity were not changed.
+
+
+## Saved rc1-r2 inventory
+
+Directory: `.release-artifacts/rc1-r2`. Independent `release:verify` passed.
+
+- Artifact source: `430661f6f27c5108facd6949fba711153068d7dc` (clean, publication-eligible).
+- Source fingerprint: `d03cb499f376216af0b1169df85bf4a38ca77ec3fc3e1292b36ce68ddf3fd581`.
+- [Inventory](../../../.release-artifacts/rc1-r2/inventory.json) SHA-256: `f837cfba99fa2e3deef87261787fe24a2e5692cfe619dd32955df90e0e375bfc`.
+- All sixteen archives and four platform images passed preparation inspection/smokes; exact-artifact acceptance is still running.
+
+| Package | Archive SHA-256 |
+| --- | --- |
+| @lacecms/content | `bd3449cecfae96d1029a9987293ea1c50b31918dc898a20415265f909893ce8b` |
+| @lacecms/config | `24f516893a2546051db407f7a911e537ed7fc7e628ee28121979bec9f627a5d9` |
+| @lacecms/domain | `dd4619d2adb067d3074403537462684aff6cd801f63c5b4d5493548a4c0d76a6` |
+| @lacecms/application | `632378f774b38400aada412dd7a576772fa41311392ee08fc34650fa0c42a472` |
+| @lacecms/render | `767938cfde88d44b7f8c58bf7a53f17de9db8eb168a4e8385b4be7c33c2212f2` |
+| @lacecms/contracts | `49eca44e2d4cc568e104ce109a7a00591d03e2eafce97d8674813cde4e9bc3fa` |
+| @lacecms/sdk | `fbee5c8f369889b40f571cfc34a25d6416eb72f56aba9adc4d5bd60f63974ad7` |
+| @lacecms/astro | `ed304625337fdc1b1ff124581945e920fd599a232809ae10ecf6ece9473f9366` |
+| @lacecms/auth | `26879a680d28b392a3d929274a8fdfe66ee45a164a0829f291c55177bee5edd7` |
+| @lacecms/db | `085590086d4565029f74fef88a2ea9d650911eec2160b165d27d279c725e5a19` |
+| @lacecms/mcp | `2985f2070bf4882b8d8442857d62d6bb3d4348cdbed0b8b398a8abf22b1a0479` |
+| @lacecms/server | `8acbe9d8391c80ed9075426f0d07296f5e4e3e0a5aff9e035eff3dba3488f089` |
+| @lacecms/platform-cloudflare | `61afc4cc7d7c38fc6412cd710714eb74b7d16483032fadbe21836b085a8d5044` |
+| @lacecms/platform-node | `1be6ba49c3fc04b072852c111115a168bcc7e92b427bc71e0f6313dfcafb98a2` |
+| @lacecms/cli | `4037b725b91c8f9b572f65fcdae936d62351b9efd1fb00806ebb6d54d49d2f3b` |
+| create-lace | `571f8377c58b677e72bc5e2d45b61dc204e9288dadbf3ae6b971efca721e9693` |
+
+Local image identifiers are not remote registry digests.
+
+| Image / platform | Local ID | Saved archive SHA-256 |
+| --- | --- | --- |
+| api / linux/amd64 | `sha256:9e33e48d81360c2b50724a87e7556eae37f410a4e02bc8150998528fe2da5818` | `cbc5a0d6009d5025c8adf8fb41bd3108de84825c95b6d3bed3adb8126906cf8d` |
+| builder / linux/amd64 | `sha256:2c33777b8c1c6a9c9df864feb68f54b5704e48605af03177e66a8c4701095bc8` | `b0a52c1c636ab2ff639e8f6063d0cae7e93388c534a81ace6d4cfa9efdc841a6` |
+| api / linux/arm64 | `sha256:82fa94fbc0f4e37307c71fd11ac179509416ee1dc415e348a2076a5d35d0df28` | `03c9d5713caceb522d303c79fc94ec16ad18a756a58e4b5c6a45776218e447a7` |
+| builder / linux/arm64 | `sha256:dd261d9376f5e17d73f7fda10a026aefa5268d3ae1dc90536da85e5197b07ee8` | `29d3c08d1396e7addf7e1357234227abe6c19fda03ec9979e6e4aeb063272b5e` |
+
+
+## Acceptance attempt 1: global navigation boundary
+
+The first exact-artifact run passed starter, Node setup/publication/import,
+security, Compose failure/retry/persistence, external-site and local Worker
+journeys, including the new Worker MCP publication/conditional/media multi-picker
+checks. It then stopped in the historical block-order journey: its whole-page
+key scan included the navigation global's `b1` block after the import sample had
+published navigation. Draft and build-export order matched the entry editor;
+this was a test-boundary mismatch, not evidence of a product ordering defect.
+
+The served-order check is now scoped by the shipped `data-lace-entry` hook and
+still checks every rendered block for the target entry. A focused regression
+covers navigation, reordered attributes, unscoped markup and an absent entry.
+No success receipt was written for the failed run; temporary services were
+stopped/removed. The saved source/packages/images stay unchanged. A fresh full
+run uses the same immutable inventory and a separately recorded reviewed harness
+revision; no partial run is substituted for a full acceptance receipt.

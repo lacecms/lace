@@ -13,6 +13,17 @@ test("block-order evidence reads the saved positions and rendered key order", ()
   ).toEqual(["b", "a"]);
 });
 
+test("served entry order excludes global navigation while retaining all entry blocks", () => {
+  const html =
+    '<nav data-lace-entry="navigation" data-lace-block-key="b1"></nav>' +
+    '<section data-lace-entry="post" data-lace-block-key="first"></section>' +
+    '<section data-lace-block-key="second" data-lace-entry="post"></section>' +
+    '<footer data-lace-block-key="unscoped"></footer>';
+  expect(renderedBlockKeys(html, "post")).toEqual(["first", "second"]);
+  expect(renderedBlockKeys(html, "navigation")).toEqual(["b1"]);
+  expect(renderedBlockKeys(html, "absent")).toEqual([]);
+});
+
 async function listen(server) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return `http://127.0.0.1:${server.address().port}/`;
