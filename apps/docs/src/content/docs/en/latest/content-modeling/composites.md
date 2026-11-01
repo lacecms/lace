@@ -40,6 +40,8 @@ const layout = {
 
 Attach this alongside the owner's `fields`. `sections` is the other mode. Groups and field lists must be nonempty, keys unique, and references immediate sibling fields without duplicates or paths. Unlisted fields follow in declaration order. Layout creates no new data objects or paths. System title/slug/SEO and standard block controls keep their established positions. Blocks can organize declared settings with `settingsLayout`.
 
+To ask for some fields only in some cases, such as an image or a video per list item, use [conditional fields](../conditional-fields/).
+
 Placeholders, item summaries and layout are presentation metadata: they need synchronization but do not require a structural model/block version bump or rewrite content. Older engines may reject these options, so upgrade matching packages before adoption and remove unsupported metadata before rolling back.
 
 ## Reusable list layouts
@@ -94,7 +96,7 @@ strings; changing options/defaults retains existing structural rules.
 See [Astro integration](../../astro-integration/) for the matching CSS contract and
 coordinated Gallery v4 upgrade.
 
-Block-level `settingsVisibility` is optional. It maps scalar setting keys to
+Block-level `settingsVisibility` is optional and only affects the settings panel; data fields use [conditional fields](../conditional-fields/). It maps scalar setting keys to
 `{ setting, values }`, where the controller is a required sibling select with a
 valid default and `values` is a nonempty unique subset of its options. Controllers
 cannot themselves be conditional; chains, cycles and recursive field conditions

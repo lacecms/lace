@@ -17,6 +17,12 @@ Add permitted blocks, duplicate, remove or reorder them. Block visibility, ancho
 
 Groups/lists can be created, collapsed and reordered. List items appear as compact rows that start collapsed; each row's actions menu offers Move up, Move down, Duplicate and Remove, and Duplicate makes an independent value copy. Keyboard drag uses Space to pick up/drop, arrows to move and Escape to cancel. Removing items remains possible when a size limit blocks growth.
 
+## Conditional fields
+
+Some fields apply only when another field selects them, for example a Video URL that appears when an item's Kind is Video. Changing that field shows and hides the dependent fields immediately, in each list item separately. Values you typed in a hidden field are kept: switch back and they reappear. Hidden values are saved with the draft but never published, and a hidden field is never required.
+
+If a hidden field holds a value that cannot be saved, such as an invalid URL, it stays shown with a note naming the field that controls it, so you can fix or clear it. A publication problem in a field that no longer applies disappears from the validation summary. Revert to published restores only published values, so it discards hidden draft values.
+
 ## Conflicts and deployment
 
 A revision conflict preserves your unsaved work. Use Copy my JSON before explicitly adopting the server draft; Reload server draft replaces local state. Do not repeatedly overwrite another editor's changes blindly.

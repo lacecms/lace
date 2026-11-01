@@ -28,7 +28,7 @@ Field builders include text, textarea, number, boolean, date, datetime, URL, sel
 
 Text counters count JavaScript UTF-16 units without trimming; SEO counters have their own trimmed/code-point rules. Do not truncate content silently to satisfy a UI counter.
 
-See [groups, lists and forms](composites/) and [configuration synchronization](synchronization/).
+See [groups, lists and forms](composites/), [conditional fields](conditional-fields/) and [configuration synchronization](synchronization/).
 
 ## Blocks and SEO
 

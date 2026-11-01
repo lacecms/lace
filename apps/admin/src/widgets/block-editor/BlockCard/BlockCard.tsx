@@ -17,11 +17,15 @@ import { flushSync } from "react-dom";
 import { useController, useWatch, type Control } from "react-hook-form";
 import { isBlockAnchor } from "@lacecms/content";
 import {
+  applicableErrors,
   blockLevelProblems,
   FieldRenderer,
   FieldLayout,
+  hiddenFieldNote,
   mediaAltPair,
   PUBLICATION_ISSUE_TYPE,
+  renderedFieldKeys,
+  shownFieldKeys,
   type DraftEditorValues,
 } from "../../../entities/content/index.js";
 import { useMediaItem } from "../../../entities/media/index.js";
@@ -86,6 +90,25 @@ function hasMessages(
   return Object.keys(keys).some((key) => has(entries[key]));
 }
 
+/**
+ * A block's errors without publication-only problems of data fields its
+ * current values hide; `undefined` when nothing remains.
+ */
+function applicableBlockErrors(
+  error: BlockErrors,
+  definition: BlockDefinitionDto,
+  data: unknown,
+): BlockErrors {
+  if (error?.data === undefined) return error;
+  const { data: stored, ...rest } = error;
+  const shown = applicableErrors(definition.fields, definition.visibility, data, stored) as
+    | Readonly<Record<string, unknown>>
+    | undefined;
+  const next =
+    shown === undefined || Object.keys(shown).length === 0 ? rest : { ...rest, data: shown };
+  return Object.keys(next).length === 0 ? undefined : next;
+}
+
 function TabProblemMarker({ shown }: { readonly shown: boolean }) {
   return shown ? (
     <>
@@ -108,7 +131,7 @@ export function BlockCard({
   collapsed,
   control,
   definition,
-  error,
+  error: storedError,
   index,
   linkBase,
   onActivate,
@@ -153,6 +176,7 @@ export function BlockCard({
   const afterClose = useRef<() => void>(undefined);
   const article = useRef<HTMLElement | null>(null);
   const data = useWatch({ control, name: `blocks.${index}.data` });
+  const error = applicableBlockErrors(storedError, definition, data);
   const anchor = useWatch({ control, name: `blocks.${index}.anchor` });
   const className = useWatch({ control, name: `blocks.${index}.className` });
   const hiddenField = useController({ control, name: `blocks.${index}.hidden` }).field;
@@ -186,6 +210,13 @@ export function BlockCard({
     element.addEventListener(REVEAL_CONTROL_EVENT, reveal);
     return () => element.removeEventListener(REVEAL_CONTROL_EVENT, reveal);
   }, []);
+  const shownKeys = shownFieldKeys(definition.fields, definition.visibility, data);
+  const renderedKeys = renderedFieldKeys(
+    definition.fields,
+    definition.visibility,
+    data,
+    error?.data,
+  );
   const contentFields = (
     <FieldLayout
       fields={definition.fields}
@@ -193,6 +224,7 @@ export function BlockCard({
       errors={error?.data}
       hiddenBlock={hiddenOnSite}
       label="Block content"
+      visibleKeys={renderedKeys}
       renderField={(fieldKey) => {
         const fieldDefinition = definition.fields[fieldKey]!;
         return fieldKey === "alt" && mediaKey !== undefined ? (
@@ -207,6 +239,11 @@ export function BlockCard({
           />
         ) : (
           <FieldRenderer
+            annotation={
+              shownKeys.has(fieldKey) || renderedKeys?.has(fieldKey) !== true
+                ? undefined
+                : hiddenFieldNote(definition.fields, definition.visibility, fieldKey)
+            }
             control={control}
             definition={fieldDefinition}
             error={controlError(error, "data", fieldKey, hiddenOnSite)}

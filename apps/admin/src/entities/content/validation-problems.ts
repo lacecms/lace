@@ -7,6 +7,7 @@ import { fieldLabel } from "./draft.js";
 import type { DraftEditorValues } from "./editor-form.js";
 import { fieldControlId } from "./field-types.js";
 import { SEO_CONTROLS } from "./seo.js";
+import { applicableErrors } from "./visibility.js";
 
 /** Where activating a validation problem moves focus. */
 export type ProblemTarget =
@@ -143,16 +144,20 @@ function recursiveProblems(
  * list, each block in order (block-level problems, content fields, then the
  * anchor, declared settings and CSS classes of its Settings tab), slug, model
  * fields, SEO values in card order, then issues the editor could not place.
- * Problems that do not block publication come last.
+ * Problems that do not block publication come last. Publication-only problems
+ * of conditional fields that the current values hide are left out.
  */
 export function validationProblems({
   blocks,
   errors,
+  fields: fieldValues = {},
   model,
   unmapped = [],
 }: {
   readonly blocks: readonly ContentBlockDto[];
   readonly errors: FieldErrors<DraftEditorValues>;
+  /** The entry's current model field values, which decide conditional fields. */
+  readonly fields?: Readonly<Record<string, unknown>>;
   readonly model: ContentModelDto;
   readonly unmapped?: readonly string[];
 }): ValidationProblem[] {
@@ -178,10 +183,15 @@ export function validationProblems({
       target: { kind: "blocks" },
     });
   for (const [index, block] of blocks.entries()) {
-    const error = blockErrors[index] as Readonly<Record<string, unknown>> | undefined;
+    let error = blockErrors[index] as Readonly<Record<string, unknown>> | undefined;
     if (error === undefined) continue;
     const definition = model.blockDefinitions?.find((item) => item.type === block.type);
     const fields = definition?.fields ?? {};
+    if (error.data !== undefined && definition !== undefined)
+      error = {
+        ...error,
+        data: applicableErrors(fields, definition.visibility, block.data, error.data),
+      };
     const settings = definition?.settings ?? {};
     const blockName = `${fieldLabel(block.type, definition?.label)} block ${index + 1}${
       block.hidden ? " (hidden)" : ""
@@ -250,7 +260,12 @@ export function validationProblems({
       message: slug,
       target: { id: "system-slug", kind: "control" },
     });
-  const fieldErrors = (errors.fields ?? {}) as Messages;
+  const fieldErrors = (applicableErrors(
+    model.fields,
+    model.visibility,
+    fieldValues,
+    errors.fields ?? {},
+  ) ?? {}) as Messages;
   for (const key of formFieldKeys(model.fields, model.layout)) {
     const field = model.fields[key]!;
     if (field.type === "group" || field.type === "list") {

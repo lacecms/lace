@@ -105,3 +105,54 @@ test("the preview leaf is the first present direct child with a preview", () => 
   expect(previewLeaf(galleryItem, { media: "m1" }, undefined)).toBeUndefined();
   expect(previewLeaf(link, { label: "Blog" }, previews)).toBeUndefined();
 });
+
+const mixedItem: FieldDefinition = {
+  fields: {
+    kind: { defaultValue: "image", options: ["image", "video"], required: true, type: "select" },
+    media: { required: true, type: "media" },
+    alt: { required: false, type: "text" },
+    videoUrl: { required: true, type: "url" },
+    videoTitle: { required: true, type: "text" },
+    caption: { required: false, type: "text" },
+  },
+  required: false,
+  type: "group",
+  visibility: {
+    media: { field: "kind", values: ["image"] },
+    alt: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+    videoTitle: { field: "kind", values: ["video"] },
+  },
+};
+
+test("hidden values never summarize or preview an item", () => {
+  const video = {
+    alt: "Stale alt",
+    caption: "Studio walk-through",
+    kind: "video",
+    media: "m1",
+    videoUrl: "https://vimeo.com/1",
+  };
+  expect(itemSummary(mixedItem, video, "caption")).toEqual({
+    media: false,
+    primary: "Studio walk-through",
+    secondary: "video",
+  });
+  expect(previewLeaf(mixedItem, video, previews)).toBeUndefined();
+  const image = { ...video, kind: "image" };
+  expect(itemSummary(mixedItem, image, "caption")).toMatchObject({ media: true });
+  expect(previewLeaf(mixedItem, image, previews)).toEqual({
+    definition: mixedItem.type === "group" ? mixedItem.fields.media : undefined,
+    key: "media",
+    value: "m1",
+  });
+});
+
+test("a hidden item label falls back to the shown fields", () => {
+  const summary = itemSummary(
+    mixedItem,
+    { kind: "image", videoTitle: "Old title", alt: "Sunset" },
+    "videoTitle",
+  );
+  expect(summary.primary).toBe("Sunset");
+});

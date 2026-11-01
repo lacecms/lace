@@ -1,5 +1,9 @@
 import { ImageOff } from "lucide-react";
-import { mediaAltPair, type FieldPreviewProps } from "../../../entities/content/index.js";
+import {
+  mediaAltPair,
+  shownFieldKeys,
+  type FieldPreviewProps,
+} from "../../../entities/content/index.js";
 import { MediaThumbnail, useMediaItem } from "../../../entities/media/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
@@ -33,7 +37,11 @@ export function MediaItemPreview({ value, group, children }: FieldPreviewProps) 
   }
   const groupValue = group?.value as Readonly<Record<string, unknown>> | undefined;
   const altShape = group !== undefined && mediaAltPair(group.definition.fields) !== undefined;
-  const noAlt = altShape && blank(groupValue?.alt) && item.alt === undefined;
+  // A hidden `alt` override does not apply, so only the media item's alt text counts.
+  const altShown =
+    group !== undefined &&
+    shownFieldKeys(group.definition.fields, group.definition.visibility, groupValue).has("alt");
+  const noAlt = altShape && (!altShown || blank(groupValue?.alt)) && item.alt === undefined;
   return children({
     detail: item.status === "active" ? mediaFacts(item) : "Marked for deletion",
     indicators: noAlt ? ["No alt"] : [],

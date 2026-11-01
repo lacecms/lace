@@ -141,6 +141,17 @@ blocks, tabs and disclosures. Required/minimum publication problems in hidden
 blocks retain their non-blocking treatment. During pending lifecycle requests,
 mutation controls are locked while disclosures remain usable.
 
+Conditional fields (SM5, [ADR 0018](adr/0018-conditional-fields.md)) are
+evaluated per occurrence: model fields, each present group value, each list
+item and each block's data read only their own controller, with its form value
+or else its declared default. Hidden targets stay mounted, so switching the
+controller back restores values, rich-text identity, media and nested list
+identity; saves submit hidden values unchanged. Collapsed row summaries,
+previews, the "No alt" indicator and block summaries read only shown fields,
+and a hidden `itemLabel` falls back to the shown fields. A list stays eligible
+for multi-select Add only when its single required media field is shown in the
+item's starting value; appended items carry the controller default.
+
 Save adopts the normalized response as the clean baseline. Failed requests and
 revision conflicts retain local values; Copy my JSON contains complete content,
 and Reload server draft explicitly adopts the server version. Discard and revert

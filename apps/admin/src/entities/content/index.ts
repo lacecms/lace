@@ -95,3 +95,9 @@ export {
   mediaListTarget,
   type MediaListTarget,
 } from "./media-list.js";
+export {
+  applicableErrors,
+  hiddenFieldNote,
+  renderedFieldKeys,
+  shownFieldKeys,
+} from "./visibility.js";

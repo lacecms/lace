@@ -1,6 +1,7 @@
 import { formFieldKeys } from "@lacecms/content";
 import { record } from "./composite-values.js";
 import type { FieldDefinition, FieldPreviewRegistry, ItemPreview } from "./field-types.js";
+import { shownFieldKeys } from "./visibility.js";
 
 /** Plain-text lines of a list item, before any leaf preview is applied. */
 export interface ItemSummary {
@@ -14,6 +15,15 @@ export interface ItemSummary {
 
 const clean = (text: string) => text.replace(/\s+/gu, " ").trim();
 
+/** The children of a group value that its rules show, as `[key, definition]` pairs. */
+function shownChildren(
+  definition: Extract<FieldDefinition, { type: "group" }>,
+  value: Record<string, unknown>,
+): [string, FieldDefinition][] {
+  const shown = shownFieldKeys(definition.fields, definition.visibility, value);
+  return Object.entries(definition.fields).filter(([key]) => shown.has(key));
+}
+
 function plainRichText(node: unknown): string {
   if (!record(node)) return "";
   if (typeof node.text === "string") return node.text;
@@ -23,7 +33,7 @@ function plainRichText(node: unknown): string {
 /** The useful text of one value with its priority: text, rich text, then URL/select. */
 function texts(definition: FieldDefinition, value: unknown): { priority: number; text: string }[] {
   if (definition.type === "group" && record(value))
-    return Object.entries(definition.fields).flatMap(([key, child]) => texts(child, value[key]));
+    return shownChildren(definition, value).flatMap(([key, child]) => texts(child, value[key]));
   if (definition.type === "list" && Array.isArray(value))
     return value.flatMap((item) => texts(definition.item, item));
   if (["text", "textarea", "url", "select"].includes(definition.type) && typeof value === "string")
@@ -49,7 +59,7 @@ function first(found: { priority: number; text: string }[]): string | undefined 
 function holdsMedia(definition: FieldDefinition, value: unknown): boolean {
   if (definition.type === "media") return typeof value === "string" && value !== "";
   if (definition.type === "group" && record(value))
-    return Object.entries(definition.fields).some(([key, child]) => holdsMedia(child, value[key]));
+    return shownChildren(definition, value).some(([key, child]) => holdsMedia(child, value[key]));
   if (definition.type === "list" && Array.isArray(value))
     return value.some((item) => holdsMedia(definition.item, item));
   return false;
@@ -66,14 +76,24 @@ export function itemSummary(
   itemLabel?: string,
 ): ItemSummary {
   const media = holdsMedia(definition, value);
+  // A hidden item label falls back to the summary of the shown fields.
+  const shown =
+    definition.type === "group" && record(value)
+      ? new Set(shownChildren(definition, value).map(([key]) => key))
+      : undefined;
   const labelled =
-    itemLabel && record(value) && typeof value[itemLabel] === "string"
+    itemLabel &&
+    record(value) &&
+    shown?.has(itemLabel) !== false &&
+    typeof value[itemLabel] === "string"
       ? clean(value[itemLabel])
       : "";
   const primary = labelled || first(texts(definition, value));
   if (primary === undefined || definition.type !== "group" || !record(value))
     return { media, primary };
-  const ordered = formFieldKeys(definition.fields, definition.layout);
+  const ordered = formFieldKeys(definition.fields, definition.layout).filter((key) =>
+    shown!.has(key),
+  );
   const source = labelled
     ? itemLabel
     : ordered.find((key) =>
@@ -101,7 +121,9 @@ export function previewLeaf(
   | { readonly key: string; readonly definition: FieldDefinition; readonly value: unknown }
   | undefined {
   if (!previews || definition.type !== "group" || !record(value)) return undefined;
+  const shown = shownFieldKeys(definition.fields, definition.visibility, value);
   for (const key of formFieldKeys(definition.fields, definition.layout)) {
+    if (!shown.has(key)) continue;
     const child = definition.fields[key]!;
     if (previews[child.type] && present(value[key]))
       return { key, definition: child, value: value[key] };

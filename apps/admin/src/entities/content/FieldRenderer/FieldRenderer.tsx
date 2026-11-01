@@ -67,6 +67,13 @@ import {
 import { builtInRenderers, groupedFieldTypes } from "../FieldControls/index.js";
 import { itemSummary as summarize, previewLeaf, rowLines } from "../item-summary.js";
 import {
+  applicableErrors,
+  applicableValueErrors,
+  hiddenFieldNote,
+  renderedFieldKeys,
+  shownFieldKeys,
+} from "../visibility.js";
+import {
   mediaIdsInList,
   mediaListCapacity,
   mediaListItems,
@@ -388,9 +395,27 @@ function ValueNode(props: NodeProps) {
           ? error
           : `${error} Required for publication only.`
       : error;
-  if (definition.type === "list") return <ListNode {...props} definition={definition} />;
+  if (definition.type === "list")
+    return annotation ? (
+      <div className="grid min-w-0 gap-1">
+        <small className="text-xs text-muted-foreground">{annotation}</small>
+        <ListNode {...props} definition={definition} />
+      </div>
+    ) : (
+      <ListNode {...props} definition={definition} />
+    );
   if (definition.type === "group") {
     const present = record(value);
+    // Problems this value's rules make reachable; hidden targets with draft problems stay shown.
+    const shownErrors = (
+      present ? applicableErrors(definition.fields, definition.visibility, value, errors) : errors
+    ) as Errors | undefined;
+    const shownKeys = present
+      ? shownFieldKeys(definition.fields, definition.visibility, value)
+      : undefined;
+    const renderedKeys = present
+      ? renderedFieldKeys(definition.fields, definition.visibility, value, shownErrors)
+      : undefined;
     const candidate = fieldStartingValue(definition, {});
     const createProblem = growthProblem(name, candidate);
     const clearProblem = growthProblem(name, null);
@@ -418,16 +443,22 @@ function ValueNode(props: NodeProps) {
             fields={definition.fields}
             layout={definition.layout}
             label={label}
-            errors={errors}
+            errors={shownErrors}
             hiddenBlock={hidden}
+            visibleKeys={renderedKeys}
             renderField={(key) => {
               const child = definition.fields[key]!;
               return (
                 <ValueNode
+                  annotation={
+                    shownKeys?.has(key) === false && renderedKeys?.has(key) === true
+                      ? hiddenFieldNote(definition.fields, definition.visibility, key)
+                      : undefined
+                  }
                   definition={child}
                   errors={
-                    errors?.[key] !== null && typeof errors?.[key] === "object"
-                      ? (errors[key] as Errors)
+                    shownErrors?.[key] !== null && typeof shownErrors?.[key] === "object"
+                      ? (shownErrors[key] as Errors)
                       : undefined
                   }
                   fieldKey={key}
@@ -472,7 +503,7 @@ function ValueNode(props: NodeProps) {
         description={definition.description}
         guidance={fieldGuidance(definition)}
         required={definition.required}
-        error={errors}
+        error={shownErrors}
         id={id}
         label={label}
         suffix={
@@ -804,6 +835,8 @@ function ListNode(
   props: NodeProps & { readonly definition: Extract<FieldDefinition, { type: "list" }> },
 ) {
   const { definition, name, fieldKey, value, onChange, onBlur, errors, onErrors } = props;
+  // Indicators count only problems the items' rules make reachable; moves keep every error.
+  const shownErrors = applicableValueErrors(definition, value, errors) as Errors | undefined;
   const {
     readOnly,
     busy,
@@ -993,7 +1026,7 @@ function ListNode(
             {list.length} / {maximum}
           </span>
         ) : null}
-        {hasProblems(errors) ? (
+        {hasProblems(shownErrors) ? (
           <span className="text-xs text-destructive">Has problems</span>
         ) : null}
         <span className="flex-1" />
@@ -1056,7 +1089,7 @@ function ListNode(
           <small
             className={cn(
               "basis-full text-xs text-muted-foreground",
-              !readOnly && !hasProblems(errors) && "sr-only",
+              !readOnly && !hasProblems(shownErrors) && "sr-only",
             )}
             id={`${id}:guidance`}
           >
@@ -1241,7 +1274,7 @@ function ListNode(
                         onReveal={() => flushSync(() => toggle(token, true))}
                         onToggle={() => toggle(token)}
                         open={open.has(token)}
-                        problems={hasProblems(errors?.[index])}
+                        problems={hasProblems(shownErrors?.[index])}
                         readOnly={readOnly}
                         summary={
                           <ItemSummaryLine

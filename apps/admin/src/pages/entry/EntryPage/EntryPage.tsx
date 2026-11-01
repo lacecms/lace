@@ -8,25 +8,29 @@ import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/
 import { getRouteApi, useBlocker } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
 import type { ContractValidationIssue } from "@lacecms/contracts";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { ulid } from "ulid";
 import {
+  applicableErrors,
   createDraftResolver,
   draftValues,
   FieldRenderer,
   FieldLayout,
   EntryListBudget,
   FieldRendererProvider,
+  hiddenFieldNote,
   issueLocation,
   localDraftJson,
   orderedDraftBlocks,
   locationField,
   PUBLICATION_ISSUE_TYPE,
+  renderedFieldKeys,
   resolvedPublicPath,
   seoDefaultsAnnotation,
   siteUrlFor,
   seoInput,
   serverIssueMessage,
+  shownFieldKeys,
   suggestSlug,
   useSeoDefaults,
   validationProblems,
@@ -120,6 +124,8 @@ export function EntryPage() {
       ? {}
       : { resolver: createDraftResolver(model, () => [...transient.current.values()]) }),
   });
+  // Model fields decide which conditional fields apply.
+  const fieldValues = useWatch({ control: form.control, name: "fields" });
   const [summaryShown, setSummaryShown] = useState(false);
   const [unmappedIssues, setUnmappedIssues] = useState<readonly string[]>([]);
   const summaryRef = useRef<HTMLElement>(null);
@@ -334,9 +340,19 @@ export function EntryPage() {
       />
     );
 
-  const errors = form.formState.errors.fields as
-    | Record<string, { readonly message?: string }>
-    | undefined;
+  const errors = applicableErrors(
+    model.fields,
+    model.visibility,
+    fieldValues,
+    form.formState.errors.fields,
+  ) as Record<string, { readonly message?: string }> | undefined;
+  const shownModelFields = shownFieldKeys(model.fields, model.visibility, fieldValues);
+  const renderedModelFields = renderedFieldKeys(
+    model.fields,
+    model.visibility,
+    fieldValues,
+    errors,
+  );
   const blockErrors = form.formState.errors.blocks as
     | Record<string, Record<string, unknown>>
     | undefined;
@@ -418,6 +434,7 @@ export function EntryPage() {
         // Errors change with every revalidation, which re-renders the page.
         blocks: form.getValues("blocks"),
         errors: form.formState.errors,
+        fields: form.getValues("fields"),
         model,
         unmapped: unmappedIssues,
       })
@@ -689,11 +706,16 @@ export function EntryPage() {
                       layout={model.layout}
                       errors={errors}
                       label="Entry fields"
+                      visibleKeys={renderedModelFields}
                       renderField={(key) => {
                         const definition = model.fields[key]!;
                         return (
                           <FieldRenderer
-                            annotation={seoDefaultsAnnotation(model, key)}
+                            annotation={
+                              shownModelFields.has(key) || renderedModelFields?.has(key) !== true
+                                ? seoDefaultsAnnotation(model, key)
+                                : hiddenFieldNote(model.fields, model.visibility, key)
+                            }
                             control={form.control}
                             definition={definition}
                             error={errors?.[key]?.message}

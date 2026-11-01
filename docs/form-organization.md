@@ -59,6 +59,15 @@ controls without editing values. Existing SEO and block Content/Settings tabs
 retain their behavior; `settingsLayout` arranges only declared settings inside
 Settings.
 
+Conditional fields reuse the same mounted panels. A section or tab whose
+fields are all hidden by `visibility` rules is hidden, and the selection moves
+to the first tab with a shown field. A hidden field that still holds a draft
+problem stays shown with the note "Shown to fix a problem in a stored value.
+Applies when <controller> is <values>."; publication-only problems of hidden
+fields are dropped from the field, tab and section indicators, block cards and
+the validation summary until the field applies again. Block settings keep the
+LIST2 `settingsVisibility` behavior.
+
 Adding, editing or removing layout needs no model/block version increase,
 content rewrite or database migration. It changes projection identity only.
 Configuration synchronization follows the existing public-metadata rule:

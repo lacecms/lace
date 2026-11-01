@@ -1,5 +1,6 @@
 import type { FieldDefinition } from "@lacecms/content";
 import { draftItemValue, fieldStartingValue, record } from "./composite-values.js";
+import { shownFieldKeys } from "./visibility.js";
 
 /**
  * Where an eligible media list keeps the media of each item: the item itself
@@ -12,7 +13,8 @@ export interface MediaListTarget {
 /**
  * Whether a list's items can be added from the media picker in multiple mode:
  * a media item, or a group item with exactly one direct media field that is
- * required. Any other item keeps the ordinary Add.
+ * required and shown in the starting value Add would use. Any other item keeps
+ * the ordinary Add.
  */
 export function mediaListTarget(item: FieldDefinition): MediaListTarget | undefined {
   if (item.type === "media") return {};
@@ -20,7 +22,9 @@ export function mediaListTarget(item: FieldDefinition): MediaListTarget | undefi
   const media = Object.entries(item.fields).filter(([, child]) => child.type === "media");
   if (media.length !== 1) return undefined;
   const [key, child] = media[0]!;
-  return child.required === true ? { key } : undefined;
+  if (child.required !== true) return undefined;
+  const initial = draftItemValue(item) ?? fieldStartingValue(item, {});
+  return shownFieldKeys(item.fields, item.visibility, initial).has(key) ? { key } : undefined;
 }
 
 /**

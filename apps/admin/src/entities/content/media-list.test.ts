@@ -143,3 +143,25 @@ test("an exact budget boundary is allowed", () => {
     mediaListCapacity({ fits: fitsWithin(100), item: media, list, maximum: 100, target: {} }),
   ).toEqual({ capacity: 2, cause: "list" });
 });
+
+test("a conditional media field is eligible only when its default shows it", () => {
+  const item = (defaultValue: "image" | "video") =>
+    field.group({
+      fields: {
+        kind: field.select({ defaultValue, options: ["image", "video"], required: true }),
+        media: field.media({ required: true }),
+        videoUrl: field.url({ required: true }),
+      },
+      visibility: {
+        media: { field: "kind", values: ["image"] },
+        videoUrl: { field: "kind", values: ["video"] },
+      },
+    });
+  const eligible = item("image");
+  expect(mediaListTarget(eligible)).toEqual({ key: "media" });
+  expect(mediaListItems(eligible, { key: "media" }, ["a", "b"])).toEqual([
+    { kind: "image", media: "a" },
+    { kind: "image", media: "b" },
+  ]);
+  expect(mediaListTarget(item("video"))).toBeUndefined();
+});

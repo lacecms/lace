@@ -81,7 +81,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | SM2 | MCP publication scope | S | SM2 | done |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | done |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | done |
-| SM5 | Conditional fields | L | SM5A → SM5B → SM5C | in progress |
+| SM5 | Conditional fields | L | SM5A → SM5B → SM5C → SM5D | in progress |
 
 **Order rationale:** SM1 and SM2 are small and independent; SM1 unblocks the
 portfolio site first. SM3 comes before SM4 so the import format can assign
@@ -291,9 +291,9 @@ planning and resume; integration test against a Node API.
 
 ## Step SM5 — Conditional fields
 
-**Status:** in progress (SM5A and SM5B done; SM5C planned).
+**Status:** in progress (SM5A, SM5B and SM5C done; SM5D planned).
 
-**Size:** L (three sessions). Lifts the CE9 exclusion of conditional
+**Size:** L (four sessions). Lifts the CE9 exclusion of conditional
 visibility.
 
 **What:** a field is shown, required and delivered only when a sibling
@@ -338,12 +338,37 @@ field; block `settingsVisibility` is unchanged. See
 
 ### Session SM5C — Admin forms and documentation
 
+**Status:** done (archived). Implementation verified, 16/16 tasks; three capability deltas synchronized.
+
 - Generic forms show and hide fields reactively in models, groups, list items
   and block data, preserving editor state and hidden draft values.
 - Validation summaries list only reachable errors and reveal the right
   section, tab or list item.
-- Documentation and one shipped example; decide whether block
-  `settingsVisibility` stays separate or later converges on the same rule.
+- Collapsed rows, block summaries and previews use applicable values only;
+  media-list multi-select Add requires the media field to be visible by
+  default.
+- Documentation; decide whether block `settingsVisibility` stays separate or
+  later converges on the same rule (proposed: stays separate).
+
+The shipped example moved to SM5D (owner decision 2026-11-01).
+
+### Session SM5D — Gallery video items
+
+Shipped example of conditional fields in the starter blocks.
+
+- Built-in `gallery` v5: each item has a required select `kind` (`image`,
+  `video`, default `image`); `media`, `alt` and `link` apply to images;
+  `videoUrl` (YouTube or Vimeo), a required accessible title, `playback`
+  (`player`, `ambient`) and `aspectRatio` apply to videos; `caption` applies
+  to both. Identity migration: existing items default to `image`.
+- No separate video poster, so the `images` list stays eligible for
+  multi-select Add; appended items carry `kind: "image"`.
+- Registry `GalleryBlock.astro` renders video items in their cell with the
+  `videoEmbed` playback behavior (ambient, reduced motion, no-JS fallback);
+  the lightbox covers images only.
+- Collapsed video rows show the provider and title without "No alt".
+- Registry revision, template version and upgrade instructions; copied
+  gallery components must narrow `item.media` by `kind`.
 
 **Architecture and specs:** §8 field types and limits, §9.3 snapshots, §10
 publication; `field-descriptors`, `content-validation`,
@@ -388,3 +413,7 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM5B | `sm05b-conditional-field-delivery` | Proposed. Use case computes the published projection (fields, every block's data, media and internal-link references) and passes it on `PublishContentEntryCommand.projection` when the model or a draft block declares rules; Node and D1 write it in the existing guarded publication and guard links from the supplied rows; unopted entries keep the SQL copy. Draft link rows mark hidden links undelivered; render projects parsed block data; published value types make targets optional; MCP/OpenAPI/import guidance. 21 tasks. |
 | 2026-11-01 | SM5B | `sm05b-conditional-field-delivery` | Implemented and verified, 21/21 tasks. Publication writes the projection of fields, every block's data and their media/link references on Node SQLite, D1 and the in-memory store (copy path kept for unopted content); atomic link guard over projected rows; hidden media are draft usage only; draft link rows mark hidden links undelivered; render projects parsed block data; `BlockDataValues`/`ModelFieldValues`/`BlockDataOf` make targets optional; MCP, OpenAPI, MCP and import docs. Package and repository contract tests (SQLite 209, D1 104 cases), cross-runtime 7/7, D1 budgets, root format/lint/typecheck/test/build (pinned Node 24.12.0), starter and existing-site acceptance, docs, OpenAPI and OpenSpec checks pass. Awaiting explicit archive. |
 | 2026-11-01 | SM5B | `sm05b-conditional-field-delivery` | Archived at `openspec/changes/archive/2026-11-01-sm05b-conditional-field-delivery`; deltas synchronized into main specs: `conditional-fields` (5 added), `content-repository-contracts`, `mcp-content-server`, `render-core` (1 added each) and `rest-contracts` (1 modified). SM5C remains planned. |
+| 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | Proposed. Owner decisions: the shipped example (gallery video items) moves to a new Session SM5D; SM5 becomes four sessions. Admin-only: rules evaluated with the shared `isFieldVisible` over effective form values; hidden targets stay mounted through `FieldLayout.visibleKeys` in model fields, groups/list items and block data; publication-only issues under hidden targets filtered at read time, hidden draft problems keep the field shown with a controller note; summaries, previews and media-list eligibility use shown keys; `settingsVisibility` stays separate (proposed). Public *Conditional fields* page. No API, schema or template change. 16 tasks, not applied. |
+| 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | In progress. Applying reactive admin forms, reachable problems, applicable summaries and documentation. |
+| 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | Implemented and verified, 16/16 tasks. Shared `isFieldVisible` over effective form values in model fields, groups/list items and block data through `FieldLayout.visibleKeys`; hidden targets stay mounted and keep values; publication-only issues under hidden targets filtered at read time (fields, rows, tabs, block cards, summary), hidden draft problems shown with a controller note; summaries, previews, "No alt" and media-list eligibility use shown keys; `settingsVisibility` stays separate (ADR 0018). Public *Conditional fields* page and editing notes. Admin unit 975, new e2e 6/6 with axe at 320 px, root format/lint/typecheck/test (pinned Node 24.12.0), build, docs, OpenAPI and OpenSpec checks pass. Pre-existing: composites pointer-drag e2e. Awaiting explicit archive. |
+| 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | Archived at `openspec/changes/archive/2026-11-01-sm05c-conditional-field-admin-forms`; deltas synchronized into main specs: `admin-draft-editor` (3 added, 1 modified), `conditional-fields` (2 added) and `public-documentation` (1 added). SM5D remains planned. |

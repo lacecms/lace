@@ -10,8 +10,8 @@ remain authoritative; public prose does not replace them.
 | Public section | Internal references and acceptance sources |
 | --- | --- |
 | Getting started | personal-site-guide.md, compatibility.md, generated README/Compose guides |
-| Content modeling | node-api.md, configuration-synchronization.md, composite-fields.md, field-guidance.md, form-organization.md, model/SEO/block specs |
-| Editing content | rich-text-authoring.md, content-import.md (import guide, sample package), CLI README, admin/media/account and content-import-cli specs |
+| Content modeling | node-api.md, configuration-synchronization.md, composite-fields.md, field-guidance.md, form-organization.md, ADR 0018 and conditional-fields spec (conditional fields page), model/SEO/block specs |
+| Editing content | rich-text-authoring.md, content-import.md (import guide, sample package), composite-fields.md and form-organization.md (conditional fields in the editor), CLI README, admin/media/account and content-import-cli specs |
 | Astro integration | site-styling.md (including video embed activation and provider smoke checks), generated lace-astro-site.md, SDK/render/block-installation specs |
 | Deployment | cloudflare-worker.md, cloudflare-deployment-handoff.md, generated Compose/Cloudflare guides |
 | Operations | auth-operations.md, database-migrations.md, compatibility.md, generated lace-operations.md |

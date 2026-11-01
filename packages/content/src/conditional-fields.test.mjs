@@ -481,3 +481,67 @@ describe("internal links inside hidden targets", () => {
     ]);
   });
 });
+
+describe("public documentation example", () => {
+  // Mirrors the `portfolio` block on apps/docs content-modeling/conditional-fields.md.
+  const portfolio = () =>
+    defineBlock({
+      type: "portfolio",
+      version: 1,
+      label: "Portfolio",
+      fields: {
+        items: field.list({
+          label: "Items",
+          itemLabel: "caption",
+          maxItems: 50,
+          item: field.group({
+            fields: {
+              kind: field.select({
+                label: "Kind",
+                options: ["image", "video"],
+                defaultValue: "image",
+                required: true,
+              }),
+              media: field.media({ label: "Image", required: true }),
+              alt: field.text({ label: "Alt text" }),
+              videoUrl: field.url({
+                label: "Video URL",
+                required: true,
+                embedProviders: ["youtube", "vimeo"],
+              }),
+              videoTitle: field.text({ label: "Video title", required: true }),
+              caption: field.text({ label: "Caption" }),
+            },
+            visibility: {
+              media: { field: "kind", values: ["image"] },
+              alt: { field: "kind", values: ["image"] },
+              videoUrl: { field: "kind", values: ["video"] },
+              videoTitle: { field: "kind", values: ["video"] },
+            },
+          }),
+        }),
+      },
+    });
+
+  it("loads, publishes each kind and omits hidden values", () => {
+    const block = portfolio();
+    defineBlockRegistry([block]);
+    expect(JSON.parse(JSON.stringify(toBlockMetadata(block)))).toEqual(toBlockMetadata(block));
+    const data = validateBlockData(
+      block,
+      {
+        items: [
+          { media: MEDIA, videoUrl: "https://vimeo.com/1", caption: "Photo" },
+          { kind: "video", videoUrl: "https://vimeo.com/2", videoTitle: "Clip", alt: "Stale" },
+        ],
+      },
+      "published",
+    );
+    expect(publishedBlockData(block, data)).toEqual({
+      items: [
+        { kind: "image", media: MEDIA, caption: "Photo" },
+        { kind: "video", videoUrl: "https://vimeo.com/2", videoTitle: "Clip" },
+      ],
+    });
+  });
+});

@@ -1,6 +1,6 @@
 # ADR 0018: Conditional fields
 
-- Status: accepted; SM5A and SM5B implemented, SM5C builds on it
+- Status: accepted; SM5A, SM5B and SM5C implemented
 - Date: 2026-11-01
 
 ## Context
@@ -50,7 +50,23 @@ sync behavior. SM5B applies the projection to publication and delivery: the
 publish use case computes the projected fields, block data and their media and
 internal-link references, and the guarded atomic publication writes them when
 the model or a draft block declares rules; render removes hidden block data and
-published value types make targets optional. SM5C adds admin show/hide.
+published value types make targets optional.
+
+SM5C makes the admin present the rules without enforcing them. Each form
+owner (model fields, group values including every list item, block data)
+evaluates its own controller with the shared evaluator over effective form
+values (the form value, else the declared default). Hidden targets stay
+mounted and keep their values, so switching back restores them and saves
+submit them unchanged. Publication-only problems of hidden targets are dropped
+when read; a hidden target with a draft problem stays shown with a note naming
+its controller. Row summaries, previews and media-list multi-select
+eligibility use only the fields that apply.
+
+Block settings keep `settingsVisibility` as a separate, presentation-only
+rule (SM5C owner decision). Settings stay validated, defaulted and delivered,
+and render code reads them unconditionally; moving them under `visibility`
+would remove settings from published blocks and from `BlockProps.settings`
+types for no editorial gain. Both maps can appear on one block.
 
 ## Rejected alternatives
 

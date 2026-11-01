@@ -859,7 +859,13 @@ projection, so hidden values count only as draft usage and hidden links are
 neither delivered nor checked. Public reads, globals, the build export and
 published admin/MCP reads therefore never carry hidden values; render removes
 hidden block data after parsing, and published value types make targets
-optional. The admin hides fields in SM5C. See
+optional. The admin (SM5C) evaluates each owner's rules with the shared
+evaluator over effective form values and hides targets while keeping them
+mounted with their values; it only presents the rules. Publication-only
+problems of hidden targets are not shown, a hidden target with a draft problem
+stays shown to be fixed, and row summaries, previews and media-list
+eligibility read only applicable fields. Block `settingsVisibility` stays a
+separate presentation-only rule. See
 [ADR 0018](adr/0018-conditional-fields.md).
 
 ### Visual form organization (CE9B)
