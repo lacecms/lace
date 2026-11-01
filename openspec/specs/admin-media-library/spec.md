@@ -93,7 +93,7 @@ The library SHALL offer a writer deletion of an active item from its details pan
 - **THEN** the item returns to a pending deletion state without claiming the object has already been removed
 
 ### Requirement: Library search, type filter, sort, and view are URL state
-The `/media` route SHALL keep its filename search term, type filter, tag filter, sort order, and grid or list view in the route's URL search parameters and SHALL request media from the API with exactly the search, type, tags, and sort values. The tag filter SHALL hold up to five tags combined with AND, entered through the shared tag input and shown as removable chips with a label stating that items must have all of them. Opening or reloading a library URL with these parameters SHALL restore the same search box contents, type filter, tag filter, sort order, view, and results. Unsupported type, sort, or view values, search terms that are blank or longer than the API accepts, and tags that are not valid after normalization SHALL be ignored rather than causing an error; tags SHALL be normalized, deduplicated, and sorted in ascending order, and only the first five of that order SHALL be kept. Default values (no search, all types, no tags, newest first, grid view) SHALL not be written to the URL. Search input SHALL update the URL after the user pauses typing without adding a history entry per keystroke. Changing the search, type, tags, or sort SHALL restart pagination at the first page; pagination cursors SHALL never be written to the URL. A filtered library with no results SHALL offer to clear the filters instead of claiming the library is empty, and clearing the filters SHALL clear the search, type, and tags.
+The `/media` route SHALL keep its filename search term, type filter, tag filter, sort order, and grid or list view in the route's URL search parameters and SHALL request media from the API with exactly the search, type, tags, and sort values. The tag filter SHALL hold up to five tags combined with AND, entered through the shared tag input in the compact toolbar form defined by the toolbar requirement, shown as removable chips, with an accessible name and description stating that items must have all of them. Opening or reloading a library URL with these parameters SHALL restore the same search box contents, type filter, tag filter, sort order, view, and results. Unsupported type, sort, or view values, search terms that are blank or longer than the API accepts, and tags that are not valid after normalization SHALL be ignored rather than causing an error; tags SHALL be normalized, deduplicated, and sorted in ascending order, and only the first five of that order SHALL be kept. Default values (no search, all types, no tags, newest first, grid view) SHALL not be written to the URL. Search input SHALL update the URL after the user pauses typing without adding a history entry per keystroke. Changing the search, type, tags, or sort SHALL restart pagination at the first page; pagination cursors SHALL never be written to the URL. A filtered library with no results SHALL offer to clear the filters instead of claiming the library is empty, and clearing the filters SHALL clear the search, type, and tags.
 
 #### Scenario: A filtered library survives a reload
 - **WHEN** an editor searches for "hero", selects the PNG filter, sorts by name, switches to the list view, and reloads the page
@@ -480,3 +480,53 @@ The dialog SHALL offer a confirm action naming the count, for example "Add 12 im
 #### Scenario: The confirm action requires a selection
 - **WHEN** a writer opens the picker in multiple mode without selecting anything
 - **THEN** the confirm action is disabled and the status reads that no items are selected
+
+### Requirement: Library and picker share a two-row filter toolbar
+The `/media` library and the media picker dialog SHALL present their filters in
+one toolbar layout. At widths of 40rem and above the first row SHALL hold the
+filename search (taking the remaining width), the type filter, and, at the
+end, the sort control and, where offered, the grid/list toggle; the second row
+SHALL hold the tag filter, its help control and, at the end, "Clear filters"
+while any search, type or tag filter is active. The type filter SHALL be a
+single bordered segmented group of toggle buttons ("All" and each type) with
+the pressed state exposed, styled like the grid/list toggle. Below 40rem the
+controls SHALL stack in the same reading order (search, type filter, sort
+with the toggle, tag filter with its help control, then "Clear filters"),
+without horizontal page scrolling at 320 px, and the type
+segments SHALL wrap inside their group when they do not fit. The order of
+controls in the accessibility tree and tab sequence SHALL follow this visual
+order in both layouts.
+
+The toolbar's tag filter SHALL use the shared tag input in a compact form: a
+single bordered field the height of the search input with a leading tag icon,
+the chosen tags as removable chips inside the field before the text input
+(wrapping inside the field when they do not fit), the placeholder "Filter by
+tag", and no visible label. Its combobox SHALL keep the accessible name
+"Filter by tags (all must match)" and SHALL be described by the text "Items
+must have all tags". Next to the field, an information icon button named
+"About tag filters" SHALL show that text in a tooltip on pointer hover and on
+keyboard focus, dismissible with Escape without closing a surrounding dialog.
+All tag input behavior (suggestions, keyboard handling, normalization, the
+five-tag limit message, announcements, Escape inside the picker, uploads
+tagged with the active filter) SHALL be unchanged. The details-panel tag
+editor SHALL keep its visible label and chip list above the input.
+
+#### Scenario: Wide picker toolbar
+- **WHEN** a writer opens the media picker at a dialog width of 56rem and adds the filter tags `project-2026` and `portrait`
+- **THEN** search, the type segments and sort share the first row, and the tag field with both chips inside it, the information icon and "Clear filters" share the second row, with no control wrapping onto a third row
+
+#### Scenario: Help text by pointer and keyboard
+- **WHEN** a user hovers the information icon, then tabs onto it, then presses Escape inside the picker
+- **THEN** the tooltip "Items must have all tags" appears on hover and on focus, Escape hides it, and the picker stays open
+
+#### Scenario: Screen reader hears the rule without the tooltip
+- **WHEN** a screen-reader user focuses the tag filter combobox
+- **THEN** it is announced as "Filter by tags (all must match)" with the description "Items must have all tags"
+
+#### Scenario: Narrow library
+- **WHEN** the library is shown at 320 px wide with two filter tags
+- **THEN** search, type segments, sort with the view toggle, the tag field and "Clear filters" are stacked in that order, chips wrap inside the tag field, nothing scrolls horizontally, and axe reports no violations
+
+#### Scenario: Details panel keeps its tag editor
+- **WHEN** a writer opens the details panel of a media item
+- **THEN** its tag editor shows the visible label "Tags", the chip list and the input as before

@@ -124,6 +124,17 @@ test("Escape in open tag suggestions keeps the picker open", async () => {
   expect(screen.getByRole("dialog", { name: "Choose media for Hero" })).toBeInTheDocument();
 });
 
+test("Escape on the tag rule tooltip closes only the tooltip", async () => {
+  const user = userEvent.setup();
+  const { dialog } = await mount({ listMedia: async () => ({ items: [mediaItem] }) });
+  const help = within(dialog).getByRole("button", { name: "About tag filters" });
+  help.focus();
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("Items must have all tags");
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("tooltip")).not.toBeInTheDocument());
+  expect(screen.getByRole("dialog", { name: "Choose media for Hero" })).toBeInTheDocument();
+});
+
 test("files dropped into a tag-filtered picker carry the filter tags", async () => {
   const user = userEvent.setup();
   const uploadMedia = vi.fn(async () => mediaItem);

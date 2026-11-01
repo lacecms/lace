@@ -59,16 +59,18 @@
           "key": "gallery-one",
           "type": "gallery",
           "position": 1000,
-          "schemaVersion": 4,
+          "schemaVersion": 5,
           "data": {
             "title": "Published gallery",
             "images": [
               {
+                "kind": "image",
                 "media": "<cover>",
                 "alt": "Gallery cover",
                 "caption": "Gallery caption"
               },
               {
+                "kind": "image",
                 "media": "<cover>"
               }
             ]

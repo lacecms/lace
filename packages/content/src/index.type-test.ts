@@ -196,11 +196,19 @@ void [labelledValues, labelOption, badLabelledValue];
 
 type GalleryData = BlockDataValues<typeof builtInBlocks.gallery.fields>;
 const galleryData: GalleryData = {
-  images: [{ media: "media-1" }, { alt: "Override", caption: "Studio", media: "media-2" }],
+  images: [
+    { kind: "image", media: "media-1" },
+    { alt: "Override", caption: "Studio", kind: "image", media: "media-2" },
+    { kind: "video", videoTitle: "Tour", videoUrl: "https://vimeo.com/1", playback: "ambient" },
+  ],
   title: "Studio",
 };
-// @ts-expect-error gallery items require media.
-const galleryWithoutMedia: GalleryData = { images: [{ caption: "No image" }] };
+// Published items carry a kind; conditional targets such as media are optional.
+const galleryWithoutMedia: GalleryData = { images: [{ caption: "Video", kind: "video" }] };
+// @ts-expect-error published gallery items carry their kind.
+const galleryWithoutKind: GalleryData = { images: [{ media: "media-1" }] };
+// @ts-expect-error playback is one of the declared modes.
+const galleryBadPlayback: GalleryData = { images: [{ kind: "video", playback: "loop" }] };
 type NavigationData = BlockDataValues<typeof builtInBlocks.navigation.fields>;
 const navigationData: NavigationData = {
   links: [
@@ -213,7 +221,14 @@ const childWithoutUrl: NavigationData = {
   // @ts-expect-error submenu links require a URL.
   links: [{ children: [{ label: "Guide" }], label: "Docs" }],
 };
-void [galleryData, galleryWithoutMedia, navigationData, childWithoutUrl];
+void [
+  galleryData,
+  galleryWithoutMedia,
+  galleryWithoutKind,
+  galleryBadPlayback,
+  navigationData,
+  childWithoutUrl,
+];
 
 const expandedRichText: SafeRichTextDocument = {
   content: [

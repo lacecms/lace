@@ -6396,11 +6396,21 @@ contract("LIST1 Gallery v3 migrates draft, published and hidden lists", async (r
   expect(prepared.plan.isValid, JSON.stringify(prepared.plan)).toBe(true);
   await syncNotes(repository, after, 30, prepared);
   const migrated = (await repository.load({ entryId: stored.id }))!;
-  for (const snapshot of [migrated.draft, migrated.published!]) {
+  // Synchronization stores validated results: drafts materialize every item
+  // default, publications keep only the defaults their projection shows.
+  const videoDefaults = { aspectRatio: "16:9", playback: "player" };
+  for (const [snapshot, extra] of [
+    [migrated.draft, videoDefaults],
+    [migrated.published!, {}],
+  ] as const) {
     expect(snapshot.blocks).toEqual(
       blocks.map((b) => ({
         ...b,
-        schemaVersion: 4,
+        data: {
+          ...data,
+          images: data.images.map((item) => ({ kind: "image", ...extra, ...item })),
+        },
+        schemaVersion: gallery.version,
         settings: { lightbox: true, layoutMode: "grid", layoutWrap: true, layoutPreset: "auto" },
       })),
     );
@@ -6440,6 +6450,161 @@ contract("LIST1 Gallery v3 migrates draft, published and hidden lists", async (r
   await syncNotes(repository, after, 40);
   expect(await repository.load({ entryId: stored.id })).toEqual(stable);
 });
+
+contract(
+  "SM5D Gallery v4 items migrate as images and mixed galleries publish their projection",
+  async (runtime, expect) => {
+    const gallery = builtInBlocks.gallery;
+    const { kind, videoUrl, videoTitle, playback, aspectRatio, ...v4Fields } =
+      gallery.fields.images.item.fields;
+    void [kind, videoUrl, videoTitle, playback, aspectRatio];
+    const old = defineBlock({
+      type: "gallery",
+      version: 4,
+      fields: {
+        ...gallery.fields,
+        images: field.list({
+          defaultValue: [],
+          item: field.group({ fields: v4Fields }),
+          itemLabel: "caption",
+          maxItems: 50,
+          minItems: 1,
+        }),
+      },
+      settings: gallery.settings!,
+      migrations: { 2: (b) => b, 3: (b) => b, 4: (b) => b },
+    });
+    const make = (block: BlockDefinition, version: number) =>
+      defineConfig({
+        blocks: [block],
+        content: [
+          defineCollection({ key: "posts", route: "/blog/:slug", version, blocks: ["gallery"] }),
+        ],
+      });
+    const before = await make(old, 1),
+      after = await make(gallery, 2);
+    const { repository, sql } = await runtime.open({
+      resolveModel: syncResolver(before.runtime.content),
+    });
+    await syncNotes(repository, before, 10);
+    await seedMedia(sql, "m-1");
+    const data = {
+      images: [{ media: "m-1", alt: "Kitchen", caption: "Before", link: "/work/kitchen" }],
+    };
+    const settings = { lightbox: true, layoutMode: "flex-row", layoutWrap: false };
+    const blocks = [false, true].map((hidden, index) => ({
+      key: blockKey(`gallery-${index}`),
+      type: "gallery",
+      schemaVersion: 4,
+      position: 1000 + index * 1000,
+      hidden,
+      data,
+      settings,
+    }));
+    const references = blocks.map((b) => ({
+      sourceKey: b.key,
+      fieldPath: "/images/0/media",
+      mediaId: mediaId("m-1"),
+    }));
+    await repository.create({
+      entry: entry("gallery-v4", "posts", {
+        blocks,
+        slug: "gallery",
+        title: "Gallery",
+        updatedAt: 20,
+      }),
+      mediaReferences: references,
+    });
+    await repository.publish(publish("gallery-v4", 1, 21, "gallery-v4-published"));
+    const stored = (await repository.load({ entryId: contentEntryId("gallery-v4") }))!;
+    const prepared = await prepareNotes(repository, after);
+    expect(prepared.plan.isValid, JSON.stringify(prepared.plan)).toBe(true);
+    await syncNotes(repository, after, 30, prepared);
+    const migrated = (await repository.load({ entryId: stored.id }))!;
+    // The identity migration keeps stored values; synchronization stores the
+    // validated result, so drafts gain every default and publications only
+    // the shown `kind`.
+    const image = { kind: "image", ...data.images[0] };
+    for (const [snapshot, item] of [
+      [migrated.draft, { ...image, aspectRatio: "16:9", playback: "player" }],
+      [migrated.published!, image],
+    ] as const)
+      expect(snapshot.blocks).toEqual(
+        blocks.map((b) => ({
+          ...b,
+          data: { images: [item] },
+          schemaVersion: 5,
+          settings: { ...settings, layoutPreset: "auto" },
+        })),
+      );
+    const mediaRows = () =>
+      sql.all(
+        "select snapshot_id, source_key, field_path from content_media_references order by snapshot_id, source_key",
+      );
+    const storedRows = await mediaRows();
+    expect(storedRows).toHaveLength(4);
+
+    const useCases = new ContentUseCases({
+      clock: { now: () => unixMilliseconds(35) },
+      config: after.runtime,
+      content: repository,
+      media: repository,
+      idGenerator: { next: sequence("gallery-video") },
+    });
+    const video = {
+      kind: "video",
+      videoUrl: "https://vimeo.com/76979871",
+      videoTitle: "Studio tour",
+      playback: "ambient",
+      aspectRatio: "1:1",
+      caption: "Spring",
+    };
+    const saved = await useCases.save({
+      actor: editor,
+      entryId: migrated.id,
+      expectedRevision: migrated.draft.revision,
+      title: "Gallery",
+      slug: "gallery",
+      fields: {},
+      blocks: [
+        {
+          ...migrated.draft.blocks[0]!,
+          data: {
+            images: [
+              { ...data.images[0], kind: "image", videoUrl: "https://youtu.be/dQw4w9WgXcQ" },
+              { ...video, media: "m-1", alt: "Stale" },
+            ],
+          },
+        },
+      ],
+    });
+    expect(saved.draft.blocks[0]!.data).toMatchObject({
+      images: [{ videoUrl: "https://youtu.be/dQw4w9WgXcQ" }, { media: "m-1", alt: "Stale" }],
+    });
+    await useCases.publish({
+      actor: admin,
+      entryId: migrated.id,
+      expectedRevision: saved.draft.revision,
+    });
+    const published = (await repository.load({ entryId: migrated.id }))!;
+    expect(published.draft.blocks[0]!.data).toEqual(saved.draft.blocks[0]!.data);
+    expect(published.published!.blocks[0]!.data).toEqual({
+      images: [{ kind: "image", ...data.images[0] }, { ...video }],
+    });
+    expect(
+      (await mediaRows()).filter((row) => row.snapshot_id === published.published!.id),
+    ).toEqual([
+      {
+        snapshot_id: published.published!.id,
+        source_key: blocks[0]!.key,
+        field_path: "/images/0/media",
+      },
+    ]);
+    expect(
+      (await repository.loadPublic("/blog/gallery"))!.entry.published!.blocks[0]!.data,
+    ).toEqual(published.published!.blocks[0]!.data);
+  },
+);
 
 contract(
   "SM1 videoEmbed v1 migrates draft, published and hidden blocks",

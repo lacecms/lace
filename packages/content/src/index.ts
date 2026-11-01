@@ -3018,6 +3018,70 @@ const imageLinkField = field.url({
   label: "Link",
 });
 
+// The aspect ratio of a `videoEmbed` block and of each `gallery` video item.
+const videoAspectRatioField = field.select({
+  options: ["16:9", "4:3", "1:1", "4:5", "9:16"],
+  required: true,
+  defaultValue: "16:9",
+  label: "Aspect ratio",
+  description: "Reserves the video area before the player loads.",
+  presentation: {
+    control: "cards",
+    choices: [
+      {
+        value: "16:9",
+        label: "16:9",
+        description: "Wide landscape.",
+        diagram: { cells: [{ x: 0, y: 2, width: 12, height: 7 }] },
+      },
+      {
+        value: "4:3",
+        label: "4:3",
+        description: "Classic landscape.",
+        diagram: { cells: [{ x: 0, y: 1, width: 12, height: 9 }] },
+      },
+      {
+        value: "1:1",
+        label: "1:1",
+        description: "Square.",
+        diagram: { cells: [{ x: 1, y: 1, width: 9, height: 9 }] },
+      },
+      {
+        value: "4:5",
+        label: "4:5",
+        description: "Portrait.",
+        diagram: { cells: [{ x: 2, y: 1, width: 8, height: 10 }] },
+      },
+      {
+        value: "9:16",
+        label: "9:16",
+        description: "Tall portrait.",
+        diagram: { cells: [{ x: 3, y: 0, width: 6, height: 11 }] },
+      },
+    ],
+  },
+});
+
+// The playback mode of a `videoEmbed` block and of each `gallery` video item.
+const videoPlaybackField = field.select({
+  options: ["player", "ambient"],
+  required: true,
+  defaultValue: "player",
+  label: "Playback",
+  description: "Ambient videos play muted and loop without controls.",
+  presentation: {
+    control: "cards",
+    choices: [
+      { value: "player", label: "Player", description: "Visitors start the video." },
+      {
+        value: "ambient",
+        label: "Ambient",
+        description: "Muted, looping, no controls; respects reduced motion.",
+      },
+    ],
+  },
+});
+
 /** Starter blocks implemented exclusively through the public block and field DSL. */
 export const builtInBlocks = deepFreeze({
   cta: defineBlock({
@@ -3033,36 +3097,84 @@ export const builtInBlocks = deepFreeze({
     version: 1,
   }),
   gallery: defineBlock({
-    description: "A list of images with selectable layouts and optional captions.",
+    description: "A list of images and videos with selectable layouts and optional captions.",
     fields: {
       images: field.list({
         defaultValue: [],
         item: field.group({
-          // Media comes first so editors show the image before its overrides.
+          // The kind comes first, then each kind reads image (or video) before
+          // its overrides: media, alt, caption, link or URL, title, caption,
+          // playback, aspect ratio.
           fields: {
+            kind: field.select({
+              options: ["image", "video"],
+              required: true,
+              defaultValue: "image",
+              label: "Type",
+              presentation: {
+                control: "cards",
+                choices: [
+                  {
+                    value: "image",
+                    label: "Image",
+                    description: "A picture from the media library.",
+                  },
+                  { value: "video", label: "Video", description: "A YouTube or Vimeo video." },
+                ],
+              },
+            }),
             media: field.media({ label: "Image", required: true }),
+            videoUrl: field.url({
+              required: true,
+              embedProviders: ["youtube", "vimeo"],
+              label: "Video URL",
+              description: "Paste a YouTube or Vimeo video link, not iframe code.",
+            }),
             alt: field.text({
               description: "Leave empty to use the media item's alt text.",
               label: "Alt text",
             }),
+            videoTitle: field.text({
+              required: true,
+              minLength: 1,
+              label: "Video title",
+              description: "Names the video for visitors using assistive technology.",
+            }),
             caption: field.text({
-              description: "Leave empty to use the media item's caption.",
+              description: "An empty image caption uses the media item's caption.",
               label: "Caption",
             }),
             link: imageLinkField,
+            playback: videoPlaybackField,
+            aspectRatio: videoAspectRatioField,
+          },
+          visibility: {
+            media: { field: "kind", values: ["image"] },
+            alt: { field: "kind", values: ["image"] },
+            link: { field: "kind", values: ["image"] },
+            videoUrl: { field: "kind", values: ["video"] },
+            videoTitle: { field: "kind", values: ["video"] },
+            playback: { field: "kind", values: ["video"] },
+            aspectRatio: { field: "kind", values: ["video"] },
           },
         }),
         itemLabel: "caption",
-        label: "Images",
+        label: "Images and videos",
         maxItems: 50,
         minItems: 1,
       }),
       title: field.text({ label: "Title" }),
     },
     label: "Gallery",
-    // Version 2 only added the lightbox setting and version 3 only the optional
-    // item link. Version 4 adds scalar layout defaults; data stays valid.
-    migrations: { 2: (block) => block, 3: (block) => block, 4: (block) => block },
+    // Version 2 only added the lightbox setting, version 3 only the optional
+    // item link and version 4 scalar layout defaults. Version 5 adds item kinds
+    // whose default makes every stored item an image; data stays valid.
+    migrations: {
+      2: (block) => block,
+      3: (block) => block,
+      4: (block) => block,
+      5: (block) => block,
+    },
     settings: { ...listLayoutSettings(), lightbox: lightboxSetting },
     settingsVisibility: listLayoutSettingsVisibility(),
     settingsLayout: {
@@ -3073,7 +3185,7 @@ export const builtInBlocks = deepFreeze({
       ],
     },
     type: "gallery",
-    version: 4,
+    version: 5,
   }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",
@@ -3189,66 +3301,8 @@ export const builtInBlocks = deepFreeze({
     description: "A YouTube or Vimeo video with an optional image preview.",
     migrations: { 2: (block) => block },
     settings: {
-      aspectRatio: field.select({
-        options: ["16:9", "4:3", "1:1", "4:5", "9:16"],
-        required: true,
-        defaultValue: "16:9",
-        label: "Aspect ratio",
-        description: "Reserves the video area before the player loads.",
-        presentation: {
-          control: "cards",
-          choices: [
-            {
-              value: "16:9",
-              label: "16:9",
-              description: "Wide landscape.",
-              diagram: { cells: [{ x: 0, y: 2, width: 12, height: 7 }] },
-            },
-            {
-              value: "4:3",
-              label: "4:3",
-              description: "Classic landscape.",
-              diagram: { cells: [{ x: 0, y: 1, width: 12, height: 9 }] },
-            },
-            {
-              value: "1:1",
-              label: "1:1",
-              description: "Square.",
-              diagram: { cells: [{ x: 1, y: 1, width: 9, height: 9 }] },
-            },
-            {
-              value: "4:5",
-              label: "4:5",
-              description: "Portrait.",
-              diagram: { cells: [{ x: 2, y: 1, width: 8, height: 10 }] },
-            },
-            {
-              value: "9:16",
-              label: "9:16",
-              description: "Tall portrait.",
-              diagram: { cells: [{ x: 3, y: 0, width: 6, height: 11 }] },
-            },
-          ],
-        },
-      }),
-      playback: field.select({
-        options: ["player", "ambient"],
-        required: true,
-        defaultValue: "player",
-        label: "Playback",
-        description: "Ambient videos play muted and loop without controls.",
-        presentation: {
-          control: "cards",
-          choices: [
-            { value: "player", label: "Player", description: "Visitors start the video." },
-            {
-              value: "ambient",
-              label: "Ambient",
-              description: "Muted, looping, no controls; respects reduced motion.",
-            },
-          ],
-        },
-      }),
+      aspectRatio: videoAspectRatioField,
+      playback: videoPlaybackField,
     },
     fields: {
       url: field.url({

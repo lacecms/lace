@@ -31,7 +31,7 @@ The supported parts are:
 | `image` | `media`, `caption`, with a link `link`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
 | `quote` | `text`, `attribution` |
 | `cta` | `heading`, `body`, `action` |
-| `gallery` | `title`, `items`, `item`, `media`, `caption`, with an item link `link`, and with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media` |
+| `gallery` | `title`, `items`, `item` (with `data-lace-kind`), `media`, `caption`, with an item link `link`, with the lightbox on `lightbox-trigger`, `lightbox`, `lightbox-close`, `lightbox-media`, and for video items `player` and `source` |
 | `navigation` | `list`, `item`, `link`, `label`, `submenu`, `toggle`, `children` |
 
 An optional part is absent when the published block has no value for it. For
@@ -129,6 +129,13 @@ the layout header, outside `[data-lace-entry]`. Select it with
 content with `[data-lace-entry] [data-lace-block="navigation"]`. While the
 global is unpublished the header shows the static `.site-nav` fallback from
 `BaseLayout.astro`, which shares the same list rules.
+
+Gallery video items (v5) sit in the same cells: `[data-lace-kind="video"]`
+items hold a `figure[data-lace-video]` whose `data-lace-aspect-ratio` and
+`data-lace-playback` mirror the item. The registry's `GalleryVideo.css`
+reserves the ratio and hides the source link only while an ambient player is
+mounted; the starter's 4:3 image crop targets the `media` part only, so videos
+keep their own ratio.
 
 ## Images and the lightbox
 

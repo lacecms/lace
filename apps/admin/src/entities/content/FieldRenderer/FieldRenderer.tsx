@@ -76,6 +76,7 @@ import {
 import {
   mediaIdsInList,
   mediaListCapacity,
+  mediaListChoices,
   mediaListItems,
   mediaListTarget,
 } from "../media-list.js";
@@ -93,6 +94,7 @@ import {
 
 export type {
   FieldDefinition,
+  FieldPreview,
   FieldPreviewProps,
   FieldPreviewRegistry,
   FieldRendererProps,
@@ -896,6 +898,8 @@ function ListNode(
   const createProblem = growthProblem(name, []);
   // Eligible media lists add from the picker in multiple mode instead of one starting item.
   const mediaTarget = MediaListPicker ? mediaListTarget(definition.item) : undefined;
+  // Options of the media field's controller that hide it get their own Add, such as Video.
+  const mediaChoices = mediaTarget ? mediaListChoices(definition.item, mediaTarget) : [];
   // Kept after closing, so the picker keeps its props while it closes.
   const [picking, setPicking] = useState<{
     readonly capacity: number;
@@ -1052,6 +1056,20 @@ function ListNode(
               <PlusIcon aria-hidden />
               Add
             </Button>
+            {mediaChoices.map((choice) => (
+              <Button
+                aria-describedby={addProblem ? `${id}:limit` : undefined}
+                aria-label={`Add ${choice.label} item to ${label}`}
+                disabled={busy || !!addProblem || !!growthProblem(name, [...list, choice.item])}
+                key={choice.value}
+                onClick={() => insert(choice.item)}
+                size="sm"
+                variant="outline"
+              >
+                <PlusIcon aria-hidden />
+                Add {choice.label}
+              </Button>
+            ))}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

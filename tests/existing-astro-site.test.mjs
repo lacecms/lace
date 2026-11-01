@@ -108,8 +108,13 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   expect(requests).toBe(1);
   const home = await readFile(join(site, "dist/index.html"), "utf8");
   const article = await readFile(join(site, "dist/articles/first-post/index.html"), "utf8");
+  // Inline block scripts name their blocks in selectors, so markup is read without them.
   const blocks = (html) =>
-    [...html.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1]);
+    [
+      ...html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, "")
+        .matchAll(/data-lace-block="([^"]+)"/gu),
+    ].map((match) => match[1]);
   expect(blocks(home)).toEqual(["hero", "navigation", "cta", "link", "link"]);
   expect(blocks(article)).toEqual(["richText", "image", "quote", "gallery"]);
   expect(home).toContain('<main data-lace-model="home" data-lace-entry="home-entry">');

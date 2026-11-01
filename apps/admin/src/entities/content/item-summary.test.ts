@@ -1,3 +1,4 @@
+import { builtInBlocks, toBlockMetadata } from "@lacecms/content";
 import { expect, test } from "vitest";
 import type { FieldDefinition, FieldPreviewRegistry } from "./field-types.js";
 import { itemSummary, previewLeaf, rowLines } from "./item-summary.js";
@@ -136,7 +137,7 @@ test("hidden values never summarize or preview an item", () => {
   expect(itemSummary(mixedItem, video, "caption")).toEqual({
     media: false,
     primary: "Studio walk-through",
-    secondary: "video",
+    secondary: "https://vimeo.com/1",
   });
   expect(previewLeaf(mixedItem, video, previews)).toBeUndefined();
   const image = { ...video, kind: "image" };
@@ -155,4 +156,62 @@ test("a hidden item label falls back to the shown fields", () => {
     "videoTitle",
   );
   expect(summary.primary).toBe("Sunset");
+});
+
+// The built-in gallery item with the video preview registered for embed URLs.
+const builtInGallery = toBlockMetadata(builtInBlocks.gallery).fields
+  .images as unknown as FieldDefinition;
+const galleryVideoItem = (builtInGallery.type === "list" ? builtInGallery.item : builtInGallery)!;
+const embedPreview = Object.assign(() => null, {
+  appliesTo: (definition: FieldDefinition) =>
+    definition.type === "url" && definition.embedProviders !== undefined,
+});
+const withEmbed: FieldPreviewRegistry = { media: () => null, url: embedPreview };
+
+test("a video item previews its embed URL instead of a stale hidden image", () => {
+  const video = {
+    kind: "video",
+    media: "stale",
+    videoTitle: "Studio tour",
+    videoUrl: "https://vimeo.com/76979871",
+  };
+  expect(previewLeaf(galleryVideoItem as FieldDefinition, video, withEmbed)).toMatchObject({
+    key: "videoUrl",
+  });
+  expect(itemSummary(galleryVideoItem as FieldDefinition, video, "caption")).toMatchObject({
+    media: false,
+    primary: "Studio tour",
+  });
+  expect(
+    itemSummary(galleryVideoItem as FieldDefinition, { ...video, caption: "Spring" }, "caption")
+      .primary,
+  ).toBe("Spring");
+  expect(rowLines({ media: false, primary: "Studio tour" }, { title: "Vimeo video" })).toEqual({
+    primary: "Studio tour",
+    secondary: "Vimeo video",
+  });
+});
+
+test("a visibility controller never names an item", () => {
+  const image = { kind: "image", media: "m1", playback: "player", aspectRatio: "16:9" };
+  expect(itemSummary(galleryVideoItem as FieldDefinition, image, "caption")).toEqual({
+    media: true,
+    primary: undefined,
+  });
+  expect(rowLines({ media: true }, { detail: "PNG · 800×600", title: "a.png" })).toEqual({
+    primary: "a.png",
+    secondary: "PNG · 800×600",
+  });
+  expect(
+    itemSummary(galleryVideoItem as FieldDefinition, { ...image, alt: "Kitchen" }, "caption"),
+  ).toMatchObject({ primary: "Kitchen", secondary: undefined });
+});
+
+test("previews that do not apply to a field are skipped", () => {
+  // Navigation URLs are not restricted to embed providers, so they keep the text summary.
+  expect(previewLeaf(link, { label: "Blog", url: "/blog" }, withEmbed)).toBeUndefined();
+  // An image item still previews its media.
+  expect(
+    previewLeaf(galleryVideoItem as FieldDefinition, { kind: "image", media: "m1" }, withEmbed),
+  ).toMatchObject({ key: "media" });
 });

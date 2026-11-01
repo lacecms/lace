@@ -50,7 +50,7 @@ const initial = {
       {
         key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         type: "gallery",
-        schemaVersion: 4,
+        schemaVersion: 5,
         position: 1000,
         hidden: false,
         data: { images: [] },
@@ -348,22 +348,29 @@ test("a gallery's Add picks several images at once and saves them in order", asy
     getMedia: async (id) => ({ ...items.find((item) => item.id === id)!, usage: [] }),
     listMedia: async () => ({ items }),
   });
-  await user.click(await screen.findByRole("button", { name: "Add Images item" }));
-  const dialog = await screen.findByRole("dialog", { name: "Add media to Images" });
+  await user.click(await screen.findByRole("button", { name: "Add Images and videos item" }));
+  const dialog = await screen.findByRole("dialog", { name: "Add media to Images and videos" });
   await user.click(await within(dialog).findByRole("button", { name: "b.jpg" }));
   await user.click(within(dialog).getByRole("button", { name: "a.jpg" }));
   await user.click(within(dialog).getByRole("button", { name: "Add 2 images" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(screen.getByRole("button", { name: "Expand Images item 1" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "Expand Images and videos item 1" })).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "Save draft" }));
   await screen.findByText("Saved revision 3");
   expect(save.mock.calls[0]![1].blocks[0]!.data).toEqual({
-    images: [{ media: "media-b" }, { media: "media-a" }],
+    images: ["media-b", "media-a"].map((media) => ({
+      aspectRatio: "16:9",
+      kind: "image",
+      media,
+      playback: "player",
+    })),
   });
 });
 
 test("viewers see no Add for a gallery", async () => {
   open(undefined, "viewer");
   await screen.findByRole("article");
-  expect(screen.queryByRole("button", { name: "Add Images item" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Add Images and videos item" }),
+  ).not.toBeInTheDocument();
 });

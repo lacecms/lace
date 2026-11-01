@@ -4,6 +4,7 @@ export {
   FieldRenderer,
   FieldRendererProvider,
   type FieldDefinition,
+  type FieldPreview,
   type FieldPreviewProps,
   type FieldPreviewRegistry,
   type FieldRendererProps,

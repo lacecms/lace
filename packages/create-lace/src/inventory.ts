@@ -16,7 +16,7 @@ export interface TemplateFile {
   readonly metadata?: true;
 }
 
-export const TEMPLATE_VERSION = "0.44.0";
+export const TEMPLATE_VERSION = "0.45.0";
 
 const STARTER = ["starter"] as const;
 const SITE = ["starter", "existing"] as const;
@@ -54,6 +54,7 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "site/src/components/lace/CtaBlock.astro", owner: "user", modes: STARTER },
   { path: "site/src/components/lace/GalleryBlock.astro", owner: "user", modes: STARTER },
   { path: "site/src/components/lace/ListLayout.css", owner: "user", modes: STARTER },
+  { path: "site/src/components/lace/GalleryVideo.css", owner: "user", modes: STARTER },
   { path: "site/src/components/lace/HeroBlock.astro", owner: "user", modes: STARTER },
   { path: "site/src/components/lace/ImageBlock.astro", owner: "user", modes: STARTER },
   { path: "site/src/components/lace/LinkBlock.astro", owner: "user", modes: STARTER },

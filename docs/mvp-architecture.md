@@ -974,12 +974,18 @@ field DSL and do not receive special database treatment; `image`, `gallery`, `vi
   its link in the same tab instead of the lightbox;
 - `quote`: required quote text and optional attribution;
 - `cta`: required heading, optional body, required action label, and required URL;
-- `gallery` (CE7D/LIST1, version 4): optional title and an `images` list (default `[]`, at
-  least one item to publish, at most 50) of groups with required media,
-  optional alt text and optional caption that override the media item's and
-  the same optional `link`, plus the same `lightbox` setting, with identity
-  migrations to versions 2, 3 and 4; shared layout settings are added alongside
-  lightbox in Layout/Behavior settings sections;
+- `gallery` (CE7D/LIST1/SM5D, version 5): optional title and an `images` list
+  ("Images and videos", default `[]`, at least one item to publish, at most 50)
+  of groups whose required select `kind` (`image` default, `video`, choice
+  cards) controls conditional fields (SM5): images use required media,
+  optional alt text that overrides the media item's and the same optional
+  `link`; videos use a required YouTube/Vimeo `videoUrl`, a required accessible
+  `videoTitle` and per-item `playback` and `aspectRatio` selects shared with
+  `videoEmbed`; both use an optional caption (images fall back to the media
+  caption). Plus the same `lightbox` setting, with identity migrations to
+  versions 2–5 (stored items without `kind` are images through the default);
+  shared layout settings are added alongside lightbox in Layout/Behavior
+  settings sections. Videos have no poster, so the list keeps multi-select Add;
 - `navigation` (CE7D): optional accessible `name` and a `links` list (default
   `[]`, at least one to publish, at most 20) of groups with a required label,
   an optional URL and an optional `children` list (at most 20) of groups with a
@@ -2557,8 +2563,9 @@ attributes, so a block without an envelope renders the markup of earlier
 revisions.
 
 Built-in components carry no `<style>`; only videoEmbed carries its bounded
-activation and ambient mounting `<script>`. Presentation stays in the
-site stylesheet. The `image` (revision 6), `gallery` (revision 3) and `hero`
+activation and ambient mounting `<script>`, and gallery a script that only
+mounts the ambient players of its video items. Presentation stays in the
+site stylesheet. The `image` (revision 6), `gallery` (revision 7) and `hero`
 (revision 4) components render media through `LaceImage.astro`; `image` and
 `gallery` open the lightbox when their `lightbox` setting is on, with dialog
 identifiers `lace-lightbox-<entry id>-<block key>[-<item index>]`, and the hero
@@ -2577,6 +2584,10 @@ structural stylesheet reserves the selected ratio (16:9 by default). Ambient
 mounting happens once after checking reduced motion; no live ambient iframe
 appears in static HTML. Source links remain available with or without JavaScript,
 and are visually hidden only while ambient playback is mounted, until focused.
+Gallery (revision 7) renders video items in their layout cell with the same
+player, ambient, reduced-motion and no-JS behavior for a poster-less block,
+reserving each item's ratio through its `GalleryVideo.css` companion; lightbox
+and links stay image-only, and dialog indexes count every stored item.
 Player URLs use youtube-nocookie.com or player.vimeo.com, never autoplay in
 player mode, and retain only Vimeo's privacy hash plus canonical ambient
 parameters when selected. Ambient mode has no pause control (the documented
@@ -3259,7 +3270,7 @@ The sign-in route is a centered card outside the shell: a focused email field, a
 
 The media library at `/media` follows the same URL-state rules for its filename search, type filter, sort, and grid/list view. Tiles and rows load their thumbnails lazily through the authenticated admin preview endpoint. Writers can drop files anywhere over the library or choose several at once. Each file is checked for type and size in the browser and then uploads with its own progress and server error. The default browser client sends uploads through `XMLHttpRequest` so it can report bytes sent; every other request uses `fetch`, and both paths share error mapping and response validation. A details side panel shows an item's facts, its usage from the media detail read, and its public URL. Deletion there requires confirmation and is unavailable while content uses the item.
 
-Model and block media fields choose through a picker dialog built from the same grid, search, type filter, sort, and upload queue. Its query is local state that resets on each opening and never enters the URL. It offers only active items, and a confirmed upload can be used directly from its queue row. Eligible media lists (a list of media, or of groups with exactly one required media field, such as the gallery) open the same picker in multiple mode from Add: tiles toggle an ordered selection that survives filtering, confirmed uploads join it, and it is capped by the list's remaining `maxItems` and the 500-element snapshot budget before one confirmation appends an item per image. A field with a value shows a thumbnail card with filename, Replace, and Remove. The card resolves the stored ID through the media detail read, so it never searches loaded pages. It names pending-deletion, missing (`NOT_FOUND`), and unreadable items explicitly, and it keeps the ID in the draft until the writer replaces or removes it. The raw ID is never shown.
+Model and block media fields choose through a picker dialog built from the same grid, search, type filter, sort, and upload queue. Its query is local state that resets on each opening and never enters the URL. It offers only active items, and a confirmed upload can be used directly from its queue row. Eligible media lists (a list of media, or of groups with exactly one required media field, such as the gallery) open the same picker in multiple mode from Add: tiles toggle an ordered selection that survives filtering, confirmed uploads join it, and it is capped by the list's remaining `maxItems` and the 500-element snapshot budget before one confirmation appends an item per image. When the media field depends on a `select` controller, the toolbar adds one "Add {choice}" button per option that hides it (the gallery's "Add Video"), which appends one open item with that option. The library and picker share a two-row filter toolbar whose tag filter is a compact token field with its match-all rule in a tooltip. A field with a value shows a thumbnail card with filename, Replace, and Remove. The card resolves the stored ID through the media detail read, so it never searches loaded pages. It names pending-deletion, missing (`NOT_FOUND`), and unreadable items explicitly, and it keeps the ID in the draft until the writer replaces or removes it. The raw ID is never shown.
 
 The editor must make draft/published/build status visible and must surface optimistic-concurrency conflicts rather than overwriting a newer draft.
 

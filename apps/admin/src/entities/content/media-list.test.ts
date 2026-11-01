@@ -5,6 +5,7 @@ import { snapshotBudget } from "./composite-values.js";
 import {
   mediaIdsInList,
   mediaListCapacity,
+  mediaListChoices,
   mediaListItems,
   mediaListTarget,
 } from "./media-list.js";
@@ -59,9 +60,70 @@ test("a declared item default is copied with its media replaced", () => {
   ]);
 });
 
-test("the built-in gallery item holds only its media", () => {
+test("the built-in gallery item is an image holding its media", () => {
   if (gallery.type !== "list") throw new Error("gallery images is a list");
-  expect(mediaListItems(gallery.item, { key: "media" }, ["m1"])).toEqual([{ media: "m1" }]);
+  expect(mediaListItems(gallery.item, { key: "media" }, ["m1"])).toEqual([
+    { aspectRatio: "16:9", kind: "image", media: "m1", playback: "player" },
+  ]);
+});
+
+test("the gallery offers a Video choice that starts a video item", () => {
+  if (gallery.type !== "list") throw new Error("gallery images is a list");
+  const [choice, ...rest] = mediaListChoices(gallery.item, { key: "media" });
+  expect(rest).toEqual([]);
+  expect(choice).toEqual({
+    item: { aspectRatio: "16:9", kind: "video", playback: "player" },
+    label: "Video",
+    value: "video",
+  });
+  // Each choice is a detached copy.
+  expect(mediaListChoices(gallery.item, { key: "media" })[0]!.item).not.toBe(choice!.item);
+});
+
+test("choices follow option order and fall back to option values", () => {
+  const item = field.group({
+    fields: {
+      source: field.select({ options: ["upload", "embed", "none"], defaultValue: "upload" }),
+      cover: field.media({ required: true }),
+    },
+    visibility: { cover: { field: "source", values: ["upload"] } },
+  });
+  expect(
+    mediaListChoices(item, { key: "cover" }).map(({ label, value }) => [label, value]),
+  ).toEqual([
+    ["embed", "embed"],
+    ["none", "none"],
+  ]);
+});
+
+test("a declared item default is cloned into each choice", () => {
+  const item = field.group({
+    defaultValue: { kind: "image", label: "Project" },
+    fields: {
+      kind: field.select({ options: ["image", "video"] }),
+      label: field.text(),
+      media: field.media({ required: true }),
+    },
+    visibility: { media: { field: "kind", values: ["image"] } },
+  });
+  expect(mediaListChoices(item, { key: "media" })[0]!.item).toEqual({
+    kind: "video",
+    label: "Project",
+  });
+});
+
+test("media fields without a select rule offer no choices", () => {
+  const unconditional = field.group({ fields: { photo: field.media({ required: true }) } });
+  const boolean = field.group({
+    fields: {
+      shown: field.boolean({ defaultValue: true }),
+      photo: field.media({ required: true }),
+    },
+    visibility: { photo: { field: "shown", values: [true] } },
+  });
+  expect(mediaListChoices(unconditional, { key: "photo" })).toEqual([]);
+  expect(mediaListChoices(boolean, { key: "photo" })).toEqual([]);
+  expect(mediaListChoices(field.media(), {})).toEqual([]);
 });
 
 test("media already in a list is collected from string values only", () => {

@@ -14,6 +14,7 @@ import {
   applicableErrors,
   createDraftResolver,
   draftValues,
+  EmbedUrlPreview,
   FieldRenderer,
   FieldLayout,
   EntryListBudget,
@@ -75,7 +76,7 @@ import {
 
 const entryRoute = getRouteApi("/_protected/content/$modelKey/$entryId");
 const mediaRenderers: FieldRendererRegistry = { media: MediaPicker, url: OrdinaryUrlField };
-const mediaPreviews: FieldPreviewRegistry = { media: MediaItemPreview };
+const fieldPreviews: FieldPreviewRegistry = { media: MediaItemPreview, url: EmbedUrlPreview };
 const formId = "entry-draft-form";
 
 export function EntryPage() {
@@ -510,7 +511,7 @@ export function EntryPage() {
           form={form}
           mediaListPicker={MediaListPicker}
           model={model}
-          previews={mediaPreviews}
+          previews={fieldPreviews}
           readOnly={readOnly}
           renderers={mediaRenderers}
         >

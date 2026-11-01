@@ -2,11 +2,13 @@ import { render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { builtInBlocks, toBlockMetadata } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 import { expect, test } from "vitest";
 import { itemAction, openActions, openItem } from "../../../app/testing/index.js";
 import { revealControl } from "../../../shared/lib/index.js";
 import type { DraftEditorValues } from "../editor-form.js";
+import { EmbedUrlPreview } from "../EmbedUrlPreview/index.js";
 import {
   FieldRenderer,
   FieldRendererProvider,
@@ -267,11 +269,13 @@ function FakeMediaListPicker({
 
 /** A list bound to a form and model, so growth checks see the entry-wide budget. */
 function PickerHarness({
+  busy = false,
   definition = images,
   initial,
   filler = 0,
   readOnly = false,
 }: {
+  readonly busy?: boolean;
   readonly definition?: FieldDefinition;
   readonly initial: unknown;
   readonly filler?: number;
@@ -307,6 +311,7 @@ function PickerHarness({
   );
   return (
     <FieldRendererProvider
+      busy={busy}
       form={form}
       mediaListPicker={FakeMediaListPicker}
       model={model}
@@ -512,4 +517,80 @@ test("viewers get no Add for eligible lists", () => {
   render(<PickerHarness initial={[{ media: "a" }]} readOnly />);
   expect(screen.queryByRole("button", { name: "Add Images item" })).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+// The built-in gallery list, whose media field depends on the item's `kind`.
+const galleryImages = toBlockMetadata(builtInBlocks.gallery).fields
+  .images as unknown as FieldDefinition;
+
+test("Add Video appends one open video item next to the media Add", async () => {
+  const user = userEvent.setup();
+  render(<PickerHarness definition={galleryImages} initial={[{ kind: "image", media: "a" }]} />);
+  const add = screen.getByRole("button", { name: "Add Images and videos item" });
+  const video = screen.getByRole("button", { name: "Add Video item to Images and videos" });
+  expect(video).toHaveTextContent("Add Video");
+  expect(video).not.toHaveAttribute("aria-haspopup");
+  expect(add.compareDocumentPosition(video) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.click(video);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByTestId("value")).toHaveTextContent(
+    JSON.stringify([
+      { kind: "image", media: "a" },
+      { kind: "video", playback: "player", aspectRatio: "16:9" },
+    ]),
+  );
+  expect(screen.getByTestId("dirty")).toHaveTextContent("true");
+  expect(screen.getByText("Added Images and videos item 2.")).toHaveRole("status");
+  expect(screen.getByRole("textbox", { name: /Video URL/u })).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: /Alt text/u })).toBeNull();
+  // The media Add still opens the picker.
+  await user.click(add);
+  expect(screen.getByRole("dialog", { name: "Add media to Images and videos" })).toBeVisible();
+});
+
+test("Add Video shares the list limits and is absent for viewers", () => {
+  const full = Array.from({ length: 50 }, (_, index) => ({ kind: "image", media: `m${index}` }));
+  const { unmount } = render(<PickerHarness definition={galleryImages} initial={full} />);
+  const video = screen.getByRole("button", { name: "Add Video item to Images and videos" });
+  expect(video).toBeDisabled();
+  expect(video).toHaveAccessibleDescription("This list allows at most 50 items.");
+  unmount();
+  const busy = render(<PickerHarness busy definition={galleryImages} initial={[]} />);
+  expect(
+    screen.getByRole("button", { name: "Add Video item to Images and videos" }),
+  ).toBeDisabled();
+  busy.unmount();
+  render(<PickerHarness definition={galleryImages} initial={[]} readOnly />);
+  expect(screen.queryByRole("button", { name: /Add Video/u })).toBeNull();
+});
+
+test("lists whose media field has no select rule show only Add", () => {
+  render(<PickerHarness initial={[]} />);
+  expect(screen.getAllByRole("button", { name: /^Add / })).toHaveLength(1);
+});
+
+test("collapsed gallery rows show a video's title and provider, and an image's file", () => {
+  render(
+    <Harness
+      definition={galleryImages}
+      initial={[
+        { kind: "image", media: "m1", caption: "Kitchen" },
+        {
+          kind: "video",
+          media: "stale",
+          videoTitle: "Studio tour",
+          videoUrl: "https://vimeo.com/76979871",
+        },
+      ]}
+      previews={{ media: StubPreview, url: EmbedUrlPreview }}
+    />,
+  );
+  const rows = screen.getAllByRole("button", { name: /^Expand Images and videos item/u });
+  expect(rows[0]!.closest("li")).toHaveTextContent("Kitchen");
+  expect(rows[0]!.closest("li")).toHaveTextContent("m1.jpeg");
+  const video = rows[1]!.closest("li")!;
+  expect(video).toHaveTextContent("Studio tour");
+  expect(video).toHaveTextContent("Vimeo video");
+  expect(video).not.toHaveTextContent("stale");
+  expect(video).not.toHaveTextContent("Thumb");
 });

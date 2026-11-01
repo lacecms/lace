@@ -323,7 +323,13 @@ export async function existingSiteJourney(parent, operations) {
     await new Promise((done) => server.close(done));
   }
 
-  const blocks = (html) => [...html.matchAll(/data-lace-block="([^"]+)"/gu)].map((m) => m[1]);
+  // Inline block scripts name their blocks in selectors, so markup is read without them.
+  const blocks = (html) =>
+    [
+      ...html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, "")
+        .matchAll(/data-lace-block="([^"]+)"/gu),
+    ].map((m) => m[1]);
   // Home includes both Link appearances; the post includes a gallery.
   if (
     JSON.stringify(blocks(home)) !== JSON.stringify(["hero", "navigation", "cta", "link", "link"])

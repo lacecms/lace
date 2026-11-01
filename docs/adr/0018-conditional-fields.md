@@ -1,6 +1,6 @@
 # ADR 0018: Conditional fields
 
-- Status: accepted; SM5A, SM5B and SM5C implemented
+- Status: accepted; SM5A, SM5B, SM5C and SM5D implemented
 - Date: 2026-11-01
 
 ## Context
@@ -88,3 +88,8 @@ enforces applicable ones. Removing a rule from a required field can be refused
 when published items lack the value; the remedy matches making a field
 required today. Revert restores published values, which carry no hidden
 values. Older engines reject configurations that use `visibility`.
+
+The built-in `gallery` (version 5, SM5D) is the shipped example: its item
+`kind` select shows `media`, `alt` and `link` for images and `videoUrl`,
+`videoTitle`, `playback` and `aspectRatio` for videos. The admin derives an
+"Add Video" button from the media field's rule, next to the multi-select Add.

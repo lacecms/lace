@@ -41,7 +41,7 @@ Supply `LACE_API_BASE_URL` to the Astro configuration process as well as the ser
 
 `LaceImage.astro` builds WebP variants at 960 and 1920 pixels, each capped at the original width, with `srcset`, `sizes`, dimensions, alt text and focal point. GIF variants preserve animation. Eligible opaque images receive a blurred placeholder; GIF, transparent images and services without local transforms omit it. Images load lazily by default; Hero uses eager loading. A failed fetch or transform fails the build. Set the loader's `optimizeImages: false` to use direct public originals instead.
 
-Image and Gallery components support an opt-in, script-free full-size lightbox. A block/item link takes precedence and opens in the same tab. Adopt the starter's lightbox and link focus styles. After upgrading packages, review `lace add block image gallery hero --site <path> --dry-run`, update unedited files and merge customized components (`--write-new` provides `.new` proposals). Image/gallery schemas are now 4/4: raise affected model versions and synchronize content explicitly, with matching components ready before the next build. See [upgrade and rollback](../operations/#upgrade-and-roll-back).
+Image and Gallery components support an opt-in, script-free full-size lightbox for images. A block/item link takes precedence and opens in the same tab. Adopt the starter's lightbox and link focus styles. After upgrading packages, review `lace add block image gallery hero --site <path> --dry-run`, update unedited files and merge customized components (`--write-new` provides `.new` proposals). Image/gallery schemas are now 4/4: raise affected model versions and synchronize content explicitly, with matching components ready before the next build. See [upgrade and rollback](../operations/#upgrade-and-roll-back).
 
 ## Style your components
 
@@ -76,6 +76,51 @@ unlayered `display: grid` and `grid-template-columns` rules that would force fle
 back into grid. Keep your image and decorative rules. Grid/auto keeps Gallery's
 existing image `sizes`; other layouts use `100vw`. Tune the user-owned component's
 sizes to actual site widths, especially for custom layouts and featured images.
+
+### Gallery video items
+
+Gallery v5 items carry `kind`: `image` items render as before, `video` items
+render inside their layout cell as `<li data-lace-part="item"
+data-lace-kind="video">` with a `<figure data-lace-video
+data-lace-aspect-ratio="…" data-lace-playback="…">`, a `[data-lace-video-area]`,
+an optional `caption` part and a `source` link. Player items load a lazy,
+non-autoplaying iframe. Ambient items mount a muted, looping player once on page
+load; reduced motion and no JavaScript fall back to the player, as for the
+Video embed block. Ambient playback has no pause control, which does not meet
+WCAG 2.2.2 for motion longer than five seconds; add a control in your component
+copy if you need one, and use ambient sparingly because each player loads
+provider media. The lightbox and links never apply to videos, and dialog ids
+count every stored item.
+
+`GalleryVideo.css` installs beside the component. It reserves each video area at
+its item's ratio (16:9 by default) with zero-specificity rules in the
+`lace-layout` layer and visually hides the source link only while an ambient
+player is mounted; unlayered site CSS overrides it.
+
+Published items include only the fields their kind shows, so typed components
+narrow before describing an image:
+
+```astro
+{data.images.map((item) =>
+  item.kind === "video"
+    ? item.videoUrl !== undefined && <MyVideo url={item.videoUrl} title={item.videoTitle} />
+    : item.media !== undefined && <LaceImage image={image(item.media, item.alt)} />,
+)}
+```
+
+### Upgrade Gallery v4 to v5
+
+1. Back up content and site sources and upgrade the engine, admin, CLI and site
+   packages together. No SQL migration is required.
+2. Raise the version of every model that allows Gallery and synchronize with
+   `lace content sync`. Identity migration 5 keeps stored items: drafts gain the
+   item defaults and publications gain `kind: "image"`.
+3. Run `lace add block gallery --site site` (or merge the `.new` proposals). It
+   updates `GalleryBlock.astro` and `ListLayout.css` and adds
+   `GalleryVideo.css`. A revision 6 component fails with `block_version_mismatch`
+   after synchronization; an edited copy must check `kind` and `media` as above.
+4. Rollback after synchronization needs the pre-upgrade content backup and the
+   matching older code and site sources.
 
 ### Upgrade Gallery v3 to v4
 

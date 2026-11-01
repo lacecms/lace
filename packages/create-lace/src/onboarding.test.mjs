@@ -102,7 +102,7 @@ test("generated block sources are user-owned and identical to the reference site
     lock.blockMap,
     ...Object.values(lock.items).flatMap((item) => Object.keys(item.files)),
   ];
-  expect(shared).toHaveLength(14);
+  expect(shared).toHaveLength(15);
   for (const path of shared) {
     expect(generated.manifest.files[`site/${path}`]).toEqual({ owner: "user" });
     expect(await readFile(join(generated.path, "site", path), "utf8")).toBe(
@@ -152,13 +152,13 @@ test("generated Astro builds every built-in block from one export and rejects un
           .matchAll(/data-lace-block="([^"]+)"/gu),
       ].map((match) => match[1]),
     ).toEqual(["navigation", "hero", "navigation", "cta", "videoEmbed", "link", "link"]);
-    expect([...post.matchAll(/data-lace-block="([^"]+)"/gu)].map((match) => match[1])).toEqual([
-      "navigation",
-      "richText",
-      "image",
-      "quote",
-      "gallery",
-    ]);
+    expect(
+      [
+        ...post
+          .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, "")
+          .matchAll(/data-lace-block="([^"]+)"/gu),
+      ].map((match) => match[1]),
+    ).toEqual(["navigation", "richText", "image", "quote", "gallery"]);
     expect(home).toContain('data-lace-model="home" data-lace-entry="home-entry"');
     expect(post).toContain('data-lace-block-key="post-image"');
     expect(post).toContain('data-lace-part="caption"');

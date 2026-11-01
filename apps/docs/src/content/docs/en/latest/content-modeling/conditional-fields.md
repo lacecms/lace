@@ -3,7 +3,7 @@ title: Conditional fields
 description: Show, require and publish a field only when a sibling select or switch selects it.
 ---
 
-A conditional field applies only when a sibling **controller** holds selected values. For example, a gallery item can be an image or a video: `kind` decides whether the editor asks for an image or a video link. Lace enforces the rule on every write path (admin, REST, MCP and `lace import`), so a field that does not apply is never required and never published.
+A conditional field applies only when a sibling **controller** holds selected values. For example, a gallery item can be an image or a video: `kind` decides whether the editor asks for an image or a video link. The built-in `gallery` block (version 5) ships exactly this rule; the example below shows the same shape in a custom block. Lace enforces the rule on every write path (admin, REST, MCP and `lace import`), so a field that does not apply is never required and never published.
 
 ## Declare a rule
 
@@ -114,3 +114,5 @@ Block **settings** use a different rule, `settingsVisibility`, described in [gro
 ## In the editor
 
 The admin hides fields that do not apply as soon as the controller changes, without saving. See [edit and publish content](../../editing-content/#conditional-fields) for what editors see.
+
+When a list can add several images from the media library and its media field depends on a `select` controller, the list also offers one **Add** button per option that hides the media field, labelled with the option's choice-card label (the gallery's **Add Video**). It adds one item with that option selected. A controller's value never labels a collapsed row; rows use the other fields and previews instead.

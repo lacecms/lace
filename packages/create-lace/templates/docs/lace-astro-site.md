@@ -172,13 +172,25 @@ Two built-in blocks hold repeatable content in group and list fields; editors
 fill them with the generic Add, Remove, Duplicate and reorder controls and must
 add at least one item before publishing:
 
-- `gallery` has an optional `title` and up to 50 `images`, each with `media`,
-  an optional `alt` and an optional `caption`. `GalleryBlock.astro` renders a
-  `<section class="gallery">` with a list of figures. Each image uses
-  `image(item.media, item.alt)`, so its alt text falls back to the media item's
-  alt text and then to `""`; the caption falls back to the media caption. Images
-  carry `width`, `height`, the focal-point `object-position` and
-  `loading="lazy"`.
+- `gallery` (version 5) has an optional `title` and up to 50 `images`. Each
+  item has a `kind`: an `image` item has `media`, an optional `alt`, `caption`
+  and `link`; a `video` item has a YouTube or Vimeo `videoUrl`, a `videoTitle`,
+  `playback` (`player` or `ambient`), `aspectRatio` and an optional `caption`.
+  Editors add images with **Add** and videos with **Add Video**.
+  `GalleryBlock.astro` renders a `<section class="gallery">` with a list of
+  figures. Each image uses `image(item.media, item.alt)`, so its alt text falls
+  back to the media item's alt text and then to `""`; the caption falls back to
+  the media caption. Images carry `width`, `height`, the focal-point
+  `object-position` and `loading="lazy"`. Video items render the player in
+  their cell, sized by `GalleryVideo.css`, with the same ambient, reduced-motion
+  and no-JavaScript behavior as the Video embed block. Published items include
+  only the fields of their kind, so a customized copy checks `item.kind` and
+  that `item.media` is present before describing an image.
+- Upgrading from template 0.44.0: raise the version of every model that allows
+  `gallery` and run `pnpm content:sync`. Before the next build, update the
+  component with `pnpm exec lace add block gallery --site site` or merge the
+  `.new` proposals; a revision 6 component fails with `block_version_mismatch`
+  after sync.
 - `navigation` has an optional `name` (the `aria-label` of its `<nav>`; name
   every navigation when a page has several) and up to 20 `links`, each with a
   `label`, an optional `url` and up to 20 `children` (one submenu level). A
@@ -557,7 +569,8 @@ editors on purpose (and keep those classes in any CSS purge safelist):
 }
 ```
 
-The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`;
+The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`,
+and for video items `player` and `source` inside `[data-lace-video]`;
 the navigation exposes `list`, `item`, `link`, `label`, `submenu`, `toggle` and
 `children`. Neither component ships styles. This CSS lays galleries out as an
 adaptive grid that crops images around their focal point, and navigation as a

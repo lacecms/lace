@@ -27,6 +27,41 @@ export function mediaListTarget(item: FieldDefinition): MediaListTarget | undefi
   return shownFieldKeys(item.fields, item.visibility, initial).has(key) ? { key } : undefined;
 }
 
+/** An Add choice for an option of the media field's controller that hides the media field. */
+export interface MediaListChoice {
+  /** The option's choice-card label, otherwise the option value. */
+  readonly label: string;
+  readonly value: string;
+  /** A detached starting value with the controller set to the option. */
+  readonly item: Record<string, unknown>;
+}
+
+/**
+ * The options, in option order, of the `select` controller that a rule on an
+ * eligible list's media field does not list, each with the item Add would
+ * insert for it (the gallery's Video). Lists without such a rule, or whose
+ * controller is a boolean, offer no choices.
+ */
+export function mediaListChoices(
+  item: FieldDefinition,
+  target: MediaListTarget,
+): MediaListChoice[] {
+  if (item.type !== "group" || target.key === undefined) return [];
+  const rule = item.visibility?.[target.key];
+  const controller = rule === undefined ? undefined : item.fields[rule.field];
+  if (rule === undefined || controller?.type !== "select") return [];
+  const initial = draftItemValue(item) ?? fieldStartingValue(item, {});
+  const listed = new Set<unknown>(rule.values);
+  return controller.options
+    .filter((option) => !listed.has(option))
+    .map((value) => ({
+      item: { ...(record(initial) ? structuredClone(initial) : {}), [rule.field]: value },
+      label:
+        controller.presentation?.choices.find((choice) => choice.value === value)?.label ?? value,
+      value,
+    }));
+}
+
 /**
  * One new item per media identifier, in order: the identifier itself, or a
  * detached copy of the item's starting value with its media field set.

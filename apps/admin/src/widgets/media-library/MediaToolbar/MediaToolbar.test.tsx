@@ -87,5 +87,45 @@ test("the tag filter stops at five tags", async () => {
   setup({ tags: ["a", "b", "c", "d", "e"] });
   const input = await screen.findByRole("combobox", { name: "Filter by tags (all must match)" });
   expect(input).toHaveAttribute("readonly");
-  expect(input).toHaveAccessibleDescription("At most 5 tags can be combined.");
+  expect(input).toHaveAccessibleDescription(
+    "At most 5 tags can be combined. Items must have all tags",
+  );
+});
+
+test("controls follow the two-row reading order with a compact tag filter", async () => {
+  setup({ tags: ["cover", "portrait"], type: "image/png" });
+  const search = await screen.findByRole("searchbox", { name: "Search media" });
+  const types = screen.getByRole("group", { name: "Filter by type" });
+  const sort = screen.getByRole("combobox", { name: "Sort media" });
+  const view = screen.getByRole("group", { name: "Layout" });
+  const tags = screen.getByRole("combobox", { name: "Filter by tags (all must match)" });
+  const help = screen.getByRole("button", { name: "About tag filters" });
+  const clear = screen.getByRole("button", { name: "Clear filters" });
+  const order = [search, types, sort, view, tags, help, clear];
+  for (const [index, element] of order.slice(1).entries())
+    expect(
+      order[index]!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  // Chips sit inside the same field as the input, which has no visible label.
+  const chips = screen.getByRole("list", { name: "Filter by tags (all must match): chosen tags" });
+  expect(chips.parentElement).toBe(tags.parentElement);
+  expect(screen.getByText("Filter by tags (all must match)")).toHaveClass("sr-only");
+  expect(tags).toHaveAttribute("placeholder", "Filter by tag");
+  expect(tags).toHaveAccessibleDescription("Items must have all tags");
+  expect(types.querySelectorAll("button[aria-pressed]")).toHaveLength(6);
+});
+
+test("the tag rule tooltip opens on hover and on keyboard focus", async () => {
+  const user = userEvent.setup();
+  setup();
+  const help = await screen.findByRole("button", { name: "About tag filters" });
+  await user.hover(help);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("Items must have all tags");
+  await user.unhover(help);
+  await user.keyboard("{Escape}");
+  await user.click(document.body);
+  help.focus();
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("Items must have all tags");
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 });

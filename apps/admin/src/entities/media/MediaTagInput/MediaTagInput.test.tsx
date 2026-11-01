@@ -17,14 +17,19 @@ function Harness({
   initial = [],
   limit = 20,
   onChange,
+  variant,
 }: {
   readonly initial?: readonly string[];
   readonly limit?: number;
   readonly onChange?: (tags: readonly string[]) => void;
+  readonly variant?: "field" | "inline";
 }) {
   const [tags, setTags] = useState(initial);
   return (
     <MediaTagInput
+      {...(variant === "inline"
+        ? { describedBy: "rule", placeholder: "Filter by tag", variant: "inline" as const }
+        : {})}
       label="Tags"
       limit={limit}
       limitMessage={`An item can have at most ${limit} tags.`}
@@ -164,4 +169,38 @@ test("suggestions exclude chosen tags and a click adds one", async () => {
   await user.click(await screen.findByRole("option", { name: "project-2026, 3 items" }));
   expect(screen.queryByRole("option", { name: /portrait/ })).toBeNull();
   expect(chips()).toEqual(["portrait", "project-2026"]);
+});
+
+test("the inline variant keeps chips inside one field with a hidden label", async () => {
+  const { user } = setup(
+    <>
+      <Harness initial={["cover", "travel"]} variant="inline" />
+      <span id="rule">Items must have all tags</span>
+    </>,
+  );
+  const input = await screen.findByRole("combobox", { name: "Tags" });
+  expect(screen.getByText("Tags")).toHaveClass("sr-only");
+  expect(input).toHaveAttribute("placeholder", "Filter by tag");
+  expect(input).toHaveAccessibleDescription("Items must have all tags");
+  const chips = screen.getByRole("list", { name: "Tags: chosen tags" });
+  expect(chips.parentElement).toBe(input.parentElement);
+  await user.click(input);
+  await user.keyboard("{Backspace}");
+  expect(screen.queryByText("travel")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Remove tag cover" }));
+  expect(input).toHaveFocus();
+  await user.type(input, "pro");
+  await screen.findByRole("option", { name: "project-2026, 3 items" });
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(await screen.findByRole("button", { name: "Remove tag project-2026" })).toBeVisible();
+});
+
+test("the field variant keeps its visible label and chips above the input", async () => {
+  setup(<Harness initial={["cover"]} />);
+  const input = await screen.findByRole("combobox", { name: "Tags" });
+  expect(screen.getByText("Tags")).not.toHaveClass("sr-only");
+  expect(input).toHaveAttribute("placeholder", "Add a tag");
+  expect(screen.getByRole("list", { name: "Tags: chosen tags" }).parentElement).not.toBe(
+    input.parentElement,
+  );
 });

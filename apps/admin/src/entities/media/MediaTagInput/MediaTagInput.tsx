@@ -1,5 +1,5 @@
 import { normalizeMediaTag } from "@lacecms/contracts";
-import { X } from "lucide-react";
+import { Tag, X } from "lucide-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
 import { cn } from "../../../shared/lib/index.js";
 import { Badge } from "../../../shared/ui/Badge/index.js";
@@ -32,6 +32,8 @@ export function isOpenTagCombobox(target: EventTarget | null): boolean {
  * a comma adds the typed text, and Backspace in an empty input removes the
  * last chip. Typed text is normalized like the API before it is added. At the
  * limit the input stays focusable for removal but accepts no more text.
+ * The `inline` variant fits a toolbar: one field with a tag icon and the chips
+ * before the input, and a label read only by assistive technology.
  */
 export function MediaTagInput({
   className,
@@ -42,7 +44,9 @@ export function MediaTagInput({
   limit,
   limitMessage,
   onChange,
+  placeholder = "Add a tag",
   tags,
+  variant = "field",
 }: {
   readonly className?: string | undefined;
   /** Further descriptions of the input, such as a server error. */
@@ -54,7 +58,10 @@ export function MediaTagInput({
   readonly limit: number;
   readonly limitMessage: string;
   readonly onChange: (tags: readonly string[]) => void;
+  readonly placeholder?: string | undefined;
   readonly tags: readonly string[];
+  /** `field` shows the label and chips above the input; `inline` puts them in one field. */
+  readonly variant?: "field" | "inline" | undefined;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -159,96 +166,136 @@ export function MediaTagInput({
     describedBy,
   ].filter((value) => value !== undefined);
 
+  const inlineField = variant === "inline";
+  const chipList =
+    tags.length === 0 ? undefined : (
+      <ul
+        aria-label={`${label}: chosen tags`}
+        className={cn("m-0 flex list-none flex-wrap gap-1 p-0", inlineField && "contents")}
+      >
+        {tags.map((tag) => (
+          <li key={tag}>
+            <Badge className="gap-0.5 py-0 pr-0.5 font-medium" variant="secondary">
+              <span>{tag}</span>
+              <Button
+                aria-label={`Remove tag ${tag}`}
+                disabled={disabled}
+                onClick={() => {
+                  remove(tag);
+                  input.current?.focus();
+                }}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <X aria-hidden="true" />
+              </Button>
+            </Badge>
+          </li>
+        ))}
+      </ul>
+    );
+  const combobox = (
+    <>
+      <Input
+        {...{ [TAG_INPUT_ATTRIBUTE]: "" }}
+        className={
+          inlineField
+            ? "h-6 min-w-24 flex-1 basis-24 border-0 bg-transparent px-0 shadow-none outline-none focus-visible:border-0 focus-visible:ring-0 focus-visible:outline-none dark:bg-transparent"
+            : undefined
+        }
+        aria-activedescendant={activeOption === undefined ? undefined : `${id}-option-${active}`}
+        aria-autocomplete="list"
+        aria-controls={listId}
+        aria-describedby={describedByIds.length > 0 ? describedByIds.join(" ") : undefined}
+        aria-expanded={expanded}
+        aria-invalid={invalid || error === true ? true : undefined}
+        autoComplete="off"
+        disabled={disabled}
+        id={`${id}-input`}
+        onBlur={() => {
+          setFocused(false);
+          setActive(-1);
+        }}
+        onChange={(event) => changeText(event.currentTarget.value)}
+        onFocus={() => {
+          setFocused(true);
+          setDismissed(false);
+        }}
+        onKeyDown={onKeyDown}
+        placeholder={full ? undefined : placeholder}
+        readOnly={full}
+        ref={input}
+        role="combobox"
+        spellCheck={false}
+        value={text}
+      />
+      <ul
+        className="absolute top-full right-0 left-0 z-50 m-0 mt-1 max-h-60 list-none overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+        hidden={!expanded}
+        id={listId}
+        // Keep focus in the input when a suggestion is clicked.
+        onMouseDown={(event) => event.preventDefault()}
+        role="listbox"
+        aria-label={`${label} suggestions`}
+        // The list is never a tab stop; focus stays in the input.
+        tabIndex={-1}
+      >
+        {/* Options stay mounted while hidden: removing nodes during blur makes the
+              surrounding focus trap pull focus back to its container. */}
+        {options.map((option, index) => (
+          <li
+            aria-label={`${option.tag}, ${option.count} ${option.count === 1 ? "item" : "items"}`}
+            aria-selected={index === active}
+            className={cn(
+              "flex cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1 text-sm",
+              index === active ? "bg-accent text-accent-foreground" : undefined,
+            )}
+            id={`${id}-option-${index}`}
+            key={option.tag}
+            onClick={() => add(option.tag)}
+            onMouseMove={() => setActive(index)}
+            role="option"
+          >
+            <span>{option.tag}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{option.count}</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+
   return (
     <div className={cn("grid gap-1.5", className)}>
-      <label className="text-sm font-medium" htmlFor={`${id}-input`}>
+      <label
+        className={cn("text-sm font-medium", inlineField && "sr-only")}
+        htmlFor={`${id}-input`}
+      >
         {label}
       </label>
-      {tags.length === 0 ? undefined : (
-        <ul aria-label={`${label}: chosen tags`} className="m-0 flex list-none flex-wrap gap-1 p-0">
-          {tags.map((tag) => (
-            <li key={tag}>
-              <Badge className="gap-0.5 py-0 pr-0.5 font-medium" variant="secondary">
-                <span>{tag}</span>
-                <Button
-                  aria-label={`Remove tag ${tag}`}
-                  disabled={disabled}
-                  onClick={() => {
-                    remove(tag);
-                    input.current?.focus();
-                  }}
-                  size="icon-xs"
-                  variant="ghost"
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </Badge>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="relative">
-        <Input
-          {...{ [TAG_INPUT_ATTRIBUTE]: "" }}
-          aria-activedescendant={activeOption === undefined ? undefined : `${id}-option-${active}`}
-          aria-autocomplete="list"
-          aria-controls={listId}
-          aria-describedby={describedByIds.length > 0 ? describedByIds.join(" ") : undefined}
-          aria-expanded={expanded}
-          aria-invalid={invalid || error === true ? true : undefined}
-          autoComplete="off"
-          disabled={disabled}
-          id={`${id}-input`}
-          onBlur={() => {
-            setFocused(false);
-            setActive(-1);
+      {inlineField ? (
+        <div
+          className={cn(
+            "relative flex min-h-8 w-full min-w-0 flex-wrap items-center gap-1 rounded-md border border-input bg-background px-2 py-0.5 shadow-xs dark:bg-input/30",
+            "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+            (invalid || error === true) && "border-destructive",
+          )}
+          // Pointer presses on the field's padding, icon or chips gap focus the input.
+          onMouseDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            event.preventDefault();
+            input.current?.focus();
           }}
-          onChange={(event) => changeText(event.currentTarget.value)}
-          onFocus={() => {
-            setFocused(true);
-            setDismissed(false);
-          }}
-          onKeyDown={onKeyDown}
-          placeholder={full ? undefined : "Add a tag"}
-          readOnly={full}
-          ref={input}
-          role="combobox"
-          spellCheck={false}
-          value={text}
-        />
-        <ul
-          className="absolute top-full right-0 left-0 z-50 m-0 mt-1 max-h-60 list-none overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-          hidden={!expanded}
-          id={listId}
-          // Keep focus in the input when a suggestion is clicked.
-          onMouseDown={(event) => event.preventDefault()}
-          role="listbox"
-          aria-label={`${label} suggestions`}
-          // The list is never a tab stop; focus stays in the input.
-          tabIndex={-1}
         >
-          {/* Options stay mounted while hidden: removing nodes during blur makes the
-              surrounding focus trap pull focus back to its container. */}
-          {options.map((option, index) => (
-            <li
-              aria-label={`${option.tag}, ${option.count} ${option.count === 1 ? "item" : "items"}`}
-              aria-selected={index === active}
-              className={cn(
-                "flex cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1 text-sm",
-                index === active ? "bg-accent text-accent-foreground" : undefined,
-              )}
-              id={`${id}-option-${index}`}
-              key={option.tag}
-              onClick={() => add(option.tag)}
-              onMouseMove={() => setActive(index)}
-              role="option"
-            >
-              <span>{option.tag}</span>
-              <span className="text-xs text-muted-foreground tabular-nums">{option.count}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+          <Tag aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          {chipList}
+          {combobox}
+        </div>
+      ) : (
+        <>
+          {chipList}
+          <div className="relative">{combobox}</div>
+        </>
+      )}
       {invalid ? (
         <p className="m-0 text-xs text-destructive" id={messageId} role="alert">
           {invalidTagMessage}

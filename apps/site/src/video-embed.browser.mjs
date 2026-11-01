@@ -85,6 +85,17 @@ export async function verifyVideoEmbeds(siteRoot) {
         expect(await ambient.locator("iframe").getAttribute("src")).not.toContain("background");
       }
     }
+    // Gallery ambient items fall back to the ordinary player under reduced motion.
+    for (const key of ["about-gallery-0", "about-gallery-1"]) {
+      const video = page.locator(
+        `[data-lace-block-key="${key}"] [data-lace-video][data-lace-playback="ambient"]`,
+      );
+      await browserExpect(video).toHaveAttribute("data-lace-ambient", "fallback");
+      await browserExpect(video.locator("iframe")).toHaveCount(1);
+      expect(await video.locator("iframe").getAttribute("src")).not.toContain("background");
+      await browserExpect(video.locator('[data-lace-part="source"]')).toBeVisible();
+    }
+    expect(requests.some((request) => /background=1/u.test(request))).toBe(false);
     const motion = await browser.newContext({ reducedMotion: "no-preference" });
     await motion.route("https://**/*", (route) =>
       route.fulfill({ contentType: "text/html", body: "<p>Stub player</p>" }),
@@ -126,10 +137,45 @@ export async function verifyVideoEmbeds(siteRoot) {
       document.dispatchEvent(new Event("astro:page-load"));
       document.dispatchEvent(new Event("astro:page-load"));
     });
-    const ambientBlocks = moving.locator('[data-lace-playback="ambient"]');
+    const ambientBlocks = moving.locator(
+      '[data-lace-block="videoEmbed"][data-lace-playback="ambient"]',
+    );
     await browserExpect(ambientBlocks).toHaveCount(6);
     for (const item of await ambientBlocks.all())
       await browserExpect(item.locator("iframe")).toHaveCount(1);
+    // Gallery ambient items mount once each, even after repeated initialization,
+    // and neither script mounts a player into the other's markup.
+    const galleryAmbient = moving.locator(
+      '[data-lace-block="gallery"] [data-lace-video][data-lace-playback="ambient"]',
+    );
+    await browserExpect(galleryAmbient).toHaveCount(2);
+    for (const item of await galleryAmbient.all()) {
+      await browserExpect(item).toHaveAttribute("data-lace-ambient", "active");
+      await browserExpect(item.locator("iframe")).toHaveCount(1);
+      await browserExpect(item.locator("iframe")).toHaveAttribute("tabindex", "-1");
+      await browserExpect(item.locator("iframe")).toHaveAttribute(
+        "src",
+        "https://player.vimeo.com/video/76979871?h=abc123def&background=1",
+      );
+      const link = item.locator('[data-lace-part="source"]');
+      expect(await link.evaluate((element) => getComputedStyle(element).clipPath)).toBe(
+        "inset(50%)",
+      );
+    }
+    expect(
+      await moving
+        .locator('[data-lace-block-key="about-gallery-0"] [data-lace-video-area]')
+        .first()
+        .evaluate((area) => getComputedStyle(area).aspectRatio),
+    ).toBe("9 / 16");
+    const player = moving.locator(
+      '[data-lace-block-key="about-gallery-0"] [data-lace-video][data-lace-playback="player"]',
+    );
+    await browserExpect(player.locator("iframe")).toHaveCount(1);
+    expect(await player.locator("iframe").getAttribute("allow")).not.toContain("autoplay");
+    expect(await player.getAttribute("data-lace-ambient")).toBeNull();
+    for (const key of ["about-vimeo", "about-vimeo-second"])
+      expect(await moving.locator(`[data-lace-block-key="${key}"] iframe`).count()).toBe(0);
     await motion.close();
     await context.close();
     const noScript = await browser.newContext({ javaScriptEnabled: false });
@@ -153,6 +199,14 @@ export async function verifyVideoEmbeds(siteRoot) {
         expect(frame.width).toBeCloseTo(area.width, 0);
         expect(frame.height).toBeCloseTo(area.height, 0);
       }
+    }
+    for (const key of ["about-gallery-0", "about-gallery-1"]) {
+      const video = fallback.locator(
+        `[data-lace-block-key="${key}"] [data-lace-video][data-lace-playback="ambient"]`,
+      );
+      await browserExpect(video.locator("iframe")).toHaveCount(1);
+      expect(await video.locator("iframe").getAttribute("src")).not.toContain("background");
+      await browserExpect(video.locator('[data-lace-part="source"]')).toBeVisible();
     }
     await noScript.close();
   } finally {

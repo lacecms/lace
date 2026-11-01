@@ -285,7 +285,7 @@ test("starter image blocks and gallery items show the image before its overrides
   renderInRouter(<ImageHarness data={{ images: [{}] }} definition={galleryBlock!} />, {
     client: stubClient({}),
   });
-  await openItem(userEvent.setup(), "Images item 1");
+  await openItem(userEvent.setup(), "Images and videos item 1");
   const [itemMedia] = await screen.findAllByText("Media selection is not available here.");
   before(itemMedia!, screen.getByRole("textbox", { name: "Alt text" }));
 });

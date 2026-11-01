@@ -85,13 +85,13 @@ test("summarizes a block's first non-empty list by its label, count, and items",
   const images = blockSummary(gallery!, {
     images: [{ media: mediaId }, { media: mediaId }, { media: mediaId }],
   });
-  expect(images).toBe("Images (3)");
+  expect(images).toBe("Images and videos (3)");
   expect(images).not.toContain(mediaId);
   expect(
     blockSummary(gallery!, {
       images: [{ caption: "Office", media: mediaId }, { media: mediaId }, { caption: "Team" }],
     }),
-  ).toBe("Images (3): Office, Team");
+  ).toBe("Images and videos (3): Office, Team");
 });
 
 test("keeps top-level text ahead of lists and skips empty lists", () => {

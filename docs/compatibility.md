@@ -832,3 +832,21 @@ adoption; older engines cannot maintain internal-link projections or interpret
 the new URL grammar. Test restoration at an isolated origin with replacement
 secrets and production hooks disabled. Local Node/D1/R2 acceptance does not prove
 real VPS or Cloudflare deployment, restore or assistant-client compatibility.
+
+## Gallery video items (SM5D)
+
+`@lacecms/content` moves the built-in `gallery` to definition version 5: each
+item gains a required `kind` select (`image` default, `video`) that controls
+conditional fields, plus `videoUrl`, `videoTitle`, `playback` and `aspectRatio`
+for videos. Identity migration 5 keeps stored items as images; configuration
+sync materializes the item defaults in drafts and `kind` in publications. No
+SQL migration. `videoEmbed` keeps its version and hashes; its `playback` and
+`aspectRatio` descriptors are now shared with the gallery item.
+
+The registry `gallery` item moves to revision 7 with a new `GalleryVideo.css`
+stylesheet and an ambient-mounting script. Revision 6 components fail with
+`block_version_mismatch` after sync, and published item types make `media`
+optional, so customized copies must check `kind` and `media`. Template 0.45.0
+raises the starter model versions and ships the new component and stylesheet.
+Rollback after sync requires the pre-upgrade content backup with matching code
+and site sources.

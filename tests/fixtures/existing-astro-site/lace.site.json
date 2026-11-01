@@ -12,9 +12,10 @@
       }
     },
     "gallery": {
-      "revision": 6,
+      "revision": 7,
       "files": {
-        "src/components/lace/GalleryBlock.astro": "8a2455f083c9fffc2758085cb63e08072cb155e12768d14f51adddba733c9653",
+        "src/components/lace/GalleryBlock.astro": "0db9489d64d4e41f3ac78219cbadc2f106e8b3249246f433d88697c4c91fb000",
+        "src/components/lace/GalleryVideo.css": "95c9b2d88f75e22f2e1a722a7eb84898a1bab9a8feabfa0a769185a143b0bff8",
         "src/components/lace/ListLayout.css": "a8606fc40a51963db63e115646c1466b51727b310aa9f6425ea798fb3ac204fe"
       }
     },

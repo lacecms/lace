@@ -65,7 +65,7 @@ const galleryBlock = {
   hidden: false,
   key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   position: 1000,
-  schemaVersion: 4,
+  schemaVersion: 5,
   settings: { layoutMode: "grid", layoutPreset: "auto", layoutWrap: true, lightbox: false },
   type: "gallery",
 };
@@ -158,13 +158,13 @@ test("twenty tagged images join a gallery in one step", async ({ page }) => {
     media("media-other", "other.png", ["travel"]),
   ]);
   await page.goto("/admin/content/posts/entry-1");
-  await page.getByRole("button", { name: "Add Images item" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add media to Images" });
+  await page.getByRole("button", { name: "Add Images and videos item" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add media to Images and videos" });
   await dialog
     .getByRole("combobox", { name: "Filter by tags (all must match)" })
     .fill("project-2026");
   await page.keyboard.press("Enter");
-  const grid = dialog.getByRole("list", { name: "Media choices for Images" });
+  const grid = dialog.getByRole("list", { name: "Media choices for Images and videos" });
   await expect(grid.getByRole("button")).toHaveCount(20);
   for (const item of tagged) await grid.getByRole("button", { name: item.filename }).click();
   await expect(dialog.getByRole("status")).toHaveText(
@@ -174,14 +174,23 @@ test("twenty tagged images join a gallery in one step", async ({ page }) => {
   await expect(dialog).toBeHidden();
 
   await expect(
-    page.getByRole("button", { name: "Expand Images item 1", exact: true }),
+    page.getByRole("button", { name: "Expand Images and videos item 1", exact: true }),
   ).toBeFocused();
-  await expect(page.getByRole("button", { name: "Expand Images item 20" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Expand Images and videos item 20" }),
+  ).toBeVisible();
   await expect(page.getByText("20 / 50", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Saved revision 2")).toBeVisible();
   const saved = saves[0]!.blocks as { data: { images: unknown[] } }[];
-  expect(saved[0]!.data.images).toEqual(tagged.map((item) => ({ media: item.id })));
+  expect(saved[0]!.data.images).toEqual(
+    tagged.map((item) => ({
+      aspectRatio: "16:9",
+      kind: "image",
+      media: item.id,
+      playback: "player",
+    })),
+  );
 });
 
 test("a custom block list keeps selection order, capacity, uploads and defaults", async ({
@@ -244,10 +253,10 @@ test("a custom block list keeps selection order, capacity, uploads and defaults"
 test("a keyboard user selects with Space and Enter, and Escape discards", async ({ page }) => {
   await mockEditor(page, galleryBlock, [media("media-a", "a.png"), media("media-b", "b.png")]);
   await page.goto("/admin/content/posts/entry-1");
-  const add = page.getByRole("button", { name: "Add Images item" });
+  const add = page.getByRole("button", { name: "Add Images and videos item" });
   await add.focus();
   await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Add media to Images" });
+  const dialog = page.getByRole("dialog", { name: "Add media to Images and videos" });
   const a = dialog.getByRole("button", { name: "a.png" });
   const b = dialog.getByRole("button", { name: "b.png" });
   await a.focus();

@@ -131,19 +131,34 @@ caption and an optional URL `link`, where the block's alt text overrides the
 media item's alt text;
 `quote` SHALL contain required quote text plus optional attribution; and `cta`
 SHALL contain required heading, action label, and action URL plus optional body.
-`gallery` SHALL contain an optional text `title` and an `images` list whose
-default is an empty list, with a publication minimum of 1 and a maximum of 50
-items, each item a group of required `media`, optional text `alt` that
-overrides the media item's alt text, optional text `caption` and an optional
-URL `link`; the list's item label SHALL be `caption`. Each `link` field SHALL
-be labelled "Link" with a description stating that a selected image opens the
-link instead of the full-screen view. `navigation` SHALL contain an optional text
+`gallery` SHALL contain an optional text `title` and an `images` list labelled
+"Images and videos" whose default is an empty list, with a publication minimum
+of 1 and a maximum of 50 items, each item a group of: a required select `kind`
+with options `image` and `video`, default `image`, labelled "Type" with
+choice-card presentation (an Image and a Video choice, each with a label and
+description); required `media`; optional text `alt` that overrides the media
+item's alt text; a required URL `videoUrl` restricted to YouTube and Vimeo,
+labelled "Video URL"; a required text `videoTitle` with minimum length 1,
+labelled "Video title", whose description says it names the video for
+assistive technology; optional text `caption`; an optional URL `link`; and the
+required selects `playback` and `aspectRatio` with exactly the options,
+defaults, labels, descriptions and choice-card presentation of the
+`videoEmbed` settings of the same names. The item group SHALL declare
+`visibility` rules making `media`, `alt` and `link` depend on `kind` values
+`["image"]`, and `videoUrl`, `videoTitle`, `playback` and `aspectRatio` depend
+on `["video"]`; `kind` and `caption` SHALL have no rule. The `caption`
+description SHALL state that an empty image caption falls back to the media
+item's caption. The list's item label SHALL be `caption`. Each `link` field
+SHALL be labelled "Link" with a description stating that a selected image
+opens the link instead of the full-screen view. The gallery description SHALL
+mention images and videos. `navigation` SHALL contain an optional text
 `name` and a `links` list whose default is an empty list, with a publication
 minimum of 1 and a maximum of 20 items, each item a group of a required text
 `label`, an optional `url` and an optional `children` list of at most 20 items,
 each child a group of a required text `label` and a required `url`; both link
 lists SHALL use `label` as their item label. URL values SHALL follow the ordinary URL-field target rules, including internal references; provider-restricted URLs SHALL retain provider validation.
-`image` and `gallery` SHALL be at definition version 4. Both SHALL declare
+`image` SHALL be at definition version 4 and `gallery` at definition version
+5. Both SHALL declare
 a boolean setting `lightbox` labelled "Open full screen" with a description
 and the default `false`. Gallery SHALL additionally declare the reusable
 `layoutMode`, `layoutWrap` and `layoutPreset` scalar settings from the
@@ -153,11 +168,18 @@ Behavior section containing lightbox, using ordinary settingsLayout metadata.
 Arrangement SHALL remain visible. Wrap and preset controls SHALL follow the
 shared mode-specific visibility and validation-error reveal contract.
 `image` SHALL declare migrations to versions 2, 3 and 4. Gallery SHALL retain
-identity migrations to versions 2 and 3 and add the version 4 migration, which
-returns stored data and settings unchanged; normal setting validation SHALL
-supply any absent defaults. Migration SHALL preserve item order, media usage,
-alt/caption/link overrides, lightbox values and block-envelope values, including
-hidden blocks and both draft and published snapshots. `navigation` SHALL
+identity migrations to versions 2, 3 and 4 and add the version 5 migration,
+which returns stored data and settings unchanged; normal setting validation
+SHALL supply any absent defaults, and the `kind` default SHALL make every
+stored item without `kind` an image. Migration SHALL preserve item order,
+media usage, alt/caption/link overrides, lightbox and layout values and
+block-envelope values, including hidden blocks and both draft and published
+snapshots, and SHALL change no media usage. As for every migrated block,
+synchronization SHALL store the validated result: drafts SHALL gain the item
+defaults (`kind` `image` and the hidden `playback` and `aspectRatio`
+defaults), and published snapshots SHALL gain only `kind`, because their
+projection omits hidden targets.
+`navigation` SHALL
 be at definition version 1. Except for `link` and `videoEmbed`, the other built-ins SHALL stay at version 1 and
 SHALL declare no settings.
 Each built-in SHALL carry a non-empty human-readable label and a non-empty
@@ -211,10 +233,47 @@ values SHALL follow normal draft/publication validation.
   changes
 
 #### Scenario: Version 1 gallery blocks migrate unchanged
-- **WHEN** a version 1 `gallery` block is migrated to the configured version 4
+- **WHEN** a version 1 `gallery` block is migrated to the configured version 5
 - **THEN** the migrated data equals the stored data and its settings are
   `{ lightbox: false, layoutMode: "grid", layoutWrap: true, layoutPreset: "auto" }`
   after defaults
+
+#### Scenario: Version 4 gallery items become images
+- **WHEN** a version 4 `gallery` block whose items hold `media`, `alt`,
+  `caption` and `link` but no `kind` is migrated to version 5 and validated in
+  publish mode
+- **THEN** the stored data is unchanged, validation succeeds, the parsed
+  items have `kind` `image`, and their `media`, `alt`, `caption` and `link`
+  values are visible and delivered as before
+
+#### Scenario: A video item
+- **WHEN** a gallery item `{ kind: "video", videoUrl:
+  "https://vimeo.com/76979871", videoTitle: "Studio tour", playback:
+  "ambient", aspectRatio: "1:1", caption: "Spring 2026" }` is validated in
+  publish mode
+- **THEN** it is valid without `media`, and its published projection holds
+  exactly `kind`, `videoUrl`, `videoTitle`, `playback`, `aspectRatio` and
+  `caption`
+
+#### Scenario: A video item applies its defaults
+- **WHEN** a video item holds only `kind`, `videoUrl` and `videoTitle` and is
+  parsed in publish mode
+- **THEN** its `playback` is `player` and its `aspectRatio` is `16:9`
+
+#### Scenario: Video fields are required only for videos
+- **WHEN** an item with `kind` `video` lacks `videoUrl` and `videoTitle`,
+  another has an empty `videoTitle`, and a third has a
+  `https://example.com/clip` `videoUrl`
+- **THEN** draft validation accepts the missing values while publish
+  validation fails at the first item's `videoUrl` path, and both modes reject
+  the empty title (its minimum length applies to drafts) and the
+  non-provider URL at their paths
+
+#### Scenario: Image values are hidden on video items
+- **WHEN** a draft video item still holds a `media`, an `alt` and a `link`
+  from when it was an image, and the entry is published
+- **THEN** publication succeeds, the draft keeps those values, and the
+  published item holds none of them
 
 #### Scenario: Version 3 image blocks keep their lightbox setting
 - **WHEN** a version 3 `image` block with settings `{ lightbox: true }` is
@@ -284,9 +343,16 @@ schema version, or attempts to register a duplicate type
 #### Scenario: Version 3 Gallery preserves content and lightbox
 - **WHEN** version 3 Gallery blocks, including a hidden block, are synchronized
   in draft and published snapshots with lightbox enabled and linked images
-- **THEN** Gallery becomes version 4 with the three layout defaults, while
+- **THEN** Gallery becomes version 5 with the three layout defaults, while
   content, item order, lightbox, links and envelope values are preserved under
   the existing guarded block-migration and final published-version/build rules
+
+#### Scenario: Shared video descriptors keep videoEmbed identity
+- **WHEN** a configuration registering `videoEmbed` without `gallery` is
+  normalized after the gallery adopts the shared `playback` and `aspectRatio`
+  descriptors
+- **THEN** `videoEmbed` stays at version 2 and its structural and projection
+  hashes equal those from before this change
 
 #### Scenario: Layout settings share runtime validation
 - **WHEN** Gallery settings use an unknown mode, a nonboolean wrap or an
@@ -431,30 +497,41 @@ descriptor depth; data changes SHALL continue to use versioned migrations.
 
 ### Requirement: Built-in image fields declare media first
 The built-in `image` block SHALL declare its fields in the order `media`,
-`alt`, `caption`, `link`, and the `gallery` list item group SHALL declare its
-fields in the same order, so generic editors that follow declaration order
-present the image before the values that override or extend it. Field
-declaration order SHALL be presentation only: it SHALL NOT change field keys,
-paths, constraints, defaults, required status, definition versions,
-migrations, structural hashes or projection hashes, and stored block data
-SHALL remain valid without migration.
+`alt`, `caption`, `link`. The `gallery` list item group SHALL declare its
+fields in the order `kind`, `media`, `videoUrl`, `alt`, `videoTitle`,
+`caption`, `link`, `playback`, `aspectRatio`, so generic editors that follow
+declaration order present the controller first, then an image item as
+`media`, `alt`, `caption`, `link` and a video item as `videoUrl`,
+`videoTitle`, `caption`, `playback`, `aspectRatio`. Field declaration order
+SHALL be presentation only: it SHALL NOT change field keys, paths,
+constraints, defaults, required status, definition versions, migrations,
+structural hashes or projection hashes, and stored block data SHALL remain
+valid without migration.
 
 #### Scenario: Image fields are projected media first
 - **WHEN** the starter registry's `image` block and `gallery` block metadata
   are projected for the admin
-- **THEN** the first key of the `image` fields and of the gallery item group's
-  fields is `media`, followed by `alt`, `caption` and `link`
+- **THEN** the `image` fields are `media`, `alt`, `caption`, `link` in that
+  order, and the gallery item group's fields are `kind`, `media`, `videoUrl`,
+  `alt`, `videoTitle`, `caption`, `link`, `playback`, `aspectRatio`
+
+#### Scenario: Each kind reads in its own order
+- **WHEN** the generic editor shows a gallery item with `kind` `image` and
+  another with `kind` `video`
+- **THEN** the first shows Type, Image, Alt text, Caption and Link, and the
+  second shows Type, Video URL, Video title, Caption, Playback and Aspect
+  ratio, in that order
 
 #### Scenario: Reordering keeps identity and versions
 - **WHEN** a configuration registering `image` and `gallery` is normalized
-  with the media-first declaration order and compared with the same
-  configuration declared in the earlier alphabetical order
-- **THEN** both blocks keep versions 4 and 3, and every model and
+  with the declared order and compared with the same configuration whose
+  `image` fields and gallery item fields are declared in alphabetical order
+- **THEN** the blocks keep versions 4 and 5, and every model and
   whole-configuration structural and projection hash is equal
 
 #### Scenario: Existing data stays valid
-- **WHEN** a saved `image` block or gallery item from before the reordering is
-  loaded and validated in draft and publish modes
+- **WHEN** a saved `image` block from before the reordering is loaded and
+  validated in draft and publish modes
 - **THEN** it validates exactly as before and no migration runs
 
 ### Requirement: Gallery adopts reusable mode-specific setting visibility
@@ -462,9 +539,10 @@ Gallery v4 SHALL declare the shared list-layout visibility rules: `layoutMode`
 always visible, `layoutWrap` visible for both flex modes, and `layoutPreset`
 visible for grid, subject to generic validation-error reveal. An unrelated block
 SHALL be able to reuse the same scalar settings and visibility rules without
-admin changes. Layout/Behavior grouping, settings/defaults, Gallery definition
-version 4, migrations 2/3/4 and all image/link/lightbox semantics SHALL remain
-unchanged. Setting visibility metadata SHALL not enter authored/public payloads
+admin changes. Layout/Behavior grouping, settings/defaults, migrations and
+all image/link/lightbox semantics SHALL remain unchanged by this visibility
+metadata; Gallery definition version 5 adds item kinds without changing the
+settings or their visibility rules. Setting visibility metadata SHALL not enter authored/public payloads
 or change Astro registry source revisions or stylesheet ownership.
 
 #### Scenario: Two adopters
@@ -472,5 +550,9 @@ or change Astro registry source revisions or stylesheet ownership.
 - **THEN** both expose the same mode-specific controls with independent retained scalar values through the ordinary editor
 
 #### Scenario: Existing content and sites remain compatible
-- **WHEN** Gallery gains visibility metadata
-- **THEN** existing v4 blocks, model structural versions, Astro components, CSS hashes and public settings retain their existing contracts
+- **WHEN** Gallery gains setting visibility metadata
+- **THEN** existing blocks, model structural versions, Astro components, CSS hashes and public settings retain their existing contracts
+
+#### Scenario: Version 5 keeps the layout settings
+- **WHEN** a version 4 Gallery with settings `{ layoutMode: "flex-row", layoutWrap: false, lightbox: true }` is migrated to version 5
+- **THEN** its settings and their visibility in the Settings form are unchanged

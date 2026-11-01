@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { expectNoAccessibilityViolations } from "./support/accessibility.js";
 import { sessionPath, sessionSummary } from "./support/session.js";
 
 // Match API calls by pathname prefix; a glob such as `**/api/**` would also
@@ -325,4 +326,60 @@ test("the toolbar with tag chips fits a 320 px viewport", async ({ page }) => {
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+  // Narrow screens stack the controls in reading order.
+  const tops = await Promise.all(
+    [
+      page.getByRole("searchbox", { name: "Search media" }),
+      page.getByRole("group", { name: "Filter by type" }),
+      page.getByRole("combobox", { name: "Sort media" }),
+      page.getByRole("combobox", { name: filterLabel }),
+      page.getByRole("button", { name: "Clear filters" }),
+    ].map(async (locator) => (await locator.boundingBox())!.y),
+  );
+  expect(tops).toEqual([...tops].sort((left, right) => left - right));
+  // Chips stay inside the bordered tag field.
+  const field = page.getByRole("combobox", { name: filterLabel }).locator("..");
+  const box = (await field.boundingBox())!;
+  for (const chip of await page.getByRole("button", { name: /^Remove tag / }).all()) {
+    const chipBox = (await chip.boundingBox())!;
+    expect(chipBox.x).toBeGreaterThanOrEqual(box.x);
+    expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+  }
+  await expectNoAccessibilityViolations(page, "media toolbar 320");
+});
+
+test("the picker toolbar keeps two rows and explains the tag rule", async ({ page }) => {
+  await page.setViewportSize({ height: 900, width: 1280 });
+  await mockMedia(page, [media("media-1", "bike.png", ["cover", "portrait"])]);
+  await page.goto("/admin/content/posts/entry-1");
+  await page.getByRole("button", { name: "Choose media for Cover" }).click();
+  const dialog = page.getByRole("dialog", { name: "Choose media for Cover" });
+  const filter = dialog.getByRole("combobox", { name: filterLabel });
+  for (const tag of ["cover", "portrait"]) {
+    await filter.fill(tag);
+    await filter.press("Enter");
+  }
+  await expect(dialog.getByRole("button", { name: "Remove tag portrait" })).toBeVisible();
+  const top = async (locator: ReturnType<Page["getByRole"]>) => (await locator.boundingBox())!;
+  const search = await top(dialog.getByRole("searchbox", { name: "Search media" }));
+  const types = await top(dialog.getByRole("group", { name: "Filter by type" }));
+  const sort = await top(dialog.getByRole("combobox", { name: "Sort media" }));
+  const field = await top(filter);
+  const help = await top(dialog.getByRole("button", { name: "About tag filters" }));
+  const clear = await top(dialog.getByRole("button", { name: "Clear filters" }));
+  const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+  // Search, types and sort share the first row; the tag field, help and Clear the second.
+  for (const box of [types, sort]) expect(Math.abs(middle(box) - middle(search))).toBeLessThan(6);
+  expect(field.y).toBeGreaterThan(search.y + search.height);
+  for (const box of [help, clear]) expect(Math.abs(middle(box) - middle(field))).toBeLessThan(8);
+
+  const info = dialog.getByRole("button", { name: "About tag filters" });
+  await info.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("Items must have all tags");
+  await info.focus();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(filter).toHaveAccessibleDescription("Items must have all tags");
+  await expectNoAccessibilityViolations(page, "media picker toolbar");
 });

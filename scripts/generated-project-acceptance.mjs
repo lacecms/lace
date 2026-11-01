@@ -1197,9 +1197,15 @@ async function starterJourney(project) {
   )?.[0];
   if (
     !gallery ||
-    (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 3 ||
+    (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 4 ||
     !gallery.includes('<img alt="Media library description" data-lace-part="media"') ||
-    !gallery.includes('<img alt="A quiet desk" data-lace-part="media"')
+    !gallery.includes('<img alt="A quiet desk" data-lace-part="media"') ||
+    // SM5D: the ambient video item ships templates and no live ambient player.
+    !gallery.includes(
+      '<figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient">',
+    ) ||
+    !gallery.includes("<template data-lace-ambient-template>") ||
+    !gallery.includes("Watch on Vimeo")
   )
     throw new Error("starter-build: gallery figures or their effective alt text missing");
   if (
@@ -1207,7 +1213,7 @@ async function starterJourney(project) {
     !gallery.includes('data-lace-layout="grid"') ||
     !gallery.includes('data-lace-wrap="true"') ||
     !gallery.includes('data-lace-preset="auto"') ||
-    (gallery.match(/<li\b[^>]*\bdata-lace-layout-item[^>]*>/g) ?? []).length !== 3
+    (gallery.match(/<li\b[^>]*\bdata-lace-layout-item[^>]*>/g) ?? []).length !== 4
   )
     throw new Error("starter-build: gallery list layout hooks missing");
   if (
@@ -1326,7 +1332,7 @@ async function starterJourney(project) {
   }
   imageExport.entries[0].blocks.push({
     type: "gallery",
-    schemaVersion: 4,
+    schemaVersion: 5,
     key: "alpha-seven-gallery",
     position: 20000,
     data: {

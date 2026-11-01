@@ -81,7 +81,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | SM2 | MCP publication scope | S | SM2 | done |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | done |
 | SM4 | `lace import` | L | SM4A → SM4B → SM4C | done |
-| SM5 | Conditional fields | L | SM5A → SM5B → SM5C → SM5D | in progress |
+| SM5 | Conditional fields | L | SM5A → SM5B → SM5C → SM5D | done |
 
 **Order rationale:** SM1 and SM2 are small and independent; SM1 unblocks the
 portfolio site first. SM3 comes before SM4 so the import format can assign
@@ -291,7 +291,7 @@ planning and resume; integration test against a Node API.
 
 ## Step SM5 — Conditional fields
 
-**Status:** in progress (SM5A, SM5B and SM5C done; SM5D planned).
+**Status:** done (SM5A, SM5B, SM5C and SM5D archived).
 
 **Size:** L (four sessions). Lifts the CE9 exclusion of conditional
 visibility.
@@ -354,6 +354,8 @@ The shipped example moved to SM5D (owner decision 2026-11-01).
 
 ### Session SM5D — Gallery video items
 
+**Status:** done (archived). Implementation verified, 23/23 tasks; six capability deltas synchronized.
+
 Shipped example of conditional fields in the starter blocks.
 
 - Built-in `gallery` v5: each item has a required select `kind` (`image`,
@@ -369,6 +371,9 @@ Shipped example of conditional fields in the starter blocks.
 - Collapsed video rows show the provider and title without "No alt".
 - Registry revision, template version and upgrade instructions; copied
   gallery components must narrow `item.media` by `kind`.
+- Owner addition (2026-11-01): the shared media library and picker toolbar
+  moves to two rows with a segmented type filter and a compact tag filter
+  whose "all must match" rule is a tooltip; it stacks on narrow screens.
 
 **Architecture and specs:** §8 field types and limits, §9.3 snapshots, §10
 publication; `field-descriptors`, `content-validation`,
@@ -383,7 +388,7 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-10-31 | SM1 | `sm01-video-embed-playback` | Proposed. Owner decisions: ambient mode has no pause control (WCAG 2.2.2 gap documented); reduced motion and no-JS fall back to player; source link visually hidden only while an ambient player is mounted. 17 tasks, not applied. |
 | 2026-10-31 | SM1 | `sm01-video-embed-playback` | Implemented and verified, 17/17 tasks. videoEmbed v2, ambient URLs/playback, aspect ratios, SQLite/D1 migration, registry revision 2 and template 0.40.0. Root tests, typecheck, lint, formatting, OpenAPI, docs, packed starter/existing-site acceptance and strict OpenSpec checks pass. Awaiting explicit sync/archive. |
 | 2026-10-31 | SM1 | `sm01-video-embed-playback` | Archived at `openspec/changes/archive/2026-10-31-sm01-video-embed-playback`; all five capability deltas synchronized into main specs and strict validation passed. |
-| 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Proposed. `content:publish` scope (implies write and read), third consent choice available only to roles with `content:publish`, `publish_entry` tool reusing the REST publication operation and result with optional idempotency key, template 0.41.0. Unpublish/delete stay banned. 18 tasks, not applied. |
+| 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Proposed. `content:publish` scope (implies write and read), third consent choice available only to roles with `content:publish`, `publish_entry` tool reusing the REST publication operation and result with optional idempotency key, template 0.41.0. Unpublish/delete stay banned. 20 tasks, not applied. |
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | In progress. Applying the approved scope, consent, tool and setup changes. |
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Implemented and verified, 18/18 tasks. Separate publish scope and consent, shared publication tool/results, role attenuation, template 0.41.0. Root tests (3000), typecheck, lint, formatting, build, OpenAPI, OAuth/MCP compatibility (114), Chromium at 320px (3), docs, packed starter/existing-site acceptance and strict OpenSpec validation passed. Awaiting explicit sync/archive; status remains in progress until archived. |
 | 2026-10-31 | SM2 | `sm02-mcp-publication-scope` | Archived at `openspec/changes/archive/2026-10-31-sm02-mcp-publication-scope`; all five capability deltas synchronized into main specs, preserving existing scenarios. Strict spec/change validation passed. |
@@ -404,7 +409,7 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM4B | `sm04b-cli-import` | Proposed. Owner decisions: drafts edited after the last import are a plan `conflict` (state file records the written revision) and nothing is written without `--overwrite`; `--validate-only` checks a package offline against `lace.config.ts`. Format v1 with `$media`/`$entry` references and a shipped JSON Schema; HTTP client of admin REST (ADR 0017, `cli -> contracts`); shared `normalizeDraftCandidate` for exact "unchanged"; ordered publication with cycle detection; bounded `Retry-After`. No REST, schema or template change. 21 tasks, not applied. |
 | 2026-11-01 | SM4B | `sm04b-cli-import` | Implemented and verified, 21/21 tasks. `lace import` (format v1 + JSON Schema, offline `--validate-only`, server config check, hash/slug lookups, plan with edit-protection conflicts and `--overwrite`, ordered writes with state file, link-ordered publication with idempotency keys, bounded `Retry-After`), shared `normalizeDraftCandidate`, ADR 0017, `cli -> contracts`. CLI/application tests, root format/lint/typecheck/test, build, packed starter/existing-site acceptance, OpenAPI, docs and strict OpenSpec checks pass. Awaiting explicit sync/archive. |
 | 2026-11-01 | SM4B | `sm04b-cli-import` | Archived at `openspec/changes/archive/2026-11-01-sm04b-cli-import`; new `content-import-cli` capability (11 requirements) and one added `content-use-cases` requirement synchronized into main specs. SM4C remains planned. |
-| 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Proposed. Owner decisions: two verification tiers (full matrix through the CLI process in the workspace cross-runtime suite on Node and the local Worker; packed-CLI smoke in the Node Compose and Cloudflare consumer journeys, offline validation in the CI starter phase); the user guide is a public page with a downloadable starter sample and `docs/content-import.md` is the internal note (refines the roadmap wording); generated projects get guidance and a Template 0.44.0 note, no import script. 18 tasks, not applied. |
+| 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Proposed. Owner decisions: two verification tiers (full matrix through the CLI process in the workspace cross-runtime suite on Node and the local Worker; packed-CLI smoke in the Node Compose and Cloudflare consumer journeys, offline validation in the CI starter phase); the user guide is a public page with a downloadable starter sample and `docs/content-import.md` is the internal note (refines the roadmap wording); generated projects get guidance and a Template 0.44.0 note, no import script. 20 tasks, not applied. |
 | 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Implemented and verified, 18/18 tasks. Shared starter sample in `apps/docs/public/examples/content-import` with a root validity/guide-equality test; cross-runtime import journey through the CLI process on Node and Worker (validate, dry run, publish, unchanged reruns with and without state, conflict and `--overwrite`, refused and revoked tokens, equal canonical results); packed smoke in the starter, Node Compose and Cloudflare consumer journeys; public *Import content* page, CLI reference rows, internal `docs/content-import.md`; generated operations guide section and Template 0.44.0. No CLI or server defect found; fixed the stale alpha.8 `videoEmbed` v1 fixture that blocked `acceptance:cloudflare`. Full `acceptance:generated` not run (phase `node` only). Awaiting explicit sync/archive. |
 | 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Archived at `openspec/changes/archive/2026-11-01-sm04c-import-runtime-verification-docs`; four capability deltas synchronized into main specs (4 added requirements). Step SM4 complete. |
 | 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Proposed. Owner decisions: owner-level `visibility` map `{ target: { field, values } }` on models, groups (incl. list items) and block data instead of per-field `visibleWhen`; sibling `select`/`boolean` controllers, optional allowed (absent without default hides); no chains; hidden fields validated with draft semantics (refines "type only"); hidden values kept in drafts, omitted by the published projection; `seoDefaults` may not name a conditional field; `settingsVisibility` unchanged. Structural identity; new `field-visibility-*` sync kinds prune newly hidden published values. Publication omission stays in SM5B. 23 tasks, not applied. |
@@ -417,3 +422,6 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | In progress. Applying reactive admin forms, reachable problems, applicable summaries and documentation. |
 | 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | Implemented and verified, 16/16 tasks. Shared `isFieldVisible` over effective form values in model fields, groups/list items and block data through `FieldLayout.visibleKeys`; hidden targets stay mounted and keep values; publication-only issues under hidden targets filtered at read time (fields, rows, tabs, block cards, summary), hidden draft problems shown with a controller note; summaries, previews, "No alt" and media-list eligibility use shown keys; `settingsVisibility` stays separate (ADR 0018). Public *Conditional fields* page and editing notes. Admin unit 975, new e2e 6/6 with axe at 320 px, root format/lint/typecheck/test (pinned Node 24.12.0), build, docs, OpenAPI and OpenSpec checks pass. Pre-existing: composites pointer-drag e2e. Awaiting explicit archive. |
 | 2026-11-01 | SM5C | `sm05c-conditional-field-admin-forms` | Archived at `openspec/changes/archive/2026-11-01-sm05c-conditional-field-admin-forms`; deltas synchronized into main specs: `admin-draft-editor` (3 added, 1 modified), `conditional-fields` (2 added) and `public-documentation` (1 added). SM5D remains planned. |
+| 2026-11-01 | SM5D | `sm05d-gallery-video-items` | Proposed. Owner decisions: video markup and ambient-only script inline in the single `GalleryBlock.astro` plus `GalleryVideo.css` (the manifest allows one component; shared `LaceVideo` primitive goes to the backlog); item keys `videoUrl`/`videoTitle`, list key stays `images` (label "Images and videos"); `playback` default `player`; `kind` as choice cards; published types stay optional (copies check `kind` and `media`); admin "Add {choice}" buttons derived from the media field's select controller ("Add Video") and an embed URL row preview; identity migration 5; no new ADR. Owner addition: media library/picker toolbar redesign (two rows, segmented type filter, compact tag filter with the match-all rule in a tooltip). 23 tasks, not applied. |
+| 2026-11-01 | SM5D | `sm05d-gallery-video-items` | Implemented and verified, 23/23 tasks. Gallery v5 item kinds with conditional video fields and shared `videoEmbed` descriptors, identity migration 5; registry revision 7 with inline ambient script and `GalleryVideo.css`; admin "Add Video" derived from the media field's select rule, embed URL row preview, controllers no longer label rows; two-row media toolbar with segmented types and compact tag filter (rule in tooltip and description); template 0.45.0. Content, contract (SQLite/D1), registry, CLI, site browser, admin unit/e2e, starter and existing-site acceptance, cross-runtime 7/7, root format/lint/typecheck/test (pinned Node 24.12.0)/build, OpenAPI, docs and OpenSpec checks pass. Pre-existing: composites pointer-drag e2e. Awaiting explicit archive. |
+| 2026-11-01 | SM5D | `sm05d-gallery-video-items` | Archived at `openspec/changes/archive/2026-11-01-sm05d-gallery-video-items`; deltas synchronized into main specs: `admin-draft-editor` (3 added), `admin-media-library` (1 added, 1 modified), `astro-reference-site` (1 added), `block-registry` (3 modified), `block-source-registry` (1 added, 2 modified) and `public-documentation` (1 added). Step SM5 complete. |

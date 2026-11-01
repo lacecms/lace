@@ -215,7 +215,18 @@ A reference anywhere else is an error. With `--publish`, a published entry may l
           "type": "gallery",
           "data": {
             "title": "From the studio",
-            "images": [{ "media": { "$media": "studio" } }, { "media": { "$media": "workshop" } }]
+            "images": [
+              { "media": { "$media": "studio" } },
+              { "media": { "$media": "workshop" } },
+              {
+                "kind": "video",
+                "videoUrl": "https://vimeo.com/76979871",
+                "videoTitle": "A walk through the studio",
+                "playback": "ambient",
+                "aspectRatio": "1:1",
+                "caption": "The studio in motion"
+              }
+            ]
           }
         }
       ],

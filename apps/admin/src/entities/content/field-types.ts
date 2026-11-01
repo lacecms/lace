@@ -76,12 +76,18 @@ export interface FieldPreviewProps {
 }
 
 /**
+ * A collapsed-row preview. `appliesTo` narrows it to some fields of its type;
+ * without it the preview applies to every field of the type.
+ */
+export type FieldPreview = ComponentType<FieldPreviewProps> & {
+  readonly appliesTo?: (definition: FieldDefinition) => boolean;
+};
+
+/**
  * Maps field types to the previews of collapsed list items. Like renderers,
  * higher layers provide previews that need their own data (media thumbnails).
  */
-export type FieldPreviewRegistry = Partial<
-  Record<FieldDefinition["type"], ComponentType<FieldPreviewProps>>
->;
+export type FieldPreviewRegistry = Partial<Record<FieldDefinition["type"], FieldPreview>>;
 
 /** The DOM id of the control for a model or block field's form name. */
 export function fieldControlId(

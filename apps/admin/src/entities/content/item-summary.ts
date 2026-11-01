@@ -24,6 +24,15 @@ function shownChildren(
   return Object.entries(definition.fields).filter(([key]) => shown.has(key));
 }
 
+/** Controllers choose which fields apply, such as an item's kind, and never name it. */
+function summarizedChildren(
+  definition: Extract<FieldDefinition, { type: "group" }>,
+  value: Record<string, unknown>,
+): [string, FieldDefinition][] {
+  const controllers = new Set(Object.values(definition.visibility ?? {}).map((rule) => rule.field));
+  return shownChildren(definition, value).filter(([key]) => !controllers.has(key));
+}
+
 function plainRichText(node: unknown): string {
   if (!record(node)) return "";
   if (typeof node.text === "string") return node.text;
@@ -33,7 +42,9 @@ function plainRichText(node: unknown): string {
 /** The useful text of one value with its priority: text, rich text, then URL/select. */
 function texts(definition: FieldDefinition, value: unknown): { priority: number; text: string }[] {
   if (definition.type === "group" && record(value))
-    return shownChildren(definition, value).flatMap(([key, child]) => texts(child, value[key]));
+    return summarizedChildren(definition, value).flatMap(([key, child]) =>
+      texts(child, value[key]),
+    );
   if (definition.type === "list" && Array.isArray(value))
     return value.flatMap((item) => texts(definition.item, item));
   if (["text", "textarea", "url", "select"].includes(definition.type) && typeof value === "string")
@@ -91,8 +102,9 @@ export function itemSummary(
   const primary = labelled || first(texts(definition, value));
   if (primary === undefined || definition.type !== "group" || !record(value))
     return { media, primary };
+  const summarized = new Set(summarizedChildren(definition, value).map(([key]) => key));
   const ordered = formFieldKeys(definition.fields, definition.layout).filter((key) =>
-    shown!.has(key),
+    summarized.has(key),
   );
   const source = labelled
     ? itemLabel
@@ -112,7 +124,10 @@ export function itemSummary(
 
 const present = (value: unknown) => value !== undefined && value !== null && value !== "";
 
-/** The first direct child of a group item, in rendered order, that has a preview and a value. */
+/**
+ * The first shown direct child of a group item, in rendered order, whose
+ * preview applies to it and that has a value.
+ */
 export function previewLeaf(
   definition: FieldDefinition,
   value: unknown,
@@ -125,7 +140,8 @@ export function previewLeaf(
   for (const key of formFieldKeys(definition.fields, definition.layout)) {
     if (!shown.has(key)) continue;
     const child = definition.fields[key]!;
-    if (previews[child.type] && present(value[key]))
+    const preview = previews[child.type];
+    if (preview && (preview.appliesTo?.(child) ?? true) && present(value[key]))
       return { key, definition: child, value: value[key] };
   }
   return undefined;
