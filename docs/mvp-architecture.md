@@ -852,8 +852,14 @@ reports `field-visibility-added` (compatible), `-removed` (validated) and
 hidden published values in its guarded mutation with one version advance and
 build request, and checks newly visible published occurrences with publish
 semantics. Global `seoDefaults` must not name a conditional field. Metadata
-crosses REST/OpenAPI as validated JSON. Publication and delivery adopt the
-projection in SM5B; the admin hides fields in SM5C. See
+crosses REST/OpenAPI as validated JSON. Publication stores the projection
+(SM5B): published fields and block data, including hidden blocks, omit hidden
+targets, and published media and internal-link references are derived from the
+projection, so hidden values count only as draft usage and hidden links are
+neither delivered nor checked. Public reads, globals, the build export and
+published admin/MCP reads therefore never carry hidden values; render removes
+hidden block data after parsing, and published value types make targets
+optional. The admin hides fields in SM5C. See
 [ADR 0018](adr/0018-conditional-fields.md).
 
 ### Visual form organization (CE9B)
@@ -1249,7 +1255,10 @@ content_snapshots
 objects/arrays without item envelopes or separate value tables. `seo_json` holds the
 normalized SEO group (section 8) as a JSON object, or `NULL` when the snapshot
 has none; an all-empty group is never stored. Save, publication, revert and
-duplication copy it with the rest of the snapshot. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
+duplication copy it with the rest of the snapshot. A published snapshot holds the
+published projection of conditional fields (section 8): `fields_json`, block data
+and the snapshot's media and internal-link references omit hidden targets, while
+the draft keeps them. System fields involved in identity, routing, concurrency, or common queries remain relational columns.
 
 The draft snapshot is mutable. A published snapshot is immutable to editors and can only be replaced through the publish use case or removed through the unpublish use case (section 10); configuration synchronization may rewrite its stored fields and blocks for a classified schema change (section 8), advancing the published version (atomically for field rewrites, after resumable block migrations as described in section 4.7). Reverting a draft sets the published snapshot's `revision` to the new draft revision without changing its content, so an entry whose draft equals its publication is derived as published ([ADR 0008](adr/0008-entry-lifecycle-commands.md)).
 
@@ -1681,6 +1690,12 @@ batch:
    `expectedDraftRevision`.
 2. Copies draft blocks and media-reference rows with set-based
    `INSERT ... SELECT` statements conditional on the new snapshot existing.
+   When the model or a draft block declares conditional-field rules, the use
+   case supplies the published projection instead: the snapshot takes its
+   fields, blocks keep their envelopes with projected data, media and
+   internal-link references are inserted from the supplied rows, and the
+   internal-link guard checks the supplied delivered links. Entries without
+   rules keep the copy.
 3. Removes the entry's old route and inserts the resolved route, also
    conditional on the new snapshot existing. A path collision aborts and rolls
    back the whole batch.

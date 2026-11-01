@@ -1,5 +1,5 @@
 import { field } from "@lacecms/content";
-import { defineCollection, definePage } from "./index.js";
+import { defineCollection, defineGlobal, definePage } from "./index.js";
 import type { ModelFieldValues } from "./index.js";
 
 type Equal<Left, Right> =
@@ -107,11 +107,11 @@ const nestedRenameModel = definePage({
 });
 void nestedRenameModel;
 
-// @ts-expect-error Layout fields belong to the model's own field map.
 defineGlobal({
   key: "layout",
   version: 1,
   fields: { title: field.text() },
+  // @ts-expect-error Layout fields belong to the model's own field map.
   layout: { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["missing"] }] },
 });
 
@@ -159,16 +159,70 @@ definePage({
   listOptions: {},
 });
 
-definePage({
+const conditionalPage = definePage({
   key: "conditional-home",
   path: "/conditional",
   version: 1,
   fields: {
     heroKind: field.select({ options: ["image", "video"], required: true }),
-    heroVideo: field.url(),
+    heroVideo: field.url({ required: true }),
+    title: field.text({ required: true }),
   },
   visibility: { heroVideo: { field: "heroKind", values: ["video"] } },
 });
+type ConditionalPageValues = ModelFieldValues<
+  typeof conditionalPage.fields,
+  typeof conditionalPage.visibility
+>;
+export type ConditionalPageValues_ = Expect<
+  Equal<
+    Pick<ConditionalPageValues, "heroKind" | "title">,
+    Readonly<{ heroKind: "image" | "video"; title: string }>
+  >
+>;
+export type ConditionalPageTargetOptional = Expect<
+  Equal<Pick<ConditionalPageValues, "heroVideo">, Readonly<{ heroVideo?: string }>>
+>;
+const conditionalCollection = defineCollection({
+  key: "conditional-items",
+  route: "/items/:slug",
+  version: 1,
+  fields: { hasCta: field.boolean(), ctaUrl: field.url({ required: true }) },
+  visibility: { ctaUrl: { field: "hasCta", values: [true] } },
+});
+export type ConditionalCollectionTargetOptional = Expect<
+  Equal<
+    undefined extends ModelFieldValues<
+      typeof conditionalCollection.fields,
+      typeof conditionalCollection.visibility
+    >["ctaUrl"]
+      ? true
+      : false,
+    true
+  >
+>;
+const conditionalGlobal = defineGlobal({
+  key: "conditional-settings",
+  version: 1,
+  fields: {
+    mode: field.select({ options: ["a", "b"], required: true }),
+    extra: field.text({ required: true }),
+  },
+  visibility: { extra: { field: "mode", values: ["b"] } },
+});
+export type ConditionalGlobalVisibility = Expect<
+  Equal<(typeof conditionalGlobal.visibility)["extra"]["values"][number], "b">
+>;
+export type UnconditionalPageUnchanged = Expect<
+  Equal<ModelFieldValues<typeof page.fields, undefined>, ModelFieldValues<typeof page.fields>>
+>;
+// A page without rules names no targets, even through its optional `visibility`.
+export type UnconditionalPageNoTargets = Expect<
+  Equal<
+    ModelFieldValues<typeof page.fields, typeof page.visibility>,
+    ModelFieldValues<typeof page.fields>
+  >
+>;
 definePage({
   key: "conditional-bad-value",
   path: "/conditional-bad-value",

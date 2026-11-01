@@ -291,7 +291,7 @@ planning and resume; integration test against a Node API.
 
 ## Step SM5 — Conditional fields
 
-**Status:** in progress (SM5A done; SM5B and SM5C planned).
+**Status:** in progress (SM5A and SM5B done; SM5C planned).
 
 **Size:** L (three sessions). Lifts the CE9 exclusion of conditional
 visibility.
@@ -326,6 +326,8 @@ field; block `settingsVisibility` is unchanged. See
   ADR 0007.
 
 ### Session SM5B — Server enforcement and delivery
+
+**Status:** done (archived). Implementation verified, 21/21 tasks; five capability deltas synchronized.
 
 - Save and publish use cases apply the rules on the server; the admin is
   never the only enforcement.
@@ -383,3 +385,6 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Proposed. Owner decisions: owner-level `visibility` map `{ target: { field, values } }` on models, groups (incl. list items) and block data instead of per-field `visibleWhen`; sibling `select`/`boolean` controllers, optional allowed (absent without default hides); no chains; hidden fields validated with draft semantics (refines "type only"); hidden values kept in drafts, omitted by the published projection; `seoDefaults` may not name a conditional field; `settingsVisibility` unchanged. Structural identity; new `field-visibility-*` sync kinds prune newly hidden published values. Publication omission stays in SM5B. 23 tasks, not applied. |
 | 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Implemented and verified, 23/23 tasks. Owner-level `visibility` on models, groups and block data with shared normalizer, evaluator and published projection; hidden fields validated in draft mode and retained in drafts; structural identity, `seoDefaults` restriction, REST/OpenAPI metadata; `field-visibility-*` sync kinds that prune hidden published values and refuse revealed gaps (refined: all hidden published values are pruned). Content/config/contracts/application tests, repository contract on SQLite and D1, cross-runtime suite, root format/lint/typecheck/test (pinned Node 24.12.0), build, starter and existing-site acceptance, docs, OpenAPI and OpenSpec checks pass. Publication omission remains SM5B. Awaiting explicit sync/archive. |
 | 2026-11-01 | SM5A | `sm05a-conditional-field-semantics` | Archived at `openspec/changes/archive/2026-11-01-sm05a-conditional-field-semantics`; new `conditional-fields` capability (4 requirements) and deltas for `block-settings-visibility` (1 modified), `content-model-configuration`, `content-validation`, `rest-contracts` (1 added each) and `schema-evolution` (3 added) synchronized into main specs. SM5B and SM5C remain planned. |
+| 2026-11-01 | SM5B | `sm05b-conditional-field-delivery` | Proposed. Use case computes the published projection (fields, every block's data, media and internal-link references) and passes it on `PublishContentEntryCommand.projection` when the model or a draft block declares rules; Node and D1 write it in the existing guarded publication and guard links from the supplied rows; unopted entries keep the SQL copy. Draft link rows mark hidden links undelivered; render projects parsed block data; published value types make targets optional; MCP/OpenAPI/import guidance. 21 tasks. |
+| 2026-11-01 | SM5B | `sm05b-conditional-field-delivery` | Implemented and verified, 21/21 tasks. Publication writes the projection of fields, every block's data and their media/link references on Node SQLite, D1 and the in-memory store (copy path kept for unopted content); atomic link guard over projected rows; hidden media are draft usage only; draft link rows mark hidden links undelivered; render projects parsed block data; `BlockDataValues`/`ModelFieldValues`/`BlockDataOf` make targets optional; MCP, OpenAPI, MCP and import docs. Package and repository contract tests (SQLite 209, D1 104 cases), cross-runtime 7/7, D1 budgets, root format/lint/typecheck/test/build (pinned Node 24.12.0), starter and existing-site acceptance, docs, OpenAPI and OpenSpec checks pass. Awaiting explicit archive. |
+| 2026-11-01 | SM5B | `sm05b-conditional-field-delivery` | Archived at `openspec/changes/archive/2026-11-01-sm05b-conditional-field-delivery`; deltas synchronized into main specs: `conditional-fields` (5 added), `content-repository-contracts`, `mcp-content-server`, `render-core` (1 added each) and `rest-contracts` (1 modified). SM5C remains planned. |

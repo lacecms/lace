@@ -17,15 +17,19 @@ import {
   toBlockMetadata,
   collectSnapshotInternalLinks,
   ContentValidationError,
+  declaresFieldVisibility,
   detachFieldMedia,
   encodeFieldPath,
   MAX_TITLE_LENGTH,
+  publishedBlockData,
+  publishedFieldValues,
   sha256CanonicalJson,
   validateEntryAggregate,
 } from "@lacecms/content";
 import type {
   InternalLinkReference,
   BlockMetadata,
+  FieldVisibility,
   FormLayout,
   FieldDefinition,
   JsonObject,
@@ -92,6 +96,7 @@ import type {
   OpaqueCursor,
   PublicationIdempotencyKey,
   PublicContentReadPort,
+  PublishedProjection,
   ContentLinkReadPort,
   LinkImpactAcknowledgment,
 } from "./index.js";
@@ -375,8 +380,12 @@ function commandEntry(result: ContentCommandResult): ContentEntry {
  * Portable orchestration for content lifecycle commands. Transport handlers and
  * persistence adapters remain outside this service.
  */
+type ModelFieldMap = Readonly<Record<string, FieldDefinition>>;
+
 export class ContentUseCases {
   public readonly listQueryLimits: ListQueryLimits;
+  /** Memoized `declaresFieldVisibility` per model key and block type; config is fixed. */
+  private readonly visibilityOwners = new Map<string, boolean>();
   public constructor(private readonly dependencies: ContentUseCaseDependencies) {
     this.listQueryLimits = Object.freeze({
       ...(dependencies.listQueryLimits ?? NODE_LIST_QUERY_LIMITS),
@@ -599,9 +608,17 @@ export class ContentUseCases {
       entry.id,
     );
     contentPublicPath(entry.model, draft.slug);
+    const projection = this.publishedProjection(this.model(entry.model.key), draft);
+    // A projection belongs to one draft revision; never attach it to another.
+    if (projection !== undefined && entry.draft.revision !== input.expectedRevision)
+      throw new DomainError(
+        "CONTENT_REVISION_CONFLICT",
+        "The draft revision no longer matches the expected revision.",
+      );
     const result = await this.dependencies.content.publish({
       entryId: entry.id,
       expectedRevision: input.expectedRevision,
+      ...(projection === undefined ? {} : { projection }),
       ...(input.idempotencyKey === undefined
         ? {}
         : { idempotency: await this.idempotency(input, draft) }),
@@ -866,14 +883,8 @@ export class ContentUseCases {
       if (!active.has(id))
         throw new DomainError("CONTENT_INVALID_STATE", `Media ${id} is unavailable.`);
     }
-    const internalLinks = collectSnapshotInternalLinks(
-      model.fields,
-      normalized.fields,
-      normalized.blocks.map((block) => ({
-        ...block,
-        fields: this.dependencies.config.blocks.get(block.type)!.fields,
-      })),
-    );
+    // Links inside hidden targets are not delivered, so publication never checks them.
+    const internalLinks = this.internalLinks(model, normalized.fields, normalized.blocks);
     if (internalLinks.length > 0) {
       if (this.dependencies.content.resolveLinkTargets === undefined)
         throw new DomainError("CONTENT_INVALID_STATE", "Internal link validation is unavailable.");
@@ -905,6 +916,88 @@ export class ContentUseCases {
       if (issues.length > 0) throw new ContentValidationError(issues);
     }
     return { ...normalized, mediaReferences: Object.freeze(mediaReferences), internalLinks };
+  }
+
+  private internalLinks(
+    model: NormalizedContentModel,
+    fields: JsonObject,
+    blocks: readonly Pick<ContentBlock, "data" | "hidden" | "key" | "type">[],
+  ): readonly InternalLinkReference[] {
+    return collectSnapshotInternalLinks(
+      model.fields,
+      fields,
+      blocks.map((block) => {
+        const definition = this.dependencies.config.blocks.get(block.type)!;
+        return {
+          ...block,
+          fields: definition.fields,
+          ...(definition.visibility === undefined
+            ? {}
+            : { visibility: definition.visibility as FieldVisibility }),
+        };
+      }),
+      model.visibility as FieldVisibility | undefined,
+    );
+  }
+
+  /** Whether a model or block type declares conditional-field rules anywhere. */
+  private declaresVisibility(owner: string, fields: ModelFieldMap, rules: unknown): boolean {
+    let declared = this.visibilityOwners.get(owner);
+    if (declared === undefined) {
+      declared = declaresFieldVisibility(fields, rules as FieldVisibility | undefined);
+      this.visibilityOwners.set(owner, declared);
+    }
+    return declared;
+  }
+
+  /**
+   * The published projection of a validated draft and its references, or
+   * `undefined` when neither its model nor its blocks declare rules, so the
+   * repository copies the draft as before.
+   */
+  private publishedProjection(
+    model: NormalizedContentModel,
+    draft: NormalizedDraft,
+  ): PublishedProjection | undefined {
+    const registry = this.dependencies.config.blocks;
+    if (
+      !this.declaresVisibility(`model:${model.key}`, model.fields, model.visibility) &&
+      !draft.blocks.some((block) => {
+        const definition = registry.get(block.type)!;
+        return this.declaresVisibility(
+          `block:${block.type}`,
+          definition.fields,
+          definition.visibility,
+        );
+      })
+    )
+      return undefined;
+    const fields = publishedFieldValues(
+      model.fields,
+      draft.fields,
+      model.visibility as FieldVisibility | undefined,
+    );
+    const blocks = draft.blocks.map((block) => ({
+      ...block,
+      data: publishedBlockData(registry.get(block.type)!, block.data),
+    }));
+    const mediaReferences = this.collectMedia(fields, model.fields, "$fields");
+    if (draft.seo?.image !== undefined)
+      mediaReferences.push({
+        fieldPath: "image",
+        mediaId: mediaId(draft.seo.image),
+        sourceKey: "$seo",
+      });
+    for (const block of blocks)
+      mediaReferences.push(
+        ...this.collectMedia(block.data, registry.get(block.type)!.fields, block.key),
+      );
+    return detached({
+      blocks: blocks.map(({ data, key }) => ({ data, key })),
+      fields,
+      internalLinks: this.internalLinks(model, fields, blocks),
+      mediaReferences,
+    });
   }
 
   private collectMedia(

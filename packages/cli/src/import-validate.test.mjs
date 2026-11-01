@@ -2,6 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
+import { defineCollection, defineConfig } from "@lacecms/config";
+import { builtInBlocks, field } from "@lacecms/content";
 import {
   draftInput,
   loadImportConfiguration,
@@ -129,5 +131,64 @@ describe("local package validation", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+});
+
+describe("conditional fields in a package", () => {
+  test("hidden values are validated as drafts and never required", async () => {
+    const defined = await defineConfig({
+      blocks: Object.values(builtInBlocks),
+      content: [
+        defineCollection({
+          key: "works",
+          version: 1,
+          route: "/works/:slug",
+          fields: {
+            kind: field.select({ options: ["image", "video"], required: true }),
+            media: field.media({ required: true }),
+            videoUrl: field.url({ required: true }),
+            caption: field.text({ maxLength: 5 }),
+          },
+          visibility: {
+            media: { field: "kind", values: ["image"] },
+            videoUrl: { field: "kind", values: ["video"] },
+            caption: { field: "kind", values: ["video"] },
+          },
+        }),
+      ],
+    });
+    const works = {
+      blocks: defined.runtime.blocks,
+      models: new Map(defined.runtime.content.map((model) => [model.key, model])),
+    };
+    const pkg = (fields) => ({
+      formatVersion: 1,
+      media: [{ key: "cover", file: "media/cover.png" }],
+      entries: [{ key: "w", model: "works", title: "Work", slug: "w", fields, blocks: [] }],
+    });
+    const valid = await validatePackage(
+      await writePackage(pkg({ kind: "image", media: { $media: "cover" }, caption: "Kept" })),
+      works,
+      { publish: true },
+    );
+    expect(valid.entries).toHaveLength(1);
+    let error;
+    try {
+      await validatePackage(
+        await writePackage(pkg({ kind: "image", media: { $media: "cover" }, caption: "Too long" })),
+        works,
+        { publish: true },
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error?.issues?.map((issue) => issue.pointer)).toEqual(["/entries/0/fields/caption"]);
+    error = undefined;
+    try {
+      await validatePackage(await writePackage(pkg({ kind: "video" })), works, { publish: true });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error?.issues?.map((issue) => issue.pointer)).toEqual(["/entries/0/fields/videoUrl"]);
   });
 });

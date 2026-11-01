@@ -26,6 +26,7 @@ import {
   publicGlobalContentSchema,
   toPublicGlobalContentDto,
   publicContentEntrySchema,
+  contentMetadataOpenApi,
   publicContentListSchema,
   publicMediaDictionarySchema,
   toPublicContentEntryDto,
@@ -2774,4 +2775,32 @@ test("SM5A visibility metadata round trips at every owner and rejects forged rul
     blocks: [],
   });
   expect(plain).not.toHaveProperty("visibility");
+});
+
+test("published values without hidden required targets cross public contracts", () => {
+  const entry = {
+    blocks: [
+      {
+        data: { kind: "image" },
+        key: "feature-1",
+        position: 1_000,
+        schemaVersion: 1,
+        settings: {},
+        type: "feature",
+      },
+    ],
+    fields: { kind: "image", gallery: [{ kind: "video", videoUrl: "https://example.com/v" }] },
+    id: "work",
+    internalLinks: [],
+    modelKey: "works",
+    path: "/works/work",
+    publishedAt: toIsoTimestamp(1_800_000_000_000),
+    slug: "work",
+    title: "Work",
+  };
+  const dto = { entry, media: {} };
+  expect(v.parse(publicContentEntrySchema, dto)).toEqual(dto);
+  expect(contentMetadataOpenApi.FieldVisibility.description).toMatch(
+    /retained in drafts; its value is omitted from published snapshots, public reads and build exports/u,
+  );
 });

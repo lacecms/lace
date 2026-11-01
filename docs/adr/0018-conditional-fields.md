@@ -1,6 +1,6 @@
 # ADR 0018: Conditional fields
 
-- Status: accepted for SM5A; SM5B and SM5C build on it
+- Status: accepted; SM5A and SM5B implemented, SM5C builds on it
 - Date: 2026-11-01
 
 ## Context
@@ -46,9 +46,11 @@ build ([ADR 0007](0007-schema-evolution-during-sync.md)); drafts keep values.
 Global `seoDefaults` may not name a conditional field.
 
 SM5A ships the declaration, validation, projection, identity, metadata and
-sync behavior. SM5B applies the projection to publication and delivery; SM5C
-adds admin show/hide. Until SM5B lands on the same branch, publication still
-copies hidden draft values; the branch is not released in between.
+sync behavior. SM5B applies the projection to publication and delivery: the
+publish use case computes the projected fields, block data and their media and
+internal-link references, and the guarded atomic publication writes them when
+the model or a draft block declares rules; render removes hidden block data and
+published value types make targets optional. SM5C adds admin show/hide.
 
 ## Rejected alternatives
 

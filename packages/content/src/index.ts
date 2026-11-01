@@ -436,7 +436,9 @@ export type FieldValue<Definition extends FieldDefinition> = Definition extends 
             }
           ? string extends keyof Fields
             ? JsonObject
-            : BlockDataValues<Fields>
+            : Definition extends { readonly visibility: infer Visibility }
+              ? BlockDataValues<Fields, Visibility>
+              : BlockDataValues<Fields>
           : Definition extends {
                 readonly type: "list";
                 readonly item: infer Item extends ListItemDefinition;
@@ -1858,6 +1860,22 @@ export function publishedFieldValues(
   return output;
 }
 
+/**
+ * Whether an owner or any nested group, including list-item groups, declares
+ * conditional-field rules, so its published projection can differ from its values.
+ */
+export function declaresFieldVisibility(
+  definitions: ModelFieldDefinitions,
+  visibility?: FieldVisibility,
+): boolean {
+  if (visibility !== undefined && Object.keys(visibility).length > 0) return true;
+  const visit = (definition: FieldDefinition): boolean =>
+    definition.type === "group"
+      ? declaresFieldVisibility(definition.fields, definition.visibility)
+      : definition.type === "list" && visit(definition.item);
+  return Object.values(definitions).some(visit);
+}
+
 /** The published projection of one block's normalized data. */
 export function publishedBlockData(definition: BlockMetadata, data: JsonObject): JsonObject {
   return publishedFieldValues(definition.fields, data, definition.visibility as FieldVisibility);
@@ -1963,9 +1981,14 @@ export function collectSnapshotInternalLinks(
     readonly fields: ModelFieldDefinitions;
     readonly data: JsonObject;
     readonly hidden?: boolean;
+    /** The block's data rules; links inside hidden targets are not delivered. */
+    readonly visibility?: FieldVisibility;
   }[],
+  visibility?: FieldVisibility,
 ): readonly InternalLinkReference[] {
   const references: InternalLinkReference[] = [];
+  const pointerOf = (path: readonly ValidationPathSegment[]) =>
+    `/${path.map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
   function add(
     definitions: ModelFieldDefinitions,
     data: JsonObject,
@@ -1973,7 +1996,17 @@ export function collectSnapshotInternalLinks(
     area: "fields" | "data",
     delivered: boolean,
     rootPath: readonly ValidationPathSegment[],
+    rules: FieldVisibility | undefined,
   ): void {
+    // The projection keeps paths, so a link is visible exactly when it survives it.
+    const visible = declaresFieldVisibility(definitions, rules)
+      ? new Set(
+          collectFieldInternalLinks(
+            definitions,
+            publishedFieldValues(definitions, data, rules),
+          ).map((reference) => pointerOf(reference.path)),
+        )
+      : undefined;
     for (const reference of collectFieldInternalLinks(definitions, data)) {
       if (references.length === MAX_INTERNAL_LINK_REFERENCES)
         invalid(
@@ -1981,22 +2014,27 @@ export function collectSnapshotInternalLinks(
           "too_many_internal_links",
           `must not contain more than ${MAX_INTERNAL_LINK_REFERENCES} internal links.`,
         );
+      const pointer = pointerOf(reference.path);
       references.push({
         sourceKey,
         area,
-        delivered,
+        delivered: delivered && (visible === undefined || visible.has(pointer)),
         targetId: reference.targetId,
-        pointer: `/${reference.path.map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`,
+        pointer,
       });
     }
   }
-  add(fields, values, "$fields", "fields", true, ["fields"]);
+  add(fields, values, "$fields", "fields", true, ["fields"], visibility);
   blocks.forEach((block, index) =>
-    add(block.fields, block.data, block.key, "data", block.hidden !== true, [
-      "blocks",
-      index,
+    add(
+      block.fields,
+      block.data,
+      block.key,
       "data",
-    ]),
+      block.hidden !== true,
+      ["blocks", index, "data"],
+      block.visibility,
+    ),
   );
   return deepFreeze(references);
 }
@@ -2266,15 +2304,42 @@ export interface BlockDefinitionInput<
   readonly version: number;
 }
 
-/** The data shape inferred from a block's field definitions. */
-export type BlockDataValues<Fields extends ModelFieldDefinitions> = Readonly<
+/**
+ * The target keys of an owner's inferred conditional-field rules: keys the
+ * inferred rules declare. Keys that are merely permitted (optional, as in a
+ * wide `FieldVisibility<Fields>`) are not targets.
+ */
+export type FieldVisibilityTargets<Visibility> = [Visibility] extends [undefined]
+  ? never
+  : {
+      [Key in keyof NonNullable<Visibility>]-?: {} extends Pick<NonNullable<Visibility>, Key>
+        ? never
+        : Key;
+    }[keyof NonNullable<Visibility>];
+
+/**
+ * The data shape inferred from a block's field definitions. Conditional targets
+ * named by `Visibility` are optional: they are absent while hidden.
+ */
+export type BlockDataValues<
+  Fields extends ModelFieldDefinitions,
+  Visibility = undefined,
+> = Readonly<
   {
-    [Key in keyof Fields as FieldIsRequired<Fields[Key]> extends true ? Key : never]: FieldValue<
-      Fields[Key]
-    >;
+    [
+      Key in keyof Fields as Key extends FieldVisibilityTargets<Visibility>
+        ? never
+        : FieldIsRequired<Fields[Key]> extends true
+          ? Key
+          : never
+    ]: FieldValue<Fields[Key]>;
   } & {
     readonly [
-      Key in keyof Fields as FieldIsRequired<Fields[Key]> extends true ? never : Key
+      Key in keyof Fields as Key extends FieldVisibilityTargets<Visibility>
+        ? Key
+        : FieldIsRequired<Fields[Key]> extends true
+          ? never
+          : Key
     ]?: FieldValue<Fields[Key]>;
   }
 >;
@@ -2288,8 +2353,9 @@ export type BlockSettingsValues<Settings extends ModelFieldDefinitions> = Readon
 export interface BlockMetadata<
   Fields extends ModelFieldDefinitions = ModelFieldDefinitions,
   Settings extends ModelFieldDefinitions = ModelFieldDefinitions,
+  Visibility = undefined,
 > {
-  readonly defaultValue?: BlockDataValues<Fields>;
+  readonly defaultValue?: BlockDataValues<Fields, Visibility>;
   readonly description?: string;
   readonly fields: Fields;
   readonly layout?: FormLayout<keyof Fields & string>;
@@ -2308,10 +2374,14 @@ export interface BlockMetadata<
 export interface BlockDefinition<
   Fields extends ModelFieldDefinitions = ModelFieldDefinitions,
   Settings extends ModelFieldDefinitions = ModelFieldDefinitions,
-> extends BlockMetadata<Fields, Settings> {
+  Visibility = undefined,
+> extends BlockMetadata<Fields, Settings, Visibility> {
   /** Runtime-only migrations keyed by target version; never part of metadata. */
   readonly migrations?: BlockMigrations;
-  readonly validate: (value: unknown, mode: ContentValidationMode) => BlockDataValues<Fields>;
+  readonly validate: (
+    value: unknown,
+    mode: ContentValidationMode,
+  ) => BlockDataValues<Fields, Visibility>;
 }
 
 function blockFail(message: string): never {
@@ -2407,7 +2477,10 @@ function normalizeBlockMigrations(value: unknown, version: number): BlockMigrati
 export function defineBlock<
   const Fields extends ModelFieldDefinitions,
   const Settings extends ModelFieldDefinitions = NoBlockSettings,
->(input: BlockDefinitionInput<Fields, Settings>): BlockDefinition<Fields, Settings> {
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: BlockDefinitionInput<Fields, Settings> & { readonly visibility?: Visibility },
+): BlockDefinition<Fields, Settings, Visibility> {
   if (!isRecord(input)) {
     blockFail("block must be a plain object.");
   }
@@ -2469,7 +2542,7 @@ export function defineBlock<
     fields,
     `block.${input.type}.visibility`,
   ) as FieldVisibility<Fields> | undefined;
-  let defaultValue: BlockDataValues<Fields> | undefined;
+  let defaultValue: BlockDataValues<Fields, Visibility> | undefined;
   if (input.defaultValue !== undefined) {
     try {
       const normalized = normalizeJsonValue(
@@ -2482,7 +2555,7 @@ export function defineBlock<
       }
       defaultValue = deepFreeze(
         validateModelFields(fields, normalized, "draft", [], visibility as FieldVisibility),
-      ) as BlockDataValues<Fields>;
+      ) as BlockDataValues<Fields, Visibility>;
     } catch (error) {
       if (error instanceof ContentValidationError) {
         blockFail("defaultValue must conform to the block fields.");
@@ -2490,7 +2563,7 @@ export function defineBlock<
       throw error;
     }
   }
-  const definition: BlockDefinition<Fields, Settings> = {
+  const definition: BlockDefinition<Fields, Settings, Visibility> = {
     ...(defaultValue === undefined ? {} : { defaultValue }),
     ...(input.description === undefined ? {} : { description: input.description }),
     fields,
@@ -2504,10 +2577,16 @@ export function defineBlock<
     validate: (value, mode) => {
       const rules = visibility as FieldVisibility | undefined;
       if (!isRecord(value)) {
-        return validateModelFields(fields, value, mode, [], rules) as BlockDataValues<Fields>;
+        return validateModelFields(fields, value, mode, [], rules) as BlockDataValues<
+          Fields,
+          Visibility
+        >;
       }
       const withDefault = defaultValue === undefined ? value : { ...defaultValue, ...value };
-      return validateModelFields(fields, withDefault, mode, [], rules) as BlockDataValues<Fields>;
+      return validateModelFields(fields, withDefault, mode, [], rules) as BlockDataValues<
+        Fields,
+        Visibility
+      >;
     },
     version: input.version,
     ...(visibility === undefined ? {} : { visibility }),

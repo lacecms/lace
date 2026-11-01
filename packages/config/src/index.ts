@@ -17,6 +17,7 @@ import type {
   BlockRegistry,
   FieldDefinition,
   FieldVisibility,
+  FieldVisibilityTargets,
   FormLayout,
   FieldIsRequired,
   FieldValue,
@@ -60,18 +61,35 @@ export class ConfigurationError extends Error {
 /** Field descriptors indexed by their stable configuration field key. */
 export type FieldMap = Readonly<Record<string, FieldDefinition>>;
 
-/** The values inferred from a model's field descriptors. */
-export type ModelFieldValues<Fields extends FieldMap> = Readonly<
+/**
+ * The values inferred from a model's field descriptors. Conditional targets
+ * named by `Visibility` (for example `typeof model.visibility`) are optional:
+ * published values omit them while hidden.
+ */
+export type ModelFieldValues<Fields extends FieldMap, Visibility = undefined> = Readonly<
   {
-    [Key in keyof Fields as FieldIsRequired<Fields[Key]> extends true ? Key : never]: FieldValue<
-      Fields[Key]
-    >;
+    [
+      Key in keyof Fields as Key extends FieldVisibilityTargets<Visibility>
+        ? never
+        : FieldIsRequired<Fields[Key]> extends true
+          ? Key
+          : never
+    ]: FieldValue<Fields[Key]>;
   } & {
     readonly [
-      Key in keyof Fields as FieldIsRequired<Fields[Key]> extends true ? never : Key
+      Key in keyof Fields as Key extends FieldVisibilityTargets<Visibility>
+        ? Key
+        : FieldIsRequired<Fields[Key]> extends true
+          ? never
+          : Key
     ]?: FieldValue<Fields[Key]>;
   }
 >;
+
+/** Exposes a model's inferred conditional-field rules on its definition type. */
+export type ModelVisibility<Visibility> = [Visibility] extends [undefined]
+  ? {}
+  : { readonly visibility: Visibility };
 
 interface CommonModelInput<Fields extends FieldMap> {
   readonly blocks?: readonly string[];
@@ -170,7 +188,7 @@ export interface SeoDefaultsDefinition {
   readonly titleTemplate?: string;
 }
 
-interface NormalizedCommonModel<Fields extends FieldMap> {
+export interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: Fields;
@@ -190,7 +208,7 @@ interface NormalizedCommonModel<Fields extends FieldMap> {
 }
 
 /** SEO options of a normalized page or collection. */
-interface NormalizedRoutableModel {
+export interface NormalizedRoutableModel {
   /** Runtime-only synchronization hint: stored SEO values may be cleared. */
   readonly removedSeo?: true;
   readonly seo?: ModelSeoDefinition;
@@ -740,9 +758,12 @@ function normalizeSeoDefaults(
 }
 
 /** Defines a detached singleton page model with inferred field values. */
-export function definePage<const Fields extends FieldMap = FieldMap>(
-  input: PageModelInput<Fields>,
-): PageModelDefinition<Fields> {
+export function definePage<
+  const Fields extends FieldMap = FieldMap,
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: PageModelInput<Fields> & { readonly visibility?: Visibility },
+): PageModelDefinition<Fields> & ModelVisibility<Visibility> {
   const common = normalizeCommonModel(input);
   if (Object.hasOwn(input, "listOptions"))
     fail(`page "${input.key}" must not declare listOptions.`);
@@ -752,13 +773,16 @@ export function definePage<const Fields extends FieldMap = FieldMap>(
     path: normalizePagePath(input.path),
     ...normalizeRoutableSeo(input, common.fields),
   };
-  return deepFreeze(definition);
+  return deepFreeze(definition) as PageModelDefinition<Fields> & ModelVisibility<Visibility>;
 }
 
 /** Defines a detached route-less singleton model, such as site settings. */
-export function defineGlobal<const Fields extends FieldMap = FieldMap>(
-  input: GlobalModelInput<Fields>,
-): GlobalModelDefinition<Fields> {
+export function defineGlobal<
+  const Fields extends FieldMap = FieldMap,
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: GlobalModelInput<Fields> & { readonly visibility?: Visibility },
+): GlobalModelDefinition<Fields> & ModelVisibility<Visibility> {
   const common = normalizeCommonModel(input);
   for (const option of ["path", "route", "listFields", "listOptions", "seo", "removedSeo"]) {
     if (Object.hasOwn(input, option)) {
@@ -775,7 +799,7 @@ export function defineGlobal<const Fields extends FieldMap = FieldMap>(
     kind: "global",
     ...(seoDefaults === undefined ? {} : { seoDefaults }),
   };
-  return deepFreeze(definition);
+  return deepFreeze(definition) as GlobalModelDefinition<Fields> & ModelVisibility<Visibility>;
 }
 
 function normalizeListFields(value: unknown, fields: FieldMap): readonly string[] {
@@ -839,9 +863,12 @@ function normalizeListOptions(value: unknown, fields: FieldMap): CollectionListO
 }
 
 /** Defines a detached collection model with inferred field values. */
-export function defineCollection<const Fields extends FieldMap = FieldMap>(
-  input: CollectionModelInput<Fields>,
-): CollectionModelDefinition<Fields> {
+export function defineCollection<
+  const Fields extends FieldMap = FieldMap,
+  const Visibility extends FieldVisibility<Fields> | undefined = undefined,
+>(
+  input: CollectionModelInput<Fields> & { readonly visibility?: Visibility },
+): CollectionModelDefinition<Fields> & ModelVisibility<Visibility> {
   const common = normalizeCommonModel(input);
   const listFields = normalizeListFields(input.listFields, common.fields);
   const listOptions = normalizeListOptions(input.listOptions, common.fields);
@@ -855,7 +882,7 @@ export function defineCollection<const Fields extends FieldMap = FieldMap>(
     route: normalizeCollectionRoute(input.route),
     ...normalizeRoutableSeo(input, common.fields),
   };
-  return deepFreeze(definition);
+  return deepFreeze(definition) as CollectionModelDefinition<Fields> & ModelVisibility<Visibility>;
 }
 
 function pageMatchesCollection(pagePath: string, collectionRoute: string): boolean {

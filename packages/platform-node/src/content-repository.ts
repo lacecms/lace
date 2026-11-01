@@ -95,6 +95,11 @@ import {
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   INVALID_PUBLISHED_LINK_TARGETS_SQL,
+  INVALID_PROJECTED_LINK_TARGETS_SQL,
+  projectedBlocksSql,
+  projectedInternalLinksSql,
+  projectedMediaReferencesSql,
+  projectedPublicationRows,
   assertPublishedInternalLinkTargets,
   SqlContentLinkReader,
   replaceInternalLinkStatements,
@@ -740,23 +745,36 @@ export class NodeContentRepository
             };
           }
         }
+        // A projection replaces the copied fields, block data and references (conditional fields).
+        const projected =
+          input.projection === undefined
+            ? undefined
+            : projectedPublicationRows(
+                entry.draft.blocks.map((block) => block.key),
+                input.projection,
+              );
         assertPublishedInternalLinkTargets(
-          this.connection
-            .prepare(INVALID_PUBLISHED_LINK_TARGETS_SQL)
-            .all(
-              entry.draft.id,
-              entry.id,
-              path ?? null,
-            ) as readonly import("@lacecms/db").InvalidPublishedLinkTargetRow[],
+          (projected === undefined
+            ? this.connection
+                .prepare(INVALID_PUBLISHED_LINK_TARGETS_SQL)
+                .all(entry.draft.id, entry.id, path ?? null)
+            : this.connection
+                .prepare(INVALID_PROJECTED_LINK_TARGETS_SQL)
+                .all(
+                  projected.internalLinksJson,
+                  entry.id,
+                  path ?? null,
+                )) as readonly import("@lacecms/db").InvalidPublishedLinkTargetRow[],
           entry.draft.blocks.map((block) => block.key),
         );
         this.checkpoint("publish.snapshot");
         const copied = this.connection
           .prepare(
-            "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?",
+            `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, s.entry_id, s.revision, s.slug, s.title, ${projected === undefined ? "s.fields_json" : "?"}, s.seo_json, s.schema_version, ?, ?, ? from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id where e.id = ? and s.revision = ?`,
           )
           .run(
             input.publishedSnapshotId,
+            ...(projected === undefined ? [] : [projected.fieldsJson]),
             input.publishedAt,
             input.publishedAt,
             input.publishedBy.id,
@@ -769,24 +787,39 @@ export class NodeContentRepository
             "The draft revision no longer matches the expected revision.",
           );
         this.checkpoint("publish.blocks");
-        this.connection
-          .prepare(
-            `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
-          )
-          .run(input.publishedSnapshotId, entry.draft.id);
+        if (projected === undefined)
+          this.connection
+            .prepare(
+              `insert into content_blocks (snapshot_id, ${BLOCK_COPY_COLUMNS_SQL}) select ?, ${BLOCK_COPY_COLUMNS_SQL} from content_blocks where snapshot_id = ?`,
+            )
+            .run(input.publishedSnapshotId, entry.draft.id);
+        else
+          this.connection
+            .prepare(projectedBlocksSql())
+            .run(input.publishedSnapshotId, projected.blockDataJson, entry.draft.id);
         this.bumpLinkGraph([
           entry.draft.id,
           ...(entry.published === undefined ? [] : [entry.published.id]),
         ]);
-        this.connection
-          .prepare(COPY_INTERNAL_LINKS_SQL)
-          .run(input.publishedSnapshotId, entry.draft.id);
+        if (projected === undefined)
+          this.connection
+            .prepare(COPY_INTERNAL_LINKS_SQL)
+            .run(input.publishedSnapshotId, entry.draft.id);
+        else
+          this.connection
+            .prepare(projectedInternalLinksSql())
+            .run(input.publishedSnapshotId, projected.internalLinksJson);
         this.checkpoint("publish.references");
-        this.connection
-          .prepare(
-            "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) select ?, source_key, field_path, media_id, created_at from content_media_references where snapshot_id = ?",
-          )
-          .run(input.publishedSnapshotId, entry.draft.id);
+        if (projected === undefined)
+          this.connection
+            .prepare(
+              "insert into content_media_references (snapshot_id, source_key, field_path, media_id, created_at) select ?, source_key, field_path, media_id, created_at from content_media_references where snapshot_id = ?",
+            )
+            .run(input.publishedSnapshotId, entry.draft.id);
+        else
+          this.connection
+            .prepare(projectedMediaReferencesSql())
+            .run(input.publishedSnapshotId, input.publishedAt, projected.mediaReferencesJson);
         // A global has no route; its publication only replaces the snapshot.
         if (path !== undefined) {
           this.checkpoint("publish.route");

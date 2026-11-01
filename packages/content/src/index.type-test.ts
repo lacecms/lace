@@ -407,3 +407,90 @@ defineBlock({
   // @ts-expect-error Data visibility cannot name block settings.
   visibility: { url: { field: "mode", values: ["a"] } },
 });
+
+type ConditionalItemValue = FieldValue<typeof conditionalItem>;
+export type ConditionalItemKindRequired = Expect<
+  Equal<ConditionalItemValue["kind"], "image" | "video">
+>;
+export type ConditionalTargetsOptional = Expect<
+  Equal<
+    Pick<ConditionalItemValue, "media" | "videoUrl" | "caption">,
+    Readonly<{ media?: string; videoUrl?: string; caption?: string }>
+  >
+>;
+const conditionalGallery = field.list({ item: conditionalItem });
+export type ConditionalListItemsOptional = Expect<
+  Equal<
+    undefined extends FieldValue<typeof conditionalGallery>[number]["media"] ? true : false,
+    true
+  >
+>;
+const conditionalNested = field.group({ fields: { inner: conditionalItem } });
+export type ConditionalNestedOptional = Expect<
+  Equal<
+    undefined extends NonNullable<FieldValue<typeof conditionalNested>["inner"]>["videoUrl"]
+      ? true
+      : false,
+    true
+  >
+>;
+const conditionalMediaBlock = defineBlock({
+  type: "conditional-media",
+  version: 1,
+  fields: {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    title: field.text({ required: true }),
+  },
+  visibility: {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+  },
+});
+type ConditionalBlockData = ReturnType<typeof conditionalMediaBlock.validate>;
+export type ConditionalBlockData_ = Expect<
+  Equal<
+    ConditionalBlockData,
+    BlockDataValues<
+      typeof conditionalMediaBlock.fields,
+      { readonly media: unknown; readonly videoUrl: unknown }
+    >
+  >
+>;
+export type ConditionalBlockRequired = Expect<
+  Equal<
+    Pick<ConditionalBlockData, "kind" | "title">,
+    Readonly<{ kind: "image" | "video"; title: string }>
+  >
+>;
+export type ConditionalBlockTargetsOptional = Expect<
+  Equal<
+    Pick<ConditionalBlockData, "media" | "videoUrl">,
+    Readonly<{ media?: string; videoUrl?: string }>
+  >
+>;
+const unconditionalMediaBlock = defineBlock({
+  type: "plain-media",
+  version: 1,
+  fields: { media: field.media({ required: true }), caption: field.text() },
+});
+export type UnconditionalMediaBlockUnchanged = Expect<
+  Equal<
+    ReturnType<typeof unconditionalMediaBlock.validate>,
+    BlockDataValues<typeof unconditionalMediaBlock.fields>
+  >
+>;
+export type UnconditionalMediaBlockRequired = Expect<
+  Equal<ReturnType<typeof unconditionalMediaBlock.validate>["media"], string>
+>;
+const plainGroup = field.group({ fields: { title: field.text({ required: true }) } });
+export type UnconditionalGroupUnchanged = Expect<
+  Equal<FieldValue<typeof plainGroup>, Readonly<{ title: string } & {}>>
+>;
+// Typed definitions remain usable where any block definition is accepted.
+const anyBlocks: readonly import("./index.js").BlockDefinition[] = [
+  conditionalMediaBlock,
+  unconditionalMediaBlock,
+];
+void anyBlocks;

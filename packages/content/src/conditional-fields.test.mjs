@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ContentValidationError,
   canonicalizeJson,
+  collectSnapshotInternalLinks,
+  declaresFieldVisibility,
   defineBlock,
   defineBlockRegistry,
   field,
@@ -367,5 +369,115 @@ describe("published projection", () => {
       visibility: { ctaUrl: { field: "hasCta", values: [true] } },
     });
     expect(publishedBlockData(toBlockMetadata(block), { ctaUrl: "https://a.example" })).toEqual({});
+  });
+});
+
+describe("declared rules", () => {
+  it("finds rules at the owner, in nested groups and in list-item groups", () => {
+    const plain = { title: field.text(), tags: field.list({ item: field.text() }) };
+    expect(declaresFieldVisibility(plain)).toBe(false);
+    expect(declaresFieldVisibility(plain, {})).toBe(false);
+    expect(declaresFieldVisibility(itemFields(), itemRules())).toBe(true);
+    expect(declaresFieldVisibility({ gallery: gallery() })).toBe(true);
+    expect(
+      declaresFieldVisibility({
+        outer: field.group({
+          fields: { inner: field.group({ fields: itemFields(), visibility: itemRules() }) },
+        }),
+      }),
+    ).toBe(true);
+    const block = defineBlock({
+      type: "media",
+      version: 1,
+      fields: itemFields(),
+      visibility: itemRules(),
+    });
+    expect(declaresFieldVisibility(block.fields, block.visibility)).toBe(true);
+    expect(
+      declaresFieldVisibility({ items: field.list({ item: field.group({ fields: plain }) }) }),
+    ).toBe(false);
+  });
+});
+
+describe("internal links inside hidden targets", () => {
+  const linkFields = () => ({
+    hasCta: field.boolean(),
+    ctaUrl: field.url(),
+    always: field.url(),
+  });
+  const linkRules = () => ({ ctaUrl: { field: "hasCta", values: [true] } });
+
+  it("marks model-level, list-item and block-data links as not delivered when hidden", () => {
+    const fields = {
+      ...linkFields(),
+      items: field.list({
+        item: field.group({
+          fields: {
+            kind: field.select({ options: ["link", "text"], defaultValue: "text" }),
+            url: field.url(),
+          },
+          visibility: { url: { field: "kind", values: ["link"] } },
+        }),
+      }),
+    };
+    const values = validateModelFields(
+      fields,
+      {
+        hasCta: false,
+        ctaUrl: "entry:a",
+        always: "entry:b",
+        items: [
+          { kind: "text", url: "entry:c" },
+          { kind: "link", url: "entry:d" },
+        ],
+      },
+      "draft",
+      [],
+      linkRules(),
+    );
+    const references = collectSnapshotInternalLinks(
+      fields,
+      values,
+      [
+        {
+          key: "cta",
+          fields: linkFields(),
+          data: { hasCta: false, ctaUrl: "entry:e", always: "entry:f" },
+          visibility: linkRules(),
+        },
+        {
+          key: "hidden",
+          fields: linkFields(),
+          data: { hasCta: true, ctaUrl: "entry:g" },
+          hidden: true,
+          visibility: linkRules(),
+        },
+      ],
+      linkRules(),
+    );
+    expect(
+      references.map(({ pointer, sourceKey, delivered }) => [sourceKey, pointer, delivered]),
+    ).toEqual([
+      ["$fields", "/ctaUrl", false],
+      ["$fields", "/always", true],
+      ["$fields", "/items/0/url", false],
+      ["$fields", "/items/1/url", true],
+      ["cta", "/ctaUrl", false],
+      ["cta", "/always", true],
+      ["hidden", "/ctaUrl", false],
+    ]);
+  });
+
+  it("keeps the output of content without rules unchanged", () => {
+    const fields = linkFields();
+    const values = { hasCta: false, ctaUrl: "entry:a" };
+    expect(collectSnapshotInternalLinks(fields, values, [])).toEqual([
+      { sourceKey: "$fields", area: "fields", delivered: true, targetId: "a", pointer: "/ctaUrl" },
+    ]);
+    expect(
+      collectSnapshotInternalLinks(fields, { ...values, hasCta: true }, [], linkRules()),
+    ).toEqual([
+      { sourceKey: "$fields", area: "fields", delivered: true, targetId: "a", pointer: "/ctaUrl" },
+    ]);
   });
 });

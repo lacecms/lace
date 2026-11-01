@@ -52,7 +52,8 @@ const tools: readonly {
   {
     name: "list_content_models",
     operation: "discoverModels",
-    description: "Inspect content models and their fields, blocks and query limits.",
+    description:
+      "Inspect content models and their fields, blocks and query limits. A field named under an owner's `visibility` applies only while its sibling controller holds one of the listed values.",
   },
   {
     name: "list_entries",
@@ -68,19 +69,19 @@ const tools: readonly {
     name: "create_entry",
     operation: "create",
     description:
-      "Create an unpublished entry from a complete draft. Re-read after an uncertain outcome; creation is not idempotent.",
+      "Create an unpublished entry from a complete draft. Fill a conditional field only when its controller selects it; values of hidden fields are kept and validated as drafts. Re-read after an uncertain outcome; creation is not idempotent.",
   },
   {
     name: "publish_entry",
     operation: "publish",
     description:
-      "Publish the saved draft at the expected revision. Requires content:publish. Retry with the same idempotencyKey after an uncertain outcome.",
+      "Publish the saved draft at the expected revision. Requires content:publish. Hidden conditional fields are not required and their values are never published. Retry with the same idempotencyKey after an uncertain outcome.",
   },
   {
     name: "save_draft",
     operation: "save",
     description:
-      "Replace the complete draft using the explicit expected revision. Does not publish or request a build.",
+      "Replace the complete draft using the explicit expected revision. Values of hidden conditional fields are kept and validated as drafts. Does not publish or request a build.",
   },
 ]);
 

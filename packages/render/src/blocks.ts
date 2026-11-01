@@ -4,7 +4,9 @@ import {
   ContentValidationError,
   effectiveAltText,
   isBlockAnchor,
+  declaresFieldVisibility,
   normalizeBlockClassName,
+  publishedBlockData,
   validateBlockData,
   validateBlockSettings,
 } from "@lacecms/content";
@@ -79,12 +81,16 @@ export interface ImageDescription {
 export type ImageDescriber = (mediaId: string, usageAlt?: string | null) => ImageDescription;
 
 // oxlint-disable-next-line typescript/no-explicit-any -- definitions vary by field and settings record.
-type AnyBlockDefinition = BlockDefinition<any, any>;
+type AnyBlockDefinition = BlockDefinition<any, any, any>;
 
-/** The parsed data type of a block definition. */
+/** The parsed data type of a block definition; conditional targets are optional. */
 export type BlockDataOf<Definition extends AnyBlockDefinition> =
-  Definition extends BlockDefinition<infer Fields extends ModelFieldDefinitions>
-    ? BlockDataValues<Fields>
+  Definition extends BlockDefinition<
+    infer Fields extends ModelFieldDefinitions,
+    infer _Settings extends ModelFieldDefinitions,
+    infer Visibility
+  >
+    ? BlockDataValues<Fields, Visibility>
     : never;
 
 /** The parsed settings type of a block definition; every declared setting is present. */
@@ -142,9 +148,23 @@ export interface PreparedBlock<Component = unknown> {
   readonly props: BlockProps<AnyBlockDefinition>;
 }
 
+const visibilityDeclarations = new WeakMap<object, boolean>();
+
+/** Whether a block's data declares conditional-field rules anywhere; memoized per definition. */
+function declaresVisibility(definition: AnyBlockDefinition): boolean {
+  let declared = visibilityDeclarations.get(definition);
+  if (declared === undefined) {
+    declared = declaresFieldVisibility(definition.fields, definition.visibility);
+    visibilityDeclarations.set(definition, declared);
+  }
+  return declared;
+}
+
 /**
  * Validates a block's data against its definition in publish mode, applying the
- * definition's defaults. The render core never migrates block data.
+ * definition's defaults, then removes values its conditional-field rules hide
+ * (including defaults materialized for hidden targets). The render core never
+ * migrates block data.
  */
 export function parseBlock<Definition extends AnyBlockDefinition>(
   definition: Definition,
@@ -166,7 +186,10 @@ export function parseBlock<Definition extends AnyBlockDefinition>(
     );
   }
   try {
-    return validateBlockData(definition, block.data, "publish") as BlockDataOf<Definition>;
+    const data = validateBlockData(definition, block.data, "publish");
+    return (
+      declaresVisibility(definition) ? publishedBlockData(definition, data as never) : data
+    ) as BlockDataOf<Definition>;
   } catch (error) {
     if (error instanceof ContentValidationError) {
       const issue = error.issues[0];

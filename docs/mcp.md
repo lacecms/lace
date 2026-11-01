@@ -187,6 +187,15 @@ build outbox unchanged. Existing draft internal-link rules still apply: a
 missing/unpublished destination can remain in a draft, but a global cannot be a
 destination, and publishing requires available routable destinations.
 
+Conditional fields follow the shared rules ([ADR 0018](adr/0018-conditional-fields.md)).
+`list_content_models` returns each owner's `visibility` map in the same model,
+group and block metadata as REST. An agent fills a target only when its
+controller selects it. Values of hidden fields are kept in the draft and
+validated as drafts, so switching the controller back restores them.
+`publish_entry` does not require hidden fields and never publishes their values:
+the published snapshot returned by `get_entry` omits them while the draft keeps
+them. The tool descriptions say the same.
+
 After an uncertain create/save response, re-read content before deciding what
 to do. Creation is not idempotent. Retrying a save must retain its original
 revision; do not substitute the latest revision to force an overwrite.

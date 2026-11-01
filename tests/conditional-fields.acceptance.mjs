@@ -1,7 +1,7 @@
-// SM5A: conditional-field validation and draft retention on Node and the local
-// Worker, through the admin REST boundary with one shared configuration.
+// SM5A/SM5B: conditional-field validation, draft retention, publication and
+// delivery on Node and the local Worker, through REST with one shared configuration.
 import { expect, test } from "vitest";
-import { defineCollection, defineConfig } from "../packages/config/dist/index.js";
+import { defineCollection, defineConfig, defineGlobal } from "../packages/config/dist/index.js";
 import { builtInBlocks, defineBlock, field } from "../packages/content/dist/index.js";
 import { openProductRuntime } from "./support/cross-runtime-fixture.mjs";
 
@@ -36,9 +36,19 @@ const config = await defineConfig({
         }),
       },
       key: "works",
+      listOptions: { filterableFields: ["heroVideo"] },
       route: "/works/:slug",
       version: 1,
       visibility: { heroVideo: { field: "heroKind", values: ["video"] } },
+    }),
+    defineGlobal({
+      fields: {
+        mode: field.select({ options: ["plain", "banner"], required: true, defaultValue: "plain" }),
+        banner: field.text({ required: true }),
+      },
+      key: "settings",
+      version: 1,
+      visibility: { banner: { field: "mode", values: ["banner"] } },
     }),
   ],
 });
@@ -163,6 +173,124 @@ test("conditional fields validate and retain drafts identically on both runtimes
     unsafe: 422,
     unsafeIssue: ["/fields/heroVideo"],
     stored: { heroKind: "video", gallery: [{ kind: "video" }] },
+  });
+  expect(results.worker).toEqual(results.node);
+});
+
+test("publication and delivery omit hidden values identically on both runtimes", async () => {
+  const results = {};
+  for (const runtime of ["node", "worker"]) {
+    const f = await openProductRuntime(runtime, { config });
+    try {
+      const call = async (path, options = {}) => {
+        const response = await f.call(path, { cookie: f.cookies.admin, ...options });
+        return { status: response.status, body: await response.json() };
+      };
+      const publish = async (entry) =>
+        call(`/api/v1/admin/entries/${entry.id}/publish`, {
+          method: "POST",
+          json: { expectedRevision: entry.draft.revision },
+        });
+      const created = await call("/api/v1/admin/models/works/entries", {
+        method: "POST",
+        json: {
+          title: "Work",
+          slug: "work",
+          fields: {
+            heroKind: "image",
+            heroVideo: "https://example.com/stale-hero",
+            gallery: [
+              { kind: "image", media: "cover", videoUrl: "https://example.com/stale" },
+              { kind: "video", media: "stale", videoUrl: "https://example.com/v" },
+            ],
+          },
+          blocks: [
+            {
+              key: "cta-1",
+              type: "conditionalCta",
+              schemaVersion: 1,
+              position: 1000,
+              data: { hasCta: false, ctaUrl: "https://example.com/stale-cta" },
+            },
+          ],
+        },
+      });
+      expect(created.status).toBe(201);
+      expect((await publish(created.body)).status).toBe(200);
+      const admin = (await call(`/api/v1/admin/entries/${created.body.id}`)).body;
+
+      const settingsList = await call("/api/v1/admin/models/settings/entries");
+      const settings = settingsList.body.items[0];
+      const settingsEntry = (await call(`/api/v1/admin/entries/${settings.id}`)).body;
+      const savedSettings = await call(`/api/v1/admin/entries/${settings.id}/draft`, {
+        method: "PUT",
+        json: {
+          expectedRevision: settingsEntry.draft.revision,
+          title: settingsEntry.draft.title,
+          fields: { mode: "plain", banner: "Stale banner" },
+          blocks: [],
+        },
+      });
+      expect(savedSettings.status).toBe(200);
+      expect((await publish(savedSettings.body)).status).toBe(200);
+
+      const publicWork = await call("/api/v1/public/collections/works/work");
+      const publicSettings = await call("/api/v1/public/globals/settings");
+      const issued = await call("/api/v1/admin/api-tokens", {
+        method: "POST",
+        json: { name: `sm5b-${runtime}` },
+      });
+      const exported = await f.call("/api/v1/public/build-export", {
+        headers: { authorization: `Bearer ${issued.body.token}` },
+      });
+      const exportBody = await exported.json();
+      const drafts = await call(
+        `/api/v1/admin/models/works/entries?filters=${encodeURIComponent(
+          JSON.stringify([{ field: "heroVideo", op: "isSet" }]),
+        )}`,
+      );
+      results[runtime] = {
+        draft: { fields: admin.draft.fields, block: admin.draft.blocks[0].data },
+        published: { fields: admin.published.fields, block: admin.published.blocks[0].data },
+        publicWork: {
+          fields: publicWork.body.entry.fields,
+          block: publicWork.body.entry.blocks[0].data,
+        },
+        publicSettings: publicSettings.body.global.fields,
+        exported: {
+          status: exported.status,
+          work: exportBody.entries.find((entry) => entry.slug === "work").fields,
+        },
+        draftQuery: drafts.body.items.map((item) => item.slug),
+      };
+    } finally {
+      await f.close();
+    }
+  }
+  const published = {
+    heroKind: "image",
+    gallery: [
+      { kind: "image", media: "cover" },
+      { kind: "video", videoUrl: "https://example.com/v" },
+    ],
+  };
+  expect(results.node).toEqual({
+    draft: {
+      fields: {
+        heroKind: "image",
+        heroVideo: "https://example.com/stale-hero",
+        gallery: [
+          { kind: "image", media: "cover", videoUrl: "https://example.com/stale" },
+          { kind: "video", media: "stale", videoUrl: "https://example.com/v" },
+        ],
+      },
+      block: { hasCta: false, ctaUrl: "https://example.com/stale-cta" },
+    },
+    published: { fields: published, block: { hasCta: false } },
+    publicWork: { fields: published, block: { hasCta: false } },
+    publicSettings: { mode: "plain" },
+    exported: { status: 200, work: published },
+    draftQuery: ["work"],
   });
   expect(results.worker).toEqual(results.node);
 });

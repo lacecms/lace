@@ -21,6 +21,12 @@ are [ADR 0016](adr/0016-import-credentials.md) (import tokens) and
   equal the local `lace.config.ts`.
 - The token comes only from `LACE_IMPORT_TOKEN` and never appears in output,
   the state file or diagnostics.
+- Conditional fields need no import-specific handling: `--validate-only` and
+  the server apply the same `visibility` rules
+  ([ADR 0018](adr/0018-conditional-fields.md)). Fill a target only when its
+  controller selects it. A hidden value is validated as a draft value, kept in
+  the draft and never published, so `--publish` succeeds without hidden
+  required fields.
 
 ## Sample package
 

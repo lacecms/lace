@@ -246,6 +246,65 @@ export interface PublishContentEntryCommand {
   readonly publishedAt: UnixMilliseconds;
   readonly publishedBy: Actor;
   readonly publishedSnapshotId: ContentSnapshotId;
+  /**
+   * The published projection of the draft at `expectedRevision`, present when
+   * its model or a draft block declares conditional-field rules. Repositories
+   * write it instead of copying draft fields, block data and references.
+   */
+  readonly projection?: PublishedProjection;
+}
+
+/** Published values and references of a draft whose hidden targets are removed. */
+export interface PublishedProjection {
+  /** Every draft block exactly once, with its projected data. */
+  readonly blocks: readonly { readonly data: JsonObject; readonly key: BlockKey }[];
+  readonly fields: JsonObject;
+  readonly internalLinks: readonly InternalLinkReference[];
+  readonly mediaReferences: readonly DraftMediaReference[];
+}
+
+/**
+ * Applies a supplied projection to an entry whose draft was copied into its
+ * publication. Fails without a result when the projection does not name every
+ * draft block exactly once.
+ */
+export function withPublishedProjection(
+  entry: ContentEntry,
+  projection: PublishedProjection,
+): ContentEntry {
+  const published = entry.published;
+  if (published === undefined)
+    throw new DomainError("CONTENT_INVALID_STATE", "The entry has no publication to project.");
+  const data = publishedProjectionBlockData(
+    entry.draft.blocks.map((block) => block.key),
+    projection,
+  );
+  return {
+    ...entry,
+    published: {
+      ...published,
+      blocks: published.blocks.map((block) => ({ ...block, data: data.get(block.key)! })),
+      fields: projection.fields,
+    },
+  };
+}
+
+/** Maps projected block data by key after checking it names exactly the draft's blocks. */
+export function publishedProjectionBlockData(
+  draftKeys: readonly BlockKey[],
+  projection: PublishedProjection,
+): ReadonlyMap<BlockKey, JsonObject> {
+  const data = new Map(projection.blocks.map((block) => [block.key, block.data]));
+  if (
+    data.size !== projection.blocks.length ||
+    data.size !== draftKeys.length ||
+    draftKeys.some((key) => !data.has(key))
+  )
+    throw new DomainError(
+      "CONTENT_INVALID_STATE",
+      "The published projection must name every draft block exactly once.",
+    );
+  return data;
 }
 
 /** Atomic idempotency scope retained alongside a successful publication. */

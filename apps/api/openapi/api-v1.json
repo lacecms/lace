@@ -497,7 +497,7 @@
           "required": ["field", "values"],
           "type": "object"
         },
-        "description": "Conditional fields. Keys name immediate sibling fields; each rule names a sibling select or boolean controller that is not itself a target, and a nonempty unique subset of its options or booleans. A hidden field is not required, keeps draft validation and is retained in drafts.",
+        "description": "Conditional fields. Keys name immediate sibling fields; each rule names a sibling select or boolean controller that is not itself a target, and a nonempty unique subset of its options or booleans. A hidden field is not required, keeps draft validation and is retained in drafts; its value is omitted from published snapshots, public reads and build exports.",
         "type": "object"
       },
       "GroupFieldDefinition": {

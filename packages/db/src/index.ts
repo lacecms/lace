@@ -35,4 +35,5 @@ export interface AppliedMigration {
 export * from "./schema.js";
 export * from "./sql-content.js";
 export * from "./sql-internal-links.js";
+export * from "./sql-publication.js";
 export * from "./internal-link-reader.js";

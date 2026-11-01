@@ -18,6 +18,7 @@ import {
   renderConfigurationSyncPlanJson,
   assertBuildExportPageSize,
   selectBuildExportPage,
+  withPublishedProjection,
 } from "@lacecms/application";
 import type {
   ActorSummary,
@@ -1148,7 +1149,9 @@ export class InMemoryContentStore
     const entry = this.entries.get(input.entryId);
     if (entry === undefined)
       throw new DomainError("CONTENT_INVALID_STATE", "Content entry does not exist.");
-    const published = publishContentEntry(entry, input);
+    const copied = publishContentEntry(entry, input);
+    const published =
+      input.projection === undefined ? copied : withPublishedProjection(copied, input.projection);
     const path = contentPublicPath(published.model, published.published!.slug);
     const nextRoutes = new Map(this.routes);
     // A global has no route; its publication only replaces the snapshot.
@@ -1167,11 +1170,14 @@ export class InMemoryContentStore
     this.entries.set(published.id, published);
     // Publication replaces the prior published snapshot, as SQLite cascades its references.
     if (entry.published !== undefined) this.references.delete(entry.published.id);
-    this.references.set(published.published!.id, clone(this.references.get(entry.draft.id) ?? []));
+    this.references.set(
+      published.published!.id,
+      clone(input.projection?.mediaReferences ?? this.references.get(entry.draft.id) ?? []),
+    );
     if (entry.published !== undefined) this.linkReferences.delete(entry.published.id);
     this.linkReferences.set(
       published.published!.id,
-      clone(this.linkReferences.get(entry.draft.id) ?? []),
+      clone(input.projection?.internalLinks ?? this.linkReferences.get(entry.draft.id) ?? []),
     );
     this.routes.clear();
     for (const [routePath, route] of nextRoutes) this.routes.set(routePath, route);

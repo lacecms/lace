@@ -1513,11 +1513,14 @@ and Cloudflare. Validation SHALL apply the `conditional-fields` load-time
 rules against each owner's field map and SHALL accept metadata only when it
 equals its own normalization. Generated OpenAPI SHALL describe `visibility`
 on content models, group field metadata and block metadata as a map of
-`{ field, values }` rules without additional properties. Block settings
-metadata SHALL keep `settingsVisibility` unchanged. Metadata without
-visibility SHALL retain its existing representation. Content mutation
+`{ field, values }` rules without additional properties, and SHALL state that
+a hidden field is not required, is validated and retained as a draft value,
+and is omitted from published snapshots, public reads and build exports.
+Block settings metadata SHALL keep `settingsVisibility` unchanged. Metadata
+without visibility SHALL retain its existing representation. Content mutation
 payloads, entry DTOs and build-export values SHALL acquire no visibility keys
-or computed visibility state.
+or computed visibility state; published values SHALL omit hidden targets
+without changing DTO shapes.
 
 #### Scenario: Round-trip recursive visibility
 - **WHEN** a model response contains model-level rules, block data rules and rules inside a list-item group
@@ -1530,3 +1533,11 @@ or computed visibility state.
 #### Scenario: Content transport unchanged
 - **WHEN** a draft with conditional fields is created, saved or read
 - **THEN** content DTOs keep existing paths and shapes, including retained hidden values, without visibility metadata
+
+#### Scenario: Published values validate without hidden targets
+- **WHEN** a public entry read or build export page omits a required target that its controller hides
+- **THEN** the shared public DTO schemas and the SDK accept the response
+
+#### Scenario: OpenAPI documents published omission
+- **WHEN** the generated OpenAPI document is inspected
+- **THEN** the `FieldVisibility` schema description states that hidden values are retained in drafts and omitted from published content
