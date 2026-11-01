@@ -132,7 +132,7 @@ What the roadmap changes, with the numbers to beat:
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
-| RF2 | Tests against source | L | RF2A → RF2B → RF2C | planned |
+| RF2 | Tests against source | L | RF2A → RF2B → RF2C | proposed |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
@@ -262,18 +262,29 @@ Packaged-output coverage stays, as one explicit smoke test per package.
 
 **How (shared by all three sessions):**
 
-- A root `vitest.shared.mjs` exports a config that aliases every
-  `@lacecms/*` workspace package to its `src/index.ts` and transpiles with
-  Vitest. Each package's `vitest.config.mjs` extends it.
+- A root `vitest.shared.mjs` exports the workspace aliases (every
+  `@lacecms/*` package specifier and subpath export to its `src/`) and two
+  config builders: `sharedTestConfig` (source tests, `src/**/*.test.ts`)
+  and `packagedTestConfig` (`src/**/*.packaged.test.mjs`, no aliases, so
+  packaged tests resolve like a consumer). Each package's
+  `vitest.config.mjs` and `vitest.packaged.config.mjs` use them.
 - `*.test.mjs` files that import `../dist/*.js` become `*.test.ts` importing
-  `./index.js` (or the module under test), gaining type-checking.
-- Each package keeps one `packaged-exports.test.mjs` that imports `dist/` and
-  asserts the public export list, so packaging regressions still fail.
+  `./index.js` (or the module under test); a per-package
+  `tsconfig.test.json` type-checks them under `pnpm typecheck`.
+- Each package keeps one `packaged-exports.packaged.test.mjs` that imports
+  `dist/` and asserts the literal public export list; tests that need built
+  output (spawning `dist/bin.js`, Wrangler bundles, the copied admin
+  bundle, fixture builds) are renamed `*.packaged.test.mjs`.
 - `turbo.json`: `test` depends on nothing; a new `test:packaged` task depends
   on `build` and `^build`; root `pnpm test` runs both. Every package gains
   `test:watch`.
-- Remove the inner `pnpm run build &&` from the `test` scripts of
-  `packages/create-lace` and `apps/api`.
+- `scripts/check-boundaries.mjs` lets `*.test.ts` and `src/test-support/`
+  files import `vitest`, `node:` builtins and `@lacecms/test-utils`; the
+  source-path ban and dependency graph still apply (spec delta in RF2A).
+- Packages not yet converted carry an interim `pnpm run build &&` prefix in
+  their `test` script until their session removes it; RF2C removes the
+  last ones, including the pre-existing prefixes of `packages/create-lace`
+  and `apps/api`.
 
 ### Session RF2A — Pure packages
 
@@ -294,17 +305,22 @@ use case; `packages/server/src/app.test.mjs` (3,966 lines) by route group
 (setup/session/account, users/invitations/tokens, builds, media, content,
 public, docs).
 
-### Session RF2C — Platforms, CLI and test-utils
+### Session RF2C — Platforms, CLI, generator, apps and test-utils
 
 - `packages/test-utils/src/repository-contract.ts` splits along its existing
-  seams into `repository-contract/{builds,lifecycle,sync,media,globals-seo,envelope,export,conditional}.ts`,
-  each exporting `cases`; `repository-contract/index.ts` concatenates them.
-  The Node and D1 harnesses do not change. `security-contract.ts` stays.
-- `packages/test-utils/src/index.ts` (1,785 lines) splits into
-  `factories.ts`, `fixtures.ts`, `stores.ts` and `harness.ts`.
-- `platform-node`, `platform-cloudflare` and `cli` unit tests move to source;
-  tests that exercise the packaged CLI binary or Worker bundle stay on `dist`
-  under `test:packaged`.
+  seams into `repository-contract/{shared,builds,lifecycle,sync,media,globals-seo,envelope,export,conditional}.ts`,
+  each exporting its cases; `repository-contract/index.ts` concatenates them
+  in the original order and a test pins the 103 case names. The Node and D1
+  harnesses do not change. `security-contract.ts` stays.
+- `packages/test-utils/src/index.ts` (1,785 lines) splits by concern into
+  `assertions.ts`, `adapters.ts`, `in-memory-content-store.ts` and a
+  re-exporting `index.ts`.
+- `platform-node`, `platform-cloudflare`, `cli`, `create-lace`, `apps/api`,
+  `apps/builder` and `apps/site` tests move to source; the eleven CLI
+  tests that spawn `dist/bin.js`, the three generator tests that install
+  the packed CLI, the Worker bundle/smoke tests, the admin-asset cases of
+  the Cloudflare worker test and the site fixture build stay on built
+  output under `test:packaged`.
 
 **Acceptance:** `pnpm test` total case count equals the baseline count;
 `pnpm --filter @lacecms/platform-node test` runs the contract suite from
@@ -693,3 +709,6 @@ reference pages.
 | 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Proposed. One `docs/verification.md` (commands, limits, coverage, D1 measurements, owner checks), `docs/README.md` and `docs/adr/README.md` indexes, deletion of `docs/archive/step-*`, link repair in ten documents, root link-guard test. Delta specs: `local-operations-verification`, `local-security-resilience-verification`, `cross-runtime-product-verification`, `public-documentation` (1 modified each), `workspace-governance` (1 added). 15 tasks, not applied; depends on RF1A. |
 | 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Archived at [`2026-11-01-rf01a-workspace-scripts-hygiene`](../openspec/changes/archive/2026-11-01-rf01a-workspace-scripts-hygiene/); 21/21 tasks complete and all three capability deltas synchronized. Journey modules now have behavior names; five Vitest configs became one named-project config; latest-template fixtures retained; placeholder and feedback maps removed; superseded video planning archived without syncing deltas. Script files: 52 → 47 top-level + 4 journeys; documented commands: 24/55 → 54/54; root test files: 34 → 32, cases unchanged at 225. Catalog covers all 54 root commands; script guard includes workspace build scripts reached through Turbo. |
 | 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Archived at [`2026-11-01-rf01b-docs-pruning-index`](../openspec/changes/archive/2026-11-01-rf01b-docs-pruning-index/); 15/15 tasks complete, all five capability deltas synchronized. Consolidated five verification documents, removed 35 tracked obsolete step records (the audit counted 48 files), indexed 45 documents and 18 ADRs, repaired links including archived roadmaps and the current about route. New root link guard exercises missing links and unindexed documents/ADRs in a scratch copy. Public documentation build inputs unchanged. Typecheck, lint, formatting, full tests (44 Turbo tasks; 33 root files / 228 tests), docs checks and strict validation passed; local Worker/root tests ran outside the sandbox with pinned Node 24.12.0 and pnpm 12.3.4. |
+| 2026-11-01 | RF2A | `rf02a-source-tests-pure-packages` | Proposed. Shared `vitest.shared.mjs` (aliases, source and packaged config builders), `.test.ts` + `tsconfig.test.json`, `*.packaged.test.mjs` under `test:packaged`, build-free `test` task, boundary exemption for test files; converts `content`, `config`, `domain`, `contracts`, `render`, `sdk`, `astro` (baseline 446 cases). Delta spec: `workspace-governance` (1 added, 1 modified). 18 tasks, not applied. |
+| 2026-11-01 | RF2B | `rf02b-source-tests-application-server` | Proposed. Converts `application`, `db`, `auth`, `server`, `mcp` (baseline 250 cases); splits `application/src/index.test.mjs` into eight use-case files and `server/src/app.test.mjs` into ten route-group files plus `src/test-support/app-harness.ts`, matching the RF4B/RF4D module layout. `skip_specs`. 13 tasks, not applied; depends on RF2A. |
+| 2026-11-01 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Proposed. Splits `test-utils` (`repository-contract/` by area with pinned case order; `assertions`/`adapters`/`in-memory-content-store`); converts platforms, CLI, generator and apps with packaged cases separated by file; removes every interim build prefix. `skip_specs`. 15 tasks, not applied; depends on RF2B. |
