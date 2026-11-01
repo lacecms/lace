@@ -14,6 +14,7 @@ import { crc32, deflateSync } from "node:zlib";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
+import { importSampleSmoke } from "./import-smoke.mjs";
 
 /** A structurally valid 3×2 RGB PNG, so upload exercises the Worker image inspector. */
 function rgbPng() {
@@ -786,6 +787,17 @@ export async function cloudflareConsumerJourney(parent, operations) {
         );
         await start("cloudflare-alpha-eight-mcp");
       },
+    });
+    // Last, so the import's publications never change an export baseline above.
+    await importSampleSmoke({
+      stage: "cloudflare-import",
+      project,
+      base,
+      cookie: await login(base, email, password, secretValues),
+      run,
+      readExport,
+      secretValues,
+      workspace,
     });
   } catch (error) {
     // Network failures carry no stage context; keep the local Worker's own output.

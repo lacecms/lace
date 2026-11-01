@@ -1,7 +1,11 @@
 import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
-    include: ["tests/cross-runtime-product.acceptance.mjs", "tests/video-embed.acceptance.mjs"],
+    include: [
+      "tests/cross-runtime-product.acceptance.mjs",
+      "tests/video-embed.acceptance.mjs",
+      "tests/content-import.acceptance.mjs",
+    ],
     fileParallelism: false,
     maxWorkers: 1,
     testTimeout: 360000,

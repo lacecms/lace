@@ -34,9 +34,9 @@ Pending sync retains exit `2`; review the plan before explicitly applying. Block
 
 `lace add block` installs registry components that each target one block version (`blockVersion` in the registry item) and refuses a configured block of another version. When you version a built-in or custom block and ship its migrations in `lace.config.ts`, update its site component yourself; for a custom block, `lace add block <type>` scaffolds a component only when none exists. Completed bootstrap retains `OPERATION_FAILED`/exit `6` and directs you to sign in with the existing administrator; it cannot reveal another setup token. Recovery guidance does not execute commands or switch targets. Upgrade conflicts, locks and interrupted operations retain the reports and recovery rules below.
 
-## Content import (SM4B)
+## Content import
 
-`lace import <dir>` loads a portable import package into a running installation through the admin REST API. It never opens the database, so it works the same against Node, a local Worker and a remote Cloudflare installation. Run it from the CMS project root that contains `lace.config.ts`, with the same `@lacecms/cli` release as the server.
+`lace import <dir>` loads a portable import package into a running installation through the admin REST API. The user guide, with the format reference, a sample package and converter guidance, is the public [Import content](https://lacecms.github.io/lace/en/latest/editing-content/import/) page. It never opens the database, so it works the same against Node, a local Worker and a remote Cloudflare installation. Run it from the CMS project root that contains `lace.config.ts`, with the same `@lacecms/cli` release as the server.
 
 ```bash
 pnpm exec lace import ./import --validate-only

@@ -80,7 +80,7 @@ Gaps found while mapping tatianae.com onto Lace:
 | SM1 | `videoEmbed` aspect ratio and ambient playback | S | SM1 | done |
 | SM2 | MCP publication scope | S | SM2 | done |
 | SM3 | Media tags and multi-select picker | L | SM3A → SM3B → SM3C | done |
-| SM4 | `lace import` | L | SM4A → SM4B → SM4C | in progress |
+| SM4 | `lace import` | L | SM4A → SM4B → SM4C | done |
 | SM5 | Conditional fields | L | SM5A → SM5B → SM5C | planned |
 
 **Order rationale:** SM1 and SM2 are small and independent; SM1 unblocks the
@@ -280,9 +280,13 @@ planning and resume; integration test against a Node API.
 ### Session SM4C — Runtime verification and documentation
 
 - Acceptance journeys against local Node and local Worker installations,
-  including a rerun that changes nothing.
-- `docs/content-import.md`: format reference, a small sample package and a
-  guide for writing a converter from another CMS.
+  including a rerun that changes nothing: a full matrix in the workspace
+  cross-runtime suite through the CLI process, and a packed-CLI smoke in the
+  generated Node and Cloudflare consumer journeys.
+- A public *Import content* page: format reference, a downloadable sample
+  package for the starter models and a guide for writing a converter from
+  another CMS. `docs/content-import.md` is the internal maintainer note
+  (owner decision 2026-11-01).
 - Generated-project guidance and template notes mention the command.
 
 ## Step SM5 — Conditional fields
@@ -360,3 +364,6 @@ publication; `field-descriptors`, `content-validation`,
 | 2026-11-01 | SM4B | `sm04b-cli-import` | Proposed. Owner decisions: drafts edited after the last import are a plan `conflict` (state file records the written revision) and nothing is written without `--overwrite`; `--validate-only` checks a package offline against `lace.config.ts`. Format v1 with `$media`/`$entry` references and a shipped JSON Schema; HTTP client of admin REST (ADR 0017, `cli -> contracts`); shared `normalizeDraftCandidate` for exact "unchanged"; ordered publication with cycle detection; bounded `Retry-After`. No REST, schema or template change. 21 tasks, not applied. |
 | 2026-11-01 | SM4B | `sm04b-cli-import` | Implemented and verified, 21/21 tasks. `lace import` (format v1 + JSON Schema, offline `--validate-only`, server config check, hash/slug lookups, plan with edit-protection conflicts and `--overwrite`, ordered writes with state file, link-ordered publication with idempotency keys, bounded `Retry-After`), shared `normalizeDraftCandidate`, ADR 0017, `cli -> contracts`. CLI/application tests, root format/lint/typecheck/test, build, packed starter/existing-site acceptance, OpenAPI, docs and strict OpenSpec checks pass. Awaiting explicit sync/archive. |
 | 2026-11-01 | SM4B | `sm04b-cli-import` | Archived at `openspec/changes/archive/2026-11-01-sm04b-cli-import`; new `content-import-cli` capability (11 requirements) and one added `content-use-cases` requirement synchronized into main specs. SM4C remains planned. |
+| 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Proposed. Owner decisions: two verification tiers (full matrix through the CLI process in the workspace cross-runtime suite on Node and the local Worker; packed-CLI smoke in the Node Compose and Cloudflare consumer journeys, offline validation in the CI starter phase); the user guide is a public page with a downloadable starter sample and `docs/content-import.md` is the internal note (refines the roadmap wording); generated projects get guidance and a Template 0.44.0 note, no import script. 18 tasks, not applied. |
+| 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Implemented and verified, 18/18 tasks. Shared starter sample in `apps/docs/public/examples/content-import` with a root validity/guide-equality test; cross-runtime import journey through the CLI process on Node and Worker (validate, dry run, publish, unchanged reruns with and without state, conflict and `--overwrite`, refused and revoked tokens, equal canonical results); packed smoke in the starter, Node Compose and Cloudflare consumer journeys; public *Import content* page, CLI reference rows, internal `docs/content-import.md`; generated operations guide section and Template 0.44.0. No CLI or server defect found; fixed the stale alpha.8 `videoEmbed` v1 fixture that blocked `acceptance:cloudflare`. Full `acceptance:generated` not run (phase `node` only). Awaiting explicit sync/archive. |
+| 2026-11-01 | SM4C | `sm04c-import-runtime-verification-docs` | Archived at `openspec/changes/archive/2026-11-01-sm04c-import-runtime-verification-docs`; four capability deltas synchronized into main specs (4 added requirements). Step SM4 complete. |
