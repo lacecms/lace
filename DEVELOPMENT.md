@@ -274,14 +274,18 @@ Vitest's default timeout. The human and JSON sync/bootstrap cases run separately
 with fresh databases so neither mode consumes the other's deadline.
 
 Generated-consumer acceptance runs outside this checkout. `pnpm
-acceptance:generated` is the onboarding and alpha.2 field-trial feedback
-regression suite against a workspace-packed package graph and locally built
-images. For a release candidate,
+acceptance:generated` runs generated-consumer regression journeys, including
+upgrades from the latest published template fixtures, against a workspace-packed
+package graph and locally built images. For a release candidate,
 `pnpm release:prepare --output <new-dir>` prepares the exact package and image
 set from a clean commit and `pnpm acceptance:release --artifacts <new-dir>` runs
-the same journeys against only those artifacts. The selected candidate is
+the same journeys against only those artifacts. Run `pnpm acceptance:starter`
+for the packed starter and `pnpm exec node scripts/generated-project-acceptance.mjs upgrade`
+for retained default/Cloudflare template upgrades; these focused source runs do
+not create a release receipt. The selected candidate is
 `0.1.0-alpha.6` (template `0.30.0`); publication status is recorded separately; see
-[docs/alpha-release.md](./docs/alpha-release.md). No command publishes.
+[docs/alpha-release.md](./docs/alpha-release.md). These preparation and acceptance
+commands do not publish.
 
 ## Troubleshooting
 
@@ -351,3 +355,65 @@ only at build time. `latest` follows main and currently targets alpha.6.
 Maintainers should update both public and relevant internal guidance when behavior
 changes, retaining architecture and accepted OpenSpec authority. Keep generated
 consumer guides matched to their own package/template release.
+
+## Script catalog
+
+Root commands and when to run them. Pass command-specific arguments after the
+script name. Release publication commands require an authorized prepared set.
+
+| Script                           | Group         | Purpose / when to run                                                           | Entry file or task configuration                                          |
+| -------------------------------- | ------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `acceptance:release`             | acceptance    | Verify one exact prepared release inventory and record its receipt.             | `scripts/generated-project-acceptance.mjs`                                |
+| `acceptance:generated`           | acceptance    | Run the generated-consumer regression journeys from workspace-packed artifacts. | `scripts/generated-project-acceptance.mjs`                                |
+| `acceptance:starter`             | acceptance    | Build and inspect the packed starter, rendered blocks and image delivery.       | `scripts/generated-project-acceptance.mjs`                                |
+| `acceptance:cloudflare`          | acceptance    | Exercise a packed consumer with local Worker bindings and Pages stubs.          | `scripts/generated-project-acceptance.mjs`                                |
+| `acceptance:builder-diagnostics` | acceptance    | Verify safe builder source failures and recovery in an existing-site consumer.  | `scripts/generated-project-acceptance.mjs`                                |
+| `acceptance:existing-site`       | acceptance    | Verify connection to an existing Astro site without overwriting its source.     | `scripts/generated-project-acceptance.mjs`                                |
+| `acceptance:start`               | acceptance    | Start an isolated local product acceptance stack.                               | `scripts/dev-stack.mjs`                                                   |
+| `acceptance:stop`                | acceptance    | Remove the isolated acceptance stack and its disposable volumes.                | `scripts/dev-stack.mjs`                                                   |
+| `acceptance:bootstrap`           | acceptance    | Issue a setup token for manual acceptance.                                      | `scripts/dev-stack.mjs`                                                   |
+| `acceptance:restart-site`        | acceptance    | Restart acceptance Astro after changing its data mode.                          | `scripts/dev-stack.mjs`                                                   |
+| `build`                          | quality       | Build workspace packages and applications in dependency order.                  | `turbo.json`                                                              |
+| `content:sync`                   | development   | Review or apply root content configuration to the local Node stack.             | `scripts/dev-stack.mjs`                                                   |
+| `db:generate`                    | database      | Generate a forward SQL migration after schema edits.                            | `drizzle.config.ts`                                                       |
+| `db:migrate:cloudflare`          | database      | Apply migrations to the reference local Cloudflare database.                    | `scripts/cloudflare.mjs`                                                  |
+| `db:migrate:node`                | database      | Build the database package and migrate the reference Node database.             | `run`                                                                     |
+| `dev:cloudflare`                 | development   | Run the reference Worker development environment.                               | `scripts/cloudflare.mjs`                                                  |
+| `dev:env`                        | development   | Create protected local environment values once.                                 | `scripts/dev-stack.mjs`                                                   |
+| `dev:logs`                       | development   | Follow logs of the local Node development stack.                                | `scripts/dev-stack.mjs`                                                   |
+| `dev:node`                       | development   | Start the complete local Node development stack.                                | `scripts/dev-stack.mjs`                                                   |
+| `dev:reset`                      | development   | Explicitly discard local development volumes after confirmation.                | `scripts/dev-stack.mjs`                                                   |
+| `dev:smoke`                      | development   | Run an isolated local stack smoke check.                                        | `scripts/dev-stack.mjs`                                                   |
+| `dev:stop`                       | development   | Stop the local development stack while preserving data.                         | `scripts/dev-stack.mjs`                                                   |
+| `dev:bootstrap`                  | development   | Issue an expiring first-administrator setup token.                              | `scripts/dev-stack.mjs`                                                   |
+| `format:check`                   | quality       | Check repository formatting before completing a change.                         | `.oxfmtrc.json`                                                           |
+| `lint`                           | quality       | Run workspace Oxlint and dependency/admin color guards.                         | `scripts/check-boundaries.mjs`, `scripts/check-admin-colors.mjs`          |
+| `lace`                           | development   | Invoke the built workspace CLI with supplied arguments.                         | `packages/cli/dist/bin.js`                                                |
+| `openapi:check`                  | quality       | Verify the committed OpenAPI document matches generated output.                 | `scripts/check-openapi.mjs`                                               |
+| `openapi:generate`               | quality       | Regenerate the OpenAPI document after REST changes.                             | `apps/api/scripts/generate-openapi.mjs`                                   |
+| `proxy:probe`                    | verification  | Probe the nginx media-upload request-size boundary.                             | `scripts/nginx-upload-probe.mjs`                                          |
+| `spec:validate`                  | quality       | Strictly validate accepted specs and active changes.                            | `openspec/`                                                               |
+| `test`                           | quality       | Run package tests followed by root repository tests.                            | `turbo.json`, `tests/`                                                    |
+| `test:vps`                       | quality       | Exercise VPS build integration with disposable services.                        | `tests/vps-build.integration.mjs`                                         |
+| `typecheck`                      | quality       | Check workspace types and the root content configuration.                       | `turbo.json`, `tsconfig.project.json`                                     |
+| `typecheck:config`               | quality       | Check the root typed content configuration.                                     | `tsconfig.project.json`                                                   |
+| `release:check`                  | release       | Check release model coherence without preparing artifacts.                      | `scripts/release.mjs`                                                     |
+| `release:plan`                   | release       | Inspect the release package and image preparation plan.                         | `scripts/release.mjs`                                                     |
+| `release:packages`               | release       | Prepare package archives in an explicit new output directory.                   | `scripts/release.mjs`                                                     |
+| `release:images`                 | release       | Prepare API and builder images in an explicit output directory.                 | `scripts/release.mjs`                                                     |
+| `release:prepare`                | release       | Prepare the complete release package and image set.                             | `scripts/release.mjs`                                                     |
+| `release:publish:npm`            | release       | Publish an authorized prepared npm artifact set.                                | `scripts/release-publish.mjs`                                             |
+| `release:publish:images`         | release       | Publish an authorized prepared container image set.                             | `scripts/release-publish.mjs`                                             |
+| `release:verify`                 | release       | Independently verify a saved artifact inventory.                                | `scripts/release.mjs`                                                     |
+| `verify:cross-runtime`           | verification  | Verify product parity against an explicit prepared artifact inventory.          | `scripts/cross-runtime-verification.mjs`                                  |
+| `verify:security`                | verification  | Run source security, resilience, D1-budget and audit phases.                    | `scripts/security-resilience-verification.mjs`                            |
+| `verify:operations`              | verification  | Run local health, restore, rotation and migration phases.                       | `scripts/operations-verification.mjs`                                     |
+| `release:github`                 | release       | Create the authorized GitHub release from prepared evidence.                    | `scripts/release-github.mjs`                                              |
+| `release:clean`                  | release       | Clean explicitly selected local release artifacts.                              | `scripts/release-clean.mjs`                                               |
+| `release:acceptance:import`      | release       | Import and validate external exact-artifact acceptance evidence.                | `scripts/release-evidence.mjs`                                            |
+| `docs:dev`                       | documentation | Preview the public documentation locally.                                       | `apps/docs/package.json`                                                  |
+| `docs:build`                     | documentation | Build the static public documentation.                                          | `apps/docs/package.json`, `turbo.json`                                    |
+| `docs:check`                     | documentation | Check documentation types, links, build and focused tests.                      | `apps/docs/package.json`                                                  |
+| `compat:mcp`                     | compatibility | Check pinned MCP SDK types and Node/Worker interoperability.                    | `scripts/fixtures/oauth-mcp/tsconfig.json`, `scripts/fixtures/oauth-mcp/` |
+| `compat:mcp:baseline`            | compatibility | Run the focused MCP protocol compatibility baseline.                            | `scripts/fixtures/oauth-mcp/compat.test.mjs`                              |
+| `compat:mcp:types`               | compatibility | Check the pinned MCP SDK type integration.                                      | `scripts/fixtures/oauth-mcp/tsconfig.json`                                |

@@ -23,7 +23,7 @@ const apiRequire = createRequire(new URL("../../apps/api/package.json", import.m
 const { S3Client, CreateBucketCommand, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } =
   nodeRequire("@aws-sdk/client-s3");
 const { getRequestListener } = apiRequire("@hono/node-server");
-export const password = "Cross-runtime-local-password-34A!";
+export const password = "Cross-runtime-local-password-Cross-runtime!";
 export const png = await nodeRequire("sharp")({
   create: { width: 1, height: 1, channels: 3, background: { r: 1, g: 2, b: 3 } },
 })
@@ -51,7 +51,7 @@ export async function openProductRuntime(kind, options = {}) {
         errors.push(error);
       }
     }
-    if (errors.length) throw new AggregateError(errors, "34A fixture cleanup failed");
+    if (errors.length) throw new AggregateError(errors, "Cross-runtime fixture cleanup failed");
   };
   const stop = () => {
     void close().then(
@@ -83,19 +83,19 @@ export async function openProductRuntime(kind, options = {}) {
     const captureMetadata = async (destination) => {
       await mkdir(join(destination, "project"), { recursive: true, mode: 0o700 });
       for (const file of metadataFiles) await cp(resolve(file), join(destination, "project", file));
-      if (process.env.LACE_34C_PACKED_ROOT) {
+      if (process.env.LACE_VERIFY_PACKED_ROOT) {
         const consumer = join(destination, "consumer");
         await mkdir(join(consumer, ".lace"), { recursive: true, mode: 0o700 });
         for (const file of [...metadataFiles, ".lace/manifest.json"])
-          await cp(join(process.env.LACE_34C_PACKED_ROOT, file), join(consumer, file));
+          await cp(join(process.env.LACE_VERIFY_PACKED_ROOT, file), join(consumer, file));
       }
     };
     let dispatchPending = async () => {};
     const buildTrigger = { trigger: async () => ({ status: "failed", reason: "build_failed" }) };
     if (kind === "node") {
-      const directory = await mkdtemp(join(tmpdir(), "lace-34a-node-"));
+      const directory = await mkdtemp(join(tmpdir(), "lace-cross-runtime-node-"));
       cleanups.push(() => rm(directory, { recursive: true, force: true }));
-      const container = `lace-34a-${randomUUID()}`;
+      const container = `lace-cross-runtime-${randomUUID()}`;
       const volume = options.operations ? `${container}-objects` : undefined;
       if (volume) {
         await exec("docker", ["volume", "create", volume]);
@@ -111,9 +111,9 @@ export async function openProductRuntime(kind, options = {}) {
         "-p",
         "127.0.0.1::9000",
         "-e",
-        "MINIO_ROOT_USER=lace34alocal",
+        "MINIO_ROOT_USER=lacecross-runtimelocal",
         "-e",
-        "MINIO_ROOT_PASSWORD=lace34alocalpassword",
+        "MINIO_ROOT_PASSWORD=lacecross-runtimelocalpassword",
         "quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z",
         "server",
         "/data",
@@ -125,20 +125,23 @@ export async function openProductRuntime(kind, options = {}) {
         endpoint,
         forcePathStyle: true,
         region: "us-east-1",
-        credentials: { accessKeyId: "lace34alocal", secretAccessKey: "lace34alocalpassword" },
+        credentials: {
+          accessKeyId: "lacecross-runtimelocal",
+          secretAccessKey: "lacecross-runtimelocalpassword",
+        },
       });
       cleanups.push(() => client.destroy());
       let ready = false;
       for (let attempt = 0; attempt < 100; attempt++) {
         try {
-          await client.send(new CreateBucketCommand({ Bucket: "lace-34a" }));
+          await client.send(new CreateBucketCommand({ Bucket: "lace-cross-runtime" }));
           ready = true;
           break;
         } catch {
           await new Promise((done) => setTimeout(done, 100));
         }
       }
-      if (!ready) throw new Error("34A: local MinIO did not become ready");
+      if (!ready) throw new Error("Cross-runtime: local MinIO did not become ready");
       const databasePath = join(directory, "lace.sqlite");
       if (options.backup) {
         await cp(join(options.backup, "lace.sqlite"), databasePath);
@@ -146,7 +149,7 @@ export async function openProductRuntime(kind, options = {}) {
         for (const [index, object] of objects.entries())
           await client.send(
             new PutObjectCommand({
-              Bucket: "lace-34a",
+              Bucket: "lace-cross-runtime",
               Key: object.key,
               ContentType: object.contentType,
               Body: await readFile(join(options.backup, `object-${index}`)),
@@ -155,12 +158,12 @@ export async function openProductRuntime(kind, options = {}) {
       } else migrateNodeDatabase(databasePath);
       const baseSettings = {
         LACE_DATABASE_PATH: databasePath,
-        LACE_AUTH_SECRET: "cross-runtime-local-auth-secret-34a-long-enough",
+        LACE_AUTH_SECRET: "cross-runtime-local-auth-secret-cross-runtime-long-enough",
         LACE_PUBLIC_BASE_URL: origin + "/",
         LACE_MINIO_ENDPOINT: endpoint,
-        LACE_MINIO_BUCKET: "lace-34a",
-        LACE_MINIO_ACCESS_KEY: "lace34alocal",
-        LACE_MINIO_SECRET_KEY: "lace34alocalpassword",
+        LACE_MINIO_BUCKET: "lace-cross-runtime",
+        LACE_MINIO_ACCESS_KEY: "lacecross-runtimelocal",
+        LACE_MINIO_SECRET_KEY: "lacecross-runtimelocalpassword",
         LACE_MINIO_REGION: "us-east-1",
         LACE_MINIO_TIMEOUT_MS: "10000",
         LACE_HOST: "127.0.0.1",
@@ -193,9 +196,9 @@ export async function openProductRuntime(kind, options = {}) {
           "-p",
           `${new URL(endpoint).host}:9000`,
           "-e",
-          "MINIO_ROOT_USER=lace34creplacement",
+          "MINIO_ROOT_USER=laceoperationsreplacement",
           "-e",
-          "MINIO_ROOT_PASSWORD=lace34creplacementpassword",
+          "MINIO_ROOT_PASSWORD=laceoperationsreplacementpassword",
           "quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z",
           "server",
           "/data",
@@ -205,15 +208,15 @@ export async function openProductRuntime(kind, options = {}) {
           forcePathStyle: true,
           region: "us-east-1",
           credentials: {
-            accessKeyId: "lace34creplacement",
-            secretAccessKey: "lace34creplacementpassword",
+            accessKeyId: "laceoperationsreplacement",
+            secretAccessKey: "laceoperationsreplacementpassword",
           },
         });
         cleanups.push(() => replacement.destroy());
         let ready = false;
         for (let attempt = 0; attempt < 100; attempt++) {
           try {
-            await replacement.send(new ListObjectsV2Command({ Bucket: "lace-34a" }));
+            await replacement.send(new ListObjectsV2Command({ Bucket: "lace-cross-runtime" }));
             ready = true;
             break;
           } catch {
@@ -223,12 +226,12 @@ export async function openProductRuntime(kind, options = {}) {
         if (!ready) throw new Error("Replacement storage credentials did not become ready");
         let oldDenied = false;
         try {
-          await client.send(new ListObjectsV2Command({ Bucket: "lace-34a" }));
+          await client.send(new ListObjectsV2Command({ Bucket: "lace-cross-runtime" }));
         } catch (error) {
           oldDenied = error.$metadata?.httpStatusCode === 403;
         }
-        baseSettings.LACE_MINIO_ACCESS_KEY = "lace34creplacement";
-        baseSettings.LACE_MINIO_SECRET_KEY = "lace34creplacementpassword";
+        baseSettings.LACE_MINIO_ACCESS_KEY = "laceoperationsreplacement";
+        baseSettings.LACE_MINIO_SECRET_KEY = "laceoperationsreplacementpassword";
         runtime = compose();
         maintenance = false;
         return { oldDenied, newWorks: ready };
@@ -248,11 +251,14 @@ export async function openProductRuntime(kind, options = {}) {
           let continuation;
           do {
             const page = await client.send(
-              new ListObjectsV2Command({ Bucket: "lace-34a", ContinuationToken: continuation }),
+              new ListObjectsV2Command({
+                Bucket: "lace-cross-runtime",
+                ContinuationToken: continuation,
+              }),
             );
             for (const item of page.Contents ?? []) {
               const object = await client.send(
-                new GetObjectCommand({ Bucket: "lace-34a", Key: item.Key }),
+                new GetObjectCommand({ Bucket: "lace-cross-runtime", Key: item.Key }),
               );
               await writeFile(
                 join(destination, `object-${objects.length}`),
@@ -279,16 +285,16 @@ export async function openProductRuntime(kind, options = {}) {
         await runtime.buildDispatcher.runOnce();
       };
     } else {
-      console.info("34A worker fixture: start local bindings");
+      console.info("Cross-runtime worker fixture: start local bindings");
       const directory = options.operations
-        ? await mkdtemp(join(tmpdir(), "lace-34c-worker-"))
+        ? await mkdtemp(join(tmpdir(), "lace-operations-worker-"))
         : undefined;
       if (directory) cleanups.push(() => rm(directory, { recursive: true, force: true }));
       const persistTo = directory ? join(directory, "persistence") : undefined;
       if (options.backup)
         await cp(join(options.backup, "persistence"), persistTo, { recursive: true });
       let local = await openLocalCloudflare({ persistTo, migrate: !options.backup });
-      console.info("34A worker fixture: bindings migrated");
+      console.info("Cross-runtime worker fixture: bindings migrated");
       cleanups.push(() => local.dispose());
       const pending = new Set();
       const ctx = {
@@ -311,7 +317,7 @@ export async function openProductRuntime(kind, options = {}) {
         DB: options.instrumentD1 ? options.instrumentD1(local.database) : local.database,
         MEDIA: local.bucket,
         LACE_ENVIRONMENT: "development",
-        LACE_AUTH_SECRET: "cross-runtime-local-auth-secret-34a-long-enough",
+        LACE_AUTH_SECRET: "cross-runtime-local-auth-secret-cross-runtime-long-enough",
         LACE_PUBLIC_BASE_URL: origin + "/",
         ASSETS: {
           fetch(value) {
@@ -365,7 +371,7 @@ export async function openProductRuntime(kind, options = {}) {
       };
       cleanups.push(async () => Promise.all(pending));
     }
-    console.info(`34A ${kind} fixture: synchronize models`);
+    console.info(`Cross-runtime ${kind} fixture: synchronize models`);
     if (!options.backup) {
       const prepared = await prepareConfigurationSynchronization({
         models: config.runtime.content,
@@ -400,22 +406,23 @@ export async function openProductRuntime(kind, options = {}) {
       });
       return response;
     };
-    console.info(`34A ${kind} fixture: bootstrap and sign in`);
+    console.info(`Cross-runtime ${kind} fixture: bootstrap and sign in`);
     if (!options.backup) {
       const token = await runtime.security.createSetupToken();
       const created = await call("/api/v1/setup/admin", {
         method: "POST",
-        json: { email: "admin@34a.test", password, token: token.token },
+        json: { email: "admin@cross-runtime.test", password, token: token.token },
       });
-      if (created.status !== 201) throw new Error(`34A ${kind}: setup status ${created.status}`);
+      if (created.status !== 201)
+        throw new Error(`Cross-runtime ${kind}: setup status ${created.status}`);
     }
     const login = async (role) => {
       const response = await call("/api/auth/sign-in/email", {
         method: "POST",
-        json: { email: `${role}@34a.test`, password },
+        json: { email: `${role}@cross-runtime.test`, password },
       });
       if (response.status !== 200)
-        throw new Error(`34A ${kind}: ${role} sign-in status ${response.status}`);
+        throw new Error(`Cross-runtime ${kind}: ${role} sign-in status ${response.status}`);
       return response.headers
         .getSetCookie()
         .map((value) => value.split(";")[0])
@@ -428,17 +435,17 @@ export async function openProductRuntime(kind, options = {}) {
         const invited = await call("/api/v1/admin/invitations", {
           method: "POST",
           cookie,
-          json: { email: `${role}@34a.test`, role },
+          json: { email: `${role}@cross-runtime.test`, role },
         });
         if (invited.status !== 201)
-          throw new Error(`34A ${kind}: invite ${role} status ${invited.status}`);
+          throw new Error(`Cross-runtime ${kind}: invite ${role} status ${invited.status}`);
         const { link } = await invited.json();
         const accepted = await call("/api/v1/invitations/accept", {
           method: "POST",
           json: { password, token: link.split("#token=")[1] },
         });
         if (accepted.status !== 201)
-          throw new Error(`34A ${kind}: accept ${role} status ${accepted.status}`);
+          throw new Error(`Cross-runtime ${kind}: accept ${role} status ${accepted.status}`);
       }
     const cookies = { admin: cookie, editor: await login("editor"), viewer: await login("viewer") };
     return {
@@ -464,7 +471,10 @@ export async function openProductRuntime(kind, options = {}) {
     try {
       await close();
     } catch (cleanupError) {
-      throw new AggregateError([error, cleanupError], "34A fixture setup and cleanup failed");
+      throw new AggregateError(
+        [error, cleanupError],
+        "Cross-runtime fixture setup and cleanup failed",
+      );
     }
     throw error;
   }

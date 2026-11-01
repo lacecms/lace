@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** Uses only the installed consumer SDK and actual runtime HTTP boundary. */
-export async function alphaSixJourney({
+export async function nodeContractsMediaJourney({
   base,
   cookie,
   png,
@@ -93,7 +93,7 @@ export async function alphaSixJourney({
   assert.deepEqual((await invoke(`admin/entries/${entryId}`)).body.draft, original.body.draft);
 
   const form = new FormData();
-  form.append("file", new Blob([png], { type: "image/png" }), "alpha-six-draft.png");
+  form.append("file", new Blob([png], { type: "image/png" }), "node-contracts-media-draft.png");
   const uploaded = await invoke("admin/media", { method: "POST", body: form });
   assert.equal(uploaded.response.status, 201);
   const models = await invoke("admin/content-models");
@@ -104,7 +104,7 @@ export async function alphaSixJourney({
     method: "POST",
     json: {
       title: "Alpha six draft media",
-      slug: "alpha-six-draft-media",
+      slug: "node-contracts-media-draft-media",
       fields: {},
       blocks: [
         {

@@ -8,10 +8,10 @@ import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 import { expected } from "./cross-runtime-api.mjs";
 const exec = promisify(execFile);
 export async function astroJourney(f, seed) {
-  console.info(`34A ${f.kind} Astro: build actual authenticated export`);
-  const directory = await mkdtemp(join(tmpdir(), `lace-34a-astro-${f.kind}-`));
+  console.info(`Cross-runtime ${f.kind} Astro: build actual authenticated export`);
+  const directory = await mkdtemp(join(tmpdir(), `lace-cross-runtime-astro-${f.kind}-`));
   try {
-    const sentinel = "static-build-credential-sentinel-34b-private-value";
+    const sentinel = "static-build-credential-sentinel-security-private-value";
     const secrets = [seed.token, sentinel];
     const built = await exec("pnpm", ["exec", "astro", "build", "--outDir", directory], {
       cwd: resolve("apps/site"),
@@ -24,7 +24,7 @@ export async function astroJourney(f, seed) {
         LACE_SITE_DATA_MODE: "live",
         LACE_API_BASE_URL: f.origin,
         LACE_BUILD_TOKEN: seed.token,
-        LACE_PUBLIC_BASE_URL: "https://media.34a.test/",
+        LACE_PUBLIC_BASE_URL: "https://media.cross-runtime.test/",
         LACE_EXPECTED_PUBLISHED_VERSION: "6",
       },
     });
@@ -62,7 +62,7 @@ export async function astroJourney(f, seed) {
       );
       manifest.blocks[path] = keys;
       for (const match of html.matchAll(
-        /https:\/\/media\.34a\.test\/api\/v1\/public\/media\/([^"\s<>]+)/gu,
+        /https:\/\/media\.cross-runtime\.test\/api\/v1\/public\/media\/([^"\s<>]+)/gu,
       )) {
         assert.equal(match[1], seed.cover, "unexpected media reference");
         manifest.media.push("<cover>");

@@ -69,7 +69,7 @@ test("CLI refuses migration, sync/check and bootstrap before SQLite with sanitiz
     expect(allowed.status).toBe(0);
     expect(JSON.parse(allowed.stdout)).toMatchObject({ ok: true, code: "MIGRATED" });
     expect(existsSync(join(root, "data/lace.sqlite"))).toBe(true);
-    const sentinel = "docker-inspection-credential-sentinel-34b";
+    const sentinel = "docker-inspection-credential-sentinel-security";
     await writeFile(
       docker,
       `#!${process.execPath}\nconsole.error(${JSON.stringify(sentinel)}); process.exit(17);\n`,

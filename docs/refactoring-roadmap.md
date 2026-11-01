@@ -106,7 +106,7 @@ What the roadmap changes, with the numbers to beat:
 | Admin | components under 60 lines occupying a three-file folder | 40 |
 | CLI | runtime dependencies on the `--target node` path | `miniflare` + `workerd` loaded statically through `commands.ts` |
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
-| Scripts | alpha-numbered or roadmap-step-numbered entrypoints | `alpha-six/seven/eight-acceptance.mjs`, `consumer-34b-security.mjs`, `verify:34a/b/c` |
+| Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
 | Docs | `docs/archive/step-*` verification records | 48 files, 952 KB |
 | Docs | verification documents | 5 (`mvp-traceability`, `verification/ce10-*`, `real-application-`, `local-operations-`, `local-security-verification`) |
@@ -117,7 +117,7 @@ What the roadmap changes, with the numbers to beat:
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| RF1 | Workspace hygiene | M | RF1A → RF1B | proposed |
+| RF1 | Workspace hygiene | M | RF1A → RF1B | in progress |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | planned |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
@@ -172,8 +172,8 @@ or its history. Scripts have current names and one catalog.
 
 ### Session RF1A — Scripts, root tests and stale change
 
-- Delete `scripts/not-implemented.mjs` and the root `test:integration`
-  script, which only prints "not implemented" and fails.
+- Delete the milestone-1 placeholder integration command and its script,
+  which only prints an unavailable-feature message and fails.
 - Release-named journey modules are renamed by what they verify, not
   deleted: `scripts/alpha-six-acceptance.mjs`, `alpha-seven-acceptance.mjs`,
   `alpha-eight-acceptance.mjs` and `consumer-34b-security.mjs` are the
@@ -187,9 +187,9 @@ or its history. Scripts have current names and one catalog.
   requirements; `tests/field-trial-acceptance.test.mjs` (helper unit tests)
   is renamed `acceptance-helpers.test.mjs`.
 - Rename roadmap-step-numbered entrypoints to what they verify:
-  `verify:34a` → `verify:cross-runtime`, `verify:34b` → `verify:security`,
-  `verify:34c` → `verify:operations`; `LACE_34B_*`/`LACE_34C_*` variables →
-  `LACE_VERIFY_*`; result directories lose `step-34*`. The five root
+  `verify:cross-runtime`, `verify:security` and `verify:operations`;
+  verification environment variables use `LACE_VERIFY_*` and result directories
+  use `.lace-acceptance/verify-*`. The five root
   `vitest.<name>.config.mjs` files collapse into one
   `vitest.verification.config.mjs` with named `projects` (not a root
   `vitest.config.mjs`, which `pnpm test` would pick up).
@@ -679,3 +679,4 @@ reference pages.
 | 2026-11-01 | — | — | Roadmap selected from the workspace audit. Site migration roadmap archived. No OpenSpec change created. |
 | 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Proposed. Corrections to the roadmap text: the alpha-named journey modules are current spec-required acceptance journeys and are renamed, not merged; `field-trial-acceptance.test.mjs` is a helper unit test and is renamed; `make-api-runtime.mjs` stays (Dockerfile). Owner decision: keep only the `0.35.0` upgrade fixtures. Delta specs: `generated-project-acceptance` (2 modified, 2 removed), `prepublication-consumer-security` (2 modified), `workspace-governance` (1 added, 1 removed). 21 tasks, not applied. |
 | 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Proposed. One `docs/verification.md` (commands, limits, coverage, D1 measurements, owner checks), `docs/README.md` and `docs/adr/README.md` indexes, deletion of `docs/archive/step-*`, link repair in ten documents, root link-guard test. Delta specs: `local-operations-verification`, `local-security-resilience-verification`, `cross-runtime-product-verification`, `public-documentation` (1 modified each), `workspace-governance` (1 added). 15 tasks, not applied; depends on RF1A. |
+| 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Archived at [`2026-11-01-rf01a-workspace-scripts-hygiene`](../openspec/changes/archive/2026-11-01-rf01a-workspace-scripts-hygiene/); 21/21 tasks complete and all three capability deltas synchronized. Journey modules now have behavior names; five Vitest configs became one named-project config; latest-template fixtures retained; placeholder and feedback maps removed; superseded video planning archived without syncing deltas. Script files: 52 → 47 top-level + 4 journeys; documented commands: 24/55 → 54/54; root test files: 34 → 32, cases unchanged at 225. Catalog covers all 54 root commands; script guard includes workspace build scripts reached through Turbo. |

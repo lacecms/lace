@@ -114,8 +114,10 @@ when selected and do not yet have an implementation order or new CE numbers.
   storage, streamed upload, byte-range delivery and field-level media kinds;
   then uploaded-video blocks and admin library/picker/player support. Revisit
   autoplay/loop/muted/controls and motion accessibility when selecting that work.
-  The existing unapplied `video-a-media-upload-delivery` draft (0 completed tasks)
-  is retained as historical planning input, not the selected next change. Its old
+  The unapplied `video-a-media-upload-delivery` draft (0 completed tasks)
+  is preserved as historical planning input at
+  [`2026-11-01-video-a-media-upload-delivery-superseded`](openspec/changes/archive/2026-11-01-video-a-media-upload-delivery-superseded/),
+  without synchronizing its deltas. It is not the selected next change. Its old
   A → B → C order is superseded by this embed-first selection; rebase and replan
   it against accepted specs before any future apply. Do not include another
   `videoEmbed` implementation in that future uploaded-video scope.

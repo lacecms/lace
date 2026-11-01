@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 /** Regression probes against an exact consumer's real HTTP boundary. */
-export async function consumer34bSecurity({ base, cookie, png }) {
+export async function consumerSecurityProbes({ base, cookie, png }) {
   const invoke = (path, options = {}) =>
     fetch(new URL(path, base), {
       ...options,
@@ -14,11 +14,11 @@ export async function consumer34bSecurity({ base, cookie, png }) {
   assert.equal(status.engineVersion, "0.1.0-alpha.8", "exact installed CMS release differs");
   const anonymous = await fetch(new URL("/api/v1/admin/settings/status", base));
   assert.equal(anonymous.status, 403);
-  console.info("34C exact consumer: running CMS release and administrator boundary passed");
+  console.info("Operations exact consumer: running CMS release and administrator boundary passed");
   const users = await (await invoke("/api/v1/admin/users")).json();
   const media = await (await invoke("/api/v1/admin/media")).json();
-  const invitation = JSON.stringify({ email: "denied-34b@lace.test", role: "admin" });
-  for (const origin of ["https://foreign-34b.test", "null"]) {
+  const invitation = JSON.stringify({ email: "denied-security@lace.test", role: "admin" });
+  for (const origin of ["https://foreign-security.test", "null"]) {
     const denied = await invoke("/api/v1/admin/invitations", {
       method: "POST",
       headers: { origin, "content-type": "application/json" },
@@ -39,7 +39,7 @@ export async function consumer34bSecurity({ base, cookie, png }) {
   const form = new FormData();
   form.append(
     "file",
-    new Blob([png, Buffer.from("<script>34b-polyglot</script>")], { type: "image/png" }),
+    new Blob([png, Buffer.from("<script>security-polyglot</script>")], { type: "image/png" }),
     "polyglot.png",
   );
   const image = await invoke("/api/v1/admin/media", {
@@ -66,6 +66,6 @@ export async function consumer34bSecurity({ base, cookie, png }) {
     "exact consumer notices are incomplete",
   );
   console.info(
-    "34B exact consumer: origin, cross-site metadata, image-container negatives, unchanged users/media and bundled notices passed",
+    "Security exact consumer: origin, cross-site metadata, image-container negatives, unchanged users/media and bundled notices passed",
   );
 }

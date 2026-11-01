@@ -17,13 +17,13 @@ export const remoteCredentialNames = [
 export function assertLocalOperationsEnvironment(env) {
   assert.ok(
     remoteCredentialNames.every((name) => !env[name]),
-    "34C refuses remote credentials/settings; use a clean local environment",
+    "Operations refuses remote credentials/settings; use a clean local environment",
   );
 }
 
 /** Only a freshly created directory is eligible for automatic deletion. */
 export async function withOwnedDirectory(parent, work, signal) {
-  const directory = await mkdtemp(join(parent, "lace-34c-"));
+  const directory = await mkdtemp(join(parent, "lace-operations-"));
   try {
     signal?.throwIfAborted();
     return await work(directory, signal);
@@ -33,10 +33,10 @@ export async function withOwnedDirectory(parent, work, signal) {
 }
 
 export async function main() {
-  assert.equal(process.argv.slice(2).length, 0, "usage: pnpm verify:34c");
+  assert.equal(process.argv.slice(2).length, 0, "usage: pnpm verify:operations");
   assertLocalOperationsEnvironment(process.env);
   await mkdir(".lace-acceptance", { recursive: true });
-  const output = await mkdtemp(resolve(".lace-acceptance/step-34c-results-"));
+  const output = await mkdtemp(resolve(".lace-acceptance/verify-operations-"));
   const save = (name, value) =>
     writeFile(join(output, name), JSON.stringify(value, null, 2) + "\n");
   await save("provenance.json", {
@@ -86,7 +86,12 @@ export async function main() {
       command: "node",
       args: ["scripts/generated-project-acceptance.mjs", target],
     })),
-    testPhase("health-restore-rotation", ["--config", "vitest.operations.config.mjs"]),
+    testPhase("health-restore-rotation", [
+      "--config",
+      "vitest.verification.config.mjs",
+      "--project",
+      "operations",
+    ]),
     testPhase("forward-migration-upgrade", [
       "packages/platform-node/src/migrate.test.mjs",
       "packages/cli/src/upgrade-command.test.mjs",
@@ -99,12 +104,12 @@ export async function main() {
       phases,
       async (phase) =>
         ownedCommand(phase.command, phase.args, {
-          env: { LACE_34C_EVIDENCE: output },
+          env: { LACE_VERIFY_EVIDENCE: output },
         }),
       (report) => save("results.json", report),
     );
   } finally {
-    console.info(`34C local results: ${output}`);
+    console.info(`Operations local results: ${output}`);
   }
 }
 

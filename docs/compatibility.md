@@ -234,12 +234,10 @@ components are user-owned, so existing sites adopt them with
 conflicts); components that ignore the new props keep rendering without ids
 or editor classes.
 
-Templates `0.15.0` and `0.16.0` were source-only steps between the published
-alpha.2 and the alpha.3 candidate; their upgrade instructions remain listed for
-projects upgrading from `0.14.0`. Upgrading an alpha.2 installation also
-requires database migration `0003_site_build_outcomes` before the alpha.3
-engine serves traffic (back up first; downgrade restores the backup), as the
-`0.17.0` upgrade instructions state for Node SQLite and Cloudflare D1.
+Supported template upgrade verification starts from the latest published
+prerelease template, currently `0.35.0`. Only its exact default and Cloudflare
+fixtures are retained. Earlier published versions remain historical records;
+upgrades from their templates are no longer acceptance gates.
 
 Both runtime images target `linux/amd64` and `linux/arm64`; each platform is
 built and smoke-tested separately during preparation, while the full consumer
@@ -254,8 +252,8 @@ shared SQLite locks or WAL memory: host `lace` database commands must run only
 while the `api` and `dispatcher` services are stopped, as the generated guides
 state. Linux hosts share the kernel with their containers and are not affected.
 Exact candidate evidence is in
-`docs/archive/step-33/step-33h-verification.md` (alpha.3) and
-`docs/archive/step-32/step-32b-verification.md` (alpha.2); preparation and publication
+[the archived alpha.3 change](../openspec/changes/archive/2026-10-06-step-33h-alpha3-candidate/) and
+[the archived alpha.2 artifact refresh](../openspec/changes/archive/2026-10-04-step-32b-coherent-artifact-refresh/); preparation and publication
 are described in `docs/alpha-release.md`.
 
 ## Alpha.6 coordinated upgrade

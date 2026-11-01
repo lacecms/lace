@@ -3,10 +3,10 @@ import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gifFixture } from "../packages/test-utils/dist/index.js";
+import { gifFixture } from "../../packages/test-utils/dist/index.js";
 
 /** Three visibly different frames prevent encoders coalescing identical frames. */
-export function alphaSevenGif() {
+export function gifFixtureFrames() {
   const bytes = Buffer.from(
     gifFixture({
       width: 320,
@@ -26,7 +26,7 @@ export function alphaSevenGif() {
 }
 
 /** Real media HTTP probes shared by the saved Node and Worker consumers. */
-export async function alphaSevenMediaJourney({ base, cookie, project, proxyBase }) {
+export async function imageDeliveryJourney({ base, cookie, project, proxyBase }) {
   const invoke = async (path, { json, ...options } = {}) => {
     const response = await fetch(new URL(`api/v1/${path}`, base), {
       ...options,
@@ -43,9 +43,9 @@ export async function alphaSevenMediaJourney({ base, cookie, project, proxyBase 
     assert.ok(response.ok, `${path}: ${response.status} ${JSON.stringify(body)}`);
     return { response, body };
   };
-  const gif = alphaSevenGif();
+  const gif = gifFixtureFrames();
   const form = new FormData();
-  form.append("file", new Blob([gif], { type: "image/gif" }), "alpha-seven.gif");
+  form.append("file", new Blob([gif], { type: "image/gif" }), "image-delivery.gif");
   const uploaded = await invoke("admin/media", { method: "POST", body: form });
   assert.equal(uploaded.response.status, 201);
   assert.equal(uploaded.body.mimeType, "image/gif");
@@ -69,7 +69,7 @@ export async function alphaSevenMediaJourney({ base, cookie, project, proxyBase 
     method: "POST",
     json: {
       title: "Alpha seven GIF",
-      slug: "alpha-seven-gif",
+      slug: "image-delivery-gif",
       fields: {},
       blocks: [
         {
@@ -121,7 +121,7 @@ export async function alphaSevenMediaJourney({ base, cookie, project, proxyBase 
       .toBuffer();
     assert.ok(png.length > 1024 * 1024 && png.length < 10 * 1024 * 1024);
     const large = new FormData();
-    large.append("file", new Blob([png], { type: "image/png" }), "alpha-seven-large.png");
+    large.append("file", new Blob([png], { type: "image/png" }), "image-delivery-large.png");
     const response = await fetch(new URL("api/v1/admin/media", proxyBase), {
       method: "POST",
       headers: { cookie, origin: new URL(base).origin },
@@ -140,7 +140,7 @@ export async function alphaSevenMediaJourney({ base, cookie, project, proxyBase 
     assert.equal(cached.status, 200);
     assert.equal(cached.headers.get("cache-control"), "public, max-age=2592000, immutable");
     await cached.arrayBuffer();
-    for (const path of ["_astro/alpha-seven-missing.webp", "_headers"]) {
+    for (const path of ["_astro/image-delivery-missing.webp", "_headers"]) {
       const missing = await fetch(new URL(path, proxyBase));
       assert.equal(missing.status, 404);
       assert.ok(!missing.headers.get("cache-control")?.includes("immutable"));
@@ -153,7 +153,7 @@ export async function alphaSevenMediaJourney({ base, cookie, project, proxyBase 
 }
 
 /** Inspect the output bytes from the installed starter's image regression build. */
-export async function verifyAlphaSevenImages(project, html) {
+export async function verifyImageDelivery(project, html) {
   const sharp = createRequire(join(project, "site/package.json"))("sharp");
   const figure = (key) => {
     const value = html.match(
@@ -162,12 +162,12 @@ export async function verifyAlphaSevenImages(project, html) {
     assert.ok(value, `missing image figure ${key}`);
     return value;
   };
-  const photo = figure("alpha-seven-photo");
+  const photo = figure("image-delivery-photo");
   assert.ok(photo.includes("data:image/svg+xml,"));
   assert.ok(photo.includes("<dialog"));
-  const transparent = figure("alpha-seven-transparent");
+  const transparent = figure("image-delivery-transparent");
   assert.ok(!transparent.includes("background-image"));
-  const animated = figure("alpha-seven-gif");
+  const animated = figure("image-delivery-gif");
   assert.ok(!animated.includes("background-image"));
   assert.ok(animated.includes('href="/image-destination"'));
   assert.ok(!animated.includes("<dialog"), "link did not take precedence over lightbox");
@@ -181,7 +181,7 @@ export async function verifyAlphaSevenImages(project, html) {
   assert.equal(metadata.pageHeight, 240);
   assert.ok(photo.includes("960w") && photo.includes("1920w"));
   const gallery = html.match(
-    /<section[^>]*data-lace-block-key="alpha-seven-gallery"[^>]*>([\s\S]*?)<\/section>/u,
+    /<section[^>]*data-lace-block-key="image-delivery-gallery"[^>]*>([\s\S]*?)<\/section>/u,
   )?.[1];
   assert.ok(gallery?.includes('href="/gallery-destination"'));
   assert.equal(

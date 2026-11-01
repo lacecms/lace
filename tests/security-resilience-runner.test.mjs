@@ -8,7 +8,7 @@ import {
 } from "../scripts/security-resilience-verification.mjs";
 import { validateAudit } from "../scripts/dependency-audit.mjs";
 
-test("34B required phases reject empty and unavailable definitions, preserving not-run successors", async () => {
+test("Security required phases reject empty and unavailable definitions, preserving not-run successors", async () => {
   await expect(
     executeRequiredPhases(
       [],
@@ -30,8 +30,8 @@ test("34B required phases reject empty and unavailable definitions, preserving n
   ]);
 });
 for (const kind of ["missing", "empty", "skipped", "failed"])
-  test(`34B ${kind} test phase cannot pass`, async () => {
-    const root = await mkdtemp(join(tmpdir(), "lace-34b-runner-"));
+  test(`Security ${kind} test phase cannot pass`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "lace-security-runner-"));
     try {
       const path = join(root, "suite.json");
       if (kind !== "missing")
@@ -64,8 +64,8 @@ for (const kind of ["missing", "empty", "skipped", "failed"])
       await rm(root, { recursive: true, force: true });
     }
   });
-test("34B interrupted owned command waits for child cleanup and marks successors not-run", async () => {
-  const root = await mkdtemp(join(tmpdir(), "lace-34b-interruption-"));
+test("Security interrupted owned command waits for child cleanup and marks successors not-run", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lace-security-interruption-"));
   try {
     const ready = join(root, "ready"),
       cleaned = join(root, "cleaned");
@@ -104,7 +104,7 @@ test("34B interrupted owned command waits for child cleanup and marks successors
     await rm(root, { recursive: true, force: true });
   }
 });
-test("34B audit rejects undispositioned advisories and unknown/missing license data", () => {
+test("Security audit rejects undispositioned advisories and unknown/missing license data", () => {
   const base = { metadata: {}, advisories: {} };
   expect(() => validateAudit(base, [{ license: "MIT" }])).not.toThrow();
   expect(() => validateAudit(base, [{ license: "(MIT OR CC0-1.0)" }])).not.toThrow();

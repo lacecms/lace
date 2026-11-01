@@ -3457,7 +3457,6 @@ pnpm build
 pnpm typecheck
 pnpm lint
 pnpm test
-pnpm test:integration
 pnpm db:generate
 pnpm db:migrate:node
 pnpm db:migrate:cloudflare
@@ -3630,6 +3629,11 @@ parity test keeps starter, `apps/site`, and `registry/` block sources identical.
 Render-core tests prove that rich-text acceptance and rejection match
 `@lacecms/content` exactly and that the render core imports no framework.
 
+Local cross-runtime product checks run through `pnpm verify:cross-runtime`
+with an explicit prepared artifact directory; `pnpm verify:security` runs the
+source security and resilience suites. Their named projects share
+`vitest.verification.config.mjs`; ordinary root tests remain separate.
+
 ## 21. Observability and operations
 
 The MVP should emit structured logs with:
@@ -3658,6 +3662,11 @@ Operationally important admin information:
 - content-configuration hash/sync state;
 - object-storage connectivity status;
 - latest site build status.
+
+`pnpm verify:operations` verifies local health, coordinated restore, credential
+rotation and forward migration. Verification results are written under
+`.lace-acceptance/verify-{cross-runtime,security,operations}-*`; real deployment
+checks remain owner operations.
 
 ## 22. Migration and compatibility policy
 

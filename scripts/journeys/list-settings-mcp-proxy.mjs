@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 /** Consumer-owned configuration, applied before the generated runtime synchronizes. */
-export async function configureAlphaEight(project) {
+export async function configureListSettings(project) {
   const path = join(project, "lace.config.ts");
   const text = await readFile(path, "utf8");
   const anchor =
@@ -20,7 +20,7 @@ export async function configureAlphaEight(project) {
 }
 
 /** HTTP and SDK probes against saved Node images or the installed consumer Worker. */
-export async function alphaEightJourney({
+export async function listSettingsMcpProxyJourney({
   base,
   project,
   email,
@@ -32,7 +32,7 @@ export async function alphaEightJourney({
   fetch: requestFetch = globalThis.fetch,
 }) {
   const origin = new URL(base).origin;
-  const callback = new URL("/alpha-eight/callback", base);
+  const callback = new URL("/list-settings-mcp-proxy/callback", base);
   callback.protocol = "http:"; // Native loopback redirect, independent of the HTTPS resource.
   let cookie;
   const invoke = async (path, { json, form, headers, ...options } = {}) => {
@@ -105,7 +105,7 @@ export async function alphaEightJourney({
         redirect_uri: callback.href,
         resource: `${origin}/mcp`,
         scope: "content:read content:write offline_access",
-        state: "alpha-eight",
+        state: "list-settings-mcp-proxy",
         code_challenge: createHash("sha256").update(verifier).digest("base64url"),
         code_challenge_method: "S256",
       });
@@ -136,7 +136,7 @@ export async function alphaEightJourney({
       });
       for (const value of [tokens.body.access_token, tokens.body.refresh_token])
         if (value) secretValues.add(value);
-      const client = new Client({ name: "alpha-eight-consumer", version: "0.0.0" });
+      const client = new Client({ name: "list-settings-mcp-proxy-consumer", version: "0.0.0" });
       await client.connect(
         new StreamableHTTPClientTransport(new URL("mcp", base), {
           fetch: async (url, init) => {
@@ -185,9 +185,9 @@ export async function alphaEightJourney({
     const draft = {
       modelKey: "posts",
       title: "Alpha eight assistant draft",
-      slug: "alpha-eight-assistant",
+      slug: "list-settings-mcp-proxy-assistant",
       fields: {
-        summary: "alpha-eight-query-value",
+        summary: "list-settings-mcp-proxy-query-value",
         relatedUrl: `entry:${encodeURIComponent(before.entries[0].id)}`,
       },
       blocks: [
@@ -243,7 +243,7 @@ export async function alphaEightJourney({
         name: "list_entries",
         arguments: {
           modelKey: "posts",
-          q: "alpha-eight-query-value",
+          q: "list-settings-mcp-proxy-query-value",
           sort: "field:summary",
           filters: [{ field: "summary", op: "contains", value: "query-value" }],
         },
@@ -276,7 +276,7 @@ export async function alphaEightJourney({
     assert.equal((await reader.client.listTools()).tools.length, 3);
     const invitation = await ok("api/v1/admin/invitations", {
       method: "POST",
-      json: { email: "alpha-eight-viewer@lace.test", role: "viewer" },
+      json: { email: "list-settings-mcp-proxy-viewer@lace.test", role: "viewer" },
     });
     assert.equal(
       typeof invitation.body.link,
@@ -296,7 +296,7 @@ export async function alphaEightJourney({
     const administratorCookie = cookie;
     const viewerLogin = await ok("api/auth/sign-in/email", {
       method: "POST",
-      json: { email: "alpha-eight-viewer@lace.test", password: viewerPassword },
+      json: { email: "list-settings-mcp-proxy-viewer@lace.test", password: viewerPassword },
     });
     cookie = viewerLogin.response.headers
       .getSetCookie()
@@ -309,7 +309,8 @@ export async function alphaEightJourney({
     cookie = administratorCookie;
     // The client helpers above are test drivers; application runtime resolution stays in the consumer.
     assert.ok((await readFile(join(project, "docs/lace-mcp.md"), "utf8")).includes("Gemini CLI"));
-    if (run) await run("alpha-eight-site-typecheck", "pnpm", ["typecheck"], { cwd: project });
+    if (run)
+      await run("list-settings-mcp-proxy-site-typecheck", "pnpm", ["typecheck"], { cwd: project });
   } finally {
     await Promise.all(clients.map((client) => client.close()));
   }
@@ -319,10 +320,10 @@ export async function alphaEightJourney({
 }
 
 /** Render and activate the installed video source, with provider traffic intercepted. */
-export async function verifyAlphaEightStarter(project, workspace) {
+export async function verifyListSettingsStarter(project, workspace) {
   const { createServer } = await import("node:http");
   const { resolve, extname } = await import("node:path");
-  const { loadBrowser } = await import("./acceptance-browser.mjs");
+  const { loadBrowser } = await import("../acceptance-browser.mjs");
   const root = resolve(project, "site/dist");
   const server = createServer(async (request, response) => {
     const path = resolve(root, `.${new URL(request.url, "http://local.test").pathname}`);
@@ -384,16 +385,16 @@ export async function verifyAlphaEightStarter(project, workspace) {
 }
 
 /** A real TLS edge in front of the generated nginx, retaining production HTTPS checks. */
-export async function alphaEightTlsProxy({ parent, upstream, run, workspace, secretValues }) {
+export async function tlsEdgeProxy({ parent, upstream, run, workspace, secretValues }) {
   const { mkdir } = await import("node:fs/promises");
   const { createServer } = await import("node:https");
   const { request } = await import("node:http");
   const { createRequire } = await import("node:module");
-  const directory = join(parent, "alpha-eight-tls");
+  const directory = join(parent, "list-settings-mcp-proxy-tls");
   await mkdir(directory);
   const certificatePath = join(directory, "certificate.pem");
   const keyPath = join(directory, "key.pem");
-  await run("alpha-eight-tls-certificate", "openssl", [
+  await run("list-settings-mcp-proxy-tls-certificate", "openssl", [
     "req",
     "-x509",
     "-newkey",

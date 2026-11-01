@@ -26,7 +26,7 @@ This checklist maps every architecture §3 Included item and §14 security requi
 | Architecture §14 requirement | Named local evidence | Documentation | Local status / owner check |
 | --- | --- | --- | --- |
 | Secure HTTP-only production cookies | `packages/auth/src/index.test.mjs`; Node production smoke | auth-operations.md; generated production guide | Covered locally / pending actual HTTPS proxy cookies |
-| CSRF and origin protection | `tests/security-boundary.test.mjs`; `scripts/consumer-34b-security.mjs` foreign/null/cross-site denials | local-security-verification.md | Covered / pending real ingress origin rejection |
+| CSRF and origin protection | `tests/security-boundary.test.mjs`; `scripts/journeys/consumer-security-probes.mjs` foreign/null/cross-site denials | local-security-verification.md | Covered / pending real ingress origin rejection |
 | Explicit trusted origins | Auth/server security tests; generated origin settings | auth-operations.md | Covered / pending real-domain allowlist |
 | Auth/upload rate limiting | Node/Worker security-contract tests; security acceptance actor/proxy identity probes | local-security-verification.md; 34B host-safety record | Covered / pending real trusted proxy and concurrency behavior |
 | Upload MIME/size/filename validation | Platform security-contract tests; exact-consumer polyglot rejection | local-security-verification.md | Covered / pending provider limits and representative uploads |

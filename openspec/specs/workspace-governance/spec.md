@@ -100,24 +100,6 @@ commands.
   typecheck, or format command
 - **THEN** no local database or object-store data are deleted implicitly
 
-### Requirement: Explicit unavailable-command behavior
-
-Until a later roadmap step implements a documented developer command's runtime
-feature, invoking that command SHALL print `not implemented in milestone 1` or
-an equally specific milestone message. A non-verification developer command
-such as a development-server launcher SHALL exit successfully after that
-message; an unavailable verification or state-changing command SHALL exit
-unsuccessfully and SHALL not simulate feature execution.
-
-#### Scenario: Deferred development launcher
-
-- **WHEN** a contributor runs an unimplemented development-server command during Step 1
-- **THEN** the command exits successfully after identifying that the feature is not implemented in milestone 1
-
-#### Scenario: Deferred verification command
-
-- **WHEN** a contributor runs an unimplemented integration verification command during Step 1
-- **THEN** the command exits unsuccessfully after identifying that the feature is not implemented in milestone 1
 
 ### Requirement: Site-rendering packages stay framework-neutral
 The dependency-boundary verification SHALL permit the render core to import only the content package and its own modules, rejecting UI-framework, Node built-in, SDK, contract, and other third-party imports. It SHALL permit the SDK to import only the contracts package, its validation library, and its own modules, so the published-site loader cannot import a UI framework or Node-only API.
@@ -199,3 +181,19 @@ catalog dependencies.
 #### Scenario: Application imports a transport schema
 - **WHEN** an application boundary fixture imports a REST contract or MCP SDK
 - **THEN** the existing forbidden-edge check continues to reject it
+
+### Requirement: Root scripts and script files reference each other completely
+
+Every `node scripts/<file>` target of a root `package.json` script SHALL exist, and every file under `scripts/` (excluding `scripts/fixtures/`) SHALL be referenced by a root `package.json` script, another script, a CI workflow, a Dockerfile or a test. A repository test SHALL enforce both directions so that an orphaned or dangling script fails the root test command. Root scripts, script files, acceptance stage names, result directories and verification environment variables SHALL be named by what they run or verify and SHALL NOT encode a prerelease number or roadmap step identifier. `DEVELOPMENT.md` SHALL catalog every root script with its group and when to run it.
+
+#### Scenario: Script file loses its last reference
+- **WHEN** a contributor deletes the only root script, workflow step or import that referenced a file under `scripts/`
+- **THEN** the root test fails naming the orphaned file
+
+#### Scenario: Root script points at a deleted file
+- **WHEN** a root `package.json` script names a `scripts/` file that does not exist
+- **THEN** the root test fails naming the script
+
+#### Scenario: Catalog is incomplete
+- **WHEN** a root script is added without a catalog row in `DEVELOPMENT.md`
+- **THEN** the root test fails naming the uncataloged script

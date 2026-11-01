@@ -30,7 +30,7 @@ test("operations phases fail closed on empty, unavailable, failed or skipped wor
       async () => {},
     ),
   ).rejects.toThrow("empty");
-  const parent = await mkdtemp(join(tmpdir(), "lace-34c-harness-"));
+  const parent = await mkdtemp(join(tmpdir(), "lace-operations-harness-"));
   try {
     const path = join(parent, "skipped.json");
     await writeFile(path, JSON.stringify({ success: true, numTotalTests: 2, numPendingTests: 1 }));
@@ -60,7 +60,7 @@ test("operations phases fail closed on empty, unavailable, failed or skipped wor
 });
 
 test("owned directories isolate concurrent work and clean success, failure and interruption", async () => {
-  const parent = await mkdtemp(join(tmpdir(), "lace-34c-cleanup-"));
+  const parent = await mkdtemp(join(tmpdir(), "lace-operations-cleanup-"));
   try {
     const ordinary = join(parent, "ordinary.txt");
     await writeFile(ordinary, "keep");

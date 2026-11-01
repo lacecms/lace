@@ -14,14 +14,14 @@ const cli = join(workspace, "packages/cli/dist/bin.js");
 
 /** Source guard verification; image identities are explicit and are not candidate acceptance. */
 export async function composeDatabaseSafety() {
-  const api = process.env.LACE_34B_API_IMAGE;
-  const builder = process.env.LACE_34B_BUILDER_IMAGE;
+  const api = process.env.LACE_VERIFY_API_IMAGE;
+  const builder = process.env.LACE_VERIFY_BUILDER_IMAGE;
   assert.ok(
     api && builder,
-    "Set LACE_34B_API_IMAGE and LACE_34B_BUILDER_IMAGE to local fixture images",
+    "Set LACE_VERIFY_API_IMAGE and LACE_VERIFY_BUILDER_IMAGE to local fixture images",
   );
-  const parent = await mkdtemp(join(tmpdir(), "lace-34b-compose-"));
-  const project = `lace34b${randomUUID().replaceAll("-", "")}`;
+  const parent = await mkdtemp(join(tmpdir(), "lace-security-compose-"));
+  const project = `lacesecurity${randomUUID().replaceAll("-", "")}`;
   const root = join(parent, "consumer");
   const interruption = new AbortController();
   let cleaning = false;
@@ -39,7 +39,7 @@ export async function composeDatabaseSafety() {
       });
     } catch {
       // Child output may contain credentials; report only the owned phase.
-      throw new Error(`34B Compose command failed: ${command} ${args.slice(0, 2).join(" ")}`);
+      throw new Error(`Security Compose command failed: ${command} ${args.slice(0, 2).join(" ")}`);
     }
   };
   const compose = (...args) => run("docker", ["compose", "--project-name", project, ...args]);
@@ -104,8 +104,8 @@ export async function composeDatabaseSafety() {
         "",
       ].join("\n"),
     );
-    if (process.env.LACE_34B_MINIO_IMAGE) {
-      await run("docker", ["tag", process.env.LACE_34B_MINIO_IMAGE, `${project}-minio`]);
+    if (process.env.LACE_VERIFY_MINIO_IMAGE) {
+      await run("docker", ["tag", process.env.LACE_VERIFY_MINIO_IMAGE, `${project}-minio`]);
       taggedMinio = true;
     } else await compose("build", "minio");
     await host(["db", "migrate"]);
@@ -152,10 +152,13 @@ export async function composeDatabaseSafety() {
     const password = randomBytes(24).toString("hex");
     await call("/api/v1/setup/admin", {
       token: bootstrap.data.token,
-      email: "compose@34b.test",
+      email: "compose@security.test",
       password,
     });
-    const login = await call("/api/auth/sign-in/email", { email: "compose@34b.test", password });
+    const login = await call("/api/auth/sign-in/email", {
+      email: "compose@security.test",
+      password,
+    });
     const cookie = login.headers
       .getSetCookie()
       .map((value) => value.split(";")[0])
@@ -163,7 +166,7 @@ export async function composeDatabaseSafety() {
     const entry = await (
       await call(
         "/api/v1/admin/models/posts/entries",
-        { slug: "retained", title: "34B retained content", fields: {}, blocks: [] },
+        { slug: "retained", title: "Security retained content", fields: {}, blocks: [] },
         cookie,
       )
     ).json();
@@ -173,9 +176,9 @@ export async function composeDatabaseSafety() {
     const retained = await (
       await call(`/api/v1/admin/entries/${entry.id}`, undefined, cookie)
     ).json();
-    assert.equal(retained.draft.title, "34B retained content");
+    assert.equal(retained.draft.title, "Security retained content");
     console.info(
-      "34B Compose: four commands denied without state/token changes; stopped maintenance and restart persistence passed",
+      "Security Compose: four commands denied without state/token changes; stopped maintenance and restart persistence passed",
     );
     return {
       status: "passed",

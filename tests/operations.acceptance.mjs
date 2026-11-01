@@ -12,16 +12,16 @@ import { node, cloudflare } from "./support/operational-platforms.mjs";
 const { NodeBuilderSiteBuildTrigger } = node;
 const { DeployHookSiteBuildTrigger, PagesDeploymentStatusReader } = cloudflare;
 
-let evidenceDirectory = process.env.LACE_34C_EVIDENCE;
-if (!evidenceDirectory && process.env.LACE_34C_PACKED_ROOT) {
+let evidenceDirectory = process.env.LACE_VERIFY_EVIDENCE;
+if (!evidenceDirectory && process.env.LACE_VERIFY_PACKED_ROOT) {
   await mkdir(resolve(".lace-acceptance"), { recursive: true });
-  evidenceDirectory = await mkdtemp(resolve(".lace-acceptance/step-34c-packed-results-"));
+  evidenceDirectory = await mkdtemp(resolve(".lace-acceptance/verify-operations-packed-"));
 }
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 
-test("34C rotated builder, hook and Pages credentials reject old values and recover", async () => {
-  const oldSecret = "old-builder-local-secret-34c-long-enough";
-  const replacement = "new-builder-local-secret-34c-long-enough";
+test("Operations rotated builder, hook and Pages credentials reject old values and recover", async () => {
+  const oldSecret = "old-builder-local-secret-operations-long-enough";
+  const replacement = "new-builder-local-secret-operations-long-enough";
   let handler = createBuilderHandler({
     secret: oldSecret,
     build: async () => ({ status: "succeeded" }),
@@ -30,7 +30,7 @@ test("34C rotated builder, hook and Pages credentials reject old values and reco
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
   try {
     const baseUrl = new URL(`http://127.0.0.1:${server.address().port}/`);
-    const build = { buildId: "rotation-34c", targetVersion: 5 };
+    const build = { buildId: "rotation-operations", targetVersion: 5 };
     const old = new NodeBuilderSiteBuildTrigger({ baseUrl, secret: oldSecret });
     expect(await old.trigger(build)).toEqual({ status: "succeeded" });
     handler = createBuilderHandler({
@@ -44,7 +44,7 @@ test("34C rotated builder, hook and Pages credentials reject old values and reco
     let hook = "old-hook";
     const controlledHook = async (url) =>
       url.pathname.endsWith(hook)
-        ? Response.json({ success: true, result: { id: "deployment-34c" } })
+        ? Response.json({ success: true, result: { id: "deployment-operations" } })
         : new Response(null, { status: 401 });
     const hookAdapter = (key) =>
       new DeployHookSiteBuildTrigger({
@@ -60,22 +60,25 @@ test("34C rotated builder, hook and Pages credentials reject old values and reco
       init.headers.authorization === `Bearer ${token}`
         ? Response.json({
             success: true,
-            result: { id: "deployment-34c", latest_stage: { name: "deploy", status: "success" } },
+            result: {
+              id: "deployment-operations",
+              latest_stage: { name: "deploy", status: "success" },
+            },
           })
         : new Response(null, { status: 401 });
     const reader = (apiToken) =>
       new PagesDeploymentStatusReader({
         accountId: "a".repeat(32),
-        projectName: "local-34c",
+        projectName: "local-operations",
         apiToken,
         fetch: controlledPages,
       });
-    expect((await reader(token).read("deployment-34c")).outcome).toBe("succeeded");
+    expect((await reader(token).read("deployment-operations")).outcome).toBe("succeeded");
     token = "replacement-pages-local-token";
-    expect((await reader("old-pages-local-token").read("deployment-34c")).outcome).not.toBe(
+    expect((await reader("old-pages-local-token").read("deployment-operations")).outcome).not.toBe(
       "succeeded",
     );
-    expect((await reader(token).read("deployment-34c")).outcome).toBe("succeeded");
+    expect((await reader(token).read("deployment-operations")).outcome).toBe("succeeded");
   } finally {
     server.closeAllConnections();
     await new Promise((done) => server.close(done));
@@ -129,7 +132,7 @@ async function verifyObjects(f, expected) {
 }
 
 for (const kind of ["node", "worker"]) {
-  test(`34C ${kind}: health, migration failure, release identity and safe structured logs`, async () => {
+  test(`Operations ${kind}: health, migration failure, release identity and safe structured logs`, async () => {
     const logs = [];
     const f = await openProductRuntime(kind, { logger: { log: (entry) => logs.push(entry) } });
     try {
@@ -168,8 +171,8 @@ for (const kind of ["node", "worker"]) {
 }
 
 for (const kind of ["node", "worker"]) {
-  test(`34C ${kind}: coordinated restore, missing/corrupt media and credential rotation`, async () => {
-    const root = await mkdtemp(join(tmpdir(), `lace-34c-drill-${kind}-`));
+  test(`Operations ${kind}: coordinated restore, missing/corrupt media and credential rotation`, async () => {
+    const root = await mkdtemp(join(tmpdir(), `lace-operations-drill-${kind}-`));
     const operational = [];
     const errors = vi.spyOn(console, "error").mockImplementation((entry) => {
       if (typeof entry === "string" && entry.startsWith("{")) operational.push(JSON.parse(entry));
@@ -205,7 +208,7 @@ for (const kind of ["node", "worker"]) {
         expect(hash(await readFile(join(snapshot, "project", file)))).toBe(
           hash(await readFile(file)),
         );
-      if (process.env.LACE_34C_PACKED_ROOT)
+      if (process.env.LACE_VERIFY_PACKED_ROOT)
         for (const file of [
           "lace.config.ts",
           "package.json",
@@ -213,13 +216,13 @@ for (const kind of ["node", "worker"]) {
           ".lace/manifest.json",
         ])
           expect(hash(await readFile(join(snapshot, "consumer", file)))).toBe(
-            hash(await readFile(join(process.env.LACE_34C_PACKED_ROOT, file))),
+            hash(await readFile(join(process.env.LACE_VERIFY_PACKED_ROOT, file))),
           );
       // A new origin, SQLite/D1/R2 state and MinIO container keep restored work isolated.
       restored = await openProductRuntime(kind, {
         operations: true,
         backup: snapshot,
-        authSecret: "isolated-restored-auth-secret-34c-long-enough",
+        authSecret: "isolated-restored-auth-secret-operations-long-enough",
       });
       expect(restored.origin).not.toBe(f.origin);
       expect(await fingerprints(restored)).toEqual(metadata);
@@ -253,7 +256,9 @@ for (const kind of ["node", "worker"]) {
       await verifyObjects(restored, objects);
       // Old browser signatures cannot authorize after a secret replacement.
       const staleCookie = restored.cookies.admin;
-      await restored.restart({ authSecret: "replacement-auth-secret-34c-long-enough-for-auth" });
+      await restored.restart({
+        authSecret: "replacement-auth-secret-operations-long-enough-for-auth",
+      });
       expect(
         (await restored.call("/api/v1/admin/settings/status", { cookie: staleCookie })).status,
       ).toBe(403);
@@ -262,12 +267,12 @@ for (const kind of ["node", "worker"]) {
       const issued = await restored.call("/api/v1/admin/api-tokens", {
         cookie,
         method: "POST",
-        json: { name: "34c-replacement" },
+        json: { name: "operations-replacement" },
       });
       expect(issued.status).toBe(201);
       const replacement = await issued.json();
       const tokens = await (await restored.call("/api/v1/admin/api-tokens", { cookie })).json();
-      const old = tokens.items.find((item) => item.name === "34a-build");
+      const old = tokens.items.find((item) => item.name === "cross-runtime-build");
       expect(old).toBeDefined();
       expect(
         (await restored.call(`/api/v1/admin/api-tokens/${old.id}`, { cookie, method: "DELETE" }))
@@ -308,8 +313,8 @@ for (const kind of ["node", "worker"]) {
           JSON.stringify(
             {
               kind,
-              packedPlatformArtifacts: Boolean(process.env.LACE_34C_PACKED_ROOT),
-              consumerOwnershipCaptured: Boolean(process.env.LACE_34C_PACKED_ROOT),
+              packedPlatformArtifacts: Boolean(process.env.LACE_VERIFY_PACKED_ROOT),
+              consumerOwnershipCaptured: Boolean(process.env.LACE_VERIFY_PACKED_ROOT),
               simulatorVersion:
                 kind === "worker"
                   ? JSON.parse(

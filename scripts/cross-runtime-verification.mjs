@@ -68,7 +68,7 @@ async function command(command, args) {
     child.once("exit", (code, signal) => {
       release();
       if (code === 0) done();
-      else reject(new Error(`34A command failed: ${command} (${signal ?? code})`));
+      else reject(new Error(`Cross-runtime command failed: ${command} (${signal ?? code})`));
     });
   });
 }
@@ -76,14 +76,14 @@ async function command(command, args) {
 export async function main(args = process.argv.slice(2)) {
   assert.ok(
     args.length === 2 || args.length === 4,
-    "usage: pnpm verify:34a --artifacts <prepared-directory> [--baseline <reviewed-inventory>]",
+    "usage: pnpm verify:cross-runtime --artifacts <prepared-directory> [--baseline <reviewed-inventory>]",
   );
   if (args.length === 4) assert.equal(args[2], "--baseline");
   const baselinePath = args[3] ?? "docs/archive/step-33/step-33h-artifacts.json";
   assert.equal(args[0], "--artifacts", "an explicit candidate artifact directory is required");
   const artifacts = resolve(args[1]);
   await mkdir(".lace-acceptance", { recursive: true });
-  const output = await mkdtemp(resolve(".lace-acceptance/step-34a-"));
+  const output = await mkdtemp(resolve(".lace-acceptance/verify-cross-runtime-"));
   const provenance = {
     source: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     workingTree: execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()
@@ -163,7 +163,12 @@ export async function main(args = process.argv.slice(2)) {
       "packages/platform-cloudflare/src/repository-contract.test.mjs",
       "--maxWorkers=2",
     ]),
-    testPhase("product", ["--config", "vitest.cross-runtime.config.mjs"]),
+    testPhase("product", [
+      "--config",
+      "vitest.verification.config.mjs",
+      "--project",
+      "cross-runtime",
+    ]),
     testPhase("sdk-render-site", [
       "packages/sdk/src",
       "packages/render/src",
@@ -176,11 +181,11 @@ export async function main(args = process.argv.slice(2)) {
       args: ["acceptance:release", "--artifacts", artifacts],
     },
   ];
-  console.info(`34A report: ${output}/result.json`);
+  console.info(`Cross-runtime report: ${output}/result.json`);
   await runPhases(
     phases,
     async (phase) => {
-      console.info(`34A phase: ${phase.name}`);
+      console.info(`Cross-runtime phase: ${phase.name}`);
       if (phase.run) await phase.run();
       else await command(phase.command, phase.args);
       if (phase.testReport)
@@ -192,7 +197,9 @@ export async function main(args = process.argv.slice(2)) {
         JSON.stringify({ ...provenance, ...report }, null, 2) + "\n",
       ),
   );
-  console.info("34A local verification complete; real-deployment acceptance remains owner work.");
+  console.info(
+    "Cross-runtime local verification complete; real-deployment acceptance remains owner work.",
+  );
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   main().catch((error) => {

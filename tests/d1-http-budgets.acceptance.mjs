@@ -55,7 +55,7 @@ async function fixture() {
       status: response.status,
     };
     measurements.push(result);
-    console.info(`34B D1 ${JSON.stringify(result)}`);
+    console.info(`Security D1 ${JSON.stringify(result)}`);
     expect(response.status, name).toBe(expectedStatus);
     expect(count.stats.queries, name).toBeLessThanOrEqual(50);
     expect(count.stats.maxParameters, name).toBeLessThanOrEqual(100);
@@ -76,7 +76,7 @@ async function seedMedia(db) {
     );
 }
 
-test("34B authenticated D1 create/save/publish accepts 200 blocks/references within complete HTTP budgets and rejects 201", async () => {
+test("Security authenticated D1 create/save/publish accepts 200 blocks/references within complete HTTP budgets and rejects 201", async () => {
   const f = await fixture();
   try {
     await seedMedia(f.database);
@@ -190,14 +190,14 @@ test("34B authenticated D1 create/save/publish accepts 200 blocks/references wit
   }
 }, 120000);
 
-test("34B D1 exports 100/201/501 published entries in bounded pages with near-limit JSON", async () => {
+test("Security D1 exports 100/201/501 published entries in bounded pages with near-limit JSON", async () => {
   const f = await fixture();
   try {
     await seedMedia(f.database);
     const issued = await f.call("/api/v1/admin/api-tokens", {
       cookie: f.cookies.admin,
       method: "POST",
-      json: { name: "34b-budget" },
+      json: { name: "security-budget" },
     });
     expect(issued.status).toBe(201);
     const token = (await issued.json()).token;
@@ -360,7 +360,7 @@ test("34B D1 exports 100/201/501 published entries in bounded pages with near-li
       ).toEqual(expected);
       expect(exported.entries.every((entry) => !Object.hasOwn(entry, "draft"))).toBe(true);
       console.info(
-        `34B export fixture ${JSON.stringify({ entries: size, maximalEntries: 2, mediaReferences: 400, fieldsJsonBytes: Buffer.byteLength(JSON.stringify(expected[0].fields)), blockJsonBytes: Buffer.byteLength(JSON.stringify(expected[1].blocks[0].data)) })}`,
+        `Security export fixture ${JSON.stringify({ entries: size, maximalEntries: 2, mediaReferences: 400, fieldsJsonBytes: Buffer.byteLength(JSON.stringify(expected[0].fields)), blockJsonBytes: Buffer.byteLength(JSON.stringify(expected[1].blocks[0].data)) })}`,
       );
     }
   } finally {

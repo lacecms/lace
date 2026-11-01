@@ -3,7 +3,7 @@ import { openProductRuntime, png } from "./support/cross-runtime-fixture.mjs";
 import { MediaDeletionDispatcher } from "../packages/application/dist/index.js";
 
 for (const kind of ["node", "worker"]) {
-  test(`34B ${kind}: real object storage faults preserve lifecycle and recover after eight attempts`, async () => {
+  test(`Security ${kind}: real object storage faults preserve lifecycle and recover after eight attempts`, async () => {
     const f = await openProductRuntime(kind);
     try {
       const storage = f.runtime.deletionDispatcher.options.storage;

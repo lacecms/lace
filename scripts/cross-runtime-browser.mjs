@@ -10,14 +10,16 @@ const { expect } = require("@playwright/test");
 export async function browserJourney(f, workspace) {
   const browser = await loadBrowser(workspace);
   const contexts = [];
-  const report = (name) => console.info(`34A ${f.kind} browser: ${name}`);
+  const report = (name) => console.info(`Cross-runtime ${f.kind} browser: ${name}`);
   const login = async (role) => {
     const context = await browser.newContext({ baseURL: f.origin });
     contexts.push(context);
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     await page.goto("/admin/");
-    await page.getByRole("textbox", { name: "Email", exact: true }).fill(`${role}@34a.test`);
+    await page
+      .getByRole("textbox", { name: "Email", exact: true })
+      .fill(`${role}@cross-runtime.test`);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Content", exact: true })).toBeVisible();
@@ -155,7 +157,9 @@ export async function browserJourney(f, workspace) {
     await page.getByRole("button", { name: "Leave without saving", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     // Recovery itself uses the real auth endpoint and confirms the mutation never committed.
-    await page.getByRole("textbox", { name: "Email", exact: true }).fill("admin@34a.test");
+    await page
+      .getByRole("textbox", { name: "Email", exact: true })
+      .fill("admin@cross-runtime.test");
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Content", exact: true })).toBeVisible();

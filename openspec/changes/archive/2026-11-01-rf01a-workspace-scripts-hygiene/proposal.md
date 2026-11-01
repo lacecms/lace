@@ -8,7 +8,7 @@ traceability maps for alpha.1 and alpha.2 field trials, a placeholder
 an unapplied, superseded OpenSpec change. With one user and no non-alpha
 release, these files cost reading time on every change and tell newcomers
 nothing about what they verify. This is Session RF1A of
-[`docs/refactoring-roadmap.md`](../../../docs/refactoring-roadmap.md), the
+[`docs/refactoring-roadmap.md`](../../../../docs/refactoring-roadmap.md), the
 first session of Step RF1 (workspace hygiene); it runs first because it
 shrinks everything RF2 converts and RF1B re-indexes.
 
