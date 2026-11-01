@@ -232,6 +232,9 @@ lockfile change, run the explicit reset and start the stack again.
 
 ## Verification
 
+See [verification commands, coverage and limits](docs/verification.md) and the
+[internal documentation index](docs/README.md).
+
 Focused package checks are useful while developing a surface:
 
 ```sh
@@ -339,7 +342,8 @@ marker. Only a completion/dismissal marker is stored, never content or credentia
 
 The public user documentation lives in `apps/docs`. All repository `docs/`
 materials remain maintained internal engineering documents; the public site
-does not publish them automatically. See [documentation maintenance](docs/documentation-maintenance.md)
+does not publish them automatically. See the [internal documentation index](docs/README.md),
+[verification guide](docs/verification.md) and [documentation maintenance](docs/documentation-maintenance.md)
 for topic ownership and Pages setup/recovery.
 
 ```sh

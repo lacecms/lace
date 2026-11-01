@@ -20,4 +20,4 @@ content modeling, editing, Astro integration and deployment.
 
 Working on the CMS itself? Read **[Developing Lace](DEVELOPMENT.md)** for the
 engine checkout, local stack, tests and contributor workflow. The repository's
-`docs/` directory contains maintained internal engineering documentation.
+[`docs/` index](docs/README.md) lists internal engineering documentation and its status.

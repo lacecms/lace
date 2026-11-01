@@ -211,7 +211,7 @@ and the separate Pages-Read-only Worker secret `LACE_PAGES_API_TOKEN`) the
 scheduled Worker instead tracks the exact deployment until a proven outcome or
 the tracking deadline. The real-account
 procedure is `docs/cloudflare-deployment-handoff.md`, used by the owner after
-the implementation roadmap as part of `docs/real-application-verification.md`.
+the implementation roadmap as part of [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure).
 
 ### VPS deployment
 
@@ -780,7 +780,7 @@ the existing two-batch page algorithm, superseding the previous ten-read bound. 
 budget, 100 binds per statement and 40-statement guarded mutation batch ceiling.
 There are no per-link DB/HTTP reads during rendering. See
 [internal URL links](./internal-url-links.md) and the
-[verification evidence](./verification/ce10-internal-url-links.md). The delta specs
+[verification evidence](./verification.md#recorded-d1-budget-measurements). The delta specs
 were synchronized into accepted specs and the change archived on 2026-10-24 at
 `openspec/changes/archive/2026-10-24-ce10-internal-url-links`.
 
@@ -3559,6 +3559,8 @@ Automated dependency update tooling may open version-update pull requests, but f
 
 ## 20. Testing strategy
 
+See [verification](verification.md) for commands, coverage, evidence limits and owner checks.
+
 Composite verification covers typed depth-six fixtures, schema bounds 6/7 and
 2/3, list-of-list refusal, values 100/101 and snapshot totals 500/501, defaults,
 hidden data, exact paths, byte/media limits and scalar hash regressions. Shared
@@ -3666,7 +3668,7 @@ Operationally important admin information:
 `pnpm verify:operations` verifies local health, coordinated restore, credential
 rotation and forward migration. Verification results are written under
 `.lace-acceptance/verify-{cross-runtime,security,operations}-*`; real deployment
-checks remain owner operations.
+checks remain [owner operations](verification.md#owner-checks-on-real-infrastructure).
 
 ## 22. Migration and compatibility policy
 
@@ -3845,14 +3847,14 @@ first local vertical slices:
 - confirming, during the owner-operated real-deployment release gate after
   the implementation roadmap, the Cloudflare Pages Git integration selected as
   the reference static host for hook-driven rebuilds (see
-  `docs/real-application-verification.md` and
+  [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) and
   `docs/cloudflare-deployment-handoff.md`).
 
 Step 34 completes local cross-runtime, security and operations verification and
 prepares the owner handoff. Real VPS and Cloudflare deployment acceptance remains
 a separate release requirement after the roadmap; local simulation does not
 satisfy it. The owner records exact candidate versions and results using
-`docs/real-application-verification.md` before claiming deployment readiness.
+[owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) before claiming deployment readiness.
 
 If package-name ownership differs, only published names and generator templates
 change; internal package boundaries and domain contracts remain the same.

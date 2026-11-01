@@ -2,7 +2,7 @@
 
 This is the detailed Cloudflare procedure for the owner-operated release gate
 after completion of the implementation roadmap. Use it alongside
-[the real-application verification plan](real-application-verification.md), which
+[the real-application verification plan](verification.md#owner-checks-on-real-infrastructure), which
 also covers VPS, shared product scenarios and recovery. It deploys a
 project generated with `create-lace --cloudflare` to a real Cloudflare account:
 the CMS Worker (D1, R2, packaged admin, scheduled recovery) and the separate
@@ -191,4 +191,4 @@ running any delete.
 
 ## Local operations evidence
 
-See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+See [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) for deployment, restore, rotation and provider evidence beyond local verification.

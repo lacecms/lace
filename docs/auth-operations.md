@@ -203,7 +203,7 @@ No email, password, session credential, build token, or content enters tour stor
 
 ## Local operations evidence
 
-See [34C local operations verification](local-operations-verification.md) for coordinated database/object restore, credential rotation, health/log interpretation and the running CMS version in administrator Settings. Remote deployment, D1 capacity/restore and provider permissions remain owner checks; local evidence does not close them.
+See [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) for deployment, restore, rotation and provider evidence beyond local verification.
 
 ## Optional MCP delegation
 

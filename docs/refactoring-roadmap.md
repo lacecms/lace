@@ -108,8 +108,9 @@ What the roadmap changes, with the numbers to beat:
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
-| Docs | `docs/archive/step-*` verification records | 48 files, 952 KB |
-| Docs | verification documents | 5 (`mvp-traceability`, `verification/ce10-*`, `real-application-`, `local-operations-`, `local-security-verification`) |
+| Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
+| Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
+| Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
 | Specs | `openspec/specs` | 84 capabilities, 22.7k lines, no index; `admin-draft-editor` 2,154 lines |
 | Specs | stale unapplied change | `openspec/changes/video-a-media-upload-delivery` (0 of 20 tasks; fails `spec:validate` strict) |
 
@@ -117,7 +118,7 @@ What the roadmap changes, with the numbers to beat:
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| RF1 | Workspace hygiene | M | RF1A → RF1B | in progress |
+| RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | planned |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
@@ -219,19 +220,17 @@ RF1A; they stay).
 
 ### Session RF1B — Documentation pruning and index
 
-- Delete `docs/archive/step-25`, `step-27`, `step-29`, `step-32`, `step-33`,
-  `step-34` (verification records and JSON artifacts of completed roadmap
-  steps). `docs/archive/` keeps the three roadmaps and the implementation
-  roadmap summary.
-- Merge `docs/mvp-traceability.md`, `docs/verification/ce10-internal-url-links.md`,
-  `docs/real-application-verification.md`,
-  `docs/local-operations-verification.md` and
-  `docs/local-security-verification.md` into one `docs/verification.md`:
-  commands and what each proves, limits, the §3/§14 coverage tables, the
-  recorded D1 budget measurements, and the owner checks on real
-  infrastructure with their recorded status. Step-era identities and
-  per-alpha handoff narratives are dropped; a root link guard test keeps
-  `docs/` free of dangling links and unindexed files.
+- Obsolete per-step verification reports and JSON inventories are removed;
+  `docs/archive/` retains the three completed roadmaps and implementation
+  roadmap summary. Their former records remain accessible through Git history
+  identified in the internal documentation index.
+- [Verification](verification.md) consolidates the five former verification
+  documents into commands and prerequisites, limits, §3/§14 coverage, recorded
+  D1 budgets, and real-infrastructure owner checks with dated status. Individual
+  run results stay in their result directories; release readiness stays in
+  archived changes. Links from maintained and archived documents point at the
+  consolidation or the relevant archived change. The root link guard covers
+  relative Markdown links, reference links, document status rows and ADR rows.
 - Add `docs/README.md`: one line per file with its status (authoritative,
   internal note, historical) and owner section of the architecture it
   details. Add `docs/adr/README.md` listing ADRs by number and status.
@@ -680,3 +679,4 @@ reference pages.
 | 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Proposed. Corrections to the roadmap text: the alpha-named journey modules are current spec-required acceptance journeys and are renamed, not merged; `field-trial-acceptance.test.mjs` is a helper unit test and is renamed; `make-api-runtime.mjs` stays (Dockerfile). Owner decision: keep only the `0.35.0` upgrade fixtures. Delta specs: `generated-project-acceptance` (2 modified, 2 removed), `prepublication-consumer-security` (2 modified), `workspace-governance` (1 added, 1 removed). 21 tasks, not applied. |
 | 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Proposed. One `docs/verification.md` (commands, limits, coverage, D1 measurements, owner checks), `docs/README.md` and `docs/adr/README.md` indexes, deletion of `docs/archive/step-*`, link repair in ten documents, root link-guard test. Delta specs: `local-operations-verification`, `local-security-resilience-verification`, `cross-runtime-product-verification`, `public-documentation` (1 modified each), `workspace-governance` (1 added). 15 tasks, not applied; depends on RF1A. |
 | 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Archived at [`2026-11-01-rf01a-workspace-scripts-hygiene`](../openspec/changes/archive/2026-11-01-rf01a-workspace-scripts-hygiene/); 21/21 tasks complete and all three capability deltas synchronized. Journey modules now have behavior names; five Vitest configs became one named-project config; latest-template fixtures retained; placeholder and feedback maps removed; superseded video planning archived without syncing deltas. Script files: 52 → 47 top-level + 4 journeys; documented commands: 24/55 → 54/54; root test files: 34 → 32, cases unchanged at 225. Catalog covers all 54 root commands; script guard includes workspace build scripts reached through Turbo. |
+| 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Archived at [`2026-11-01-rf01b-docs-pruning-index`](../openspec/changes/archive/2026-11-01-rf01b-docs-pruning-index/); 15/15 tasks complete, all five capability deltas synchronized. Consolidated five verification documents, removed 35 tracked obsolete step records (the audit counted 48 files), indexed 45 documents and 18 ADRs, repaired links including archived roadmaps and the current about route. New root link guard exercises missing links and unindexed documents/ADRs in a scratch copy. Public documentation build inputs unchanged. Typecheck, lint, formatting, full tests (44 Turbo tasks; 33 root files / 228 tests), docs checks and strict validation passed; local Worker/root tests ran outside the sandbox with pinned Node 24.12.0 and pnpm 12.3.4. |
