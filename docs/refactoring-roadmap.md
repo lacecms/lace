@@ -460,6 +460,16 @@ here to remove the only forward reference), `built-in-blocks.ts` and
   `configuration-report.ts` and `configuration-apply.ts`; `decideEvolution`
   (362 lines) becomes a table keyed by `StructuralChange.kind`.
 
+RF2B test companions are already separated: `index.test.ts` covers the
+ports/brands helpers; `configuration-sync.test.ts`,
+`configuration-evolution.test.ts`, `configuration-migration.test.ts` and
+`configuration-visibility.test.ts` accompany the configuration cluster. The
+use-case companions are `accounts.test.ts`, `content-authority.test.ts`,
+`draft-normalization.test.ts`, `conditional-publication.test.ts`,
+`site-build.test.ts`, `media-use-cases.test.ts`, `collection-queries.test.ts`,
+`build-export.test.ts`, `internal-links.test.ts`, `import-tokens.test.ts`,
+`email.test.ts` and `image-container.test.ts`.
+
 **Architecture:** §15 *Infrastructure ports* is rewritten from the real
 interfaces (today it shows a `Cache.get<T>` port that does not exist).
 
@@ -481,6 +491,16 @@ each exporting `register<Area>Routes(app, context)` over a `RouteContext`
 work (media multipart and tag parsing, build export paging) move their
 parsing into `media-upload.ts` and `build-export.ts`. The MCP and OAuth
 special cases become one `protocolErrorResponse` helper.
+
+RF2B route test companions map to the future modules: `setup-session` uses
+`routes-session-settings.test.ts`; `accounts` uses `routes-accounts.test.ts`;
+`admin-users` uses `routes-users-invitations.test.ts`; `builds`, `media` and
+`content` use their corresponding `routes-*.test.ts`; `public` uses
+`routes-public-export.test.ts`; `docs` and global middleware remain in
+`app.test.ts`. MCP/OAuth and import protocol coverage live in
+`routes-mcp.test.ts` and `routes-import.test.ts`. Shared fixtures are in
+`src/test-support/app-harness.ts`; `build-site.test.ts` and `email.test.ts`
+remain alongside their existing modules.
 
 ### Session RF4E — `@lacecms/db` and remaining monoliths
 
@@ -715,3 +735,4 @@ reference pages.
 | 2026-11-01 | RF2B | `rf02b-source-tests-application-server` | Proposed. Converts `application`, `db`, `auth`, `server`, `mcp` (baseline 250 cases); splits `application/src/index.test.mjs` into eight use-case files and `server/src/app.test.mjs` into ten route-group files plus `src/test-support/app-harness.ts`, matching the RF4B/RF4D module layout. `skip_specs`. 13 tasks, not applied; depends on RF2A. |
 | 2026-11-01 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Proposed. Splits `test-utils` (`repository-contract/` by area with pinned case order; `assertions`/`adapters`/`in-memory-content-store`); converts platforms, CLI, generator and apps with packaged cases separated by file; removes every interim build prefix. `skip_specs`. 15 tasks, not applied; depends on RF2B. |
 | 2026-11-02 | RF2A | `rf02a-source-tests-pure-packages` | Archived at [`2026-11-02-rf02a-source-tests-pure-packages`](../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/); 18/18 tasks complete and the `workspace-governance` delta synchronized. Shared source aliases and configs, seven packages converted (446 listed titles / 768 expanded cases preserved), seven packaged export checks, build-free source-test task and watch scripts. Test/test-support imports excluded from boundaries and cycle graph; production and admin structure checks preserved. All seven source suites pass without any package dist; content 0.47 s. Nine legacy files use the explicit TODO(rf2) typechecking escape hatch, listed in the change verification note; eight files are strictly checked. Root typecheck, lint, build, tests (51 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. Root test wall time 328.49 s without cache; earlier cached baseline failed its toolchain gate, so no controlled root speed comparison is claimed. |
+| 2026-11-02 | RF2B | `rf02b-source-tests-application-server` | Archived at [`2026-11-02-rf02b-source-tests-application-server`](../openspec/changes/archive/2026-11-02-rf02b-source-tests-application-server/); 13/13 tasks complete, no delta specs. Five packages converted to source tests; application split into eight use-case files, server into ten route-group files with a typed shared harness. All 250 listed titles preserved (277 expanded source cases); five packaged export checks added. RF2A source aliases, build-free tests and boundary exclusions reused. 24 legacy test files retain explicit TODO(rf2) typechecking exceptions (RF2A: nine); nine test files and the harness are strictly checked. Root typecheck, lint, build, tests (56 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. All five source suites pass with every package dist temporarily absent. |
