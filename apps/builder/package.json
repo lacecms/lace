@@ -15,7 +15,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
-    "test": "vitest run src/*.test.mjs"
+    "test": "pnpm run build && vitest run src/*.test.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",

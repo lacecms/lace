@@ -26,7 +26,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
-    "test": "vitest run src/index.test.mjs src/image-container.test.mjs src/email.test.mjs src/accounts.test.mjs src/configuration-evolution.test.mjs src/configuration-migration.test.mjs src/content-authority.test.mjs src/draft-normalization.test.mjs src/configuration-visibility.test.mjs src/conditional-publication.test.mjs"
+    "test": "pnpm run build && vitest run src/index.test.mjs src/image-container.test.mjs src/email.test.mjs src/accounts.test.mjs src/configuration-evolution.test.mjs src/configuration-migration.test.mjs src/content-authority.test.mjs src/draft-normalization.test.mjs src/configuration-visibility.test.mjs src/conditional-publication.test.mjs"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",

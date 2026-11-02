@@ -28,7 +28,7 @@
     "db:generate": "drizzle-kit generate --config ../../drizzle.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
-    "test": "vitest run src/index.test.mjs"
+    "test": "pnpm run build && vitest run src/index.test.mjs"
   },
   "dependencies": {
     "@lacecms/application": "workspace:*",

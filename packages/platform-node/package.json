@@ -31,7 +31,7 @@
     "db:migrate": "pnpm run build && node dist/migrate.js",
     "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
-    "test": "vitest run src/*.test.mjs"
+    "test": "pnpm run build && vitest run src/*.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",

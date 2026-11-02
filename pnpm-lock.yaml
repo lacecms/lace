@@ -901,6 +901,9 @@ importers:
         specifier: workspace:*
         version: link:../content
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -909,7 +912,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.3(@types/node@22.20.2)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+        version: 5.0.3(@types/node@24.10.1)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/content:
     dependencies:
@@ -917,6 +920,9 @@ importers:
         specifier: 'catalog:'
         version: 1.4.2(typescript@7.0.2)
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -925,7 +931,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.3(@types/node@22.20.2)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+        version: 5.0.3(@types/node@24.10.1)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/contracts:
     dependencies:
@@ -939,6 +945,9 @@ importers:
         specifier: 'catalog:'
         version: 1.4.2(typescript@7.0.2)
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -947,7 +956,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.3(@types/node@22.20.2)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+        version: 5.0.3(@types/node@24.10.1)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/create-lace:
     devDependencies:
@@ -998,6 +1007,9 @@ importers:
         specifier: workspace:*
         version: link:../content
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -1006,7 +1018,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.3(@types/node@22.20.2)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+        version: 5.0.3(@types/node@24.10.1)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/mcp:
     dependencies:
@@ -1173,6 +1185,9 @@ importers:
       '@lacecms/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -1192,6 +1207,9 @@ importers:
         specifier: 'catalog:'
         version: 1.4.2(typescript@7.0.2)
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -1200,7 +1218,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.3(@types/node@22.20.2)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+        version: 5.0.3(@types/node@24.10.1)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.3(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/server:
     dependencies:

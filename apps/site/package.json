@@ -16,7 +16,7 @@
     "dev:container": "ASTRO_DEV_BACKGROUND=1 ASTRO_TELEMETRY_DISABLED=1 astro dev --force --host 0.0.0.0 --port 4321 --strictPort",
     "typecheck": "ASTRO_TELEMETRY_DISABLED=1 astro sync && tsc -p tsconfig.json --noEmit",
     "lint": "oxlint src",
-    "test": "vitest run"
+    "test": "pnpm run build && vitest run"
   },
   "dependencies": {
     "@lacecms/astro": "workspace:*",

@@ -278,9 +278,11 @@ Packaged-output coverage stays, as one explicit smoke test per package.
 - `turbo.json`: `test` depends on nothing; a new `test:packaged` task depends
   on `build` and `^build`; root `pnpm test` runs both. Every package gains
   `test:watch`.
-- `scripts/check-boundaries.mjs` lets `*.test.ts` and `src/test-support/`
-  files import `vitest`, `node:` builtins and `@lacecms/test-utils`; the
-  source-path ban and dependency graph still apply (spec delta in RF2A).
+- `scripts/check-boundaries.mjs` excludes `*.test.ts`, `*.test.tsx` and
+  `src/test-support/**` from import/re-export checks and the runtime cycle
+  graph. Production import rules and admin source-structure checks remain
+  unchanged; TypeScript, Oxlint and Vitest still check tests (owner decision
+  recorded in RF2A).
 - Packages not yet converted carry an interim `pnpm run build &&` prefix in
   their `test` script until their session removes it; RF2C removes the
   last ones, including the pre-existing prefixes of `packages/create-lace`
@@ -712,3 +714,4 @@ reference pages.
 | 2026-11-01 | RF2A | `rf02a-source-tests-pure-packages` | Proposed. Shared `vitest.shared.mjs` (aliases, source and packaged config builders), `.test.ts` + `tsconfig.test.json`, `*.packaged.test.mjs` under `test:packaged`, build-free `test` task, boundary exemption for test files; converts `content`, `config`, `domain`, `contracts`, `render`, `sdk`, `astro` (baseline 446 cases). Delta spec: `workspace-governance` (1 added, 1 modified). 18 tasks, not applied. |
 | 2026-11-01 | RF2B | `rf02b-source-tests-application-server` | Proposed. Converts `application`, `db`, `auth`, `server`, `mcp` (baseline 250 cases); splits `application/src/index.test.mjs` into eight use-case files and `server/src/app.test.mjs` into ten route-group files plus `src/test-support/app-harness.ts`, matching the RF4B/RF4D module layout. `skip_specs`. 13 tasks, not applied; depends on RF2A. |
 | 2026-11-01 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Proposed. Splits `test-utils` (`repository-contract/` by area with pinned case order; `assertions`/`adapters`/`in-memory-content-store`); converts platforms, CLI, generator and apps with packaged cases separated by file; removes every interim build prefix. `skip_specs`. 15 tasks, not applied; depends on RF2B. |
+| 2026-11-02 | RF2A | `rf02a-source-tests-pure-packages` | Archived at [`2026-11-02-rf02a-source-tests-pure-packages`](../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/); 18/18 tasks complete and the `workspace-governance` delta synchronized. Shared source aliases and configs, seven packages converted (446 listed titles / 768 expanded cases preserved), seven packaged export checks, build-free source-test task and watch scripts. Test/test-support imports excluded from boundaries and cycle graph; production and admin structure checks preserved. All seven source suites pass without any package dist; content 0.47 s. Nine legacy files use the explicit TODO(rf2) typechecking escape hatch, listed in the change verification note; eight files are strictly checked. Root typecheck, lint, build, tests (51 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. Root test wall time 328.49 s without cache; earlier cached baseline failed its toolchain gate, so no controlled root speed comparison is claimed. |
