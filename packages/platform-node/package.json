@@ -29,9 +29,11 @@
   "scripts": {
     "build": "node ../../scripts/platform-release-version.mjs && tsc -p tsconfig.json",
     "db:migrate": "pnpm run build && node dist/migrate.js",
-    "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "oxlint src",
-    "test": "vitest run src/*.test.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:packaged": "vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",

@@ -377,6 +377,9 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
 
   for (const member of members) {
     for (const filePath of collectFiles(member.sourceDirectory)) {
+      const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
+      // Test setup is not part of the runtime dependency graph.
+      if (testFilePattern.test(sourcePath) || sourcePath.startsWith("test-support/")) continue;
       for (const specifier of importsIn(filePath)) {
         if (specifier.startsWith(".")) {
           if (isOutside(member.sourceDirectory, filePath, specifier)) {

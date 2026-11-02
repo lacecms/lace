@@ -118,3 +118,63 @@ test.each([
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test.each(["test-imports", "test-source-path"])(
+  "excludes %s test imports from boundaries",
+  (name) => {
+    const result = spawnSync(process.execPath, [checker, join(fixtureDirectory, name)], {
+      encoding: "utf8",
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  },
+);
+
+test.each([
+  ["render", 'import "node:path";', "may not import node:path"],
+  ["astro", 'import "@lacecms/content";', "forbidden dependency"],
+  ["astro", 'import "../test-fixtures/Blocks.astro";', "cross-package source-path import"],
+  ["astro", 'export { field } from "@lacecms/content";', "forbidden dependency"],
+])("still checks production %s imports: %s", (name, source, message) => {
+  const root = mkdtempSync(join(tmpdir(), "lace-production-boundary-"));
+  try {
+    for (const member of [name, "content"]) {
+      const directory = join(root, "packages", member);
+      mkdirSync(join(directory, "src"), { recursive: true });
+      writeFileSync(
+        join(directory, "package.json"),
+        JSON.stringify({ name: `@lacecms/${member}` }),
+      );
+      writeFileSync(join(directory, "src/index.ts"), member === name ? source : "export {};\n");
+    }
+    const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(message);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("still rejects cycles in production imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "lace-cycle-boundary-"));
+  try {
+    // The permitted graph is acyclic; a production cycle necessarily has a forbidden edge.
+    for (const member of ["platform-node", "platform-cloudflare"]) {
+      const directory = join(root, "packages", member);
+      mkdirSync(join(directory, "src"), { recursive: true });
+      writeFileSync(
+        join(directory, "package.json"),
+        JSON.stringify({ name: `@lacecms/${member}` }),
+      );
+      writeFileSync(
+        join(directory, "src/index.ts"),
+        `import "@lacecms/${member === "platform-node" ? "platform-cloudflare" : "platform-node"}";`,
+      );
+    }
+    const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("forbidden dependency");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

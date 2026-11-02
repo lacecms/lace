@@ -16,9 +16,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "pnpm run build && node dist/dev.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json && tsc -p tsconfig.test.json",
     "lint": "oxlint src",
-    "test": "pnpm run build && vitest run src/*.test.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:packaged": "vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
     "@hono/node-server": "catalog:",
@@ -30,6 +32,7 @@
     "@lacecms/application": "workspace:*",
     "@lacecms/config": "workspace:*",
     "@lacecms/domain": "workspace:*",
+    "@lacecms/test-utils": "workspace:*",
     "@types/node": "catalog:",
     "miniflare": "catalog:",
     "oxlint": "catalog:",

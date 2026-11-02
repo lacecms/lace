@@ -331,7 +331,8 @@ apps/site    -> astro, render, sdk, content
 Generated starter sites and connected existing sites use the same direct
 dependencies as `apps/site`. `registry/` is engine data, not a workspace
 package: its files are copied into sites and bundled with `@lacecms/cli`, never
-imported by any package.
+imported by production package modules. Integration tests may load registry
+components directly to verify the installed sources.
 
 Rules:
 
@@ -371,7 +372,12 @@ Rules:
 - `site` depends on the public SDK, the render core and its framework adapter,
   `@lacecms/content` for block definitions, and user-owned block markup.
 
-Workspace dependency checks in CI must reject cycles and imports that violate these rules.
+Workspace dependency checks in CI must reject cycles and imports that violate
+these rules in production modules. `*.test.ts`, `*.test.tsx` and modules under
+a workspace member's `src/test-support/` are excluded from import/re-export
+boundary checks; their imports do not enter the runtime cycle graph. TypeScript,
+Oxlint and test execution still check tests. Admin source-structure checks retain
+their existing rules. Test dependencies do not widen production dependency edges.
 
 The private `apps/docs` application publishes public documentation independently
 of CMS services. It imports no Lace runtime packages and no runtime package may
@@ -3573,6 +3579,25 @@ cover static links/resources, locale/version identity, production-base search
 and changed-input main-only Pages publication. Builds require no CMS services.
 See `docs/documentation-maintenance.md` for public/internal topic ownership.
 
+### Source tests and packaged output
+
+Package `test` tasks run TypeScript tests against source without a build.
+`vitest.shared.mjs` provides source aliases for workspace package specifiers and
+subpath exports; tests use public package specifiers for other Lace packages.
+`tsconfig.test.json` includes tests and test-support modules in `typecheck`, and
+`test:watch` re-runs tests on save. Astro component tests use the source components
+through Astro's Vite configuration.
+
+Built exports are checked separately by `*.packaged.test.mjs` under
+`test:packaged`, whose Turbo task depends on the package and dependency builds.
+Each converted package pins its literal public export list; Astro also checks
+its four copied component subpaths. Root `pnpm test` runs both task kinds before
+the root governance/integration suite, which may still consume built output.
+
+All package and app `test` tasks run without build prerequisites. Process,
+packed-consumer, Worker-bundle, bundled-asset and Astro fixture-build checks
+run under `test:packaged`; `apps/site test` succeeds with no source test files.
+
 ### Unit tests
 
 Unit tests cover pure domain and application behavior:
@@ -3592,6 +3617,14 @@ The same repository behavior suite must run against:
 
 - Node SQLite;
 - local D1/Miniflare.
+
+The shared suite lives in `packages/test-utils/src/repository-contract/`: shared
+ports and seeds, builds, lifecycle, sync, media, globals/SEO, block envelopes,
+export and conditional-publication cases. Its index concatenates area cases in
+the original order, pinned by a literal case-name test. The Node harness runs
+each case on file-backed and in-memory SQLite; D1 keeps its per-case Miniflare
+isolation and timeout. Deterministic adapters, assertions and the in-memory
+content store are separate modules behind the unchanged test-utils public entry.
 
 This is more valuable than attempting to make the two Drizzle drivers look identical through an overly broad abstraction.
 

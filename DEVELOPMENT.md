@@ -235,7 +235,28 @@ lockfile change, run the explicit reset and start the stack again.
 See [verification commands, coverage and limits](docs/verification.md) and the
 [internal documentation index](docs/README.md).
 
-Focused package checks are useful while developing a surface:
+Package and app `test` commands run TypeScript source without requiring any
+package `dist/` or copied platform `admin/` bundle:
+
+```sh
+pnpm --filter @lacecms/content test
+pnpm --filter @lacecms/content test:watch
+pnpm exec turbo run test:packaged --filter @lacecms/content
+```
+
+`test:packaged` checks built public exports; invoke it through Turbo to build
+prerequisites, or run the package script directly after building. Shared Vitest
+aliases resolve public workspace imports to source only for source tests.
+`tsconfig.test.json` participates in package typechecking. Some legacy fixtures
+carry explicit `TODO(rf2)` typechecking exceptions inventoried in the RF2
+changes' verification notes.
+
+Process/executable checks, packed CLI/generator consumers, API Worker bundles,
+platform admin assets and the site fixture build run only in `test:packaged`.
+`apps/site test` has no source cases; use its `test:packaged` task for the
+fixture build. Root `pnpm test` selects both task kinds.
+
+Focused application checks are useful while developing a surface:
 
 ```sh
 pnpm --filter @lacecms/app-api test
@@ -268,7 +289,8 @@ pnpm build
 pnpm spec:validate
 ```
 
-`pnpm test` runs at most two Turborepo tasks at once and passes
+`pnpm test` runs source and packaged Turbo tasks, then the root suite. It runs
+at most two Turborepo tasks at once and passes
 `--maxWorkers=2` to each package's Vitest runner. This bounds nested parallelism
 when Node subprocess, browser DOM and local Worker tests share a CI host.
 The Worker suites retain their serial file policy. Tests that invoke several
@@ -397,7 +419,7 @@ script name. Release publication commands require an authorized prepared set.
 | `openapi:generate`               | quality       | Regenerate the OpenAPI document after REST changes.                             | `apps/api/scripts/generate-openapi.mjs`                                   |
 | `proxy:probe`                    | verification  | Probe the nginx media-upload request-size boundary.                             | `scripts/nginx-upload-probe.mjs`                                          |
 | `spec:validate`                  | quality       | Strictly validate accepted specs and active changes.                            | `openspec/`                                                               |
-| `test`                           | quality       | Run package tests followed by root repository tests.                            | `turbo.json`, `tests/`                                                    |
+| `test`                           | quality       | Run source and packaged tests, then root repository tests.                      | `turbo.json`, `tests/`                                                    |
 | `test:vps`                       | quality       | Exercise VPS build integration with disposable services.                        | `tests/vps-build.integration.mjs`                                         |
 | `typecheck`                      | quality       | Check workspace types and the root content configuration.                       | `turbo.json`, `tsconfig.project.json`                                     |
 | `typecheck:config`               | quality       | Check the root typed content configuration.                                     | `tsconfig.project.json`                                                   |

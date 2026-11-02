@@ -24,9 +24,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "oxlint src",
-    "test": "vitest run src/*.test.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:packaged": "vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
     "@hono/standard-validator": "catalog:",
@@ -44,6 +46,7 @@
     "@lacecms/content": "workspace:*",
     "@lacecms/domain": "workspace:*",
     "@lacecms/test-utils": "workspace:*",
+    "@types/node": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

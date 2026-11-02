@@ -1,0 +1,902 @@
+// @ts-nocheck
+// TODO(rf2): Type heterogeneous block maps, mutable render fixtures and invalid runtime inputs.
+import {
+  ContentValidationError,
+  builtInBlocks,
+  defineBlock,
+  field,
+  validateRichTextDocument,
+} from "@lacecms/content";
+import { expect, test } from "vitest";
+import {
+  LaceRenderError,
+  defineBlockMap,
+  describeRichText,
+  parseBlock,
+  parseBlockEnvelope,
+  prepareBlocks,
+  resolveBlock,
+} from "./index.js";
+
+const context = Object.freeze({ blockKey: "block-1", entryId: "entry-1", modelKey: "posts" });
+
+function paragraph(...content) {
+  return { content, type: "paragraph" };
+}
+
+function text(value, marks) {
+  return marks === undefined ? { text: value, type: "text" } : { marks, text: value, type: "text" };
+}
+
+function doc(...content) {
+  return { content, type: "doc" };
+}
+
+function block(type, data, overrides = {}) {
+  return { data, key: "block-1", position: 0, schemaVersion: 1, type, ...overrides };
+}
+
+function captureError(run) {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected a failure.");
+}
+
+const body = doc(paragraph(text("Hello "), text("world", [{ type: "bold" }])));
+
+test.each([
+  [
+    "hero",
+    {
+      body,
+      eyebrow: "Lace",
+      heading: "Welcome",
+      image: "hero-media",
+      primaryActionLabel: "Read",
+      primaryActionUrl: "/blog/first",
+    },
+  ],
+  ["richText", { content: body }],
+  ["image", { alt: "A lake", caption: "Morning", media: "lake-media" }],
+  ["quote", { attribution: "Ada", quote: "Make it simple." }],
+  ["cta", { actionLabel: "Start", actionUrl: "https://lace.example/docs", body, heading: "Go" }],
+])("parses the built-in %s block", (type, data) => {
+  const schemaVersion = builtInBlocks[type].version;
+  expect(parseBlock(builtInBlocks[type], block(type, data, { schemaVersion }), context)).toEqual(
+    data,
+  );
+});
+
+test("parses an image block without alt text and refuses version 1 image data", () => {
+  const data = { media: "lake-media" };
+  expect(
+    parseBlock(builtInBlocks.image, block("image", data, { schemaVersion: 4 }), context),
+  ).toEqual(data);
+  const error = captureError(() =>
+    parseBlock(
+      builtInBlocks.image,
+      block("image", { alt: "A lake", media: "lake-media" }),
+      context,
+    ),
+  );
+  expect(error.code).toBe("block_version_mismatch");
+});
+
+test("parses a user-defined block and applies defaults", () => {
+  const banner = defineBlock({
+    defaultValue: { tone: "info" },
+    fields: {
+      message: field.text({ required: true }),
+      tone: field.select({ options: ["info", "warning"] }),
+    },
+    type: "banner",
+    version: 2,
+  });
+  expect(
+    parseBlock(banner, block("banner", { message: "Hi" }, { schemaVersion: 2 }), context),
+  ).toEqual({ message: "Hi", tone: "info" });
+});
+
+test("missing required data names model, entry, block key, and field path", () => {
+  const error = captureError(() =>
+    parseBlock(builtInBlocks.hero, block("hero", { eyebrow: "No heading" }), context),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("invalid_block_data");
+  expect(error.context).toEqual(context);
+  expect(error.fieldPath).toEqual(["heading"]);
+  expect(error.cause).toBeInstanceOf(ContentValidationError);
+  for (const part of ["block-1", "posts", "entry-1", "heading"]) {
+    expect(error.message).toContain(part);
+  }
+});
+
+test("invalid nested rich text in block data reports the nested field path", () => {
+  const error = captureError(() =>
+    parseBlock(
+      builtInBlocks.richText,
+      block("richText", { content: doc(paragraph(paragraph(text("x")))) }),
+      context,
+    ),
+  );
+  expect(error.code).toBe("invalid_block_data");
+  expect(error.fieldPath[0]).toBe("content");
+});
+
+test("unsafe URLs in block data are rejected", () => {
+  const error = captureError(() =>
+    parseBlock(
+      builtInBlocks.cta,
+      block("cta", { actionLabel: "Go", actionUrl: "javascript:alert(1)", heading: "Go" }),
+      context,
+    ),
+  );
+  expect(error.code).toBe("invalid_block_data");
+  expect(error.fieldPath).toEqual(["actionUrl"]);
+});
+
+test("a block of another type fails against a definition", () => {
+  const error = captureError(() =>
+    parseBlock(builtInBlocks.hero, block("quote", { quote: "x" }), context),
+  );
+  expect(error.code).toBe("unknown_block_type");
+});
+
+test("a schema-version mismatch fails without migrating", () => {
+  const hero2 = defineBlock({ fields: builtInBlocks.hero.fields, type: "hero", version: 2 });
+  const error = captureError(() =>
+    parseBlock(hero2, block("hero", { heading: "Old" }, { schemaVersion: 1 }), context),
+  );
+  expect(error.code).toBe("block_version_mismatch");
+  expect(error.message).toContain("version 1");
+  expect(error.message).toContain("version 2");
+});
+
+test("block maps reject a key that differs from its definition type", () => {
+  expect(() =>
+    defineBlockMap({ banner: { component: "Hero", definition: builtInBlocks.hero } }),
+  ).toThrow(/banner/u);
+});
+
+test("block maps are frozen", () => {
+  const map = defineBlockMap({ hero: { component: "Hero", definition: builtInBlocks.hero } });
+  expect(Object.isFrozen(map)).toBe(true);
+  expect(Object.isFrozen(map.hero)).toBe(true);
+});
+
+test.each(["carousel", "constructor", "toString", "__proto__"])(
+  "resolving the unmapped type %s fails with block identifiers",
+  (type) => {
+    const map = defineBlockMap({ hero: { component: "Hero", definition: builtInBlocks.hero } });
+    const error = captureError(() => resolveBlock(map, block(type, {}), context));
+    expect(error.code).toBe("unknown_block_type");
+    for (const part of [type, "posts", "entry-1", "block-1"]) {
+      expect(error.message).toContain(part);
+    }
+  },
+);
+
+test("prepareBlocks returns components and props in block order", () => {
+  const map = defineBlockMap({
+    cta: { component: "Cta", definition: builtInBlocks.cta },
+    hero: { component: "Hero", definition: builtInBlocks.hero },
+    quote: { component: "Quote", definition: builtInBlocks.quote },
+  });
+  const mediaUrl = (id) => `https://media.example/${id}`;
+  const blocks = [
+    block("hero", { heading: "Top" }, { key: "a", position: 0 }),
+    block("quote", { quote: "Middle" }, { key: "b", position: 1 }),
+    block(
+      "cta",
+      { actionLabel: "Go", actionUrl: "/go", heading: "End" },
+      { key: "c", position: 2 },
+    ),
+  ];
+  const prepared = prepareBlocks(map, { blocks, id: "entry-1", modelKey: "home" }, mediaUrl);
+  expect(prepared.map((item) => item.component)).toEqual(["Hero", "Quote", "Cta"]);
+  expect(prepared[1].props).toEqual({
+    link: expect.any(Function),
+    block: blocks[1],
+    context: { blockKey: "b", entryId: "entry-1", modelKey: "home" },
+    data: { quote: "Middle" },
+    image: expect.any(Function),
+    mediaUrl,
+    settings: {},
+  });
+  expect(Object.isFrozen(prepared)).toBe(true);
+});
+
+const resolvedMedia = {
+  office: {
+    alt: "Office",
+    caption: "Our office",
+    focalPoint: { x: 0.25, y: 0.4 },
+    height: 900,
+    url: "https://public.example/api/v1/public/media/office",
+    width: 1600,
+  },
+  thirds: {
+    alt: null,
+    caption: null,
+    focalPoint: { x: 1 / 3, y: 0.66666 },
+    height: null,
+    url: "https://public.example/api/v1/public/media/thirds",
+    width: null,
+  },
+};
+
+function describedEntry(media = (id) => resolvedMedia[id]) {
+  const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
+  const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 4 })];
+  const [prepared] = prepareBlocks(
+    map,
+    { blocks, id: "entry-1", media, modelKey: "posts" },
+    (id) => `https://api.example/media/${id}`,
+  );
+  return prepared.props.image;
+}
+
+test("image descriptions carry resolved dimensions, caption, and focal position", () => {
+  const image = describedEntry();
+  expect(image("office")).toEqual({
+    alt: "Office",
+    caption: "Our office",
+    height: 900,
+    objectPosition: "25% 40%",
+    src: "https://public.example/api/v1/public/media/office",
+    width: 1600,
+  });
+  expect(image("office", "Team at work").alt).toBe("Team at work");
+  expect(image("office", " ").alt).toBe("Office");
+  expect(image("thirds")).toEqual({
+    alt: "",
+    objectPosition: "33.33% 66.67%",
+    src: "https://public.example/api/v1/public/media/thirds",
+  });
+  expect(Object.isFrozen(image("office"))).toBe(true);
+});
+
+test("image descriptions carry the media type and build source of resolved media", () => {
+  const image = describedEntry(() => ({
+    ...resolvedMedia.office,
+    mimeType: "image/jpeg",
+    sourceUrl: "http://api:8787/api/v1/public/media/office",
+  }));
+  expect(image("office")).toMatchObject({
+    mimeType: "image/jpeg",
+    sourceUrl: "http://api:8787/api/v1/public/media/office",
+    src: "https://public.example/api/v1/public/media/office",
+  });
+  const withoutSource = describedEntry(() => ({ ...resolvedMedia.office, mimeType: "image/png" }));
+  expect(withoutSource("office")).not.toHaveProperty("sourceUrl");
+  expect(withoutSource("office").mimeType).toBe("image/png");
+});
+
+test("image descriptions omit the object position without a focal point", () => {
+  const image = describedEntry(() => ({ ...resolvedMedia.office, focalPoint: null }));
+  expect(image("office")).not.toHaveProperty("objectPosition");
+});
+
+test("an unresolved media reference fails with missing_media", () => {
+  const image = describedEntry();
+  const error = captureError(() => image("gone"));
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("missing_media");
+  expect(error.message).toContain("gone");
+  expect(error.context).toEqual({ blockKey: "img", entryId: "entry-1", modelKey: "posts" });
+});
+
+test("entries without resolved media fall back to the media URL builder", () => {
+  const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
+  const [prepared] = prepareBlocks(
+    map,
+    {
+      blocks: [block("image", { media: "office" }, { schemaVersion: 4 })],
+      id: "entry-1",
+      modelKey: "posts",
+    },
+    (id) => `https://api.example/media/${id}`,
+  );
+  expect(prepared.props.image("office", "Lake")).toEqual({
+    alt: "Lake",
+    src: "https://api.example/media/office",
+  });
+  expect(prepared.props.image("office").alt).toBe("");
+  expect(prepared.props.image("office")).not.toHaveProperty("sourceUrl");
+  expect(prepared.props.image("office")).not.toHaveProperty("mimeType");
+});
+
+const banner = defineBlock({
+  fields: { message: field.text({ required: true }) },
+  settings: {
+    compact: field.boolean({ defaultValue: false }),
+    layout: field.select({ defaultValue: "wide", options: ["wide", "narrow"] }),
+  },
+  type: "banner",
+  version: 1,
+});
+const envelopeMap = defineBlockMap({
+  banner: { component: "Banner", definition: banner },
+  cta: { component: "Cta", definition: builtInBlocks.cta },
+  hero: { component: "Hero", definition: builtInBlocks.hero },
+});
+
+function prepareEnvelope(...blocks) {
+  return prepareBlocks(envelopeMap, { blocks, id: "entry-1", modelKey: "home" }, () => "");
+}
+
+test("prepareBlocks skips hidden blocks and keeps the order of the visible ones", () => {
+  const prepared = prepareEnvelope(
+    block("hero", { heading: "Top" }, { key: "a" }),
+    block("quote", { quote: "Hidden" }, { hidden: true, key: "b", position: 1 }),
+    block(
+      "cta",
+      { actionLabel: "Go", actionUrl: "/go", heading: "End" },
+      { hidden: false, key: "c", position: 2 },
+    ),
+  );
+  expect(prepared.map(({ props }) => props.block.key)).toEqual(["a", "c"]);
+});
+
+test.each([
+  ["an unknown type", block("carousel", {}, { hidden: true, key: "g" })],
+  ["an older version", block("hero", { heading: "Old" }, { hidden: true, schemaVersion: 0 })],
+  ["invalid data", block("hero", {}, { hidden: true })],
+  ["an invalid envelope", block("hero", { heading: "x" }, { anchor: "Bad", hidden: true })],
+])("a hidden block with %s never fails preparation", (_name, hidden) => {
+  expect(prepareEnvelope(hidden)).toEqual([]);
+});
+
+test("block props carry the anchor, the normalized class name and parsed settings", () => {
+  const [prepared] = prepareEnvelope(
+    block(
+      "banner",
+      { message: "Hi" },
+      { anchor: "pricing", className: "wide  dark wide", settings: { layout: "narrow" } },
+    ),
+  );
+  expect(prepared.props).toMatchObject({
+    anchor: "pricing",
+    className: "wide dark",
+    data: { message: "Hi" },
+    settings: { compact: false, layout: "narrow" },
+  });
+});
+
+test("a block without an envelope gets no anchor or class name and empty settings", () => {
+  const [prepared] = prepareEnvelope(block("hero", { heading: "Top" }));
+  expect(Object.hasOwn(prepared.props, "anchor")).toBe(false);
+  expect(Object.hasOwn(prepared.props, "className")).toBe(false);
+  expect(prepared.props.settings).toEqual({});
+});
+
+test("declared setting defaults apply to missing and empty settings", () => {
+  for (const overrides of [{}, { settings: {} }]) {
+    const [prepared] = prepareEnvelope(block("banner", { message: "Hi" }, overrides));
+    expect(prepared.props.settings).toEqual({ compact: false, layout: "wide" });
+  }
+});
+
+test.each([
+  ["an undeclared setting", { settings: { width: 3 } }, ["settings", "width"]],
+  ["an invalid setting value", { settings: { layout: "tall" } }, ["settings", "layout"]],
+  ["non-object settings", { settings: [] }, ["settings"]],
+  ["an invalid anchor", { anchor: "Pricing Table" }, ["anchor"]],
+  ["an invalid class name", { className: "<script>" }, ["className"]],
+  ["a blank class name", { className: "   " }, ["className"]],
+])("%s fails with invalid_block_envelope", (_name, overrides, fieldPath) => {
+  const error = captureError(() =>
+    prepareEnvelope(block("banner", { message: "Hi" }, { key: "b-1", ...overrides })),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("invalid_block_envelope");
+  expect(error.context).toEqual({ blockKey: "b-1", entryId: "entry-1", modelKey: "home" });
+  expect(error.fieldPath).toEqual(fieldPath);
+  expect(error.message).toContain("Cannot render block b-1 of model home entry entry-1");
+  expect(error.message).toContain(`at field ${fieldPath.join(".")}`);
+});
+
+test("an undeclared setting keeps the validation failure as its cause", () => {
+  const error = captureError(() =>
+    parseBlockEnvelope(
+      builtInBlocks.hero,
+      block("hero", {}, { settings: { tone: "dark" } }),
+      context,
+    ),
+  );
+  expect(error.cause).toBeInstanceOf(ContentValidationError);
+});
+
+test("a version mismatch is reported before an invalid envelope", () => {
+  const error = captureError(() =>
+    prepareEnvelope(block("banner", { message: "Hi" }, { anchor: "Bad", schemaVersion: 2 })),
+  );
+  expect(error.code).toBe("block_version_mismatch");
+});
+
+test("prepareBlocks fails on a block the site cannot render", () => {
+  const map = defineBlockMap({ hero: { component: "Hero", definition: builtInBlocks.hero } });
+  const error = captureError(() =>
+    prepareBlocks(
+      map,
+      { blocks: [block("carousel", {}, { key: "g" })], id: "entry-9", modelKey: "home" },
+      () => "",
+    ),
+  );
+  expect(error.code).toBe("unknown_block_type");
+  expect(error.context).toEqual({ blockKey: "g", entryId: "entry-9", modelKey: "home" });
+});
+
+test("describes every allowlisted node and mark", () => {
+  const description = describeRichText(
+    doc(
+      { attrs: { level: 2 }, content: [text("Title")], type: "heading" },
+      paragraph(
+        text("bold link", [{ type: "bold" }, { attrs: { href: "/docs" }, type: "link" }]),
+        { type: "hardBreak" },
+        text("rest", [{ type: "italic" }, { type: "strike" }, { type: "code" }]),
+      ),
+      { content: [{ content: [paragraph(text("one"))], type: "listItem" }], type: "bulletList" },
+      { content: [{ content: [paragraph(text("two"))], type: "listItem" }], type: "orderedList" },
+      { content: [paragraph(text("quoted"))], type: "blockquote" },
+    ),
+  );
+  const t = (value) => ({ kind: "text", text: value });
+  const el = (tag, source, children, attributes = {}) => ({
+    attributes,
+    children,
+    kind: "element",
+    source,
+    tag,
+  });
+  expect(description).toEqual([
+    el("h2", "heading", [t("Title")]),
+    el("p", "paragraph", [
+      el("strong", "bold", [el("a", "link", [t("bold link")], { href: "/docs" })]),
+      el("br", "hardBreak", []),
+      el("em", "italic", [el("s", "strike", [el("code", "code", [t("rest")])])]),
+    ]),
+    el("ul", "bulletList", [el("li", "listItem", [el("p", "paragraph", [t("one")])])]),
+    el("ol", "orderedList", [el("li", "listItem", [el("p", "paragraph", [t("two")])])]),
+    el("blockquote", "blockquote", [el("p", "paragraph", [t("quoted")])]),
+  ]);
+  expect(Object.isFrozen(description)).toBe(true);
+  expect(Object.isFrozen(description[0])).toBe(true);
+});
+
+test("text is carried verbatim for adapters to escape", () => {
+  expect(describeRichText(doc(paragraph(text("<script>alert(1)</script>"))))).toEqual([
+    {
+      attributes: {},
+      children: [{ kind: "text", text: "<script>alert(1)</script>" }],
+      kind: "element",
+      source: "paragraph",
+      tag: "p",
+    },
+  ]);
+});
+
+test("invalid rich text carries block context and the full field path", () => {
+  const error = captureError(() =>
+    describeRichText(
+      doc(paragraph(text("x", [{ attrs: { href: "https:example.com" }, type: "link" }]))),
+      {
+        block: context,
+        fieldPath: ["body"],
+      },
+    ),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("invalid_rich_text");
+  expect(error.context).toEqual(context);
+  expect(error.fieldPath).toEqual([
+    "body",
+    "content",
+    0,
+    "content",
+    0,
+    "marks",
+    0,
+    "attrs",
+    "href",
+  ]);
+  expect(error.cause).toBeInstanceOf(ContentValidationError);
+});
+
+const link = (href) => doc(paragraph(text("link", [{ attrs: { href }, type: "link" }])));
+
+const parityCorpus = [
+  ["empty document", doc()],
+  ["empty paragraph", doc({ type: "paragraph" })],
+  ["formatted paragraph", body],
+  [
+    "heading levels",
+    doc({ attrs: { level: 1 }, type: "heading" }, { attrs: { level: 3 }, type: "heading" }),
+  ],
+  [
+    "nested list",
+    doc({
+      content: [
+        {
+          content: [
+            paragraph(text("a")),
+            {
+              content: [{ content: [paragraph(text("b"))], type: "listItem" }],
+              type: "orderedList",
+            },
+          ],
+          type: "listItem",
+        },
+      ],
+      type: "bulletList",
+    }),
+  ],
+  ["root-relative link", link("/about")],
+  ["fragment link", link("#top")],
+  ["https link", link("https://example.com/path?q=1#x")],
+  ["http link", link("http://example.com")],
+  ["mailto link", link("mailto:ada@example.com")],
+  ["tel link", link("tel:+15550100000")],
+  ["tel link with spaces", link("tel:+1 555 010 0000")],
+  ["drift: https without slashes", link("https:example.com")],
+  ["drift: mailto without @", link("mailto:ada")],
+  ["drift: paragraph in paragraph", doc(paragraph(paragraph(text("x"))))],
+  ["protocol-relative link", link("//evil.example")],
+  ["javascript link", link("javascript:alert(1)")],
+  ["data link", link("data:text/html,<b>x</b>")],
+  ["link with whitespace", link("https://exa mple.com")],
+  [
+    "link with supported target attribute",
+    doc(paragraph(text("x", [{ attrs: { href: "/", target: "_blank" }, type: "link" }]))),
+  ],
+  ["unknown mark", doc(paragraph(text("x", [{ type: "underline" }])))],
+  ["plain code block", doc({ content: [text("x")], type: "codeBlock" })],
+  ["html node", doc({ html: "<b>x</b>", type: "html" })],
+  ["heading level 4", doc({ attrs: { level: 4 }, type: "heading" })],
+  ["text at root", doc(text("x"))],
+  ["list without items", doc({ content: [paragraph(text("x"))], type: "bulletList" })],
+  ["style attribute", doc({ attrs: { style: "color:red" }, type: "paragraph" })],
+  ["event handler attribute", doc(paragraph({ onclick: "x", text: "x", type: "text" }))],
+  ["not a document", { content: [], type: "paragraph" }],
+  ["null", null],
+  ["string", "<p>x</p>"],
+];
+
+test.each(parityCorpus)("render core and content validation agree: %s", (_name, value) => {
+  let contentAccepts = true;
+  try {
+    validateRichTextDocument(value);
+  } catch (error) {
+    if (!(error instanceof ContentValidationError)) throw error;
+    contentAccepts = false;
+  }
+  let renderAccepts = true;
+  try {
+    describeRichText(value);
+  } catch (error) {
+    if (!(error instanceof LaceRenderError)) throw error;
+    expect(error.code).toBe("invalid_rich_text");
+    renderAccepts = false;
+  }
+  expect(renderAccepts).toBe(contentAccepts);
+});
+
+test.each(["https:example.com", "mailto:ada"])("drift case %s is rejected", (href) => {
+  expect(() => describeRichText(link(href))).toThrow(LaceRenderError);
+});
+
+test("paragraph nested in a paragraph is rejected", () => {
+  expect(() => describeRichText(doc(paragraph(paragraph(text("x")))))).toThrow(LaceRenderError);
+});
+
+test("the parity corpus covers both accepted and rejected documents", () => {
+  const accepted = parityCorpus.filter(([, value]) => {
+    try {
+      validateRichTextDocument(value);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  expect(accepted.length).toBe(14);
+  expect(parityCorpus.length - accepted.length).toBe(17);
+});
+
+test("renders composite defaults and reports numeric leaf paths with context", () => {
+  const definition = defineBlock({
+    type: "nested",
+    version: 1,
+    fields: {
+      rows: field.list({
+        required: true,
+        item: field.group({
+          fields: {
+            href: field.url({ required: true }),
+            tone: field.select({ options: ["light", "dark"], defaultValue: "light" }),
+          },
+        }),
+      }),
+    },
+  });
+  expect(parseBlock(definition, block("nested", { rows: [{ href: "/" }] }), context)).toEqual({
+    rows: [{ href: "/", tone: "light" }],
+  });
+  expect(parseBlock(definition, block("nested", { rows: [] }), context)).toEqual({ rows: [] });
+  const error = captureError(() =>
+    parseBlock(definition, block("nested", { rows: [{ href: "javascript:bad" }] }), context),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.cause).toBeInstanceOf(ContentValidationError);
+  expect(error.cause.issues[0].path).toEqual(["rows", 0, "href"]);
+  expect(error.context).toMatchObject(context);
+  const oversized = captureError(() =>
+    parseBlock(definition, block("nested", { rows: Array(101).fill({ href: "/" }) }), context),
+  );
+  expect(oversized.cause.issues[0].code).toBe("list_too_long");
+});
+
+test.each([
+  [{}, { href: "/safe" }],
+  [{ rel: "nofollow" }, { href: "/safe", rel: "nofollow" }],
+  [{ target: "_blank" }, { href: "/safe", target: "_blank", rel: "noopener noreferrer" }],
+  [
+    { target: "_blank", rel: "nofollow" },
+    { href: "/safe", target: "_blank", rel: "noopener noreferrer nofollow" },
+  ],
+])("describes independent link choices %#", (attrs, expected) => {
+  const [paragraph] = describeRichText(
+    doc({
+      content: [text("Link", [{ type: "link", attrs: { href: "/safe", ...attrs } }])],
+      type: "paragraph",
+    }),
+  );
+  expect(paragraph.children[0]).toEqual({
+    attributes: expected,
+    children: [{ kind: "text", text: "Link" }],
+    kind: "element",
+    source: "link",
+    tag: "a",
+  });
+});
+
+test("describes h4, void rules and pre/code without altering code text", () => {
+  const code = "\t  <script>&\nnext\n";
+  expect(
+    describeRichText(
+      doc(
+        { attrs: { level: 4 }, content: [text("Title")], type: "heading" },
+        { type: "horizontalRule" },
+        { content: [text(code)], type: "codeBlock" },
+        { type: "codeBlock" },
+      ),
+    ),
+  ).toEqual([
+    {
+      attributes: {},
+      children: [{ kind: "text", text: "Title" }],
+      kind: "element",
+      source: "heading",
+      tag: "h4",
+    },
+    { attributes: {}, children: [], kind: "element", source: "horizontalRule", tag: "hr" },
+    {
+      attributes: {},
+      children: [
+        {
+          attributes: {},
+          children: [{ kind: "text", text: code }],
+          kind: "element",
+          source: "codeBlock",
+          tag: "code",
+        },
+      ],
+      kind: "element",
+      source: "codeBlock",
+      tag: "pre",
+    },
+    {
+      attributes: {},
+      children: [
+        { attributes: {}, children: [], kind: "element", source: "codeBlock", tag: "code" },
+      ],
+      kind: "element",
+      source: "codeBlock",
+      tag: "pre",
+    },
+  ]);
+});
+
+const expandedParityCorpus = [
+  { type: "horizontalRule" },
+  { content: [], type: "codeBlock" },
+  { content: [text("  x\n")], type: "codeBlock" },
+  { content: [{ type: "horizontalRule" }, { type: "codeBlock" }], type: "blockquote" },
+  { attrs: { language: null }, type: "codeBlock" },
+  { content: [text("x", [])], type: "codeBlock" },
+  { content: [{ type: "hardBreak" }], type: "codeBlock" },
+  { content: [], type: "horizontalRule" },
+  { attrs: { level: 5 }, type: "heading" },
+  ...[
+    { target: "_self" },
+    { target: null },
+    { target: "" },
+    { rel: null },
+    { rel: "noopener" },
+    { rel: "noreferrer" },
+    { rel: "nofollow noopener" },
+    { href: "javascript:alert(1)", target: "_blank" },
+  ].map((attrs) => paragraph(text("Link", [{ type: "link", attrs: { href: "/safe", ...attrs } }]))),
+];
+
+test.each(expandedParityCorpus)("expanded content/render acceptance and paths agree %#", (node) => {
+  const value = doc(node);
+  try {
+    validateRichTextDocument(value);
+  } catch (error) {
+    const rendered = captureError(() =>
+      describeRichText(value, { block: context, fieldPath: ["sections", 0, "body"] }),
+    );
+    expect(rendered).toMatchObject({
+      code: "invalid_rich_text",
+      context,
+      fieldPath: ["sections", 0, "body", ...error.issues[0].path],
+    });
+    expect(rendered.cause).toBeInstanceOf(ContentValidationError);
+    return;
+  }
+  expect(() => describeRichText(value)).not.toThrow();
+});
+
+test("video embed descriptions canonicalize locally and preserve contextual failures", async () => {
+  const { describeVideoEmbed } = await import("./index.js");
+  expect(describeVideoEmbed("https://youtu.be/dQw4w9WgXcQ?autoplay=1")).toEqual({
+    provider: "youtube",
+    videoId: "dQw4w9WgXcQ",
+    src: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    ambientSrc:
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&playsinline=1",
+  });
+  expect(describeVideoEmbed("https://vimeo.com/123/abc")).toEqual({
+    provider: "vimeo",
+    videoId: "123",
+    privacyHash: "abc",
+    src: "https://player.vimeo.com/video/123?h=abc",
+    ambientSrc: "https://player.vimeo.com/video/123?h=abc&background=1",
+  });
+  expect(() => describeVideoEmbed("https://example.com", context)).toThrow(LaceRenderError);
+  try {
+    describeVideoEmbed("https://example.com", context);
+  } catch (error) {
+    expect(error).toMatchObject({ code: "invalid_block_data", context, fieldPath: ["url"] });
+  }
+});
+
+test("block link props resolve manual targets, preserve required tokens and contextualize failures", async () => {
+  const { createLinkResolver } = await import("./index.js");
+  const context = { modelKey: "pages", entryId: "source", blockKey: "action" };
+  const fallback = createLinkResolver(undefined, context);
+  expect(fallback("/manual")).toEqual({ state: "resolved", href: "/manual" });
+  expect(fallback("")).toEqual({ state: "empty" });
+  expect(() => fallback("entry:target")).toThrow(
+    expect.objectContaining({ code: "missing_link_resolver", context }),
+  );
+  for (const value of ["javascript:bad", "entry:%74arget", "//evil", 42])
+    expect(() => fallback(value)).toThrow(
+      expect.objectContaining({ code: "invalid_link", context }),
+    );
+  for (const resolve of [
+    () => ({ state: "resolved", href: "entry:target", targetId: "target" }),
+    () => ({ state: "resolved", href: "javascript:evil", targetId: "target" }),
+    () => ({ state: "unavailable", targetId: "other" }),
+    () => ({ state: "unavailable", targetId: "target", href: "#" }),
+    () => ({ state: "empty" }),
+    () => null,
+    () => {
+      throw new Error("bad resolver");
+    },
+  ])
+    expect(() => createLinkResolver(resolve, context)("entry:target")).toThrow(
+      expect.objectContaining({ code: "invalid_link", context }),
+    );
+  const action = defineBlock({
+    type: "action",
+    version: 1,
+    fields: { url: field.url({ required: true }) },
+  });
+  const map = defineBlockMap({ action: { component: "Action", definition: action } });
+  const block = {
+    key: "action",
+    type: "action",
+    schemaVersion: 1,
+    position: 1000,
+    data: { url: "entry:target" },
+  };
+  const [prepared] = prepareBlocks(
+    map,
+    {
+      ...context,
+      id: "source",
+      blocks: [block],
+      link: () => ({ state: "unavailable", targetId: "target" }),
+    },
+    () => "/media",
+  );
+  expect(prepared.props.data.url).toBe("entry:target");
+  expect(prepared.props.link(prepared.props.data.url)).toEqual({
+    state: "unavailable",
+    targetId: "target",
+  });
+});
+
+const conditionalMedia = defineBlock({
+  type: "conditional-media",
+  version: 1,
+  fields: {
+    kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
+    media: field.media({ required: true }),
+    videoUrl: field.url({ required: true }),
+    caption: field.text({ defaultValue: "Video caption" }),
+    items: field.list({
+      item: field.group({
+        fields: {
+          kind: field.select({ options: ["image", "video"], required: true }),
+          media: field.media({ required: true }),
+          videoUrl: field.url({ required: true }),
+        },
+        visibility: {
+          media: { field: "kind", values: ["image"] },
+          videoUrl: { field: "kind", values: ["video"] },
+        },
+      }),
+    }),
+  },
+  visibility: {
+    media: { field: "kind", values: ["image"] },
+    videoUrl: { field: "kind", values: ["video"] },
+    caption: { field: "kind", values: ["video"] },
+  },
+});
+
+test("parsing removes hidden conditional block data, including hidden defaults", () => {
+  expect(
+    parseBlock(
+      conditionalMedia,
+      block("conditional-media", {
+        kind: "image",
+        media: "m1",
+        videoUrl: "https://example.com/stale",
+        items: [
+          { kind: "image", media: "m2", videoUrl: "https://example.com/stale" },
+          { kind: "video", media: "m3", videoUrl: "https://example.com/v" },
+        ],
+      }),
+      context,
+    ),
+  ).toEqual({
+    kind: "image",
+    media: "m1",
+    items: [
+      { kind: "image", media: "m2" },
+      { kind: "video", videoUrl: "https://example.com/v" },
+    ],
+  });
+  expect(
+    parseBlock(
+      conditionalMedia,
+      block("conditional-media", { kind: "video", videoUrl: "https://example.com/v" }),
+      context,
+    ),
+  ).toEqual({ kind: "video", videoUrl: "https://example.com/v", caption: "Video caption" });
+});
+
+test("a visible required conditional target still fails with its path", () => {
+  const error = captureError(() =>
+    parseBlock(conditionalMedia, block("conditional-media", { kind: "video" }), context),
+  );
+  expect(error).toBeInstanceOf(LaceRenderError);
+  expect(error.code).toBe("invalid_block_data");
+  expect(error.fieldPath).toEqual(["videoUrl"]);
+});

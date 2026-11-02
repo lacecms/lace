@@ -93,11 +93,11 @@ What the roadmap changes, with the numbers to beat:
 
 | Area | Measure | Baseline |
 | --- | --- | --- |
-| Test loop | package test files importing `../dist/` | 112 of 119 `.test.mjs` |
-| Test loop | `turbo.json` `test.dependsOn` | `["build", "^build"]` |
-| Test loop | packages with a `test:watch` script | 0 |
-| Size | `packages/test-utils/src/repository-contract.ts` | 9,400 lines, 103 cases in one array |
-| Size | `packages/server/src/app.test.mjs` | 3,966 lines |
+| Test loop | package test files importing `../dist/` | 112 of 119 `.test.mjs` → RF2C: 0 source tests; built checks are explicit `*.packaged.test.mjs` |
+| Test loop | `turbo.json` `test.dependsOn` | `["build", "^build"]` → RF2C: `[]` for all 22 source tasks |
+| Test loop | workspace members with a `test:watch` script | 0 → RF2C: 20 |
+| Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
+| Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities |
 | Size | `packages/contracts/src/index.ts` | 3,014 lines |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) |
@@ -132,7 +132,7 @@ What the roadmap changes, with the numbers to beat:
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
-| RF2 | Tests against source | L | RF2A → RF2B → RF2C | planned |
+| RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
@@ -262,18 +262,31 @@ Packaged-output coverage stays, as one explicit smoke test per package.
 
 **How (shared by all three sessions):**
 
-- A root `vitest.shared.mjs` exports a config that aliases every
-  `@lacecms/*` workspace package to its `src/index.ts` and transpiles with
-  Vitest. Each package's `vitest.config.mjs` extends it.
+- A root `vitest.shared.mjs` exports the workspace aliases (every
+  `@lacecms/*` package specifier and subpath export to its `src/`) and two
+  config builders: `sharedTestConfig` (source tests, `src/**/*.test.ts`)
+  and `packagedTestConfig` (`src/**/*.packaged.test.mjs`, no aliases, so
+  packaged tests resolve like a consumer). Each package's
+  `vitest.config.mjs` and `vitest.packaged.config.mjs` use them.
 - `*.test.mjs` files that import `../dist/*.js` become `*.test.ts` importing
-  `./index.js` (or the module under test), gaining type-checking.
-- Each package keeps one `packaged-exports.test.mjs` that imports `dist/` and
-  asserts the public export list, so packaging regressions still fail.
+  `./index.js` (or the module under test); a per-package
+  `tsconfig.test.json` type-checks them under `pnpm typecheck`.
+- Each package keeps one `packaged-exports.packaged.test.mjs` that imports
+  `dist/` and asserts the literal public export list; tests that need built
+  output (spawning `dist/bin.js`, Wrangler bundles, the copied admin
+  bundle, fixture builds) are renamed `*.packaged.test.mjs`.
 - `turbo.json`: `test` depends on nothing; a new `test:packaged` task depends
   on `build` and `^build`; root `pnpm test` runs both. Every package gains
   `test:watch`.
-- Remove the inner `pnpm run build &&` from the `test` scripts of
-  `packages/create-lace` and `apps/api`.
+- `scripts/check-boundaries.mjs` excludes `*.test.ts`, `*.test.tsx` and
+  `src/test-support/**` from import/re-export checks and the runtime cycle
+  graph. Production import rules and admin source-structure checks remain
+  unchanged; TypeScript, Oxlint and Vitest still check tests (owner decision
+  recorded in RF2A).
+- Packages not yet converted carry an interim `pnpm run build &&` prefix in
+  their `test` script until their session removes it; RF2C removes the
+  last ones, including the pre-existing prefixes of `packages/create-lace`
+  and `apps/api`.
 
 ### Session RF2A — Pure packages
 
@@ -294,17 +307,22 @@ use case; `packages/server/src/app.test.mjs` (3,966 lines) by route group
 (setup/session/account, users/invitations/tokens, builds, media, content,
 public, docs).
 
-### Session RF2C — Platforms, CLI and test-utils
+### Session RF2C — Platforms, CLI, generator, apps and test-utils
 
 - `packages/test-utils/src/repository-contract.ts` splits along its existing
-  seams into `repository-contract/{builds,lifecycle,sync,media,globals-seo,envelope,export,conditional}.ts`,
-  each exporting `cases`; `repository-contract/index.ts` concatenates them.
-  The Node and D1 harnesses do not change. `security-contract.ts` stays.
-- `packages/test-utils/src/index.ts` (1,785 lines) splits into
-  `factories.ts`, `fixtures.ts`, `stores.ts` and `harness.ts`.
-- `platform-node`, `platform-cloudflare` and `cli` unit tests move to source;
-  tests that exercise the packaged CLI binary or Worker bundle stay on `dist`
-  under `test:packaged`.
+  seams into `repository-contract/{shared,builds,lifecycle,sync,media,globals-seo,envelope,export,conditional}.ts`,
+  each exporting its cases; `repository-contract/index.ts` concatenates them
+  in the original order and a test pins the 103 case names. The Node and D1
+  harnesses do not change. `security-contract.ts` stays.
+- `packages/test-utils/src/index.ts` (1,785 lines) splits by concern into
+  `assertions.ts`, `adapters.ts`, `in-memory-content-store.ts` and a
+  re-exporting `index.ts`.
+- `platform-node`, `platform-cloudflare`, `cli`, `create-lace`, `apps/api`,
+  `apps/builder` and `apps/site` tests move to source; the eleven CLI
+  tests that spawn `dist/bin.js`, the three generator tests that install
+  the packed CLI, the Worker bundle/smoke tests, the admin-asset cases of
+  the Cloudflare worker test and the site fixture build stay on built
+  output under `test:packaged`.
 
 **Acceptance:** `pnpm test` total case count equals the baseline count;
 `pnpm --filter @lacecms/platform-node test` runs the contract suite from
@@ -442,6 +460,16 @@ here to remove the only forward reference), `built-in-blocks.ts` and
   `configuration-report.ts` and `configuration-apply.ts`; `decideEvolution`
   (362 lines) becomes a table keyed by `StructuralChange.kind`.
 
+RF2B test companions are already separated: `index.test.ts` covers the
+ports/brands helpers; `configuration-sync.test.ts`,
+`configuration-evolution.test.ts`, `configuration-migration.test.ts` and
+`configuration-visibility.test.ts` accompany the configuration cluster. The
+use-case companions are `accounts.test.ts`, `content-authority.test.ts`,
+`draft-normalization.test.ts`, `conditional-publication.test.ts`,
+`site-build.test.ts`, `media-use-cases.test.ts`, `collection-queries.test.ts`,
+`build-export.test.ts`, `internal-links.test.ts`, `import-tokens.test.ts`,
+`email.test.ts` and `image-container.test.ts`.
+
 **Architecture:** §15 *Infrastructure ports* is rewritten from the real
 interfaces (today it shows a `Cache.get<T>` port that does not exist).
 
@@ -463,6 +491,16 @@ each exporting `register<Area>Routes(app, context)` over a `RouteContext`
 work (media multipart and tag parsing, build export paging) move their
 parsing into `media-upload.ts` and `build-export.ts`. The MCP and OAuth
 special cases become one `protocolErrorResponse` helper.
+
+RF2B route test companions map to the future modules: `setup-session` uses
+`routes-session-settings.test.ts`; `accounts` uses `routes-accounts.test.ts`;
+`admin-users` uses `routes-users-invitations.test.ts`; `builds`, `media` and
+`content` use their corresponding `routes-*.test.ts`; `public` uses
+`routes-public-export.test.ts`; `docs` and global middleware remain in
+`app.test.ts`. MCP/OAuth and import protocol coverage live in
+`routes-mcp.test.ts` and `routes-import.test.ts`. Shared fixtures are in
+`src/test-support/app-harness.ts`; `build-site.test.ts` and `email.test.ts`
+remain alongside their existing modules.
 
 ### Session RF4E — `@lacecms/db` and remaining monoliths
 
@@ -693,3 +731,9 @@ reference pages.
 | 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Proposed. One `docs/verification.md` (commands, limits, coverage, D1 measurements, owner checks), `docs/README.md` and `docs/adr/README.md` indexes, deletion of `docs/archive/step-*`, link repair in ten documents, root link-guard test. Delta specs: `local-operations-verification`, `local-security-resilience-verification`, `cross-runtime-product-verification`, `public-documentation` (1 modified each), `workspace-governance` (1 added). 15 tasks, not applied; depends on RF1A. |
 | 2026-11-01 | RF1A | `rf01a-workspace-scripts-hygiene` | Archived at [`2026-11-01-rf01a-workspace-scripts-hygiene`](../openspec/changes/archive/2026-11-01-rf01a-workspace-scripts-hygiene/); 21/21 tasks complete and all three capability deltas synchronized. Journey modules now have behavior names; five Vitest configs became one named-project config; latest-template fixtures retained; placeholder and feedback maps removed; superseded video planning archived without syncing deltas. Script files: 52 → 47 top-level + 4 journeys; documented commands: 24/55 → 54/54; root test files: 34 → 32, cases unchanged at 225. Catalog covers all 54 root commands; script guard includes workspace build scripts reached through Turbo. |
 | 2026-11-01 | RF1B | `rf01b-docs-pruning-index` | Archived at [`2026-11-01-rf01b-docs-pruning-index`](../openspec/changes/archive/2026-11-01-rf01b-docs-pruning-index/); 15/15 tasks complete, all five capability deltas synchronized. Consolidated five verification documents, removed 35 tracked obsolete step records (the audit counted 48 files), indexed 45 documents and 18 ADRs, repaired links including archived roadmaps and the current about route. New root link guard exercises missing links and unindexed documents/ADRs in a scratch copy. Public documentation build inputs unchanged. Typecheck, lint, formatting, full tests (44 Turbo tasks; 33 root files / 228 tests), docs checks and strict validation passed; local Worker/root tests ran outside the sandbox with pinned Node 24.12.0 and pnpm 12.3.4. |
+| 2026-11-01 | RF2A | `rf02a-source-tests-pure-packages` | Proposed. Shared `vitest.shared.mjs` (aliases, source and packaged config builders), `.test.ts` + `tsconfig.test.json`, `*.packaged.test.mjs` under `test:packaged`, build-free `test` task, boundary exemption for test files; converts `content`, `config`, `domain`, `contracts`, `render`, `sdk`, `astro` (baseline 446 cases). Delta spec: `workspace-governance` (1 added, 1 modified). 18 tasks, not applied. |
+| 2026-11-01 | RF2B | `rf02b-source-tests-application-server` | Proposed. Converts `application`, `db`, `auth`, `server`, `mcp` (baseline 250 cases); splits `application/src/index.test.mjs` into eight use-case files and `server/src/app.test.mjs` into ten route-group files plus `src/test-support/app-harness.ts`, matching the RF4B/RF4D module layout. `skip_specs`. 13 tasks, not applied; depends on RF2A. |
+| 2026-11-01 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Proposed. Splits `test-utils` (`repository-contract/` by area with pinned case order; `assertions`/`adapters`/`in-memory-content-store`); converts platforms, CLI, generator and apps with packaged cases separated by file; removes every interim build prefix. `skip_specs`. 15 tasks, not applied; depends on RF2B. |
+| 2026-11-02 | RF2A | `rf02a-source-tests-pure-packages` | Archived at [`2026-11-02-rf02a-source-tests-pure-packages`](../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/); 18/18 tasks complete and the `workspace-governance` delta synchronized. Shared source aliases and configs, seven packages converted (446 listed titles / 768 expanded cases preserved), seven packaged export checks, build-free source-test task and watch scripts. Test/test-support imports excluded from boundaries and cycle graph; production and admin structure checks preserved. All seven source suites pass without any package dist; content 0.47 s. Nine legacy files use the explicit TODO(rf2) typechecking escape hatch, listed in the change verification note; eight files are strictly checked. Root typecheck, lint, build, tests (51 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. Root test wall time 328.49 s without cache; earlier cached baseline failed its toolchain gate, so no controlled root speed comparison is claimed. |
+| 2026-11-02 | RF2B | `rf02b-source-tests-application-server` | Archived at [`2026-11-02-rf02b-source-tests-application-server`](../openspec/changes/archive/2026-11-02-rf02b-source-tests-application-server/); 13/13 tasks complete, no delta specs. Five packages converted to source tests; application split into eight use-case files, server into ten route-group files with a typed shared harness. All 250 listed titles preserved (277 expanded source cases); five packaged export checks added. RF2A source aliases, build-free tests and boundary exclusions reused. 24 legacy test files retain explicit TODO(rf2) typechecking exceptions (RF2A: nine); nine test files and the harness are strictly checked. Root typecheck, lint, build, tests (56 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. All five source suites pass with every package dist temporarily absent. |
+| 2026-11-02 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Archived at [`2026-11-02-rf02c-source-tests-delivery-and-test-utils`](../openspec/changes/archive/2026-11-02-rf02c-source-tests-delivery-and-test-utils/); 15/15 tasks complete, no delta specs. Test-utils split into area contracts and assertions/adapters/store modules with unchanged public exports; all 105 measured contract registrations pinned in order (proposal baseline 103 was stale). Eight members now use source/packaged separation; source tests pass without any dist or copied admin bundle. All original titles preserved. Owner confirmed process/Astro/registry/schema cases as packaged, with Worker asset routing kept source-based. All 22 source tasks have no build dependencies; 20 members have watch scripts. RF2 retains 88 explicit legacy typing exceptions (33 earlier, 55 RF2C including the Worker helper), inventoried in the change verification note. Root build, typecheck, lint, tests (64 Turbo tasks; 33 root files / 250 cases), formatting and strict validation pass. Root test wall time 255.47 s with 25 cached tasks versus RF2A 328.49 s without cache; no controlled speed comparison is claimed. |

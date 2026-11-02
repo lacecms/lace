@@ -24,9 +24,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "oxlint src",
-    "test": "vitest run src/index.test.mjs src/image-container.test.mjs src/email.test.mjs src/accounts.test.mjs src/configuration-evolution.test.mjs src/configuration-migration.test.mjs src/content-authority.test.mjs src/draft-normalization.test.mjs src/configuration-visibility.test.mjs src/conditional-publication.test.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:packaged": "vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",
@@ -34,6 +36,7 @@
     "@lacecms/domain": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

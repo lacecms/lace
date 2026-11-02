@@ -34,7 +34,7 @@
     "openapi:generate": "node apps/api/scripts/generate-openapi.mjs",
     "proxy:probe": "node scripts/nginx-upload-probe.mjs",
     "spec:validate": "pnpm exec openspec validate --all --strict --no-interactive",
-    "test": "turbo run test --concurrency=2 -- --maxWorkers=2 && vitest run tests --maxWorkers=2 --exclude 'tests/fixtures/**' --exclude '.release-artifacts/**'",
+    "test": "turbo run test test:packaged --concurrency=2 -- --maxWorkers=2 && vitest run tests --maxWorkers=2 --exclude 'tests/fixtures/**' --exclude '.release-artifacts/**'",
     "test:vps": "node tests/vps-build.integration.mjs",
     "typecheck": "turbo run typecheck && pnpm typecheck:config",
     "typecheck:config": "tsc -p tsconfig.project.json",

@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.worker.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "include": ["src/index.ts"]
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/index.ts"],
+  "exclude": ["src/**/*.test.ts", "src/test-support/**"]
 }
