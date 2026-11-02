@@ -878,7 +878,13 @@ envelope values take no rules. A target is visible when the controller's
 present value, else its default, is listed; an absent controller without a
 default hides its targets. Each occurrence (model fields, group value, list
 item, block data) evaluates only its own values; hidden containers hide their
-subtree.
+subtree. Validation, the published projection (including block migration,
+internal links and render), configuration synchronization and the admin share
+`effectiveVisibilityValues` and `isFieldVisible` from `@lacecms/content`.
+Effective values contain only controllers of the occurrence: present values
+unless `undefined` or `null`, otherwise declared defaults, otherwise omitted.
+A cleared form controller (`null`) is unset; stored controllers never hold
+`null`. Each layer delegates default and absence handling to content.
 
 Validation normalizes unconditional fields first, then visible targets in the
 selected mode and hidden targets in draft mode, recursively: hidden fields are

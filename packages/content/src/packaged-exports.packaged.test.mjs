@@ -46,6 +46,7 @@ test("packaged entry point keeps its public exports", async () => {
     "defineBlockRegistry",
     "detachFieldMedia",
     "effectiveAltText",
+    "effectiveVisibilityValues",
     "encodeEntryLink",
     "encodeFieldPath",
     "encodeSchemaPath",

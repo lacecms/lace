@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./visibility-parity": {
+      "types": "./dist/visibility-parity.d.ts",
+      "import": "./dist/visibility-parity.js"
     }
   },
   "scripts": {

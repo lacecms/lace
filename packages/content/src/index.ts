@@ -510,10 +510,33 @@ export function normalizeFieldVisibility(
   return deepFreeze(raw) as unknown as FieldVisibility;
 }
 
+/** Effective controller values for one occurrence, without copying non-controller data. */
+export function effectiveVisibilityValues(
+  fields: ModelFieldDefinitions,
+  visibility: FieldVisibility | undefined,
+  values: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, boolean | string>> {
+  const result: Record<string, boolean | string> = {};
+  if (visibility === undefined) return result;
+  const seen = new Set<string>();
+  for (const target of Object.keys(visibility)) {
+    if (!Object.hasOwn(visibility, target)) continue;
+    const { field } = visibility[target]!;
+    if (seen.has(field)) continue;
+    seen.add(field);
+    const present = Object.hasOwn(values, field) ? values[field] : undefined;
+    const controller = Object.hasOwn(fields, field) ? fields[field] : undefined;
+    const value = present ?? controller?.defaultValue;
+    if (value !== undefined)
+      Object.defineProperty(result, field, { value: value as boolean | string, enumerable: true });
+  }
+  return result;
+}
+
 /**
- * Whether `target` applies in one normalized object occurrence: a target
- * without a rule is visible; otherwise its controller's value (present or
- * materialized default) must be listed. An absent controller matches nothing.
+ * Whether a target's rule matches effective controller values, as computed by
+ * effectiveVisibilityValues. A target without a rule is visible; an absent
+ * effective controller matches nothing.
  */
 export function isFieldVisible(
   visibility: FieldVisibility | undefined,
@@ -1972,7 +1995,11 @@ function normalizeFieldMap(
   // Controllers are unconditional, so their normalized values decide every target.
   for (const [key, definition] of Object.entries(definitions))
     if (!conditional(key)) normalize(key, definition, mode);
-  const controllers = Object.fromEntries(normalized);
+  const controllers = effectiveVisibilityValues(
+    definitions,
+    visibility,
+    Object.fromEntries(normalized),
+  );
   for (const [key, definition] of Object.entries(definitions))
     if (conditional(key))
       normalize(key, definition, isFieldVisible(visibility, key, controllers) ? mode : "draft");
@@ -2010,9 +2037,10 @@ export function publishedFieldValues(
       return value.map((item) => project(definition.item, item));
     return value;
   };
+  const effective = effectiveVisibilityValues(definitions, visibility, values);
   const output: Record<string, JsonValue> = {};
   for (const [key, value] of Object.entries(values)) {
-    if (!isFieldVisible(visibility, key, values)) continue;
+    if (!isFieldVisible(visibility, key, effective)) continue;
     const definition = Object.hasOwn(definitions, key) ? definitions[key] : undefined;
     Object.defineProperty(output, key, {
       value: definition === undefined ? value : project(definition, value),

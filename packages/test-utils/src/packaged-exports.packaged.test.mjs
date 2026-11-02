@@ -25,5 +25,11 @@ test("packaged entry point keeps its public exports", async () => {
     "readAllBuildContentPages",
     "readCompleteBuildExport",
     "securityContractCases",
+    "visibilityParityCases",
   ]);
+  const subpath = await import("@lacecms/test-utils/visibility-parity");
+  expect(Object.keys(subpath)).toEqual(["visibilityParityCases"]);
+  expect(subpath.visibilityParityCases).toEqual(
+    (await import("../dist/index.js")).visibilityParityCases,
+  );
 });

@@ -1,3 +1,4 @@
+import { visibilityParityCases } from "@lacecms/test-utils/visibility-parity";
 import { expect, test } from "vitest";
 import { field, isFieldVisible, validateFieldValue, type FieldDefinition } from "@lacecms/content";
 import { cleanValue } from "./composite-values.js";
@@ -169,4 +170,14 @@ test("the note names the controller and its values", () => {
     "Shown to fix a problem in a stored value. Applies when Has Cta is on.",
   );
   expect(hiddenFieldNote(fields, visibility, "caption")).toBeUndefined();
+});
+
+test.each(visibilityParityCases)("admin shared visibility parity: $name", (entry) => {
+  for (const occurrence of entry.occurrences) {
+    let values: unknown = entry.values;
+    for (const key of occurrence.path) values = (values as Record<string | number, unknown>)[key];
+    expect([...shownFieldKeys(occurrence.fields, occurrence.visibility, values)]).toEqual(
+      occurrence.visibleKeys,
+    );
+  }
 });

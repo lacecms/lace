@@ -14,6 +14,7 @@ import {
   defineBlock,
   defineBlockRegistry,
   field,
+  effectiveVisibilityValues,
   isFieldVisible,
   normalizeFieldDefinition,
   normalizeFieldVisibility,
@@ -560,5 +561,73 @@ describe("public documentation example", () => {
         { kind: "video", videoUrl: "https://vimeo.com/2", videoTitle: "Clip" },
       ],
     });
+  });
+});
+
+describe("effective visibility values", () => {
+  it.each([
+    ["omitted", {}, { kind: "image" }],
+    ["present", { kind: "video" }, { kind: "video" }],
+    ["cleared", { kind: null }, { kind: "image" }],
+    ["undefined", { kind: undefined }, { kind: "image" }],
+  ])("uses a defaulted select: %s", (_name, values, expected) => {
+    const input = Object.freeze({ ...values, caption: "unrelated" });
+    expect(effectiveVisibilityValues(itemFields(), itemRules(), input)).toEqual(expected);
+    expect(input.caption).toBe("unrelated");
+  });
+
+  it("omits optional absent controllers and preserves false", () => {
+    const fields = { flag: field.boolean(), layout: field.select({ options: ["grid"] }) };
+    const rules = {
+      a: { field: "flag", values: [false] },
+      b: { field: "layout", values: ["grid"] },
+    };
+    expect(effectiveVisibilityValues(fields, rules, {})).toEqual({});
+    expect(effectiveVisibilityValues(fields, rules, { flag: false })).toEqual({ flag: false });
+    expect(effectiveVisibilityValues(fields, rules, { flag: null, layout: null })).toEqual({});
+  });
+
+  it("reads a shared controller once and handles no rules", () => {
+    let reads = 0;
+    const values = {
+      get kind() {
+        reads++;
+        return "video";
+      },
+    };
+    expect(effectiveVisibilityValues(itemFields(), itemRules(), values)).toEqual({ kind: "video" });
+    expect(reads).toBe(1);
+    expect(effectiveVisibilityValues(itemFields(), undefined, values)).toEqual({});
+    expect(effectiveVisibilityValues(itemFields(), {}, values)).toEqual({});
+    expect(reads).toBe(1);
+    let missingReads = 0;
+    const unset = {
+      get kind() {
+        missingReads++;
+        return undefined;
+      },
+    };
+    expect(effectiveVisibilityValues({}, itemRules(), unset)).toEqual({});
+    expect(missingReads).toBe(1);
+  });
+
+  it("ignores inherited rules, values and field definitions", () => {
+    const values = Object.create({ kind: "video" }) as Record<string, unknown>;
+    expect(effectiveVisibilityValues(itemFields(), itemRules(), values)).toEqual({ kind: "image" });
+    const rules = Object.create(itemRules()) as ReturnType<typeof itemRules>;
+    expect(effectiveVisibilityValues(itemFields(), rules, {})).toEqual({});
+    const fields = Object.create(itemFields()) as ReturnType<typeof itemFields>;
+    expect(effectiveVisibilityValues(fields, itemRules(), {})).toEqual({});
+  });
+
+  it("projects a group without a defaulted controller and retains key order", () => {
+    const values = { group: { caption: "first", videoUrl: "https://vimeo.com/1", media: MEDIA } };
+    const projected = publishedFieldValues(
+      { group: field.group({ fields: itemFields(), visibility: itemRules() }) },
+      values,
+    );
+    expect(projected).toEqual({ group: { caption: "first", media: MEDIA } });
+    expect(Object.keys(projected.group!)).toEqual(["caption", "media"]);
+    expect(values.group).toHaveProperty("videoUrl");
   });
 });

@@ -4,6 +4,8 @@ import {
   collectFieldMedia,
   encodeFieldPath,
   encodeSchemaPath,
+  effectiveVisibilityValues,
+  isFieldVisible,
   parseSchemaPath,
   schemaFieldAt,
   validateFieldValue,
@@ -85,11 +87,9 @@ function visibleUnder(
   parent: MutableObject,
 ): boolean {
   if (rule === undefined) return true;
-  const controller: FieldDefinition | undefined = Object.hasOwn(fields, rule.field)
-    ? fields[rule.field]
-    : undefined;
-  const value = Object.hasOwn(parent, rule.field) ? parent[rule.field] : controller?.defaultValue;
-  return value !== undefined && rule.values.includes(value as boolean | string);
+  // A local target also accommodates the before/after rules of a sync change.
+  const rules = { target: rule };
+  return isFieldVisible(rules, "target", effectiveVisibilityValues(fields, rules, parent));
 }
 
 function ruleFor(

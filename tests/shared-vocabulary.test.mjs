@@ -4,6 +4,8 @@ import { expect, test } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
 const names = [
+  "effectiveVisibilityValues",
+  "isFieldVisible",
   "SLUG_PATTERN",
   "MAX_SLUG_LENGTH",
   "ContentModelKind",
@@ -51,6 +53,16 @@ function violations(source, file) {
     found.push(`${file}:${source.slice(0, match.index).split("\n").length}: duplicate ${match[1]}`);
   const lines = source.split("\n");
   for (let i = 0; i < lines.length; i++) {
+    if (
+      /\brule\.values\.includes\s*\(/u.test(lines[i]) &&
+      !(
+        file ===
+          "apps/admin/src/widgets/block-editor/BlockSettingsFields/BlockSettingsFields.tsx" &&
+        lines[i].trim() === 'return typeof value === "string" && rule.values.includes(value);'
+      )
+    )
+      found.push(`${file}:${i + 1}: inline field visibility match`);
+    // BlockSettingsFields evaluates settingsVisibility: a distinct presentation-only rule.
     if (!lines[i].includes(grammar)) continue;
     const prefix = lines.slice(0, i + 1).join("\n");
     const owner = [...prefix.matchAll(/^(?:export )?const \w+/gmu)].at(-1)?.[0];
@@ -92,6 +104,9 @@ test("shared identifiers, route vocabulary, limits and helpers have one portable
 });
 
 test.each([
+  ["inline-visibility.ts", "inline field visibility match"],
+  ["duplicate-visibility.ts", "duplicate effectiveVisibilityValues"],
+  ["duplicate-field-visible.ts", "duplicate isFieldVisible"],
   ["duplicate-slug.ts", "duplicate SLUG_PATTERN"],
   ["duplicate-limit.ts", "duplicate MAX_MEDIA_USAGE_ENTRIES"],
   ["inline-regex.ts", "inline slug grammar"],
