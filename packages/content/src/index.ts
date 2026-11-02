@@ -32,6 +32,180 @@ export type FieldType =
   | "textarea"
   | "url";
 
+/** Portable facts shared by configuration, queries, transport and admin support. */
+export type FieldSortFamily = "string" | "number" | "boolean" | "date" | "datetime";
+export type FieldFilterKind = "text" | "select" | "number" | "boolean" | "date" | "datetime";
+export type FieldValueKind = "string" | "number" | "boolean" | "object" | "array";
+export type FieldTypeCapability = {
+  readonly searchable: boolean;
+  readonly seoText: boolean;
+  readonly itemLabel: boolean;
+  readonly placeholder: boolean;
+  readonly valueKind: FieldValueKind;
+} & (
+  | {
+      readonly listQueryable: true;
+      readonly sortableAs: FieldSortFamily;
+      readonly filterKind: FieldFilterKind;
+    }
+  | { readonly listQueryable: false; readonly sortableAs?: never; readonly filterKind?: never }
+);
+
+const declaredFieldTypeCapabilities = deepFreeze({
+  text: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "text",
+    searchable: true,
+    seoText: true,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  textarea: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "text",
+    searchable: true,
+    seoText: true,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  richText: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: true,
+    valueKind: "object",
+  },
+  number: {
+    listQueryable: true,
+    sortableAs: "number",
+    filterKind: "number",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: true,
+    valueKind: "number",
+  },
+  boolean: {
+    listQueryable: true,
+    sortableAs: "boolean",
+    filterKind: "boolean",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "boolean",
+  },
+  date: {
+    listQueryable: true,
+    sortableAs: "date",
+    filterKind: "date",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  datetime: {
+    listQueryable: true,
+    sortableAs: "datetime",
+    filterKind: "datetime",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  select: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "select",
+    searchable: false,
+    seoText: false,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  url: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "text",
+    searchable: false,
+    seoText: false,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  media: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  group: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "object",
+  },
+  list: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "array",
+  },
+} as const satisfies { readonly [Type in FieldType]: FieldTypeCapability });
+
+// Keep the public lookup total even while a newly introduced kind is missing
+// its declaration: the resulting diagnostics belong at this source of truth.
+export const fieldTypeCapabilities: typeof declaredFieldTypeCapabilities &
+  Readonly<Record<FieldType, FieldTypeCapability>> = declaredFieldTypeCapabilities;
+
+export const FIELD_FILTER_OPERATIONS = deepFreeze({
+  text: ["contains", "eq"],
+  select: ["in"],
+  number: ["eq", "range"],
+  boolean: ["eq"],
+  date: ["range"],
+  datetime: ["range"],
+} as const satisfies Record<FieldFilterKind, readonly string[]>);
+
+type DeclaredFieldType = keyof typeof declaredFieldTypeCapabilities;
+type TypesWhere<
+  Key extends keyof (typeof declaredFieldTypeCapabilities)[DeclaredFieldType],
+  Value,
+> = {
+  [Type in DeclaredFieldType]: (typeof declaredFieldTypeCapabilities)[Type][Key] extends Value
+    ? Type
+    : never;
+}[DeclaredFieldType];
+export type ListQueryableFieldType = TypesWhere<"listQueryable", true>;
+export type SearchableFieldType = TypesWhere<"searchable", true>;
+export type SeoTextFieldType = TypesWhere<"seoText", true>;
+export type ItemLabelFieldType = TypesWhere<"itemLabel", true>;
+export type PlaceholderFieldType = TypesWhere<"placeholder", true>;
+
+/** Field kinds with a boolean capability, in stable declaration order. */
+export function fieldTypesWith<
+  Key extends "listQueryable" | "searchable" | "seoText" | "itemLabel" | "placeholder",
+>(capability: Key): readonly TypesWhere<Key, true>[] {
+  return Object.freeze(
+    (Object.keys(fieldTypeCapabilities) as FieldType[]).filter(
+      (type) => fieldTypeCapabilities[type][capability],
+    ),
+  ) as TypesWhere<Key, true>[];
+}
+
 /** Options common to every field builder. */
 export interface CommonFieldOptions<Value> {
   readonly defaultValue?: Value;
@@ -679,7 +853,13 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
   definition.required = readOptionalBoolean(options, "required") ?? false;
 }
 
-function assertAllowedOptions(options: MutableJsonObject, allowed: readonly string[]): void {
+function assertAllowedOptions(
+  options: MutableJsonObject,
+  allowed: readonly string[],
+  type?: FieldType,
+): void {
+  if (type !== undefined && fieldTypeCapabilities[type].placeholder)
+    allowed = [...allowed, "placeholder"];
   for (const key of Object.keys(options)) {
     // Every field kind accepts the temporary `renamedFrom` hint.
     if (!allowed.includes(key) && key !== "renamedFrom") {
@@ -706,20 +886,19 @@ function addDefault(
   definition.defaultValue = value;
 }
 
-function buildStringField<Type extends "text" | "textarea", Options extends StringFieldOptions>(
+function buildStringField<
+  Type extends TextFieldDefinition["type"] | TextareaFieldDefinition["type"],
+  Options extends StringFieldOptions,
+>(
   type: Type,
   input: Options | undefined,
 ): Type extends "text" ? TextFieldDefinition<Options> : TextareaFieldDefinition<Options> {
   const options = normalizeOptions(input ?? {});
-  assertAllowedOptions(options, [
-    "defaultValue",
-    "description",
-    "label",
-    "maxLength",
-    "minLength",
-    "placeholder",
-    "required",
-  ]);
+  assertAllowedOptions(
+    options,
+    ["defaultValue", "description", "label", "maxLength", "minLength", "required"],
+    type,
+  );
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
 
@@ -752,17 +931,25 @@ function buildStringField<Type extends "text" | "textarea", Options extends Stri
 }
 
 function buildStringValueField<
-  Type extends "date" | "datetime" | "media" | "url",
+  Type extends
+    | DateFieldDefinition["type"]
+    | DatetimeFieldDefinition["type"]
+    | MediaFieldDefinition["type"]
+    | UrlFieldDefinition["type"],
   Options extends StringValueFieldOptions,
 >(type: Type, input: Options | undefined): FieldDefinition {
   const options = normalizeOptions(input ?? {});
-  assertAllowedOptions(options, [
-    "defaultValue",
-    "description",
-    "label",
-    "required",
-    ...(type === "url" ? ["placeholder", "embedProviders"] : []),
-  ]);
+  assertAllowedOptions(
+    options,
+    [
+      "defaultValue",
+      "description",
+      "label",
+      "required",
+      ...(type === "url" ? ["embedProviders"] : []),
+    ],
+    type,
+  );
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
   if (type === "url" && options.embedProviders !== undefined) {
@@ -865,13 +1052,11 @@ export const field = {
     options?: Options,
   ): RichTextFieldDefinition<Options> {
     const normalized = normalizeOptions(options ?? {});
-    assertAllowedOptions(normalized, [
-      "defaultValue",
-      "description",
-      "label",
-      "required",
-      "placeholder",
-    ]);
+    assertAllowedOptions(
+      normalized,
+      ["defaultValue", "description", "label", "required"],
+      "richText",
+    );
     const definition: Record<string, unknown> = { type: "richText" };
     addCommonOptions(definition, normalized);
     addDefault(
@@ -888,15 +1073,11 @@ export const field = {
     options?: Options,
   ): NumberFieldDefinition<Options> {
     const normalized = normalizeOptions(options ?? {});
-    assertAllowedOptions(normalized, [
-      "defaultValue",
-      "description",
-      "label",
-      "placeholder",
-      "max",
-      "min",
-      "required",
-    ]);
+    assertAllowedOptions(
+      normalized,
+      ["defaultValue", "description", "label", "max", "min", "required"],
+      "number",
+    );
     const definition: Record<string, unknown> = { type: "number" };
     addCommonOptions(definition, normalized);
     const min = readOptionalFiniteNumber(normalized, "min", false);
@@ -958,15 +1139,11 @@ export const field = {
     options: Options & SelectFieldOptions<Options["options"]>,
   ): SelectFieldDefinition<Options["options"], Options & SelectFieldOptions<Options["options"]>> {
     const normalized = normalizeOptions(options);
-    assertAllowedOptions(normalized, [
-      "defaultValue",
-      "description",
-      "label",
-      "options",
-      "presentation",
-      "placeholder",
-      "required",
-    ]);
+    assertAllowedOptions(
+      normalized,
+      ["defaultValue", "description", "label", "options", "presentation", "required"],
+      "select",
+    );
     const rawChoices = normalized.options;
     if (!Array.isArray(rawChoices) || rawChoices.length === 0) {
       fail("options.options", "must be a non-empty array of strings.");
@@ -1122,7 +1299,10 @@ function descriptorRecord(value: unknown, path: string): Record<string, unknown>
   return output;
 }
 
-function normalizeCompositeOptions(type: "group" | "list", value: unknown): FieldDefinition {
+function normalizeCompositeOptions(
+  type: GroupFieldDefinition["type"] | ListFieldDefinition["type"],
+  value: unknown,
+): FieldDefinition {
   const options = descriptorRecord(value, "options");
   if (Object.hasOwn(options, "type")) fail("options.type", "is not supported.");
   return normalizeFieldDefinition({ ...options, type });
@@ -1235,7 +1415,7 @@ function normalizeDescriptor(
           !FIELD_KEY_PATTERN.test(key) ||
           itemDefinition.type !== "group" ||
           !Object.hasOwn(itemDefinition.fields, key) ||
-          !["text", "textarea", "select", "url"].includes(itemDefinition.fields[key]!.type)
+          !fieldTypeCapabilities[itemDefinition.fields[key]!.type].itemLabel
         )
           fail(
             `${path}.itemLabel`,

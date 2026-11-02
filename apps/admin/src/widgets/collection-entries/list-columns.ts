@@ -1,5 +1,5 @@
 import type { ContentEntrySortDto, ContentModelDto, FieldMetadataMapDto } from "@lacecms/contracts";
-import { formatAbsoluteTime, formatDate } from "../../shared/lib/index.js";
+import { fieldTypeSupport } from "../../entities/content/index.js";
 
 type FieldMetadata = FieldMetadataMapDto[string];
 
@@ -30,22 +30,12 @@ export function listFieldColumns(model: ContentModelDto): readonly ListFieldColu
   });
 }
 
-const numberFormat = new Intl.NumberFormat("en");
-
 /** Formats a list value by its field type; missing or mismatched values become a dash. */
 export function formatListValue(field: FieldMetadata, value: unknown): string {
-  switch (field.type) {
-    case "boolean":
-      return typeof value === "boolean" ? (value ? "Yes" : "No") : "—";
-    case "number":
-      return typeof value === "number" && Number.isFinite(value) ? numberFormat.format(value) : "—";
-    case "date":
-      return (typeof value === "string" && formatDate(value)) || "—";
-    case "datetime":
-      return (typeof value === "string" && formatAbsoluteTime(value)) || "—";
-    default:
-      return typeof value === "string" && value.length > 0 ? value : "—";
-  }
+  return (
+    fieldTypeSupport[field.type].listCell?.(value) ??
+    (typeof value === "string" && value.length > 0 ? value : "—")
+  );
 }
 
 export type SortableColumn = "publishedAt" | "title" | "updatedAt" | `field:${string}`;

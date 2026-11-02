@@ -1,3 +1,5 @@
+import { fieldTypeCapabilities, FIELD_FILTER_OPERATIONS } from "@lacecms/content";
+import type { FieldType } from "@lacecms/content";
 import {
   canonicalCollectionFilters,
   collectionFieldFilterSchema,
@@ -10,6 +12,14 @@ import {
   type ListQueryLimits,
 } from "@lacecms/contracts";
 import * as v from "valibot";
+
+/** Shared order for filter controls and server operator validation. */
+export function fieldFilterOperations(type: FieldType): readonly string[] {
+  const capability = fieldTypeCapabilities[type];
+  return capability.listQueryable
+    ? [...FIELD_FILTER_OPERATIONS[capability.filterKind], "isSet", "isNotSet"]
+    : [];
+}
 
 export interface CollectionListSearch {
   readonly q?: string | undefined;
@@ -30,6 +40,10 @@ export function collectionFilterProblem(
   const field = model.fields[filter.field];
   if (!field || !model.listOptions?.filterableFields?.includes(filter.field))
     return "This field is no longer filterable.";
+  const capability = fieldTypeCapabilities[field.type];
+  if (!capability.listQueryable || !fieldFilterOperations(field.type).includes(filter.op))
+    return "Choose an operation supported by this field.";
+  const kind = capability.filterKind;
   if (filter.op === "isSet" || filter.op === "isNotSet") return undefined;
   if (
     filter.op === "in" &&
@@ -38,27 +52,19 @@ export function collectionFilterProblem(
   )
     return undefined;
   if (filter.op === "eq") {
-    if (field.type === "boolean" && typeof filter.value === "boolean") return undefined;
-    if (field.type === "number" && typeof filter.value === "number") return undefined;
-    if (["text", "textarea", "url"].includes(field.type) && typeof filter.value === "string")
-      return undefined;
+    if (kind === "boolean" && typeof filter.value === "boolean") return undefined;
+    if (kind === "number" && typeof filter.value === "number") return undefined;
+    if (kind === "text" && typeof filter.value === "string") return undefined;
   }
-  if (filter.op === "contains" && ["text", "textarea", "url"].includes(field.type)) {
+  if (filter.op === "contains" && kind === "text") {
     if (fitsListQueryLimits(filter.value, limits)) return undefined;
     return listQueryBudgetHint(limits);
   }
   if (filter.op === "range") {
-    if (field.type === "number" && ("min" in filter || "max" in filter)) return undefined;
-    if (
-      (field.type === "date" || field.type === "datetime") &&
-      ("from" in filter || "to" in filter)
-    ) {
+    if (kind === "number" && ("min" in filter || "max" in filter)) return undefined;
+    if ((kind === "date" || kind === "datetime") && ("from" in filter || "to" in filter)) {
       const endpoints = [filter.from, filter.to].filter((value) => value !== undefined);
-      if (
-        endpoints.every((value) =>
-          field.type === "date" ? value.length === 10 : value.length > 10,
-        )
-      )
+      if (endpoints.every((value) => (kind === "date" ? value.length === 10 : value.length > 10)))
         return undefined;
     }
   }

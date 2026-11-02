@@ -10,6 +10,7 @@ import type { CollectionListOptionsSource } from "./collection-queries.js";
 export * from "./collection-queries.js";
 import {
   canonicalizeJson,
+  fieldTypeCapabilities,
   ContentValidationError,
   defineBlock,
   normalizeFieldDefinition,
@@ -390,9 +391,7 @@ function hasValidListFields<
     value.listFields.every(
       (key) =>
         Object.hasOwn(value.fields, key) &&
-        ["text", "textarea", "number", "boolean", "select", "date", "datetime", "url"].includes(
-          value.fields[key]!.type,
-        ),
+        fieldTypeCapabilities[value.fields[key]!.type].listQueryable,
     )
   );
 }
@@ -978,10 +977,9 @@ export const contentModelSchema = v.pipe(
             keys.every(
               (key) =>
                 Object.hasOwn(model.fields, key) &&
-                (operation === "searchableFields"
-                  ? ["text", "textarea"]
-                  : ["text", "textarea", "number", "boolean", "select", "date", "datetime", "url"]
-                ).includes(model.fields[key]!.type),
+                fieldTypeCapabilities[model.fields[key]!.type][
+                  operation === "searchableFields" ? "searchable" : "listQueryable"
+                ],
             ),
         )),
     "List options must name supported collection fields.",

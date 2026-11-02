@@ -1,5 +1,6 @@
 import {
   defineBlockRegistry,
+  fieldTypeCapabilities,
   normalizeFieldVisibility,
   normalizeFormLayout,
   parseSchemaPath,
@@ -12,6 +13,9 @@ import {
   toFieldMetadata,
 } from "@lacecms/content";
 import type {
+  ListQueryableFieldType,
+  SearchableFieldType,
+  SeoTextFieldType,
   BlockDefinition,
   BlockMetadata,
   BlockRegistry,
@@ -31,24 +35,6 @@ const STABLE_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 const BLOCK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-
-/** Field types whose values are plain JSON scalars suitable for list columns. */
-export const LIST_FIELD_TYPES: ReadonlySet<FieldDefinition["type"]> = new Set([
-  "boolean",
-  "date",
-  "datetime",
-  "number",
-  "select",
-  "text",
-  "textarea",
-  "url",
-]);
-
-/** Field types that may supply SEO text: site names, title templates and descriptions. */
-export const SEO_TEXT_FIELD_TYPES: ReadonlySet<FieldDefinition["type"]> = new Set([
-  "text",
-  "textarea",
-]);
 
 /** Thrown when `lace.config.ts` contains an invalid or ambiguous definition. */
 export class ConfigurationError extends Error {
@@ -111,7 +97,7 @@ interface CommonModelInput<Fields extends FieldMap> {
 /** Fallback fields of the same model for SEO values the editor leaves unset. */
 export interface ModelSeoInput<Fields extends FieldMap = FieldMap> {
   /** A `text` or `textarea` field used when the SEO description is unset. */
-  readonly description?: keyof Fields & string;
+  readonly description?: ListQueryFieldKey<Fields, SeoTextFieldType>;
   /** A `media` field used when the SEO image is unset. */
   readonly image?: keyof Fields & string;
 }
@@ -137,15 +123,9 @@ export type ListQueryFieldKey<Fields extends FieldMap, Types extends FieldDefini
 
 /** Independent admin query capabilities; visibility grants no capability. */
 export interface CollectionListOptions<Fields extends FieldMap = FieldMap> {
-  readonly sortableFields?: readonly ListQueryFieldKey<
-    Fields,
-    "text" | "textarea" | "url" | "select" | "number" | "boolean" | "date" | "datetime"
-  >[];
-  readonly filterableFields?: readonly ListQueryFieldKey<
-    Fields,
-    "text" | "textarea" | "url" | "select" | "number" | "boolean" | "date" | "datetime"
-  >[];
-  readonly searchableFields?: readonly ListQueryFieldKey<Fields, "text" | "textarea">[];
+  readonly sortableFields?: readonly ListQueryFieldKey<Fields, ListQueryableFieldType>[];
+  readonly filterableFields?: readonly ListQueryFieldKey<Fields, ListQueryableFieldType>[];
+  readonly searchableFields?: readonly ListQueryFieldKey<Fields, SearchableFieldType>[];
 }
 
 /** Input accepted by `defineCollection`. */
@@ -160,10 +140,10 @@ export interface CollectionModelInput<
 
 /** Fields of the declaring global that supply site-wide SEO defaults. */
 export interface SeoDefaultsInput<Fields extends FieldMap = FieldMap> {
-  readonly description?: keyof Fields & string;
+  readonly description?: ListQueryFieldKey<Fields, SeoTextFieldType>;
   readonly image?: keyof Fields & string;
-  readonly siteName: keyof Fields & string;
-  readonly titleTemplate?: keyof Fields & string;
+  readonly siteName: ListQueryFieldKey<Fields, SeoTextFieldType>;
+  readonly titleTemplate?: ListQueryFieldKey<Fields, SeoTextFieldType>;
 }
 
 /** Input accepted by `defineGlobal`; a global has no path, route, or list fields. */
@@ -639,7 +619,9 @@ function seoFieldReference(
   if (definition === undefined) {
     fail(`model "${modelKey}" ${option} references undeclared field "${key}".`);
   }
-  const allowed = media ? definition.type === "media" : SEO_TEXT_FIELD_TYPES.has(definition.type);
+  const allowed = media
+    ? definition.type === "media"
+    : fieldTypeCapabilities[definition.type].seoText;
   if (!allowed) {
     fail(
       `model "${modelKey}" ${option} field "${key}" must be ${media ? "a media field" : "a text or textarea field"}, not ${definition.type}.`,
@@ -823,7 +805,7 @@ function normalizeListFields(value: unknown, fields: FieldMap): readonly string[
     if (definition === undefined) {
       fail(`listFields references undeclared field "${key}".`);
     }
-    if (!LIST_FIELD_TYPES.has(definition.type)) {
+    if (!fieldTypeCapabilities[definition.type].listQueryable) {
       fail(`listFields field "${key}" must be a scalar field, not ${definition.type}.`);
     }
     seen.add(key);
@@ -853,7 +835,7 @@ function normalizeListOptions(value: unknown, fields: FieldMap): CollectionListO
     const normalized = normalizeListFields(targets, fields);
     if (
       operation === "searchableFields" &&
-      normalized.some((key) => !SEO_TEXT_FIELD_TYPES.has(fields[key]!.type))
+      normalized.some((key) => !fieldTypeCapabilities[fields[key]!.type].searchable)
     ) {
       fail("listOptions.searchableFields requires text or textarea fields.");
     }

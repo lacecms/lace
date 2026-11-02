@@ -4,7 +4,7 @@ import type {
   ContentEntryListPage,
   ListContentEntriesInput,
 } from "@lacecms/application";
-import { sha256CanonicalJson } from "@lacecms/content";
+import { fieldTypeCapabilities, sha256CanonicalJson } from "@lacecms/content";
 import { opaqueCursor } from "@lacecms/application";
 import {
   assertPageSize,
@@ -49,7 +49,7 @@ const invalidCursor = (): never => {
 };
 const id = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 255;
-const strings = new Set(["text", "textarea", "select", "url"]);
+const sortFamily = (field: CollectionQueryField) => fieldTypeCapabilities[field.type].sortableAs;
 class Bindings {
   public readonly params: Parameter[] = [];
   private readonly paths = new Map<string, string>();
@@ -70,14 +70,14 @@ function scalar(field: CollectionQueryField, bind: Bindings): { value: string; p
   const path = bind.path(field.key),
     raw = `json_extract(d.fields_json, ${path})`,
     type = `json_type(d.fields_json, ${path})`;
-  if (field.type === "number")
+  if (sortFamily(field) === "number")
     return {
       value: raw,
       present: `coalesce(${type} in ('integer','real') and abs(${raw}) <= 1.7976931348623157e308,0)`,
     };
-  if (field.type === "boolean")
+  if (sortFamily(field) === "boolean")
     return { value: raw, present: `coalesce(${type} in ('true','false'),0)` };
-  if (field.type === "datetime") {
+  if (sortFamily(field) === "datetime") {
     const value = `cast(round((julianday(${raw})-2440587.5)*86400000) as integer)`;
     return { value, present: `coalesce(${type}='text' and ${raw}<>'' and ${value} is not null,0)` };
   }
@@ -125,7 +125,7 @@ function predicates(input: ListContentEntriesInput, bind: Bindings): string {
         const lower = filter.min ?? filter.from,
           upper = filter.max ?? filter.to;
         const operand = (value: number | string): Parameter =>
-          field.type === "datetime" ? Date.parse(value as string) : value;
+          sortFamily(field) === "datetime" ? Date.parse(value as string) : value;
         if (lower !== undefined) conditions.push(`${target.value} >= ${bind.add(operand(lower))}`);
         if (upper !== undefined) conditions.push(`${target.value} <= ${bind.add(operand(upper))}`);
       }
@@ -152,15 +152,16 @@ function decodeFieldCursor(
       (cursor.rank !== 0 && cursor.rank !== 1)
     )
       return invalidCursor();
-    const allowed = strings.has(field.type)
-      ? ["version", "kind", "type", "id", "rank", "snapshot", "revision", "boundary"]
-      : ["version", "kind", "type", "id", "rank", "value"];
+    const allowed =
+      sortFamily(field) === "string"
+        ? ["version", "kind", "type", "id", "rank", "snapshot", "revision", "boundary"]
+        : ["version", "kind", "type", "id", "rank", "value"];
     if (
       Object.keys(cursor).length !== allowed.length ||
       Object.keys(cursor).some((key) => !allowed.includes(key))
     )
       return invalidCursor();
-    if (strings.has(field.type)) {
+    if (sortFamily(field) === "string") {
       if (
         cursor.boundary !== "string-anchor" ||
         !id(cursor.snapshot) ||
@@ -170,7 +171,7 @@ function decodeFieldCursor(
         return invalidCursor();
     } else if (cursor.rank === 1) {
       if (cursor.value !== null) return invalidCursor();
-    } else if (field.type === "date") {
+    } else if (sortFamily(field) === "date") {
       if (
         typeof cursor.value !== "string" ||
         !/^\d{4}-\d{2}-\d{2}$/u.test(cursor.value) ||
@@ -178,12 +179,12 @@ function decodeFieldCursor(
         new Date(`${cursor.value}T00:00:00Z`).toISOString().slice(0, 10) !== cursor.value
       )
         return invalidCursor();
-    } else if (field.type === "boolean") {
+    } else if (sortFamily(field) === "boolean") {
       if (typeof cursor.value !== "boolean") return invalidCursor();
     } else if (
       typeof cursor.value !== "number" ||
       !Number.isFinite(cursor.value) ||
-      (field.type === "datetime" && !Number.isSafeInteger(cursor.value))
+      (sortFamily(field) === "datetime" && !Number.isSafeInteger(cursor.value))
     )
       return invalidCursor();
     return cursor;
@@ -235,7 +236,7 @@ export async function collectionListPlan(input: ListContentEntriesInput): Promis
     ? `(case when ${target.present} then ${target.value} else null end)`
     : system!.value;
   const order = target
-    ? `${value}${strings.has(field!.type) ? " collate nocase" : ""}`
+    ? `${value}${sortFamily(field!) === "string" ? " collate nocase" : ""}`
     : system!.order;
   const rank = target ? `(case when ${target.present} then 0 else 1 end)` : "0";
   const listJson =
@@ -250,7 +251,7 @@ export async function collectionListPlan(input: ListContentEntriesInput): Promis
     anchorValue = "",
     anchorId = "",
     valid = "1";
-  const anchored = after !== undefined && strings.has(field!.type);
+  const anchored = after !== undefined && sortFamily(field!) === "string";
   if (anchored) {
     anchor = `with anchor as materialized (select ${value} as value, ${rank} as rank from content_entries e join content_snapshots d on d.id=e.draft_snapshot_id
       where e.model_key=${bind.add(input.modelKey)} and e.id=${bind.add(after.id)} and d.id=${bind.add(after.snapshot!)} and d.revision=${bind.add(after.revision!)}) `;
@@ -272,7 +273,7 @@ export async function collectionListPlan(input: ListContentEntriesInput): Promis
       `(${order} ${comparison} ${boundary} or (${order} = ${boundary} and e.id ${comparison} ${bind.add(systemAfter.id)}))`,
     );
   }
-  const stringSort = field !== undefined && strings.has(field.type);
+  const stringSort = field !== undefined && sortFamily(field) === "string";
   const select = `select ${fields}, ${stringSort && !anchored ? "null" : value} as sort_value, ${rank} as sort_missing
     from ${ENTRY_SOURCE_SQL} left join user u on u.id=d.updated_by where ${where.join(" and ")}
     order by ${custom ? `${rank} asc, ` : ""}${order} ${direction}, e.id ${direction} limit ${bind.add(limit + 1)}`;
@@ -330,7 +331,7 @@ export async function collectionListPlan(input: ListContentEntriesInput): Promis
                   value:
                     last.sort_missing === 1
                       ? null
-                      : field.type === "boolean"
+                      : sortFamily(field) === "boolean"
                         ? Boolean(last.sort_value)
                         : last.sort_value,
                 }),

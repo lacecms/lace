@@ -1,3 +1,6 @@
+import { ContentValidationError, MAX_LIST_ITEMS, validateRichTextDocument } from "@lacecms/content";
+import type { FieldType } from "@lacecms/content";
+import { formatAbsoluteTime, formatDate } from "../../shared/lib/index.js";
 import type { ContentModelDto } from "@lacecms/contracts";
 import type { ComponentType, ReactNode } from "react";
 
@@ -98,3 +101,160 @@ export function fieldControlId(
 ): string {
   return `field-${name.replaceAll(".", "-")}`;
 }
+
+/** The URL forms the shared allowlist permits, as writers read them. */
+const SAFE_URL_FORMS = "https://, http://, mailto:, tel:, / or #";
+
+/** The message for a rich-text link whose URL the shared allowlist rejects. */
+export const LINK_URL_MESSAGE = `Links must start with ${SAFE_URL_FORMS}.`;
+
+/** The message for a URL field whose value the shared allowlist rejects. */
+export const URL_FIELD_MESSAGE = `Enter a URL that starts with ${SAFE_URL_FORMS}.`;
+
+function lengthProblem(minLength?: number, maxLength?: number): string {
+  if (minLength !== undefined && maxLength !== undefined)
+    return `Enter between ${minLength} and ${maxLength} characters.`;
+  if (minLength !== undefined) return `Enter at least ${minLength} characters.`;
+  if (maxLength !== undefined) return `Enter no more than ${maxLength} characters.`;
+  return "Enter text.";
+}
+
+function rangeProblem(min?: number, max?: number): string {
+  if (min !== undefined && max !== undefined) return `Enter a number from ${min} to ${max}.`;
+  if (min !== undefined) return `Enter a number of at least ${min}.`;
+  if (max !== undefined) return `Enter a number of at most ${max}.`;
+  return "Enter a number.";
+}
+
+function richTextProblem(value: unknown): string {
+  try {
+    validateRichTextDocument(value);
+  } catch (caught) {
+    if (!(caught instanceof ContentValidationError)) throw caught;
+    const code = caught.issues[0]?.code;
+    if (code === "unsafe_url") return LINK_URL_MESSAGE;
+    if (code === "unknown_node" || code === "unknown_mark" || code === "invalid_child")
+      return "Remove formatting that is not supported here.";
+  }
+  return "This text could not be read. Undo the last change or clear the field.";
+}
+
+export interface FieldTypeSupport {
+  readonly problem: (definition: FieldDefinition, value: unknown) => string;
+  readonly listCell?: (value: unknown) => string;
+  readonly filter?: {
+    readonly control: "text" | "number" | "date" | "datetime-local" | "boolean" | "select";
+  };
+  readonly summary?: { readonly priority: 0 | 1 | 2; readonly text: (value: unknown) => string };
+  readonly guidance?: (definition: FieldDefinition) => readonly string[];
+  readonly draftValue?: () => unknown;
+}
+
+const stringCell = (value: unknown) =>
+  typeof value === "string" && value.length > 0 ? value : "—";
+const clean = (value: string) => value.replace(/\s+/gu, " ").trim();
+const summaryText = (value: unknown) => (typeof value === "string" ? clean(value) : "");
+function plainRichText(value: unknown): string {
+  if (value === null || typeof value !== "object") return "";
+  const node = value as { text?: unknown; content?: unknown };
+  if (typeof node.text === "string") return node.text;
+  return Array.isArray(node.content) ? node.content.map(plainRichText).join(" ") : "";
+}
+const textProblem = (definition: FieldDefinition) =>
+  definition.type === "text" || definition.type === "textarea"
+    ? lengthProblem(definition.minLength, definition.maxLength)
+    : "Enter text.";
+const textGuidance = (definition: FieldDefinition) => {
+  const parts: string[] = [];
+  if (definition.type === "text" || definition.type === "textarea") {
+    if (definition.minLength !== undefined)
+      parts.push(`When provided, enter at least ${definition.minLength} characters.`);
+    if (definition.maxLength !== undefined)
+      parts.push(`Limit: ${definition.maxLength} characters.`);
+  }
+  return parts;
+};
+const compositeProblem = () =>
+  "This composite contains an invalid value. Review the saved JSON and the validation details.";
+const numberFormat = new Intl.NumberFormat("en");
+
+/** Every kind declares support explicitly; domain eligibility lives in content capabilities. */
+export const fieldTypeSupport: Readonly<Record<FieldType, FieldTypeSupport>> = {
+  text: {
+    problem: textProblem,
+    listCell: stringCell,
+    filter: { control: "text" },
+    summary: { priority: 0, text: summaryText },
+    guidance: textGuidance,
+    draftValue: () => "",
+  },
+  textarea: {
+    problem: textProblem,
+    listCell: stringCell,
+    filter: { control: "text" },
+    summary: { priority: 0, text: summaryText },
+    guidance: textGuidance,
+    draftValue: () => "",
+  },
+  richText: {
+    problem: (_, value) => richTextProblem(value),
+    summary: { priority: 1, text: (value) => clean(plainRichText(value)) },
+  },
+  number: {
+    problem: (definition) =>
+      definition.type === "number"
+        ? rangeProblem(definition.min, definition.max)
+        : "Enter a number.",
+    listCell: (value) =>
+      typeof value === "number" && Number.isFinite(value) ? numberFormat.format(value) : "—",
+    filter: { control: "number" },
+    guidance: (definition) => {
+      const parts: string[] = [];
+      if (definition.type === "number") {
+        if (definition.min !== undefined) parts.push(`Minimum: ${definition.min}.`);
+        if (definition.max !== undefined) parts.push(`Maximum: ${definition.max}.`);
+      }
+      return parts;
+    },
+  },
+  boolean: {
+    problem: () => "Choose on or off.",
+    listCell: (value) => (typeof value === "boolean" ? (value ? "Yes" : "No") : "—"),
+    filter: { control: "boolean" },
+    draftValue: () => false,
+  },
+  date: {
+    problem: () => "Choose a valid date.",
+    listCell: (value) => (typeof value === "string" && formatDate(value)) || "—",
+    filter: { control: "date" },
+  },
+  datetime: {
+    problem: () => "Choose a valid date and time.",
+    listCell: (value) => (typeof value === "string" && formatAbsoluteTime(value)) || "—",
+    filter: { control: "datetime-local" },
+  },
+  select: {
+    problem: () => "Choose one of the listed options.",
+    listCell: stringCell,
+    filter: { control: "select" },
+    summary: { priority: 2, text: summaryText },
+  },
+  url: {
+    problem: (definition) =>
+      definition.type === "url" && definition.embedProviders !== undefined
+        ? `Enter a valid ${definition.embedProviders.join(" or ")} video URL.`
+        : URL_FIELD_MESSAGE,
+    listCell: stringCell,
+    filter: { control: "text" },
+    summary: { priority: 2, text: summaryText },
+  },
+  media: { problem: () => "Choose a media item." },
+  group: { problem: compositeProblem, draftValue: () => ({}) },
+  list: {
+    problem: compositeProblem,
+    guidance: (definition) =>
+      definition.type === "list"
+        ? [`Limit: ${definition.maxItems ?? MAX_LIST_ITEMS} items, including drafts.`]
+        : [],
+  },
+};

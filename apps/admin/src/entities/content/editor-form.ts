@@ -10,7 +10,6 @@ import {
   canonicalJsonByteLength,
   normalizeBlockClassName,
   validateFieldValue,
-  validateRichTextDocument,
 } from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject } from "@lacecms/content";
 import type { ContentBlockDto, ContentModelDto, ContractValidationIssue } from "@lacecms/contracts";
@@ -33,14 +32,8 @@ export interface DraftEditorValues {
   title: string;
 }
 
-/** The URL forms the shared allowlist permits, as writers read them. */
-const SAFE_URL_FORMS = "https://, http://, mailto:, tel:, / or #";
-
-/** The message for a rich-text link whose URL the shared allowlist rejects. */
-export const LINK_URL_MESSAGE = `Links must start with ${SAFE_URL_FORMS}.`;
-
-/** The message for a URL field whose value the shared allowlist rejects. */
-export const URL_FIELD_MESSAGE = `Enter a URL that starts with ${SAFE_URL_FORMS}.`;
+export { LINK_URL_MESSAGE, URL_FIELD_MESSAGE } from "./field-types.js";
+import { fieldTypeSupport } from "./field-types.js";
 
 /** Block-level messages shared by local validation and server issue mapping. */
 export const BLOCK_MESSAGES = {
@@ -87,34 +80,6 @@ export function undeclaredSettingMessage(key: string): string {
   return `This block has a value for the undeclared setting “${key}”.`;
 }
 
-function lengthProblem(minLength?: number, maxLength?: number): string {
-  if (minLength !== undefined && maxLength !== undefined)
-    return `Enter between ${minLength} and ${maxLength} characters.`;
-  if (minLength !== undefined) return `Enter at least ${minLength} characters.`;
-  if (maxLength !== undefined) return `Enter no more than ${maxLength} characters.`;
-  return "Enter text.";
-}
-
-function rangeProblem(min?: number, max?: number): string {
-  if (min !== undefined && max !== undefined) return `Enter a number from ${min} to ${max}.`;
-  if (min !== undefined) return `Enter a number of at least ${min}.`;
-  if (max !== undefined) return `Enter a number of at most ${max}.`;
-  return "Enter a number.";
-}
-
-function richTextProblem(value: unknown): string {
-  try {
-    validateRichTextDocument(value);
-  } catch (caught) {
-    if (!(caught instanceof ContentValidationError)) throw caught;
-    const code = caught.issues[0]?.code;
-    if (code === "unsafe_url") return LINK_URL_MESSAGE;
-    if (code === "unknown_node" || code === "unknown_mark" || code === "invalid_child")
-      return "Remove formatting that is not supported here.";
-  }
-  return "This text could not be read. Undo the last change or clear the field.";
-}
-
 /**
  * Returns a sentence describing why a present value violates its field
  * descriptor, or `undefined` when the value is valid. Messages never repeat
@@ -127,32 +92,7 @@ export function fieldProblem(definition: FieldMetadata, value: unknown): string 
   } catch (caught) {
     if (!(caught instanceof ContentValidationError)) throw caught;
   }
-  switch (definition.type) {
-    case "text":
-    case "textarea":
-      return lengthProblem(definition.minLength, definition.maxLength);
-    case "number":
-      return rangeProblem(definition.min, definition.max);
-    case "select":
-      return "Choose one of the listed options.";
-    case "date":
-      return "Choose a valid date.";
-    case "datetime":
-      return "Choose a valid date and time.";
-    case "url":
-      if (definition.embedProviders !== undefined)
-        return `Enter a valid ${definition.embedProviders.join(" or ")} video URL.`;
-      return URL_FIELD_MESSAGE;
-    case "media":
-      return "Choose a media item.";
-    case "boolean":
-      return "Choose on or off.";
-    case "richText":
-      return richTextProblem(value);
-    case "group":
-    case "list":
-      return "This composite contains an invalid value. Review the saved JSON and the validation details.";
-  }
+  return fieldTypeSupport[definition.type].problem(definition, value);
 }
 
 function sentence(message: string): string {

@@ -1,0 +1,1 @@
+type Kinds = "text" | "textarea";

@@ -22,6 +22,9 @@
           "label": {
             "type": "string"
           },
+          "layout": {
+            "$ref": "#/components/schemas/FormLayout"
+          },
           "settings": {
             "additionalProperties": {
               "oneOf": [
@@ -151,6 +154,9 @@
             },
             "type": "object"
           },
+          "settingsLayout": {
+            "$ref": "#/components/schemas/FormLayout"
+          },
           "settingsVisibility": {
             "additionalProperties": {
               "additionalProperties": false,
@@ -188,7 +194,7 @@
         "type": "object"
       },
       "FieldDefinition": {
-        "description": "Finite descriptors: at most six group/list containers, two consecutive groups, and no direct list of lists. Content has at most 100 items/list and 500 list elements/snapshot.",
+        "description": "Finite descriptors: at most six group/list containers, two consecutive groups, and no direct list of lists. Content has at most 100 items/list and 500 list elements/snapshot. Shared runtime validation also enforces ordered length/range bounds, defaults conforming to their descriptors, select presentation matching unique options, and layout references to distinct immediate siblings.",
         "oneOf": [
           {
             "additionalProperties": false,
@@ -423,6 +429,14 @@
               "description": {
                 "type": "string"
               },
+              "embedProviders": {
+                "items": {
+                  "enum": ["youtube", "vimeo"]
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
               "label": {
                 "type": "string"
               },
@@ -500,6 +514,46 @@
         "description": "Conditional fields. Keys name immediate sibling fields; each rule names a sibling select or boolean controller that is not itself a target, and a nonempty unique subset of its options or booleans. A hidden field is not required, keeps draft validation and is retained in drafts; its value is omitted from published snapshots, public reads and build exports.",
         "type": "object"
       },
+      "FormLayout": {
+        "additionalProperties": false,
+        "description": "Groups place distinct immediate sibling fields. Keys are unique; references and composite depth are checked by shared runtime validation.",
+        "properties": {
+          "groups": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "fields": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "key": {
+                  "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+                  "type": "string"
+                },
+                "label": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["key", "label", "fields"],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "mode": {
+            "enum": ["sections", "tabs"]
+          }
+        },
+        "required": ["mode", "groups"],
+        "type": "object"
+      },
       "GroupFieldDefinition": {
         "additionalProperties": false,
         "properties": {
@@ -520,6 +574,9 @@
           },
           "label": {
             "type": "string"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/FormLayout"
           },
           "required": {
             "type": "boolean"
@@ -779,6 +836,14 @@
                   "description": {
                     "type": "string"
                   },
+                  "embedProviders": {
+                    "items": {
+                      "enum": ["youtube", "vimeo"]
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "label": {
                     "type": "string"
                   },
@@ -823,7 +888,7 @@
             ]
           },
           "itemLabel": {
-            "description": "Immediate text, textarea, select or URL child of a group item; presentation only.",
+            "description": "Immediate text, textarea, select, url child of a group item; presentation only.",
             "type": "string"
           },
           "label": {

@@ -1,3 +1,6 @@
+import { BLOCK_SETTING_FIELD_TYPES, fieldTypeCapabilities, fieldTypesWith } from "@lacecms/content";
+import type { FieldType } from "@lacecms/content";
+
 /** Recursive metadata documentation; runtime checks remain in the shared descriptors. */
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 const common = {
@@ -5,48 +8,39 @@ const common = {
   label: { type: "string" },
   description: { type: "string" },
 } as const;
-const scalarTypes = [
-  "text",
-  "textarea",
-  "richText",
-  "number",
-  "boolean",
-  "date",
-  "datetime",
-  "select",
-  "url",
-  "media",
-] as const;
-const scalar = (type: (typeof scalarTypes)[number]) => ({
+const scalarTypes = (Object.keys(fieldTypeCapabilities) as FieldType[]).filter(
+  (type) => type !== "group" && type !== "list",
+);
+const extras: Partial<Record<FieldType, Record<string, unknown>>> = {
+  text: { minLength: { type: "integer", minimum: 0 }, maxLength: { type: "integer", minimum: 0 } },
+  textarea: {
+    minLength: { type: "integer", minimum: 0 },
+    maxLength: { type: "integer", minimum: 0 },
+  },
+  number: { min: { type: "number" }, max: { type: "number" } },
+  select: {
+    options: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string" } },
+    presentation: ref("SelectPresentation"),
+  },
+  url: {
+    embedProviders: {
+      type: "array",
+      minItems: 1,
+      uniqueItems: true,
+      items: { enum: ["youtube", "vimeo"] },
+    },
+  },
+};
+const scalar = (type: FieldType) => ({
   type: "object",
   additionalProperties: false,
   required: ["type", "required", ...(type === "select" ? ["options"] : [])],
   properties: {
     ...common,
     type: { const: type },
-    ...(["text", "textarea", "url", "number", "select", "richText"].includes(type)
-      ? { placeholder: { type: "string" } }
-      : {}),
-    defaultValue: {
-      type:
-        type === "number"
-          ? "number"
-          : type === "boolean"
-            ? "boolean"
-            : type === "richText"
-              ? "object"
-              : "string",
-    },
-    ...(["text", "textarea"].includes(type)
-      ? { minLength: { type: "integer", minimum: 0 }, maxLength: { type: "integer", minimum: 0 } }
-      : {}),
-    ...(type === "number" ? { min: { type: "number" }, max: { type: "number" } } : {}),
-    ...(type === "select"
-      ? {
-          options: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string" } },
-          presentation: ref("SelectPresentation"),
-        }
-      : {}),
+    ...(fieldTypeCapabilities[type].placeholder ? { placeholder: { type: "string" } } : {}),
+    defaultValue: { type: fieldTypeCapabilities[type].valueKind },
+    ...extras[type],
   },
 });
 const fieldMap = {
@@ -55,6 +49,31 @@ const fieldMap = {
   additionalProperties: ref("FieldDefinition"),
 };
 export const contentMetadataOpenApi = {
+  FormLayout: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "groups"],
+    description:
+      "Groups place distinct immediate sibling fields. Keys are unique; references and composite depth are checked by shared runtime validation.",
+    properties: {
+      mode: { enum: ["sections", "tabs"] },
+      groups: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["key", "label", "fields"],
+          properties: {
+            key: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9]*$" },
+            label: { type: "string", minLength: 1 },
+            description: { type: "string" },
+            fields: { type: "array", minItems: 1, items: { type: "string" } },
+          },
+        },
+      },
+    },
+  },
   SelectPresentation: {
     type: "object",
     additionalProperties: false,
@@ -105,7 +124,7 @@ export const contentMetadataOpenApi = {
   },
   FieldDefinition: {
     description:
-      "Finite descriptors: at most six group/list containers, two consecutive groups, and no direct list of lists. Content has at most 100 items/list and 500 list elements/snapshot.",
+      "Finite descriptors: at most six group/list containers, two consecutive groups, and no direct list of lists. Content has at most 100 items/list and 500 list elements/snapshot. Shared runtime validation also enforces ordered length/range bounds, defaults conforming to their descriptors, select presentation matching unique options, and layout references to distinct immediate siblings.",
     oneOf: [...scalarTypes.map(scalar), ref("GroupFieldDefinition"), ref("ListFieldDefinition")],
   },
   FieldVisibility: {
@@ -137,6 +156,7 @@ export const contentMetadataOpenApi = {
       fields: fieldMap,
       defaultValue: { type: "object" },
       visibility: ref("FieldVisibility"),
+      layout: ref("FormLayout"),
     },
   },
   ListFieldDefinition: {
@@ -151,8 +171,7 @@ export const contentMetadataOpenApi = {
       maxItems: { type: "integer", minimum: 0, maximum: 100 },
       itemLabel: {
         type: "string",
-        description:
-          "Immediate text, textarea, select or URL child of a group item; presentation only.",
+        description: `Immediate ${fieldTypesWith("itemLabel").join(", ")} child of a group item; presentation only.`,
       },
       defaultValue: { type: "array", maxItems: 100 },
     },
@@ -170,6 +189,8 @@ export const contentMetadataOpenApi = {
       fields: fieldMap,
       defaultValue: { type: "object" },
       visibility: ref("FieldVisibility"),
+      layout: ref("FormLayout"),
+      settingsLayout: ref("FormLayout"),
       settingsVisibility: {
         type: "object",
         description:
@@ -187,15 +208,17 @@ export const contentMetadataOpenApi = {
       settings: {
         type: "object",
         additionalProperties: {
-          oneOf: ["text", "number", "boolean", "select"].map((type) => ({
-            ...scalar(type as (typeof scalarTypes)[number]),
-            required: [
-              "type",
-              "required",
-              "defaultValue",
-              ...(type === "select" ? ["options"] : []),
-            ],
-          })),
+          oneOf: scalarTypes
+            .filter((type) => (BLOCK_SETTING_FIELD_TYPES as readonly string[]).includes(type))
+            .map((type) => ({
+              ...scalar(type),
+              required: [
+                "type",
+                "required",
+                "defaultValue",
+                ...(type === "select" ? ["options"] : []),
+              ],
+            })),
         },
       },
     },

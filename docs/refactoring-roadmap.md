@@ -107,7 +107,7 @@ What the roadmap changes, with the numbers to beat:
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines; five-file cluster of 3,733 lines with type-only cycles |
 | Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
-| Duplication | copies of the "list-queryable field types" set | 5 (config, contracts ×2, application, db) plus 5 admin switches |
+| Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table |
 | Duplication | `*Source` interfaces in contracts mirroring application types | 11 |
 | Duplication | slug/route canonicalization | twice (config and domain) |
 | Duplication | conditional-visibility evaluators | 3 (content, application, admin) |
@@ -133,7 +133,7 @@ What the roadmap changes, with the numbers to beat:
 | --- | --- | :---: | --- | --- |
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
-| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
+| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | proposed |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
@@ -342,7 +342,8 @@ import, so it owns the shared vocabulary.
 
 - `packages/content` exports a `fieldTypeCapabilities` table keyed by
   `FieldDefinition["type"]`: `listQueryable`, `seoText`, `placeholder`,
-  `valueKind`, `sortableAs`, `filterKind`.
+  `valueKind`, `sortableAs`, `filterKind`, `searchable`, `itemLabel`.
+  `FIELD_FILTER_OPERATIONS` owns the per-filter-kind operators.
 - Derive from it and delete: `LIST_FIELD_TYPES` and `SEO_TEXT_FIELD_TYPES`
   (`packages/config/src/index.ts:36-53`), `hasValidListFields`'s inline list
   (`packages/contracts/src/index.ts:378-399`), `scalarTypes`, the placeholder
@@ -350,22 +351,25 @@ import, so it owns the shared vocabulary.
   `CollectionQueryFieldType` (`packages/application/src/collection-queries.ts`)
   and the `strings` set with `datetime` special cases in
   `packages/db/src/collection-list.ts`.
-- Admin: one `fieldTypeSupport: Record<FieldDefinition["type"], {problem, listCell, filter, summary, guidance}>`
+- Admin: one `fieldTypeSupport: Record<FieldDefinition["type"], {problem, listCell, filter, summary, guidance, draftValue}>`
   in `apps/admin/src/entities/content/field-types.ts`, consumed by
   `editor-form.ts`, `widgets/collection-entries/list-columns.ts`,
   `CollectionFilters.tsx`, `item-summary.ts`, `composite-values.ts` and
-  `field-guidance.ts`, so a new field type fails to compile until every
+  `field-guidance.ts` and `widgets/block-editor/block-presentation.ts`, so a new field type fails to compile until every
   surface declares support.
 - A contracts test asserts that `contentMetadataOpenApi` accepts exactly the
   descriptors `normalizeFieldDefinition` accepts.
 
 **Architecture and specs:** §8 *Initial field types* gains the capability
 table; `field-descriptors` (capabilities declared once),
-`collection-query-options`.
+`collection-query-options`, `rest-contracts`.
 
-**Acceptance:** adding a dummy field type in a test fixture touches `content`
-and `apps/admin/src/entities/content/field-types.ts` only; generated
-`apps/api/openapi/api-v1.json` is byte-identical.
+**Acceptance:** adding a dummy scalar field type reports errors only in
+`content`, the admin support table and built-in control declarations. Owner
+decision (2026-11-02): correct existing OpenAPI drift (`embedProviders`, group
+and block `layout`, block `settingsLayout`) with one `FormLayout` schema.
+`apps/api/openapi/api-v1.json` changes only in descriptor schemas; parity has
+no known-gap exceptions.
 
 ### Session RF3B — Shared identifiers and limits
 
@@ -737,3 +741,6 @@ reference pages.
 | 2026-11-02 | RF2A | `rf02a-source-tests-pure-packages` | Archived at [`2026-11-02-rf02a-source-tests-pure-packages`](../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/); 18/18 tasks complete and the `workspace-governance` delta synchronized. Shared source aliases and configs, seven packages converted (446 listed titles / 768 expanded cases preserved), seven packaged export checks, build-free source-test task and watch scripts. Test/test-support imports excluded from boundaries and cycle graph; production and admin structure checks preserved. All seven source suites pass without any package dist; content 0.47 s. Nine legacy files use the explicit TODO(rf2) typechecking escape hatch, listed in the change verification note; eight files are strictly checked. Root typecheck, lint, build, tests (51 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. Root test wall time 328.49 s without cache; earlier cached baseline failed its toolchain gate, so no controlled root speed comparison is claimed. |
 | 2026-11-02 | RF2B | `rf02b-source-tests-application-server` | Archived at [`2026-11-02-rf02b-source-tests-application-server`](../openspec/changes/archive/2026-11-02-rf02b-source-tests-application-server/); 13/13 tasks complete, no delta specs. Five packages converted to source tests; application split into eight use-case files, server into ten route-group files with a typed shared harness. All 250 listed titles preserved (277 expanded source cases); five packaged export checks added. RF2A source aliases, build-free tests and boundary exclusions reused. 24 legacy test files retain explicit TODO(rf2) typechecking exceptions (RF2A: nine); nine test files and the harness are strictly checked. Root typecheck, lint, build, tests (56 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. All five source suites pass with every package dist temporarily absent. |
 | 2026-11-02 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Archived at [`2026-11-02-rf02c-source-tests-delivery-and-test-utils`](../openspec/changes/archive/2026-11-02-rf02c-source-tests-delivery-and-test-utils/); 15/15 tasks complete, no delta specs. Test-utils split into area contracts and assertions/adapters/store modules with unchanged public exports; all 105 measured contract registrations pinned in order (proposal baseline 103 was stale). Eight members now use source/packaged separation; source tests pass without any dist or copied admin bundle. All original titles preserved. Owner confirmed process/Astro/registry/schema cases as packaged, with Worker asset routing kept source-based. All 22 source tasks have no build dependencies; 20 members have watch scripts. RF2 retains 88 explicit legacy typing exceptions (33 earlier, 55 RF2C including the Worker helper), inventoried in the change verification note. Root build, typecheck, lint, tests (64 Turbo tasks; 33 root files / 250 cases), formatting and strict validation pass. Root test wall time 255.47 s with 25 cached tasks versus RF2A 328.49 s without cache; no controlled speed comparison is claimed. |
+| 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Proposed. Frozen `fieldTypeCapabilities` in content (roadmap's six columns plus `searchable` and `itemLabel`) and `FIELD_FILTER_OPERATIONS`; config, contracts, application, db and content builders derive from it; `LIST_FIELD_TYPES`/`SEO_TEXT_FIELD_TYPES` deleted. Admin `fieldTypeSupport` (adds `draftValue`; `block-presentation.ts` also consumes it). Correction to the roadmap text: OpenAPI already drifted (URL `embedProviders`, group/block `layout`, `settingsLayout` missing); owner decision 2026-11-02: fix it, so `api-v1.json` changes in descriptor schemas only, and the parity test has no exceptions. Root vocabulary guard; totality verified by a recorded experiment. Delta specs: `field-descriptors`, `collection-query-options`, `rest-contracts` (1 added each). 21 tasks, not applied. |
+| 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Implemented, 21/21 tasks complete; not archived. One frozen capability table and operator declaration drive content builders, typed config, contracts/OpenAPI, application filters and SQL; one total admin support table drives messages, cells, controls, summaries, guidance and draft values. Consumer list copies removed; source vocabulary guard added. OpenAPI descriptor drift corrected with unrelated components unchanged. Dummy-kind experiment reports only content and the two admin declaration sites. All root gates passed (64 Turbo test tasks; 34 root files / 256 cases); original 28 browser cases pass with enlarged default viewport, documenting the existing offscreen drag failure at 1280×720. See the change verification note for counts and experiments. |
+| 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Archived at [`2026-11-02-rf03a-field-type-capabilities`](../openspec/changes/archive/2026-11-02-rf03a-field-type-capabilities/); 21/21 tasks complete and all three capability deltas synchronized. All 84 accepted specs pass strict validation. Implementation verification and the browser viewport limitation are recorded in the archived change. |

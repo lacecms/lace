@@ -734,6 +734,36 @@ The MVP field DSL should support:
 - URL;
 - media.
 
+`@lacecms/content` owns the frozen `fieldTypeCapabilities` declaration. The
+configuration, contracts, application queries, persistence and admin derive
+eligibility from it; they must not copy lists of field kinds. Its eight columns
+are `listQueryable`, `sortableAs`, `filterKind`, `searchable`, `seoText`,
+`itemLabel`, `placeholder` and `valueKind`:
+
+| Kind | List-queryable | Sort family | Filter kind | Searchable | SEO text | Item label | Placeholder | Value kind |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| text | yes | string | text | yes | yes | yes | yes | string |
+| textarea | yes | string | text | yes | yes | yes | yes | string |
+| richText | no | — | — | no | no | no | yes | object |
+| number | yes | number | number | no | no | no | yes | number |
+| boolean | yes | boolean | boolean | no | no | no | no | boolean |
+| date | yes | date | date | no | no | no | no | string |
+| datetime | yes | datetime | datetime | no | no | no | no | string |
+| select | yes | string | select | no | no | yes | yes | string |
+| url | yes | string | text | no | no | yes | yes | string |
+| media | no | — | — | no | no | no | no | string |
+| group | no | — | — | no | no | no | no | object |
+| list | no | — | — | no | no | no | no | array |
+
+`FIELD_FILTER_OPERATIONS` owns the operators of each filter kind: text
+`contains, eq`; select `in`; number `eq, range`; boolean `eq`; date and datetime
+`range`. Every queryable kind additionally supports `isSet` and `isNotSet`.
+The admin's total `fieldTypeSupport` declaration owns presentation and messages
+for every kind: problems, list cells, filter controls, summaries, guidance and
+new list item values. Adding a kind requires declaring its capabilities and
+admin support. OpenAPI derives scalar descriptor properties from the same
+capabilities and documents provider restrictions and form layouts.
+
 Reference fields should be anticipated in the DSL design but may be postponed until after the first vertical slice. Arbitrary executable user code must not be serialized and sent to the admin application.
 
 Reference fields are not part of the MVP. The field-definition discriminated
