@@ -109,7 +109,7 @@ What the roadmap changes, with the numbers to beat:
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
 | Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table |
 | Duplication | `*Source` interfaces in contracts mirroring application types | 11 |
-| Duplication | slug/route canonicalization | twice (config and domain) |
+| Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
 | Duplication | conditional-visibility evaluators | 3 (content, application, admin) |
 | Duplication | error conventions | 4 (content, domain, config, application); MCP maps application errors to 500 |
 | Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim |
@@ -379,14 +379,19 @@ no known-gap exceptions.
   `ContentModelKind`, and the transport limits that application and contracts
   each declare (`MAX_MEDIA_SEARCH_LENGTH`, `MAX_MEDIA_USAGE_ENTRIES`,
   `MAX_BUILD_EXPORT_PAGE_SIZE`, entry search length). `config`, `domain`,
-  `application` and `contracts` re-export them.
+  `application` and `contracts` keep existing public names through imports or
+  re-exports; contracts additionally re-exports `SLUG_PATTERN` for server.
 - The eleven `*Source` interfaces in contracts that mirror application types
   stay (the boundary forbids the import), but each gains a compile-time
   `satisfies` check in `packages/test-utils` (which may import both), and
-  `toContentModelDto` is built from one key list so a new optional property
-  cannot silently drop out of the DTO.
-- Deduplicate the private helpers `deepFreeze`, `isPlainObject`, `isRecord`
-  and `fail` (content, config, domain) through a `@lacecms/content` export.
+  `toContentModelDto` is built from a total projection table so a new optional
+  property cannot silently drop out of the DTO. All eleven pairs are checked,
+  including each media-usage discriminant; only public media has an explicit
+  private-property omission list. Serialized key order stays unchanged.
+- Deduplicate `deepFreeze`, `isPlainObject` and `isRecord` through
+  `@lacecms/content` exports (`isRecord` already had only one definition).
+  Keep `fail` local until RF3D: these helpers throw four different error
+  classes, so sharing them now would add an unnecessary error factory.
 
 **Architecture and specs:** §6 *Repository structure* rules (content owns
 shared vocabulary); `content-domain-rules`.
@@ -744,3 +749,6 @@ reference pages.
 | 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Proposed. Frozen `fieldTypeCapabilities` in content (roadmap's six columns plus `searchable` and `itemLabel`) and `FIELD_FILTER_OPERATIONS`; config, contracts, application, db and content builders derive from it; `LIST_FIELD_TYPES`/`SEO_TEXT_FIELD_TYPES` deleted. Admin `fieldTypeSupport` (adds `draftValue`; `block-presentation.ts` also consumes it). Correction to the roadmap text: OpenAPI already drifted (URL `embedProviders`, group/block `layout`, `settingsLayout` missing); owner decision 2026-11-02: fix it, so `api-v1.json` changes in descriptor schemas only, and the parity test has no exceptions. Root vocabulary guard; totality verified by a recorded experiment. Delta specs: `field-descriptors`, `collection-query-options`, `rest-contracts` (1 added each). 21 tasks, not applied. |
 | 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Implemented, 21/21 tasks complete; not archived. One frozen capability table and operator declaration drive content builders, typed config, contracts/OpenAPI, application filters and SQL; one total admin support table drives messages, cells, controls, summaries, guidance and draft values. Consumer list copies removed; source vocabulary guard added. OpenAPI descriptor drift corrected with unrelated components unchanged. Dummy-kind experiment reports only content and the two admin declaration sites. All root gates passed (64 Turbo test tasks; 34 root files / 256 cases); original 28 browser cases pass with enlarged default viewport, documenting the existing offscreen drag failure at 1280×720. See the change verification note for counts and experiments. |
 | 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Archived at [`2026-11-02-rf03a-field-type-capabilities`](../openspec/changes/archive/2026-11-02-rf03a-field-type-capabilities/); 21/21 tasks complete and all three capability deltas synchronized. All 84 accepted specs pass strict validation. Implementation verification and the browser viewport limitation are recorded in the archived change. |
+| 2026-11-02 | RF3B | `rf03b-shared-identifiers-limits` | Proposed. New content modules `identifiers.ts` (`SLUG_PATTERN`, `MAX_SLUG_LENGTH`, `isContentSlug`, `ContentModelKind`, reason-returning route checks with one message wording, four transport limits) and `objects.ts` (`deepFreeze`, `isPlainObject`, `isRecord`); config and domain keep their functions and error classes as thin wrappers; application and contracts re-export limits under current names; contracts adds only `SLUG_PATTERN` (server drops its inline regex). Corrections to the roadmap text: `fail` stays local until RF3D (four error classes); "re-export" means keep existing public names, add re-exports only where consumed; `isRecord` exists only in content. Eleven `*Source` mirrors checked in test-utils (`DiscoveredContentModel` gains the `visibility` it already returns); total `toContentModelDto` projection table; root vocabulary guard. `api-v1.json` unchanged. Delta specs: `content-domain-rules` (1 modified: adds `global` kind; 1 added), `rest-contracts` (1 added). 23 tasks, not applied. |
+| 2026-11-02 | RF3B | `rf03b-shared-identifiers-limits` | Implemented, 23/23 tasks complete. Shared identifier/route and object modules; public wrappers and limit aliases preserved. Eleven source mirrors and a total DTO projection are checked; owner-approved insertion order preserves serialized JSON. Vocabulary guard and negative experiments added. All root gates passed (64 Turbo tasks; 35 root files / 261 cases), including Node and Cloudflare contracts. OpenAPI and DTO serialization unchanged. Verification is recorded in the active change; not archived. |
+| 2026-11-02 | RF3B | `rf03b-shared-identifiers-limits` | Archived at [`2026-11-02-rf03b-shared-identifiers-limits`](../openspec/changes/archive/2026-11-02-rf03b-shared-identifiers-limits/); 23/23 tasks complete and both capability deltas synchronized. All 84 accepted specifications pass strict validation. Shared identifiers, route rules, limits and object helpers have one owner in content; eleven mirrors and the total DTO projection are checked. OpenAPI and serialized model DTOs remain unchanged. |

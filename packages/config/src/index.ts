@@ -1,4 +1,11 @@
 import {
+  deepFreeze,
+  isPlainObject,
+  pagePathFailure,
+  collectionRouteFailure,
+  collectionPathFailure,
+} from "@lacecms/content";
+import {
   defineBlockRegistry,
   fieldTypeCapabilities,
   normalizeFieldVisibility,
@@ -6,7 +13,6 @@ import {
   parseSchemaPath,
   encodeSchemaPath,
   schemaFieldAt,
-  MAX_SLUG_LENGTH,
   sha256CanonicalJson,
   toBlockMetadata,
   toBlockRegistryMetadata,
@@ -34,7 +40,6 @@ export const packageName = "@lacecms/config";
 const STABLE_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 const BLOCK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 /** Thrown when `lace.config.ts` contains an invalid or ambiguous definition. */
 export class ConfigurationError extends Error {
@@ -289,21 +294,6 @@ function fail(message: string): never {
   throw new ConfigurationError(message);
 }
 
-function isPlainObject(value: object): value is Record<string, unknown> {
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === null || prototype === Object.prototype;
-}
-
-function deepFreeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nestedValue of Object.values(value)) {
-      deepFreeze(nestedValue);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
-
 function assertString(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string") {
     fail(`${name} must be a string.`);
@@ -485,64 +475,25 @@ function normalizeBlocks(value: readonly string[] | undefined): readonly string[
   return deepFreeze(normalized);
 }
 
-function assertCanonicalRouteValue(value: unknown, name: string): asserts value is string {
-  assertString(value, name);
-  if (
-    value.length === 0 ||
-    !value.startsWith("/") ||
-    value.includes("?") ||
-    value.includes("#") ||
-    value.includes("\\") ||
-    /\s/u.test(value) ||
-    value.includes("//") ||
-    (value.length > 1 && value.endsWith("/"))
-  ) {
-    fail(`${name} must be a canonical absolute path.`);
-  }
-
-  for (const segment of value.slice(1).split("/")) {
-    if (segment === "." || segment === "..") {
-      fail(`${name} must not contain dot segments.`);
-    }
-  }
-}
-
 /** Validates and returns a canonical fixed page path. */
 export function normalizePagePath(path: string): string {
-  assertCanonicalRouteValue(path, "path");
-  if (path.includes(":")) {
-    fail("path must not contain parameter segments.");
-  }
+  const failure = pagePathFailure(path);
+  if (failure) fail(failure.message);
   return path;
 }
 
 /** Validates and returns a canonical collection route with one `:slug` segment. */
 export function normalizeCollectionRoute(route: string): string {
-  assertCanonicalRouteValue(route, "route");
-  const segments = route === "/" ? [] : route.slice(1).split("/");
-  const slugSegments = segments.filter((segment) => segment === ":slug");
-  if (
-    slugSegments.length !== 1 ||
-    segments.some((segment) => segment.includes(":") && segment !== ":slug")
-  ) {
-    fail("route must contain exactly one :slug segment and no other parameters.");
-  }
+  const failure = collectionRouteFailure(route);
+  if (failure) fail(failure.message);
   return route;
 }
 
 /** Resolves a validated collection route to one canonical public path. */
 export function resolveCollectionRoute(route: string, slug: string): string {
-  const normalizedRoute = normalizeCollectionRoute(route);
-  if (
-    typeof slug !== "string" ||
-    slug.length === 0 ||
-    slug.length > MAX_SLUG_LENGTH ||
-    !SLUG_PATTERN.test(slug)
-  ) {
-    fail("slug must use lowercase ASCII letters, digits, and single hyphens.");
-  }
-  const resolved = normalizedRoute.replace(":slug", slug);
-  return normalizePagePath(resolved);
+  const failure = collectionPathFailure(route, slug);
+  if ("issue" in failure) fail(failure.message);
+  return failure.path;
 }
 
 function normalizeCommonModel<Fields extends FieldMap>(

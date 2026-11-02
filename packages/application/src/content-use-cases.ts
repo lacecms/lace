@@ -116,6 +116,7 @@ export interface ContentUseCaseDependencies {
 
 /** Authorized, JSON-safe configuration metadata; no hashes, migrations or validators. */
 export interface DiscoveredContentModel {
+  readonly visibility?: FieldVisibility;
   readonly key: string;
   readonly kind: ContentModelKind;
   readonly version: number;

@@ -1,3 +1,4 @@
+import { MAX_BUILD_EXPORT_PAGE_SIZE } from "@lacecms/content";
 export * from "./content-authority.js";
 export * from "./oauth.js";
 export * from "./collection-queries.js";
@@ -136,7 +137,7 @@ export const CONTENT_ENTRY_SORTS: readonly ContentEntrySort[] = Object.freeze([
 ]);
 
 export const DEFAULT_CONTENT_ENTRY_SORT: ContentEntrySort = "-updatedAt";
-export const MAX_CONTENT_ENTRY_SEARCH_LENGTH = 200;
+export { MAX_ENTRY_SEARCH_LENGTH as MAX_CONTENT_ENTRY_SEARCH_LENGTH } from "@lacecms/content";
 
 /** Display name used for `system:` audit actors such as configuration sync. */
 export const SYSTEM_ACTOR_DISPLAY_NAME = "System";
@@ -415,7 +416,7 @@ export interface PublicGlobalContent {
 }
 
 /** Entries one build-export page holds at most. */
-export const MAX_BUILD_EXPORT_PAGE_SIZE = 100;
+export { MAX_BUILD_EXPORT_PAGE_SIZE } from "@lacecms/content";
 /**
  * Stored JSON bytes (fields, SEO and visible block data and settings; globals
  * on the first page) after which a build-export page ends. It bounds the
@@ -1035,9 +1036,9 @@ export const MEDIA_SORTS: readonly MediaSort[] = Object.freeze([
 ]);
 
 export const DEFAULT_MEDIA_SORT: MediaSort = "-createdAt";
-export const MAX_MEDIA_SEARCH_LENGTH = 200;
+export { MAX_MEDIA_SEARCH_LENGTH } from "@lacecms/content";
 /** Upper bound on the referencing entries returned by one media usage read. */
-export const MAX_MEDIA_USAGE_ENTRIES = 50;
+export { MAX_MEDIA_USAGE_ENTRIES } from "@lacecms/content";
 
 export interface ListMediaInput {
   readonly tags?: readonly string[];

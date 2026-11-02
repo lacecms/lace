@@ -17,6 +17,7 @@ import {
   defaultRolePermissions,
   permissionsFor,
   normalizeBlockPositions,
+  normalizeCollectionPublicRoute,
   packageName,
   planBlockPosition,
   publishContentEntry,
@@ -671,4 +672,10 @@ test("normalizes only ASCII media tags with stable limits and ordering", async (
   expect(normalizeMediaTags(Array.from({ length: 21 }, (_, i) => `tag-${i}`))).toEqual({
     issue: 20,
   });
+});
+
+test("collection route failures use the shared parameter wording", () => {
+  expect(() => normalizeCollectionPublicRoute("/blog/:slug/:id")).toThrow(
+    "route must contain exactly one :slug segment and no other parameters.",
+  );
 });

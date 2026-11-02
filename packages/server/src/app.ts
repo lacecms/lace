@@ -1,3 +1,4 @@
+import { SLUG_PATTERN } from "@lacecms/contracts";
 import { Scalar } from "@scalar/hono-api-reference";
 import { isBearerManagementRequest, isImportRoute } from "./import-routes.js";
 import {
@@ -2737,8 +2738,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
       let path: string;
       try {
         const slug = context.req.param("slug");
-        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(slug))
-          invalid("The submitted value is invalid.", "/slug");
+        if (!SLUG_PATTERN.test(slug)) invalid("The submitted value is invalid.", "/slug");
         path = model.route.replace(":slug", slug);
       } catch {
         return validationResponse([

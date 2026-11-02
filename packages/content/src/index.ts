@@ -1,3 +1,8 @@
+import { MAX_SLUG_LENGTH } from "./identifiers.js";
+import type { ContentModelKind } from "./identifiers.js";
+export * from "./identifiers.js";
+import { deepFreeze, isPlainObject, isRecord } from "./objects.js";
+export * from "./objects.js";
 import { parseVideoEmbed } from "./video-embeds.js";
 import type { EmbedProvider } from "./video-embeds.js";
 import * as v from "valibot";
@@ -647,11 +652,6 @@ function fail(path: string, message: string): never {
   throw new FieldConfigurationError(`${path} ${message}`);
 }
 
-function isPlainObject(value: object): value is Record<string, unknown> {
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === null || prototype === Object.prototype;
-}
-
 function isArrayIndex(key: string): boolean {
   if (key === "0") {
     return true;
@@ -761,18 +761,6 @@ function normalizeOptions(options: unknown): MutableJsonObject {
   }
 
   return normalized;
-}
-
-function deepFreeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) {
-      deepFreeze(child);
-    }
-
-    Object.freeze(value);
-  }
-
-  return value;
 }
 
 const RENAMED_FROM_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
@@ -1521,12 +1509,6 @@ function formatValidationPath(path: readonly ValidationPathSegment[]): string {
 
 function invalid(path: readonly ValidationPathSegment[], code: string, message: string): never {
   throw new ContentValidationError([{ code, message, path }]);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    value !== null && typeof value === "object" && !Array.isArray(value) && isPlainObject(value)
-  );
 }
 
 function assertExactKeys(
@@ -3509,15 +3491,10 @@ export const builtInBlocks = deepFreeze({
 
 /** Maximum title length shared by draft, publish, REST, and admin validation. */
 export const MAX_TITLE_LENGTH = 200;
-/** Maximum slug length shared by publish, REST, and admin validation. */
-export const MAX_SLUG_LENGTH = 100;
 /** Maximum flat top-level block count for one entry. */
 export const MAX_TOP_LEVEL_BLOCKS = 200;
 /** Maximum UTF-8 bytes in fields JSON or a single block data JSON value. */
 export const MAX_JSON_BYTES = 1_000_000;
-
-/** Model kinds: routed singletons, routed lists, and route-less singletons. */
-export type ContentModelKind = "collection" | "global" | "page";
 
 /** A block-like value whose data can be limited before the Step 3 block registry exists. */
 export interface EntryBlockData {

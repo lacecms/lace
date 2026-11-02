@@ -336,6 +336,10 @@ components directly to verify the installed sources.
 
 Rules:
 
+- `content` owns the portable shared vocabulary: slug identifiers, model kinds,
+  canonical route rules, transport limits and object helpers. Other packages
+  import or re-export these definitions under their existing public names.
+  Failure construction stays local to each layer.
 - `domain` must not import framework or infrastructure packages.
 - `content` and `config` must remain runtime-portable and must not import Node-only APIs.
 - `application` may depend on domain rules, content validation, and the normalized configuration, but not on REST DTOs, Hono, Drizzle, Cloudflare, or Node adapters.
@@ -1040,6 +1044,15 @@ Shared contract constants enforce the same limits in config validation, REST
 validation, and the admin UI: title at most 200 characters, slug at most 100
 characters, at most 200 top-level blocks and 200 media references per entry, and
 at most 1,000,000 UTF-8 bytes in either `fields_json` or one block's `data_json`.
+The shared transport bounds in `@lacecms/content` are 200 code units for entry
+search (`MAX_ENTRY_SEARCH_LENGTH`) and media search (`MAX_MEDIA_SEARCH_LENGTH`),
+50 referencing entries per media usage read (`MAX_MEDIA_USAGE_ENTRIES`), and
+100 entries per build-export page (`MAX_BUILD_EXPORT_PAGE_SIZE`). Application
+retains the entry-search alias `MAX_CONTENT_ENTRY_SEARCH_LENGTH`; application
+and contracts re-export the other names. Runtime entry-query limits remain
+separate: Node permits 200 code units, while Cloudflare permits 48 code units
+and at most 50 UTF-8 bytes in the escaped LIKE pattern including wrappers.
+
 Individual field definitions may set stricter limits. These conservative JSON limits leave room
 below D1's row/string ceiling and prevent the browser editor from creating
 payloads the target runtime cannot persist.

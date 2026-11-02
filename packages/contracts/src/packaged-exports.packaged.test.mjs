@@ -23,6 +23,7 @@ test("packaged entry point keeps its public exports", async () => {
     "MAX_SEO_DESCRIPTION_LENGTH",
     "MAX_SEO_TITLE_LENGTH",
     "NODE_LIST_QUERY_LIMITS",
+    "SLUG_PATTERN",
     "accountCapabilitiesSchema",
     "accountPasswordChangeRequestSchema",
     "accountProfileUpdateRequestSchema",

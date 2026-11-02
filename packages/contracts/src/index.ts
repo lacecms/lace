@@ -1,3 +1,12 @@
+import type { ContentModelKind } from "@lacecms/content";
+import {
+  MAX_ENTRY_SEARCH_LENGTH,
+  MAX_MEDIA_SEARCH_LENGTH,
+  MAX_MEDIA_USAGE_ENTRIES,
+  MAX_BUILD_EXPORT_PAGE_SIZE,
+  MAX_SLUG_LENGTH,
+} from "@lacecms/content";
+export { SLUG_PATTERN } from "@lacecms/content";
 import {
   collectionListOptionsSchema,
   collectionFieldFiltersSchema,
@@ -55,7 +64,6 @@ import {
 import type {
   ContentBlock,
   ContentEntry,
-  ContentModelKind,
   ContentModelRoute,
   ContentSnapshot,
   DomainErrorCode,
@@ -699,7 +707,7 @@ export const contentEntrySortSchema = v.union([
   contentEntrySystemSortSchema,
   v.pipe(v.string(), v.regex(/^-?field:[A-Za-z][A-Za-z0-9]*$/u)),
 ]);
-export const MAX_ENTRY_SEARCH_LENGTH = 200;
+export { MAX_ENTRY_SEARCH_LENGTH } from "@lacecms/content";
 
 export const listValueSchema = v.union([v.string(), v.pipe(v.number(), v.finite()), v.boolean()]);
 export const listValuesSchema = v.record(
@@ -792,7 +800,7 @@ export const contentEntryListQuerySchema = v.object({
   slug: v.optional(
     v.pipe(
       v.string(),
-      v.maxLength(100),
+      v.maxLength(MAX_SLUG_LENGTH),
       v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?![\s\S])/u),
       v.description(
         "Collections only: exact current draft slug (a published slug that differs never matches). Applies to the page and totals, combines with the other parameters and binds continuation cursors. Refused for page and global models.",
@@ -1358,8 +1366,8 @@ export { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_CAPTION_LENGTH } from "@lacecms/domain"
 /** The server's tag normalization, so clients show the stored form before saving. */
 export { normalizeMediaTag } from "@lacecms/domain";
 export { effectiveAltText } from "@lacecms/content";
-export const MAX_MEDIA_SEARCH_LENGTH = 200;
-export const MAX_MEDIA_USAGE_ENTRIES = 50;
+export { MAX_MEDIA_SEARCH_LENGTH } from "@lacecms/content";
+export { MAX_MEDIA_USAGE_ENTRIES } from "@lacecms/content";
 
 /** Input tags normalize once; element validation preserves JSON Pointer positions. */
 export const mediaTagInputSchema = v.pipe(
@@ -1589,7 +1597,7 @@ export const buildExportSchema = v.strictObject({
 });
 
 /** Entries one build-export page holds at most, and the default page size. */
-export const MAX_BUILD_EXPORT_PAGE_SIZE = 100;
+export { MAX_BUILD_EXPORT_PAGE_SIZE } from "@lacecms/content";
 
 /** Query parameters of the build-export endpoint; unknown keys are rejected. */
 export const buildExportQuerySchema = v.strictObject({
@@ -2654,61 +2662,8 @@ export interface ContentModelSource {
   readonly visibility?: FieldVisibility;
 }
 
-/** Maps a model's SEO fallback fields with `null` for unmapped values. */
-export function toModelSeoDto(seo: NonNullable<ContentModelSource["seo"]>): ModelSeoDto {
-  return { description: seo.description ?? null, image: seo.image ?? null };
-}
-
-/** Maps a site SEO defaults mapping with `null` for unmapped optional values. */
-export function toSeoDefaultsDto(
-  defaults: NonNullable<ContentModelSource["seoDefaults"]>,
-): SeoDefaultsDto {
-  return {
-    description: defaults.description ?? null,
-    image: defaults.image ?? null,
-    siteName: defaults.siteName,
-    titleTemplate: defaults.titleTemplate ?? null,
-  };
-}
-
-export function toContentModelDto(
-  model: ContentModelSource,
-): v.InferOutput<typeof contentModelSchema> {
-  return {
-    ...(model.blockDefinitions === undefined
-      ? {}
-      : { blockDefinitions: [...model.blockDefinitions] }),
-    blocks: [...model.blocks],
-    ...(model.description === undefined ? {} : { description: model.description }),
-    fields: model.fields,
-    key: model.key,
-    kind: model.kind,
-    ...(model.label === undefined ? {} : { label: model.label }),
-    ...(model.listFields === undefined ? {} : { listFields: [...model.listFields] }),
-    ...(model.listOptions === undefined
-      ? {}
-      : {
-          listOptions: Object.fromEntries(
-            Object.entries(model.listOptions)
-              .filter(([, value]) => value !== undefined)
-              .map(([key, value]) => [key, [...value!]]),
-          ),
-        }),
-    ...(model.layout === undefined
-      ? {}
-      : { layout: normalizeFormLayout(model.layout, model.fields)! }),
-    ...(model.path === undefined ? {} : { path: model.path }),
-    ...(model.route === undefined ? {} : { route: model.route }),
-    ...(model.seo === undefined ? {} : { seo: toModelSeoDto(model.seo) }),
-    ...(model.seoDefaults === undefined
-      ? {}
-      : { seoDefaults: toSeoDefaultsDto(model.seoDefaults) }),
-    version: model.version,
-    ...(model.visibility === undefined
-      ? {}
-      : { visibility: normalizeFieldVisibility(model.visibility, model.fields)! }),
-  };
-}
+export { toModelSeoDto, toSeoDefaultsDto, toContentModelDto } from "./content-model-projection.js";
+import { toContentModelDto } from "./content-model-projection.js";
 
 /** Pure projections of the authorized application results; no lookup lives here. */
 export function toContentModelDiscoveryDto(input: {
