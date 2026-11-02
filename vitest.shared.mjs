@@ -17,6 +17,10 @@ export const workspaceAliases = [
       };
     }),
   {
+    find: "@lacecms/test-utils/visibility-parity",
+    replacement: sourcePath("./packages/test-utils/src/visibility-parity.ts"),
+  },
+  {
     find: "@lacecms/platform-node/test",
     replacement: sourcePath("./packages/platform-node/src/test-actors.ts"),
   },

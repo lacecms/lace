@@ -1,4 +1,11 @@
-import { MAX_SLUG_LENGTH } from "@lacecms/content";
+import { LaceError } from "@lacecms/content";
+export { LaceError } from "@lacecms/content";
+import {
+  deepFreeze,
+  pagePathFailure,
+  collectionRouteFailure,
+  collectionPathFailure,
+} from "@lacecms/content";
 import type { JsonObject, JsonValue } from "@lacecms/content";
 import type { SiteBuildStatus } from "./build-status.js";
 import { cloneEntrySeo } from "./seo.js";
@@ -6,8 +13,6 @@ import type { EntrySeo } from "./seo.js";
 
 export const packageName = "@lacecms/domain";
 export const BLOCK_POSITION_STEP = 1_000;
-
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 /** A nominal marker for domain values that share a string representation. */
 export type Brand<Value, Name extends string> = Value & { readonly __brand: Name };
@@ -21,7 +26,9 @@ export type MediaId = Brand<string, "MediaId">;
 export type SiteBuildId = Brand<string, "SiteBuildId">;
 export type UnixMilliseconds = Brand<number, "UnixMilliseconds">;
 
-export type ContentModelKind = "collection" | "global" | "page";
+export type { ContentModelKind } from "@lacecms/content";
+export { isContentSlug } from "@lacecms/content";
+import type { ContentModelKind } from "@lacecms/content";
 export type Role = "admin" | "editor" | "viewer";
 export type Permission =
   | "content:read"
@@ -48,12 +55,9 @@ export type DomainErrorCode =
   | "MEDIA_UPDATE_CONFLICT";
 
 /** A portable error with a stable code suitable for later transport mapping. */
-export class DomainError extends Error {
-  public constructor(
-    public readonly code: DomainErrorCode,
-    message: string,
-  ) {
-    super(message);
+export class DomainError extends LaceError<DomainErrorCode> {
+  public constructor(code: DomainErrorCode, message: string) {
+    super(code, message);
     this.name = "DomainError";
   }
 }
@@ -100,6 +104,29 @@ export class BlockOrderError extends DomainError {
 export class CollectionQueryValidationError extends DomainError {
   public constructor(public readonly pointer: string) {
     super("CONTENT_INVALID_STATE", "Collection query is invalid.");
+  }
+}
+
+/** Closed account-flow failures; the HTTP boundary maps each code to one envelope. */
+export type AccountErrorCode =
+  | "CONFLICT"
+  | "INVALID_CREDENTIALS"
+  | "INVITATION_INVALID"
+  | "NOT_FOUND"
+  | "RESET_INVALID";
+
+export class AccountError extends LaceError<AccountErrorCode> {
+  public constructor(code: AccountErrorCode) {
+    super(code, code);
+    this.name = "AccountError";
+  }
+}
+
+/** A sensitive limit was exhausted inside a use case. */
+export class RateLimitExceededError extends LaceError<"RATE_LIMITED"> {
+  public constructor(public readonly retryAfterSeconds: number) {
+    super("RATE_LIMITED", "Rate limit exceeded.");
+    this.name = "RateLimitExceededError";
   }
 }
 
@@ -404,16 +431,6 @@ export interface PublishedRoute {
   readonly updatedAt: UnixMilliseconds;
 }
 
-function deepFreeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nestedValue of Object.values(value)) {
-      deepFreeze(nestedValue);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
-
 function cloneJson(value: JsonValue): JsonValue {
   if (
     value === null ||
@@ -463,67 +480,25 @@ function cloneSnapshot<Snapshot extends ContentSnapshot>(snapshot: Snapshot): Sn
   } as unknown as Snapshot;
 }
 
-function assertCanonicalPath(value: string, name: string): void {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    !value.startsWith("/") ||
-    value.includes("?") ||
-    value.includes("#") ||
-    value.includes("\\") ||
-    /\s/u.test(value) ||
-    value.includes("//") ||
-    (value.length > 1 && value.endsWith("/"))
-  ) {
-    fail("CONTENT_INVALID_STATE", `${name} must be a canonical absolute path.`);
-  }
-  for (const segment of value.slice(1).split("/")) {
-    if (segment === "." || segment === "..") {
-      fail("CONTENT_INVALID_STATE", `${name} must not contain dot segments.`);
-    }
-  }
-}
-
 /** Validates a fixed page path at the domain boundary. */
 export function normalizePagePublicPath(path: string): string {
-  assertCanonicalPath(path, "path");
-  if (path.includes(":")) {
-    fail("CONTENT_INVALID_STATE", "path must not contain parameter segments.");
-  }
+  const failure = pagePathFailure(path);
+  if (failure) fail("CONTENT_INVALID_STATE", failure.message);
   return path;
 }
 
 /** Validates a collection route with its one permitted placeholder. */
 export function normalizeCollectionPublicRoute(route: string): string {
-  assertCanonicalPath(route, "route");
-  const segments = route === "/" ? [] : route.slice(1).split("/");
-  const slugCount = segments.filter((segment) => segment === ":slug").length;
-  if (slugCount !== 1 || segments.some((segment) => segment.includes(":") && segment !== ":slug")) {
-    fail("CONTENT_INVALID_STATE", "route must contain exactly one :slug segment and no others.");
-  }
+  const failure = collectionRouteFailure(route);
+  if (failure) fail("CONTENT_INVALID_STATE", failure.message);
   return route;
-}
-
-/** Lowercase ASCII letters, digits and single hyphens, at most `MAX_SLUG_LENGTH` characters. */
-export function isContentSlug(value: unknown): value is string {
-  return typeof value === "string" && value.length <= MAX_SLUG_LENGTH && SLUG_PATTERN.test(value);
 }
 
 /** Resolves a canonical collection route without interpreting slug syntax as a path. */
 export function resolveCollectionPublicPath(route: string, slug: string): string {
-  const normalizedRoute = normalizeCollectionPublicRoute(route);
-  if (
-    typeof slug !== "string" ||
-    slug.length === 0 ||
-    slug.length > MAX_SLUG_LENGTH ||
-    !SLUG_PATTERN.test(slug)
-  ) {
-    fail(
-      "CONTENT_INVALID_STATE",
-      "slug must use lowercase ASCII letters, digits, and single hyphens.",
-    );
-  }
-  return normalizePagePublicPath(normalizedRoute.replace(":slug", slug));
+  const failure = collectionPathFailure(route, slug);
+  if ("issue" in failure) fail("CONTENT_INVALID_STATE", failure.message);
+  return failure.path;
 }
 
 /** Resolves the public path for one routable model and, for collections, its publication slug. */

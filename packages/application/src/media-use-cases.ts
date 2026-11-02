@@ -1,3 +1,4 @@
+import { InvariantError } from "@lacecms/content";
 import {
   DomainError,
   isMediaFocalCoordinate,
@@ -617,10 +618,10 @@ export class MediaUseCases {
   public async openBinary(media: MediaMetadata): Promise<MediaBinary> {
     const mimeType = media.mimeType;
     if (!ALLOWED_MEDIA_MIME_TYPES.includes(mimeType as MediaMimeType)) {
-      throw new Error("Stored media has an unsupported MIME type.");
+      throw new InvariantError("Stored media has an unsupported MIME type.");
     }
     const body = await this.dependencies.storage.get(media.storageKey);
-    if (body === null) throw new Error("Stored media object is unavailable.");
+    if (body === null) throw new InvariantError("Stored media object is unavailable.");
     return Object.freeze({
       body,
       filename: sanitizeMediaFilename(media.filename),
@@ -665,7 +666,7 @@ export class MediaUseCases {
 
   private async catalogView(id: MediaId, missing: string): Promise<MediaView> {
     const item = await this.dependencies.media.loadMediaCatalogItem(id);
-    if (item === null) throw new Error(missing);
+    if (item === null) throw new InvariantError(missing);
     return toMediaView(detached(item));
   }
 

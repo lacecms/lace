@@ -1,3 +1,4 @@
+import { fieldTypeSupport } from "./field-types.js";
 import {
   ContentValidationError,
   MAX_LIST_ITEMS,
@@ -142,11 +143,7 @@ export function snapshotBudget(model: ContentModelDto, values: DraftEditorValues
 }
 export function draftItemValue(definition: FieldDefinition): unknown {
   let value: unknown = definition.defaultValue;
-  if (value === undefined) {
-    if (definition.type === "group") value = {};
-    else if (definition.type === "boolean") value = false;
-    else if (definition.type === "text" || definition.type === "textarea") value = "";
-  }
+  if (value === undefined) value = fieldTypeSupport[definition.type].draftValue?.();
   if (value === undefined) return undefined;
   try {
     return validateFieldValue(definition, structuredClone(value), [], "draft");

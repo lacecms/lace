@@ -6,7 +6,12 @@ import {
 } from "@lacecms/contracts";
 import * as v from "valibot";
 import { useId, useState } from "react";
-import { collectionFilterProblem, listQueryBudgetHint } from "../../../entities/content/index.js";
+import {
+  collectionFilterProblem,
+  fieldFilterOperations as operations,
+  fieldTypeSupport,
+  listQueryBudgetHint,
+} from "../../../entities/content/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";
 import {
@@ -19,19 +24,6 @@ import {
 } from "../../../shared/ui/Dialog/index.js";
 
 const selectClass = "h-9 rounded-md border border-input bg-background px-3 text-sm";
-const operations = (type: string): readonly string[] => [
-  ...(["text", "textarea", "url"].includes(type)
-    ? ["contains", "eq"]
-    : type === "select"
-      ? ["in"]
-      : type === "number"
-        ? ["eq", "range"]
-        : type === "boolean"
-          ? ["eq"]
-          : ["range"]),
-  "isSet",
-  "isNotSet",
-];
 const labels: Record<string, string> = {
   contains: "Contains",
   eq: "Equals",
@@ -62,29 +54,26 @@ export function CollectionFilters({
   const [key, setKey] = useState(fieldKey);
   const existing = filters.find((filter) => filter.field === fieldKey);
   const field = model.fields[key]!;
+  const control = fieldTypeSupport[field.type].filter?.control;
   const [op, setOp] = useState(existing?.op ?? operations(field.type)[0]!);
   const [value, setValue] = useState(
-    existing && "value" in existing
-      ? String(existing.value)
-      : field.type === "boolean"
-        ? "false"
-        : "",
+    existing && "value" in existing ? String(existing.value) : control === "boolean" ? "false" : "",
   );
   const [values, setValues] = useState<string[]>(existing?.op === "in" ? [...existing.values] : []);
   const boundValue = (name: "min" | "max" | "from" | "to") =>
     existing?.op === "range" && name in existing
       ? String(existing[name as keyof typeof existing] ?? "").replace(/Z$/u, "")
       : "";
-  const [lower, setLower] = useState(boundValue(field.type === "number" ? "min" : "from"));
-  const [upper, setUpper] = useState(boundValue(field.type === "number" ? "max" : "to"));
+  const [lower, setLower] = useState(boundValue(control === "number" ? "min" : "from"));
+  const [upper, setUpper] = useState(boundValue(control === "number" ? "max" : "to"));
   const [touched, setTouched] = useState(false);
   const errorId = useId();
   const candidate: Record<string, unknown> = { field: key, op };
   if (op === "eq" || op === "contains")
     candidate.value =
-      field.type === "boolean"
+      control === "boolean"
         ? value === "true"
-        : field.type === "number"
+        : control === "number"
           ? value === ""
             ? null
             : Number(value)
@@ -92,23 +81,16 @@ export function CollectionFilters({
   if (op === "in") candidate.values = values;
   if (op === "range") {
     const bound = (text: string) =>
-      field.type === "number"
+      control === "number"
         ? Number(text)
-        : field.type === "datetime"
+        : control === "datetime-local"
           ? `${text.length === 16 ? `${text}:00` : text}Z`
           : text;
-    if (lower !== "") candidate[field.type === "number" ? "min" : "from"] = bound(lower);
-    if (upper !== "") candidate[field.type === "number" ? "max" : "to"] = bound(upper);
+    if (lower !== "") candidate[control === "number" ? "min" : "from"] = bound(lower);
+    if (upper !== "") candidate[control === "number" ? "max" : "to"] = bound(upper);
   }
   const problem = collectionFilterProblem(model, candidate, limits);
-  const controlType =
-    field.type === "number"
-      ? "number"
-      : field.type === "datetime"
-        ? "datetime-local"
-        : field.type === "date"
-          ? "date"
-          : "text";
+  const controlType = control === "boolean" || control === "select" ? "text" : (control ?? "text");
   return (
     <Dialog
       open
@@ -149,7 +131,11 @@ export function CollectionFilters({
                 const next = event.target.value;
                 setKey(next);
                 setOp(operations(model.fields[next]!.type)[0]!);
-                setValue(model.fields[next]!.type === "boolean" ? "false" : "");
+                setValue(
+                  fieldTypeSupport[model.fields[next]!.type].filter?.control === "boolean"
+                    ? "false"
+                    : "",
+                );
                 setValues([]);
                 setLower("");
                 setUpper("");
@@ -182,7 +168,7 @@ export function CollectionFilters({
             </select>
           </label>
           {op === "eq" || op === "contains" ? (
-            field.type === "boolean" ? (
+            control === "boolean" ? (
               <label className="grid gap-1 text-sm">
                 Value
                 <select
@@ -238,7 +224,7 @@ export function CollectionFilters({
           {op === "range" ? (
             <div className="grid grid-cols-2 gap-3">
               <label className="grid gap-1 text-sm">
-                {field.type === "number" ? "Minimum" : "From (UTC)"}
+                {control === "number" ? "Minimum" : "From (UTC)"}
                 <Input
                   type={controlType}
                   step="any"
@@ -250,7 +236,7 @@ export function CollectionFilters({
                 />
               </label>
               <label className="grid gap-1 text-sm">
-                {field.type === "number" ? "Maximum" : "To (UTC)"}
+                {control === "number" ? "Maximum" : "To (UTC)"}
                 <Input
                   type={controlType}
                   step="any"

@@ -1,11 +1,26 @@
 import { ContentUseCases } from "@lacecms/application";
 
 import { readAllBuildContentPages } from "../build-export.js";
+import type { CollectionModelInput } from "@lacecms/config";
 import { defineCollection, defineConfig } from "@lacecms/config";
 
-import { defineBlock, field } from "@lacecms/content";
+import { defineBlock, field, validateModelFields, publishedFieldValues } from "@lacecms/content";
 
-import { blockKey, contentSnapshotId, mediaId, unixMilliseconds } from "@lacecms/domain";
+import type {
+  FieldDefinition,
+  GroupFieldDefinition,
+  ModelFieldDefinitions,
+  JsonObject,
+} from "@lacecms/content";
+import { visibilityParityCases } from "../visibility-parity.js";
+
+import {
+  blockKey,
+  contentEntryId,
+  contentSnapshotId,
+  mediaId,
+  unixMilliseconds,
+} from "@lacecms/domain";
 
 import {
   type ContractRepository,
@@ -20,6 +35,10 @@ import {
   seedModels,
   seedMedia,
   registerContract,
+  entry,
+  publish,
+  applySync,
+  syncResolver,
 } from "./shared.js";
 import { lifecycleState } from "./lifecycle.js";
 
@@ -337,3 +356,120 @@ contract("refuses a projection that does not name the draft's blocks", async (ru
   ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
   expect(await lifecycleState(sql)).toEqual(state);
 });
+
+function withoutVisibility(fields: ModelFieldDefinitions): ModelFieldDefinitions {
+  const stripGroup = (definition: GroupFieldDefinition): GroupFieldDefinition => {
+    const { visibility: _rules, ...plain } = definition;
+    return { ...plain, fields: withoutVisibility(definition.fields) };
+  };
+  const strip = (definition: FieldDefinition): FieldDefinition => {
+    if (definition.type === "group") return stripGroup(definition);
+    if (definition.type === "list")
+      return {
+        ...definition,
+        item: definition.item.type === "group" ? stripGroup(definition.item) : definition.item,
+      };
+    return definition;
+  };
+  return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, strip(value)]));
+}
+
+contract(
+  "shares visibility parity across synchronization and publication",
+  async (runtime, expect) => {
+    for (const parity of visibilityParityCases) {
+      const values = JSON.parse(JSON.stringify(parity.values)) as Record<
+        string,
+        JsonObject[string]
+      >;
+      const expected = JSON.parse(JSON.stringify(parity.published)) as Record<
+        string,
+        JsonObject[string]
+      >;
+      // Cleared form controllers are unset before storage; SQL snapshots never store null controllers.
+      for (const key of Object.keys(values))
+        if (values[key] === null) {
+          delete values[key];
+          delete expected[key];
+        }
+      const config = async (version: number) =>
+        defineConfig({
+          blocks: [],
+          content: [
+            defineCollection({
+              key: "posts",
+              version,
+              route: "/blog/:slug",
+              blocks: [],
+              fields: version === 1 ? withoutVisibility(parity.fields) : parity.fields,
+              ...(version === 1 ? {} : { visibility: parity.visibility }),
+            } as CollectionModelInput),
+          ],
+        });
+      const v1 = await config(1);
+      const v2 = await config(2);
+      const { repository } = await runtime.open({ resolveModel: syncResolver(v2.runtime.content) });
+      await applySync(repository, v1.runtime.content, 10);
+      await repository.create({
+        entry: entry("parity-raw", "posts", { fields: values, slug: "raw", updatedAt: 20 }),
+        mediaReferences: [],
+      });
+      await repository.publish(publish("parity-raw", 1, 21));
+      await applySync(repository, v2.runtime.content, 30);
+      const synced = (await repository.load({ entryId: contentEntryId("parity-raw") }))!;
+      expect(synced.published!.fields, parity.name).toEqual(expected);
+      expect(synced.draft.fields, parity.name).toEqual(values);
+      const useCases = new ContentUseCases({
+        config: v2.runtime,
+        content: repository,
+        media: repository,
+        clock: { now: () => unixMilliseconds(40) },
+        idGenerator: { next: sequence("parity") },
+      });
+      const created = await useCases.create({
+        actor: editor,
+        modelKey: "posts",
+        title: "Parity",
+        slug: "normal",
+        fields: values,
+        blocks: [],
+      });
+      await useCases.publish({ actor: admin, entryId: created.id, expectedRevision: 1 });
+      const stored = (await repository.load({ entryId: created.id }))!.published!.fields;
+      const normalized = validateModelFields(
+        parity.fields,
+        values,
+        "publish",
+        [],
+        parity.visibility,
+      );
+      expect(stored, parity.name).toEqual(
+        publishedFieldValues(parity.fields, normalized, parity.visibility),
+      );
+      // Sync preserves absent controllers; ordinary writes materialize defaults. Both retain the same targets.
+      const normalizedSync = validateModelFields(
+        parity.fields,
+        synced.published!.fields,
+        "publish",
+        [],
+        parity.visibility,
+      );
+      expect(stored, parity.name).toEqual(
+        publishedFieldValues(parity.fields, normalizedSync, parity.visibility),
+      );
+      for (const occurrence of parity.occurrences) {
+        let value: unknown = stored;
+        for (const key of occurrence.path) value = (value as Record<string | number, unknown>)[key];
+        const keys = Object.keys(value as JsonObject);
+        expect(
+          keys.filter((key) => !occurrence.visibleKeys.includes(key)),
+          parity.name,
+        ).toEqual([]);
+        for (const key of Object.keys(occurrence.visibility))
+          expect(keys.includes(key), `${parity.name}: ${occurrence.path.join("/")}/${key}`).toBe(
+            occurrence.visibleKeys.includes(key),
+          );
+      }
+    }
+  },
+);

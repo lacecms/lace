@@ -1,3 +1,4 @@
+import type { GroupFieldDefinition, ListFieldDefinition } from "@lacecms/content";
 import { CalendarIcon, ExternalLink, Link2, X } from "lucide-react";
 import { type ComponentType, useId, useState } from "react";
 import { cn, formatDate } from "../../../shared/lib/index.js";
@@ -472,7 +473,7 @@ function UnavailableMediaField() {
 
 /** Scalar controls reused by the recursive field renderer. */
 export const builtInRenderers: Record<
-  Exclude<FieldDefinition["type"], "group" | "list">,
+  Exclude<FieldDefinition, GroupFieldDefinition | ListFieldDefinition>["type"],
   ComponentType<FieldRendererProps>
 > = {
   boolean: BooleanField,
@@ -488,7 +489,8 @@ export const builtInRenderers: Record<
 };
 
 /** Field types whose control is not a single labelable element. */
-export const groupedFieldTypes: ReadonlySet<FieldDefinition["type"]> = new Set([
-  "media",
-  "richText",
-]);
+export const groupedFieldTypes: ReadonlySet<FieldDefinition["type"]> = new Set(
+  (Object.keys(builtInRenderers) as FieldDefinition["type"][]).filter(
+    (type) => type === "media" || type === "richText",
+  ),
+);

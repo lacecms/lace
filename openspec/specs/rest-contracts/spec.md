@@ -1541,3 +1541,148 @@ without changing DTO shapes.
 #### Scenario: OpenAPI documents published omission
 - **WHEN** the generated OpenAPI document is inspected
 - **THEN** the `FieldVisibility` schema description states that hidden values are retained in drafts and omitted from published content
+
+### Requirement: OpenAPI descriptor schemas match the shared descriptor normalizer
+
+Generated OpenAPI field descriptor schemas (`FieldDefinition`,
+`GroupFieldDefinition`, `ListFieldDefinition`, the block setting alternatives
+of `BlockMetadata`) SHALL be derived from the field type capability
+declaration of `field-descriptors`: the documented kinds, which kinds carry
+`placeholder`, the JSON type of each `defaultValue` and the block setting
+kinds. They SHALL document every descriptor property that shared metadata
+validation accepts: URL fields SHALL document optional `embedProviders` as a
+nonempty unique array of `youtube` and `vimeo`, group fields and
+`BlockMetadata` SHALL document optional `layout`, and `BlockMetadata` SHALL
+document optional `settingsLayout`, through one `FormLayout` schema with mode
+`sections` or `tabs` and nonempty groups of key, label, optional description
+and nonempty field keys. Semantic constraints that JSON Schema cannot express
+(length and range ordering, default conformance, option uniqueness with
+presentation, layout references to sibling fields, composite depth) SHALL
+remain enforced by shared runtime validation and SHALL stay described in
+schema descriptions.
+
+For a corpus that contains, for every field kind, a descriptor with every
+option that kind accepts and descriptors with an unknown property, an option
+of another kind or a wrongly typed default, the OpenAPI descriptor schema
+and the shared normalizer SHALL accept and reject the same descriptors.
+Runtime validation, response shapes and every other generated OpenAPI schema
+SHALL remain unchanged.
+
+#### Scenario: Provider-restricted URL metadata is documented
+
+- **WHEN** a model response contains a URL field with `embedProviders:
+  ["youtube"]` and a group with a `tabs` layout
+- **THEN** the response passes shared metadata validation and validates
+  against the generated `FieldDefinition` and `GroupFieldDefinition` schemas
+
+#### Scenario: Schema and normalizer agree on the corpus
+
+- **WHEN** the descriptor corpus derived from the capability declaration is
+  checked against both the OpenAPI descriptor schema and the shared
+  normalizer
+- **THEN** each descriptor receives the same accept or reject verdict from
+  both, including rejection of a placeholder on a boolean field and of
+  `embedProviders` on a text field
+
+#### Scenario: Unrelated OpenAPI output is unchanged
+
+- **WHEN** `apps/api/openapi/api-v1.json` is regenerated
+- **THEN** its diff is limited to the field descriptor schemas,
+  `BlockMetadata` and the new `FormLayout` schema
+
+### Requirement: Contract projections cover their application results
+Every contracts projection input that mirrors an application result SHALL be
+checked against that result when the code is built. This covers the content
+model, collection list options, entry summary, import token, media
+metadata, media detail, media usage location, public entry, public media,
+public global and build-export page. The check SHALL require that:
+
+- the application result is assignable to the projection input;
+- every property of the application result is a property of the projection
+  input or is named in a declared list of intentionally omitted properties
+  (for example a media item's private storage key);
+- every property of the projection input exists on the application result.
+
+The content model projection SHALL map every property of its input to the
+content model DTO. Its mapped properties SHALL equal the properties of the
+content model DTO schema, so a new optional model property cannot be
+accepted by the schema while being dropped from discovery responses on REST
+or MCP. Existing DTO shapes, values and OpenAPI SHALL remain unchanged.
+
+#### Scenario: A new application property is caught at build time
+- **WHEN** a maintainer adds an optional property to a discovered content
+  model without adding it to the contracts projection input
+- **THEN** typechecking fails and names the content model pair until the
+  property is projected or declared as intentionally omitted
+
+#### Scenario: A property the application already returns is declared
+- **WHEN** content model discovery returns conditional-field `visibility`
+- **THEN** the application result type declares `visibility`, and REST and
+  MCP discovery responses contain the same normalized `visibility` as before
+
+#### Scenario: The content model projection matches its schema
+- **WHEN** the content model DTO schema gains or loses a property
+- **THEN** a contracts test fails until the projection maps exactly the
+  schema's properties
+
+#### Scenario: Private storage data stays out of public media
+- **WHEN** a public media projection input is checked against stored media
+  metadata
+- **THEN** every other stored property, including the storage key,
+  filename, tags, hash, size, status, timestamps and attribution, is listed
+  as intentionally omitted, and public media responses do not contain them
+
+### Requirement: One error model maps failures through one classification table
+Every portable failure raised by content rules, configuration, domain rules,
+application use cases and shared contracts SHALL carry a stable
+machine-readable code through one shared error base. One shared classifier
+SHALL own the mapping from failure to transport envelope for every transport:
+validation failures carrying issues SHALL map to `422 VALIDATION_FAILED` with
+their issues; any other failure whose code is a documented transport code
+SHALL map to that code's single status and sanitized message; every other
+failure, including configuration, block-definition, block-migration and
+internal-invariant failures and errors without a code, SHALL map to `500
+INTERNAL_ERROR` with the generic message. The documented status and code pairs
+SHALL be exactly: `VALIDATION_FAILED` `422`; `AUTHORIZATION_DENIED` `403`;
+`CONTENT_INVALID_STATE` `422`; `INVALID_CREDENTIALS` `400`; `NOT_FOUND` `404`;
+`INVITATION_INVALID` and `RESET_INVALID` `410`; `PAYLOAD_TOO_LARGE` `413`;
+`RATE_LIMITED` `429`; and `409` for `BUILD_EXPORT_VERSION_CHANGED`,
+`CONFLICT`, `CONTENT_LINKS_IN_USE`, `CONTENT_LINK_IMPACT_CHANGED`,
+`CONTENT_MODEL_CARDINALITY_CONFLICT`, `CONTENT_NOT_PUBLISHED`,
+`CONTENT_PAGE_SINGLETON`, `CONTENT_PUBLISHED_IMMUTABLE`,
+`CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, `LAST_ADMIN_PROTECTED`,
+`MEDIA_IN_USE` and `MEDIA_UPDATE_CONFLICT`. An exhausted account or request
+limit SHALL keep its `Retry-After` header of at least one whole second. A
+stale build export SHALL keep its documented version details, and a block
+order failure SHALL keep its bounded ordering message. No envelope SHALL
+expose the internal message of a failure the table does not mark safe. The
+status, code, message, details and headers the REST API returns for each
+failure SHALL equal those it returned before this requirement, and a
+repository test SHALL pin that matrix for every portable error class the
+shared packages export.
+
+#### Scenario: An account failure is classified from its code
+- **WHEN** an account operation fails because an invitation has expired
+- **THEN** the API returns status `410` with code `INVITATION_INVALID` and the
+  sanitized invitation message, exactly as before
+
+#### Scenario: A rate-limited account operation keeps its retry hint
+- **WHEN** a sensitive account operation is refused because its limit is
+  exhausted with 1.2 seconds remaining
+- **THEN** the API returns status `429` with code `RATE_LIMITED` and the header
+  `Retry-After: 2`
+
+#### Scenario: A configuration failure is internal
+- **WHEN** a request reaches a block definition or configuration failure
+- **THEN** the API returns status `500` with code `INTERNAL_ERROR` and the
+  generic message, without the definition detail
+
+#### Scenario: An internal invariant failure is sanitized
+- **WHEN** a media binary request finds that the stored object is unavailable
+- **THEN** the API returns status `500` with code `INTERNAL_ERROR` and the
+  generic message, without the storage key or internal message
+
+#### Scenario: The matrix covers every exported error class
+- **WHEN** a shared package exports a new error class that the status matrix
+  does not list
+- **THEN** the repository test fails and names that class

@@ -239,3 +239,19 @@ definePage({
   // @ts-expect-error Visibility targets must be model fields.
   visibility: { missing: { field: "heroKind", values: ["image"] } },
 });
+
+const seoFields = { title: field.text(), description: field.textarea(), count: field.number() };
+const seoKeys: import("./index.js").ModelSeoInput<typeof seoFields> = {
+  description: "description",
+};
+const seoDefaults: import("./index.js").SeoDefaultsInput<typeof seoFields> = {
+  siteName: "title",
+  titleTemplate: "description",
+};
+// @ts-expect-error SEO text sources derive their permitted kinds from content capabilities.
+const invalidSeo: import("./index.js").ModelSeoInput<typeof seoFields> = { description: "count" };
+// @ts-expect-error Numeric fields cannot provide the site name.
+const invalidSeoDefaults: import("./index.js").SeoDefaultsInput<typeof seoFields> = {
+  siteName: "count",
+};
+void [seoKeys, seoDefaults, invalidSeo, invalidSeoDefaults];

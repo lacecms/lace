@@ -335,3 +335,22 @@ test("tools describe conditional fields and publish their projection", async () 
   expect(read.draft.fields).toEqual({ kind: "image", videoUrl: "https://example.com/left-over" });
   expect(read.published.fields).toEqual({ kind: "image" });
 });
+
+test("MCP error matrix shares the classifier body without transport headers", async () => {
+  const { errorMatrixCases } = await import("@lacecms/test-utils");
+  const { classifyError } = await import("@lacecms/contracts");
+  const f = await fixture();
+  const client = await f.connect(actor("admin", "admin", true));
+  for (const c of errorMatrixCases) {
+    f.content.loadAdminEntry = async () => {
+      throw c.create();
+    };
+    const result = await client.callTool({
+      name: "get_entry",
+      arguments: { entryId: "matrix-entry" },
+    });
+    expect(result.isError, c.name).toBe(true);
+    expect(payload(result), c.name).toEqual(classifyError(c.create()).body);
+    expect(JSON.stringify(result), c.name).not.toContain("retry-after");
+  }
+});

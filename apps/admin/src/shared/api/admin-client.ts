@@ -155,8 +155,7 @@ export const adminQueryKeys = Object.freeze({
   /** One searched, filtered, and sorted media list; pages are held by the infinite query. */
   mediaList: (query: Pick<MediaListQuery, "q" | "sort" | "tags" | "type">) =>
     [
-      "admin",
-      "media",
+      ...adminQueryKeys.media,
       "list",
       {
         q: query.q ?? null,

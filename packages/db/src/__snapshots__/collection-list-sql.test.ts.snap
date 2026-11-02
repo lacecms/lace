@@ -1,0 +1,182 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`list statements and bindings preserve every sort family 1`] = `
+[
+  {
+    "items": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        "%a\\_\\%%",
+        "["target"]",
+        11,
+      ],
+      "sql": "select e.id, e.model_key, e.published_snapshot_id, e.updated_at, d.id as draft_snapshot_id,
+    d.revision as draft_revision, d.title, d.slug, (select json_group_object(value, json(d.fields_json -> ('$.' || value))) from json_each(?5)) as fields_json, d.updated_by,
+    u.name as updated_by_name, p.created_at as published_at, case when e.published_snapshot_id is null then 'draft'
+  when p.revision = d.revision then 'published' else 'changed' end as status, null as sort_value, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then 0 else 1 end) as sort_missing
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id left join user u on u.id=d.updated_by where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) and json_extract(d.fields_json, ?3) like ?4 escape '\\')
+    order by (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then 0 else 1 end) asc, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then json_extract(d.fields_json, ?3) else null end) collate nocase asc, e.id asc limit ?6",
+    },
+    "totals": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        "%a\\_\\%%",
+      ],
+      "sql": "select count(*) as total_count, sum(case when e.published_snapshot_id is null then 1 else 0 end) as draft_count,
+    sum(case when p.revision=d.revision then 1 else 0 end) as published_count, sum(case when p.revision<>d.revision then 1 else 0 end) as changed_count
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) and json_extract(d.fields_json, ?3) like ?4 escape '\\')",
+    },
+    "type": "text",
+  },
+  {
+    "items": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        0,
+        5,
+        "["target"]",
+        11,
+      ],
+      "sql": "select e.id, e.model_key, e.published_snapshot_id, e.updated_at, d.id as draft_snapshot_id,
+    d.revision as draft_revision, d.title, d.slug, (select json_group_object(value, json(d.fields_json -> ('$.' || value))) from json_each(?6)) as fields_json, d.updated_by,
+    u.name as updated_by_name, p.created_at as published_at, case when e.published_snapshot_id is null then 'draft'
+  when p.revision = d.revision then 'published' else 'changed' end as status, (case when coalesce(json_type(d.fields_json, ?3) in ('integer','real') and abs(json_extract(d.fields_json, ?3)) <= 1.7976931348623157e308,0) then json_extract(d.fields_json, ?3) else null end) as sort_value, (case when coalesce(json_type(d.fields_json, ?3) in ('integer','real') and abs(json_extract(d.fields_json, ?3)) <= 1.7976931348623157e308,0) then 0 else 1 end) as sort_missing
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id left join user u on u.id=d.updated_by where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3) in ('integer','real') and abs(json_extract(d.fields_json, ?3)) <= 1.7976931348623157e308,0) and json_extract(d.fields_json, ?3) >= ?4 and json_extract(d.fields_json, ?3) <= ?5)
+    order by (case when coalesce(json_type(d.fields_json, ?3) in ('integer','real') and abs(json_extract(d.fields_json, ?3)) <= 1.7976931348623157e308,0) then 0 else 1 end) asc, (case when coalesce(json_type(d.fields_json, ?3) in ('integer','real') and abs(json_extract(d.fields_json, ?3)) <= 1.7976931348623157e308,0) then json_extract(d.fields_json, ?3) else null end) asc, e.id asc limit ?7",
+    },
+    "totals": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        0,
+        5,
+      ],
+      "sql": "select count(*) as total_count, sum(case when e.published_snapshot_id is null then 1 else 0 end) as draft_count,
+    sum(case when p.revision=d.revision then 1 else 0 end) as published_count, sum(case when p.revision<>d.revision then 1 else 0 end) as changed_count
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3) in ('integer','real') and abs(json_extract(d.fields_json, ?3)) <= 1.7976931348623157e308,0) and json_extract(d.fields_json, ?3) >= ?4 and json_extract(d.fields_json, ?3) <= ?5)",
+    },
+    "type": "number",
+  },
+  {
+    "items": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        0,
+        "["target"]",
+        11,
+      ],
+      "sql": "select e.id, e.model_key, e.published_snapshot_id, e.updated_at, d.id as draft_snapshot_id,
+    d.revision as draft_revision, d.title, d.slug, (select json_group_object(value, json(d.fields_json -> ('$.' || value))) from json_each(?5)) as fields_json, d.updated_by,
+    u.name as updated_by_name, p.created_at as published_at, case when e.published_snapshot_id is null then 'draft'
+  when p.revision = d.revision then 'published' else 'changed' end as status, (case when coalesce(json_type(d.fields_json, ?3) in ('true','false'),0) then json_extract(d.fields_json, ?3) else null end) as sort_value, (case when coalesce(json_type(d.fields_json, ?3) in ('true','false'),0) then 0 else 1 end) as sort_missing
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id left join user u on u.id=d.updated_by where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3) in ('true','false'),0) and json_extract(d.fields_json, ?3) = ?4)
+    order by (case when coalesce(json_type(d.fields_json, ?3) in ('true','false'),0) then 0 else 1 end) asc, (case when coalesce(json_type(d.fields_json, ?3) in ('true','false'),0) then json_extract(d.fields_json, ?3) else null end) asc, e.id asc limit ?6",
+    },
+    "totals": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        0,
+      ],
+      "sql": "select count(*) as total_count, sum(case when e.published_snapshot_id is null then 1 else 0 end) as draft_count,
+    sum(case when p.revision=d.revision then 1 else 0 end) as published_count, sum(case when p.revision<>d.revision then 1 else 0 end) as changed_count
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3) in ('true','false'),0) and json_extract(d.fields_json, ?3) = ?4)",
+    },
+    "type": "boolean",
+  },
+  {
+    "items": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        "2026-01-01",
+        "2026-12-31",
+        "["target"]",
+        11,
+      ],
+      "sql": "select e.id, e.model_key, e.published_snapshot_id, e.updated_at, d.id as draft_snapshot_id,
+    d.revision as draft_revision, d.title, d.slug, (select json_group_object(value, json(d.fields_json -> ('$.' || value))) from json_each(?6)) as fields_json, d.updated_by,
+    u.name as updated_by_name, p.created_at as published_at, case when e.published_snapshot_id is null then 'draft'
+  when p.revision = d.revision then 'published' else 'changed' end as status, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then json_extract(d.fields_json, ?3) else null end) as sort_value, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then 0 else 1 end) as sort_missing
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id left join user u on u.id=d.updated_by where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) and json_extract(d.fields_json, ?3) >= ?4 and json_extract(d.fields_json, ?3) <= ?5)
+    order by (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then 0 else 1 end) asc, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) then json_extract(d.fields_json, ?3) else null end) asc, e.id asc limit ?7",
+    },
+    "totals": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        "2026-01-01",
+        "2026-12-31",
+      ],
+      "sql": "select count(*) as total_count, sum(case when e.published_snapshot_id is null then 1 else 0 end) as draft_count,
+    sum(case when p.revision=d.revision then 1 else 0 end) as published_count, sum(case when p.revision<>d.revision then 1 else 0 end) as changed_count
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'',0) and json_extract(d.fields_json, ?3) >= ?4 and json_extract(d.fields_json, ?3) <= ?5)",
+    },
+    "type": "date",
+  },
+  {
+    "items": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        1767225600000,
+        1798675200000,
+        "["target"]",
+        11,
+      ],
+      "sql": "select e.id, e.model_key, e.published_snapshot_id, e.updated_at, d.id as draft_snapshot_id,
+    d.revision as draft_revision, d.title, d.slug, (select json_group_object(value, json(d.fields_json -> ('$.' || value))) from json_each(?6)) as fields_json, d.updated_by,
+    u.name as updated_by_name, p.created_at as published_at, case when e.published_snapshot_id is null then 'draft'
+  when p.revision = d.revision then 'published' else 'changed' end as status, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'' and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) is not null,0) then cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) else null end) as sort_value, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'' and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) is not null,0) then 0 else 1 end) as sort_missing
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id left join user u on u.id=d.updated_by where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'' and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) is not null,0) and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) >= ?4 and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) <= ?5)
+    order by (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'' and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) is not null,0) then 0 else 1 end) asc, (case when coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'' and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) is not null,0) then cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) else null end) asc, e.id asc limit ?7",
+    },
+    "totals": {
+      "params": [
+        "posts",
+        "%hello%",
+        "$.target",
+        1767225600000,
+        1798675200000,
+      ],
+      "sql": "select count(*) as total_count, sum(case when e.published_snapshot_id is null then 1 else 0 end) as draft_count,
+    sum(case when p.revision=d.revision then 1 else 0 end) as published_count, sum(case when p.revision<>d.revision then 1 else 0 end) as changed_count
+    from content_entries e
+  join content_snapshots d on d.id = e.draft_snapshot_id
+  left join content_snapshots p on p.id = e.published_snapshot_id where e.model_key = ?1 and (d.title like ?2 escape '\\' or coalesce(d.slug,'') like ?2 escape '\\') and (coalesce(json_type(d.fields_json, ?3)='text' and json_extract(d.fields_json, ?3)<>'' and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) is not null,0) and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) >= ?4 and cast(round((julianday(json_extract(d.fields_json, ?3))-2440587.5)*86400000) as integer) <= ?5)",
+    },
+    "type": "datetime",
+  },
+]
+`;

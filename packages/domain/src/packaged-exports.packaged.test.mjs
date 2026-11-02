@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 test("packaged entry point keeps its public exports", async () => {
   expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([
+    "AccountError",
     "BLOCK_POSITION_STEP",
     "BUILD_SOURCE_PATH_PATTERN",
     "BlockOrderError",
@@ -9,11 +10,13 @@ test("packaged entry point keeps its public exports", async () => {
     "BuildExportVersionChangedError",
     "CollectionQueryValidationError",
     "DomainError",
+    "LaceError",
     "MAX_MEDIA_ALT_LENGTH",
     "MAX_MEDIA_CAPTION_LENGTH",
     "MAX_SEO_CANONICAL_LENGTH",
     "MAX_SEO_DESCRIPTION_LENGTH",
     "MAX_SEO_TITLE_LENGTH",
+    "RateLimitExceededError",
     "actorId",
     "assertCollectionEntryOperation",
     "assertEntryCreationAllowed",

@@ -1,3 +1,10 @@
+import { LaceError, InvariantError } from "./errors.js";
+export { LaceError, InvariantError } from "./errors.js";
+import { MAX_SLUG_LENGTH } from "./identifiers.js";
+import type { ContentModelKind } from "./identifiers.js";
+export * from "./identifiers.js";
+import { deepFreeze, isPlainObject, isRecord } from "./objects.js";
+export * from "./objects.js";
 import { parseVideoEmbed } from "./video-embeds.js";
 import type { EmbedProvider } from "./video-embeds.js";
 import * as v from "valibot";
@@ -31,6 +38,180 @@ export type FieldType =
   | "text"
   | "textarea"
   | "url";
+
+/** Portable facts shared by configuration, queries, transport and admin support. */
+export type FieldSortFamily = "string" | "number" | "boolean" | "date" | "datetime";
+export type FieldFilterKind = "text" | "select" | "number" | "boolean" | "date" | "datetime";
+export type FieldValueKind = "string" | "number" | "boolean" | "object" | "array";
+export type FieldTypeCapability = {
+  readonly searchable: boolean;
+  readonly seoText: boolean;
+  readonly itemLabel: boolean;
+  readonly placeholder: boolean;
+  readonly valueKind: FieldValueKind;
+} & (
+  | {
+      readonly listQueryable: true;
+      readonly sortableAs: FieldSortFamily;
+      readonly filterKind: FieldFilterKind;
+    }
+  | { readonly listQueryable: false; readonly sortableAs?: never; readonly filterKind?: never }
+);
+
+const declaredFieldTypeCapabilities = deepFreeze({
+  text: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "text",
+    searchable: true,
+    seoText: true,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  textarea: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "text",
+    searchable: true,
+    seoText: true,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  richText: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: true,
+    valueKind: "object",
+  },
+  number: {
+    listQueryable: true,
+    sortableAs: "number",
+    filterKind: "number",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: true,
+    valueKind: "number",
+  },
+  boolean: {
+    listQueryable: true,
+    sortableAs: "boolean",
+    filterKind: "boolean",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "boolean",
+  },
+  date: {
+    listQueryable: true,
+    sortableAs: "date",
+    filterKind: "date",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  datetime: {
+    listQueryable: true,
+    sortableAs: "datetime",
+    filterKind: "datetime",
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  select: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "select",
+    searchable: false,
+    seoText: false,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  url: {
+    listQueryable: true,
+    sortableAs: "string",
+    filterKind: "text",
+    searchable: false,
+    seoText: false,
+    itemLabel: true,
+    placeholder: true,
+    valueKind: "string",
+  },
+  media: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  group: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "object",
+  },
+  list: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "array",
+  },
+} as const satisfies { readonly [Type in FieldType]: FieldTypeCapability });
+
+// Keep the public lookup total even while a newly introduced kind is missing
+// its declaration: the resulting diagnostics belong at this source of truth.
+export const fieldTypeCapabilities: typeof declaredFieldTypeCapabilities &
+  Readonly<Record<FieldType, FieldTypeCapability>> = declaredFieldTypeCapabilities;
+
+export const FIELD_FILTER_OPERATIONS = deepFreeze({
+  text: ["contains", "eq"],
+  select: ["in"],
+  number: ["eq", "range"],
+  boolean: ["eq"],
+  date: ["range"],
+  datetime: ["range"],
+} as const satisfies Record<FieldFilterKind, readonly string[]>);
+
+type DeclaredFieldType = keyof typeof declaredFieldTypeCapabilities;
+type TypesWhere<
+  Key extends keyof (typeof declaredFieldTypeCapabilities)[DeclaredFieldType],
+  Value,
+> = {
+  [Type in DeclaredFieldType]: (typeof declaredFieldTypeCapabilities)[Type][Key] extends Value
+    ? Type
+    : never;
+}[DeclaredFieldType];
+export type ListQueryableFieldType = TypesWhere<"listQueryable", true>;
+export type SearchableFieldType = TypesWhere<"searchable", true>;
+export type SeoTextFieldType = TypesWhere<"seoText", true>;
+export type ItemLabelFieldType = TypesWhere<"itemLabel", true>;
+export type PlaceholderFieldType = TypesWhere<"placeholder", true>;
+
+/** Field kinds with a boolean capability, in stable declaration order. */
+export function fieldTypesWith<
+  Key extends "listQueryable" | "searchable" | "seoText" | "itemLabel" | "placeholder",
+>(capability: Key): readonly TypesWhere<Key, true>[] {
+  return Object.freeze(
+    (Object.keys(fieldTypeCapabilities) as FieldType[]).filter(
+      (type) => fieldTypeCapabilities[type][capability],
+    ),
+  ) as TypesWhere<Key, true>[];
+}
 
 /** Options common to every field builder. */
 export interface CommonFieldOptions<Value> {
@@ -331,10 +512,33 @@ export function normalizeFieldVisibility(
   return deepFreeze(raw) as unknown as FieldVisibility;
 }
 
+/** Effective controller values for one occurrence, without copying non-controller data. */
+export function effectiveVisibilityValues(
+  fields: ModelFieldDefinitions,
+  visibility: FieldVisibility | undefined,
+  values: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, boolean | string>> {
+  const result: Record<string, boolean | string> = {};
+  if (visibility === undefined) return result;
+  const seen = new Set<string>();
+  for (const target of Object.keys(visibility)) {
+    if (!Object.hasOwn(visibility, target)) continue;
+    const { field } = visibility[target]!;
+    if (seen.has(field)) continue;
+    seen.add(field);
+    const present = Object.hasOwn(values, field) ? values[field] : undefined;
+    const controller = Object.hasOwn(fields, field) ? fields[field] : undefined;
+    const value = present ?? controller?.defaultValue;
+    if (value !== undefined)
+      Object.defineProperty(result, field, { value: value as boolean | string, enumerable: true });
+  }
+  return result;
+}
+
 /**
- * Whether `target` applies in one normalized object occurrence: a target
- * without a rule is visible; otherwise its controller's value (present or
- * materialized default) must be listed. An absent controller matches nothing.
+ * Whether a target's rule matches effective controller values, as computed by
+ * effectiveVisibilityValues. A target without a rule is visible; an absent
+ * effective controller matches nothing.
  */
 export function isFieldVisible(
   visibility: FieldVisibility | undefined,
@@ -459,9 +663,9 @@ export type FieldIsRequired<Definition extends FieldDefinition> = Definition ext
 export type FieldMetadata = FieldDefinition;
 
 /** Thrown when a field builder receives a non-portable or contradictory option. */
-export class FieldConfigurationError extends Error {
+export class FieldConfigurationError extends LaceError<"FIELD_CONFIGURATION_INVALID"> {
   public constructor(message: string) {
-    super(message);
+    super("FIELD_CONFIGURATION_INVALID", message);
     this.name = "FieldConfigurationError";
   }
 }
@@ -471,11 +675,6 @@ type MutableJsonValue = boolean | null | number | string | MutableJsonObject | M
 
 function fail(path: string, message: string): never {
   throw new FieldConfigurationError(`${path} ${message}`);
-}
-
-function isPlainObject(value: object): value is Record<string, unknown> {
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === null || prototype === Object.prototype;
 }
 
 function isArrayIndex(key: string): boolean {
@@ -589,18 +788,6 @@ function normalizeOptions(options: unknown): MutableJsonObject {
   return normalized;
 }
 
-function deepFreeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) {
-      deepFreeze(child);
-    }
-
-    Object.freeze(value);
-  }
-
-  return value;
-}
-
 const RENAMED_FROM_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 
 function readOptionalString(options: MutableJsonObject, name: string): string | undefined {
@@ -679,7 +866,13 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
   definition.required = readOptionalBoolean(options, "required") ?? false;
 }
 
-function assertAllowedOptions(options: MutableJsonObject, allowed: readonly string[]): void {
+function assertAllowedOptions(
+  options: MutableJsonObject,
+  allowed: readonly string[],
+  type?: FieldType,
+): void {
+  if (type !== undefined && fieldTypeCapabilities[type].placeholder)
+    allowed = [...allowed, "placeholder"];
   for (const key of Object.keys(options)) {
     // Every field kind accepts the temporary `renamedFrom` hint.
     if (!allowed.includes(key) && key !== "renamedFrom") {
@@ -706,20 +899,19 @@ function addDefault(
   definition.defaultValue = value;
 }
 
-function buildStringField<Type extends "text" | "textarea", Options extends StringFieldOptions>(
+function buildStringField<
+  Type extends TextFieldDefinition["type"] | TextareaFieldDefinition["type"],
+  Options extends StringFieldOptions,
+>(
   type: Type,
   input: Options | undefined,
 ): Type extends "text" ? TextFieldDefinition<Options> : TextareaFieldDefinition<Options> {
   const options = normalizeOptions(input ?? {});
-  assertAllowedOptions(options, [
-    "defaultValue",
-    "description",
-    "label",
-    "maxLength",
-    "minLength",
-    "placeholder",
-    "required",
-  ]);
+  assertAllowedOptions(
+    options,
+    ["defaultValue", "description", "label", "maxLength", "minLength", "required"],
+    type,
+  );
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
 
@@ -752,17 +944,25 @@ function buildStringField<Type extends "text" | "textarea", Options extends Stri
 }
 
 function buildStringValueField<
-  Type extends "date" | "datetime" | "media" | "url",
+  Type extends
+    | DateFieldDefinition["type"]
+    | DatetimeFieldDefinition["type"]
+    | MediaFieldDefinition["type"]
+    | UrlFieldDefinition["type"],
   Options extends StringValueFieldOptions,
 >(type: Type, input: Options | undefined): FieldDefinition {
   const options = normalizeOptions(input ?? {});
-  assertAllowedOptions(options, [
-    "defaultValue",
-    "description",
-    "label",
-    "required",
-    ...(type === "url" ? ["placeholder", "embedProviders"] : []),
-  ]);
+  assertAllowedOptions(
+    options,
+    [
+      "defaultValue",
+      "description",
+      "label",
+      "required",
+      ...(type === "url" ? ["embedProviders"] : []),
+    ],
+    type,
+  );
   const definition: Record<string, unknown> = { type };
   addCommonOptions(definition, options);
   if (type === "url" && options.embedProviders !== undefined) {
@@ -865,13 +1065,11 @@ export const field = {
     options?: Options,
   ): RichTextFieldDefinition<Options> {
     const normalized = normalizeOptions(options ?? {});
-    assertAllowedOptions(normalized, [
-      "defaultValue",
-      "description",
-      "label",
-      "required",
-      "placeholder",
-    ]);
+    assertAllowedOptions(
+      normalized,
+      ["defaultValue", "description", "label", "required"],
+      "richText",
+    );
     const definition: Record<string, unknown> = { type: "richText" };
     addCommonOptions(definition, normalized);
     addDefault(
@@ -888,15 +1086,11 @@ export const field = {
     options?: Options,
   ): NumberFieldDefinition<Options> {
     const normalized = normalizeOptions(options ?? {});
-    assertAllowedOptions(normalized, [
-      "defaultValue",
-      "description",
-      "label",
-      "placeholder",
-      "max",
-      "min",
-      "required",
-    ]);
+    assertAllowedOptions(
+      normalized,
+      ["defaultValue", "description", "label", "max", "min", "required"],
+      "number",
+    );
     const definition: Record<string, unknown> = { type: "number" };
     addCommonOptions(definition, normalized);
     const min = readOptionalFiniteNumber(normalized, "min", false);
@@ -958,15 +1152,11 @@ export const field = {
     options: Options & SelectFieldOptions<Options["options"]>,
   ): SelectFieldDefinition<Options["options"], Options & SelectFieldOptions<Options["options"]>> {
     const normalized = normalizeOptions(options);
-    assertAllowedOptions(normalized, [
-      "defaultValue",
-      "description",
-      "label",
-      "options",
-      "presentation",
-      "placeholder",
-      "required",
-    ]);
+    assertAllowedOptions(
+      normalized,
+      ["defaultValue", "description", "label", "options", "presentation", "required"],
+      "select",
+    );
     const rawChoices = normalized.options;
     if (!Array.isArray(rawChoices) || rawChoices.length === 0) {
       fail("options.options", "must be a non-empty array of strings.");
@@ -1122,7 +1312,10 @@ function descriptorRecord(value: unknown, path: string): Record<string, unknown>
   return output;
 }
 
-function normalizeCompositeOptions(type: "group" | "list", value: unknown): FieldDefinition {
+function normalizeCompositeOptions(
+  type: GroupFieldDefinition["type"] | ListFieldDefinition["type"],
+  value: unknown,
+): FieldDefinition {
   const options = descriptorRecord(value, "options");
   if (Object.hasOwn(options, "type")) fail("options.type", "is not supported.");
   return normalizeFieldDefinition({ ...options, type });
@@ -1235,7 +1428,7 @@ function normalizeDescriptor(
           !FIELD_KEY_PATTERN.test(key) ||
           itemDefinition.type !== "group" ||
           !Object.hasOwn(itemDefinition.fields, key) ||
-          !["text", "textarea", "select", "url"].includes(itemDefinition.fields[key]!.type)
+          !fieldTypeCapabilities[itemDefinition.fields[key]!.type].itemLabel
         )
           fail(
             `${path}.itemLabel`,
@@ -1319,11 +1512,14 @@ export interface ContentValidationIssue {
 }
 
 /** Thrown when submitted content fails a portable validation contract. */
-export class ContentValidationError extends Error {
+export class ContentValidationError extends LaceError<"VALIDATION_FAILED"> {
   public readonly issues: readonly ContentValidationIssue[];
 
   public constructor(issues: readonly ContentValidationIssue[]) {
-    super(issues.map((issue) => `${formatValidationPath(issue.path)} ${issue.message}`).join("; "));
+    super(
+      "VALIDATION_FAILED",
+      issues.map((issue) => `${formatValidationPath(issue.path)} ${issue.message}`).join("; "),
+    );
     this.name = "ContentValidationError";
     this.issues = issues;
   }
@@ -1341,12 +1537,6 @@ function formatValidationPath(path: readonly ValidationPathSegment[]): string {
 
 function invalid(path: readonly ValidationPathSegment[], code: string, message: string): never {
   throw new ContentValidationError([{ code, message, path }]);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    value !== null && typeof value === "object" && !Array.isArray(value) && isPlainObject(value)
-  );
 }
 
 function assertExactKeys(
@@ -1810,7 +2000,11 @@ function normalizeFieldMap(
   // Controllers are unconditional, so their normalized values decide every target.
   for (const [key, definition] of Object.entries(definitions))
     if (!conditional(key)) normalize(key, definition, mode);
-  const controllers = Object.fromEntries(normalized);
+  const controllers = effectiveVisibilityValues(
+    definitions,
+    visibility,
+    Object.fromEntries(normalized),
+  );
   for (const [key, definition] of Object.entries(definitions))
     if (conditional(key))
       normalize(key, definition, isFieldVisible(visibility, key, controllers) ? mode : "draft");
@@ -1848,9 +2042,10 @@ export function publishedFieldValues(
       return value.map((item) => project(definition.item, item));
     return value;
   };
+  const effective = effectiveVisibilityValues(definitions, visibility, values);
   const output: Record<string, JsonValue> = {};
   for (const [key, value] of Object.entries(values)) {
-    if (!isFieldVisible(visibility, key, values)) continue;
+    if (!isFieldVisible(visibility, key, effective)) continue;
     const definition = Object.hasOwn(definitions, key) ? definitions[key] : undefined;
     Object.defineProperty(output, key, {
       value: definition === undefined ? value : project(definition, value),
@@ -2183,9 +2378,9 @@ export function normalizeBlockClassName(value: unknown): string | undefined {
 }
 
 /** Thrown when a block definition or registry is not portable or internally consistent. */
-export class BlockConfigurationError extends Error {
+export class BlockConfigurationError extends LaceError<"BLOCK_CONFIGURATION_INVALID"> {
   public constructor(message: string) {
-    super(message);
+    super("BLOCK_CONFIGURATION_INVALID", message);
     this.name = "BlockConfigurationError";
   }
 }
@@ -2722,9 +2917,9 @@ export type BlockMigrationErrorCode =
   | "version_ahead";
 
 /** Thrown when stored block data cannot be migrated to its definition's version. */
-export class BlockMigrationError extends Error {
+export class BlockMigrationError extends LaceError<BlockMigrationErrorCode> {
   public constructor(
-    public readonly code: BlockMigrationErrorCode,
+    code: BlockMigrationErrorCode,
     public readonly blockType: string,
     public readonly fromVersion: number,
     public readonly toVersion: number,
@@ -2733,7 +2928,7 @@ export class BlockMigrationError extends Error {
     public readonly step?: number,
     options?: { readonly cause?: unknown },
   ) {
-    super(message, options);
+    super(code, message, options);
     this.name = "BlockMigrationError";
   }
 }
@@ -3329,15 +3524,10 @@ export const builtInBlocks = deepFreeze({
 
 /** Maximum title length shared by draft, publish, REST, and admin validation. */
 export const MAX_TITLE_LENGTH = 200;
-/** Maximum slug length shared by publish, REST, and admin validation. */
-export const MAX_SLUG_LENGTH = 100;
 /** Maximum flat top-level block count for one entry. */
 export const MAX_TOP_LEVEL_BLOCKS = 200;
 /** Maximum UTF-8 bytes in fields JSON or a single block data JSON value. */
 export const MAX_JSON_BYTES = 1_000_000;
-
-/** Model kinds: routed singletons, routed lists, and route-less singletons. */
-export type ContentModelKind = "collection" | "global" | "page";
 
 /** A block-like value whose data can be limited before the Step 3 block registry exists. */
 export interface EntryBlockData {
@@ -3387,7 +3577,7 @@ export function canonicalJsonByteLength(value: JsonValue): number {
     globalThis as unknown as { readonly TextEncoder?: TextEncoderConstructorLike }
   ).TextEncoder;
   if (TextEncoderConstructor === undefined) {
-    throw new Error("TextEncoder is required for canonical JSON byte measurement.");
+    throw new InvariantError("TextEncoder is required for canonical JSON byte measurement.");
   }
   return new TextEncoderConstructor().encode(canonicalizeJson(value)).byteLength;
 }
@@ -3402,7 +3592,7 @@ export interface WebCryptoLike {
 function getWebCrypto(): WebCryptoLike {
   const crypto = (globalThis as unknown as { readonly crypto?: WebCryptoLike }).crypto;
   if (crypto === undefined) {
-    throw new Error("Web Crypto is required for canonical JSON hashing.");
+    throw new InvariantError("Web Crypto is required for canonical JSON hashing.");
   }
   return crypto;
 }
@@ -3416,7 +3606,7 @@ export async function sha256CanonicalJson(
     globalThis as unknown as { readonly TextEncoder?: TextEncoderConstructorLike }
   ).TextEncoder;
   if (TextEncoderConstructor === undefined) {
-    throw new Error("TextEncoder is required for canonical JSON hashing.");
+    throw new InvariantError("TextEncoder is required for canonical JSON hashing.");
   }
   const digest = new Uint8Array(
     await webCrypto.subtle.digest(

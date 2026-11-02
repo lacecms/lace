@@ -6,3 +6,5 @@ export * from "./build-export.js";
 export * from "./repository-contract/index.js";
 export * from "./security-contract.js";
 export * from "./gif.js";
+export * from "./visibility-parity.js";
+export * from "./error-matrix.js";

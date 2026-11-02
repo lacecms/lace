@@ -1,3 +1,4 @@
+import { fieldTypeSupport } from "./field-types.js";
 import { formFieldKeys } from "@lacecms/content";
 import { record } from "./composite-values.js";
 import type { FieldDefinition, FieldPreviewRegistry, ItemPreview } from "./field-types.js";
@@ -33,12 +34,6 @@ function summarizedChildren(
   return shownChildren(definition, value).filter(([key]) => !controllers.has(key));
 }
 
-function plainRichText(node: unknown): string {
-  if (!record(node)) return "";
-  if (typeof node.text === "string") return node.text;
-  return Array.isArray(node.content) ? node.content.map(plainRichText).join(" ") : "";
-}
-
 /** The useful text of one value with its priority: text, rich text, then URL/select. */
 function texts(definition: FieldDefinition, value: unknown): { priority: number; text: string }[] {
   if (definition.type === "group" && record(value))
@@ -47,20 +42,9 @@ function texts(definition: FieldDefinition, value: unknown): { priority: number;
     );
   if (definition.type === "list" && Array.isArray(value))
     return value.flatMap((item) => texts(definition.item, item));
-  if (["text", "textarea", "url", "select"].includes(definition.type) && typeof value === "string")
-    return clean(value)
-      ? [
-          {
-            priority: definition.type === "text" || definition.type === "textarea" ? 0 : 2,
-            text: clean(value),
-          },
-        ]
-      : [];
-  if (definition.type === "richText" && record(value)) {
-    const text = clean(plainRichText(value));
-    return text ? [{ priority: 1, text }] : [];
-  }
-  return [];
+  const summary = fieldTypeSupport[definition.type].summary;
+  const text = summary?.text(value);
+  return summary && text ? [{ priority: summary.priority, text }] : [];
 }
 
 function first(found: { priority: number; text: string }[]): string | undefined {

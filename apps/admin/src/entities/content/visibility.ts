@@ -1,4 +1,4 @@
-import { isFieldVisible, type FieldVisibility } from "@lacecms/content";
+import { effectiveVisibilityValues, isFieldVisible, type FieldVisibility } from "@lacecms/content";
 import { record } from "./composite-values.js";
 import { fieldLabel } from "./draft.js";
 import type { FieldDefinition } from "./field-types.js";
@@ -19,15 +19,7 @@ export function effectiveFormValues(
   visibility: FieldVisibility | undefined,
   values: unknown,
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  if (visibility === undefined) return result;
-  const present = record(values) ? values : {};
-  for (const { field } of Object.values(visibility)) {
-    const value = present[field];
-    if (value !== undefined && value !== null) result[field] = value;
-    else if (fields[field]?.defaultValue !== undefined) result[field] = fields[field].defaultValue;
-  }
-  return result;
+  return effectiveVisibilityValues(fields, visibility, record(values) ? values : {});
 }
 
 /** The keys of one occurrence whose rules match, through the shared evaluator; every key without rules. */

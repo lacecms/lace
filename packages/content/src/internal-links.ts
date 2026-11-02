@@ -20,7 +20,7 @@ export function isInternalLinkTargetId(value: unknown): value is string {
 
 /** Encode one opaque entry ID, without a route, query or fragment. */
 export function encodeEntryLink(id: string): string {
-  if (!isInternalLinkTargetId(id)) throw new Error("Invalid internal link target ID.");
+  if (!isInternalLinkTargetId(id)) throw new TypeError("Invalid internal link target ID.");
   return `entry:${encodeURIComponent(id)}`;
 }
 

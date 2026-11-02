@@ -1,17 +1,28 @@
+import { LaceError } from "@lacecms/content";
+import {
+  deepFreeze,
+  isPlainObject,
+  pagePathFailure,
+  collectionRouteFailure,
+  collectionPathFailure,
+} from "@lacecms/content";
 import {
   defineBlockRegistry,
+  fieldTypeCapabilities,
   normalizeFieldVisibility,
   normalizeFormLayout,
   parseSchemaPath,
   encodeSchemaPath,
   schemaFieldAt,
-  MAX_SLUG_LENGTH,
   sha256CanonicalJson,
   toBlockMetadata,
   toBlockRegistryMetadata,
   toFieldMetadata,
 } from "@lacecms/content";
 import type {
+  ListQueryableFieldType,
+  SearchableFieldType,
+  SeoTextFieldType,
   BlockDefinition,
   BlockMetadata,
   BlockRegistry,
@@ -30,30 +41,11 @@ export const packageName = "@lacecms/config";
 const STABLE_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 const BLOCK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-
-/** Field types whose values are plain JSON scalars suitable for list columns. */
-export const LIST_FIELD_TYPES: ReadonlySet<FieldDefinition["type"]> = new Set([
-  "boolean",
-  "date",
-  "datetime",
-  "number",
-  "select",
-  "text",
-  "textarea",
-  "url",
-]);
-
-/** Field types that may supply SEO text: site names, title templates and descriptions. */
-export const SEO_TEXT_FIELD_TYPES: ReadonlySet<FieldDefinition["type"]> = new Set([
-  "text",
-  "textarea",
-]);
 
 /** Thrown when `lace.config.ts` contains an invalid or ambiguous definition. */
-export class ConfigurationError extends Error {
+export class ConfigurationError extends LaceError<"CONFIGURATION_INVALID"> {
   public constructor(message: string) {
-    super(message);
+    super("CONFIGURATION_INVALID", message);
     this.name = "ConfigurationError";
   }
 }
@@ -111,7 +103,7 @@ interface CommonModelInput<Fields extends FieldMap> {
 /** Fallback fields of the same model for SEO values the editor leaves unset. */
 export interface ModelSeoInput<Fields extends FieldMap = FieldMap> {
   /** A `text` or `textarea` field used when the SEO description is unset. */
-  readonly description?: keyof Fields & string;
+  readonly description?: ListQueryFieldKey<Fields, SeoTextFieldType>;
   /** A `media` field used when the SEO image is unset. */
   readonly image?: keyof Fields & string;
 }
@@ -137,15 +129,9 @@ export type ListQueryFieldKey<Fields extends FieldMap, Types extends FieldDefini
 
 /** Independent admin query capabilities; visibility grants no capability. */
 export interface CollectionListOptions<Fields extends FieldMap = FieldMap> {
-  readonly sortableFields?: readonly ListQueryFieldKey<
-    Fields,
-    "text" | "textarea" | "url" | "select" | "number" | "boolean" | "date" | "datetime"
-  >[];
-  readonly filterableFields?: readonly ListQueryFieldKey<
-    Fields,
-    "text" | "textarea" | "url" | "select" | "number" | "boolean" | "date" | "datetime"
-  >[];
-  readonly searchableFields?: readonly ListQueryFieldKey<Fields, "text" | "textarea">[];
+  readonly sortableFields?: readonly ListQueryFieldKey<Fields, ListQueryableFieldType>[];
+  readonly filterableFields?: readonly ListQueryFieldKey<Fields, ListQueryableFieldType>[];
+  readonly searchableFields?: readonly ListQueryFieldKey<Fields, SearchableFieldType>[];
 }
 
 /** Input accepted by `defineCollection`. */
@@ -160,10 +146,10 @@ export interface CollectionModelInput<
 
 /** Fields of the declaring global that supply site-wide SEO defaults. */
 export interface SeoDefaultsInput<Fields extends FieldMap = FieldMap> {
-  readonly description?: keyof Fields & string;
+  readonly description?: ListQueryFieldKey<Fields, SeoTextFieldType>;
   readonly image?: keyof Fields & string;
-  readonly siteName: keyof Fields & string;
-  readonly titleTemplate?: keyof Fields & string;
+  readonly siteName: ListQueryFieldKey<Fields, SeoTextFieldType>;
+  readonly titleTemplate?: ListQueryFieldKey<Fields, SeoTextFieldType>;
 }
 
 /** Input accepted by `defineGlobal`; a global has no path, route, or list fields. */
@@ -307,21 +293,6 @@ type MutableJsonValue = boolean | null | number | string | MutableJsonObject | M
 
 function fail(message: string): never {
   throw new ConfigurationError(message);
-}
-
-function isPlainObject(value: object): value is Record<string, unknown> {
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === null || prototype === Object.prototype;
-}
-
-function deepFreeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nestedValue of Object.values(value)) {
-      deepFreeze(nestedValue);
-    }
-    Object.freeze(value);
-  }
-  return value;
 }
 
 function assertString(value: unknown, name: string): asserts value is string {
@@ -505,64 +476,25 @@ function normalizeBlocks(value: readonly string[] | undefined): readonly string[
   return deepFreeze(normalized);
 }
 
-function assertCanonicalRouteValue(value: unknown, name: string): asserts value is string {
-  assertString(value, name);
-  if (
-    value.length === 0 ||
-    !value.startsWith("/") ||
-    value.includes("?") ||
-    value.includes("#") ||
-    value.includes("\\") ||
-    /\s/u.test(value) ||
-    value.includes("//") ||
-    (value.length > 1 && value.endsWith("/"))
-  ) {
-    fail(`${name} must be a canonical absolute path.`);
-  }
-
-  for (const segment of value.slice(1).split("/")) {
-    if (segment === "." || segment === "..") {
-      fail(`${name} must not contain dot segments.`);
-    }
-  }
-}
-
 /** Validates and returns a canonical fixed page path. */
 export function normalizePagePath(path: string): string {
-  assertCanonicalRouteValue(path, "path");
-  if (path.includes(":")) {
-    fail("path must not contain parameter segments.");
-  }
+  const failure = pagePathFailure(path);
+  if (failure) fail(failure.message);
   return path;
 }
 
 /** Validates and returns a canonical collection route with one `:slug` segment. */
 export function normalizeCollectionRoute(route: string): string {
-  assertCanonicalRouteValue(route, "route");
-  const segments = route === "/" ? [] : route.slice(1).split("/");
-  const slugSegments = segments.filter((segment) => segment === ":slug");
-  if (
-    slugSegments.length !== 1 ||
-    segments.some((segment) => segment.includes(":") && segment !== ":slug")
-  ) {
-    fail("route must contain exactly one :slug segment and no other parameters.");
-  }
+  const failure = collectionRouteFailure(route);
+  if (failure) fail(failure.message);
   return route;
 }
 
 /** Resolves a validated collection route to one canonical public path. */
 export function resolveCollectionRoute(route: string, slug: string): string {
-  const normalizedRoute = normalizeCollectionRoute(route);
-  if (
-    typeof slug !== "string" ||
-    slug.length === 0 ||
-    slug.length > MAX_SLUG_LENGTH ||
-    !SLUG_PATTERN.test(slug)
-  ) {
-    fail("slug must use lowercase ASCII letters, digits, and single hyphens.");
-  }
-  const resolved = normalizedRoute.replace(":slug", slug);
-  return normalizePagePath(resolved);
+  const failure = collectionPathFailure(route, slug);
+  if ("issue" in failure) fail(failure.message);
+  return failure.path;
 }
 
 function normalizeCommonModel<Fields extends FieldMap>(
@@ -639,7 +571,9 @@ function seoFieldReference(
   if (definition === undefined) {
     fail(`model "${modelKey}" ${option} references undeclared field "${key}".`);
   }
-  const allowed = media ? definition.type === "media" : SEO_TEXT_FIELD_TYPES.has(definition.type);
+  const allowed = media
+    ? definition.type === "media"
+    : fieldTypeCapabilities[definition.type].seoText;
   if (!allowed) {
     fail(
       `model "${modelKey}" ${option} field "${key}" must be ${media ? "a media field" : "a text or textarea field"}, not ${definition.type}.`,
@@ -823,7 +757,7 @@ function normalizeListFields(value: unknown, fields: FieldMap): readonly string[
     if (definition === undefined) {
       fail(`listFields references undeclared field "${key}".`);
     }
-    if (!LIST_FIELD_TYPES.has(definition.type)) {
+    if (!fieldTypeCapabilities[definition.type].listQueryable) {
       fail(`listFields field "${key}" must be a scalar field, not ${definition.type}.`);
     }
     seen.add(key);
@@ -853,7 +787,7 @@ function normalizeListOptions(value: unknown, fields: FieldMap): CollectionListO
     const normalized = normalizeListFields(targets, fields);
     if (
       operation === "searchableFields" &&
-      normalized.some((key) => !SEO_TEXT_FIELD_TYPES.has(fields[key]!.type))
+      normalized.some((key) => !fieldTypeCapabilities[fields[key]!.type].searchable)
     ) {
       fail("listOptions.searchableFields requires text or textarea fields.");
     }

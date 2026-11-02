@@ -108,5 +108,6 @@ test("preserves every repository contract case in order", () => {
     "guards projected internal links atomically and ignores hidden ones",
     "rolls back projected publication at every injected checkpoint",
     "refuses a projection that does not name the draft's blocks",
+    "shares visibility parity across synchronization and publication",
   ]);
 });

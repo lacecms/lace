@@ -336,6 +336,10 @@ components directly to verify the installed sources.
 
 Rules:
 
+- `content` owns the portable shared vocabulary: slug identifiers, model kinds,
+  canonical route rules, transport limits and object helpers. Other packages
+  import or re-export these definitions under their existing public names.
+  Failure construction stays local to each layer.
 - `domain` must not import framework or infrastructure packages.
 - `content` and `config` must remain runtime-portable and must not import Node-only APIs.
 - `application` may depend on domain rules, content validation, and the normalized configuration, but not on REST DTOs, Hono, Drizzle, Cloudflare, or Node adapters.
@@ -734,6 +738,36 @@ The MVP field DSL should support:
 - URL;
 - media.
 
+`@lacecms/content` owns the frozen `fieldTypeCapabilities` declaration. The
+configuration, contracts, application queries, persistence and admin derive
+eligibility from it; they must not copy lists of field kinds. Its eight columns
+are `listQueryable`, `sortableAs`, `filterKind`, `searchable`, `seoText`,
+`itemLabel`, `placeholder` and `valueKind`:
+
+| Kind | List-queryable | Sort family | Filter kind | Searchable | SEO text | Item label | Placeholder | Value kind |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| text | yes | string | text | yes | yes | yes | yes | string |
+| textarea | yes | string | text | yes | yes | yes | yes | string |
+| richText | no | — | — | no | no | no | yes | object |
+| number | yes | number | number | no | no | no | yes | number |
+| boolean | yes | boolean | boolean | no | no | no | no | boolean |
+| date | yes | date | date | no | no | no | no | string |
+| datetime | yes | datetime | datetime | no | no | no | no | string |
+| select | yes | string | select | no | no | yes | yes | string |
+| url | yes | string | text | no | no | yes | yes | string |
+| media | no | — | — | no | no | no | no | string |
+| group | no | — | — | no | no | no | no | object |
+| list | no | — | — | no | no | no | no | array |
+
+`FIELD_FILTER_OPERATIONS` owns the operators of each filter kind: text
+`contains, eq`; select `in`; number `eq, range`; boolean `eq`; date and datetime
+`range`. Every queryable kind additionally supports `isSet` and `isNotSet`.
+The admin's total `fieldTypeSupport` declaration owns presentation and messages
+for every kind: problems, list cells, filter controls, summaries, guidance and
+new list item values. Adding a kind requires declaring its capabilities and
+admin support. OpenAPI derives scalar descriptor properties from the same
+capabilities and documents provider restrictions and form layouts.
+
 Reference fields should be anticipated in the DSL design but may be postponed until after the first vertical slice. Arbitrary executable user code must not be serialized and sent to the admin application.
 
 Reference fields are not part of the MVP. The field-definition discriminated
@@ -844,7 +878,13 @@ envelope values take no rules. A target is visible when the controller's
 present value, else its default, is listed; an absent controller without a
 default hides its targets. Each occurrence (model fields, group value, list
 item, block data) evaluates only its own values; hidden containers hide their
-subtree.
+subtree. Validation, the published projection (including block migration,
+internal links and render), configuration synchronization and the admin share
+`effectiveVisibilityValues` and `isFieldVisible` from `@lacecms/content`.
+Effective values contain only controllers of the occurrence: present values
+unless `undefined` or `null`, otherwise declared defaults, otherwise omitted.
+A cleared form controller (`null`) is unset; stored controllers never hold
+`null`. Each layer delegates default and absence handling to content.
 
 Validation normalizes unconditional fields first, then visible targets in the
 selected mode and hidden targets in draft mode, recursively: hidden fields are
@@ -1010,6 +1050,15 @@ Shared contract constants enforce the same limits in config validation, REST
 validation, and the admin UI: title at most 200 characters, slug at most 100
 characters, at most 200 top-level blocks and 200 media references per entry, and
 at most 1,000,000 UTF-8 bytes in either `fields_json` or one block's `data_json`.
+The shared transport bounds in `@lacecms/content` are 200 code units for entry
+search (`MAX_ENTRY_SEARCH_LENGTH`) and media search (`MAX_MEDIA_SEARCH_LENGTH`),
+50 referencing entries per media usage read (`MAX_MEDIA_USAGE_ENTRIES`), and
+100 entries per build-export page (`MAX_BUILD_EXPORT_PAGE_SIZE`). Application
+retains the entry-search alias `MAX_CONTENT_ENTRY_SEARCH_LENGTH`; application
+and contracts re-export the other names. Runtime entry-query limits remain
+separate: Node permits 200 code units, while Cloudflare permits 48 code units
+and at most 50 UTF-8 bytes in the escaped LIKE pattern including wrappers.
+
 Individual field definitions may set stricter limits. These conservative JSON limits leave room
 below D1's row/string ceiling and prevent the browser editor from creating
 payloads the target runtime cannot persist.
@@ -2222,6 +2271,14 @@ and resolves nested media through the existing published dictionaries/helpers.
   with an upgrade message.
 - Hono request validation uses `@hono/standard-validator`, keeping route integration based on Standard Schema rather than a validator-specific Hono API.
 - Database rows are never exposed directly as API DTOs.
+- Portable content, configuration, domain, application and contract failures
+  extend `LaceError` in content and carry a stable code. Contracts owns one
+  total classification table and `classifyError`; REST and MCP share its
+  sanitized envelopes, while MCP omits transport headers. Issue-carrying
+  validation failures retain their issues; only explicit hooks expose version
+  details, bounded block-order messages and rate-limit retry headers. Unknown
+  errors and internal codes return generic `500 INTERNAL_ERROR`.
+  See [ADR 0019](adr/0019-error-model.md).
 - Errors use one stable machine-readable envelope. Validation failures,
   including content validation while creating, saving, or publishing an entry,
   return `422 VALIDATION_FAILED` with one issue per failure: its code, a

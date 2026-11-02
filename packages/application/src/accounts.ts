@@ -1,3 +1,4 @@
+import { AccountError, RateLimitExceededError } from "@lacecms/domain";
 import { requirePermission, type Actor, type UnixMilliseconds } from "@lacecms/domain";
 import {
   renderEmail,
@@ -20,28 +21,8 @@ export const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 export const DISPLAY_NAME_MAX_LENGTH = 120;
 
-/** Closed account-flow failures; the HTTP boundary maps each code to one envelope. */
-export type AccountErrorCode =
-  | "CONFLICT"
-  | "INVALID_CREDENTIALS"
-  | "INVITATION_INVALID"
-  | "NOT_FOUND"
-  | "RESET_INVALID";
-
-export class AccountError extends Error {
-  public constructor(public readonly code: AccountErrorCode) {
-    super(code);
-    this.name = "AccountError";
-  }
-}
-
-/** A sensitive limit was exhausted inside a use case. */
-export class RateLimitExceededError extends Error {
-  public constructor(public readonly retryAfterSeconds: number) {
-    super("Rate limit exceeded.");
-    this.name = "RateLimitExceededError";
-  }
-}
+export { AccountError, RateLimitExceededError } from "@lacecms/domain";
+export type { AccountErrorCode } from "@lacecms/domain";
 
 /** An unaccepted, unrevoked invitation as stored; never carries its token or digest. */
 export interface InvitationRecord {

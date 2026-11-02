@@ -23,25 +23,19 @@ import {
   contentEntryListSchema,
   adminContentEntrySchema,
   classifyError,
-  validationError,
+  ContractValidationError,
+  LaceError,
   toContractValidationIssues,
-  transportError,
 } from "@lacecms/contracts";
 
 export const packageName = "@lacecms/mcp";
 type ToolName = keyof typeof mcpToolArgumentSchemas;
-class ArgumentFailure extends Error {
-  public constructor(readonly body: ReturnType<typeof validationError>["body"]) {
-    super("Invalid tool arguments.");
-  }
-}
 function argumentsFor<S extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>>(
   schema: S,
   value: unknown,
 ): v.InferOutput<S> {
   const result = v.safeParse(schema, value);
-  if (!result.success)
-    throw new ArgumentFailure(validationError(toContractValidationIssues(result.issues)).body);
+  if (!result.success) throw new ContractValidationError(toContractValidationIssues(result.issues));
   return result.output;
 }
 const tools: readonly {
@@ -140,7 +134,7 @@ export function createMcpContentHandler(input: {
           actor,
           entryId: contentEntryId(args.entryId),
         });
-        if (!entry) return Promise.reject(new ArgumentFailure(transportError("NOT_FOUND").body));
+        if (!entry) return Promise.reject(new LaceError("NOT_FOUND", "Entry does not exist."));
         return v.parse(adminContentEntrySchema, toAdminEntryProjectionDto(entry));
       }
       case "create_entry": {
@@ -260,8 +254,7 @@ export function createMcpContentHandler(input: {
                   };
                 } catch (error) {
                   outcome = "error";
-                  const result =
-                    error instanceof ArgumentFailure ? error.body : classifyError(error).body;
+                  const result = classifyError(error).body;
                   return {
                     isError: true,
                     content: [{ type: "text" as const, text: JSON.stringify(result) }],

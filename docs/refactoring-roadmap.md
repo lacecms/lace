@@ -107,11 +107,11 @@ What the roadmap changes, with the numbers to beat:
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines; five-file cluster of 3,733 lines with type-only cycles |
 | Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
-| Duplication | copies of the "list-queryable field types" set | 5 (config, contracts ×2, application, db) plus 5 admin switches |
+| Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table |
 | Duplication | `*Source` interfaces in contracts mirroring application types | 11 |
-| Duplication | slug/route canonicalization | twice (config and domain) |
-| Duplication | conditional-visibility evaluators | 3 (content, application, admin) |
-| Duplication | error conventions | 4 (content, domain, config, application); MCP maps application errors to 500 |
+| Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
+| Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
+| Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
 | Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim |
 | Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` |
 | Duplication | argv parsers in `packages/cli` | 6 (+1 in `scripts/cloudflare-lib.mjs`) |
@@ -133,7 +133,7 @@ What the roadmap changes, with the numbers to beat:
 | --- | --- | :---: | --- | --- |
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
-| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | planned |
+| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
@@ -342,7 +342,8 @@ import, so it owns the shared vocabulary.
 
 - `packages/content` exports a `fieldTypeCapabilities` table keyed by
   `FieldDefinition["type"]`: `listQueryable`, `seoText`, `placeholder`,
-  `valueKind`, `sortableAs`, `filterKind`.
+  `valueKind`, `sortableAs`, `filterKind`, `searchable`, `itemLabel`.
+  `FIELD_FILTER_OPERATIONS` owns the per-filter-kind operators.
 - Derive from it and delete: `LIST_FIELD_TYPES` and `SEO_TEXT_FIELD_TYPES`
   (`packages/config/src/index.ts:36-53`), `hasValidListFields`'s inline list
   (`packages/contracts/src/index.ts:378-399`), `scalarTypes`, the placeholder
@@ -350,22 +351,25 @@ import, so it owns the shared vocabulary.
   `CollectionQueryFieldType` (`packages/application/src/collection-queries.ts`)
   and the `strings` set with `datetime` special cases in
   `packages/db/src/collection-list.ts`.
-- Admin: one `fieldTypeSupport: Record<FieldDefinition["type"], {problem, listCell, filter, summary, guidance}>`
+- Admin: one `fieldTypeSupport: Record<FieldDefinition["type"], {problem, listCell, filter, summary, guidance, draftValue}>`
   in `apps/admin/src/entities/content/field-types.ts`, consumed by
   `editor-form.ts`, `widgets/collection-entries/list-columns.ts`,
   `CollectionFilters.tsx`, `item-summary.ts`, `composite-values.ts` and
-  `field-guidance.ts`, so a new field type fails to compile until every
+  `field-guidance.ts` and `widgets/block-editor/block-presentation.ts`, so a new field type fails to compile until every
   surface declares support.
 - A contracts test asserts that `contentMetadataOpenApi` accepts exactly the
   descriptors `normalizeFieldDefinition` accepts.
 
 **Architecture and specs:** §8 *Initial field types* gains the capability
 table; `field-descriptors` (capabilities declared once),
-`collection-query-options`.
+`collection-query-options`, `rest-contracts`.
 
-**Acceptance:** adding a dummy field type in a test fixture touches `content`
-and `apps/admin/src/entities/content/field-types.ts` only; generated
-`apps/api/openapi/api-v1.json` is byte-identical.
+**Acceptance:** adding a dummy scalar field type reports errors only in
+`content`, the admin support table and built-in control declarations. Owner
+decision (2026-11-02): correct existing OpenAPI drift (`embedProviders`, group
+and block `layout`, block `settingsLayout`) with one `FormLayout` schema.
+`apps/api/openapi/api-v1.json` changes only in descriptor schemas; parity has
+no known-gap exceptions.
 
 ### Session RF3B — Shared identifiers and limits
 
@@ -375,14 +379,19 @@ and `apps/admin/src/entities/content/field-types.ts` only; generated
   `ContentModelKind`, and the transport limits that application and contracts
   each declare (`MAX_MEDIA_SEARCH_LENGTH`, `MAX_MEDIA_USAGE_ENTRIES`,
   `MAX_BUILD_EXPORT_PAGE_SIZE`, entry search length). `config`, `domain`,
-  `application` and `contracts` re-export them.
+  `application` and `contracts` keep existing public names through imports or
+  re-exports; contracts additionally re-exports `SLUG_PATTERN` for server.
 - The eleven `*Source` interfaces in contracts that mirror application types
   stay (the boundary forbids the import), but each gains a compile-time
   `satisfies` check in `packages/test-utils` (which may import both), and
-  `toContentModelDto` is built from one key list so a new optional property
-  cannot silently drop out of the DTO.
-- Deduplicate the private helpers `deepFreeze`, `isPlainObject`, `isRecord`
-  and `fail` (content, config, domain) through a `@lacecms/content` export.
+  `toContentModelDto` is built from a total projection table so a new optional
+  property cannot silently drop out of the DTO. All eleven pairs are checked,
+  including each media-usage discriminant; only public media has an explicit
+  private-property omission list. Serialized key order stays unchanged.
+- Deduplicate `deepFreeze`, `isPlainObject` and `isRecord` through
+  `@lacecms/content` exports (`isRecord` already had only one definition).
+  Keep `fail` local until RF3D: these helpers throw four different error
+  classes, so sharing them now would add an unnecessary error factory.
 
 **Architecture and specs:** §6 *Repository structure* rules (content owns
 shared vocabulary); `content-domain-rules`.
@@ -737,3 +746,15 @@ reference pages.
 | 2026-11-02 | RF2A | `rf02a-source-tests-pure-packages` | Archived at [`2026-11-02-rf02a-source-tests-pure-packages`](../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/); 18/18 tasks complete and the `workspace-governance` delta synchronized. Shared source aliases and configs, seven packages converted (446 listed titles / 768 expanded cases preserved), seven packaged export checks, build-free source-test task and watch scripts. Test/test-support imports excluded from boundaries and cycle graph; production and admin structure checks preserved. All seven source suites pass without any package dist; content 0.47 s. Nine legacy files use the explicit TODO(rf2) typechecking escape hatch, listed in the change verification note; eight files are strictly checked. Root typecheck, lint, build, tests (51 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. Root test wall time 328.49 s without cache; earlier cached baseline failed its toolchain gate, so no controlled root speed comparison is claimed. |
 | 2026-11-02 | RF2B | `rf02b-source-tests-application-server` | Archived at [`2026-11-02-rf02b-source-tests-application-server`](../openspec/changes/archive/2026-11-02-rf02b-source-tests-application-server/); 13/13 tasks complete, no delta specs. Five packages converted to source tests; application split into eight use-case files, server into ten route-group files with a typed shared harness. All 250 listed titles preserved (277 expanded source cases); five packaged export checks added. RF2A source aliases, build-free tests and boundary exclusions reused. 24 legacy test files retain explicit TODO(rf2) typechecking exceptions (RF2A: nine); nine test files and the harness are strictly checked. Root typecheck, lint, build, tests (56 Turbo tasks; 33 root files / 250 cases), formatting and strict specification gates pass. All five source suites pass with every package dist temporarily absent. |
 | 2026-11-02 | RF2C | `rf02c-source-tests-delivery-and-test-utils` | Archived at [`2026-11-02-rf02c-source-tests-delivery-and-test-utils`](../openspec/changes/archive/2026-11-02-rf02c-source-tests-delivery-and-test-utils/); 15/15 tasks complete, no delta specs. Test-utils split into area contracts and assertions/adapters/store modules with unchanged public exports; all 105 measured contract registrations pinned in order (proposal baseline 103 was stale). Eight members now use source/packaged separation; source tests pass without any dist or copied admin bundle. All original titles preserved. Owner confirmed process/Astro/registry/schema cases as packaged, with Worker asset routing kept source-based. All 22 source tasks have no build dependencies; 20 members have watch scripts. RF2 retains 88 explicit legacy typing exceptions (33 earlier, 55 RF2C including the Worker helper), inventoried in the change verification note. Root build, typecheck, lint, tests (64 Turbo tasks; 33 root files / 250 cases), formatting and strict validation pass. Root test wall time 255.47 s with 25 cached tasks versus RF2A 328.49 s without cache; no controlled speed comparison is claimed. |
+| 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Proposed. Frozen `fieldTypeCapabilities` in content (roadmap's six columns plus `searchable` and `itemLabel`) and `FIELD_FILTER_OPERATIONS`; config, contracts, application, db and content builders derive from it; `LIST_FIELD_TYPES`/`SEO_TEXT_FIELD_TYPES` deleted. Admin `fieldTypeSupport` (adds `draftValue`; `block-presentation.ts` also consumes it). Correction to the roadmap text: OpenAPI already drifted (URL `embedProviders`, group/block `layout`, `settingsLayout` missing); owner decision 2026-11-02: fix it, so `api-v1.json` changes in descriptor schemas only, and the parity test has no exceptions. Root vocabulary guard; totality verified by a recorded experiment. Delta specs: `field-descriptors`, `collection-query-options`, `rest-contracts` (1 added each). 21 tasks, not applied. |
+| 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Implemented, 21/21 tasks complete; not archived. One frozen capability table and operator declaration drive content builders, typed config, contracts/OpenAPI, application filters and SQL; one total admin support table drives messages, cells, controls, summaries, guidance and draft values. Consumer list copies removed; source vocabulary guard added. OpenAPI descriptor drift corrected with unrelated components unchanged. Dummy-kind experiment reports only content and the two admin declaration sites. All root gates passed (64 Turbo test tasks; 34 root files / 256 cases); original 28 browser cases pass with enlarged default viewport, documenting the existing offscreen drag failure at 1280×720. See the change verification note for counts and experiments. |
+| 2026-11-02 | RF3A | `rf03a-field-type-capabilities` | Archived at [`2026-11-02-rf03a-field-type-capabilities`](../openspec/changes/archive/2026-11-02-rf03a-field-type-capabilities/); 21/21 tasks complete and all three capability deltas synchronized. All 84 accepted specs pass strict validation. Implementation verification and the browser viewport limitation are recorded in the archived change. |
+| 2026-11-02 | RF3B | `rf03b-shared-identifiers-limits` | Proposed. New content modules `identifiers.ts` (`SLUG_PATTERN`, `MAX_SLUG_LENGTH`, `isContentSlug`, `ContentModelKind`, reason-returning route checks with one message wording, four transport limits) and `objects.ts` (`deepFreeze`, `isPlainObject`, `isRecord`); config and domain keep their functions and error classes as thin wrappers; application and contracts re-export limits under current names; contracts adds only `SLUG_PATTERN` (server drops its inline regex). Corrections to the roadmap text: `fail` stays local until RF3D (four error classes); "re-export" means keep existing public names, add re-exports only where consumed; `isRecord` exists only in content. Eleven `*Source` mirrors checked in test-utils (`DiscoveredContentModel` gains the `visibility` it already returns); total `toContentModelDto` projection table; root vocabulary guard. `api-v1.json` unchanged. Delta specs: `content-domain-rules` (1 modified: adds `global` kind; 1 added), `rest-contracts` (1 added). 23 tasks, not applied. |
+| 2026-11-02 | RF3B | `rf03b-shared-identifiers-limits` | Implemented, 23/23 tasks complete. Shared identifier/route and object modules; public wrappers and limit aliases preserved. Eleven source mirrors and a total DTO projection are checked; owner-approved insertion order preserves serialized JSON. Vocabulary guard and negative experiments added. All root gates passed (64 Turbo tasks; 35 root files / 261 cases), including Node and Cloudflare contracts. OpenAPI and DTO serialization unchanged. Verification is recorded in the active change; not archived. |
+| 2026-11-02 | RF3B | `rf03b-shared-identifiers-limits` | Archived at [`2026-11-02-rf03b-shared-identifiers-limits`](../openspec/changes/archive/2026-11-02-rf03b-shared-identifiers-limits/); 23/23 tasks complete and both capability deltas synchronized. All 84 accepted specifications pass strict validation. Shared identifiers, route rules, limits and object helpers have one owner in content; eleven mirrors and the total DTO projection are checked. OpenAPI and serialized model DTOs remain unchanged. |
+| 2026-11-02 | RF3C | `rf03c-conditional-visibility-evaluator` | Proposed. New content export `effectiveVisibilityValues` (present value unless `undefined`/`null`, else declared default, else omitted; controllers only); `isFieldVisible` documented as taking effective values. Content validation and `publishedFieldValues` (hence `publishedBlockData`, block migration, render and internal links) use it; application `visibleUnder` and admin `effectiveFormValues` become delegations with unchanged call shapes. Correction to the roadmap text: the published projection is a fourth reachable evaluator path, and `null` as unset is made a shared rule (never a stored value). One pure parity case table in test-utils (subpath `@lacecms/test-utils/visibility-parity` for admin under jsdom), asserted against validation, projection, sync pruning, admin `shownFieldKeys` and one new Node/D1 repository contract case. Vocabulary guard extended; block `settingsVisibility` stays separate. Delta spec: `conditional-fields` (1 added). 16 tasks, not applied. |
+| 2026-11-02 | RF3C | `rf03c-conditional-visibility-evaluator` | Implemented, 16/16 tasks complete: shared content evaluator, application/admin delegations and 10 parity cases. Source suites pass: content 237, application 139, test-utils 69, admin 1007, Node SQLite 309, D1 218. One contract registration added (106 total); the evaluator baseline moves from 3 to 1. Root typecheck, lint, format, build, OpenAPI check and strict change validation pass; full workspace test gate passed (64 Turbo tasks; 35 root files / 264 cases). Verification recorded in the active change. Not archived. |
+| 2026-11-02 | RF3C | `rf03c-conditional-visibility-evaluator` | Archived at [`2026-11-02-rf03c-conditional-visibility-evaluator`](../openspec/changes/archive/2026-11-02-rf03c-conditional-visibility-evaluator/); 16/16 tasks complete and the `conditional-fields` delta synchronized (one requirement, five scenarios). All 84 accepted specifications pass strict validation. Implementation and runtime parity verification remain recorded in the archived change. |
+| 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Proposed. `LaceError<Code>` and `InvariantError` in content (correction to the roadmap text: content and config cannot import domain, so the base lives in content; domain and contracts re-export it). Content, config and domain error classes extend it with stable codes; `AccountError`, `AccountErrorCode` and `RateLimitExceededError` (gains `RATE_LIMITED`) move to domain, application re-exports them. `classifyError` uses one total code table (issue-carrying validation errors first; three `expose` hooks for version details, block-order message and `Retry-After`); `ClassifiedError` gains optional `headers`. Server `onError` delegates (`ContractValidationError` in contracts; server-local `AuthorizationError` extends `LaceError`); MCP drops `ArgumentFailure`, so account and rate-limit failures stop surfacing as `INTERNAL_ERROR`. Twelve raw errors become `TypeError` (arguments) or `InvariantError`; `fail` helpers stay local, closing the RF3B deferral. Error matrix in test-utils with export totality, REST matrix pinned to the baseline, MCP matrix, vocabulary guard, ADR 0019. Delta specs: `rest-contracts`, `mcp-content-server` (1 added each). 17 tasks, not applied. |
+| 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Implemented, 17/17 tasks complete. One LaceError base in content and total classifier in contracts; REST matrix preserved and MCP account/rate-limit errors retain shared codes. Twelve raw errors typed; error matrix, totality and vocabulary guards added; ADR 0019 records ownership. Root typecheck, lint, format, build, full tests (64 Turbo tasks; 35 root files / 273 cases), OpenAPI check and strict change validation pass. OpenAPI SHA-256 and existing application exports unchanged; verification recorded in the active change. Not archived. |
+| 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Archived at [`2026-11-03-rf03d-error-model-mapper`](../openspec/changes/archive/2026-11-03-rf03d-error-model-mapper/); 17/17 tasks complete. Both capability deltas synchronized: `rest-contracts` and `mcp-content-server` (one added requirement each). All 84 accepted specifications pass strict validation. RF3 shared-vocabulary work is complete; verification is preserved in the archive. |

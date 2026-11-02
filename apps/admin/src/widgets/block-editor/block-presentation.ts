@@ -10,7 +10,12 @@ import {
   QuoteIcon,
   type LucideIcon,
 } from "lucide-react";
-import { fieldLabel, itemSummary, shownFieldKeys } from "../../entities/content/index.js";
+import {
+  fieldLabel,
+  fieldTypeSupport,
+  itemSummary,
+  shownFieldKeys,
+} from "../../entities/content/index.js";
 
 export type BlockDefinitionDto = NonNullable<ContentModelDto["blockDefinitions"]>[number];
 
@@ -51,23 +56,6 @@ export function blockLabel(definition: Pick<BlockDefinitionDto, "label" | "type"
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
-}
-
-function richTextPlainText(value: unknown): string {
-  const parts: string[] = [];
-  const walk = (node: unknown) => {
-    if (node === null || typeof node !== "object") return;
-    const record = node as { readonly content?: unknown; readonly text?: unknown };
-    if (typeof record.text === "string") parts.push(record.text);
-    if (Array.isArray(record.content)) {
-      for (const child of record.content) {
-        walk(child);
-        parts.push(" ");
-      }
-    }
-  };
-  walk(value);
-  return collapseWhitespace(parts.join(""));
 }
 
 function truncate(value: string): string {
@@ -111,7 +99,7 @@ export function blockSummary(
     return typeof value === "string" ? collapseWhitespace(value) : "";
   };
   const textKeys = entries
-    .filter(([, field]) => field.type === "text" || field.type === "textarea")
+    .filter(([, field]) => fieldTypeSupport[field.type].summary?.priority === 0)
     .map(([key]) => key)
     .sort((left, right) => {
       const rank = (key: string) => {
@@ -124,15 +112,13 @@ export function blockSummary(
     const value = text(key);
     if (value !== "") return truncate(value);
   }
-  for (const [key, field] of entries) {
-    if (field.type !== "richText") continue;
-    const value = richTextPlainText(values[key]);
-    if (value !== "") return truncate(value);
-  }
-  for (const [key, field] of entries) {
-    if (field.type !== "url" && field.type !== "select") continue;
-    const value = text(key);
-    if (value !== "") return truncate(value);
+  for (const priority of [1, 2]) {
+    for (const [key, field] of entries) {
+      const summary = fieldTypeSupport[field.type].summary;
+      if (summary?.priority !== priority) continue;
+      const value = summary.text(values[key]);
+      if (value !== "") return truncate(value);
+    }
   }
   for (const key of formFieldKeys(definition.fields, definition.layout).filter((key) =>
     shown.has(key),
