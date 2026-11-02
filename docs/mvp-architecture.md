@@ -2271,6 +2271,14 @@ and resolves nested media through the existing published dictionaries/helpers.
   with an upgrade message.
 - Hono request validation uses `@hono/standard-validator`, keeping route integration based on Standard Schema rather than a validator-specific Hono API.
 - Database rows are never exposed directly as API DTOs.
+- Portable content, configuration, domain, application and contract failures
+  extend `LaceError` in content and carry a stable code. Contracts owns one
+  total classification table and `classifyError`; REST and MCP share its
+  sanitized envelopes, while MCP omits transport headers. Issue-carrying
+  validation failures retain their issues; only explicit hooks expose version
+  details, bounded block-order messages and rate-limit retry headers. Unknown
+  errors and internal codes return generic `500 INTERNAL_ERROR`.
+  See [ADR 0019](adr/0019-error-model.md).
 - Errors use one stable machine-readable envelope. Validation failures,
   including content validation while creating, saving, or publishing an entry,
   return `422 VALIDATION_FAILED` with one issue per failure: its code, a

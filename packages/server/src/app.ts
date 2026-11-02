@@ -1,14 +1,13 @@
+import { LaceError, ContractValidationError } from "@lacecms/contracts";
 import { SLUG_PATTERN } from "@lacecms/contracts";
 import { Scalar } from "@scalar/hono-api-reference";
 import { isBearerManagementRequest, isImportRoute } from "./import-routes.js";
 import {
-  AccountError,
   AccountUseCases,
   OAuthConnectionUseCases,
   BuildExportCursorError,
   ContentUseCases,
   ContentLinkUseCases,
-  RateLimitExceededError,
   MAX_MEDIA_BYTES,
   MediaUseCases,
   opaqueCursor,
@@ -444,22 +443,23 @@ export interface LaceAppInput {
   readonly defer?: (task: Promise<unknown>) => void;
 }
 
-class RequestValidationError extends Error {
-  public constructor(readonly issues: readonly ContractValidationIssue[]) {
-    super("Request validation failed.");
+class AuthorizationError extends LaceError<"AUTHORIZATION_DENIED"> {
+  public constructor(message?: string) {
+    super(
+      "AUTHORIZATION_DENIED",
+      message ?? "The actor is not permitted to perform this operation.",
+    );
   }
 }
 
-class AuthorizationError extends Error {}
-
 function invalid(message = "The submitted value is invalid.", path = ""): never {
-  throw new RequestValidationError([{ code: "invalid_value", message, path }]);
+  throw new ContractValidationError([{ code: "invalid_value", message, path }]);
 }
 
 function parse<Schema extends ServerSchema>(schema: Schema, value: unknown): v.InferOutput<Schema> {
   const result = v.safeParse(schema, value);
   if (!result.success) {
-    throw new RequestValidationError(standardIssues(result.issues, true));
+    throw new ContractValidationError(standardIssues(result.issues, true));
   }
   return result.output;
 }
@@ -477,7 +477,9 @@ function response<Schema extends ServerSchema>(
 }
 
 function errorResponse(error: ClassifiedError, headers?: HeadersInit): Response {
-  return response(errorEnvelopeSchema, error.body, error.status, headers);
+  const combined = new Headers(error.headers);
+  new Headers(headers).forEach((value, key) => combined.set(key, value));
+  return response(errorEnvelopeSchema, error.body, error.status, combined);
 }
 
 function notFound(): Response {
@@ -726,17 +728,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
           { error: "server_error" },
           { status: 503, headers: { "cache-control": "no-store" } },
         )
-      : error instanceof RequestValidationError
-        ? validationResponse(error.issues)
-        : error instanceof AuthorizationError
-          ? errorResponse(transportError("AUTHORIZATION_DENIED"))
-          : error instanceof AccountError
-            ? errorResponse(transportError(error.code))
-            : error instanceof RateLimitExceededError
-              ? errorResponse(transportError("RATE_LIMITED"), {
-                  "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
-                })
-              : errorResponse(classifyError(error)),
+      : errorResponse(classifyError(error)),
   );
 
   app.use(async (context, next) => {

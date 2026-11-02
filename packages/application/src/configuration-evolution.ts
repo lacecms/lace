@@ -1,3 +1,4 @@
+import { InvariantError } from "@lacecms/content";
 import { transformConfigurationSyncFields } from "./configuration-fields.js";
 import type { ContentModelStructure } from "@lacecms/config";
 import {
@@ -642,12 +643,13 @@ function baselineFieldAt(
     const part = path[index]!;
     if (part === "*") {
       if (current === undefined) return undefined;
-      if (current.type !== "list") throw new Error("Wildcard does not address a list.");
+      if (current.type !== "list") throw new InvariantError("Wildcard does not address a list.");
       current = current.item;
     } else {
       if (index > 0) {
         if (current === undefined) return undefined;
-        if (current.type !== "group") throw new Error("Named child does not address a group.");
+        if (current.type !== "group")
+          throw new InvariantError("Named child does not address a group.");
         fields = current.fields;
       }
       const address = encodeSchemaPath(path.slice(0, index + 1));

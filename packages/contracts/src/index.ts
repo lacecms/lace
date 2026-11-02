@@ -1,3 +1,5 @@
+import { LaceError } from "@lacecms/content";
+export { LaceError } from "@lacecms/content";
 import type { ContentModelKind } from "@lacecms/content";
 import {
   MAX_ENTRY_SEARCH_LENGTH,
@@ -41,7 +43,7 @@ import type {
 } from "@lacecms/content";
 import {
   BlockOrderError,
-  DomainError,
+  RateLimitExceededError,
   CollectionQueryValidationError,
   blockKey,
   isCanonicalUrl,
@@ -67,6 +69,7 @@ import type {
   ContentModelRoute,
   ContentSnapshot,
   DomainErrorCode,
+  AccountErrorCode,
   EntrySeo,
   MediaFocalPoint,
   SiteBuildProviderStage,
@@ -2768,45 +2771,17 @@ export function resolveExpectedRevision(input: RevisionPreconditionInput): numbe
   return body?.output ?? header!;
 }
 
-const domainErrorStatus: Readonly<Record<DomainErrorCode, 403 | 409 | 422>> = {
-  AUTHORIZATION_DENIED: 403,
-  BUILD_EXPORT_VERSION_CHANGED: 409,
-  CONTENT_INVALID_STATE: 422,
-  CONTENT_LINKS_IN_USE: 409,
-  CONTENT_LINK_IMPACT_CHANGED: 409,
-  CONTENT_MODEL_CARDINALITY_CONFLICT: 409,
-  CONTENT_NOT_PUBLISHED: 409,
-  CONTENT_PAGE_SINGLETON: 409,
-  CONTENT_PUBLISHED_IMMUTABLE: 409,
-  CONTENT_REVISION_CONFLICT: 409,
-  CONTENT_ROUTE_CONFLICT: 409,
-  LAST_ADMIN_PROTECTED: 409,
-  MEDIA_IN_USE: 409,
-  MEDIA_UPDATE_CONFLICT: 409,
-};
-
-const domainErrorMessage: Readonly<Record<DomainErrorCode, string>> = {
-  AUTHORIZATION_DENIED: "The actor is not permitted to perform this operation.",
-  BUILD_EXPORT_VERSION_CHANGED:
-    "Published content changed during the build export. Restart from the first page.",
-  CONTENT_INVALID_STATE: "The requested content operation is invalid.",
-  CONTENT_LINKS_IN_USE:
-    "Published links use this destination. Review the current link impact before removal.",
-  CONTENT_LINK_IMPACT_CHANGED: "Link impact changed. Refresh and review it again.",
-  CONTENT_MODEL_CARDINALITY_CONFLICT: "The content model cannot accept another entry.",
-  CONTENT_NOT_PUBLISHED: "The entry is not published.",
-  CONTENT_PAGE_SINGLETON: "Page and global entries are defined by configuration.",
-  CONTENT_PUBLISHED_IMMUTABLE: "Published content cannot be modified.",
-  CONTENT_REVISION_CONFLICT: "The draft was modified by another request.",
-  CONTENT_ROUTE_CONFLICT: "The public route is already in use.",
-  LAST_ADMIN_PROTECTED: "The final active administrator cannot be disabled or demoted.",
-  MEDIA_IN_USE: "The media is still used by content.",
-  MEDIA_UPDATE_CONFLICT: "The media was modified by another request.",
-};
-
 export interface ClassifiedError {
   readonly body: ErrorEnvelope;
   readonly status: 400 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
+  readonly headers?: Readonly<Record<string, string>>;
+}
+
+export class ContractValidationError extends LaceError<"VALIDATION_FAILED"> {
+  public constructor(public readonly issues: readonly ContractValidationIssue[]) {
+    super("VALIDATION_FAILED", "Request validation failed.");
+    this.name = "ContractValidationError";
+  }
 }
 
 export type TransportErrorCode =
@@ -2819,64 +2794,116 @@ export type TransportErrorCode =
   | "RATE_LIMITED"
   | "RESET_INVALID";
 
-const transportErrorStatus: Readonly<
-  Record<TransportErrorCode, 400 | 403 | 404 | 409 | 410 | 413 | 429>
-> = {
-  AUTHORIZATION_DENIED: 403,
-  CONFLICT: 409,
-  INVALID_CREDENTIALS: 400,
-  INVITATION_INVALID: 410,
-  NOT_FOUND: 404,
-  PAYLOAD_TOO_LARGE: 413,
-  RATE_LIMITED: 429,
-  RESET_INVALID: 410,
-};
+type MappedErrorCode = Exclude<LaceErrorCode, "INTERNAL_ERROR">;
+type AssertMapped<Code extends MappedErrorCode> = Code;
+interface ErrorMapping {
+  readonly status: ClassifiedError["status"];
+  readonly message: string;
+  readonly expose?: (error: LaceError) => {
+    readonly details?: JsonObject;
+    readonly headers?: Readonly<Record<string, string>>;
+    readonly message?: string;
+  };
+}
 
-const transportErrorMessage: Readonly<Record<TransportErrorCode, string>> = {
-  AUTHORIZATION_DENIED: "The actor is not permitted to perform this operation.",
-  CONFLICT: "The request conflicts with the current state.",
-  INVALID_CREDENTIALS: "The current password is incorrect.",
-  INVITATION_INVALID: "The invitation is invalid or has expired.",
-  NOT_FOUND: "The requested resource was not found.",
-  PAYLOAD_TOO_LARGE: "The request body is too large.",
-  RATE_LIMITED: "Too many requests were received.",
-  RESET_INVALID: "The password reset link is invalid or has expired.",
+// The constrained union also checks every portable domain/account code.
+const errorMappings: Readonly<
+  Record<
+    AssertMapped<MappedErrorCode | DomainErrorCode | AccountErrorCode | "RATE_LIMITED">,
+    ErrorMapping
+  >
+> = {
+  AUTHORIZATION_DENIED: {
+    status: 403,
+    message: "The actor is not permitted to perform this operation.",
+  },
+  BUILD_EXPORT_VERSION_CHANGED: {
+    status: 409,
+    message: "Published content changed during the build export. Restart from the first page.",
+    expose: (error) =>
+      error instanceof BuildExportVersionChangedError
+        ? {
+            details: { actualVersion: error.actualVersion, expectedVersion: error.expectedVersion },
+          }
+        : {},
+  },
+  CONTENT_INVALID_STATE: {
+    status: 422,
+    message: "The requested content operation is invalid.",
+    expose: (error) => (error instanceof BlockOrderError ? { message: error.message } : {}),
+  },
+  CONTENT_LINKS_IN_USE: {
+    status: 409,
+    message: "Published links use this destination. Review the current link impact before removal.",
+  },
+  CONTENT_LINK_IMPACT_CHANGED: {
+    status: 409,
+    message: "Link impact changed. Refresh and review it again.",
+  },
+  CONTENT_MODEL_CARDINALITY_CONFLICT: {
+    status: 409,
+    message: "The content model cannot accept another entry.",
+  },
+  CONTENT_NOT_PUBLISHED: { status: 409, message: "The entry is not published." },
+  CONTENT_PAGE_SINGLETON: {
+    status: 409,
+    message: "Page and global entries are defined by configuration.",
+  },
+  CONTENT_PUBLISHED_IMMUTABLE: { status: 409, message: "Published content cannot be modified." },
+  CONTENT_REVISION_CONFLICT: { status: 409, message: "The draft was modified by another request." },
+  CONTENT_ROUTE_CONFLICT: { status: 409, message: "The public route is already in use." },
+  LAST_ADMIN_PROTECTED: {
+    status: 409,
+    message: "The final active administrator cannot be disabled or demoted.",
+  },
+  MEDIA_IN_USE: { status: 409, message: "The media is still used by content." },
+  MEDIA_UPDATE_CONFLICT: { status: 409, message: "The media was modified by another request." },
+  CONFLICT: { status: 409, message: "The request conflicts with the current state." },
+  INVALID_CREDENTIALS: { status: 400, message: "The current password is incorrect." },
+  INVITATION_INVALID: { status: 410, message: "The invitation is invalid or has expired." },
+  NOT_FOUND: { status: 404, message: "The requested resource was not found." },
+  PAYLOAD_TOO_LARGE: { status: 413, message: "The request body is too large." },
+  RATE_LIMITED: {
+    status: 429,
+    message: "Too many requests were received.",
+    expose: (error) =>
+      error instanceof RateLimitExceededError
+        ? { headers: { "retry-after": String(Math.max(1, Math.ceil(error.retryAfterSeconds))) } }
+        : {},
+  },
+  RESET_INVALID: { status: 410, message: "The password reset link is invalid or has expired." },
+  VALIDATION_FAILED: { status: 422, message: "The request did not satisfy the API contract." },
 };
 
 /** Creates one of the stable sanitized envelopes for HTTP boundary failures. */
 export function transportError(code: TransportErrorCode): ClassifiedError {
-  return {
-    body: { error: { code, message: transportErrorMessage[code] } },
-    status: transportErrorStatus[code],
-  };
+  const mapping = errorMappings[code];
+  return { body: { error: { code, message: mapping.message } }, status: mapping.status };
 }
 
-/** Converts known domain failures to documented safe transport responses. */
+/** Converts portable failures to documented safe transport responses. */
 export function classifyError(error: unknown): ClassifiedError {
+  if (error instanceof ContractValidationError) return validationError(error.issues);
+  if (error instanceof ContentValidationError)
+    return validationError(toContentValidationIssues(error));
   if (error instanceof CollectionQueryValidationError)
     return validationError([
       { code: "invalid_value", message: "The submitted value is invalid.", path: error.pointer },
     ]);
-  if (error instanceof ContentValidationError)
-    return validationError(toContentValidationIssues(error));
-  if (error instanceof DomainError) {
+  if (error instanceof LaceError && Object.hasOwn(errorMappings, error.code)) {
+    const code = error.code as MappedErrorCode;
+    const mapping = errorMappings[code];
+    const exposed = mapping.expose?.(error);
     return {
+      status: mapping.status,
       body: {
         error: {
-          code: error.code,
-          ...(error instanceof BuildExportVersionChangedError
-            ? {
-                details: {
-                  actualVersion: error.actualVersion,
-                  expectedVersion: error.expectedVersion,
-                },
-              }
-            : {}),
-          message:
-            error instanceof BlockOrderError ? error.message : domainErrorMessage[error.code],
+          code,
+          message: exposed?.message ?? mapping.message,
+          ...(exposed?.details === undefined ? {} : { details: exposed.details }),
         },
       },
-      status: domainErrorStatus[error.code],
+      ...(exposed?.headers === undefined ? {} : { headers: exposed.headers }),
     };
   }
   return {

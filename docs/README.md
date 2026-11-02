@@ -73,6 +73,7 @@ the two indexes describe themselves and are excluded from the row count.
 | [0016-import-credentials.md](adr/0016-import-credentials.md) | authoritative | ADR 0016: Import credentials |
 | [0017-content-import-client.md](adr/0017-content-import-client.md) | authoritative | ADR 0017: Content import client |
 | [0018-conditional-fields.md](adr/0018-conditional-fields.md) | authoritative | ADR 0018: Conditional fields |
+| [0019-error-model.md](adr/0019-error-model.md) | authoritative | ADR 0019: One portable error model and classifier |
 
 ## docs/archive/
 

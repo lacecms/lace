@@ -1,3 +1,5 @@
+import { LaceError, InvariantError } from "./errors.js";
+export { LaceError, InvariantError } from "./errors.js";
 import { MAX_SLUG_LENGTH } from "./identifiers.js";
 import type { ContentModelKind } from "./identifiers.js";
 export * from "./identifiers.js";
@@ -661,9 +663,9 @@ export type FieldIsRequired<Definition extends FieldDefinition> = Definition ext
 export type FieldMetadata = FieldDefinition;
 
 /** Thrown when a field builder receives a non-portable or contradictory option. */
-export class FieldConfigurationError extends Error {
+export class FieldConfigurationError extends LaceError<"FIELD_CONFIGURATION_INVALID"> {
   public constructor(message: string) {
-    super(message);
+    super("FIELD_CONFIGURATION_INVALID", message);
     this.name = "FieldConfigurationError";
   }
 }
@@ -1510,11 +1512,14 @@ export interface ContentValidationIssue {
 }
 
 /** Thrown when submitted content fails a portable validation contract. */
-export class ContentValidationError extends Error {
+export class ContentValidationError extends LaceError<"VALIDATION_FAILED"> {
   public readonly issues: readonly ContentValidationIssue[];
 
   public constructor(issues: readonly ContentValidationIssue[]) {
-    super(issues.map((issue) => `${formatValidationPath(issue.path)} ${issue.message}`).join("; "));
+    super(
+      "VALIDATION_FAILED",
+      issues.map((issue) => `${formatValidationPath(issue.path)} ${issue.message}`).join("; "),
+    );
     this.name = "ContentValidationError";
     this.issues = issues;
   }
@@ -2373,9 +2378,9 @@ export function normalizeBlockClassName(value: unknown): string | undefined {
 }
 
 /** Thrown when a block definition or registry is not portable or internally consistent. */
-export class BlockConfigurationError extends Error {
+export class BlockConfigurationError extends LaceError<"BLOCK_CONFIGURATION_INVALID"> {
   public constructor(message: string) {
-    super(message);
+    super("BLOCK_CONFIGURATION_INVALID", message);
     this.name = "BlockConfigurationError";
   }
 }
@@ -2912,9 +2917,9 @@ export type BlockMigrationErrorCode =
   | "version_ahead";
 
 /** Thrown when stored block data cannot be migrated to its definition's version. */
-export class BlockMigrationError extends Error {
+export class BlockMigrationError extends LaceError<BlockMigrationErrorCode> {
   public constructor(
-    public readonly code: BlockMigrationErrorCode,
+    code: BlockMigrationErrorCode,
     public readonly blockType: string,
     public readonly fromVersion: number,
     public readonly toVersion: number,
@@ -2923,7 +2928,7 @@ export class BlockMigrationError extends Error {
     public readonly step?: number,
     options?: { readonly cause?: unknown },
   ) {
-    super(message, options);
+    super(code, message, options);
     this.name = "BlockMigrationError";
   }
 }
@@ -3572,7 +3577,7 @@ export function canonicalJsonByteLength(value: JsonValue): number {
     globalThis as unknown as { readonly TextEncoder?: TextEncoderConstructorLike }
   ).TextEncoder;
   if (TextEncoderConstructor === undefined) {
-    throw new Error("TextEncoder is required for canonical JSON byte measurement.");
+    throw new InvariantError("TextEncoder is required for canonical JSON byte measurement.");
   }
   return new TextEncoderConstructor().encode(canonicalizeJson(value)).byteLength;
 }
@@ -3587,7 +3592,7 @@ export interface WebCryptoLike {
 function getWebCrypto(): WebCryptoLike {
   const crypto = (globalThis as unknown as { readonly crypto?: WebCryptoLike }).crypto;
   if (crypto === undefined) {
-    throw new Error("Web Crypto is required for canonical JSON hashing.");
+    throw new InvariantError("Web Crypto is required for canonical JSON hashing.");
   }
   return crypto;
 }
@@ -3601,7 +3606,7 @@ export async function sha256CanonicalJson(
     globalThis as unknown as { readonly TextEncoder?: TextEncoderConstructorLike }
   ).TextEncoder;
   if (TextEncoderConstructor === undefined) {
-    throw new Error("TextEncoder is required for canonical JSON hashing.");
+    throw new InvariantError("TextEncoder is required for canonical JSON hashing.");
   }
   const digest = new Uint8Array(
     await webCrypto.subtle.digest(

@@ -10,6 +10,8 @@ test("packaged entry point keeps its public exports", async () => {
     "ContentValidationError",
     "FIELD_FILTER_OPERATIONS",
     "FieldConfigurationError",
+    "InvariantError",
+    "LaceError",
     "MAX_BLOCK_ANCHOR_LENGTH",
     "MAX_BLOCK_CLASS_NAME_LENGTH",
     "MAX_BLOCK_CLASS_TOKENS",

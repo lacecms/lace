@@ -42,9 +42,32 @@ const allowedGrammar = [
   },
 ];
 
+const errorOwners = {
+  LaceError: "packages/content/src/errors.ts",
+  InvariantError: "packages/content/src/errors.ts",
+  AccountError: "packages/domain/src/index.ts",
+  RateLimitExceededError: "packages/domain/src/index.ts",
+  ContractValidationError: "packages/contracts/src/index.ts",
+  classifyError: "packages/contracts/src/index.ts",
+};
+
 function violations(source, file) {
-  if (file.startsWith("packages/content/src/")) return [];
   const found = [];
+  const errors = new RegExp(
+    `\\b(?:const|let|function|class)\\s+(${Object.keys(errorOwners).join("|")})\\b`,
+    "gu",
+  );
+  for (const match of source.matchAll(errors))
+    if (errorOwners[match[1]] !== file)
+      found.push(
+        `${file}:${source.slice(0, match.index).split("\n").length}: duplicate ${match[1]}`,
+      );
+  if (/^packages\/(?:content|application)\/src\//u.test(file))
+    for (const match of source.matchAll(/\bnew\s+Error\s*\(/gu))
+      found.push(
+        `${file}:${source.slice(0, match.index).split("\n").length}: raw Error construction`,
+      );
+  if (file.startsWith("packages/content/src/")) return found;
   const declaration = new RegExp(
     `\\b(?:const|let|type|interface|function|class)\\s+(${names.join("|")})\\b`,
     "gu",
@@ -104,6 +127,7 @@ test("shared identifiers, route vocabulary, limits and helpers have one portable
 });
 
 test.each([
+  ["duplicate-error.ts", "duplicate LaceError"],
   ["inline-visibility.ts", "inline field visibility match"],
   ["duplicate-visibility.ts", "duplicate effectiveVisibilityValues"],
   ["duplicate-field-visible.ts", "duplicate isFieldVisible"],
@@ -122,3 +146,22 @@ test("vocabulary guard accepts re-exports", () => {
     violations(readFileSync(resolve(root, "tests/fixtures/shared-vocabulary", file), "utf8"), file),
   ).toEqual([]);
 });
+
+test.each(["content", "application"])("vocabulary guard rejects raw Error in %s source", (pkg) => {
+  const file = `packages/${pkg}/src/raw-error.ts`;
+  expect(
+    violations(
+      readFileSync(resolve(root, "tests/fixtures/shared-vocabulary/raw-error.ts"), "utf8"),
+      file,
+    ),
+  ).toEqual([`${file}:2: raw Error construction`]);
+});
+
+test.each(Object.keys(errorOwners))(
+  "vocabulary guard rejects duplicate %s declarations",
+  (name) => {
+    expect(violations(`// fixture\nexport class ${name} {}\n`, "duplicate.ts")).toEqual([
+      `duplicate.ts:2: duplicate ${name}`,
+    ]);
+  },
+);

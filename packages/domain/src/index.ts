@@ -1,3 +1,5 @@
+import { LaceError } from "@lacecms/content";
+export { LaceError } from "@lacecms/content";
 import {
   deepFreeze,
   pagePathFailure,
@@ -53,12 +55,9 @@ export type DomainErrorCode =
   | "MEDIA_UPDATE_CONFLICT";
 
 /** A portable error with a stable code suitable for later transport mapping. */
-export class DomainError extends Error {
-  public constructor(
-    public readonly code: DomainErrorCode,
-    message: string,
-  ) {
-    super(message);
+export class DomainError extends LaceError<DomainErrorCode> {
+  public constructor(code: DomainErrorCode, message: string) {
+    super(code, message);
     this.name = "DomainError";
   }
 }
@@ -105,6 +104,29 @@ export class BlockOrderError extends DomainError {
 export class CollectionQueryValidationError extends DomainError {
   public constructor(public readonly pointer: string) {
     super("CONTENT_INVALID_STATE", "Collection query is invalid.");
+  }
+}
+
+/** Closed account-flow failures; the HTTP boundary maps each code to one envelope. */
+export type AccountErrorCode =
+  | "CONFLICT"
+  | "INVALID_CREDENTIALS"
+  | "INVITATION_INVALID"
+  | "NOT_FOUND"
+  | "RESET_INVALID";
+
+export class AccountError extends LaceError<AccountErrorCode> {
+  public constructor(code: AccountErrorCode) {
+    super(code, code);
+    this.name = "AccountError";
+  }
+}
+
+/** A sensitive limit was exhausted inside a use case. */
+export class RateLimitExceededError extends LaceError<"RATE_LIMITED"> {
+  public constructor(public readonly retryAfterSeconds: number) {
+    super("RATE_LIMITED", "Rate limit exceeded.");
+    this.name = "RateLimitExceededError";
   }
 }
 

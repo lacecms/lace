@@ -5,6 +5,8 @@ test("packaged entry point keeps its public exports", async () => {
     "BUILD_EXPORT_FORMAT_VERSION",
     "CLOUDFLARE_LIST_QUERY_LIMITS",
     "COLLECTION_MATCHING_VERSION",
+    "ContractValidationError",
+    "LaceError",
     "MAX_BLOCK_ANCHOR_LENGTH",
     "MAX_BLOCK_CLASS_NAME_LENGTH",
     "MAX_BLOCK_CLASS_TOKENS",

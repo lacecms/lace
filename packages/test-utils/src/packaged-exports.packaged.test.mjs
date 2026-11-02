@@ -20,6 +20,7 @@ test("packaged entry point keeps its public exports", async () => {
     "assertQueryPlanUsesIndex",
     "contentRepositoryContractCases",
     "createUserByInvitation",
+    "errorMatrixCases",
     "gifFixture",
     "packageName",
     "readAllBuildContentPages",

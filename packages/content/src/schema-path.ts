@@ -4,7 +4,7 @@ const KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
 
 /** Parse a root key or wildcard schema pointer, never a concrete item index. */
 export function parseSchemaPath(value: string): readonly string[] {
-  if (typeof value !== "string") throw new Error("Schema path must be a string.");
+  if (typeof value !== "string") throw new TypeError("Schema path must be a string.");
   const parts =
     typeof value === "string" && value.startsWith("/") ? value.slice(1).split("/") : [value];
   if (
@@ -12,7 +12,7 @@ export function parseSchemaPath(value: string): readonly string[] {
     parts.some((part) => part !== "*" && !KEY.test(part)) ||
     parts[0] === "*"
   )
-    throw new Error(`Invalid schema path: ${String(value)}.`);
+    throw new TypeError(`Invalid schema path: ${String(value)}.`);
   return Object.freeze(parts);
 }
 
@@ -34,7 +34,7 @@ export function schemaFieldAt(
     if (segment === "*" && current.type === "list") current = current.item;
     else if (segment !== "*" && current.type === "group")
       current = Object.hasOwn(current.fields, segment) ? current.fields[segment] : undefined;
-    else throw new Error(`Invalid schema traversal: ${encodeSchemaPath(parts)}.`);
+    else throw new TypeError(`Invalid schema traversal: ${encodeSchemaPath(parts)}.`);
   }
   return current;
 }

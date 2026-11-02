@@ -1,3 +1,4 @@
+import { LaceError } from "@lacecms/content";
 import {
   deepFreeze,
   isPlainObject,
@@ -42,9 +43,9 @@ const FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 const BLOCK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
 
 /** Thrown when `lace.config.ts` contains an invalid or ambiguous definition. */
-export class ConfigurationError extends Error {
+export class ConfigurationError extends LaceError<"CONFIGURATION_INVALID"> {
   public constructor(message: string) {
-    super(message);
+    super("CONFIGURATION_INVALID", message);
     this.name = "ConfigurationError";
   }
 }
