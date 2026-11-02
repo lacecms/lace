@@ -3594,9 +3594,9 @@ Each converted package pins its literal public export list; Astro also checks
 its four copied component subpaths. Root `pnpm test` runs both task kinds before
 the root governance/integration suite, which may still consume built output.
 
-RF2A converts content, config, domain, contracts, render, SDK and Astro. Until
-RF2B/RF2C convert the remaining members, their existing tests retain explicit
-build prefixes. This transition does not make those remaining tests build-free.
+All package and app `test` tasks run without build prerequisites. Process,
+packed-consumer, Worker-bundle, bundled-asset and Astro fixture-build checks
+run under `test:packaged`; `apps/site test` succeeds with no source test files.
 
 ### Unit tests
 
@@ -3617,6 +3617,14 @@ The same repository behavior suite must run against:
 
 - Node SQLite;
 - local D1/Miniflare.
+
+The shared suite lives in `packages/test-utils/src/repository-contract/`: shared
+ports and seeds, builds, lifecycle, sync, media, globals/SEO, block envelopes,
+export and conditional-publication cases. Its index concatenates area cases in
+the original order, pinned by a literal case-name test. The Node harness runs
+each case on file-backed and in-memory SQLite; D1 keeps its per-case Miniflare
+isolation and timeout. Deterministic adapters, assertions and the in-memory
+content store are separate modules behind the unchanged test-utils public entry.
 
 This is more valuable than attempting to make the two Drizzle drivers look identical through an overly broad abstraction.
 

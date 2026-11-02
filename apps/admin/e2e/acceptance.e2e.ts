@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { readCompleteBuildExport } from "../../../packages/test-utils/dist/index.js";
+import { readCompleteBuildExport } from "@lacecms/test-utils";
 import { expectNoAccessibilityViolations } from "./support/accessibility.js";
 
 const root = resolve(import.meta.dirname, "../../..");

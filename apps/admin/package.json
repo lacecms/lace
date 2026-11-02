@@ -65,6 +65,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "catalog:",
+    "@lacecms/test-utils": "workspace:*",
     "@playwright/test": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@testing-library/jest-dom": "catalog:",

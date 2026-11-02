@@ -8,7 +8,7 @@ import type {
 import { INVITATION_TTL_MS, PASSWORD_RESET_TTL_MS } from "@lacecms/application";
 import { unixMilliseconds } from "@lacecms/domain";
 import type { ExpectStatic } from "vitest";
-import type { ContractSql } from "./repository-contract.js";
+import type { ContractSql } from "./repository-contract/index.js";
 
 /** A freshly migrated database with a controllable clock shared by the security adapters. */
 export interface SecurityContractHarness {

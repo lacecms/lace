@@ -1,0 +1,449 @@
+// @ts-nocheck
+// TODO(rf2): Type legacy HTTP/process fixtures and recorded runner calls.
+import {
+  chmod,
+  mkdtemp,
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+  symlink,
+} from "node:fs/promises";
+import { createServer } from "node:http";
+import { join } from "node:path";
+import { afterEach, expect, test, vi } from "vitest";
+import { FixedCommandBuilder, parseSiteOutputSettings } from "./index.js";
+
+const cleanup = [];
+afterEach(async () => {
+  await Promise.all(cleanup.splice(0).map((item) => item()));
+});
+
+const fixture = (extra = {}) => builderFixture(FixedCommandBuilder, cleanup, extra);
+
+test("builds from a filtered copy and atomically retains two successful releases", async () => {
+  const { builder, root, setVersion } = await fixture();
+  const output = join(root, "output");
+  for (const version of [1, 2, 3]) {
+    setVersion(version);
+    expect(await builder.build({ buildId: `build-${version}`, targetVersion: version })).toEqual({
+      status: "succeeded",
+    });
+    const current = await readlink(join(output, "current"));
+    expect((await stat(join(output, current))).mode & 0o777).toBe(0o755);
+    expect(await readFile(join(output, current, ".lace-release.json"), "utf8")).toContain(
+      `"version":${version}`,
+    );
+    expect(await readFile(join(output, current, "index.html"), "utf8")).toContain("ok");
+  }
+  expect((await readdir(join(output, "releases"))).length).toBe(2);
+  const retainedVersions = await Promise.all(
+    (await readdir(join(output, "releases"))).map(
+      async (name) =>
+        JSON.parse(await readFile(join(output, "releases", name, ".lace-release.json"), "utf8"))
+          .version,
+    ),
+  );
+  expect(retainedVersions.sort()).toEqual([2, 3]);
+  expect((await lstat(join(output, "current"))).isSymbolicLink()).toBe(true);
+});
+
+test("probes the published version with a single-entry first export page", async () => {
+  const { root, source, tool } = await fixture();
+  const requests = [];
+  const api = createServer((request, response) => {
+    requests.push({ authorization: request.headers.authorization, url: request.url });
+    response.writeHead(200, { "content-type": "application/json", etag: '"4"' });
+    response.end("{}");
+  });
+  await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => new Promise((resolve) => api.close(resolve)));
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: "apps/site",
+    outputDirectory: "dist",
+    workRoot: join(root, "work-probe"),
+    outputRoot: join(root, "output-probe"),
+    apiBaseUrl: `http://127.0.0.1:${api.address().port}/`,
+    buildToken: "build-token",
+    toolPath: tool,
+  });
+  expect(await builder.build({ buildId: "probe", targetVersion: 4 })).toMatchObject({
+    status: "succeeded",
+  });
+  expect(requests.length).toBeGreaterThan(0);
+  for (const request of requests) {
+    expect(request).toEqual({
+      authorization: "Bearer build-token",
+      url: "/api/v1/public/build-export?limit=1",
+    });
+  }
+});
+
+test("version advancement during a build leaves output unpublished", async () => {
+  const { root, source, tool } = await fixture();
+  let reads = 0;
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: "apps/site",
+    outputDirectory: "dist",
+    workRoot: join(root, "work-advanced"),
+    outputRoot: join(root, "output-advanced"),
+    apiBaseUrl: "http://api.test/",
+    buildToken: "build-token",
+    toolPath: tool,
+    versionReader: async () => {
+      reads += 1;
+      return reads === 3 ? 2 : 1;
+    },
+  });
+  expect(await builder.build({ buildId: "stale", targetVersion: 1 })).toEqual({
+    status: "failed",
+    reason: "version_changed",
+  });
+  expect(await readdir(join(root, "output-advanced/releases"))).toEqual([]);
+});
+
+test("build failure or changed version leaves current release intact", async () => {
+  const { builder, root, source, setVersion } = await fixture();
+  expect((await builder.build({ buildId: "first", targetVersion: 1 })).status).toBe("succeeded");
+  const current = await readlink(join(root, "output/current"));
+  await writeFile(join(source, "fail-build"), "yes");
+  setVersion(2);
+  expect(await builder.build({ buildId: "failed", targetVersion: 2 })).toEqual({
+    status: "failed",
+    reason: "build_failed",
+  });
+  expect(await readlink(join(root, "output/current"))).toBe(current);
+  setVersion(3);
+  expect(await builder.build({ buildId: "stale", targetVersion: 2 })).toEqual({
+    status: "failed",
+    reason: "version_changed",
+  });
+  expect(await readlink(join(root, "output/current"))).toBe(current);
+});
+
+test("tool failure logs only a fixed diagnostic category", async () => {
+  const { builder, tool } = await fixture();
+  await writeFile(tool, '#!/bin/sh\necho "secret=private ENOSPC /source/private" >&2\nexit 1\n');
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await builder.build({ buildId: "disk-full", targetVersion: 1 })).toEqual({
+      status: "failed",
+      reason: "install_failed",
+    });
+    expect(log).toHaveBeenCalledWith(
+      JSON.stringify({ component: "builder-tool", phase: "install", failure: "disk_full" }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("secret=private");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("/source/private");
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("builds the exact generated site layout with fixed commands", async () => {
+  const { root, source, tool } = await fixture();
+  await rm(join(source, "apps"), { recursive: true });
+  await mkdir(join(source, "site"));
+  await writeFile(
+    join(source, "site/package.json"),
+    JSON.stringify({ dependencies: { astro: "7.3.1" } }),
+  );
+  await writeFile(
+    tool,
+    `#!/bin/sh
+if [ "$1" = "install" ]; then
+  test "$2" = "--frozen-lockfile" || exit 1
+  test "$#" = "2" || exit 1
+  mkdir -p site/node_modules/astro
+  exit 0
+fi
+test "$1" = "--dir" || exit 1
+test "$2" = "site" || exit 1
+test "$3" = "exec" || exit 1
+test "$4" = "astro" || exit 1
+test "$5" = "build" || exit 1
+mkdir -p site/dist
+echo '<h1>generated</h1>' > site/dist/index.html
+`,
+  );
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: "site",
+    outputDirectory: "dist",
+    workRoot: join(root, "generated-work"),
+    outputRoot: join(root, "generated-output"),
+    apiBaseUrl: "http://api.test/",
+    buildToken: "build-token",
+    toolPath: tool,
+    versionReader: async () => 1,
+  });
+  expect(await builder.build({ buildId: "generated", targetVersion: 1 })).toEqual({
+    status: "succeeded",
+  });
+  const current = await readlink(join(root, "generated-output/current"));
+  expect(await readFile(join(root, "generated-output", current, "index.html"), "utf8")).toContain(
+    "generated",
+  );
+});
+
+test("standalone Astro build uses its root lockfile and selected custom output", async () => {
+  const { root, source, tool } = await fixture();
+  await rm(join(source, "pnpm-workspace.yaml"));
+  await writeFile(
+    join(source, "package.json"),
+    JSON.stringify({ dependencies: { astro: "7.3.1" } }),
+  );
+  await writeFile(
+    tool,
+    `#!/bin/sh
+if [ "$1" = "install" ]; then
+  test "$#" = "2" || exit 1
+  mkdir -p node_modules/astro
+  exit 0
+fi
+test "$1" = "--dir" && test "$2" = "." && test "$3" = "exec" && test "$4" = "astro" && test "$5" = "build" && test "$6" = "--outDir" && test "$7" = "release" || exit 1
+mkdir release
+echo '<h1>real-standalone</h1>' > release/index.html
+`,
+  );
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: ".",
+    outputDirectory: "release",
+    workRoot: join(root, "standalone-work"),
+    outputRoot: join(root, "standalone-output"),
+    apiBaseUrl: "http://api.test/",
+    buildToken: "token",
+    toolPath: tool,
+    versionReader: async () => 1,
+  });
+  expect(await builder.build({ buildId: "standalone", targetVersion: 1 })).toEqual({
+    status: "succeeded",
+  });
+  expect(await readFile(join(root, "standalone-output/current/index.html"), "utf8")).toContain(
+    "real-standalone",
+  );
+});
+
+test("linked output cannot replace a successful current release", async () => {
+  const { builder, root, source, tool } = await fixture();
+  expect((await builder.build({ buildId: "first", targetVersion: 1 })).status).toBe("succeeded");
+  const current = await readlink(join(root, "output/current"));
+  await writeFile(
+    tool,
+    `#!/bin/sh
+if [ "$1" = "install" ]; then mkdir -p apps/site/node_modules/astro; exit 0; fi
+mkdir -p apps/site/dist
+echo '<h1>unsafe</h1>' > apps/site/unsafe.html
+ln -s ../unsafe.html apps/site/dist/index.html
+`,
+  );
+  expect(await builder.build({ buildId: "unsafe", targetVersion: 1 })).toEqual({
+    status: "failed",
+    reason: "build_failed",
+  });
+  expect(await readlink(join(root, "output/current"))).toBe(current);
+  await symlink("apps/site", join(source, "linked"));
+  expect(await builder.build({ buildId: "linked-source", targetVersion: 1 })).toEqual({
+    status: "failed",
+    reason: "source_symlink",
+    path: "linked",
+  });
+  expect(await readlink(join(root, "output/current"))).toBe(current);
+});
+
+test("specific source failures keep the old release and a correction is retryable", async () => {
+  const { builder, root, source } = await fixture();
+  expect((await builder.build({ buildId: "initial", targetVersion: 1 })).status).toBe("succeeded");
+  const current = await readlink(join(root, "output/current"));
+  await symlink("/outside/secret-sentinel", join(source, "apps/site/linked"));
+  expect(await builder.build({ buildId: "failure", targetVersion: 1 })).toEqual({
+    status: "failed",
+    reason: "source_symlink",
+    path: "apps/site/linked",
+  });
+  expect(await readlink(join(root, "output/current"))).toBe(current);
+  await rm(join(source, "apps/site/linked"));
+  expect((await builder.build({ buildId: "retry", targetVersion: 1 })).status).toBe("succeeded");
+  expect(await readlink(join(root, "output/current"))).not.toBe(current);
+});
+
+test.each([
+  [{}, ""],
+  [{ siteIndexing: "off", siteUrl: "https://example.com/" }, "https://example.com/|off|set|set"],
+])("passes only configured site output settings to the build (%#)", async (settings, expected) => {
+  const { root, source, tool } = await fixture();
+  await writeFile(
+    tool,
+    `#!/bin/sh
+if [ "$1" = "install" ]; then
+  mkdir -p apps/site/node_modules/astro
+  exit 0
+fi
+mkdir -p apps/site/dist
+if [ -n "\${LACE_BUILD_SITE_URL+x}\${LACE_SITE_INDEXING+x}" ]; then
+  printf '%s|%s|%s|%s' "$LACE_BUILD_SITE_URL" "$LACE_SITE_INDEXING" "\${LACE_BUILD_SITE_URL+set}" "\${LACE_SITE_INDEXING+set}" > apps/site/dist/index.html
+else
+  printf '' > apps/site/dist/index.html
+fi
+`,
+  );
+  const builder = new FixedCommandBuilder({
+    sourceRoot: source,
+    siteDirectory: "apps/site",
+    outputDirectory: "dist",
+    workRoot: join(root, "settings-work"),
+    outputRoot: join(root, "settings-output"),
+    apiBaseUrl: "http://api.test/",
+    buildToken: "build-token",
+    toolPath: tool,
+    versionReader: async () => 1,
+    ...settings,
+  });
+  expect(await builder.build({ buildId: "settings", targetVersion: 1 })).toEqual({
+    status: "succeeded",
+  });
+  const current = await readlink(join(root, "settings-output/current"));
+  expect(await readFile(join(root, "settings-output", current, "index.html"), "utf8")).toBe(
+    expected,
+  );
+});
+
+test("site output settings treat empty values as absent and accept valid values", () => {
+  expect(parseSiteOutputSettings({})).toEqual({});
+  expect(parseSiteOutputSettings({ LACE_BUILD_SITE_URL: "", LACE_SITE_INDEXING: " " })).toEqual({});
+  expect(
+    parseSiteOutputSettings({
+      LACE_BUILD_SITE_URL: "https://example.com/blog",
+      LACE_SITE_INDEXING: "on",
+    }),
+  ).toEqual({ siteIndexing: "on", siteUrl: "https://example.com/blog" });
+});
+
+test.each([
+  [{ LACE_SITE_INDEXING: "maybe" }, "LACE_SITE_INDEXING"],
+  [{ LACE_BUILD_SITE_URL: "ftp://example.com/" }, "LACE_BUILD_SITE_URL"],
+  [{ LACE_BUILD_SITE_URL: "https://user:secret@example.com/" }, "LACE_BUILD_SITE_URL"],
+  [{ LACE_BUILD_SITE_URL: "https://example.com/?preview=secret" }, "LACE_BUILD_SITE_URL"],
+  [{ LACE_BUILD_SITE_URL: "/blog" }, "LACE_BUILD_SITE_URL"],
+])("invalid site output settings name the setting only (%#)", (environment, name) => {
+  expect(() => parseSiteOutputSettings(environment)).toThrow(
+    `Invalid builder configuration: ${name}.`,
+  );
+  try {
+    parseSiteOutputSettings(environment);
+  } catch (error) {
+    for (const value of Object.values(environment)) expect(error.message).not.toContain(value);
+  }
+});
+
+const lines = async (path) =>
+  existsSync(path) ? (await readFile(path, "utf8")).trim().split("\n") : [];
+
+test("persistent caches serve the next build and never reach the release", async () => {
+  const cacheRoot = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(() => rm(cacheRoot, { recursive: true, force: true }));
+  const { builder, root, setVersion } = await fixture({ cacheRoot });
+  for (const version of [1, 2]) {
+    setVersion(version);
+    expect(await builder.build({ buildId: `cached-${version}`, targetVersion: version })).toEqual({
+      status: "succeeded",
+    });
+  }
+  expect(await lines(join(root, "install-args"))).toEqual(
+    Array(2).fill(`install --frozen-lockfile --store-dir ${join(cacheRoot, "pnpm-store")}`),
+  );
+  expect(await lines(join(root, "astro-cache"))).toEqual(["miss", "hit"]);
+  expect(await readFile(join(cacheRoot, "pnpm-store/package"), "utf8")).toBe("package\n");
+  expect(await readFile(join(cacheRoot, "astro/assets/variant.webp"), "utf8")).toBe("variant\n");
+  const current = join(root, "output", await readlink(join(root, "output/current")));
+  expect((await readdir(current)).sort()).toEqual([".lace-release.json", "index.html"]);
+  // The work directory is gone; removing its link left the cache intact.
+  expect(await readdir(join(root, "work"))).toEqual([]);
+});
+
+test("an oversized cache is cleared before the build", async () => {
+  const cacheRoot = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(() => rm(cacheRoot, { recursive: true, force: true }));
+  await mkdir(join(cacheRoot, "astro/assets"), { recursive: true });
+  await writeFile(join(cacheRoot, "astro/assets/variant.webp"), "x".repeat(64));
+  const { builder, root } = await fixture({ cacheRoot, cacheLimitBytes: 32 });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await builder.build({ buildId: "oversized", targetVersion: 1 })).toEqual({
+      status: "succeeded",
+    });
+    expect(log.mock.calls.map(([line]) => line)).toContain(
+      '{"component":"builder-cache","event":"cleared","reason":"size_limit"}',
+    );
+  } finally {
+    log.mockRestore();
+  }
+  expect(await lines(join(root, "astro-cache"))).toEqual(["miss"]);
+});
+
+test("a failed build drops the Astro cache and keeps the package store", async () => {
+  const cacheRoot = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(() => rm(cacheRoot, { recursive: true, force: true }));
+  const { builder, root, source, setVersion } = await fixture({ cacheRoot });
+  expect((await builder.build({ buildId: "warm", targetVersion: 1 })).status).toBe("succeeded");
+  await writeFile(join(source, "fail-build"), "yes");
+  setVersion(2);
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await builder.build({ buildId: "broken", targetVersion: 2 })).toEqual({
+      status: "failed",
+      reason: "build_failed",
+    });
+  } finally {
+    log.mockRestore();
+  }
+  expect(existsSync(join(cacheRoot, "astro"))).toBe(false);
+  expect(existsSync(join(cacheRoot, "pnpm-store/package"))).toBe(true);
+  await rm(join(source, "fail-build"));
+  expect((await builder.build({ buildId: "retry", targetVersion: 2 })).status).toBe("succeeded");
+  expect(await lines(join(root, "astro-cache"))).toEqual(["miss", "hit", "miss"]);
+});
+
+test("a missing or unwritable cache root builds uncached", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "lace-builder-cache-"));
+  cleanup.push(async () => {
+    await chmod(join(parent, "locked"), 0o755).catch(() => {});
+    await rm(parent, { recursive: true, force: true });
+  });
+  await mkdir(join(parent, "locked"));
+  await chmod(join(parent, "locked"), 0o555);
+  for (const cacheRoot of [join(parent, "missing"), join(parent, "locked")]) {
+    const { builder, root } = await fixture({ cacheRoot });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await builder.build({ buildId: "uncached", targetVersion: 1 })).toEqual({
+        status: "succeeded",
+      });
+      expect(log.mock.calls.map(([line]) => line)).toContain(
+        '{"component":"builder-cache","event":"unavailable"}',
+      );
+    } finally {
+      log.mockRestore();
+    }
+    expect(await lines(join(root, "install-args"))).toEqual(["install --frozen-lockfile"]);
+  }
+  expect(existsSync(join(parent, "missing"))).toBe(false);
+});
+
+test("without a cache root the install arguments are unchanged", async () => {
+  const { builder, root } = await fixture();
+  expect((await builder.build({ buildId: "cold", targetVersion: 1 })).status).toBe("succeeded");
+  expect(await lines(join(root, "install-args"))).toEqual(["install --frozen-lockfile"]);
+});
+
+import { builderFixture } from "./test-support/builder-harness.js";
+
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";

@@ -25,9 +25,11 @@
   },
   "scripts": {
     "build": "node ../../scripts/platform-release-version.mjs && tsc -p tsconfig.json && node scripts/copy-admin-assets.mjs",
-    "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "oxlint src",
-    "test": "pnpm run build && vitest run src/*.test.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:packaged": "vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
     "@lacecms/application": "workspace:*",
@@ -44,6 +46,7 @@
   },
   "devDependencies": {
     "@lacecms/test-utils": "workspace:*",
+    "@types/node": "catalog:",
     "miniflare": "catalog:",
     "oxlint": "catalog:",
     "sharp": "catalog:",

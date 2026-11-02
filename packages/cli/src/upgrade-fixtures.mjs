@@ -2,7 +2,8 @@ import { mkdtemp, realpath, mkdir, writeFile, readdir, readFile, rm } from "node
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach } from "vitest";
-import { upgradeHash } from "../dist/upgrade-input.js";
+import { createHash } from "node:crypto";
+const upgradeHash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const roots = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));

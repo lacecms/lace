@@ -50,6 +50,14 @@
     "test:packaged": {
       "dependsOn": ["build", "^build"],
       "outputs": []
+    },
+    "@lacecms/platform-node#test:packaged": {
+      "dependsOn": ["build", "^build", "@lacecms/astro#build"],
+      "outputs": []
+    },
+    "@lacecms/platform-cloudflare#test:packaged": {
+      "dependsOn": ["build", "^build", "@lacecms/astro#build"],
+      "outputs": []
     }
   },
   "globalDependencies": ["vitest.shared.mjs"]

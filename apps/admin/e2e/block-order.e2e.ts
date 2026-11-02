@@ -17,7 +17,7 @@ import {
   NodePlaceholderObjectStorage,
 } from "../../../packages/platform-node/dist/index.js";
 import type { ContentBlockDto, PublicBlockDto } from "../../../packages/contracts/dist/index.js";
-import { readCompleteBuildExport } from "../../../packages/test-utils/dist/index.js";
+import { readCompleteBuildExport } from "@lacecms/test-utils";
 import { moveFirstHeroWithKeyboard } from "./helpers/block-order-keyboard.js";
 
 // This fixture uses the production HTTP/use-case/SQLite path. Only identity and

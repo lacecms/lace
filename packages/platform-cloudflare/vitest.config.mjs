@@ -1,6 +1,6 @@
-import { defineConfig } from "vitest/config";
+import { sharedTestConfig } from "../../vitest.shared.mjs";
 
-export default defineConfig({
+export default sharedTestConfig({
   test: {
     // Every case boots workerd through Miniflare. Running files one at a time
     // keeps that CPU load from starving other packages Turborepo tests in

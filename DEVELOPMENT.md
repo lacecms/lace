@@ -235,8 +235,8 @@ lockfile change, run the explicit reset and start the stack again.
 See [verification commands, coverage and limits](docs/verification.md) and the
 [internal documentation index](docs/README.md).
 
-RF2A packages (`content`, `config`, `domain`, `contracts`, `render`, `sdk`,
-`astro`) test TypeScript source without requiring any package `dist/`:
+Package and app `test` commands run TypeScript source without requiring any
+package `dist/` or copied platform `admin/` bundle:
 
 ```sh
 pnpm --filter @lacecms/content test
@@ -248,9 +248,13 @@ pnpm exec turbo run test:packaged --filter @lacecms/content
 prerequisites, or run the package script directly after building. Shared Vitest
 aliases resolve public workspace imports to source only for source tests.
 `tsconfig.test.json` participates in package typechecking. Some legacy fixtures
-carry explicit `TODO(rf2)` typechecking exceptions listed in the archived RF2A
-verification note. Packages scheduled for RF2B/RF2C retain temporary build
-prefixes until their conversion.
+carry explicit `TODO(rf2)` typechecking exceptions inventoried in the RF2
+changes' verification notes.
+
+Process/executable checks, packed CLI/generator consumers, API Worker bundles,
+platform admin assets and the site fixture build run only in `test:packaged`.
+`apps/site test` has no source cases; use its `test:packaged` task for the
+fixture build. Root `pnpm test` selects both task kinds.
 
 Focused application checks are useful while developing a surface:
 
