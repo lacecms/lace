@@ -1,5 +1,19 @@
 import { normalizeFieldVisibility, normalizeFormLayout } from "@lacecms/content";
-import type { ContentModelSource, ContentModelDto, ModelSeoDto, SeoDefaultsDto } from "./index.js";
+import type {
+  ContentModelDto,
+  ContentModelListDto,
+  ModelSeoDto,
+  SeoDefaultsDto,
+} from "./models.js";
+import type { FieldMetadataMapDto } from "./metadata.js";
+import type {
+  BlockMetadata,
+  ContentModelKind,
+  FieldVisibility,
+  FormLayout,
+} from "@lacecms/content";
+import type { ContentModelRoute } from "@lacecms/domain";
+import type { CollectionListOptionsSource, ListQueryLimits } from "./collection-queries.js";
 
 /** Maps a model's SEO fallback fields with `null` for unmapped values. */
 export function toModelSeoDto(seo: NonNullable<ContentModelSource["seo"]>): ModelSeoDto {
@@ -58,4 +72,50 @@ export function toContentModelDto(model: ContentModelSource): ContentModelDto {
     if (value !== undefined) dto[key] = value;
   }
   return dto as ContentModelDto;
+}
+
+export interface ContentModelSource {
+  readonly blockDefinitions?: readonly BlockMetadata[];
+  readonly blocks: readonly string[];
+  readonly description?: string;
+  readonly fields: FieldMetadataMapDto;
+  readonly key: string;
+  readonly kind: ContentModelKind;
+  readonly label?: string;
+  readonly listFields?: readonly string[];
+  readonly listOptions?: CollectionListOptionsSource;
+  readonly layout?: FormLayout;
+  readonly path?: string;
+  readonly route?: string;
+  readonly seo?: { readonly description?: string; readonly image?: string };
+  readonly seoDefaults?: {
+    readonly description?: string;
+    readonly image?: string;
+    readonly siteName: string;
+    readonly titleTemplate?: string;
+  };
+  readonly version: number;
+  readonly visibility?: FieldVisibility;
+}
+
+/** Maps a portable route without importing configuration or persistence types. */
+export function toContentModelRouteDto(route: ContentModelRoute) {
+  switch (route.kind) {
+    case "page":
+      return { kind: "page" as const, key: route.key, path: route.path };
+    case "collection":
+      return { kind: "collection" as const, key: route.key, route: route.route };
+    case "global":
+      return { kind: "global" as const, key: route.key };
+    default:
+      return route satisfies never;
+  }
+}
+
+/** Pure projections of the authorized application results; no lookup lives here. */
+export function toContentModelDiscoveryDto(input: {
+  readonly items: readonly ContentModelSource[];
+  readonly listQueryLimits: ListQueryLimits;
+}): ContentModelListDto {
+  return { items: input.items.map(toContentModelDto), listQueryLimits: input.listQueryLimits };
 }

@@ -19,7 +19,7 @@ import {
   publicMediaSchema,
   seoValueSchema,
   tolerantPublicSchemas,
-} from "./index.js";
+} from "../index.js";
 
 const publishedAt = "2026-10-01T08:00:00.000Z";
 

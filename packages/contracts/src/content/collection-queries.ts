@@ -1,3 +1,9 @@
+import { COLLECTION_MATCHING_VERSION, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import type { ListQueryLimits } from "@lacecms/content";
+import { canonicalizeJson } from "@lacecms/content";
+import type { JsonValue } from "@lacecms/content";
+import type { FieldMetadataMapDto } from "./metadata.js";
+
 import * as v from "valibot";
 export {
   COLLECTION_MATCHING_VERSION,
@@ -169,4 +175,26 @@ export function canonicalCollectionFilters(
       filter.op === "in" ? { ...filter, values: [...filter.values].sort() } : { ...filter },
     )
     .sort((a, b) => (a.field < b.field ? -1 : a.field > b.field ? 1 : 0));
+}
+
+/** Cache identity for effective query permissions, independent of labels and column order. */
+export function collectionCapabilityIdentity(
+  model: {
+    readonly fields: FieldMetadataMapDto;
+    readonly listOptions?: CollectionListOptionsSource | undefined;
+  },
+  limits: ListQueryLimits = NODE_LIST_QUERY_LIMITS,
+): string {
+  const targets = (keys: readonly string[] | undefined) =>
+    [...(keys ?? [])].sort().map((key) => {
+      const field = model.fields[key]!;
+      return [key, field.type, field.type === "select" ? [...field.options].sort() : null];
+    });
+  return canonicalizeJson([
+    COLLECTION_MATCHING_VERSION,
+    limits,
+    targets(model.listOptions?.sortableFields),
+    targets(model.listOptions?.filterableFields),
+    targets(model.listOptions?.searchableFields),
+  ] as JsonValue);
 }

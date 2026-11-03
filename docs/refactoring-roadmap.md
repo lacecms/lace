@@ -99,8 +99,8 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15, enforced by a shrinking size baseline |
-| Size | `packages/contracts/src/index.ts` | 3,014 lines |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14, enforced by a shrinking size baseline |
+| Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
 | Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
@@ -487,11 +487,14 @@ titles. Architecture §15 records the actual infrastructure interfaces.
 
 ### Session RF4C — `@lacecms/contracts`
 
-`packages/contracts/src/index.ts` (3,014 lines) becomes `content.ts`,
-`media.ts`, `accounts.ts`, `builds.ts`, `settings.ts`, `errors.ts` and
-`openapi.ts`, mirroring the REST resource groups. `hasMatchingBlockDefinitions`
-loses its ordering dependency (match by type, not index). Its test file splits
-the same way.
+`packages/contracts/src/index.ts` becomes the entry for 36 concrete modules in
+`shared/`, `errors/`, `openapi/`, `content/`, `media/`, `delivery/`, `builds/`,
+`accounts/` and `settings/`. The directory layout corrects the original seven
+flat-file plan to follow §6 and give delivery and shared primitives an owner.
+Imports follow the one-way direction recorded at the entry and are acyclic.
+`hasMatchingBlockDefinitions` matches exactly one definition per allowed type
+in any order; duplicate allowed types with definitions are rejected. Tests move
+beside their modules while preserving existing case names.
 
 ### Session RF4D — `@lacecms/server`
 
@@ -766,3 +769,8 @@ reference pages.
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Archived at [`2026-11-03-rf04a-content-module-split`](../openspec/changes/archive/2026-11-03-rf04a-content-module-split/); 21/21 tasks complete. The `workspace-governance` delta is synchronized (one added requirement, five scenarios). All 84 accepted specifications pass strict validation. Implementation and verification are preserved in the archive. RF4B is next. |
 | 2026-11-03 | RF4B | `rf04b-application-module-split` | Implemented the application domain and port split, security capability ports, and configuration decision table. The three application size-baseline entries are removed (18 → 15); 131 listed case titles and the runtime export surface are preserved. Verification is recorded in the active change. |
 | 2026-11-03 | RF4B | `rf04b-application-module-split` | Archived at [`2026-11-03-rf04b-application-module-split`](../openspec/changes/archive/2026-11-03-rf04b-application-module-split/); 20/20 tasks complete. The `application-ports-and-commands` delta is synchronized; all 84 accepted specifications validate. |
+| 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Proposed. `index.ts` (2,994 lines at `83c0157d`) becomes the only root production module, re-exporting 36 concrete modules in nine directories: `shared/`, `errors/`, `openapi/`, `content/`, `media/`, `delivery/`, `builds/`, `accounts/` and `settings/` (direction `shared ← {errors, openapi, accounts, builds, content}`, `accounts ← settings`, `content ← media`, `{content, media, errors} ← delivery`; acyclic including type imports, so the `content-model-projection` → `index` cycle is removed). Correction to the roadmap text: the seven flat files would leave `content.ts` near 1,000 lines with no owner for public delivery, the build export, the tolerant variants or the primitives, so the session uses domain directories (§6). `hasMatchingBlockDefinitions` matches by type: one definition per allowed type in any order, and duplicate allowed types with definitions are rejected. The test files split into module companions with every case name preserved (96 + 1 new). Runtime keys, type names and the OpenAPI document stay unchanged. The baseline goes from 15 to 14. Delta spec: `rest-contracts` (1 modified). 17 tasks, not applied. |
+
+| 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Implemented, 18/18 tasks complete. The 36-module contracts split and type-matched block definitions leave a 144-line entry and a 226-line largest module; size baseline 15 → 14. The 96 existing listed test names and export surface are preserved, with one new listed case. The shared-vocabulary guard follows the moved owners. All root gates pass (64 Turbo tasks; 35 root files / 284 cases); verification is recorded in the active change. |
+
+| 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Archived at [`2026-11-03-rf04c-contracts-module-split`](../openspec/changes/archive/2026-11-03-rf04c-contracts-module-split/); 18/18 tasks complete. The `rest-contracts` delta is synchronized; all 84 accepted specifications validate. Implementation and verification remain recorded in the archive. |

@@ -23,13 +23,13 @@ const grammar = "[a-z0-9]+(?:-[a-z0-9]+)*";
 // Exact occurrences, scoped to the declaration that owns each exception.
 const allowedGrammar = [
   {
-    file: "packages/contracts/src/index.ts",
+    file: "packages/contracts/src/content/entries.ts",
     owner: "export const contentEntryListQuerySchema",
     line: "v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?![\\s\\S])/u),",
     reason: "Strict-end query spelling is pinned in OpenAPI and checked for parity.",
   },
   {
-    file: "packages/contracts/src/index.ts",
+    file: "packages/contracts/src/builds/build-site.ts",
     owner: "export const buildSiteIdentitySchema",
     line: "id: v.pipe(v.string(), v.minLength(1), v.maxLength(64), v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)),",
     reason: "Build site IDs are a distinct identifier.",
@@ -47,8 +47,8 @@ const errorOwners = {
   InvariantError: "packages/content/src/shared/errors.ts",
   AccountError: "packages/domain/src/index.ts",
   RateLimitExceededError: "packages/domain/src/index.ts",
-  ContractValidationError: "packages/contracts/src/index.ts",
-  classifyError: "packages/contracts/src/index.ts",
+  ContractValidationError: "packages/contracts/src/errors/envelope.ts",
+  classifyError: "packages/contracts/src/errors/classification.ts",
 };
 
 function violations(source, file) {

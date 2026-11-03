@@ -20,7 +20,11 @@ options, including defaults and constraints where present, and SHALL reject
 unknown descriptor keys, executable values, or non-JSON values. Each model's
 block-definition metadata SHALL correspond only to its declared allowed block
 types and include the stable type, schema version, display metadata, field map,
-and optional default data. The representations SHALL use JSON primitives and
+and optional default data. When present, it SHALL contain exactly one
+definition for each allowed block type and no other definition, matched by the
+definition's stable type and independent of the order of either list; a model
+that lists an allowed block type more than once SHALL NOT carry
+block-definition metadata. The representations SHALL use JSON primitives and
 objects only, SHALL expose content values through explicit DTOs rather than
 persistence rows, and SHALL remain usable by both Node and Cloudflare API
 implementations.
@@ -43,6 +47,25 @@ implementations.
   one or more registered blocks
 - **THEN** a browser client can validate metadata for exactly those block types
   and render their portable fields without importing a server-side registry
+
+#### Scenario: Block definitions in a different order are accepted
+- **WHEN** a content model allows `hero` and `quote` blocks and its
+  block-definition metadata lists the `quote` definition before the `hero`
+  definition
+- **THEN** contract validation accepts the model and keeps both definitions in
+  the order received
+
+#### Scenario: Block definitions that do not cover the allowed types are rejected
+- **WHEN** a content model's block-definition metadata omits an allowed block
+  type, adds a type the model does not allow, or describes one type twice
+- **THEN** contract validation rejects the model with the block-definition
+  mismatch issue
+
+#### Scenario: Duplicate allowed block types cannot carry definitions
+- **WHEN** a content model lists the same allowed block type twice and carries
+  block-definition metadata
+- **THEN** contract validation rejects the model with the block-definition
+  mismatch issue
 
 #### Scenario: A malformed mutation is rejected before dispatch
 - **WHEN** a client submits a create, draft-save, publish, or delete payload

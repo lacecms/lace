@@ -2,7 +2,6 @@
   "apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx": 1508,
   "apps/admin/src/shared/api/admin-client.ts": 1042,
   "packages/config/src/index.ts": 1229,
-  "packages/contracts/src/index.ts": 2994,
   "packages/db/src/sql-content.ts": 2229,
   "packages/platform-cloudflare/src/d1-content-repository.ts": 2696,
   "packages/platform-node/src/content-repository.ts": 2291,
