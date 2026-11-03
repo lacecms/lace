@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { encodeEntryLink, field } from "./index.js";
+import { encodeEntryLink } from "./internal-link-tokens.js";
+import { field } from "./builders.js";
 import { parseSchemaPath, schemaFieldAt } from "./schema-path.js";
 
 test("entry links reject invalid target IDs with TypeError", () => {

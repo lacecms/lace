@@ -1,4 +1,4 @@
-import type { FieldDefinition, ModelFieldDefinitions } from "./index.js";
+import type { FieldDefinition, ModelFieldDefinitions } from "./definitions.js";
 
 const KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
 

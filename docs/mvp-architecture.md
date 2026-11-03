@@ -391,6 +391,26 @@ README links to the public site and root `DEVELOPMENT.md` contributor guide.
 Documentation uses explicit locale/version routes, initially English/latest for
 rc1 following main, without changing CMS localization scope.
 
+### Source layout
+
+Package `src/` roots hold entry points (`index.ts`, `bin.ts`, declared subpath
+entries) and package-level tests. Other modules live in domain directories named
+by what they own; adopt directories as soon as a package has a second concern.
+Each file owns one responsibility. Aim for a few hundred lines and split a file
+in the same change before it reaches 1,000 lines. No subdirectory has a barrel
+`index.ts`: package entries re-export concrete files, explicitly when a module
+also exports internal helpers. Directories depend one way, documented at the top
+of the entry point; module cycles, including type-only imports, are forbidden.
+Tests and type tests sit beside their module; shared helpers live in
+`src/test-support/`. `apps/admin` keeps its section 17 layer/slice structure,
+with the same size limit and no-cycle rule.
+
+Existing flat packages adopt this layout in their RF4–RF6 session or a change
+adding a second concern. The boundary checker enforces the 1,000-line ceiling
+through `scripts/oversized-source-baseline.json`: oversized legacy files may
+shrink but may not grow; deleted or within-limit files must leave the baseline.
+See [ADR 0020](adr/0020-source-layout.md).
+
 ## 7. Generated user project
 
 The supported MVP onboarding path is a project generator, not copying the entire Lace engine source into an existing arbitrary application.

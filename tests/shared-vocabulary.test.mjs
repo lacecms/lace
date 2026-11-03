@@ -43,8 +43,8 @@ const allowedGrammar = [
 ];
 
 const errorOwners = {
-  LaceError: "packages/content/src/errors.ts",
-  InvariantError: "packages/content/src/errors.ts",
+  LaceError: "packages/content/src/shared/errors.ts",
+  InvariantError: "packages/content/src/shared/errors.ts",
   AccountError: "packages/domain/src/index.ts",
   RateLimitExceededError: "packages/domain/src/index.ts",
   ContractValidationError: "packages/contracts/src/index.ts",

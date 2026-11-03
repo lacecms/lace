@@ -5,7 +5,10 @@ import { expect, test } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
 // Read the authoritative declaration, so the guard grows with the vocabulary.
-const declaration = readFileSync(resolve(root, "packages/content/src/index.ts"), "utf8");
+const declaration = readFileSync(
+  resolve(root, "packages/content/src/fields/capabilities.ts"),
+  "utf8",
+);
 const kinds = new Set(
   [...declaration.match(/export type FieldType =([\s\S]*?);/u)[1].matchAll(/"([^"]+)"/gu)].map(
     (match) => match[1],
@@ -96,16 +99,12 @@ test("production code keeps field-kind lists in the authoritative declarations",
     const file = relative(root, path);
     if (file === "apps/admin/src/entities/content/field-types.ts") return [];
     let source = readFileSync(path, "utf8");
-    if (file === "packages/content/src/index.ts") {
-      // Canonical vocabulary and capability types, plus the existing single
-      // block-settings declaration, are definitions rather than consumer copies.
-      source = source
-        .replace(/export type FieldType =[\s\S]*?(?=\/\*\* Options common)/u, (text) =>
-          text.replace(/[^\n]/gu, " "),
-        )
-        .replace(/export const BLOCK_SETTING_FIELD_TYPES =[\s\S]*?\);/u, (text) =>
-          text.replace(/[^\n]/gu, " "),
-        );
+    if (file === "packages/content/src/fields/capabilities.ts") return [];
+    if (file === "packages/content/src/blocks/definition.ts") {
+      // The single block-settings declaration is canonical vocabulary.
+      source = source.replace(/export const BLOCK_SETTING_FIELD_TYPES =[\s\S]*?\);/u, (text) =>
+        text.replace(/[^\n]/gu, " "),
+      );
     }
     return violations(source, file);
   });

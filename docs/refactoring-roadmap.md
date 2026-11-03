@@ -98,7 +98,8 @@ What the roadmap changes, with the numbers to beat:
 | Test loop | workspace members with a `test:watch` script | 0 → RF2C: 20 |
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
-| Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities |
+| Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
+| Size | oversized production files | 19 → RF4A: 18 outside content, enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 3,014 lines |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
@@ -134,7 +135,7 @@ What the roadmap changes, with the numbers to beat:
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | done |
-| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
+| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | in progress |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | M | RF7A → RF7B | planned |
@@ -442,18 +443,27 @@ an `AccountError`.
 **What:** no source file above roughly 1,000 lines; each module has one
 responsibility and one owner section in the architecture. Every session is a
 pure move: `index.ts` re-exports, public API unchanged, existing tests pass
-with import paths only.
+with import paths only. Follow architecture §6 *Source layout*: domain directories,
+no subdirectory barrels, one-way dependencies including type imports, and tests
+beside modules. RF4B–RF4E map their modules into domain directories and delete
+their split files from `scripts/oversized-source-baseline.json`; RF5/RF6 do the
+same for their files. The guard permits legacy files to shrink but never grow.
 
 ### Session RF4A — `@lacecms/content`
 
-`packages/content/src/index.ts` (3,691 lines) becomes `json.ts` (JSON types
-and helpers), `fields.ts` (descriptor normalization and `field` builders),
-`rich-text.ts`, `validation.ts` (value validation, `compileFieldSchema`,
-published projection), `references.ts` (media and internal-link collection),
-`blocks.ts` (registry, `defineBlock`, migrations; `publishedBlockData` moves
-here to remove the only forward reference), `built-in-blocks.ts` and
-`entry.ts` (aggregate validation, canonical JSON, hashing).
-`index.type-test.ts` is split alongside.
+`packages/content/src/index.ts` (3,881 lines after RF3) becomes an explicit
+re-export entry over `shared/` (JSON, errors, identifiers, objects), `fields/`
+(capabilities, definitions, builders, layout, visibility, validation, rich text,
+video embeds, link tokens, schema paths), `references/` (media, internal links,
+field paths), `blocks/` (definition, list layout, built-ins), and `entries/`
+(aggregate, canonical JSON, list-query policy). Dependencies run one way:
+`shared ← fields ← references, blocks ← entries`; no module cycle, including
+types, is permitted. `publishedBlockData` belongs to the block definition;
+`BlockDataValues` and `FieldVisibilityTargets` belong to field definitions,
+where group value inference needs them (owner-confirmed apply refinement).
+The 1,000-line ceiling applies to every module; existing leaf modules move
+with their history. The monolithic runtime test splits into twelve companions,
+and type tests into six, gated by the ordinary package `typecheck`.
 
 ### Session RF4B — `@lacecms/application`
 
@@ -758,3 +768,6 @@ reference pages.
 | 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Proposed. `LaceError<Code>` and `InvariantError` in content (correction to the roadmap text: content and config cannot import domain, so the base lives in content; domain and contracts re-export it). Content, config and domain error classes extend it with stable codes; `AccountError`, `AccountErrorCode` and `RateLimitExceededError` (gains `RATE_LIMITED`) move to domain, application re-exports them. `classifyError` uses one total code table (issue-carrying validation errors first; three `expose` hooks for version details, block-order message and `Retry-After`); `ClassifiedError` gains optional `headers`. Server `onError` delegates (`ContractValidationError` in contracts; server-local `AuthorizationError` extends `LaceError`); MCP drops `ArgumentFailure`, so account and rate-limit failures stop surfacing as `INTERNAL_ERROR`. Twelve raw errors become `TypeError` (arguments) or `InvariantError`; `fail` helpers stay local, closing the RF3B deferral. Error matrix in test-utils with export totality, REST matrix pinned to the baseline, MCP matrix, vocabulary guard, ADR 0019. Delta specs: `rest-contracts`, `mcp-content-server` (1 added each). 17 tasks, not applied. |
 | 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Implemented, 17/17 tasks complete. One LaceError base in content and total classifier in contracts; REST matrix preserved and MCP account/rate-limit errors retain shared codes. Twelve raw errors typed; error matrix, totality and vocabulary guards added; ADR 0019 records ownership. Root typecheck, lint, format, build, full tests (64 Turbo tasks; 35 root files / 273 cases), OpenAPI check and strict change validation pass. OpenAPI SHA-256 and existing application exports unchanged; verification recorded in the active change. Not archived. |
 | 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Archived at [`2026-11-03-rf03d-error-model-mapper`](../openspec/changes/archive/2026-11-03-rf03d-error-model-mapper/); 17/17 tasks complete. Both capability deltas synchronized: `rest-contracts` and `mcp-content-server` (one added requirement each). All 84 accepted specifications pass strict validation. RF3 shared-vocabulary work is complete; verification is preserved in the archive. |
+| 2026-11-03 | RF4A | `rf04a-content-module-split` | Proposed, then revised the same day on the owner's request. `index.ts` (3,881 lines at `1ac97ec2`) becomes the only root module, re-exporting concrete files from five domain directories (`shared/`, `fields/`, `references/`, `blocks/`, `entries/`; one-way `shared ← fields ← references, blocks ← entries`, no subdirectory barrels, module graph acyclic including type imports); bodies and JSDoc move verbatim, existing leaf modules move with `git mv`, `publishedBlockData` moves to `blocks/definition.ts`. Corrections to the roadmap text: the eight flat modules do not fit under 1,000 lines without cycles after RF3A, so capabilities, definitions, layout, visibility and list layout are separate modules and the shared error classes join `shared/errors.ts`. Owner decisions: a *Source layout* convention in architecture §6, `AGENTS.md` and ADR 0020 for all future code; the boundary checker fails on production files over 1,000 lines outside a shrinking baseline (`scripts/oversized-source-baseline.json`, the 18 oversized files outside `content`), so later sessions delete their entries. `index.test.ts` splits into twelve module test files with case titles pinned (115); type tests split into six files, their stale `@ts-expect-error` is fixed and they join the package `typecheck`. Delta spec: `workspace-governance` (1 added). 21 tasks, not applied. |
+| 2026-11-03 | RF4A | `rf04a-content-module-split` | Implemented, 21/21 tasks complete; not archived. Content split into 23 concrete modules in five domain directories with a 178-line entry; largest module 736 lines. Owner-confirmed placement of `BlockDataValues`/`FieldVisibilityTargets` in field definitions removes the discovered type cycle. All 180 declaration exports and 93 runtime keys preserved; 115 listed titles / 241 expanded source cases preserved across 17 test files. Six type-test companions now join typecheck. Size guard baselines 18 oversized files outside content; later sessions remove their entries. Root typecheck, lint, formatting, build, full tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and all 86 strict OpenSpec items pass. Boundary scanner progress regression covered. Verification is recorded in the active change. |
+| 2026-11-03 | RF4A | `rf04a-content-module-split` | Archived at [`2026-11-03-rf04a-content-module-split`](../openspec/changes/archive/2026-11-03-rf04a-content-module-split/); 21/21 tasks complete. The `workspace-governance` delta is synchronized (one added requirement, five scenarios). All 84 accepted specifications pass strict validation. Implementation and verification are preserved in the archive. RF4B is next. |

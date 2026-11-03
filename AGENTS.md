@@ -48,3 +48,14 @@ rule are the sole pre-OpenSpec exception.
 - Do not add ESLint, Prettier, their plugins, or compatibility wrappers.
 - Run the narrowest relevant tests, then root typecheck, Oxlint, Oxfmt check, and
   OpenSpec strict validation before completing a change.
+
+## Source layout
+
+Follow architecture §6: entry points at `src/` root, other modules grouped by
+domain as soon as a second concern exists; one responsibility per file, split
+before 1,000 lines. No subdirectory barrels or module cycles (including types);
+document directory direction at the package entry. Tests sit beside modules,
+shared helpers in `src/test-support/`. Existing packages adopt this in RF4–RF6
+or when adding a second concern; admin retains its layer/slice structure.
+Remove split files from `scripts/oversized-source-baseline.json`; never grow
+baselined files. See [ADR 0020](docs/adr/0020-source-layout.md).

@@ -119,7 +119,7 @@ original scope and does not establish later candidates' readiness.
 | Code-first definitions | `packages/config/src/index.test.mjs`; CLI sync tests; `scripts/cross-runtime-api.mjs` | configuration-synchronization.md | Covered / owner scenarios 2–3 |
 | Draft and published snapshots | `scripts/cross-runtime-api.mjs`; `scripts/publication-visibility-acceptance.mjs` | Architecture §4.4; generated publication guidance | Covered / owner scenario 4 |
 | Ordered block content | `scripts/block-order-acceptance.mjs`; cross-runtime API/Astro ordered-block comparison | Architecture §9.5; personal-site-guide.md | Covered / owner scenario 4 |
-| Tiptap rich text | Admin editor tests; `packages/content/src/index.test.mjs`; render tests | Architecture §11; site-styling.md | Covered / owner scenario 4 |
+| Tiptap rich text | Admin editor tests; `packages/content/src/fields/rich-text.test.ts`; render tests | Architecture §11; site-styling.md | Covered / owner scenario 4 |
 | R2 or MinIO media | `tests/operations.acceptance.mjs` object API backup, hashes, negatives and download; platform storage tests | [Operations and restore](#commands) | Covered locally / owner scenario 7 |
 | Better Auth email/password | `packages/auth/src/index.test.mjs`; both generated browser onboarding journeys; operations fresh sign-in | auth-operations.md | Covered / owner scenarios 2–5 |
 | Admin/editor/viewer roles | `scripts/cross-runtime-api.mjs` role denials; `packages/server/src/app.test.mjs` status boundary | Architecture §14; auth-operations.md | Covered / owner scenarios 4–5 |

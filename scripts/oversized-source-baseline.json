@@ -1,0 +1,20 @@
+{
+  "apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx": 1508,
+  "apps/admin/src/shared/api/admin-client.ts": 1042,
+  "packages/application/src/configuration-sync.ts": 1836,
+  "packages/application/src/content-use-cases.ts": 1015,
+  "packages/application/src/index.ts": 1211,
+  "packages/config/src/index.ts": 1229,
+  "packages/contracts/src/index.ts": 2994,
+  "packages/db/src/sql-content.ts": 2229,
+  "packages/platform-cloudflare/src/d1-content-repository.ts": 2696,
+  "packages/platform-node/src/content-repository.ts": 2291,
+  "packages/server/src/app.ts": 2940,
+  "packages/test-utils/src/in-memory-content-store.ts": 1518,
+  "packages/test-utils/src/repository-contract/builds.ts": 1489,
+  "packages/test-utils/src/repository-contract/envelope.ts": 1195,
+  "packages/test-utils/src/repository-contract/export.ts": 3139,
+  "packages/test-utils/src/repository-contract/lifecycle.ts": 1044,
+  "packages/test-utils/src/repository-contract/sync.ts": 1250,
+  "packages/test-utils/src/security-contract.ts": 1100
+}

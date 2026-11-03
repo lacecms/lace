@@ -178,3 +178,96 @@ test("still rejects cycles in production imports", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function checkSourceSize({ file = "index.ts", lines = 1_001, baseline, missing = false }) {
+  const root = mkdtempSync(join(tmpdir(), "lace-source-size-"));
+  try {
+    const directory = join(root, "packages/content");
+    mkdirSync(join(directory, "src", dirname(file)), { recursive: true });
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ name: "@lacecms/content" }));
+    if (!missing) writeFileSync(join(directory, "src", file), "// source line\n".repeat(lines));
+    if (baseline !== undefined) {
+      mkdirSync(join(root, "scripts"), { recursive: true });
+      writeFileSync(
+        join(root, "scripts/oversized-source-baseline.json"),
+        JSON.stringify({ [`packages/content/src/${file}`]: baseline }),
+      );
+    }
+    return spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("rejects a new 1001-line production file without a baseline", () => {
+  const result = checkSourceSize({});
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("packages/content/src/index.ts has 1001 lines; limit is 1000");
+});
+
+test("allows a production file at the 1000-line limit without a baseline", () => {
+  const result = checkSourceSize({ lines: 1_000 });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+});
+
+test("rejects a baselined production file that grows past its recorded size", () => {
+  const result = checkSourceSize({ lines: 1_003, baseline: 1_002 });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("packages/content/src/index.ts has 1003 lines; recorded 1002");
+});
+
+test.each([1_001, 1_002])(
+  "allows a baselined production file of %i lines at or below its baseline",
+  (lines) => {
+    const result = checkSourceSize({ lines, baseline: 1_002 });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  },
+);
+
+test.each([
+  { lines: 1_000, missing: false, message: "has 1000 lines (limit 1000)" },
+  { lines: 999, missing: false, message: "has 999 lines (limit 1000)" },
+  { lines: 1_001, missing: true, message: "is missing from production source" },
+])("rejects a stale source size baseline: $message", ({ lines, missing, message }) => {
+  const result = checkSourceSize({ lines, missing, baseline: 1_002 });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    "stale source size baseline entry: packages/content/src/index.ts",
+  );
+  expect(result.stderr).toContain(message);
+});
+
+test.each(["large.test.ts", "test-support/large.ts"])(
+  "excludes oversized %s from source size checks",
+  (file) => {
+    const result = checkSourceSize({ file });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  },
+);
+
+test("scans a regex containing a hash before a forbidden import without hanging", () => {
+  const root = mkdtempSync(join(tmpdir(), "lace-regex-boundary-"));
+  try {
+    const directory = join(root, "packages/content");
+    mkdirSync(join(directory, "src"), { recursive: true });
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ name: "@lacecms/content" }));
+    writeFileSync(
+      join(directory, "src/index.ts"),
+      'const pattern = /[.%#[\\]]/u;\nimport "node:fs";\n',
+    );
+    const result = spawnSync(process.execPath, [checker, root], {
+      encoding: "utf8",
+      timeout: 5_000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "Node builtin import in portable package @lacecms/content: node:fs",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

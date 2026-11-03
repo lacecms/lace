@@ -144,33 +144,43 @@ function packageOf(specifier) {
 function importsIn(filePath) {
   const imports = [];
   const scanner = createScanner(true, undefined, sourceText(filePath));
-  let token = scanner.scan();
+  // A lexical scan has no parser context for regex/JSX tokens (notably #).
+  // Always advance, as the field-vocabulary scanner does, to avoid hanging.
+  const scan = () => {
+    const before = scanner.getTokenEnd();
+    const token = scanner.scan();
+    if (token !== SyntaxKind.EndOfFile && scanner.getTokenEnd() <= before) {
+      scanner.resetTokenState(before + 1);
+    }
+    return token;
+  };
+  let token = scan();
 
   while (token !== SyntaxKind.EndOfFile) {
     if (token === SyntaxKind.ImportKeyword) {
-      token = scanner.scan();
+      token = scan();
       if (token === SyntaxKind.StringLiteral) imports.push(scanner.getTokenValue());
       if (token === SyntaxKind.OpenParenToken) {
-        token = scanner.scan();
+        token = scan();
         continue;
       }
       while (token !== SyntaxKind.EndOfFile && token !== SyntaxKind.SemicolonToken) {
-        if (token === SyntaxKind.FromKeyword && scanner.scan() === SyntaxKind.StringLiteral) {
+        if (token === SyntaxKind.FromKeyword && scan() === SyntaxKind.StringLiteral) {
           imports.push(scanner.getTokenValue());
           break;
         }
-        token = scanner.scan();
+        token = scan();
       }
     } else if (token === SyntaxKind.ExportKeyword) {
       while (token !== SyntaxKind.EndOfFile && token !== SyntaxKind.SemicolonToken) {
-        if (token === SyntaxKind.FromKeyword && scanner.scan() === SyntaxKind.StringLiteral) {
+        if (token === SyntaxKind.FromKeyword && scan() === SyntaxKind.StringLiteral) {
           imports.push(scanner.getTokenValue());
           break;
         }
-        token = scanner.scan();
+        token = scan();
       }
     }
-    token = scanner.scan();
+    token = scan();
   }
   return imports;
 }
@@ -371,6 +381,9 @@ export function checkAdminStructure(rootDirectory = defaultRoot) {
 }
 
 export function checkBoundaries(rootDirectory = defaultRoot) {
+  const baselinePath = join(rootDirectory, "scripts", "oversized-source-baseline.json");
+  const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, "utf8")) : {};
+  const sourceLineCounts = new Map();
   const members = readMembers(rootDirectory);
   const memberNames = new Set(members.map((member) => member.name));
   const graph = new Map(members.map((member) => [member.name, new Set()]));
@@ -380,6 +393,21 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
       const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
       // Test setup is not part of the runtime dependency graph.
       if (testFilePattern.test(sourcePath) || sourcePath.startsWith("test-support/")) continue;
+      const fileName = toPosix(relative(rootDirectory, filePath));
+      const text = readFileSync(filePath, "utf8");
+      const lineCount = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+      sourceLineCounts.set(fileName, lineCount);
+      if (lineCount > 1_000) {
+        const recorded = Object.hasOwn(baseline, fileName) ? baseline[fileName] : undefined;
+        if (recorded === undefined) {
+          throw new Error(`source size limit: ${fileName} has ${lineCount} lines; limit is 1000`);
+        }
+        if (!Number.isInteger(recorded) || lineCount > recorded) {
+          throw new Error(
+            `source size baseline exceeded: ${fileName} has ${lineCount} lines; recorded ${recorded}`,
+          );
+        }
+      }
       for (const specifier of importsIn(filePath)) {
         if (specifier.startsWith(".")) {
           if (isOutside(member.sourceDirectory, filePath, specifier)) {
@@ -425,6 +453,14 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
           `framework adapter ${member.name} may not re-export a Lace package (in ${filePath})`,
         );
       }
+    }
+  }
+  for (const fileName of Object.keys(baseline)) {
+    const lineCount = sourceLineCounts.get(fileName);
+    if (lineCount === undefined || lineCount <= 1_000) {
+      throw new Error(
+        `stale source size baseline entry: ${fileName} ${lineCount === undefined ? "is missing from production source" : `has ${lineCount} lines (limit 1000)`}; remove it from scripts/oversized-source-baseline.json`,
+      );
     }
   }
   assertNoCycles(graph);

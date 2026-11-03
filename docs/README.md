@@ -75,6 +75,8 @@ the two indexes describe themselves and are excluded from the row count.
 | [0018-conditional-fields.md](adr/0018-conditional-fields.md) | authoritative | ADR 0018: Conditional fields |
 | [0019-error-model.md](adr/0019-error-model.md) | authoritative | ADR 0019: One portable error model and classifier |
 
+| [0020-source-layout.md](adr/0020-source-layout.md) | authoritative | ADR 0020: Domain source layout and shrinking size baseline |
+
 ## docs/archive/
 
 | File | Status | Details |

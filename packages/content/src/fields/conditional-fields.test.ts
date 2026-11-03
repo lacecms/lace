@@ -1,32 +1,31 @@
-import type {
-  ContentValidationMode,
-  JsonValue,
-  ListFieldDefinition,
-  GroupFieldDefinition,
-  BlockDefinition,
-} from "./index.js";
+import type { ContentValidationMode } from "./validation.js";
+import type { JsonValue } from "../shared/json.js";
+import type { ListFieldDefinition, GroupFieldDefinition } from "./definitions.js";
+import type { BlockDefinition } from "../blocks/definition.js";
 import { describe, expect, it } from "vitest";
+import { ContentValidationError } from "../shared/errors.js";
+import { canonicalizeJson } from "../entries/canonical-json.js";
+import { collectSnapshotInternalLinks } from "../references/internal-links.js";
 import {
-  ContentValidationError,
-  canonicalizeJson,
-  collectSnapshotInternalLinks,
   declaresFieldVisibility,
-  defineBlock,
-  defineBlockRegistry,
-  field,
-  effectiveVisibilityValues,
-  isFieldVisible,
-  normalizeFieldDefinition,
-  normalizeFieldVisibility,
-  publishedBlockData,
   publishedFieldValues,
-  toBlockMetadata,
-  toFieldMetadata,
-  validateBlockData,
-  validateEntryAggregate,
   validateFieldValue,
   validateModelFields,
-} from "./index.js";
+} from "./validation.js";
+import {
+  defineBlock,
+  defineBlockRegistry,
+  publishedBlockData,
+  toBlockMetadata,
+  validateBlockData,
+} from "../blocks/definition.js";
+import { field, normalizeFieldDefinition, toFieldMetadata } from "./builders.js";
+import {
+  effectiveVisibilityValues,
+  isFieldVisible,
+  normalizeFieldVisibility,
+} from "./visibility.js";
+import { validateEntryAggregate } from "../entries/aggregate.js";
 
 const MEDIA = "01HZY7Z4J4R7Q8K6M5N3P2B1C0";
 

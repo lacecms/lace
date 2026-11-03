@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { fieldTypeCapabilities, fieldTypesWith, FIELD_FILTER_OPERATIONS } from "./index.js";
-import type { FieldTypeCapability } from "./index.js";
+import { fieldTypeCapabilities, fieldTypesWith, FIELD_FILTER_OPERATIONS } from "./capabilities.js";
+import type { FieldTypeCapability } from "./capabilities.js";
 
 test("field capabilities match every accepted specification row", () => {
   expect(
