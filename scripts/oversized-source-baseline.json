@@ -1,9 +1,6 @@
 {
   "apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx": 1508,
   "apps/admin/src/shared/api/admin-client.ts": 1042,
-  "packages/application/src/configuration-sync.ts": 1836,
-  "packages/application/src/content-use-cases.ts": 1015,
-  "packages/application/src/index.ts": 1211,
   "packages/config/src/index.ts": 1229,
   "packages/contracts/src/index.ts": 2994,
   "packages/db/src/sql-content.ts": 2229,

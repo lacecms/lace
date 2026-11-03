@@ -3074,20 +3074,22 @@ Security requirements:
 
 ## 15. Infrastructure ports
 
-Representative application-facing interfaces:
+Application contracts live in `packages/application/src/ports/`: `infrastructure`,
+`links`, `content`, `media`, `builds`, and `security`. Representative
+interfaces are shown below; email delivery remains beside the account use cases.
 
 ```ts
 interface ObjectStorage {
-  put(input: PutObjectInput): Promise<StoredObject>;
-  get(key: string): Promise<ReadableStream | null>;
-  delete(key: string): Promise<void>;
   createReadUrl(key: string, options?: ReadUrlOptions): Promise<string>;
+  delete(key: string): Promise<void>;
+  get(key: string): Promise<ByteStream | null>;
+  put(input: PutObjectInput): Promise<StoredObject>;
 }
 
 interface Cache {
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T, options?: CacheOptions): Promise<void>;
   delete(key: string): Promise<void>;
+  get<Value>(key: string): Promise<Value | null>;
+  set<Value>(key: string, value: Value): Promise<void>;
 }
 
 interface SiteBuildTrigger {
@@ -3095,11 +3097,30 @@ interface SiteBuildTrigger {
 }
 
 interface EmailSender {
-  readonly provider: "none" | "log" | "smtp" | "resend" | "cloudflare";
   readonly from?: string;
+  readonly provider: EmailProviderKind;
   send(message: EmailMessage): Promise<EmailDeliveryOutcome>;
 }
+
+interface Clock {
+  now(): UnixMilliseconds;
+}
+
+interface IdGenerator {
+  next(): string;
+}
+
+interface DispatcherLeasePort {
+  claim(input: ClaimDispatcherEventsInput): Promise<readonly DispatcherLease[]>;
+  complete(input: CompleteDispatcherLeaseInput): Promise<void>;
+  retry(input: RetryDispatcherLeaseInput): Promise<void>;
+}
 ```
+
+`ByteStream` is an `AsyncIterable<Uint8Array>`. Security commands are split
+into account, session, and token capability ports. `SecurityService` combines
+those three ports with `UserProfileReader`; runtime adapters implement the
+combined contract, while use cases can depend on the capabilities they call.
 
 Implementations:
 

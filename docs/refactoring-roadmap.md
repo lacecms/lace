@@ -99,13 +99,13 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 outside content, enforced by a shrinking size baseline |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15, enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 3,014 lines |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
 | Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
 | Size | `packages/db/src/sql-content.ts` | 2,229 lines |
-| Size | `packages/application/src/configuration-sync.ts` | 1,836 lines; five-file cluster of 3,733 lines with type-only cycles |
+| Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
 | Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
 | Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table |
@@ -467,30 +467,23 @@ and type tests into six, gated by the ordinary package `typecheck`.
 
 ### Session RF4B — `@lacecms/application`
 
-- `packages/application/src/index.ts` (1,210 lines) becomes `ports/` by
-  capability (`content.ts`, `media.ts`, `security.ts`, `builds.ts`,
-  `infrastructure.ts` for clock, ids, cache, logger), `brands.ts`,
-  `limits.ts` and a thin `index.ts`. `SecurityService` (28 methods) is split
-  into `AccountSecurityPort`, `SessionSecurityPort` and `TokenSecurityPort`;
-  runtimes keep implementing the intersection.
-- The `configuration-*` cluster: first `configuration-sync-types.ts` holding
-  ports, plan, change and evidence types (breaks every type-only cycle), then
-  `configuration-sync.ts` into `configuration-plan.ts`,
-  `configuration-report.ts` and `configuration-apply.ts`; `decideEvolution`
-  (362 lines) becomes a table keyed by `StructuralChange.kind`.
+The package entry re-exports concrete modules from `shared/`, six capability
+port modules, and the content, media, accounts, builds, outbox and configuration
+directories. The three oversized application files leave the size baseline:
+`index.ts`, `content-use-cases.ts`, and `configuration-sync.ts`. Content use
+cases split into inputs, draft normalization and commands; configuration types
+and limits break the former type cycles, and the synchronization implementation
+splits into support, decisions, plan, report and apply modules.
 
-RF2B test companions are already separated: `index.test.ts` covers the
-ports/brands helpers; `configuration-sync.test.ts`,
-`configuration-evolution.test.ts`, `configuration-migration.test.ts` and
-`configuration-visibility.test.ts` accompany the configuration cluster. The
-use-case companions are `accounts.test.ts`, `content-authority.test.ts`,
-`draft-normalization.test.ts`, `conditional-publication.test.ts`,
-`site-build.test.ts`, `media-use-cases.test.ts`, `collection-queries.test.ts`,
-`build-export.test.ts`, `internal-links.test.ts`, `import-tokens.test.ts`,
-`email.test.ts` and `image-container.test.ts`.
+`SecurityService` combines `UserProfileReader` with three disjoint ports:
+account owns setup completion, bootstrap, users, invitations, resets and profile
+and password changes; session owns session listing and deletion; token owns setup,
+build and import credentials. Account use cases require the profile, account and
+session ports. The configuration decision table preserves the breaking-change
+precedence before dispatching by structural change kind.
 
-**Architecture:** §15 *Infrastructure ports* is rewritten from the real
-interfaces (today it shows a `Cache.get<T>` port that does not exist).
+The existing test companions move beside their modules without changing case
+titles. Architecture §15 records the actual infrastructure interfaces.
 
 ### Session RF4C — `@lacecms/contracts`
 
@@ -771,3 +764,5 @@ reference pages.
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Proposed, then revised the same day on the owner's request. `index.ts` (3,881 lines at `1ac97ec2`) becomes the only root module, re-exporting concrete files from five domain directories (`shared/`, `fields/`, `references/`, `blocks/`, `entries/`; one-way `shared ← fields ← references, blocks ← entries`, no subdirectory barrels, module graph acyclic including type imports); bodies and JSDoc move verbatim, existing leaf modules move with `git mv`, `publishedBlockData` moves to `blocks/definition.ts`. Corrections to the roadmap text: the eight flat modules do not fit under 1,000 lines without cycles after RF3A, so capabilities, definitions, layout, visibility and list layout are separate modules and the shared error classes join `shared/errors.ts`. Owner decisions: a *Source layout* convention in architecture §6, `AGENTS.md` and ADR 0020 for all future code; the boundary checker fails on production files over 1,000 lines outside a shrinking baseline (`scripts/oversized-source-baseline.json`, the 18 oversized files outside `content`), so later sessions delete their entries. `index.test.ts` splits into twelve module test files with case titles pinned (115); type tests split into six files, their stale `@ts-expect-error` is fixed and they join the package `typecheck`. Delta spec: `workspace-governance` (1 added). 21 tasks, not applied. |
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Implemented, 21/21 tasks complete; not archived. Content split into 23 concrete modules in five domain directories with a 178-line entry; largest module 736 lines. Owner-confirmed placement of `BlockDataValues`/`FieldVisibilityTargets` in field definitions removes the discovered type cycle. All 180 declaration exports and 93 runtime keys preserved; 115 listed titles / 241 expanded source cases preserved across 17 test files. Six type-test companions now join typecheck. Size guard baselines 18 oversized files outside content; later sessions remove their entries. Root typecheck, lint, formatting, build, full tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and all 86 strict OpenSpec items pass. Boundary scanner progress regression covered. Verification is recorded in the active change. |
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Archived at [`2026-11-03-rf04a-content-module-split`](../openspec/changes/archive/2026-11-03-rf04a-content-module-split/); 21/21 tasks complete. The `workspace-governance` delta is synchronized (one added requirement, five scenarios). All 84 accepted specifications pass strict validation. Implementation and verification are preserved in the archive. RF4B is next. |
+| 2026-11-03 | RF4B | `rf04b-application-module-split` | Implemented the application domain and port split, security capability ports, and configuration decision table. The three application size-baseline entries are removed (18 → 15); 131 listed case titles and the runtime export surface are preserved. Verification is recorded in the active change. |
+| 2026-11-03 | RF4B | `rf04b-application-module-split` | Archived at [`2026-11-03-rf04b-application-module-split`](../openspec/changes/archive/2026-11-03-rf04b-application-module-split/); 20/20 tasks complete. The `application-ports-and-commands` delta is synchronized; all 84 accepted specifications validate. |
