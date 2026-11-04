@@ -1,8 +1,8 @@
 import type { DBAdapter } from "better-auth";
 import type { OAuthIssuancePersistence } from "@lacecms/application";
 import { actorId, attenuateActor, type Actor, type Permission } from "@lacecms/domain";
-import { mcpOAuthUrls } from "./mcp-oauth.js";
-import { oauthCredentialHash } from "./oauth-guard.js";
+import { mcpOAuthUrls } from "./oauth.js";
+import { oauthCredentialHash } from "./guard.js";
 
 export const MCP_OAUTH_ROUTE_ALLOWLIST: readonly (readonly [string, string])[] = Object.freeze(
   (

@@ -1,9 +1,9 @@
 import { APIError } from "better-auth/api";
 import { actorId, hasPermission, type Role } from "@lacecms/domain";
 import type { OAuthIssuancePersistence } from "@lacecms/application";
-import { normalizeMcpScopes, mcpOAuthUrls, type McpOAuthProviderInput } from "./mcp-oauth.js";
-import { oauthCredentialHash } from "./oauth-guard.js";
-import type { McpProviderFactory, McpProvider } from "./mcp-boundary.js";
+import { normalizeMcpScopes, mcpOAuthUrls, type McpOAuthProviderInput } from "./oauth.js";
+import { oauthCredentialHash } from "./guard.js";
+import type { McpProviderFactory, McpProvider } from "./provider.js";
 
 export interface OAuthBrowserSession {
   readonly userId: string;

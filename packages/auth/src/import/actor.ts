@@ -4,7 +4,7 @@ import {
   type SecurityService,
 } from "@lacecms/application";
 import { actorId, attenuateActor, type Actor, type Permission, type Role } from "@lacecms/domain";
-import { trustedOrigins } from "./trusted-origins.js";
+import { trustedOrigins } from "../shared/trusted-origins.js";
 
 export interface ImportActorResolution {
   readonly actor: Actor;

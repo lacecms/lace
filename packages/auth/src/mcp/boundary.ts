@@ -1,30 +1,20 @@
-import { createMcpConsentBoundary, type OAuthBrowserSession } from "./mcp-consent.js";
-import type { DBAdapter } from "better-auth";
+import { createMcpConsentBoundary, type OAuthBrowserSession } from "./consent.js";
 import type { OAuthIssuancePersistence } from "@lacecms/application";
 import {
   createMcpActorResolver,
   isMcpOAuthRoute,
   MCP_DISCOVERY_PATHS,
   type McpActorResolution,
-} from "./mcp-actor.js";
+} from "./actor.js";
 import {
   mcpAuthorizationMetadata,
   mcpResourceMetadata,
   mcpOAuthUrls,
   normalizeMcpClientRegistration,
-  type McpOAuthProviderInput,
-} from "./mcp-oauth.js";
-import { createOAuthRequestGuard, oauthCredentialHash } from "./oauth-guard.js";
+} from "./oauth.js";
+import { createOAuthRequestGuard, oauthCredentialHash } from "./guard.js";
+import type { McpProviderFactory } from "./provider.js";
 
-export type OAuthRequestGuard = ReturnType<typeof createOAuthRequestGuard>;
-export interface McpProvider {
-  readonly fetch: (request: Request) => Promise<Response>;
-  readonly adapter: Pick<DBAdapter, "findOne" | "create" | "consumeOne" | "update" | "deleteMany">;
-}
-export type McpProviderFactory = (
-  guard?: OAuthRequestGuard,
-  reference?: McpOAuthProviderInput["consentReferenceId"],
-) => Promise<McpProvider>;
 export interface McpOAuthHttpBoundary {
   fetch(request: Request): Promise<Response>;
   resolve(

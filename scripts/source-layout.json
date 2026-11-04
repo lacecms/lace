@@ -9,6 +9,12 @@
     "media": ["ports", "shared"],
     "outbox": ["ports", "shared"]
   },
+  "packages/auth": {
+    "shared": [],
+    "import": ["shared"],
+    "mcp": [],
+    "session": ["mcp", "shared"]
+  },
   "packages/config": {
     "shared": [],
     "models": ["shared"],
@@ -32,6 +38,13 @@
     "settings": ["accounts", "shared"],
     "media": ["content", "shared"],
     "delivery": ["content", "errors", "media", "shared"]
+  },
+  "packages/domain": {
+    "shared": [],
+    "access": ["shared"],
+    "media": ["shared"],
+    "builds": ["shared"],
+    "content": ["access", "shared"]
   },
   "packages/db": {
     "shared": [],

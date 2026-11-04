@@ -3,9 +3,7 @@
     "apps/admin/src/entities/content/composite-values.ts",
     "apps/admin/src/entities/content/editor-form.ts"
   ],
-  ["packages/auth/src/mcp-boundary.ts", "packages/auth/src/mcp-consent.ts"],
   ["packages/cli/src/diagnostics.ts", "packages/cli/src/index.ts"],
-  ["packages/domain/src/index.ts", "packages/domain/src/seo.ts"],
   [
     "packages/platform-node/src/content-repository.ts",
     "packages/platform-node/src/index.ts",

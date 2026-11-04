@@ -1,5 +1,5 @@
 import { ContentValidationError, seoTextLength } from "@lacecms/content";
-import type { Brand } from "./index.js";
+import type { Brand } from "../shared/brands.js";
 
 export const MAX_SEO_TITLE_LENGTH = 200;
 export const MAX_SEO_DESCRIPTION_LENGTH = 500;

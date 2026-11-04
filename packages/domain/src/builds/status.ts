@@ -1,4 +1,4 @@
-import type { SiteBuildFailureReason } from "./build-diagnostics.js";
+import type { SiteBuildFailureReason } from "./diagnostics.js";
 
 /**
  * The closed site-build lifecycle. Only `succeeded` proves the site was
