@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { errorMatrixCases } from "@lacecms/test-utils";
-import { fixture, json } from "./test-support/app-harness.js";
+import { fixture, json } from "../test-support/app-harness.js";
 
 test.each(errorMatrixCases)("REST error matrix: $name", async ({ create, expected }) => {
   const { app, content } = await fixture();

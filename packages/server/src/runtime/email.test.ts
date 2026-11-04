@@ -7,7 +7,7 @@ import {
   createResendEmailSender,
   emailDeliveryStatus,
   parseEmailSettings,
-} from "./index.js";
+} from "../index.js";
 
 const node = { production: true, runtime: "node" };
 const worker = { production: true, runtime: "cloudflare" };

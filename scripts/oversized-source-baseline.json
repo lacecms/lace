@@ -5,7 +5,6 @@
   "packages/db/src/sql-content.ts": 2229,
   "packages/platform-cloudflare/src/d1-content-repository.ts": 2696,
   "packages/platform-node/src/content-repository.ts": 2291,
-  "packages/server/src/app.ts": 2940,
   "packages/test-utils/src/in-memory-content-store.ts": 1518,
   "packages/test-utils/src/repository-contract/builds.ts": 1489,
   "packages/test-utils/src/repository-contract/envelope.ts": 1195,

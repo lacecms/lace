@@ -1,9 +1,9 @@
 // @ts-nocheck
 // TODO(rf2): Type partial account security overrides, deferred tasks and recorded token lookups.
 import { expect, test } from "vitest";
-import { sensitiveRequestLimit } from "./index.js";
+import { sensitiveRequestLimit } from "../index.js";
 
-import { editor, fixture, TOKEN, accountSecurity, send } from "./test-support/app-harness.js";
+import { editor, fixture, TOKEN, accountSecurity, send } from "../test-support/app-harness.js";
 
 test("reset requests answer 202 immediately without awaiting a slow sender", async () => {
   const deferred = [];

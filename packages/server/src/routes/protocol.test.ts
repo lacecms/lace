@@ -1,11 +1,33 @@
 // @ts-nocheck
 // TODO(rf2): Type partial OAuth/MCP adapters, attenuated actors and protocol completion event fixtures.
 import { expect, test } from "vitest";
-import { sensitiveRequestLimit } from "./index.js";
+import { sensitiveRequestLimit } from "../index.js";
 import { OAuthConnectionUseCases } from "@lacecms/application";
 import { actorId, unixMilliseconds } from "@lacecms/domain";
 
-import { admin, fixture, json } from "./test-support/app-harness.js";
+import { admin, fixture, json } from "../test-support/app-harness.js";
+
+test("unexpected MCP and OAuth failures keep the protocol server_error body", async () => {
+  const fail = async () => {
+    throw new Error("unexpected failure");
+  };
+  const { app } = await fixture({
+    mcpEnabled: true,
+    mcp: { resolve: async () => ({ actor: admin }), fetch: fail },
+    auth: { fetch: fail },
+  });
+  for (const path of ["/mcp", "/api/auth/oauth2/token"]) {
+    const response = await app.request(`https://lace.test${path}`);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ error: "server_error" });
+  }
+  const response = await app.request("https://lace.test/api/auth/session");
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({
+    error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." },
+  });
+});
 
 test("account MCP connection routes keep ownership, CSRF, strict bodies and safe projections", async () => {
   const now = 1800000000000;
@@ -220,7 +242,7 @@ test("MCP disabled variants, host/origin, size, OAuth challenge and rate failure
 });
 
 test("OAuth rate routing separates registration, token/client address, MCP user and owned revoke", async () => {
-  const { sensitiveRequestSubject } = await import("./index.js");
+  const { sensitiveRequestSubject } = await import("../index.js");
   expect(sensitiveRequestLimit("POST", "/api/auth/oauth2/register")).toEqual({
     operation: "oauth-register",
     scope: "client",
@@ -246,7 +268,7 @@ test("OAuth rate routing separates registration, token/client address, MCP user 
 });
 
 test("MCP flag parser accepts only absent and exact string booleans", async () => {
-  const { parseMcpEnabled } = await import("./index.js");
+  const { parseMcpEnabled } = await import("../index.js");
   expect(parseMcpEnabled(undefined)).toBe(false);
   expect(parseMcpEnabled("false")).toBe(false);
   expect(parseMcpEnabled("true")).toBe(true);

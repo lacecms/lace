@@ -13,7 +13,7 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 
-import { admin, editor, fixture, json } from "./test-support/app-harness.js";
+import { admin, editor, fixture, json } from "../test-support/app-harness.js";
 
 test("editor and viewer mutations are denied by the API independently of Admin controls", async () => {
   const editorApp = (await fixture({ actor: editor })).app;

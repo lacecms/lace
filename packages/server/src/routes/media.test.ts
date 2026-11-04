@@ -15,7 +15,7 @@ import {
   GALLERY_KEY,
   uploadImage,
   jsonRequest,
-} from "./test-support/app-harness.js";
+} from "../test-support/app-harness.js";
 
 test("bodyless media lifecycle requests reach the use case without bypassing body limits elsewhere", async () => {
   const { app } = await fixture();

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { fixture, TOKEN, accountSecurity, send } from "./test-support/app-harness.js";
+import { fixture, TOKEN, accountSecurity, send } from "../test-support/app-harness.js";
 
 test("the password-based user creation route no longer exists", async () => {
   const { security, calls } = accountSecurity();

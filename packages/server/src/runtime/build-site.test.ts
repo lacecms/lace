@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseBuildSiteIdentity } from "./index.js";
+import { parseBuildSiteIdentity } from "../index.js";
 import { buildSiteSelectionSchema } from "@lacecms/contracts";
 import * as v from "valibot";
 

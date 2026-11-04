@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { editor, fixture, json } from "./test-support/app-harness.js";
+import { editor, fixture, json } from "../test-support/app-harness.js";
 
 test("mounts authentication before API and admin fallbacks", async () => {
   const { app } = await fixture({

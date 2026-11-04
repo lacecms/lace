@@ -1,9 +1,9 @@
 // @ts-nocheck
 // TODO(rf2): Type import capability matrices, partial token security adapters and malformed query cases.
 import { expect, test } from "vitest";
-import { IMPORT_ROUTE_ALLOWLIST, isImportRoute } from "./index.js";
+import { IMPORT_ROUTE_ALLOWLIST, isImportRoute } from "../index.js";
 
-import { admin, editor, fixture, importToken, importFixture } from "./test-support/app-harness.js";
+import { admin, editor, fixture, importToken, importFixture } from "../test-support/app-harness.js";
 
 test("the import route allowlist is exactly the specified surface", () => {
   expect(IMPORT_ROUTE_ALLOWLIST.map(([method, route]) => `${method} ${route}`)).toEqual([

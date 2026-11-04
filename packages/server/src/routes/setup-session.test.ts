@@ -3,7 +3,7 @@
 import { expect, test } from "vitest";
 import { actorId } from "@lacecms/domain";
 
-import { editor, fixture, json, profiles, profileSecurity } from "./test-support/app-harness.js";
+import { editor, fixture, json, profiles, profileSecurity } from "../test-support/app-harness.js";
 
 test("settings status exposes only useful read-only state to administrators", async () => {
   const adminFixture = await fixture({ ready: false });

@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { SiteBuildUseCases } from "@lacecms/application";
 import { actorId, unixMilliseconds } from "@lacecms/domain";
 
-import { admin, editor, fixture } from "./test-support/app-harness.js";
+import { admin, editor, fixture } from "../test-support/app-harness.js";
 
 test("admin build routes queue strict requests without running a trigger", async () => {
   const calls = [];

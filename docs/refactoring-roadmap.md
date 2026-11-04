@@ -99,9 +99,9 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14, enforced by a shrinking size baseline |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13, enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
-| Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) |
+| Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) → RF4D: 218-line factory, largest production module 492 lines |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
 | Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
 | Size | `packages/db/src/sql-content.ts` | 2,229 lines |
@@ -498,24 +498,25 @@ beside their modules while preserving existing case names.
 
 ### Session RF4D — `@lacecms/server`
 
-`createLaceApp` keeps `onError`, the five global middlewares and app
-construction. Routes move to `routes/{setup-session,accounts,admin-users,builds,media,content,public,docs}.ts`,
-each exporting `register<Area>Routes(app, context)` over a `RouteContext`
-(`actor`, `usersActor`, `settingsActor`, `response`, `errorResponse`,
-`noStore`, `deferTask`, DTO mappers). The two handlers that inline domain
-work (media multipart and tag parsing, build export paging) move their
-parsing into `media-upload.ts` and `build-export.ts`. The MCP and OAuth
-special cases become one `protocolErrorResponse` helper.
+`index.ts` is the only production module at the source root. The server is
+organized as `shared/`, `runtime/`, `security/`, `composition/`, `routes/`
+and `app/`, with dependencies directed from shared helpers through runtime
+and security, composition and routes to the app factory. `createLaceApp`
+keeps construction, `onError`, the five middlewares and route registration.
 
-RF2B route test companions map to the future modules: `setup-session` uses
-`routes-session-settings.test.ts`; `accounts` uses `routes-accounts.test.ts`;
-`admin-users` uses `routes-users-invitations.test.ts`; `builds`, `media` and
-`content` use their corresponding `routes-*.test.ts`; `public` uses
-`routes-public-export.test.ts`; `docs` and global middleware remain in
-`app.test.ts`. MCP/OAuth and import protocol coverage live in
-`routes-mcp.test.ts` and `routes-import.test.ts`. Shared fixtures are in
-`src/test-support/app-harness.ts`; `build-site.test.ts` and `email.test.ts`
-remain alongside their existing modules.
+The route registrations live in `routes/{protocol,health,setup-session,accounts,admin-users,credentials,builds,media,content,public,docs}.ts`.
+The protocol and health modules own the MCP/OAuth pass-throughs and probes;
+credentials owns build and import tokens and the import credential. The
+`RouteContext` holds closures over the app input, including the session summary
+shared by account and session routes; pure response helpers and DTO mappers
+are module imports. The multipart and build-export parsers live beside their
+routes as `routes/media-upload.ts` and `routes/build-export.ts`, and media
+binary helpers live in `routes/media-binary.ts`. One protocol error helper
+preserves the existing path predicates and response headers.
+
+The RF2B route companions now live beside their modules, with middleware tests
+in `app/`, import coverage in `security/` and build-site and email tests in
+`runtime/`. The shared fixture stays in `src/test-support/`.
 
 ### Session RF4E — `@lacecms/db` and remaining monoliths
 
@@ -774,3 +775,9 @@ reference pages.
 | 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Implemented, 18/18 tasks complete. The 36-module contracts split and type-matched block definitions leave a 144-line entry and a 226-line largest module; size baseline 15 → 14. The 96 existing listed test names and export surface are preserved, with one new listed case. The shared-vocabulary guard follows the moved owners. All root gates pass (64 Turbo tasks; 35 root files / 284 cases); verification is recorded in the active change. |
 
 | 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Archived at [`2026-11-03-rf04c-contracts-module-split`](../openspec/changes/archive/2026-11-03-rf04c-contracts-module-split/); 18/18 tasks complete. The `rest-contracts` delta is synchronized; all 84 accepted specifications validate. Implementation and verification remain recorded in the archive. |
+
+| 2026-11-04 | RF4D | `rf04d-server-module-split` | Proposed. `app.ts` (2,940 lines at `c63c4686`) splits into six directories with `index.ts` as the only root production module: `shared/` (HTTP responses, request parsing, content-model lookups, account DTOs, protocol paths), `runtime/` (build site, MCP flag, email), `security/` (sensitive limits, import routes), `composition/` (`LaceAppInput`, `RouteContext`), `routes/` (eleven `register<Area>Routes` modules plus `media-upload`, `media-binary` and `build-export` helpers) and `app/` (`createLaceApp` with `onError`, the five middlewares and registration); direction `shared ← runtime, security ← composition ← routes ← app`, acyclic including type imports. Corrections to the roadmap text: `credentials`, `protocol` and `health` route modules give the token, MCP/OAuth pass-through and probe routes an owner; `RouteContext` holds only closures over the input, while pure helpers and DTO mappers are module imports; the two parsers live in `routes/` under §6. One `protocolErrorResponse` serves the 503/429/413 MCP and OAuth bodies with each site's predicate and headers unchanged. Export surface, route table and OpenAPI document stay identical; route tests move beside their modules with case titles preserved (86 + 1 characterization case for the untested protocol `onError` body). The baseline goes from 14 to 13. `skip_specs`. 17 tasks, not applied. |
+
+| 2026-11-04 | RF4D | `rf04d-server-module-split` | Implemented the six-directory server split, including the shared session summary context. The 17 runtime keys, 20 declaration type names, 179-route multiset and 87 listed test names are preserved; one protocol error characterization case was added. The oversized baseline falls from 14 to 13. Verification is recorded in the active change. |
+
+| 2026-11-04 | RF4D | `rf04d-server-module-split` | Archived at [`2026-11-04-rf04d-server-module-split`](../openspec/changes/archive/2026-11-04-rf04d-server-module-split/); 17/17 tasks complete. No delta specs. Implementation and verification are preserved in the archive. |

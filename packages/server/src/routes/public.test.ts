@@ -11,7 +11,7 @@ import {
 } from "@lacecms/domain";
 import { readAllBuildContentPages } from "@lacecms/test-utils";
 
-import { admin, fixture, json } from "./test-support/app-harness.js";
+import { admin, fixture, json } from "../test-support/app-harness.js";
 
 test("serves public content and short-circuits matching build exports", async () => {
   const { app, content, exportLoads } = await fixture();
