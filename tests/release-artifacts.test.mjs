@@ -111,16 +111,24 @@ test("injected preparation failure leaves no inventory or success", async () => 
     git("config", "user.email", "release@lace.test");
     git("add", ".");
     git("commit", "-m", "coherent fixture");
-    await expect(
-      prepareRelease(
-        { root, output, phase: "packages", preview: true },
-        {
-          packages: async () => {
-            throw new Error("injected pack failure");
+    // Exercise post-validation cleanup independently of the Node version
+    // running this test; the real release preparation still validates its toolchain.
+    const nodeVersion = Object.getOwnPropertyDescriptor(process.versions, "node");
+    try {
+      Object.defineProperty(process.versions, "node", { value: "24.12.0", configurable: true });
+      await expect(
+        prepareRelease(
+          { root, output, phase: "packages", preview: true },
+          {
+            packages: async () => {
+              throw new Error("injected pack failure");
+            },
           },
-        },
-      ),
-    ).rejects.toThrow("injected pack failure");
+        ),
+      ).rejects.toThrow("injected pack failure");
+    } finally {
+      Object.defineProperty(process.versions, "node", nodeVersion);
+    }
     expect((await readJson(join(output, "status.json"))).state).toBe("failed");
     await expect(readFile(join(output, "inventory.json"))).rejects.toThrow();
   } finally {

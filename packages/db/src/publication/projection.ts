@@ -1,7 +1,7 @@
 import type { PublishedProjection } from "@lacecms/application";
 import { publishedProjectionBlockData } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
-import { INTERNAL_LINK_ROWS_SQL, internalLinkRowsJson } from "./sql-internal-links.js";
+import { INTERNAL_LINK_ROWS_SQL, internalLinkRowsJson } from "../links/statements.js";
 
 /**
  * Bound JSON rowsets of a conditional-field publication projection. Both

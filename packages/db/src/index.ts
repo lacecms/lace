@@ -1,39 +1,65 @@
-export * from "./oauth.js";
-export * from "./api-tokens.js";
-export * from "./collection-list.js";
-export * from "./literal-like.js";
+// Direction: shared ← {schema, security, links}; links ← publication; shared ← content ← media ← delivery ← builds; links ← sync.
+export * from "./security/oauth.js";
+export * from "./security/api-tokens.js";
+export * from "./content/collection-list.js";
+export * from "./shared/literal-like.js";
 export const packageName = "@lacecms/db";
 
-export const appliedMigrationQuery =
-  "select hash, created_at from __drizzle_migrations order by created_at asc";
+export * from "./schema/migrations.js";
+export * from "./schema/tables.js";
+export * from "./sync/model-state.js";
+export * from "./sync/scan.js";
+export * from "./sync/writes.js";
+export * from "./sync/block-migration-scan.js";
+export * from "./sync/block-migration-writes.js";
+export * from "./sync/field-rewrite.js";
+export {
+  PUBLIC_ROUTE_SQL,
+  PUBLIC_GLOBAL_SQL,
+  PUBLIC_MEDIA_SQL,
+  publicSnapshotMediaSql,
+  publicSnapshotMedia,
+  publicContentEntry,
+  publicGlobalContent,
+  publicEntry,
+} from "./delivery/public.js";
+export type { PublicRow, PublicGlobalRow } from "./delivery/public.js";
+export * from "./builds/site-builds.js";
+export * from "./builds/outbox.js";
+export * from "./builds/export.js";
+export * from "./media/tags.js";
+export {
+  MEDIA_COLUMNS_SQL,
+  MEDIA_TAGS_JSON_SQL,
+  MEDIA_USAGE_COUNT_SQL,
+  MEDIA_CATALOG_SQL,
+  MEDIA_SORT_SQL,
+  MEDIA_BY_ID_SQL,
+  MEDIA_METADATA_UPDATE_SQL,
+  MEDIA_PUBLISHED_REFERENCE_SQL,
+  mediaMetadataUpdateParams,
+  mediaMetadata,
+  mediaCatalogItem,
+  mediaCursorKind,
+  decodeMediaCursor,
+} from "./media/catalog.js";
+export * from "./media/usage.js";
+export * from "./content/entries.js";
+export * from "./content/blocks.js";
+export * from "./content/snapshots.js";
+export * from "./links/statements.js";
+export * from "./publication/projection.js";
+export * from "./links/reader.js";
 
-/** Kept in lockstep with drizzle/meta/_journal.json by the migration inventory test. */
-export const checkedInMigrations = Object.freeze([
-  { createdAt: 1789240330790, name: "0000_exotic_tarantula.sql" },
-  { createdAt: 1789240330791, name: "0001_security_controls.sql" },
-  { createdAt: 1790624606153, name: "0002_mutation_guards.sql" },
-  { createdAt: 1791238354782, name: "0003_site_build_outcomes.sql" },
-  { createdAt: 1791633627420, name: "0004_account_tokens.sql" },
-  { createdAt: 1791647444998, name: "0005_content_model_structure.sql" },
-  { createdAt: 1791731667455, name: "0006_media_descriptive_metadata.sql" },
-  { createdAt: 1791750744187, name: "0007_content_model_global_kind.sql" },
-  { createdAt: 1791756612246, name: "0008_content_snapshot_seo.sql" },
-  { createdAt: 1791794161634, name: "0009_content_block_envelope.sql" },
-  { createdAt: 1792774203883, name: "0010_internal_url_links.sql" },
-  { createdAt: 1792919369108, name: "0011_public_projection_identity.sql" },
-  { createdAt: 1793229744933, name: "0012_oauth_mcp.sql" },
-  { createdAt: 1793232246526, name: "0013_oauth_verification_indexes.sql" },
-  { createdAt: 1793472696691, name: "0014_media_tags.sql" },
-  { createdAt: 1793486493913, name: "0015_import_credentials.sql" },
-]);
-
-export interface AppliedMigration {
-  readonly createdAt: number;
-  readonly hash: string;
-}
-
-export * from "./schema.js";
-export * from "./sql-content.js";
-export * from "./sql-internal-links.js";
-export * from "./sql-publication.js";
-export * from "./internal-link-reader.js";
+export * from "./shared/limits.js";
+export * from "./shared/failures.js";
+export * from "./shared/write-errors.js";
+export * from "./shared/values.js";
+export * from "./shared/base64.js";
+export {
+  encodeCursor,
+  decodeCursor,
+  encodeSortCursor,
+  decodeSortCursor,
+} from "./shared/cursors.js";
+export type { DecodedCursor, DecodedSortCursor } from "./shared/cursors.js";

@@ -99,12 +99,13 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13, enforced by a shrinking size baseline |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11, enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) → RF4D: 218-line factory, largest production module 492 lines |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
 | Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
-| Size | `packages/db/src/sql-content.ts` | 2,229 lines |
+| Size | `packages/db/src/sql-content.ts` | 2,229 lines → RF4E: domain modules; largest db module 862 lines |
+| Size | `packages/config/src/index.ts` | 1,229 lines → RF4E: entry and domain modules |
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
 | Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
@@ -135,7 +136,7 @@ What the roadmap changes, with the numbers to beat:
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | done |
-| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | in progress |
+| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4F | in progress |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | M | RF7A → RF7B | planned |
@@ -437,7 +438,7 @@ an `AccountError`.
 
 ## Step RF4 — Module splits
 
-**Size:** L (five sessions). **Depends on:** RF2 (tests on source) and RF3
+**Size:** L (six sessions). **Depends on:** RF2 (tests on source) and RF3
 (so splits move one definition).
 
 **What:** no source file above roughly 1,000 lines; each module has one
@@ -445,7 +446,7 @@ responsibility and one owner section in the architecture. Every session is a
 pure move: `index.ts` re-exports, public API unchanged, existing tests pass
 with import paths only. Follow architecture §6 *Source layout*: domain directories,
 no subdirectory barrels, one-way dependencies including type imports, and tests
-beside modules. RF4B–RF4E map their modules into domain directories and delete
+beside modules. RF4B–RF4F map their modules into domain directories and delete
 their split files from `scripts/oversized-source-baseline.json`; RF5/RF6 do the
 same for their files. The guard permits legacy files to shrink but never grow.
 
@@ -518,15 +519,29 @@ The RF2B route companions now live beside their modules, with middleware tests
 in `app/`, import coverage in `security/` and build-site and email tests in
 `runtime/`. The shared fixture stays in `src/test-support/`.
 
-### Session RF4E — `@lacecms/db` and remaining monoliths
+### Session RF4E — `@lacecms/db` and `@lacecms/config`
 
-- `packages/db/src/sql-content.ts` (2,229 lines) becomes `sql/{entries,snapshots,blocks,media,builds,cursors}.ts`
-  and `write-errors.ts`; the `*_COLUMNS_SQL` constants gain a test that
-  migrates an in-memory database and asserts every column they name exists in
-  `pragma table_info` (closes the schema-versus-SQL drift gap). `drizzle-kit
-  check` joins `pnpm lint`.
-- `packages/db/src/schema.ts` (862 lines) splits by table group only if the
-  Drizzle snapshot stays identical; otherwise it stays.
+`db` uses `shared/`, `schema/`, `security/`, `links/`, `content/`, `media/`,
+`delivery/`, `builds/`, `publication/` and `sync/` directories; `config` uses
+`shared/`, `models/`, `structure/` and `configuration/`. Their root entries
+retain the public exports. Test companions follow the `db` modules and the
+Worker-safety test scans the whole production tree.
+
+The original flat SQL split omitted synchronization, public delivery, outbox
+and build export; domain directories provide owners. Drizzle's `check` alone
+only validates migration snapshots, so `pnpm db:check` also detects pending
+schema changes using a disposable copy and runs during lint. The owner chose to
+include the oversized `config` entry here and schedule the remaining seven
+`test-utils` files as RF4F. Splitting the Drizzle schema changed DDL ordering;
+the specified fallback retains the unchanged tables in `schema/tables.ts`,
+with byte-identical export and no pending migration. The config entry explicitly
+exports its public types so its internal `CommonModelInput` stays private.
+
+### Session RF4F — `@lacecms/test-utils`
+
+Split the repository contract, in-memory store and security contract by domain,
+removing the seven remaining `test-utils` files from the oversized baseline.
+Preserve registration order, public exports and both runtime contract suites.
 
 **Acceptance (all RF4 sessions):** `pnpm build` export lists are identical to
 the baseline; `pnpm test` case counts are unchanged; `check-boundaries`
@@ -548,8 +563,8 @@ Move the verbatim row mappers (`role`, `user`, `profile`, `invitation`,
 `INVITATION_COLUMNS_SQL` and `ACTIVE_INVITATION_SQL` from
 `packages/platform-node/src/security.ts` and
 `packages/platform-cloudflare/src/d1-security.ts` into
-`packages/db/src/security-rows.ts`, following the existing
-`packages/db/src/api-tokens.ts` pattern. `digest`, `tokenSecret` and
+`packages/db/src/security/rows.ts`, following the existing
+`packages/db/src/security/api-tokens.ts` pattern. `digest`, `tokenSecret` and
 `randomHex` stay platform-local. `security-contract` (22 cases) guards both.
 
 ### Session RF5B — Shared content reader
@@ -781,3 +796,9 @@ reference pages.
 | 2026-11-04 | RF4D | `rf04d-server-module-split` | Implemented the six-directory server split, including the shared session summary context. The 17 runtime keys, 20 declaration type names, 179-route multiset and 87 listed test names are preserved; one protocol error characterization case was added. The oversized baseline falls from 14 to 13. Verification is recorded in the active change. |
 
 | 2026-11-04 | RF4D | `rf04d-server-module-split` | Archived at [`2026-11-04-rf04d-server-module-split`](../openspec/changes/archive/2026-11-04-rf04d-server-module-split/); 17/17 tasks complete. No delta specs. Implementation and verification are preserved in the archive. |
+
+
+| 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Proposed: split db and config by domain, guard SQL column lists and pending Drizzle migrations, and add RF4F for test-utils. One SQLite migration specification delta. |
+| 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Implemented the db and config module splits; the Drizzle table fallback preserves byte-identical DDL. Public exports and test titles match baseline, with one drift case added; oversized baseline 13 → 11. Root typecheck, lint, formatting, build, tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and strict specification gates pass; verification is recorded in the active change. |
+
+| 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Archived at [`2026-11-04-rf04e-db-config-module-split`](../openspec/changes/archive/2026-11-04-rf04e-db-config-module-split/); 20/20 tasks complete. The `sqlite-schema-and-migrations` delta is synchronized (one requirement, five scenarios). Verification remains recorded in the archive. RF4F is next. |

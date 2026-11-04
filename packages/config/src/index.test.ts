@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { builtInBlocks, canonicalizeJson, defineBlock, field } from "@lacecms/content";
-import fixtureConfig from "./config.fixture.js";
+import fixtureConfig from "./test-support/config.fixture.js";
 import {
   ConfigurationError,
   defineCollection,
@@ -449,7 +449,7 @@ test("rejects model blocks missing from the root registry and separates projecti
 
 test("snapshots the architecture root fixture's canonical public projection", () => {
   const expected = JSON.parse(
-    readFileSync(new URL("./config.projection.fixture.json", import.meta.url), "utf8"),
+    readFileSync(new URL("./test-support/config.projection.fixture.json", import.meta.url), "utf8"),
   );
   expect(canonicalizeJson(fixtureConfig.public)).toBe(canonicalizeJson(expected));
 });

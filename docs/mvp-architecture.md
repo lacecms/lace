@@ -3161,7 +3161,7 @@ The MVP supports the SQLite dialect only:
 - Cloudflare D1 in production and Cloudflare-compatible development;
 - a local SQLite file in Node and Docker.
 
-Drizzle schemas and migrations should stay within the SQL subset supported by both environments.
+Drizzle schemas and migrations should stay within the SQL subset supported by both environments. The `db` column-list drift test applies every checked-in migration to an in-memory database, checks each shared SQL column against its table and prepares each statement. `pnpm db:check`, included in `pnpm lint`, checks the migration snapshot chain and detects schema changes that need a migration in a disposable copy.
 
 Important D1 free-plan design constraints include:
 

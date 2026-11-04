@@ -18,8 +18,8 @@ import type {
   OpaqueCursor,
 } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
-import { encodeBase64Url, decodeBase64Url } from "./sql-content.js";
-import { LINK_TARGETS_SQL } from "./sql-internal-links.js";
+import { encodeBase64Url, decodeBase64Url } from "../shared/base64.js";
+import { LINK_TARGETS_SQL } from "./statements.js";
 
 export interface LinkReadSql {
   all<Row>(sql: string, ...params: readonly unknown[]): Promise<readonly Row[]>;

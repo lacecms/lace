@@ -250,8 +250,8 @@ const seoDefaults: import("./index.js").SeoDefaultsInput<typeof seoFields> = {
 };
 // @ts-expect-error SEO text sources derive their permitted kinds from content capabilities.
 const invalidSeo: import("./index.js").ModelSeoInput<typeof seoFields> = { description: "count" };
-// @ts-expect-error Numeric fields cannot provide the site name.
 const invalidSeoDefaults: import("./index.js").SeoDefaultsInput<typeof seoFields> = {
+  // @ts-expect-error Numeric fields cannot provide the site name.
   siteName: "count",
 };
 void [seoKeys, seoDefaults, invalidSeo, invalidSeoDefaults];

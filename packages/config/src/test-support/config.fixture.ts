@@ -1,5 +1,5 @@
 import { builtInBlocks, field } from "@lacecms/content";
-import { defineCollection, defineConfig, definePage } from "./index.js";
+import { defineCollection, defineConfig, definePage } from "../index.js";
 
 export default await defineConfig({
   blocks: [

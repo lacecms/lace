@@ -401,6 +401,7 @@ script name. Release publication commands require an authorized prepared set.
 | `acceptance:restart-site`        | acceptance    | Restart acceptance Astro after changing its data mode.                          | `scripts/dev-stack.mjs`                                                   |
 | `build`                          | quality       | Build workspace packages and applications in dependency order.                  | `turbo.json`                                                              |
 | `content:sync`                   | development   | Review or apply root content configuration to the local Node stack.             | `scripts/dev-stack.mjs`                                                   |
+| `db:check`                       | database      | Check migration snapshots and detect pending schema migrations.                 | `scripts/check-drizzle-schema.mjs`                                        |
 | `db:generate`                    | database      | Generate a forward SQL migration after schema edits.                            | `drizzle.config.ts`                                                       |
 | `db:migrate:cloudflare`          | database      | Apply migrations to the reference local Cloudflare database.                    | `scripts/cloudflare.mjs`                                                  |
 | `db:migrate:node`                | database      | Build the database package and migrate the reference Node database.             | `run`                                                                     |
