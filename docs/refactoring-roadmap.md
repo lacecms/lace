@@ -102,7 +102,7 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11, enforced by a shrinking size baseline |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11 → RF4F: 4, enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) → RF4D: 218-line factory, largest production module 492 lines |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
@@ -126,8 +126,8 @@ What the roadmap changes, with the numbers to beat:
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
-| Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141, listed in a shrinking baseline; test-support always typed |
-| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` |
+| Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139, listed in a shrinking baseline; test-support always typed |
+| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
 | Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
@@ -565,7 +565,11 @@ follow-ups.
 
 Split the repository contract, in-memory store and security contract by domain,
 removing the seven remaining `test-utils` files from the oversized baseline.
-Preserve registration order, public exports and both runtime contract suites.
+Preserve registration order, public exports and both runtime contract suites; add
+one security case-name pin. Split
+the test-utils and config monolithic tests into typed companions, remove their
+two typecheck exceptions, remove the repository contract barrel and declare the
+test-utils directory dependencies in `scripts/source-layout.json`.
 
 **Acceptance (all RF4 sessions):** `pnpm build` export lists are identical to
 the baseline; `pnpm test` case counts are unchanged; `check-boundaries`
@@ -822,3 +826,6 @@ reference pages.
 | 2026-11-04 | RF4X | `rf04x-workspace-guards` | Proposed after the owner-requested audit of RF1–RF4E, inserted before RF4F. Guards in `check-boundaries`: a shrinking `@ts-nocheck` baseline (143 files; two test-support helpers typed, 141 tests listed), per-member file cycles with a strongly-connected-component baseline (`auth`, `cli`, `domain`, `platform-node`), and `scripts/source-layout.json` directory rules, barrels and root modules for the six split packages. Repairs 21 stale test paths in the `verify:*` runners, which now run package suites through package configs; `--baseline` becomes required. Also gates the `config`/`domain` type tests, adds missing Turbo test inputs, clears 41 Oxlint warnings and makes lint deny warnings, and cleans up the roadmap, backlog and catalog. Admin source resolution, typing the legacy tests and RF3 vocabulary stay out of scope. Delta spec: `workspace-governance` (4 added, 3 modified). 24 tasks, not applied. |
 | 2026-11-04 | RF4X | `rf04x-workspace-guards` | Implemented, 24/24 tasks complete. The boundary checker now enforces a shrinking `@ts-nocheck` baseline (143 → 141; both test-support helpers typed), per-member module cycles against a five-component baseline, and the `scripts/source-layout.json` rules for the six split packages, with type tests treated as tests. The `verify:*` runners run 22 corrected paths through package configs, and a root guard rejects stale runner, verification-config and documentation test paths; it also fixed six stale paths in `docs/verification.md`. The `config`/`domain` type tests are gated, Turbo test inputs are completed, all 41 Oxlint warnings are fixed and lint denies warnings. All root gates pass (64 Turbo tasks; 35 root files / 316 cases). A full `verify:*` run remains an owner check. Not archived. |
 | 2026-11-04 | RF4X | `rf04x-workspace-guards` | Archived at [`2026-11-04-rf04x-workspace-guards`](../openspec/changes/archive/2026-11-04-rf04x-workspace-guards/); 24/24 tasks complete. The `workspace-governance` delta is synchronized (four added, three modified requirements); all accepted specifications validate. RF4F is next. |
+| 2026-11-04 | RF4F | `rf04f-test-utils-split` | Proposed with the scope the owner extended after the RF4X audit. `test-utils` keeps only its two package entries at the root and moves everything else into `shared/`, `adapters/`, `delivery/`, `errors/`, `visibility/`, `store/`, `repository-contract/` and `security-contract/`. The repository contract is cut into 23 contiguous same-domain case runs, assembled in the original order by a non-barrel `registry.ts`; the 106-name pin is unchanged. The security contract is split into domain runs and gains a new 17-name pin. `InMemoryContentStore` becomes a linear class chain with method bodies moved verbatim. The seven `test-utils` oversized entries leave the baseline (11 → 4), and `test-utils` joins `source-layout.json`. The monolithic `test-utils` (3,560 lines) and `config` (1,328 lines) tests are split beside their modules and typed (owner decision; 492 and 208 errors today; typecheck baseline −2). Exports, case order and titles are unchanged. `skip_specs`. 15 tasks, not applied. |
+| 2026-11-04 | RF4F | `rf04f-test-utils-split` | Implemented the domain splits and typed test companions; oversized baseline 11 → 4, typecheck exceptions 141 → 139. Runtime exports and contract names match the baseline; the security contract adds one name pin. Root typecheck, lint, formatting, tests and strict change validation pass; verification is recorded in the archived change. |
+| 2026-11-04 | RF4F | `rf04f-test-utils-split` | Archived at [`2026-11-04-rf04f-test-utils-split`](../openspec/changes/archive/2026-11-04-rf04f-test-utils-split/); 15/15 tasks complete. No delta specs. Implementation and verification are preserved in the archive. |

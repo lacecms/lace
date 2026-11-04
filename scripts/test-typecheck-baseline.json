@@ -40,7 +40,6 @@
   "packages/cli/src/upgrade-record.test.ts",
   "packages/cli/src/upgrade-resume.test.ts",
   "packages/cli/src/upgrade-rollback.test.ts",
-  "packages/config/src/index.test.ts",
   "packages/content/src/blocks/built-ins.test.ts",
   "packages/content/src/blocks/definition.test.ts",
   "packages/content/src/blocks/list-layout.test.ts",
@@ -138,6 +137,5 @@
   "packages/server/src/routes/public.test.ts",
   "packages/server/src/routes/setup-session.test.ts",
   "packages/server/src/runtime/email.test.ts",
-  "packages/server/src/security/import-routes.test.ts",
-  "packages/test-utils/src/index.test.ts"
+  "packages/server/src/security/import-routes.test.ts"
 ]

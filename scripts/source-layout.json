@@ -52,5 +52,15 @@
     "composition": ["runtime", "security", "shared"],
     "routes": ["composition", "runtime", "security", "shared"],
     "app": ["composition", "routes", "runtime", "security", "shared"]
+  },
+  "packages/test-utils": {
+    "shared": [],
+    "adapters": ["shared"],
+    "delivery": [],
+    "errors": [],
+    "visibility": [],
+    "store": ["shared"],
+    "repository-contract": ["delivery", "visibility"],
+    "security-contract": ["repository-contract"]
   }
 }

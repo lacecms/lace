@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { contentRepositoryContractCases } from "./index.js";
+import { contentRepositoryContractCases } from "./registry.js";
 
 test("preserves every repository contract case in order", () => {
   expect(contentRepositoryContractCases.map((value) => value.name)).toEqual([
