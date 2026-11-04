@@ -6,16 +6,6 @@ import { accountSessionSchema, sessionRevocationResultSchema } from "../index.js
 
 describe("account lifecycle contracts", () => {
   const token = "A".repeat(43);
-  const invitation = {
-    createdAt: "2026-10-10T12:00:00.000Z",
-    email: "new@example.com",
-    expiresAt: "2026-10-13T12:00:00.000Z",
-    id: "inv-1",
-    invitedBy: "Ada",
-    role: "editor",
-    state: "pending",
-  };
-  const link = `https://cms.example.com/admin/accept-invite#token=${token}`;
   const ok = (schema, value) => v.safeParse(schema, value).success;
   test("session records reject tokens and IP addresses", () => {
     const session = {

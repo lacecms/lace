@@ -21,9 +21,9 @@ ordinary pure unit checks and the public docs checks need no running CMS.
 | `pnpm exec turbo run test:packaged --filter @lacecms/content` | Builds prerequisites and checks the exact public export list of the built package. Published packages have the same task; Astro also checks component subpaths. CLI/generator process consumers, API Worker bundles, platform admin assets and the site fixture build run only here. | Packaged-test results; these tests have no source aliases. |
 | `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm spec:validate` | Types, package/admin boundaries, token styles, Drizzle schema and migration consistency, formatting and strict accepted/active specifications. | Command output; these do not prove runtime or artifact acceptance. |
 | `pnpm openapi:check` | Committed OpenAPI matches generated REST contracts; requires the relevant package builds. | Command output and snapshot comparison. |
-| `pnpm verify:cross-runtime --artifacts <prepared-directory> --baseline <reviewed-inventory.json>` | Repository parity; shared Node/Worker API, import, conditional-field and video scenarios; SDK/render/Astro; exact candidate release acceptance. Requires Docker, Chromium and a prepared candidate with matching reviewed checksums/images. Always supply the reviewed baseline explicitly: the runner's historical fallback is no longer retained. | `.lace-acceptance/verify-cross-runtime-*/result.json` and phase Vitest JSON, plus the candidate acceptance receipt. |
-| `pnpm verify:security` | Local cookie/origin/role/token/upload attacks, repository/restart faults, provider faults, Compose host safety, storage/admin recovery, static secret exclusion, authenticated D1 budgets and dependency audit. Requires explicit local API/builder images, Docker and Chromium; npm advisory/license metadata needs network access, not infrastructure credentials. | `.lace-acceptance/verify-security-*/result.json`, phase Vitest JSON and `dependency-audit.json`. |
-| `pnpm verify:operations` | Build, guide extraction, generated Node/Cloudflare-local setup, health/log checks, coordinated restore/rotation and forward migration/managed-file upgrade/rollback. Requires Docker and Chromium for setup; refuses remote credentials/settings. | `.lace-acceptance/verify-operations-*/provenance.json`, `results.json`, phase Vitest JSON and restore evidence. |
+| `pnpm verify:cross-runtime --artifacts <prepared-directory> --baseline <reviewed-inventory.json>` | Repository parity; shared Node/Worker API, import, conditional-field and video scenarios; SDK/render/Astro; exact candidate release acceptance. Requires Docker, Chromium and a prepared candidate with matching reviewed checksums/images. `--baseline` is required; the runner refuses to start without it. | `.lace-acceptance/verify-cross-runtime-*/result.json` and per-run Vitest JSON (`<phase>-<n>.json`), plus the candidate acceptance receipt. |
+| `pnpm verify:security` | Local cookie/origin/role/token/upload attacks, repository/restart faults, provider faults, Compose host safety, storage/admin recovery, static secret exclusion, authenticated D1 budgets and dependency audit. Requires explicit local API/builder images, Docker and Chromium; npm advisory/license metadata needs network access, not infrastructure credentials. | `.lace-acceptance/verify-security-*/result.json`, per-run Vitest JSON (`<phase>-<n>.json`) and `dependency-audit.json`. |
+| `pnpm verify:operations` | Build, guide extraction, generated Node/Cloudflare-local setup, health/log checks, coordinated restore/rotation and forward migration/managed-file upgrade/rollback. Requires Docker and Chromium for setup; refuses remote credentials/settings. | `.lace-acceptance/verify-operations-*/provenance.json`, `results.json`, per-run Vitest JSON (`<phase>-<n>.json`) and restore evidence. |
 | `pnpm acceptance:generated` | Generated Node, starter, Cloudflare-local, existing-site and builder diagnostic journeys; packages current workspace assets when no prepared inventory is selected. Requires Docker, Chromium and package installation access. | Owned OS temporary `lace-generated-acceptance-*` directory and console; workspace packaging is not final candidate acceptance. |
 | `pnpm acceptance:starter`, `pnpm acceptance:existing-site` | Packed starter or independent Astro source installation, source ownership, static builds, media and rendering. | Console and isolated generated-consumer work directories (cleaned unless `LACE_ACCEPTANCE_KEEP_TEMP=1`). |
 | `pnpm acceptance:cloudflare`, `pnpm acceptance:builder-diagnostics` | Packaged local Worker/admin/D1/R2 or fixed builder diagnostics/recovery respectively. Requires local Worker execution or Docker; browser paths require Chromium. | Console and isolated generated-consumer work directories (cleaned unless `LACE_ACCEPTANCE_KEEP_TEMP=1`). |
@@ -33,6 +33,14 @@ ordinary pure unit checks and the public docs checks need no running CMS.
 | `pnpm release:verify --output <prepared-directory>` | Independent saved-artifact integrity, package contents and image/runtime identities; does not rerun every product journey. | Artifact verification reports in the selected output directory. |
 | `pnpm proxy:probe` | Actual nginx upload request-size boundary, including an upload above 1 MiB. Requires Docker. | Probe output; real ingress remains an owner check. |
 | `pnpm docs:check` | Public docs types, static build, links/resources, locale/version identity and focused docs tests, without CMS services. Root tests separately guard changed-input publication and internal links/indexes. | Console and built static docs output. |
+
+A verification phase that exercises a workspace package runs that member's own
+source or packaged Vitest configuration (`pnpm --filter ./<member> exec vitest run …`),
+so it executes the same cases with the same module resolution as `test` or
+`test:packaged`; root acceptance files run through the root Vitest invocation.
+Each run writes its own JSON report and must execute, without skips, at least
+one passing test. A root test rejects any runner, verification project or
+documented command that names a missing workspace test path.
 
 Security fixture environment:
 
@@ -116,15 +124,15 @@ original scope and does not establish later candidates' readiness.
 | --- | --- | --- | --- |
 | One installation per website | `tests/cross-runtime-product.acceptance.mjs`; `scripts/build-site-acceptance.mjs` selected-site isolation | Architecture §4.1; generated operations | Covered / owner scenarios 1–3 |
 | Pages and collections | `scripts/cross-runtime-api.mjs` home/article creation and route/export comparisons | Architecture §8; configuration-synchronization.md | Covered / owner scenario 4 |
-| Code-first definitions | `packages/config/src/index.test.mjs`; CLI sync tests; `scripts/cross-runtime-api.mjs` | configuration-synchronization.md | Covered / owner scenarios 2–3 |
+| Code-first definitions | `packages/config/src/index.test.ts`; CLI sync tests; `scripts/cross-runtime-api.mjs` | configuration-synchronization.md | Covered / owner scenarios 2–3 |
 | Draft and published snapshots | `scripts/cross-runtime-api.mjs`; `scripts/publication-visibility-acceptance.mjs` | Architecture §4.4; generated publication guidance | Covered / owner scenario 4 |
 | Ordered block content | `scripts/block-order-acceptance.mjs`; cross-runtime API/Astro ordered-block comparison | Architecture §9.5; personal-site-guide.md | Covered / owner scenario 4 |
 | Tiptap rich text | Admin editor tests; `packages/content/src/fields/rich-text.test.ts`; render tests | Architecture §11; site-styling.md | Covered / owner scenario 4 |
 | R2 or MinIO media | `tests/operations.acceptance.mjs` object API backup, hashes, negatives and download; platform storage tests | [Operations and restore](#commands) | Covered locally / owner scenario 7 |
-| Better Auth email/password | `packages/auth/src/index.test.mjs`; both generated browser onboarding journeys; operations fresh sign-in | auth-operations.md | Covered / owner scenarios 2–5 |
-| Admin/editor/viewer roles | `scripts/cross-runtime-api.mjs` role denials; `packages/server/src/app.test.mjs` status boundary | Architecture §14; auth-operations.md | Covered / owner scenarios 4–5 |
-| Optional OAuth MCP content assistance | `packages/mcp/src/index.test.mjs`; auth security and repository contracts; `scripts/journeys/list-settings-mcp-proxy.mjs` | [MCP](mcp.md); ADR 0015 | Local contracts; owner scenarios 4–5 cover consent, scope, publication and revocation |
-| Optional transactional email | `packages/platform-node/src/smtp-email.test.mjs`; `packages/platform-cloudflare/src/email.test.mjs`; auth/account tests | [Authentication operations](auth-operations.md) | Local provider behavior; real configured delivery requires owner scenarios 2–5 |
+| Better Auth email/password | `packages/auth/src/index.test.ts`; both generated browser onboarding journeys; operations fresh sign-in | auth-operations.md | Covered / owner scenarios 2–5 |
+| Admin/editor/viewer roles | `scripts/cross-runtime-api.mjs` role denials; `packages/server/src/routes/content.test.ts` role-denial boundary | Architecture §14; auth-operations.md | Covered / owner scenarios 4–5 |
+| Optional OAuth MCP content assistance | `packages/mcp/src/index.test.ts`; auth security and repository contracts; `scripts/journeys/list-settings-mcp-proxy.mjs` | [MCP](mcp.md); ADR 0015 | Local contracts; owner scenarios 4–5 cover consent, scope, publication and revocation |
+| Optional transactional email | `packages/platform-node/src/smtp-email.test.ts`; `packages/platform-cloudflare/src/email.test.ts`; auth/account tests | [Authentication operations](auth-operations.md) | Local provider behavior; real configured delivery requires owner scenarios 2–5 |
 | Versioned validated REST API | Contracts/server tests; `pnpm openapi:check`; exact-consumer API probes | Architecture §12; node-api.md | Covered / owner scenario 5 |
 | Astro build-time SDK | `scripts/cross-runtime-astro.mjs`; exact starter/independent-site journeys; weak ETag journey | personal-site-guide.md; generated Astro guide | Covered / owner scenarios 2–4 |
 | Outbox build dispatch | Builder runner tests; `scripts/generated-project-acceptance.mjs` failure/recovery; Worker controlled hook/Pages journey | Architecture §9.8; generated operations | Covered with controlled provider / owner scenario 6 |
@@ -135,7 +143,7 @@ original scope and does not establish later candidates' readiness.
 
 | Architecture §14 requirement | Named local evidence | Documentation | Coverage / owner check |
 | --- | --- | --- | --- |
-| Secure HTTP-only production cookies | `packages/auth/src/index.test.mjs`; Node production smoke | auth-operations.md; generated production guide | Covered locally / owner scenario 5 |
+| Secure HTTP-only production cookies | `packages/auth/src/index.test.ts`; Node production smoke | auth-operations.md; generated production guide | Covered locally / owner scenario 5 |
 | CSRF and origin protection | `tests/security-boundary.test.mjs`; `scripts/journeys/consumer-security-probes.mjs` foreign/null/cross-site denials | [Security and resilience](#commands) | Covered / owner scenario 5 |
 | Explicit trusted origins | Auth/server security tests; generated origin settings | auth-operations.md | Covered / owner scenario 5 |
 | Auth/upload rate limiting | Node/Worker security-contract tests; security acceptance actor/proxy identity probes | [Security and resilience](#commands) | Covered / owner scenario 5 |

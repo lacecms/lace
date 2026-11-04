@@ -2,13 +2,7 @@
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import {
-  blockMetadataSchema,
-  contentModelListSchema,
-  toContentModelDto,
-  toIsoTimestamp,
-} from "../index.js";
-import { timestamp, published } from "../test-support/rest-fixtures.js";
+import { blockMetadataSchema, contentModelListSchema, toContentModelDto } from "../index.js";
 
 describe("shared REST contract DTOs", () => {
   test("validates portable allowed block metadata against each model", () => {
@@ -60,20 +54,6 @@ describe("shared REST contract DTOs", () => {
 });
 
 describe("admin entry list contracts", () => {
-  const summary = {
-    draftRevision: 2,
-    id: "entry-1",
-    listValues: { author: "Lace", featured: true, rank: 3 },
-    modelKey: "posts",
-    status: "draft",
-    title: "Welcome",
-    updatedAt: toIsoTimestamp(timestamp),
-    updatedBy: { displayName: "Editor", id: "actor-1" },
-  };
-  const publishedFields = {
-    publishedAt: toIsoTimestamp(timestamp),
-    publishedSnapshotId: "snapshot-published-1",
-  };
   test("content models carry valid collection list fields only", () => {
     const fields = { author: { required: false, type: "text" } };
     const collection = { blocks: [], fields, key: "posts", kind: "collection", route: "/b/:slug" };

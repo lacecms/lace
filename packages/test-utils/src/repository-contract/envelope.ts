@@ -1031,7 +1031,7 @@ contract(
               fields: {
                 nested: field.group({
                   fields: {
-                    title: field.text({ ...(placeholder === undefined ? {} : { placeholder }) }),
+                    title: field.text(placeholder === undefined ? {} : { placeholder }),
                   },
                 }),
               },

@@ -55,6 +55,9 @@ additions below:
   value in the progress log, so the effect of the work is measurable.
 - "Open questions" in a step are settled with the owner while writing that
   step's specification, not before.
+- A session that splits or moves test files types the new companions or lists
+  them explicitly in `scripts/test-typecheck-baseline.json`; the `@ts-nocheck`
+  header is never copied silently (RF4X).
 
 Status values: `planned`, `proposed`, `in progress`, `done` (archived).
 
@@ -110,7 +113,7 @@ What the roadmap changes, with the numbers to beat:
 | Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
 | Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table |
-| Duplication | `*Source` interfaces in contracts mirroring application types | 11 |
+| Duplication | `*Source` interfaces in contracts mirroring application types | 11 → RF3B: 11 kept (the boundary forbids the import), each checked by a `satisfies` mirror test in test-utils |
 | Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
 | Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
 | Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
@@ -123,6 +126,8 @@ What the roadmap changes, with the numbers to beat:
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
+| Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141, listed in a shrinking baseline; test-support always typed |
+| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
 | Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
@@ -136,7 +141,7 @@ What the roadmap changes, with the numbers to beat:
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | done |
-| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4F | in progress |
+| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F | in progress |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | M | RF7A → RF7B | planned |
@@ -151,6 +156,11 @@ RF5 follows RF4 because the shared reader lands in a `db` package that has
 already been split by resource. RF6 and RF7 touch disjoint files from RF3–RF5
 and may run in parallel sessions with them. RF8 is last because §15 and §16 of
 the architecture describe ports and runtime deltas that RF4 and RF5 change.
+
+**RF4X insertion (2026-11-04):** an owner-requested audit of RF1–RF4E found
+that the layout and test-typing rules were enforced only by convention and that
+RF2 had left the `verify:*` runners pointing at removed tests. RF4X adds the
+guards before RF4F and RF5 split more modules.
 
 **Deferred, stays in the backlog:** write-path convergence between Node
 transactions and D1 batches beyond statement builders; a generated admin API
@@ -537,6 +547,20 @@ the specified fallback retains the unchanged tables in `schema/tables.ts`,
 with byte-identical export and no pending migration. The config entry explicitly
 exports its public types so its internal `CommonModelInput` stays private.
 
+### Session RF4X — Workspace guards
+
+Inserted after the RF1–RF4E audit. The boundary checker gains a shrinking
+`@ts-nocheck` baseline for test files (test-support modules may not disable
+type checking), a per-member module-cycle check with a strongly connected
+component baseline, and `scripts/source-layout.json` directory rules, barrel
+and root-module checks for the six split packages. The `verify:*` runners run
+package suites through package configurations and name only existing tests,
+guarded by a root path scan; `verify:cross-runtime` requires `--baseline`.
+`config` and `domain` type tests join `typecheck`, Turbo test inputs cover
+files read outside packages, and lint denies warnings. Admin source-test
+resolution, typing the legacy tests and RF3 vocabulary duplicates are separate
+follow-ups.
+
 ### Session RF4F — `@lacecms/test-utils`
 
 Split the repository contract, in-memory store and security contract by domain,
@@ -710,7 +734,7 @@ architecture sections they change; RF1B for the index.
   its archived change. The body states current behavior only.
 - §24 *Decisions captured by this document* moves into ADRs (new ADRs only
   where none exists); the section becomes a pointer to `docs/adr/README.md`.
-- §15 is rewritten from the real ports after RF4B; §16 gains the runtime
+- §15 is reviewed against the ports RF4B already recorded and RF5 changes; §16 gains the runtime
   deltas table from RF5C; §6 lists the new module layout rules (file size
   ceiling, one responsibility per module).
 - Target size: under 2,500 lines without loss of invariants (a review
@@ -783,22 +807,18 @@ reference pages.
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Proposed, then revised the same day on the owner's request. `index.ts` (3,881 lines at `1ac97ec2`) becomes the only root module, re-exporting concrete files from five domain directories (`shared/`, `fields/`, `references/`, `blocks/`, `entries/`; one-way `shared ← fields ← references, blocks ← entries`, no subdirectory barrels, module graph acyclic including type imports); bodies and JSDoc move verbatim, existing leaf modules move with `git mv`, `publishedBlockData` moves to `blocks/definition.ts`. Corrections to the roadmap text: the eight flat modules do not fit under 1,000 lines without cycles after RF3A, so capabilities, definitions, layout, visibility and list layout are separate modules and the shared error classes join `shared/errors.ts`. Owner decisions: a *Source layout* convention in architecture §6, `AGENTS.md` and ADR 0020 for all future code; the boundary checker fails on production files over 1,000 lines outside a shrinking baseline (`scripts/oversized-source-baseline.json`, the 18 oversized files outside `content`), so later sessions delete their entries. `index.test.ts` splits into twelve module test files with case titles pinned (115); type tests split into six files, their stale `@ts-expect-error` is fixed and they join the package `typecheck`. Delta spec: `workspace-governance` (1 added). 21 tasks, not applied. |
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Implemented, 21/21 tasks complete; not archived. Content split into 23 concrete modules in five domain directories with a 178-line entry; largest module 736 lines. Owner-confirmed placement of `BlockDataValues`/`FieldVisibilityTargets` in field definitions removes the discovered type cycle. All 180 declaration exports and 93 runtime keys preserved; 115 listed titles / 241 expanded source cases preserved across 17 test files. Six type-test companions now join typecheck. Size guard baselines 18 oversized files outside content; later sessions remove their entries. Root typecheck, lint, formatting, build, full tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and all 86 strict OpenSpec items pass. Boundary scanner progress regression covered. Verification is recorded in the active change. |
 | 2026-11-03 | RF4A | `rf04a-content-module-split` | Archived at [`2026-11-03-rf04a-content-module-split`](../openspec/changes/archive/2026-11-03-rf04a-content-module-split/); 21/21 tasks complete. The `workspace-governance` delta is synchronized (one added requirement, five scenarios). All 84 accepted specifications pass strict validation. Implementation and verification are preserved in the archive. RF4B is next. |
+| 2026-11-03 | RF4B | `rf04b-application-module-split` | Proposed (row added retrospectively by RF4X; the session recorded only its implementation). Application entry re-exports concrete modules from `shared/`, six capability port modules and six domain directories; `SecurityService` composes disjoint account, session and token ports; the configuration decision table keeps the breaking-change precedence. Deviation from owner decision 2: the exported `AccountSecurityPort` type was reshaped (four methods moved to the new `SessionSecurityPort` and `TokenSecurityPort`, five added), so the public type surface changed although runtime exports did not; CHANGELOG handling is left to the next release preparation. Delta spec: `application-ports-and-commands`. 20 tasks. |
 | 2026-11-03 | RF4B | `rf04b-application-module-split` | Implemented the application domain and port split, security capability ports, and configuration decision table. The three application size-baseline entries are removed (18 → 15); 131 listed case titles and the runtime export surface are preserved. Verification is recorded in the active change. |
 | 2026-11-03 | RF4B | `rf04b-application-module-split` | Archived at [`2026-11-03-rf04b-application-module-split`](../openspec/changes/archive/2026-11-03-rf04b-application-module-split/); 20/20 tasks complete. The `application-ports-and-commands` delta is synchronized; all 84 accepted specifications validate. |
 | 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Proposed. `index.ts` (2,994 lines at `83c0157d`) becomes the only root production module, re-exporting 36 concrete modules in nine directories: `shared/`, `errors/`, `openapi/`, `content/`, `media/`, `delivery/`, `builds/`, `accounts/` and `settings/` (direction `shared ← {errors, openapi, accounts, builds, content}`, `accounts ← settings`, `content ← media`, `{content, media, errors} ← delivery`; acyclic including type imports, so the `content-model-projection` → `index` cycle is removed). Correction to the roadmap text: the seven flat files would leave `content.ts` near 1,000 lines with no owner for public delivery, the build export, the tolerant variants or the primitives, so the session uses domain directories (§6). `hasMatchingBlockDefinitions` matches by type: one definition per allowed type in any order, and duplicate allowed types with definitions are rejected. The test files split into module companions with every case name preserved (96 + 1 new). Runtime keys, type names and the OpenAPI document stay unchanged. The baseline goes from 15 to 14. Delta spec: `rest-contracts` (1 modified). 17 tasks, not applied. |
-
 | 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Implemented, 18/18 tasks complete. The 36-module contracts split and type-matched block definitions leave a 144-line entry and a 226-line largest module; size baseline 15 → 14. The 96 existing listed test names and export surface are preserved, with one new listed case. The shared-vocabulary guard follows the moved owners. All root gates pass (64 Turbo tasks; 35 root files / 284 cases); verification is recorded in the active change. |
-
 | 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Archived at [`2026-11-03-rf04c-contracts-module-split`](../openspec/changes/archive/2026-11-03-rf04c-contracts-module-split/); 18/18 tasks complete. The `rest-contracts` delta is synchronized; all 84 accepted specifications validate. Implementation and verification remain recorded in the archive. |
-
 | 2026-11-04 | RF4D | `rf04d-server-module-split` | Proposed. `app.ts` (2,940 lines at `c63c4686`) splits into six directories with `index.ts` as the only root production module: `shared/` (HTTP responses, request parsing, content-model lookups, account DTOs, protocol paths), `runtime/` (build site, MCP flag, email), `security/` (sensitive limits, import routes), `composition/` (`LaceAppInput`, `RouteContext`), `routes/` (eleven `register<Area>Routes` modules plus `media-upload`, `media-binary` and `build-export` helpers) and `app/` (`createLaceApp` with `onError`, the five middlewares and registration); direction `shared ← runtime, security ← composition ← routes ← app`, acyclic including type imports. Corrections to the roadmap text: `credentials`, `protocol` and `health` route modules give the token, MCP/OAuth pass-through and probe routes an owner; `RouteContext` holds only closures over the input, while pure helpers and DTO mappers are module imports; the two parsers live in `routes/` under §6. One `protocolErrorResponse` serves the 503/429/413 MCP and OAuth bodies with each site's predicate and headers unchanged. Export surface, route table and OpenAPI document stay identical; route tests move beside their modules with case titles preserved (86 + 1 characterization case for the untested protocol `onError` body). The baseline goes from 14 to 13. `skip_specs`. 17 tasks, not applied. |
-
 | 2026-11-04 | RF4D | `rf04d-server-module-split` | Implemented the six-directory server split, including the shared session summary context. The 17 runtime keys, 20 declaration type names, 179-route multiset and 87 listed test names are preserved; one protocol error characterization case was added. The oversized baseline falls from 14 to 13. Verification is recorded in the active change. |
-
 | 2026-11-04 | RF4D | `rf04d-server-module-split` | Archived at [`2026-11-04-rf04d-server-module-split`](../openspec/changes/archive/2026-11-04-rf04d-server-module-split/); 17/17 tasks complete. No delta specs. Implementation and verification are preserved in the archive. |
-
-
 | 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Proposed: split db and config by domain, guard SQL column lists and pending Drizzle migrations, and add RF4F for test-utils. One SQLite migration specification delta. |
 | 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Implemented the db and config module splits; the Drizzle table fallback preserves byte-identical DDL. Public exports and test titles match baseline, with one drift case added; oversized baseline 13 → 11. Root typecheck, lint, formatting, build, tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and strict specification gates pass; verification is recorded in the active change. |
-
 | 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Archived at [`2026-11-04-rf04e-db-config-module-split`](../openspec/changes/archive/2026-11-04-rf04e-db-config-module-split/); 20/20 tasks complete. The `sqlite-schema-and-migrations` delta is synchronized (one requirement, five scenarios). Verification remains recorded in the archive. RF4F is next. |
+| 2026-11-04 | RF4X | `rf04x-workspace-guards` | Proposed after the owner-requested audit of RF1–RF4E, inserted before RF4F. Guards in `check-boundaries`: a shrinking `@ts-nocheck` baseline (143 files; two test-support helpers typed, 141 tests listed), per-member file cycles with a strongly-connected-component baseline (`auth`, `cli`, `domain`, `platform-node`), and `scripts/source-layout.json` directory rules, barrels and root modules for the six split packages. Repairs 21 stale test paths in the `verify:*` runners, which now run package suites through package configs; `--baseline` becomes required. Also gates the `config`/`domain` type tests, adds missing Turbo test inputs, clears 41 Oxlint warnings and makes lint deny warnings, and cleans up the roadmap, backlog and catalog. Admin source resolution, typing the legacy tests and RF3 vocabulary stay out of scope. Delta spec: `workspace-governance` (4 added, 3 modified). 24 tasks, not applied. |
+| 2026-11-04 | RF4X | `rf04x-workspace-guards` | Implemented, 24/24 tasks complete. The boundary checker now enforces a shrinking `@ts-nocheck` baseline (143 → 141; both test-support helpers typed), per-member module cycles against a five-component baseline, and the `scripts/source-layout.json` rules for the six split packages, with type tests treated as tests. The `verify:*` runners run 22 corrected paths through package configs, and a root guard rejects stale runner, verification-config and documentation test paths; it also fixed six stale paths in `docs/verification.md`. The `config`/`domain` type tests are gated, Turbo test inputs are completed, all 41 Oxlint warnings are fixed and lint denies warnings. All root gates pass (64 Turbo tasks; 35 root files / 316 cases). A full `verify:*` run remains an owner check. Not archived. |
+| 2026-11-04 | RF4X | `rf04x-workspace-guards` | Archived at [`2026-11-04-rf04x-workspace-guards`](../openspec/changes/archive/2026-11-04-rf04x-workspace-guards/); 24/24 tasks complete. The `workspace-governance` delta is synchronized (four added, three modified requirements); all accepted specifications validate. RF4F is next. |

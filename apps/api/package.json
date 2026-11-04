@@ -17,7 +17,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "pnpm run build && node dist/dev.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json && tsc -p tsconfig.test.json",
-    "lint": "oxlint src",
+    "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"

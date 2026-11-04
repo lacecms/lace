@@ -1,4 +1,4 @@
-// Dependency direction: shared ← runtime, security ← composition ← routes ← app.
+// Directory dependencies: shared ← runtime, security ← composition ← routes ← app.
 export const packageName = "@lacecms/server";
 
 // Runtime

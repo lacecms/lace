@@ -26,7 +26,7 @@
   "scripts": {
     "build": "node ../../scripts/platform-release-version.mjs && tsc -p tsconfig.json && node scripts/copy-admin-assets.mjs",
     "typecheck": "node ../../scripts/platform-release-version.mjs --check && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "lint": "oxlint src",
+    "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"

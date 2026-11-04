@@ -7,8 +7,6 @@ import { mediaMetadataSchema, toMediaMetadataDto } from "../index.js";
 
 describe("media metadata contracts", async () => {
   const {
-    mediaEntityTag,
-    resolveMediaPrecondition,
     toUpdateMediaMetadataResultDto,
     updateMediaMetadataRequestSchema,
     updateMediaMetadataResultSchema,

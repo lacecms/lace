@@ -5,11 +5,13 @@ import { assertDraftPersistenceBounds } from "../content/snapshots.js";
 import { sqliteWriteError } from "./write-errors.js";
 
 test("bounds drafts and maps SQLite constraint failures to stable codes", () => {
-  expect(() => assertDraftPersistenceBounds(new Array(200), new Array(200))).not.toThrow();
-  expect(() => assertDraftPersistenceBounds(new Array(201), [])).toThrow(
+  expect(() =>
+    assertDraftPersistenceBounds(Array.from({ length: 200 }), Array.from({ length: 200 })),
+  ).not.toThrow();
+  expect(() => assertDraftPersistenceBounds(Array.from({ length: 201 }), [])).toThrow(
     expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
   );
-  expect(() => assertDraftPersistenceBounds([], new Array(201))).toThrow(
+  expect(() => assertDraftPersistenceBounds([], Array.from({ length: 201 }))).toThrow(
     expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
   );
   const mapped = (message, page = false) => {

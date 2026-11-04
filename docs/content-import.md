@@ -44,7 +44,7 @@ starter configuration together.
 | --- | --- | :---: | --- |
 | Sample validity | `pnpm test` (root) | yes | Sample against the starter models; guide equality |
 | Packed offline check | `pnpm acceptance:starter` | yes | `pnpm exec lace import --validate-only` with the packed CLI |
-| Cross-runtime journey | `pnpm exec vitest run --config vitest.cross-runtime.config.mjs tests/content-import.acceptance.mjs` (Docker for MinIO) | no | Full matrix below on Node and the local Worker composition |
+| Cross-runtime journey | `pnpm exec vitest run --config vitest.verification.config.mjs --project cross-runtime tests/content-import.acceptance.mjs` (Docker for MinIO) | no | Full matrix below on Node and the local Worker composition |
 | Packed Node smoke | `pnpm acceptance:generated` / `acceptance:release` (Docker Compose) | no | Packed CLI imports the sample into the Compose API; rerun unchanged |
 | Packed Worker smoke | `pnpm acceptance:cloudflare` | no | Packed CLI imports the sample into `wrangler dev`; rerun unchanged |
 | Unit and in-process | `pnpm turbo run test --filter=@lacecms/cli` | yes | Format, references, plan, apply, state, retries, exit codes |

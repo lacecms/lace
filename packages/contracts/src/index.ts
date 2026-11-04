@@ -1,5 +1,5 @@
-// Dependencies: shared ← {errors, openapi, accounts, builds, content}; accounts ← settings;
-// content ← media; {content, media, errors} ← delivery. Type imports follow the same direction.
+// Directory dependencies: shared ← errors, openapi, accounts, builds, content;
+// accounts ← settings; content ← media; content, media, errors ← delivery.
 
 export { LaceError } from "@lacecms/content";
 export { SLUG_PATTERN } from "@lacecms/content";

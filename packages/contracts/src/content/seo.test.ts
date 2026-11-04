@@ -21,29 +21,14 @@ import {
   toSeoDto,
   toContentEntryDto,
   toContentModelDto,
-  toIsoTimestamp,
   formatSeoTitle,
   isCanonicalUrl as contractsIsCanonicalUrl,
   normalizeSeoText as contractsNormalizeSeoText,
   seoText,
 } from "../index.js";
-import { timestamp, published, entry } from "../test-support/rest-fixtures.js";
+import { published, entry } from "../test-support/rest-fixtures.js";
 
 describe("admin entry list contracts", () => {
-  const summary = {
-    draftRevision: 2,
-    id: "entry-1",
-    listValues: { author: "Lace", featured: true, rank: 3 },
-    modelKey: "posts",
-    status: "draft",
-    title: "Welcome",
-    updatedAt: toIsoTimestamp(timestamp),
-    updatedBy: { displayName: "Editor", id: "actor-1" },
-  };
-  const publishedFields = {
-    publishedAt: toIsoTimestamp(timestamp),
-    publishedSnapshotId: "snapshot-published-1",
-  };
   test("SEO values have explicit admin, request, public, model and export contracts", () => {
     const seo = { image: mediaId("media-1"), noindex: true, title: "Hello" };
     const seoEntry = {

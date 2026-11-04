@@ -3072,7 +3072,7 @@ test("CE9A fake sync retains populated singleton content when guidance changes",
               nested: field.group({
                 defaultValue: { title: "Stored" },
                 fields: {
-                  title: field.text({ ...(placeholder === undefined ? {} : { placeholder }) }),
+                  title: field.text(placeholder === undefined ? {} : { placeholder }),
                 },
               }),
             },

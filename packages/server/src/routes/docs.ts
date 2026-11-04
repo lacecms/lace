@@ -53,6 +53,8 @@ export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void 
   );
 
   if (input.apiDocsEnabled === true) {
+    // Supported by the pinned browser bundle, ahead of the Hono wrapper's types.
+    const scalarBundleOnlyOptions = { agent: { disabled: true } };
     app.get(
       "/api/docs",
       describeRoute({ hide: true }),
@@ -66,8 +68,7 @@ export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void 
         withDefaultFonts: false,
         showDeveloperTools: "never",
         hideClientButton: true,
-        // Supported by the pinned browser bundle, ahead of the Hono wrapper's types.
-        ...{ agent: { disabled: true } },
+        ...scalarBundleOnlyOptions,
         mcp: { disabled: true },
       }),
     );

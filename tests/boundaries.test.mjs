@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { execFileSync, spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
@@ -270,4 +270,251 @@ test("scans a regex containing a hash before a forbidden import without hanging"
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+function checkScratch(files, baselines = {}) {
+  const root = mkdtempSync(join(tmpdir(), "lace-source-guards-"));
+  try {
+    const members = new Set(
+      Object.keys(files).map((file) => file.split("/").slice(0, 2).join("/")),
+    );
+    for (const member of members) {
+      mkdirSync(join(root, member, "src"), { recursive: true });
+      if (!Object.hasOwn(files, `${member}/package.json`))
+        writeFileSync(
+          join(root, member, "package.json"),
+          JSON.stringify({ name: `@lacecms/${basename(member)}` }),
+        );
+    }
+    for (const [file, text] of Object.entries(files)) {
+      mkdirSync(join(root, dirname(file)), { recursive: true });
+      writeFileSync(join(root, file), text);
+    }
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    for (const [name, value] of Object.entries(baselines))
+      writeFileSync(join(root, "scripts", name), JSON.stringify(value));
+    return spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const nocheck = "// @ts-nocheck\n// TODO(rf2): Legacy fixture.\nexport {};\n";
+
+test.each([
+  {
+    name: "an unlisted test",
+    file: "packages/content/src/a.test.ts",
+    listed: [],
+    message:
+      "typecheck exception not in baseline: packages/content/src/a.test.ts disables type checking",
+  },
+  {
+    name: "a listed test-support module",
+    file: "packages/content/src/test-support/helpers.ts",
+    listed: ["packages/content/src/test-support/helpers.ts"],
+    message:
+      "typecheck exception forbidden: packages/content/src/test-support/helpers.ts is not a test file",
+  },
+  {
+    name: "an unlisted test-support module",
+    file: "packages/content/src/test-support/helpers.ts",
+    listed: [],
+    message:
+      "typecheck exception forbidden: packages/content/src/test-support/helpers.ts is not a test file",
+  },
+  {
+    name: "a production module",
+    file: "packages/content/src/model.ts",
+    listed: [],
+    message: "typecheck exception forbidden: packages/content/src/model.ts is not a test file",
+  },
+])("rejects a typecheck exception in $name", ({ file, listed, message }) => {
+  const result = checkScratch(
+    { [file]: nocheck, "packages/content/src/index.ts": "export {};\n" },
+    { "test-typecheck-baseline.json": listed },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
+test.each([
+  {
+    name: "typed",
+    files: { "packages/content/src/a.test.ts": "export {};\n" },
+    reason: "no longer disables type checking",
+  },
+  { name: "deleted", files: {}, reason: "is missing" },
+])("rejects a stale typecheck baseline entry for a $name test", ({ files, reason }) => {
+  const result = checkScratch(
+    { ...files, "packages/content/src/index.ts": "export {};\n" },
+    { "test-typecheck-baseline.json": ["packages/content/src/a.test.ts"] },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    `stale typecheck baseline entry: packages/content/src/a.test.ts ${reason}`,
+  );
+});
+
+test("allows a listed legacy test that disables type checking", () => {
+  const result = checkScratch(
+    { "packages/content/src/a.test.ts": nocheck, "packages/content/src/index.ts": "export {};\n" },
+    { "test-typecheck-baseline.json": ["packages/content/src/a.test.ts"] },
+  );
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test.each([
+  ["import type", 'import type { B } from "./b.js";\nexport type A = B;\n'],
+  ["export type from", 'export type { B } from "./b.js";\n'],
+])("rejects a module cycle closed by %s", (_form, closing) => {
+  const result = checkScratch({
+    "packages/content/src/index.ts": 'export * from "./a.js";\n',
+    "packages/content/src/a.ts": closing,
+    "packages/content/src/b.ts": 'import { a } from "./a.js";\nexport type B = typeof a;\n',
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    "module cycle: packages/content/src/a.ts, packages/content/src/b.ts",
+  );
+});
+
+const legacyCycle = {
+  "packages/domain/src/index.ts": 'export * from "./seo.js";\n',
+  "packages/domain/src/seo.ts": 'import "./index.js";\nexport const seo = 1;\n',
+};
+
+test("allows a module cycle inside a baselined component", () => {
+  const result = checkScratch(legacyCycle, {
+    "source-cycle-baseline.json": [["packages/domain/src/index.ts", "packages/domain/src/seo.ts"]],
+  });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test("rejects a baselined module cycle that grows", () => {
+  const result = checkScratch(
+    {
+      ...legacyCycle,
+      "packages/domain/src/seo.ts": 'import "./index.js";\nimport "./routes.js";\n',
+      "packages/domain/src/routes.ts": 'import "./seo.js";\n',
+    },
+    {
+      "source-cycle-baseline.json": [
+        ["packages/domain/src/index.ts", "packages/domain/src/seo.ts"],
+      ],
+    },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    "module cycle: packages/domain/src/index.ts, packages/domain/src/routes.ts, packages/domain/src/seo.ts",
+  );
+});
+
+test("rejects a stale module cycle baseline entry", () => {
+  const result = checkScratch(
+    { ...legacyCycle, "packages/domain/src/seo.ts": "export const seo = 1;\n" },
+    {
+      "source-cycle-baseline.json": [
+        ["packages/domain/src/index.ts", "packages/domain/src/seo.ts"],
+      ],
+    },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    "stale source cycle baseline entry: packages/domain/src/index.ts, packages/domain/src/seo.ts",
+  );
+});
+
+test("keeps test files and test-support modules out of module cycles", () => {
+  const result = checkScratch({
+    "packages/content/src/index.ts": "export const value = 1;\n",
+    "packages/content/src/test-support/a.ts": 'import "./b.js";\n',
+    "packages/content/src/test-support/b.ts": 'import "./a.js";\n',
+    "packages/content/src/index.test.ts": 'import "./index.type-test.js";\n',
+    "packages/content/src/index.type-test.ts": 'import "./index.test.js";\n',
+  });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+const declaredLayout = {
+  "packages/content": { shared: [], fields: ["shared"] },
+};
+const declaredSources = {
+  "packages/content/package.json": JSON.stringify({
+    name: "@lacecms/content",
+    exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
+  }),
+  "packages/content/src/index.ts":
+    '// Directory dependencies: shared ← fields.\nexport * from "./fields/field.js";\n',
+  "packages/content/src/shared/json.ts": "export const json = 1;\n",
+  "packages/content/src/fields/field.ts":
+    'import { json } from "../shared/json.js";\nexport const field = json;\n',
+};
+
+test("allows a package that follows its declared layout", () => {
+  const result = checkScratch(declaredSources, { "source-layout.json": declaredLayout });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test.each([
+  {
+    name: "an import against the declared direction",
+    files: {
+      "packages/content/src/shared/text.ts":
+        'import "../fields/field.js";\nexport const text = 1;\n',
+    },
+    message:
+      "source layout: packages/content/src/shared/text.ts imports packages/content/src/fields/field.ts; shared -> fields is not declared for packages/content",
+  },
+  {
+    name: "an import of the package entry",
+    files: {
+      "packages/content/src/shared/text.ts": 'import "../index.js";\nexport const text = 1;\n',
+    },
+    message: "shared -> <entry> is not declared for packages/content",
+  },
+  {
+    name: "a subdirectory barrel",
+    files: { "packages/content/src/fields/index.ts": 'export * from "./field.js";\n' },
+    message: "source layout: subdirectory barrel packages/content/src/fields/index.ts",
+  },
+  {
+    name: "an extra root module",
+    files: { "packages/content/src/helpers.ts": "export const helper = 1;\n" },
+    message:
+      "source layout: packages/content/src/helpers.ts is a root module but not a package entry",
+  },
+  {
+    name: "an undeclared directory",
+    files: { "packages/content/src/blocks/block.ts": "export const block = 1;\n" },
+    message:
+      "source layout: packages/content directories [blocks, fields, shared] differ from scripts/source-layout.json [fields, shared]",
+  },
+  {
+    name: "an entry header naming an extra directory",
+    files: {
+      "packages/content/src/index.ts":
+        '// Directory dependencies: shared ← fields ← blocks.\nexport * from "./fields/field.js";\n',
+    },
+    message: "source layout: packages/content entry header names [blocks, fields, shared]",
+  },
+  {
+    name: "an entry header missing a directory",
+    files: {
+      "packages/content/src/index.ts":
+        '// Directory dependencies: fields.\nexport * from "./fields/field.js";\n',
+    },
+    message: "source layout: packages/content entry header names [fields]",
+  },
+])("rejects $name in a declared package", ({ files, message }) => {
+  const result = checkScratch(
+    { ...declaredSources, ...files },
+    { "source-layout.json": declaredLayout },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
 });

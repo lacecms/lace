@@ -1,4 +1,5 @@
-// Direction: shared ← {schema, security, links}; links ← publication; shared ← content ← media ← delivery ← builds; links ← sync.
+// Directory dependencies: shared ← schema, security, links; links ← publication, sync;
+// shared ← content ← media ← delivery ← builds.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export * from "./content/collection-list.js";

@@ -1,4 +1,4 @@
-// Direction: shared ← models ← structure ← configuration.
+// Directory dependencies: shared ← models ← structure ← configuration.
 export const packageName = "@lacecms/config";
 
 export { ConfigurationError } from "./shared/errors.js";

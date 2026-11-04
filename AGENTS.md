@@ -58,4 +58,9 @@ document directory direction at the package entry. Tests sit beside modules,
 shared helpers in `src/test-support/`. Existing packages adopt this in RF4–RF6
 or when adding a second concern; admin retains its layer/slice structure.
 Remove split files from `scripts/oversized-source-baseline.json`; never grow
-baselined files. See [ADR 0020](docs/adr/0020-source-layout.md).
+baselined files. The boundary checker also enforces the directory rules in
+`scripts/source-layout.json` (add a package when it adopts the layout), freezes
+legacy module cycles in `scripts/source-cycle-baseline.json`, and limits
+`@ts-nocheck` tests to `scripts/test-typecheck-baseline.json`; a split types its
+test companions or lists them there explicitly. See
+[ADR 0020](docs/adr/0020-source-layout.md).

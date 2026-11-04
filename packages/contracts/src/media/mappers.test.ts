@@ -1,18 +1,11 @@
 // @ts-nocheck
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { DomainError, unixMilliseconds } from "@lacecms/domain";
-import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { classifyError, fromIsoTimestamp, toMediaMetadataDto } from "../index.js";
 
 describe("media metadata contracts", async () => {
-  const {
-    mediaEntityTag,
-    resolveMediaPrecondition,
-    toUpdateMediaMetadataResultDto,
-    updateMediaMetadataRequestSchema,
-    updateMediaMetadataResultSchema,
-  } = await import("../index.js");
+  const { mediaEntityTag, resolveMediaPrecondition } = await import("../index.js");
   const source = {
     createdAt: unixMilliseconds(1_700_000_000_000),
     createdBy: { displayName: "Ada", id: "user-1" },
@@ -27,14 +20,6 @@ describe("media metadata contracts", async () => {
     width: 800,
   };
   const url = "https://cms.example/api/v1/public/media/media-1";
-  const issuePaths = (input) => {
-    const result = v.safeParse(updateMediaMetadataRequestSchema, input);
-    return result.success
-      ? []
-      : result.issues.map((issue) =>
-          (issue.path ?? []).map((segment) => `/${String(segment.key)}`).join(""),
-        );
-  };
   test("the media precondition is exactly one strong updatedAt tag", () => {
     expect(mediaEntityTag(source.updatedAt)).toBe('"1791647444998"');
     expect(resolveMediaPrecondition('"1791647444998"')).toBe(1_791_647_444_998);

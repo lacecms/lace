@@ -15,7 +15,7 @@
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
     "dev:container": "ASTRO_DEV_BACKGROUND=1 ASTRO_TELEMETRY_DISABLED=1 astro dev --force --host 0.0.0.0 --port 4321 --strictPort",
     "typecheck": "ASTRO_TELEMETRY_DISABLED=1 astro sync && tsc -p tsconfig.json --noEmit",
-    "lint": "oxlint src",
+    "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"

@@ -7,7 +7,7 @@
     "dev": "node scripts/prepare.mjs && astro dev --host 127.0.0.1 --port 4322",
     "build": "node scripts/prepare.mjs && astro build && node scripts/check.mjs",
     "typecheck": "astro sync && tsc --noEmit",
-    "lint": "oxlint src scripts astro.config.mjs",
+    "lint": "oxlint --deny-warnings src scripts astro.config.mjs",
     "test": "vitest run",
     "check": "pnpm build && pnpm typecheck && pnpm test",
     "test:variants": "node scripts/variants.mjs"

@@ -71,7 +71,7 @@ export function createMcpActorResolver(input: {
       if (url.searchParams.has("access_token")) return failure(401, "invalid_token");
       const authorization = request.headers.get("authorization");
       if (!authorization) return failure(401);
-      const match = /^Bearer ([A-Za-z0-9._~+\/-]+=*)$/iu.exec(authorization);
+      const match = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/iu.exec(authorization);
       if (!match || match[1]!.length > 4096) return failure(401, "invalid_token");
       const hash = await oauthCredentialHash(match[1]!);
       const now = (input.now ?? Date.now)();

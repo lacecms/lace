@@ -117,7 +117,10 @@ export function normalizeMcpClientRegistration(value: unknown): Record<string, u
     typeof name !== "string" ||
     name.trim().length === 0 ||
     name.length > 120 ||
-    /[\u0000-\u001f\u007f]/u.test(name)
+    [...name].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code <= 0x1f || code === 0x7f;
+    })
   )
     return invalidMetadata();
   const grants = data.grant_types ?? ["authorization_code", "refresh_token"];

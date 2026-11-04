@@ -29,8 +29,25 @@ split must remove its baseline entry in the same change.
 ## Consequences
 
 RF4A introduces the layout in content without changing its public API. Later
-sessions remove their own legacy baseline entries. No general directory-level
-dependency checker is introduced; content's module graph is verified explicitly.
+sessions remove their own legacy baseline entries.
+
+Amended by RF4X (2026-11-04): the boundary checker enforces the layout instead
+of one-off verification scripts.
+
+- **Cycles.** It builds each member's production module graph from relative
+  imports, including type-only imports, and fails on a cycle. Pre-existing
+  cycles are frozen in `scripts/source-cycle-baseline.json`, which records one
+  entry per strongly connected component; components may shrink but not grow.
+- **Layout.** `scripts/source-layout.json` declares, for packages that have
+  adopted the layout, the directories each directory may import. For those
+  packages the checker rejects edges outside the declaration, subdirectory
+  `index` modules, root modules that are not manifest entries, and entry
+  headers whose `Directory dependencies:` line names a different directory set.
+- **Typecheck exceptions.** Test files that disable type checking are listed in
+  the shrinking `scripts/test-typecheck-baseline.json`; test-support modules
+  may not disable it.
+
+A package adopts the layout by adding its declaration in its own session.
 
 ## Alternatives considered
 

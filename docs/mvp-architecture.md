@@ -409,6 +409,14 @@ Existing flat packages adopt this layout in their RF4–RF6 session or a change
 adding a second concern. The boundary checker enforces the 1,000-line ceiling
 through `scripts/oversized-source-baseline.json`: oversized legacy files may
 shrink but may not grow; deleted or within-limit files must leave the baseline.
+The same checker rejects module cycles in every member's production graph
+(legacy strongly connected components are frozen in
+`scripts/source-cycle-baseline.json`) and, for packages declared in
+`scripts/source-layout.json`, imports against the declared directory direction,
+subdirectory `index` modules, root modules that are not manifest entries and
+entry headers whose `Directory dependencies:` line names other directories.
+Test files may disable type checking only while listed in the shrinking
+`scripts/test-typecheck-baseline.json`; test-support modules never may.
 See [ADR 0020](adr/0020-source-layout.md).
 
 ## 7. Generated user project

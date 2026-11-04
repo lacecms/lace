@@ -40,7 +40,9 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/*/src/**",
         "$TURBO_ROOT$/packages/*/package.json",
-        "$TURBO_ROOT$/registry/**"
+        "$TURBO_ROOT$/registry/**",
+        "$TURBO_ROOT$/lace.config.ts",
+        "$TURBO_ROOT$/apps/site/src/fixtures/**"
       ]
     },
     "@lacecms/app-docs#build": {
@@ -49,15 +51,33 @@
     },
     "test:packaged": {
       "dependsOn": ["build", "^build"],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
     },
     "@lacecms/platform-node#test:packaged": {
       "dependsOn": ["build", "^build", "@lacecms/astro#build"],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
     },
     "@lacecms/platform-cloudflare#test:packaged": {
       "dependsOn": ["build", "^build", "@lacecms/astro#build"],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
     }
   },
   "globalDependencies": ["vitest.shared.mjs"]

@@ -1,13 +1,19 @@
 /** The maximum number of internal URL occurrences in a normalized snapshot. */
 export const MAX_INTERNAL_LINK_REFERENCES = 200;
 
+/** C0 controls, DEL and C1 controls. */
+function isControlCharacter(character: string): boolean {
+  const code = character.codePointAt(0) ?? 0;
+  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+}
+
 /** Entry IDs are opaque strings, bounded by the shared identifier contract. */
 export function isInternalLinkTargetId(value: unknown): value is string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > 255 ||
-    /[\u0000-\u001f\u007f-\u009f]/u.test(value)
+    [...value].some(isControlCharacter)
   )
     return false;
   try {

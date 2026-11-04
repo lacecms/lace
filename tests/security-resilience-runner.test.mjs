@@ -7,6 +7,7 @@ import {
   ownedCommand,
 } from "../scripts/security-resilience-verification.mjs";
 import { validateAudit } from "../scripts/dependency-audit.mjs";
+import { packageRun, rootRun, vitestPhase } from "../scripts/cross-runtime-verification.mjs";
 
 test("Security required phases reject empty and unavailable definitions, preserving not-run successors", async () => {
   await expect(
@@ -117,3 +118,101 @@ test("Security audit rejects undispositioned advisories and unknown/missing lice
   for (const licenses of [[], [{}], [{ license: "unknown" }]])
     expect(() => validateAudit(base, licenses)).toThrow();
 });
+
+test("Vitest phases run package suites through their own configurations", () => {
+  const phase = vitestPhase(
+    "/out",
+    "provider",
+    [
+      rootRun("tests/durable-restart.test.mjs"),
+      packageRun(
+        "packages/platform-node/src/index.test.ts",
+        "packages/platform-node/src/migrate.test.ts",
+      ),
+      packageRun("--packaged", "packages/cli/src/upgrade-command.packaged.test.mjs"),
+      packageRun("packages/render/src"),
+    ],
+    ["--maxWorkers=2"],
+  );
+  const reporting = (index) => [
+    "--maxWorkers=2",
+    "--reporter=default",
+    "--reporter=json",
+    `--outputFile=/out/provider-${index}.json`,
+  ];
+  expect(phase.steps.map((step) => step.args)).toEqual([
+    [
+      "exec",
+      "vitest",
+      "run",
+      "tests/durable-restart.test.mjs",
+      "--exclude=.release-artifacts/**",
+      "--exclude=.lace-acceptance/**",
+      ...reporting(1),
+    ],
+    [
+      "--filter",
+      "./packages/platform-node",
+      "exec",
+      "vitest",
+      "run",
+      "src/index.test.ts",
+      "src/migrate.test.ts",
+      ...reporting(2),
+    ],
+    [
+      "--filter",
+      "./packages/cli",
+      "exec",
+      "vitest",
+      "run",
+      "--config",
+      "vitest.packaged.config.mjs",
+      "src/upgrade-command.packaged.test.mjs",
+      ...reporting(3),
+    ],
+    ["--filter", "./packages/render", "exec", "vitest", "run", ...reporting(4)],
+  ]);
+  expect(() =>
+    packageRun("packages/render/src/blocks.test.ts", "packages/sdk/src/client.test.ts"),
+  ).toThrow("mixes workspace members");
+});
+
+for (const kind of ["empty", "failed"])
+  test(`Security ${kind} package run fails its multi-run phase and leaves successors not-run`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "lace-security-steps-"));
+    try {
+      const phase = vitestPhase(root, "repositories", [
+        packageRun("packages/platform-node/src/repository-contract.test.ts"),
+        packageRun("packages/platform-cloudflare/src/repository-contract.test.ts"),
+      ]);
+      const executed = [];
+      let final;
+      await expect(
+        executeRequiredPhases(
+          [phase, { name: "later", command: "node", args: [] }],
+          async (step) => {
+            executed.push(step.name);
+            const last = executed.length === 2;
+            await writeFile(
+              step.testReport,
+              JSON.stringify({
+                success: !(last && kind === "failed"),
+                numTotalTests: last && kind === "empty" ? 0 : 1,
+                numPassedTests: last ? 0 : 1,
+                numFailedTests: last && kind === "failed" ? 1 : 0,
+                numPendingTests: 0,
+              }),
+            );
+          },
+          async (report) => {
+            final = structuredClone(report);
+          },
+        ),
+      ).rejects.toThrow();
+      expect(executed).toEqual(["repositories run 1", "repositories run 2"]);
+      expect(final.phases.map((item) => item.status)).toEqual(["failed", "not-run"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });

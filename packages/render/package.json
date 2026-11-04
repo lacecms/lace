@@ -25,7 +25,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-test.json --noEmit && tsc -p tsconfig.test.json",
-    "lint": "oxlint src type-tests",
+    "lint": "oxlint --deny-warnings src type-tests",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"

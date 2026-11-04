@@ -9,26 +9,10 @@ import {
   mediaListQuerySchema,
   mediaMetadataSchema,
   normalizeMediaTag,
-  toIsoTimestamp,
   toMediaDetailDto,
 } from "../index.js";
-import { timestamp, published } from "../test-support/rest-fixtures.js";
 
 describe("admin entry list contracts", () => {
-  const summary = {
-    draftRevision: 2,
-    id: "entry-1",
-    listValues: { author: "Lace", featured: true, rank: 3 },
-    modelKey: "posts",
-    status: "draft",
-    title: "Welcome",
-    updatedAt: toIsoTimestamp(timestamp),
-    updatedBy: { displayName: "Editor", id: "actor-1" },
-  };
-  const publishedFields = {
-    publishedAt: toIsoTimestamp(timestamp),
-    publishedSnapshotId: "snapshot-published-1",
-  };
   test("validates media list queries, uploader summaries, and bounded usage details", () => {
     expect(
       v.parse(mediaListQuerySchema, { q: "  Cover ", sort: "-size", type: "image/png", x: "1" }),
@@ -116,35 +100,6 @@ describe("admin entry list contracts", () => {
 });
 
 describe("media metadata contracts", async () => {
-  const {
-    mediaEntityTag,
-    resolveMediaPrecondition,
-    toUpdateMediaMetadataResultDto,
-    updateMediaMetadataRequestSchema,
-    updateMediaMetadataResultSchema,
-  } = await import("../index.js");
-  const source = {
-    createdAt: unixMilliseconds(1_700_000_000_000),
-    createdBy: { displayName: "Ada", id: "user-1" },
-    filename: "bike.png",
-    height: 600,
-    id: "media-1",
-    mimeType: "image/png",
-    size: 12,
-    status: "active",
-    updatedAt: unixMilliseconds(1_791_647_444_998),
-    usageCount: 0,
-    width: 800,
-  };
-  const url = "https://cms.example/api/v1/public/media/media-1";
-  const issuePaths = (input) => {
-    const result = v.safeParse(updateMediaMetadataRequestSchema, input);
-    return result.success
-      ? []
-      : result.issues.map((issue) =>
-          (issue.path ?? []).map((segment) => `/${String(segment.key)}`).join(""),
-        );
-  };
   test("clients share the server tag normalization", () => {
     expect(normalizeMediaTag(" Cover-Shot ")).toBe("cover-shot");
     for (const invalid of ["summer trip", "", "x".repeat(41), "a\n"]) {
