@@ -1,7 +1,6 @@
 import { readBuildExportPage, readBuildExportQuery } from "./build-export.js";
 import {
   AuthorizationError,
-  invalid,
   notFound,
   parse,
   response,
@@ -10,7 +9,7 @@ import {
 } from "../shared/http.js";
 import { collectionItemParams, modelKeyParams, pagination, publicPath } from "../shared/request.js";
 import { collectionModel, globalModel, pageModel } from "../shared/content-config.js";
-import { SLUG_PATTERN } from "@lacecms/contracts";
+import { collectionPathFailure } from "@lacecms/contracts";
 import {
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
@@ -127,16 +126,12 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
     async (context) => {
       const model = collectionModel(input.config, context.req.param("modelKey"));
       if (model === undefined) return notFound();
-      let path: string;
-      try {
-        const slug = context.req.param("slug");
-        if (!SLUG_PATTERN.test(slug)) invalid("The submitted value is invalid.", "/slug");
-        path = model.route.replace(":slug", slug);
-      } catch {
+      const resolved = collectionPathFailure(model.route, context.req.param("slug"));
+      if (!("path" in resolved))
         return validationResponse([
           { code: "invalid_value", message: "The submitted value is invalid.", path: "/slug" },
         ]);
-      }
+      const path = resolved.path;
       const entry = await input.publicContent.loadPublic(path);
       return entry === null
         ? notFound()

@@ -1,6 +1,8 @@
 import {
+  BLOCK_TYPE_PATTERN,
   canonicalizeJson,
   defineBlock,
+  FIELD_KEY_PATTERN,
   normalizeFieldDefinition,
   toBlockMetadata,
 } from "@lacecms/content";
@@ -36,7 +38,7 @@ function isFieldMetadataMap(value: unknown): value is FieldMetadataMapDto {
     Object.getOwnPropertySymbols(value).length === 0 &&
     Object.entries(Object.getOwnPropertyDescriptors(value)).every(
       ([key, descriptor]) =>
-        /^[A-Za-z][A-Za-z0-9]*$/u.test(key) &&
+        FIELD_KEY_PATTERN.test(key) &&
         descriptor.enumerable &&
         "value" in descriptor &&
         isFieldMetadata(descriptor.value),
@@ -62,7 +64,7 @@ function isBlockMetadata(value: unknown): value is BlockMetadata {
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) return false;
   if (
     typeof value.type !== "string" ||
-    !/^[A-Za-z][A-Za-z0-9-]*$/u.test(value.type) ||
+    !BLOCK_TYPE_PATTERN.test(value.type) ||
     typeof value.version !== "number" ||
     !Number.isSafeInteger(value.version) ||
     value.version < 1 ||

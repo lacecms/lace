@@ -1,9 +1,18 @@
 import { MAX_MEDIA_SEARCH_LENGTH } from "@lacecms/content";
-import { normalizeMediaTag, normalizeMediaTags } from "@lacecms/domain";
+import {
+  MAX_MEDIA_TAG_FILTERS,
+  MAX_MEDIA_TAG_INPUT_LENGTH,
+  MAX_MEDIA_TAG_LENGTH,
+  MAX_MEDIA_TAGS_PER_ITEM,
+  MEDIA_TAG_PATTERN,
+  normalizeMediaTag,
+  normalizeMediaTags,
+} from "@lacecms/domain";
 import * as v from "valibot";
 import {
   cursorPageSchema,
   opaqueCursorSchema,
+  pageLimitQuerySchema,
   positiveIntegerSchema,
   mediaSha256Schema,
 } from "../shared/primitives.js";
@@ -35,11 +44,12 @@ export { MAX_MEDIA_USAGE_ENTRIES } from "@lacecms/content";
 export const mediaTagInputSchema = v.pipe(
   v.string(),
   v.description(
-    "A tag of 1–40 ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most 200 code points before normalization. Control characters and internal spaces are invalid.",
+    `A tag of 1–${MAX_MEDIA_TAG_LENGTH} ASCII letters, digits or hyphens after trimming surrounding spaces and lowercasing; at most ${MAX_MEDIA_TAG_INPUT_LENGTH} code points before normalization. Control characters and internal spaces are invalid.`,
   ),
   v.check(
-    (value) => [...value].length <= 200 && normalizeMediaTag(value) !== undefined,
-    "Use 1–40 ASCII letters, digits or hyphens.",
+    (value) =>
+      [...value].length <= MAX_MEDIA_TAG_INPUT_LENGTH && normalizeMediaTag(value) !== undefined,
+    `Use 1–${MAX_MEDIA_TAG_LENGTH} ASCII letters, digits or hyphens.`,
   ),
   v.transform((value) => normalizeMediaTag(value)!),
 );
@@ -50,7 +60,7 @@ export const mediaTagsInputSchema = v.pipe(
     const result = normalizeMediaTags(dataset.value);
     if ("issue" in result)
       addIssue({
-        message: "Supply at most 20 distinct tags.",
+        message: `Supply at most ${MAX_MEDIA_TAGS_PER_ITEM} distinct tags.`,
         path: [
           {
             type: "array",
@@ -67,17 +77,17 @@ export const mediaTagsInputSchema = v.pipe(
 const mediaFilterTagsSchema = v.pipe(
   v.union([v.string(), v.array(v.string())]),
   v.transform((value) => (typeof value === "string" ? [value] : value)),
-  v.pipe(v.array(mediaTagInputSchema), v.maxLength(5)),
+  v.pipe(v.array(mediaTagInputSchema), v.maxLength(MAX_MEDIA_TAG_FILTERS)),
   v.transform((tags) => [...new Set(tags)].sort()),
 );
 export const mediaTagCatalogQuerySchema = v.object({
   after: v.optional(opaqueCursorSchema),
-  limit: v.optional(v.pipe(v.string(), v.regex(/^(?:[1-9]|[1-9][0-9]|100)$/u))),
+  limit: v.optional(pageLimitQuerySchema),
   q: v.optional(mediaTagInputSchema),
 });
 export const mediaTagCatalogSchema = cursorPageSchema(
   v.strictObject({
-    tag: v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,40}(?![\s\S])/u)),
+    tag: v.pipe(v.string(), v.regex(MEDIA_TAG_PATTERN)),
     count: positiveIntegerSchema,
   }),
 );
@@ -95,7 +105,7 @@ export const mediaListQuerySchema = v.object({
     ),
   ),
   after: v.optional(opaqueCursorSchema),
-  limit: v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/u))),
+  limit: v.optional(pageLimitQuerySchema),
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_MEDIA_SEARCH_LENGTH))),
   sort: v.optional(mediaSortSchema),
   type: v.optional(mediaMimeTypeSchema),

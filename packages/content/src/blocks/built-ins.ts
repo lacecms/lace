@@ -1,6 +1,7 @@
 import { field } from "../fields/builders.js";
 import { deepFreeze } from "../shared/objects.js";
 import { defineBlock } from "./definition.js";
+import { VIDEO_EMBED_PROVIDERS } from "../fields/video-embeds.js";
 import {
   listLayoutSettings,
   lightboxSetting,
@@ -121,7 +122,7 @@ export const builtInBlocks = deepFreeze({
             media: field.media({ label: "Image", required: true }),
             videoUrl: field.url({
               required: true,
-              embedProviders: ["youtube", "vimeo"],
+              embedProviders: VIDEO_EMBED_PROVIDERS,
               label: "Video URL",
               description: "Paste a YouTube or Vimeo video link, not iframe code.",
             }),
@@ -302,7 +303,7 @@ export const builtInBlocks = deepFreeze({
     fields: {
       url: field.url({
         required: true,
-        embedProviders: ["youtube", "vimeo"],
+        embedProviders: VIDEO_EMBED_PROVIDERS,
         label: "Video URL",
         description: "Paste a YouTube or Vimeo video link, not iframe code.",
       }),

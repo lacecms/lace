@@ -1,5 +1,10 @@
-import { MAX_MEDIA_USAGE_ENTRIES } from "@lacecms/content";
-import { isMediaFocalCoordinate, normalizeMediaText } from "@lacecms/domain";
+import { MAX_MEDIA_USAGE_ENTRIES, MAX_TITLE_LENGTH } from "@lacecms/content";
+import {
+  isMediaFocalCoordinate,
+  MAX_MEDIA_TAGS_PER_ITEM,
+  MEDIA_TAG_PATTERN,
+  normalizeMediaText,
+} from "@lacecms/domain";
 import * as v from "valibot";
 import {
   cursorPageSchema,
@@ -45,8 +50,8 @@ export const mediaFocalPointSchema = v.strictObject({
 
 export const mediaMetadataSchema = v.strictObject({
   tags: v.pipe(
-    v.array(v.pipe(v.string(), v.regex(/^[a-z0-9-]{1,40}(?![\s\S])/u))),
-    v.maxLength(20),
+    v.array(v.pipe(v.string(), v.regex(MEDIA_TAG_PATTERN))),
+    v.maxLength(MAX_MEDIA_TAGS_PER_ITEM),
     v.check(
       (tags) => tags.every((tag, i) => i === 0 || tags[i - 1]! < tag),
       "Tags must be unique and sorted.",
@@ -103,7 +108,7 @@ export const mediaUsageEntrySchema = v.strictObject({
   modelKey: identifierSchema,
   slug: v.optional(identifierSchema),
   status: contentEntryStatusSchema,
-  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
 });
 /** Admin media details: metadata plus the bounded entries that use the item. */
 export const mediaDetailSchema = v.strictObject({

@@ -6,7 +6,7 @@ import {
 } from "@lacecms/db";
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
-import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import { MAX_PAGE_SIZE, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
@@ -1830,7 +1830,7 @@ export class NodeContentRepository
   }
 
   public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {
-    const bounded = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const bounded = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.trunc(limit)));
     const rows = this.connection
       .prepare("select * from site_builds order by requested_at desc, id desc limit ?")
       .all(bounded) as SiteBuildRow[];
@@ -1878,7 +1878,7 @@ export class NodeContentRepository
     readonly limit: number;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
   }): Promise<readonly SiteBuildWorkLease[]> {
-    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > MAX_PAGE_SIZE)
       throw new TypeError("Build claim limit is invalid.");
     try {
       return this.connection.transaction(() => {

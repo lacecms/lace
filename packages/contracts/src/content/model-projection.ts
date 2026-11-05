@@ -75,7 +75,7 @@ export function toContentModelDto(model: ContentModelSource): ContentModelDto {
 }
 
 export interface ContentModelSource {
-  readonly blockDefinitions?: readonly BlockMetadata[];
+  readonly blockDefinitions: readonly BlockMetadata[];
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: FieldMetadataMapDto;

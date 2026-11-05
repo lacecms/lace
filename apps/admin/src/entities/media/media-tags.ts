@@ -1,9 +1,7 @@
-import { normalizeMediaTag } from "@lacecms/contracts";
+import { MAX_MEDIA_TAG_FILTERS, normalizeMediaTag } from "@lacecms/contracts";
 
-/** The API's tag limit per media item. */
-export const MAX_MEDIA_TAGS_PER_ITEM = 20;
-/** The API's limit of tags combined in one list filter. */
-export const MAX_MEDIA_TAG_FILTERS = 5;
+/** The API's tag limits per media item and per list filter. */
+export { MAX_MEDIA_TAG_FILTERS, MAX_MEDIA_TAGS_PER_ITEM } from "@lacecms/contracts";
 
 /**
  * A tag filter from untrusted input (a URL value or local state): valid tags

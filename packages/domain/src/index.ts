@@ -13,6 +13,7 @@ export * from "./shared/errors.js";
 export * from "./access/actors.js";
 export * from "./access/permissions.js";
 export * from "./access/errors.js";
+export * from "./access/display-name.js";
 
 // media
 export * from "./media/metadata.js";

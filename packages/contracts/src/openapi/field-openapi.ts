@@ -1,4 +1,10 @@
-import { BLOCK_SETTING_FIELD_TYPES, fieldTypeCapabilities, fieldTypesWith } from "@lacecms/content";
+import {
+  BLOCK_SETTING_FIELD_TYPES,
+  FIELD_KEY_SOURCE,
+  fieldTypeCapabilities,
+  fieldTypesWith,
+  VIDEO_EMBED_PROVIDERS,
+} from "@lacecms/content";
 import type { FieldType } from "@lacecms/content";
 
 /** Recursive metadata documentation; runtime checks remain in the shared descriptors. */
@@ -27,7 +33,7 @@ const extras: Partial<Record<FieldType, Record<string, unknown>>> = {
       type: "array",
       minItems: 1,
       uniqueItems: true,
-      items: { enum: ["youtube", "vimeo"] },
+      items: { enum: [...VIDEO_EMBED_PROVIDERS] },
     },
   },
 };
@@ -45,7 +51,7 @@ const scalar = (type: FieldType) => ({
 });
 const fieldMap = {
   type: "object",
-  propertyNames: { pattern: "^[A-Za-z][A-Za-z0-9]*$" },
+  propertyNames: { pattern: `^${FIELD_KEY_SOURCE}$` },
   additionalProperties: ref("FieldDefinition"),
 };
 export const contentMetadataOpenApi = {
@@ -65,7 +71,7 @@ export const contentMetadataOpenApi = {
           additionalProperties: false,
           required: ["key", "label", "fields"],
           properties: {
-            key: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9]*$" },
+            key: { type: "string", pattern: `^${FIELD_KEY_SOURCE}$` },
             label: { type: "string", minLength: 1 },
             description: { type: "string" },
             fields: { type: "array", minItems: 1, items: { type: "string" } },

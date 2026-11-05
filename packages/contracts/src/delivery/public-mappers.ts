@@ -17,7 +17,7 @@ import type {
 
 /** A published entry with the media its published snapshot references. */
 export interface PublicEntrySource {
-  readonly internalLinks?: readonly PublicInternalLinkReference[];
+  readonly internalLinks: readonly PublicInternalLinkReference[];
   readonly entry: ContentEntry;
   readonly media: readonly PublicMediaSource[];
   readonly path: string;
@@ -152,7 +152,7 @@ export function toPublicContentListDto(
 
 /** A published global and the media its publication references. */
 export interface PublicGlobalSource {
-  readonly internalLinks?: readonly PublicInternalLinkReference[];
+  readonly internalLinks: readonly PublicInternalLinkReference[];
   readonly entry: ContentEntry;
   readonly media: readonly PublicMediaSource[];
 }

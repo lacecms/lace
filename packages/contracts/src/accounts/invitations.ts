@@ -1,3 +1,4 @@
+import { MAX_DISPLAY_NAME_LENGTH } from "@lacecms/domain";
 import * as v from "valibot";
 import { identifierSchema, isoTimestampSchema } from "../shared/primitives.js";
 import { emailSchema, roleSchema, passwordSchema } from "./users.js";
@@ -16,8 +17,8 @@ export const displayNameSchema = v.pipe(
   v.string(),
   v.maxLength(1_024),
   v.check(
-    (value) => value.trim().length >= 1 && value.trim().length <= 120,
-    "Enter a name of 1 to 120 characters.",
+    (value) => value.trim().length >= 1 && value.trim().length <= MAX_DISPLAY_NAME_LENGTH,
+    `Enter a name of 1 to ${MAX_DISPLAY_NAME_LENGTH} characters.`,
   ),
   v.check((value) => !controlCharacterPattern.test(value), "Control characters are not allowed."),
 );

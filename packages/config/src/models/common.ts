@@ -1,8 +1,7 @@
-import { deepFreeze, isPlainObject } from "@lacecms/content";
+import { BLOCK_TYPE_PATTERN, deepFreeze, isPlainObject } from "@lacecms/content";
 import { normalizeFieldVisibility, normalizeFormLayout } from "@lacecms/content";
 import type { FieldVisibility } from "@lacecms/content";
 import {
-  BLOCK_KEY_PATTERN,
   assertOptionalDisplayValue,
   assertStableKey,
   assertVersion,
@@ -50,7 +49,7 @@ export function normalizeCommonModel<Fields extends FieldMap>(
     `model.${input.key}.visibility`,
   ) as FieldVisibility<Fields> | undefined;
   const removedFields = normalizeRemovedFields(input.removedFields);
-  const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_KEY_PATTERN);
+  const removedBlocks = normalizeKeyList(input.removedBlocks, "removedBlocks", BLOCK_TYPE_PATTERN);
   assertSynchronizationHints(
     input.key,
     fields,

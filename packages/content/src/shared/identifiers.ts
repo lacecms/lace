@@ -2,6 +2,8 @@
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 /** Maximum slug length shared by publish, REST, and admin validation. */
 export const MAX_SLUG_LENGTH = 100;
+/** Model keys: a lowercase ASCII letter, then lowercase letters or digits in runs joined by single hyphens. */
+export const MODEL_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 /** Model kinds: routed singletons, routed lists, and route-less singletons. */
 export type ContentModelKind = "collection" | "global" | "page";
 /** Maximum entry search length at the transport boundary; runtime bounds may be narrower. */
@@ -12,6 +14,12 @@ export const MAX_MEDIA_SEARCH_LENGTH = 200;
 export const MAX_MEDIA_USAGE_ENTRIES = 50;
 /** Entries one build-export page holds at most, and the default page size. */
 export const MAX_BUILD_EXPORT_PAGE_SIZE = 100;
+/** Largest page an admin list read returns. */
+export const MAX_PAGE_SIZE = 100;
+/** Page size of an admin list read that omits its limit. */
+export const DEFAULT_PAGE_SIZE = 50;
+/** Entry IDs one link-target resolution accepts at most. */
+export const MAX_LINK_RESOLVE_IDS = 200;
 
 /** Lowercase ASCII letters, digits and single hyphens, at most `MAX_SLUG_LENGTH` characters. */
 export function isContentSlug(value: unknown): value is string {

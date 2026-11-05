@@ -1,10 +1,5 @@
+import { MODEL_KEY_PATTERN } from "@lacecms/content";
 import { fail } from "./errors.js";
-
-const STABLE_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
-
-export const FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
-
-export const BLOCK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
 
 function assertString(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string") {
@@ -20,7 +15,7 @@ export function assertOptionalDisplayValue(value: unknown, name: string): void {
 
 export function assertStableKey(value: unknown, name: string): asserts value is string {
   assertString(value, name);
-  if (!STABLE_KEY_PATTERN.test(value)) {
+  if (!MODEL_KEY_PATTERN.test(value)) {
     fail(`${name} must be a lowercase kebab-case key.`);
   }
 }

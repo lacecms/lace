@@ -29,11 +29,25 @@ export function normalizeMediaText(value: string, kind: MediaTextKind): string |
   return [...text].length > limit ? undefined : text;
 }
 
+/** Maximum length of a normalized media tag. */
+export const MAX_MEDIA_TAG_LENGTH = 40;
+/** Maximum code points of one submitted tag before normalization. */
+export const MAX_MEDIA_TAG_INPUT_LENGTH = 200;
+/** Maximum distinct tags of one media item. */
+export const MAX_MEDIA_TAGS_PER_ITEM = 20;
+/** Maximum tags combined in one media-list filter. */
+export const MAX_MEDIA_TAG_FILTERS = 5;
+/** A normalized media tag: lowercase ASCII letters, digits or hyphens. */
+export const MEDIA_TAG_PATTERN = new RegExp(
+  `^[a-z0-9-]{1,${MAX_MEDIA_TAG_LENGTH}}(?![\\s\\S])`,
+  "u",
+);
+
 /** ASCII-only media organization; reject controls before trimming can hide them. */
 export function normalizeMediaTag(value: unknown): string | undefined {
   if (typeof value !== "string" || /\p{Cc}/u.test(value)) return undefined;
   const tag = value.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
-  return /^[a-z0-9-]{1,40}$/.test(tag) ? tag : undefined;
+  return MEDIA_TAG_PATTERN.test(tag) ? tag : undefined;
 }
 
 /** Reports the original input position, including the first excessive distinct tag. */
@@ -45,7 +59,7 @@ export function normalizeMediaTags(
     const tag = normalizeMediaTag(value);
     if (tag === undefined) return { issue: index };
     tags.add(tag);
-    if (tags.size > 20) return { issue: index };
+    if (tags.size > MAX_MEDIA_TAGS_PER_ITEM) return { issue: index };
   }
   return { tags: Object.freeze([...tags].sort()) };
 }

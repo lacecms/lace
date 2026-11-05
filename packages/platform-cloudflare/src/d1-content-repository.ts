@@ -6,7 +6,7 @@ import {
 } from "@lacecms/db";
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
-import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import { CLOUDFLARE_LIST_QUERY_LIMITS, MAX_PAGE_SIZE } from "@lacecms/content";
 import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
@@ -805,7 +805,7 @@ export class D1ContentRepository
   }
 
   public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {
-    const bounded = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const bounded = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.trunc(limit)));
     const rows = await this.all<SiteBuildRow>(
       "select * from site_builds order by requested_at desc, id desc limit ?",
       bounded,
@@ -1789,7 +1789,7 @@ export class D1ContentRepository
     readonly limit: number;
     readonly now: UnixMilliseconds;
   }): Promise<readonly SiteBuildWorkLease[]> {
-    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > MAX_PAGE_SIZE)
       throw new TypeError("Build claim limit is invalid.");
     const expired = input.now - DISPATCHER_LEASE_DURATION_MS;
     const rows = await this.all<OutboxRow>(

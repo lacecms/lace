@@ -1,4 +1,11 @@
 import { expect, test } from "vitest";
+import { field, toFieldMetadata } from "@lacecms/content";
+import {
+  filterParityCases,
+  filterParityFields,
+  filterParityFilterableFields,
+  filterParityUnlistedField,
+} from "@lacecms/test-utils/filter-parity";
 import { resolveCollectionListSearch, collectionFilterProblem } from "./collection-query.js";
 import {
   CLOUDFLARE_LIST_QUERY_LIMITS,
@@ -41,4 +48,29 @@ test("metadata resolves hidden fields and drops only unsupported or over-budget 
     resolveCollectionListSearch(query, { ...model, listOptions: undefined }).sort,
   ).toBeUndefined();
   expect(collectionFilterProblem(model, { field: "n", op: "range", min: 2, max: 1 })).toBeDefined();
+});
+
+test("the condition editor follows the shared filter parity table", () => {
+  const parityModel: ContentModelDto = {
+    key: "posts",
+    kind: "collection",
+    route: "/posts/:slug",
+    version: 1,
+    blocks: [],
+    fields: Object.fromEntries(
+      Object.entries({
+        ...filterParityFields,
+        [filterParityUnlistedField]: field.text(),
+      }).map(([key, definition]) => [key, toFieldMetadata(definition)]),
+    ),
+    listOptions: { filterableFields: [...filterParityFilterableFields] },
+  };
+  expect(
+    Object.fromEntries(
+      filterParityCases.map((entry) => [
+        entry.name,
+        collectionFilterProblem(parityModel, entry.filter) === undefined,
+      ]),
+    ),
+  ).toEqual(Object.fromEntries(filterParityCases.map((entry) => [entry.name, entry.accepted])));
 });

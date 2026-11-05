@@ -1,6 +1,5 @@
+import { FIELD_KEY_PATTERN } from "./definitions.js";
 import type { FieldDefinition, ModelFieldDefinitions } from "./definitions.js";
-
-const KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
 
 /** Parse a root key or wildcard schema pointer, never a concrete item index. */
 export function parseSchemaPath(value: string): readonly string[] {
@@ -9,7 +8,7 @@ export function parseSchemaPath(value: string): readonly string[] {
     typeof value === "string" && value.startsWith("/") ? value.slice(1).split("/") : [value];
   if (
     parts.length === 0 ||
-    parts.some((part) => part !== "*" && !KEY.test(part)) ||
+    parts.some((part) => part !== "*" && !FIELD_KEY_PATTERN.test(part)) ||
     parts[0] === "*"
   )
     throw new TypeError(`Invalid schema path: ${String(value)}.`);

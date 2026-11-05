@@ -365,7 +365,10 @@ export type ModelFieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /** Portable normalized values, including incomplete draft groups. */
 export type ModelFieldValues = JsonObject;
-export const FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
+/** Field key grammar without anchors, for OpenAPI strings and composed grammars. */
+export const FIELD_KEY_SOURCE = "[A-Za-z][A-Za-z0-9]*";
+/** Field keys: an ASCII letter followed by ASCII letters or digits. */
+export const FIELD_KEY_PATTERN = new RegExp(`^${FIELD_KEY_SOURCE}$`, "u");
 
 /**
  * The target keys of an owner's inferred conditional-field rules: keys the

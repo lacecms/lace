@@ -72,6 +72,7 @@
     "delivery": [],
     "errors": [],
     "visibility": [],
+    "filters": [],
     "store": ["shared"],
     "repository-contract": ["delivery", "visibility"],
     "security-contract": ["repository-contract"]

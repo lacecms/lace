@@ -1,21 +1,21 @@
 import { failure } from "../shared/failures.js";
 import type { ConfigurationSyncContentWrite } from "@lacecms/application";
 
-const BACKFILL_FIELD_KEY = /^[A-Za-z][A-Za-z0-9]*$/u;
+import { FIELD_KEY_PATTERN } from "@lacecms/content";
 
 /**
  * Set-based default backfill for one field of one model. Binds the default as
  * JSON text and the model key; rows that already hold the key are untouched.
  */
 export function backfillFieldSql(fieldKey: string): string {
-  if (!BACKFILL_FIELD_KEY.test(fieldKey)) failure("Backfill field key is invalid.");
+  if (!FIELD_KEY_PATTERN.test(fieldKey)) failure("Backfill field key is invalid.");
   return `update content_snapshots set fields_json = json_set(fields_json, '$.${fieldKey}', json(?))
    where entry_id in (select id from content_entries where model_key = ?)
      and json_type(fields_json, '$.${fieldKey}') is null`;
 }
 
 function syncFieldPath(fieldKey: string): string {
-  if (!BACKFILL_FIELD_KEY.test(fieldKey)) failure("Synchronization field key is invalid.");
+  if (!FIELD_KEY_PATTERN.test(fieldKey)) failure("Synchronization field key is invalid.");
   return `'$.${fieldKey}'`;
 }
 

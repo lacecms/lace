@@ -6,7 +6,7 @@ import {
   toFieldMetadata,
 } from "@lacecms/content";
 import type { FieldDefinition } from "@lacecms/content";
-import { FIELD_KEY_PATTERN, BLOCK_KEY_PATTERN } from "../shared/assertions.js";
+import { FIELD_KEY_PATTERN, BLOCK_TYPE_PATTERN } from "@lacecms/content";
 import type { FieldMap } from "./types.js";
 import { fail } from "../shared/errors.js";
 
@@ -154,7 +154,7 @@ export function normalizeBlocks(value: readonly string[] | undefined): readonly 
   const normalized: string[] = [];
   const seen = new Set<string>();
   for (const blockKey of value) {
-    if (typeof blockKey !== "string" || !BLOCK_KEY_PATTERN.test(blockKey)) {
+    if (typeof blockKey !== "string" || !BLOCK_TYPE_PATTERN.test(blockKey)) {
       fail("blocks must contain valid block keys.");
     }
     if (seen.has(blockKey)) {

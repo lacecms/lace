@@ -1,4 +1,10 @@
-import { MAX_ENTRY_SEARCH_LENGTH, MAX_SLUG_LENGTH } from "@lacecms/content";
+import {
+  FIELD_KEY_PATTERN,
+  FIELD_KEY_SOURCE,
+  MAX_ENTRY_SEARCH_LENGTH,
+  MAX_SLUG_LENGTH,
+  MAX_TITLE_LENGTH,
+} from "@lacecms/content";
 import * as v from "valibot";
 import { jsonObjectSchema } from "../shared/json.js";
 import {
@@ -6,6 +12,7 @@ import {
   nonNegativeIntegerSchema,
   isoTimestampSchema,
   opaqueCursorSchema,
+  pageLimitQuerySchema,
   cursorPageSchema,
 } from "../shared/primitives.js";
 import { contentBlockSchema } from "./blocks.js";
@@ -27,7 +34,7 @@ const snapshotFields = {
   /** Present for entries of models with SEO enabled. */
   seo: v.optional(seoValueSchema),
   slug: v.optional(identifierSchema),
-  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
   updatedAt: isoTimestampSchema,
   updatedBy: actorSchema,
 };
@@ -87,13 +94,13 @@ export const contentEntrySystemSortSchema = v.picklist([
 ]);
 export const contentEntrySortSchema = v.union([
   contentEntrySystemSortSchema,
-  v.pipe(v.string(), v.regex(/^-?field:[A-Za-z][A-Za-z0-9]*$/u)),
+  v.pipe(v.string(), v.regex(new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u"))),
 ]);
 export { MAX_ENTRY_SEARCH_LENGTH } from "@lacecms/content";
 
 export const listValueSchema = v.union([v.string(), v.pipe(v.number(), v.finite()), v.boolean()]);
 export const listValuesSchema = v.record(
-  v.pipe(v.string(), v.regex(/^[A-Za-z][A-Za-z0-9]*$/u)),
+  v.pipe(v.string(), v.regex(FIELD_KEY_PATTERN)),
   listValueSchema,
 );
 
@@ -119,7 +126,7 @@ export const contentEntrySummarySchema = v.pipe(
     publishedSnapshotId: v.optional(identifierSchema),
     slug: v.optional(identifierSchema),
     status: contentEntryStatusSchema,
-    title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+    title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
     updatedAt: isoTimestampSchema,
     updatedBy: actorSummarySchema,
   }),
@@ -159,7 +166,7 @@ export const contentEntryListQuerySchema = v.object({
       ),
     ),
   ),
-  limit: v.optional(v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/u))),
+  limit: v.optional(pageLimitQuerySchema),
   q: v.optional(
     v.pipe(
       v.string(),

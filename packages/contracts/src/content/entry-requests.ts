@@ -1,3 +1,4 @@
+import { MAX_TITLE_LENGTH } from "@lacecms/content";
 import * as v from "valibot";
 import { jsonObjectSchema } from "../shared/json.js";
 import { identifierSchema, expectedRevisionSchema } from "../shared/primitives.js";
@@ -11,7 +12,7 @@ const editableDraftFields = {
   /** Absent or `null` stores no SEO values; refused for a model without SEO. */
   seo: v.optional(v.nullable(seoInputSchema)),
   slug: v.optional(identifierSchema),
-  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
 };
 
 export const createContentEntryRequestSchema = v.strictObject(editableDraftFields);

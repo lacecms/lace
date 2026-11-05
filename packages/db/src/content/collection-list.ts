@@ -7,7 +7,7 @@ import type {
   ContentEntryListPage,
   ListContentEntriesInput,
 } from "@lacecms/application";
-import { fieldTypeCapabilities, sha256CanonicalJson } from "@lacecms/content";
+import { FIELD_KEY_PATTERN, fieldTypeCapabilities, sha256CanonicalJson } from "@lacecms/content";
 import { opaqueCursor } from "@lacecms/application";
 import {
   decodeEntryCursor,
@@ -57,7 +57,7 @@ class Bindings {
     return `?${this.params.length}`;
   }
   public path(key: string): string {
-    if (!/^[A-Za-z][A-Za-z0-9]*$/u.test(key)) throw new CollectionQueryValidationError("/sort");
+    if (!FIELD_KEY_PATTERN.test(key)) throw new CollectionQueryValidationError("/sort");
     const old = this.paths.get(key);
     if (old) return old;
     const parameter = this.add(`$.${key}`);

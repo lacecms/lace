@@ -4,6 +4,6 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/index.ts", "src/visibility-parity.ts"],
+  "include": ["src/index.ts", "src/visibility-parity.ts", "src/filter-parity.ts"],
   "exclude": ["src/**/*.test.ts", "src/test-support/**"]
 }

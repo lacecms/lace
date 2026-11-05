@@ -1,4 +1,8 @@
-import { isInternalLinkTargetId, sha256CanonicalJson } from "@lacecms/content";
+import {
+  isInternalLinkTargetId,
+  MAX_LINK_RESOLVE_IDS,
+  sha256CanonicalJson,
+} from "@lacecms/content";
 import {
   assertLinkImpactAcknowledgment,
   assertLinkPageLimit,
@@ -154,7 +158,11 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
   public async resolveLinkTargets(
     ids: readonly string[],
   ): Promise<Readonly<Record<string, LinkTargetStatus>>> {
-    if (ids.length > 200 || new Set(ids).size !== ids.length || !ids.every(isInternalLinkTargetId))
+    if (
+      ids.length > MAX_LINK_RESOLVE_IDS ||
+      new Set(ids).size !== ids.length ||
+      !ids.every(isInternalLinkTargetId)
+    )
       invalid();
     if (ids.length === 0) return {};
     const rows = await this.db.all<TargetRow>(LINK_TARGETS_SQL, JSON.stringify(ids));

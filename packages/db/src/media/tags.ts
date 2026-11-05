@@ -1,13 +1,13 @@
 import { failure } from "../shared/failures.js";
 import { assertPageSize } from "../shared/values.js";
 import { decodeSortCursor } from "../shared/cursors.js";
-import { normalizeMediaTags, normalizeMediaTag } from "@lacecms/domain";
+import { MAX_MEDIA_TAG_FILTERS, normalizeMediaTags, normalizeMediaTag } from "@lacecms/domain";
 import type { ListMediaInput } from "@lacecms/application";
 import { isMediaSha256 } from "@lacecms/domain";
 
 /** Canonical filter tags are also used to bind list cursors. */
 export function normalizedMediaFilterTags(tags: readonly string[] = []): readonly string[] {
-  if (tags.length > 5) failure("Supply at most five filter tags.");
+  if (tags.length > MAX_MEDIA_TAG_FILTERS) failure("Supply at most five filter tags.");
   const result = normalizeMediaTags(tags);
   if ("issue" in result) failure(`Invalid media filter tag at ${result.issue}.`);
   return result.tags;

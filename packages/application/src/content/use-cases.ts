@@ -14,6 +14,8 @@ import {
   declaresFieldVisibility,
   detachFieldMedia,
   encodeFieldPath,
+  FIELD_KEY_SOURCE,
+  MAX_DRAFT_MEDIA_REFERENCES,
   publishedBlockData,
   publishedFieldValues,
   sha256CanonicalJson,
@@ -102,6 +104,8 @@ import {
   systemTitle,
   normalizeDraftCandidate,
 } from "./draft-normalization.js";
+const FIELD_SORT_PATTERN = new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u");
+
 function commandEntry(result: ContentCommandResult): ContentEntry {
   if (result.entry === undefined) {
     throw new DomainError("CONTENT_INVALID_STATE", "Content command did not return an entry.");
@@ -256,7 +260,7 @@ export class ContentUseCases {
     if (
       input.sort !== undefined &&
       !CONTENT_ENTRY_SORTS.includes(input.sort as ContentEntrySort) &&
-      !/^-?field:[A-Za-z][A-Za-z0-9]*$/u.test(input.sort)
+      !FIELD_SORT_PATTERN.test(input.sort)
     ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry sort is unsupported.");
     }
@@ -600,10 +604,10 @@ export class ContentUseCases {
         ),
       );
     }
-    if (mediaReferences.length > 200) {
+    if (mediaReferences.length > MAX_DRAFT_MEDIA_REFERENCES) {
       throw new DomainError(
         "CONTENT_INVALID_STATE",
-        "A draft must not contain more than 200 media references.",
+        `A draft must not contain more than ${MAX_DRAFT_MEDIA_REFERENCES} media references.`,
       );
     }
     const ids = [...new Set(mediaReferences.map((reference) => reference.mediaId))];

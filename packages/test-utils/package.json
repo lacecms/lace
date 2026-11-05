@@ -12,6 +12,10 @@
     "./visibility-parity": {
       "types": "./dist/visibility-parity.d.ts",
       "import": "./dist/visibility-parity.js"
+    },
+    "./filter-parity": {
+      "types": "./dist/filter-parity.d.ts",
+      "import": "./dist/filter-parity.js"
     }
   },
   "scripts": {

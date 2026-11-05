@@ -1,6 +1,8 @@
 import { invalid, notFound, response, validationHook } from "../shared/http.js";
 import { mediaIdParams, pagination } from "../shared/request.js";
 import {
+  MAX_MEDIA_TAG_INPUT_LENGTH,
+  MAX_MEDIA_TAGS_PER_ITEM,
   mediaDetailSchema,
   mediaDeleteQuerySchema,
   mediaListQuerySchema,
@@ -100,11 +102,11 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
                 file: { type: "string", format: "binary" },
                 tags: {
                   type: "array",
-                  maxItems: 20,
+                  maxItems: MAX_MEDIA_TAGS_PER_ITEM,
                   items: {
                     type: "string",
                     description: "ASCII tag: letters, digits and hyphens; normalized to lowercase",
-                    maxLength: 200,
+                    maxLength: MAX_MEDIA_TAG_INPUT_LENGTH,
                   },
                 },
               },

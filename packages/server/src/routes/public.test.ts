@@ -63,6 +63,23 @@ test("serves public content and short-circuits matching build exports", async ()
     expect(openApi.body.paths[path].get.responses).toHaveProperty("200");
 });
 
+test("public collection slugs follow the full shared slug rule", async () => {
+  const { app } = await fixture();
+  for (const slug of ["Release_Notes", "release--notes", "-release", "a".repeat(101)])
+    expect(await json(app, `/api/v1/public/collections/posts/${slug}`)).toMatchObject({
+      body: {
+        error: {
+          code: "VALIDATION_FAILED",
+          details: { issues: [{ code: "invalid_value", path: "/slug" }] },
+        },
+      },
+      response: { status: 422 },
+    });
+  expect(
+    (await json(app, `/api/v1/public/collections/posts/${"a".repeat(100)}`)).response.status,
+  ).toBe(404);
+});
+
 test("public responses return published entries with one resolved media dictionary", async () => {
   const { app, store } = await fixture();
   const media = (id, extra = {}) => ({

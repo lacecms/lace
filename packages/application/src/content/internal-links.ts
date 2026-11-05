@@ -9,7 +9,7 @@ import type {
   ContentLinkReadPort,
 } from "../ports/links.js";
 import { authorizeContentOperation } from "./authority.js";
-import { isInternalLinkTargetId } from "@lacecms/content";
+import { isInternalLinkTargetId, MAX_LINK_RESOLVE_IDS } from "@lacecms/content";
 import { DomainError } from "@lacecms/domain";
 import type { Actor } from "@lacecms/domain";
 
@@ -21,10 +21,14 @@ export class ContentLinkUseCases {
     ids: readonly string[],
   ): Promise<Readonly<Record<string, LinkTargetStatus>>> {
     authorizeContentOperation(actor, "resolveLinkTargets");
-    if (ids.length > 200 || new Set(ids).size !== ids.length || !ids.every(isInternalLinkTargetId))
+    if (
+      ids.length > MAX_LINK_RESOLVE_IDS ||
+      new Set(ids).size !== ids.length ||
+      !ids.every(isInternalLinkTargetId)
+    )
       throw new DomainError(
         "CONTENT_INVALID_STATE",
-        "Link target IDs must be valid, distinct and at most 200.",
+        `Link target IDs must be valid, distinct and at most ${MAX_LINK_RESOLVE_IDS}.`,
       );
     return this.links.resolveLinkTargets(ids);
   }

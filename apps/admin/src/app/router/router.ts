@@ -1,4 +1,5 @@
 import { McpConsentPage } from "../../pages/mcp-consent/index.js";
+import { MODEL_KEY_PATTERN } from "@lacecms/content";
 import {
   createRootRouteWithContext,
   createRoute,
@@ -36,8 +37,6 @@ export interface AdminRouterContext {
   readonly client: AdminClient;
   readonly sessionSource: AdminSessionSource;
 }
-
-const modelKeyPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 // Route ids are part of the admin's internal contract: screens below `app`
 // read params and context through `getRouteApi` with these ids.
@@ -158,7 +157,7 @@ const modelRoute = createRoute({
   getParentRoute: () => protectedRoute,
   params: {
     parse: (parameters) => {
-      if (!modelKeyPattern.test(parameters.modelKey)) throw notFound();
+      if (!MODEL_KEY_PATTERN.test(parameters.modelKey)) throw notFound();
       return { modelKey: parameters.modelKey };
     },
     stringify: (parameters) => ({ modelKey: parameters.modelKey }),
@@ -172,7 +171,7 @@ const entryRoute = createRoute({
   getParentRoute: () => protectedRoute,
   params: {
     parse: (parameters) => {
-      if (!modelKeyPattern.test(parameters.modelKey) || parameters.entryId.length === 0)
+      if (!MODEL_KEY_PATTERN.test(parameters.modelKey) || parameters.entryId.length === 0)
         throw notFound();
       return { entryId: parameters.entryId, modelKey: parameters.modelKey };
     },

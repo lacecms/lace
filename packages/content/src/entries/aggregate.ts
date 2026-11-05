@@ -29,6 +29,8 @@ import { collectSnapshotInternalLinks } from "../references/internal-links.js";
 export const MAX_TITLE_LENGTH = 200;
 /** Maximum flat top-level block count for one entry. */
 export const MAX_TOP_LEVEL_BLOCKS = 200;
+/** Maximum distinct media references one draft may hold. */
+export const MAX_DRAFT_MEDIA_REFERENCES = 200;
 /** Maximum UTF-8 bytes in fields JSON or a single block data JSON value. */
 export const MAX_JSON_BYTES = 1_000_000;
 

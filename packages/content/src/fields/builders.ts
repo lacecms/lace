@@ -44,7 +44,7 @@ import {
 } from "./definitions.js";
 import { textLength, normalizeFieldValue } from "./validation.js";
 import { deepFreeze, isRecord } from "../shared/objects.js";
-import { parseVideoEmbed } from "./video-embeds.js";
+import { parseVideoEmbed, VIDEO_EMBED_PROVIDERS } from "./video-embeds.js";
 import { isSafeUrl, isSafeRichTextDocument } from "./rich-text.js";
 import { normalizeFormLayout } from "./layout.js";
 import { normalizeFieldVisibility } from "./visibility.js";
@@ -57,8 +57,6 @@ function normalizeOptions(options: unknown): MutableJsonObject {
 
   return normalized;
 }
-
-const RENAMED_FROM_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/u;
 
 function readOptionalString(options: MutableJsonObject, name: string): string | undefined {
   const value = options[name];
@@ -127,7 +125,7 @@ function addCommonOptions(definition: Record<string, unknown>, options: MutableJ
 
   const renamedFrom = readOptionalString(options, "renamedFrom");
   if (renamedFrom !== undefined) {
-    if (!RENAMED_FROM_PATTERN.test(renamedFrom)) {
+    if (!FIELD_KEY_PATTERN.test(renamedFrom)) {
       fail("options.renamedFrom", "must be a valid field key.");
     }
     definition.renamedFrom = renamedFrom;
@@ -240,11 +238,13 @@ function buildStringValueField<
     if (
       !Array.isArray(providers) ||
       providers.length === 0 ||
-      providers.some((provider) => provider !== "youtube" && provider !== "vimeo") ||
+      providers.some(
+        (provider) => !(VIDEO_EMBED_PROVIDERS as readonly MutableJsonValue[]).includes(provider),
+      ) ||
       new Set(providers).size !== providers.length
     )
       fail("options.embedProviders", "must be a non-empty unique list of youtube and vimeo.");
-    definition.embedProviders = ["youtube", "vimeo"].filter((provider) =>
+    definition.embedProviders = VIDEO_EMBED_PROVIDERS.filter((provider) =>
       providers.includes(provider),
     );
   }

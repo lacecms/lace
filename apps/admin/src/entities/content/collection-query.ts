@@ -1,4 +1,9 @@
-import { fieldTypeCapabilities, FIELD_FILTER_OPERATIONS } from "@lacecms/content";
+import {
+  fieldFilterValueFailure,
+  fieldTypeCapabilities,
+  FIELD_FILTER_OPERATIONS,
+  FIELD_PRESENCE_OPERATIONS,
+} from "@lacecms/content";
 import type { FieldType } from "@lacecms/content";
 import {
   canonicalCollectionFilters,
@@ -17,7 +22,7 @@ import * as v from "valibot";
 export function fieldFilterOperations(type: FieldType): readonly string[] {
   const capability = fieldTypeCapabilities[type];
   return capability.listQueryable
-    ? [...FIELD_FILTER_OPERATIONS[capability.filterKind], "isSet", "isNotSet"]
+    ? [...FIELD_FILTER_OPERATIONS[capability.filterKind], ...FIELD_PRESENCE_OPERATIONS]
     : [];
 }
 
@@ -43,31 +48,12 @@ export function collectionFilterProblem(
   const capability = fieldTypeCapabilities[field.type];
   if (!capability.listQueryable || !fieldFilterOperations(field.type).includes(filter.op))
     return "Choose an operation supported by this field.";
-  const kind = capability.filterKind;
-  if (filter.op === "isSet" || filter.op === "isNotSet") return undefined;
-  if (
-    filter.op === "in" &&
-    field.type === "select" &&
-    filter.values.every((value) => field.options.includes(value))
-  )
-    return undefined;
-  if (filter.op === "eq") {
-    if (kind === "boolean" && typeof filter.value === "boolean") return undefined;
-    if (kind === "number" && typeof filter.value === "number") return undefined;
-    if (kind === "text" && typeof filter.value === "string") return undefined;
-  }
-  if (filter.op === "contains" && kind === "text") {
-    if (fitsListQueryLimits(filter.value, limits)) return undefined;
-    return listQueryBudgetHint(limits);
-  }
-  if (filter.op === "range") {
-    if (kind === "number" && ("min" in filter || "max" in filter)) return undefined;
-    if ((kind === "date" || kind === "datetime") && ("from" in filter || "to" in filter)) {
-      const endpoints = [filter.from, filter.to].filter((value) => value !== undefined);
-      if (endpoints.every((value) => (kind === "date" ? value.length === 10 : value.length > 10)))
-        return undefined;
-    }
-  }
+  const failure = fieldFilterValueFailure(capability.filterKind, filter, {
+    selectOptions: field.type === "select" ? field.options : undefined,
+    fitsTextBudget: (value) => fitsListQueryLimits(value, limits),
+  });
+  if (failure === undefined) return undefined;
+  if (failure.reason === "budget") return listQueryBudgetHint(limits);
   return "Choose an operation supported by this field.";
 }
 

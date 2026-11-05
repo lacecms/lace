@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@lacecms/content";
 import * as v from "valibot";
 import {
   identifierSchema,
@@ -15,7 +16,10 @@ export const mcpToolArgumentSchemas = Object.freeze({
     ...contentEntryListQuerySchema.entries,
     modelKey: identifierSchema,
     filters: v.optional(collectionFieldFiltersSchema),
-    limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100)), 50),
+    limit: v.optional(
+      v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_PAGE_SIZE)),
+      DEFAULT_PAGE_SIZE,
+    ),
   }),
   get_entry: v.strictObject({ entryId: identifierSchema }),
   publish_entry: v.strictObject({

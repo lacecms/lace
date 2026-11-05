@@ -1,6 +1,11 @@
 import { COLLECTION_MATCHING_VERSION, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { ListQueryLimits } from "@lacecms/content";
-import { canonicalizeJson } from "@lacecms/content";
+import {
+  canonicalizeJson,
+  FIELD_KEY_PATTERN,
+  MAX_FILTER_SELECT_VALUES,
+  MAX_FILTER_TEXT_LENGTH,
+} from "@lacecms/content";
 import type { JsonValue } from "@lacecms/content";
 import type { FieldMetadataMapDto } from "./metadata.js";
 
@@ -38,9 +43,9 @@ export const listQueryLimitsSchema = v.strictObject({
 
 export const MAX_COLLECTION_FILTERS = 16;
 export const MAX_COLLECTION_FILTER_BYTES = 8192;
-export const MAX_COLLECTION_SELECT_VALUES = 50;
-export const MAX_COLLECTION_QUERY_TEXT = 200;
-export const collectionQueryFieldSchema = v.pipe(v.string(), v.regex(/^[A-Za-z][A-Za-z0-9]*$/u));
+export const MAX_COLLECTION_SELECT_VALUES = MAX_FILTER_SELECT_VALUES;
+export const MAX_COLLECTION_QUERY_TEXT = MAX_FILTER_TEXT_LENGTH;
+export const collectionQueryFieldSchema = v.pipe(v.string(), v.regex(FIELD_KEY_PATTERN));
 const text = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_COLLECTION_QUERY_TEXT));
 const number = v.pipe(v.number(), v.finite());
 const base = { field: collectionQueryFieldSchema };

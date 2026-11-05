@@ -1,4 +1,4 @@
-import { InvariantError } from "@lacecms/content";
+import { InvariantError, MAX_PAGE_SIZE } from "@lacecms/content";
 import {
   DomainError,
   isMediaFocalCoordinate,
@@ -489,8 +489,8 @@ export class MediaUseCases {
     input: ListMediaTagsInput & { readonly actor: Actor },
   ): Promise<CursorPage<MediaTagCount>> {
     requirePermission(input.actor, "content:read");
-    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
-      failure("Tag catalog limit must be from 1 to 100.");
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > MAX_PAGE_SIZE)
+      failure(`Tag catalog limit must be from 1 to ${MAX_PAGE_SIZE}.`);
     const q = input.q === undefined ? undefined : normalizeMediaTag(input.q);
     if (input.q !== undefined && q === undefined) failure("Tag prefix is invalid.");
     return detached(

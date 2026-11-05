@@ -1,6 +1,7 @@
 import { fieldTypeSupport } from "./field-types.js";
 import {
   ContentValidationError,
+  isRecord,
   MAX_LIST_ITEMS,
   MAX_SNAPSHOT_LIST_ITEMS,
   validateFieldValue,
@@ -11,8 +12,7 @@ import type { ContentModelDto } from "@lacecms/contracts";
 import type { DraftEditorValues } from "./editor-form.js";
 
 export type ValuePath = readonly (string | number)[];
-export const record = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
+export const record: (value: unknown) => value is Record<string, unknown> = isRecord;
 
 /** Cleared named properties are omitted; array slots and rich-text documents are never filtered. */
 export function cleanValue(value: unknown, definition?: FieldDefinition): unknown {

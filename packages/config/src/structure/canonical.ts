@@ -76,39 +76,51 @@ export function legacyStructureForHash(projection: JsonValue): MutableJsonValue 
   return omitDisplayMetadata(strip(omitListFields(projection)));
 }
 
+/**
+ * Descriptor keys that carry presentation only, by descriptor owner. Models
+ * drop the shared display keys; blocks also drop their settings visibility;
+ * fields drop placeholders, select presentation and list item labels; block
+ * settings and placeholder-free field maps keep labels and descriptions but
+ * drop placeholders, select presentation and group layout.
+ */
+export const DISPLAY_ONLY_KEYS = deepFreeze({
+  model: ["description", "label", "layout", "settingsLayout"],
+  block: ["description", "label", "layout", "settingsLayout", "settingsVisibility"],
+  field: [
+    "description",
+    "label",
+    "layout",
+    "settingsLayout",
+    "placeholder",
+    "presentation",
+    "itemLabel",
+  ],
+  setting: ["placeholder", "presentation", "layout"],
+} as const satisfies Record<"model" | "block" | "field" | "setting", readonly string[]>);
+
+function withoutKeys(value: JsonValue, owner: keyof typeof DISPLAY_ONLY_KEYS): MutableJsonObject {
+  const result = JSON.parse(JSON.stringify(value)) as MutableJsonObject;
+  for (const key of DISPLAY_ONLY_KEYS[owner]) delete result[key];
+  return result;
+}
+
 export function withoutDisplayProperties(value: JsonValue): MutableJsonObject {
-  const {
-    description: _description,
-    label: _label,
-    layout: _layout,
-    settingsLayout: _settingsLayout,
-    ...rest
-  } = value as JsonObject;
-  return JSON.parse(JSON.stringify(rest)) as MutableJsonObject;
+  return withoutKeys(value, "model");
 }
 
 function fieldDefinitionStructure(definition: JsonValue): MutableJsonObject {
-  const result = withoutDisplayProperties(definition);
-  delete result.placeholder;
-  if (result.type === "select") delete result.presentation;
+  const result = withoutKeys(definition, "field");
   if (result.type === "group") result.fields = fieldMapStructure(result.fields);
-  if (result.type === "list") {
-    delete result.itemLabel;
-    if (result.item !== undefined) result.item = fieldDefinitionStructure(result.item);
-  }
+  if (result.type === "list" && result.item !== undefined)
+    result.item = fieldDefinitionStructure(result.item);
   return result;
 }
 
 export function fieldMapWithoutPlaceholders(fields: JsonValue | undefined): MutableJsonObject {
   return Object.fromEntries(
     Object.entries((fields ?? {}) as JsonObject).map(([key, value]) => {
-      const result = JSON.parse(JSON.stringify(value)) as MutableJsonObject;
-      delete result.placeholder;
-      if (result.type === "select") delete result.presentation;
-      if (result.type === "group") {
-        delete result.layout;
-        result.fields = fieldMapWithoutPlaceholders(result.fields);
-      }
+      const result = withoutKeys(value, "setting");
+      if (result.type === "group") result.fields = fieldMapWithoutPlaceholders(result.fields);
       if (result.type === "list" && result.item !== undefined)
         result.item = fieldMapWithoutPlaceholders({ item: result.item }).item!;
       return [key, result];
@@ -125,9 +137,7 @@ export function fieldMapStructure(fields: JsonValue | undefined): MutableJsonObj
 }
 
 export function blockWithoutVisibility(definition: JsonValue): MutableJsonObject {
-  const result = withoutDisplayProperties(definition);
-  delete result.settingsVisibility;
-  return result;
+  return withoutKeys(definition, "block");
 }
 
 /**

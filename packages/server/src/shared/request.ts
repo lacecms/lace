@@ -1,5 +1,7 @@
 import { opaqueCursor } from "@lacecms/application";
 import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
   idempotencyKeySchema,
   identifierSchemaPublic,
   opaqueCursorSchema,
@@ -14,10 +16,10 @@ export function pagination(request: Request): {
 } {
   const url = new URL(request.url);
   const after = url.searchParams.get("after") ?? undefined;
-  const limit = url.searchParams.get("limit") ?? "50";
+  const limit = url.searchParams.get("limit") ?? String(DEFAULT_PAGE_SIZE);
   const parsedLimit = Number(limit);
-  if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100)
-    invalid("limit must be an integer between 1 and 100.", "/limit");
+  if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_PAGE_SIZE)
+    invalid(`limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`, "/limit");
   if (after === undefined) return { limit: parsedLimit };
   parse(opaqueCursorSchema, after);
   return { after: opaqueCursor(after), limit: parsedLimit };

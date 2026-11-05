@@ -7,7 +7,7 @@ import type { MediaMetadataDto, MediaDetailDto, UpdateMediaMetadataResultDto } f
 
 /** Maps metadata without exposing the private storage key. */
 export interface MediaMetadataDtoSource {
-  readonly tags?: readonly string[];
+  readonly tags: readonly string[];
   readonly alt?: string;
   readonly caption?: string;
   readonly createdAt: UnixMilliseconds;

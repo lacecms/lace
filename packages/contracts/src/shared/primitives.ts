@@ -1,5 +1,6 @@
 import { unixMilliseconds } from "@lacecms/domain";
 import type { UnixMilliseconds } from "@lacecms/domain";
+import { MAX_PAGE_SIZE } from "@lacecms/content";
 import * as v from "valibot";
 
 export const identifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(255));
@@ -23,6 +24,15 @@ function isUtcTimestamp(value: unknown): value is string {
 export const identifierSchemaPublic = identifierSchema;
 export const expectedRevisionSchema = nonNegativeIntegerSchema;
 export const opaqueCursorSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4_096));
+/**
+ * An admin list page limit from 1 to `MAX_PAGE_SIZE` as a canonical decimal
+ * query string. The grammar spells the three-digit bound `MAX_PAGE_SIZE`
+ * (100); a contracts test pins the accepted range to the constant.
+ */
+export const pageLimitQuerySchema = v.pipe(
+  v.string(),
+  v.regex(new RegExp(`^(?:[1-9]|[1-9][0-9]|${MAX_PAGE_SIZE})$`, "u")),
+);
 export const isoTimestampSchema = v.custom<string>(isUtcTimestamp);
 /** A media content hash: 64 lowercase hexadecimal characters. */
 export const mediaSha256Schema = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}(?![\s\S])/u));

@@ -1,3 +1,4 @@
+import { isRecord } from "@lacecms/content";
 import type { ProviderDeploymentObservation, ProviderDeploymentReader } from "@lacecms/application";
 import { isSiteBuildProviderStage, type SiteBuildProviderStage } from "@lacecms/domain";
 import { boundedText } from "./bounded-body.js";
@@ -29,9 +30,7 @@ export interface PagesDeploymentStatusReaderSettings {
 const transient: ProviderDeploymentObservation = Object.freeze({ kind: "transient" });
 
 function record(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? value : undefined;
 }
 
 function parse(text: string | undefined): Record<string, unknown> | undefined {

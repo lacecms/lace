@@ -1,4 +1,4 @@
-import { isInternalLinkTargetId } from "@lacecms/content";
+import { isInternalLinkTargetId, MAX_LINK_RESOLVE_IDS, MAX_TITLE_LENGTH } from "@lacecms/content";
 import * as v from "valibot";
 import { identifierSchema, opaqueCursorSchema, jsonPointerSchema } from "../shared/primitives.js";
 
@@ -26,7 +26,7 @@ export const linkTargetQuerySchema = v.strictObject({
 export const resolveLinkTargetsRequestSchema = v.strictObject({
   ids: v.pipe(
     v.array(linkTargetIdSchema),
-    v.maxLength(200),
+    v.maxLength(MAX_LINK_RESOLVE_IDS),
     v.check((ids) => new Set(ids).size === ids.length, "IDs must be distinct."),
   ),
 });
@@ -56,7 +56,7 @@ const routableTargetEntries = {
   id: linkTargetIdSchema,
   modelKey: identifierSchema,
   modelKind: v.picklist(["page", "collection"]),
-  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
 };
 export const routableLinkTargetSchema = v.variant("state", [
   v.strictObject({ ...routableTargetEntries, state: v.literal("published"), path: v.string() }),
@@ -93,7 +93,7 @@ export const linkUsageSourceSchema = v.strictObject({
   entryId: linkTargetIdSchema,
   snapshotId: linkTargetIdSchema,
   modelKey: identifierSchema,
-  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
   phase: v.picklist(["draft", "published"]),
   locations: v.pipe(v.array(linkUsageLocationSchema), v.maxLength(10)),
   nextLocationsCursor: v.optional(opaqueCursorSchema),

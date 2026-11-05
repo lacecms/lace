@@ -1,3 +1,4 @@
+import { MAX_TITLE_LENGTH } from "@lacecms/content";
 import * as v from "valibot";
 import { jsonObjectSchema } from "../shared/json.js";
 import {
@@ -25,7 +26,7 @@ export const publicEntrySchema = v.strictObject({
   /** Stored SEO values of an entry of an SEO-enabled model; absent otherwise. */
   seo: v.optional(seoValueSchema),
   slug: v.optional(identifierSchema),
-  title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
 });
 
 /** A media item referenced by public entries, resolved for rendering. */

@@ -30,8 +30,15 @@ export function publishedBlockData(definition: BlockMetadata, data: JsonObject):
   return publishedFieldValues(definition.fields, data, definition.visibility as FieldVisibility);
 }
 
-const BLOCK_TYPE_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/u;
-export const BLOCK_KEY_PATTERN = /^(?:[A-Za-z][A-Za-z0-9-]*|[0-7][0-9A-HJKMNP-TV-Z]{25})$/u;
+/** Block type grammar without anchors, for OpenAPI strings and composed grammars. */
+export const BLOCK_TYPE_SOURCE = "[A-Za-z][A-Za-z0-9-]*";
+/** Block types: an ASCII letter followed by ASCII letters, digits or hyphens. */
+export const BLOCK_TYPE_PATTERN = new RegExp(`^${BLOCK_TYPE_SOURCE}$`, "u");
+/** A block instance key: a block type or a ULID. */
+export const BLOCK_KEY_PATTERN = new RegExp(
+  `^(?:${BLOCK_TYPE_SOURCE}|[0-7][0-9A-HJKMNP-TV-Z]{25})$`,
+  "u",
+);
 
 /** Maximum length of a block anchor. */
 export const MAX_BLOCK_ANCHOR_LENGTH = 64;

@@ -7,6 +7,7 @@ import {
   encodeSchemaPath,
   effectiveVisibilityValues,
   isFieldVisible,
+  isRecord,
   parseSchemaPath,
   schemaFieldAt,
   validateFieldValue,
@@ -27,7 +28,7 @@ interface Occurrence {
   readonly path: readonly (string | number)[];
 }
 function object(value: unknown): value is MutableObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+  return isRecord(value);
 }
 function occurrences(root: MutableObject, address: string): Occurrence[] {
   const segments = parseSchemaPath(address);

@@ -1,5 +1,7 @@
 /** Providers accepted by portable embed URL fields. */
 export type EmbedProvider = "youtube" | "vimeo";
+/** Every supported embed provider, in their canonical order. */
+export const VIDEO_EMBED_PROVIDERS: readonly EmbedProvider[] = Object.freeze(["youtube", "vimeo"]);
 
 export interface VideoEmbedDescription {
   readonly provider: EmbedProvider;

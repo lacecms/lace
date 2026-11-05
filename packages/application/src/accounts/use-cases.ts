@@ -4,7 +4,12 @@ import type {
   SessionSecurityPort,
   UserProfileReader,
 } from "../ports/security.js";
-import { AccountError, RateLimitExceededError } from "@lacecms/domain";
+import {
+  AccountError,
+  RateLimitExceededError,
+  MAX_DISPLAY_NAME_LENGTH,
+  normalizeDisplayName,
+} from "@lacecms/domain";
 import { requirePermission, type Actor, type UnixMilliseconds } from "@lacecms/domain";
 import {
   renderEmail,
@@ -20,7 +25,8 @@ import type { OpaqueTokenSecret } from "../shared/brands.js";
 export const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 /** Password-reset links stay valid for one hour. */
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
-export const DISPLAY_NAME_MAX_LENGTH = 120;
+/** Alias of the domain's `MAX_DISPLAY_NAME_LENGTH`. */
+export const DISPLAY_NAME_MAX_LENGTH = MAX_DISPLAY_NAME_LENGTH;
 
 export { AccountError, RateLimitExceededError } from "@lacecms/domain";
 export type { AccountErrorCode } from "@lacecms/domain";
@@ -136,16 +142,7 @@ export function normalizeAccountEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-// oxlint-disable-next-line no-control-regex -- rejects control characters by design.
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
-
-/** Trims a display name and enforces the shared bounds. */
-export function normalizeDisplayName(value: string): string {
-  const name = value.trim();
-  if (name.length < 1 || name.length > DISPLAY_NAME_MAX_LENGTH || CONTROL_CHARACTERS.test(name))
-    throw new TypeError("Invalid display name.");
-  return name;
-}
+export { normalizeDisplayName };
 
 export type InvitationState = "expired" | "pending";
 

@@ -11,7 +11,7 @@ import type {
   ConfigurationSyncScanRequest,
 } from "./types.js";
 import { CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT } from "./limits.js";
-import { InvariantError } from "@lacecms/content";
+import { InvariantError, isRecord, MAX_DRAFT_MEDIA_REFERENCES } from "@lacecms/content";
 import { transformConfigurationSyncFields } from "./fields.js";
 import type { ContentModelStructure } from "@lacecms/config";
 import {
@@ -63,9 +63,7 @@ const MODEL_IDENTITY_PROPERTIES = new Set([
 const SCOPE_ORDER = { block: 1, field: 0, model: 2 } as const;
 
 function record(value: JsonValue | undefined): JsonObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonObject)
-    : {};
+  return isRecord(value) ? (value as JsonObject) : {};
 }
 
 function stringList(value: JsonValue | undefined): readonly string[] {
@@ -744,7 +742,8 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
               (block) => removedTypes.has(block.type) && block.key === reference.sourceKey,
             ),
         );
-        if (keptReferences.length + transformed.references.length > 200) overLimit = true;
+        if (keptReferences.length + transformed.references.length > MAX_DRAFT_MEDIA_REFERENCES)
+          overLimit = true;
         if (overLimit) addFinding(oversized, snapshot, limitPath);
         for (const [key, path] of Object.entries(transformed.violations))
           addFinding(violations[key]!, snapshot, key.startsWith("/") ? path : undefined);

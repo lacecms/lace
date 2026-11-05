@@ -2,7 +2,12 @@
 // accounts ← settings; content ← media; content, media, errors ← delivery.
 
 export { LaceError } from "@lacecms/content";
-export { SLUG_PATTERN } from "@lacecms/content";
+export {
+  SLUG_PATTERN,
+  collectionPathFailure,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from "@lacecms/content";
 export const packageName = "@lacecms/contracts";
 export { decodeEntryLink, encodeEntryLink, isSafeUrl } from "@lacecms/content";
 export {
@@ -18,6 +23,12 @@ export {
   MAX_SEO_DESCRIPTION_LENGTH,
   MAX_SEO_TITLE_LENGTH,
   normalizeSeoText,
+  MAX_MEDIA_TAG_LENGTH,
+  MAX_MEDIA_TAG_INPUT_LENGTH,
+  MAX_MEDIA_TAGS_PER_ITEM,
+  MAX_MEDIA_TAG_FILTERS,
+  MEDIA_TAG_PATTERN,
+  MAX_DISPLAY_NAME_LENGTH,
 } from "@lacecms/domain";
 export { jsonObjectSchema, jsonValueSchema } from "./shared/json.js";
 export {

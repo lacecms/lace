@@ -29,6 +29,14 @@ export {
   FIELD_FILTER_OPERATIONS,
   fieldTypesWith,
 } from "./fields/capabilities.js";
+export type { FieldFilterValueFailure, FieldFilterValueOptions } from "./fields/filter-values.js";
+export {
+  FIELD_PRESENCE_OPERATIONS,
+  MAX_FILTER_SELECT_VALUES,
+  MAX_FILTER_TEXT_LENGTH,
+  fieldFilterValueFailure,
+  filterInstant,
+} from "./fields/filter-values.js";
 export type {
   SafeRichTextMark,
   SafeRichTextNode,
@@ -75,6 +83,8 @@ export type {
   BlockDataValues,
 } from "./fields/definitions.js";
 export {
+  FIELD_KEY_PATTERN,
+  FIELD_KEY_SOURCE,
   MAX_FIELD_CONTAINER_DEPTH,
   MAX_CONSECUTIVE_GROUPS,
   MAX_LIST_ITEMS,
@@ -130,6 +140,8 @@ export type {
   BlockMigrationErrorCode,
 } from "./blocks/definition.js";
 export {
+  BLOCK_TYPE_PATTERN,
+  BLOCK_TYPE_SOURCE,
   publishedBlockData,
   MAX_BLOCK_ANCHOR_LENGTH,
   MAX_BLOCK_CLASS_NAME_LENGTH,
@@ -172,6 +184,7 @@ export type {
 export {
   MAX_TITLE_LENGTH,
   MAX_TOP_LEVEL_BLOCKS,
+  MAX_DRAFT_MEDIA_REFERENCES,
   MAX_JSON_BYTES,
   validateEntryPayload,
   validateEntryAggregate,

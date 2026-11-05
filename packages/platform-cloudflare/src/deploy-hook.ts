@@ -1,3 +1,4 @@
+import { isRecord } from "@lacecms/content";
 import type { BuildTriggerResult, SiteBuildTrigger } from "@lacecms/application";
 import { boundedText } from "./bounded-body.js";
 
@@ -26,9 +27,7 @@ function parseEnvelope(text: string | undefined): Record<string, unknown> | unde
   if (text === undefined || text.length === 0) return undefined;
   try {
     const value = JSON.parse(text) as unknown;
-    return value !== null && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : undefined;
+    return isRecord(value) ? value : undefined;
   } catch {
     return undefined;
   }

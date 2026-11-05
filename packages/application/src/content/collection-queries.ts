@@ -8,12 +8,13 @@ import type { NormalizedContentModel } from "@lacecms/config";
 import { CollectionQueryValidationError } from "@lacecms/domain";
 export { CollectionQueryValidationError } from "@lacecms/domain";
 import {
+  fieldFilterValueFailure,
   fieldTypeCapabilities,
-  FIELD_FILTER_OPERATIONS,
+  filterInstant,
   fitsListQueryLimits,
   NODE_LIST_QUERY_LIMITS,
 } from "@lacecms/content";
-import type { ListQueryLimits } from "@lacecms/content";
+import type { FieldFilterKind, ListQueryLimits } from "@lacecms/content";
 export { NODE_LIST_QUERY_LIMITS, CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 export type { ListQueryLimits } from "@lacecms/content";
 
@@ -32,30 +33,31 @@ export function validateListQueryBudget(
 const invalid = (pointer: string): never => {
   throw new CollectionQueryValidationError(pointer);
 };
-const finite = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
-const text = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= 200;
-function date(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/u.test(value) &&
-    Number.isFinite(Date.parse(`${value}T00:00:00Z`)) &&
-    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
-  );
-}
-function instant(value: unknown): string | undefined {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value) ||
-    !date(value.slice(0, 10)) ||
-    !Number.isFinite(Date.parse(value)) ||
-    Number(value.slice(11, 13)) > 23 ||
-    Number(value.slice(14, 16)) > 59 ||
-    Number(value.slice(17, 19)) > 59
-  )
-    return undefined;
-  return new Date(value).toISOString();
+/** The canonical form of a filter that `fieldFilterValueFailure` accepted. */
+function normalizedFilter(
+  field: string,
+  kind: FieldFilterKind,
+  filter: Readonly<Record<string, unknown>>,
+): CollectionFieldFilter {
+  const op = filter.op;
+  if (op === "isSet" || op === "isNotSet") return { field, op };
+  if (op === "eq") return { field, op, value: filter.value as string | number | boolean };
+  if (op === "contains") return { field, op, value: filter.value as string };
+  if (op === "in") return { field, op, values: [...(filter.values as string[])].sort() };
+  if (kind === "number")
+    return {
+      field,
+      op: "range",
+      ...(filter.min === undefined ? {} : { min: filter.min as number }),
+      ...(filter.max === undefined ? {} : { max: filter.max as number }),
+    };
+  const bound = (value: unknown) => (kind === "date" ? (value as string) : filterInstant(value)!);
+  return {
+    field,
+    op: "range",
+    ...(filter.from === undefined ? {} : { from: bound(filter.from) }),
+    ...(filter.to === undefined ? {} : { to: bound(filter.to) }),
+  };
 }
 
 /** Resolves only active, declared draft targets before persistence is called. */
@@ -98,79 +100,17 @@ export function resolveCollectionQuery(
     const field = filter.field as string;
     seen.add(field);
     const kind = fieldTypeCapabilities[descriptor!.type].filterKind;
-    const op = filter.op;
-    let members: readonly string[] = [];
-    let normalized: CollectionFieldFilter;
-    if (op === "isSet" || op === "isNotSet") {
-      normalized = { field, op };
-    } else {
-      if (!(FIELD_FILTER_OPERATIONS[kind] as readonly unknown[]).includes(op))
-        invalid(`${pointer}/op`);
-      if (op === "eq") {
-        if (
-          !(kind === "number"
-            ? finite(filter.value)
-            : kind === "boolean"
-              ? typeof filter.value === "boolean"
-              : text(filter.value))
-        )
-          invalid(`${pointer}/value`);
-        members = ["value"];
-        normalized = { field, op, value: filter.value as string | number | boolean };
-      } else if (op === "contains") {
-        if (!text(filter.value)) invalid(`${pointer}/value`);
-        if (!fitsListQueryLimits(filter.value as string, limits)) invalid(`${pointer}/value`);
-        members = ["value"];
-        normalized = { field, op, value: filter.value as string };
-      } else if (op === "in") {
-        const values = filter.values;
-        if (
-          !Array.isArray(values) ||
-          values.length < 1 ||
-          values.length > 50 ||
-          new Set(values).size !== values.length ||
-          values.some((value) => typeof value !== "string" || !descriptor!.options!.includes(value))
-        )
-          invalid(`${pointer}/values`);
-        members = ["values"];
-        normalized = { field, op, values: [...(values as string[])].sort() };
-      } else if (op === "range" && kind === "number") {
-        members = ["min", "max"];
-        for (const key of members)
-          if (filter[key] !== undefined && !finite(filter[key])) invalid(`${pointer}/${key}`);
-        if (filter.min === undefined && filter.max === undefined) invalid(pointer);
-        if (finite(filter.min) && finite(filter.max) && filter.min > filter.max)
-          invalid(`${pointer}/max`);
-        normalized = {
-          field,
-          op,
-          ...(filter.min === undefined ? {} : { min: filter.min as number }),
-          ...(filter.max === undefined ? {} : { max: filter.max as number }),
-        };
-      } else if (op === "range" && (kind === "date" || kind === "datetime")) {
-        members = ["from", "to"];
-        const bounds: { from?: string; to?: string } = {};
-        for (const key of ["from", "to"] as const) {
-          if (filter[key] === undefined) continue;
-          const bound =
-            kind === "date"
-              ? date(filter[key])
-                ? (filter[key] as string)
-                : undefined
-              : instant(filter[key]);
-          if (bound === undefined) invalid(`${pointer}/${key}`);
-          bounds[key] = bound!;
-        }
-        if (bounds.from === undefined && bounds.to === undefined) invalid(pointer);
-        if (bounds.from !== undefined && bounds.to !== undefined && bounds.from > bounds.to)
-          invalid(`${pointer}/to`);
-        normalized = { field, op, ...bounds };
-      } else invalid(`${pointer}/op`);
-    }
-    for (const key of Object.keys(filter))
-      if (!["field", "op", ...members].includes(key))
-        invalid(`${pointer}/${key.replace(/~/gu, "~0").replace(/\//gu, "~1")}`);
-    filters.push(normalized!);
+    const failure = fieldFilterValueFailure(kind, filter, {
+      selectOptions: descriptor!.options,
+      fitsTextBudget: (value) => fitsListQueryLimits(value, limits),
+    });
+    if (failure !== undefined)
+      invalid(
+        failure.path === ""
+          ? pointer
+          : `${pointer}/${failure.path.replace(/~/gu, "~0").replace(/\//gu, "~1")}`,
+      );
+    filters.push(normalizedFilter(field, kind, filter));
   }
   filters.sort((a, b) => (a.field < b.field ? -1 : a.field > b.field ? 1 : 0));
   if (!options && !filters.length) return undefined;
