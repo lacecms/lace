@@ -53,15 +53,14 @@ async function prepare(persistTo: string): Promise<number> {
     });
     if (synced !== 0) return synced;
     const security = new D1SecurityService(database, () => clock.now());
-    try {
+    if (await security.isSetupComplete()) {
+      console.info("First-admin setup is complete.");
+    } else {
       const setup = await security.createSetupToken();
       console.info(
         `First-admin setup token (shown once; expires ${new Date(Number(setup.expiresAt)).toISOString()}):`,
       );
       console.info(setup.token);
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== "Setup already completed.") throw error;
-      console.info("First-admin setup is complete.");
     }
     return 0;
   } finally {
