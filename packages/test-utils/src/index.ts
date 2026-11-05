@@ -47,4 +47,5 @@ export type {
   VisibilityParityOccurrence,
 } from "./visibility/parity-cases.js";
 export { errorMatrixCases } from "./errors/error-matrix.js";
+export { unmatchedErrorClasses } from "./errors/coverage.js";
 export type { ErrorMatrixCase } from "./errors/error-matrix.js";

@@ -17,6 +17,7 @@ import {
   mediaUrl,
   toAdminEntryProjectionDto,
   toMediaMetadataDto,
+  InvariantError,
 } from "@lacecms/contracts";
 import { AuthorizationError, response } from "../shared/http.js";
 import { exportSeo } from "../shared/content-config.js";
@@ -57,7 +58,7 @@ export function createRouteContext(input: LaceAppInput) {
 
   function media(): MediaUseCases {
     if (input.media === undefined || input.publicBaseUrl === undefined) {
-      throw new Error("Media capability is unavailable.");
+      throw new InvariantError("Media capability is unavailable.");
     }
     return input.media;
   }
@@ -65,7 +66,8 @@ export function createRouteContext(input: LaceAppInput) {
   /** Public media URLs come only from configuration, never from the request. */
   function publicMediaUrl(): (mediaId: string) => string {
     const baseUrl = input.publicBaseUrl;
-    if (baseUrl === undefined) throw new Error("Public content capability is unavailable.");
+    if (baseUrl === undefined)
+      throw new InvariantError("Public content capability is unavailable.");
     return (mediaId) => mediaUrl(baseUrl, mediaId);
   }
 
@@ -110,7 +112,8 @@ export function createRouteContext(input: LaceAppInput) {
 
   let accountUseCases: AccountUseCases | undefined;
   function accounts(): AccountUseCases {
-    if (input.publicBaseUrl === undefined) throw new Error("Account flows are unavailable.");
+    if (input.publicBaseUrl === undefined)
+      throw new InvariantError("Account flows are unavailable.");
     accountUseCases ??= new AccountUseCases({
       clock: { now: () => Date.now() as never },
       email,

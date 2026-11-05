@@ -1,6 +1,15 @@
 import type { UnixMilliseconds } from "@lacecms/domain";
+import { LaceError } from "@lacecms/content";
 import type { JsonObject } from "@lacecms/content";
 import type { DispatcherEventId, DispatcherLeaseId } from "../shared/brands.js";
+
+/** A runtime adapter refused its environment or a missing capability; internal to every transport. */
+export class RuntimeConfigurationError extends LaceError<"RUNTIME_CONFIGURATION_INVALID"> {
+  public constructor(message: string) {
+    super("RUNTIME_CONFIGURATION_INVALID", message);
+    this.name = "RuntimeConfigurationError";
+  }
+}
 
 /** Operational evidence is deliberately sanitized before it crosses this port. */
 export interface OperationalLogger {

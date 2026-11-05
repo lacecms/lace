@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { entityTagSchema, expectedRevisionSchema, nonNegativeIntegerSchema } from "./primitives.js";
 import type { EntityTag } from "./primitives.js";
+import { invalidPrecondition } from "./validation-error.js";
 
 /** Derives the build-export entity tag from the published-state version. */
 export function entityTagForVersion(version: number): EntityTag {
@@ -14,10 +15,10 @@ export function entityTagForVersion(version: number): EntityTag {
 export function versionFromEntityTag(value: string): number {
   const parsed = v.safeParse(entityTagSchema, value);
   if (!parsed.success)
-    throw new TypeError('An ETag must be "N" or W/"N" with a non-negative safe integer version.');
+    invalidPrecondition('An ETag must be "N" or W/"N" with a non-negative safe integer version.');
   const version = Number(parsed.output.replace(/^W\//u, "").slice(1, -1));
   if (!Number.isSafeInteger(version))
-    throw new TypeError("An ETag version must be a safe integer.");
+    invalidPrecondition("An ETag version must be a safe integer.");
   return version;
 }
 
@@ -33,16 +34,16 @@ export function resolveExpectedRevision(input: RevisionPreconditionInput): numbe
       ? undefined
       : v.safeParse(expectedRevisionSchema, input.expectedRevision);
   if (body !== undefined && !body.success) {
-    throw new TypeError("expectedRevision must be a non-negative integer.");
+    invalidPrecondition("expectedRevision must be a non-negative integer.");
   }
   if (input.ifMatch?.startsWith("W/"))
-    throw new TypeError("If-Match requires a strong revision ETag.");
+    invalidPrecondition("If-Match requires a strong revision ETag.");
   const header = input.ifMatch === undefined ? undefined : versionFromEntityTag(input.ifMatch);
   if (body === undefined && header === undefined) {
-    throw new TypeError("An expected revision is required.");
+    invalidPrecondition("An expected revision is required.");
   }
   if (body !== undefined && header !== undefined && body.output !== header) {
-    throw new TypeError("expectedRevision and If-Match must agree.");
+    invalidPrecondition("expectedRevision and If-Match must agree.");
   }
   return body?.output ?? header!;
 }

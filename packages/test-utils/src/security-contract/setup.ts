@@ -6,6 +6,9 @@ import {
   type SecurityContractCase,
 } from "./harness.js";
 
+/** Every setup outcome is the same typed not-found failure, so the API answers one 404. */
+const setupNotFound = { code: "NOT_FOUND", name: "AccountError" };
+
 export const cases: readonly SecurityContractCase[] = [
   {
     name: "setup state reads only the durable completion marker without writes",
@@ -60,10 +63,10 @@ export const cases: readonly SecurityContractCase[] = [
           "select count(*) as count from setup_tokens where consumed_at is null",
         ),
       ).toEqual({ count: 0 });
-      await expect(harness.security.createSetupToken()).rejects.toThrow();
+      await expect(harness.security.createSetupToken()).rejects.toMatchObject(setupNotFound);
       await expect(
         harness.security.bootstrap({ email: "admin@lace.test", password, token: setup.token }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject(setupNotFound);
       expect(await harness.security.listUsers()).toEqual([user]);
       expect(await harness.security.readUserProfile(user.id)).toEqual({
         disabled: false,
@@ -89,7 +92,7 @@ export const cases: readonly SecurityContractCase[] = [
           password,
           token: "A".repeat(43) as never,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject(setupNotFound);
       await harness.security.bootstrap({ email: "admin@lace.test", password, token: setup.token });
       await harness.sql.run(
         "update installation_state set setup_completed_at = null, setup_admin_user_id = null",
@@ -97,12 +100,12 @@ export const cases: readonly SecurityContractCase[] = [
       await harness.sql.run("update setup_tokens set consumed_at = null");
       await expect(
         harness.security.bootstrap({ email: "other@lace.test", password, token: setup.token }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject(setupNotFound);
       const fresh = await harness.security.createSetupToken();
       harness.setNow(SECURITY_CONTRACT_EPOCH + hour);
       await expect(
         harness.security.bootstrap({ email: "late@lace.test", password, token: fresh.token }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject(setupNotFound);
       expect((await harness.security.listUsers()).map((value) => value.email)).toEqual([
         "admin@lace.test",
       ]);

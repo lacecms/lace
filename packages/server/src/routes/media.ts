@@ -1,6 +1,7 @@
 import { invalid, notFound, response, validationHook } from "../shared/http.js";
 import { mediaIdParams, pagination } from "../shared/request.js";
 import {
+  ContractValidationError,
   MAX_MEDIA_TAG_INPUT_LENGTH,
   MAX_MEDIA_TAGS_PER_ITEM,
   mediaDetailSchema,
@@ -225,7 +226,8 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
       let expectedUpdatedAt: ReturnType<typeof resolveMediaPrecondition>;
       try {
         expectedUpdatedAt = resolveMediaPrecondition(context.req.header("if-match") ?? undefined);
-      } catch {
+      } catch (error) {
+        if (!(error instanceof ContractValidationError)) throw error;
         return invalid("If-Match must carry the media item's current strong ETag.");
       }
       const updated = await media().updateMetadata({

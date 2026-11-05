@@ -1,7 +1,7 @@
 // Directory dependencies: shared ← errors, openapi, accounts, builds, content;
 // accounts ← settings; content ← media; content, media, errors ← delivery.
 
-export { LaceError } from "@lacecms/content";
+export { InvariantError, LaceError } from "@lacecms/content";
 export {
   SLUG_PATTERN,
   collectionPathFailure,
@@ -23,6 +23,7 @@ export {
   MAX_SEO_DESCRIPTION_LENGTH,
   MAX_SEO_TITLE_LENGTH,
   normalizeSeoText,
+  CONFIGURATION_SYNC_STALE,
   MAX_MEDIA_TAG_LENGTH,
   MAX_MEDIA_TAG_INPUT_LENGTH,
   MAX_MEDIA_TAGS_PER_ITEM,

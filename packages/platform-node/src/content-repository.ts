@@ -142,6 +142,7 @@ import {
   configurationSyncSnapshotRewriteStatements,
   SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
+  staleSynchronizationPlan,
   syncMigrationPage,
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
@@ -417,9 +418,8 @@ export class NodeContentRepository
           !sameStoredModelStates(input.expectedStoredModels, current) ||
           renderConfigurationSyncPlanJson(input.plan) !==
             renderConfigurationSyncPlanJson(actualPlan)
-        ) {
-          failure("Configuration synchronization plan is stale.");
-        }
+        )
+          staleSynchronizationPlan();
         if (!actualPlan.requiresApply) {
           return Object.freeze({ operations: Object.freeze([]), status: "noop" as const });
         }
@@ -505,7 +505,7 @@ export class NodeContentRepository
                 expected.structureHash,
                 expected.projectionHash,
               );
-            if (removed.changes !== 1) failure("Configuration synchronization plan is stale.");
+            if (removed.changes !== 1) staleSynchronizationPlan();
             continue;
           }
           if (
@@ -544,7 +544,7 @@ export class NodeContentRepository
               expected.structureHash,
               expected.projectionHash,
             );
-          if (updated.changes !== 1) failure("Configuration synchronization plan is stale.");
+          if (updated.changes !== 1) staleSynchronizationPlan();
           if (
             (operation.action === "version-update" || operation.action === "rename") &&
             operation.evolution?.recursiveFields

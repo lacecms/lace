@@ -105,7 +105,7 @@ test("applies prepared configuration sync plans atomically and treats repeats as
       prepared: stale,
       target: store,
     }),
-  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+  ).rejects.toMatchObject({ code: "CONFIGURATION_SYNC_STALE" });
 });
 
 test("applies explicit in-memory renames and safe removals without inferring replacements", async () => {
@@ -458,7 +458,7 @@ test.each(["publicProjectionHash", "publicProjectionSourceHash"] as const)(
     const concurrent = await prepareConfigurationSynchronization({ models, state: store });
     expect(concurrent.plan).toEqual(prepared.plan);
     const version = await store.publishedContentVersion();
-    await expect(apply(prepared)).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    await expect(apply(prepared)).rejects.toMatchObject({ code: "CONFIGURATION_SYNC_STALE" });
     expect(await store.publishedContentVersion()).toBe(version);
     expect(present(store.storedModelStates()[0])[key]).toBe("untrusted-concurrent-value");
   },

@@ -148,6 +148,7 @@ import {
   configurationSyncSnapshotRewriteStatements,
   SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
+  failedSynchronizationGuard,
   syncMigrationPage,
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
@@ -1361,18 +1362,17 @@ export class D1ContentRepository
       !input.plan.isValid ||
       !sameStoredModelStates(input.expectedStoredModels, state) ||
       renderConfigurationSyncPlanJson(input.plan) !== renderConfigurationSyncPlanJson(actualPlan)
-    ) {
-      failure("Configuration synchronization plan is stale.");
-    }
-    if (!actualPlan.requiresApply) {
+    )
+      await failedSynchronizationGuard();
+    if (!actualPlan.requiresApply)
       return Object.freeze({ operations: Object.freeze([]), status: "noop" as const });
-    }
     const expectedByKey = new Map(input.expectedStoredModels.map((model) => [model.key, model]));
     const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
     const singletonEntries = new Map(input.singletonEntries.map((page) => [page.modelKey, page]));
     const batch = this.batch();
     const linkDirtyToken = crypto.randomUUID();
     const linkStatements = syncInternalLinkStatements(input.linkRewrites ?? [], linkDirtyToken);
+    const links = { valid: linkStatements.valid, first: this.first.bind(this) };
     const token = this.guard(batch, input.appliedAt, {
       params: [json, ...linkStatements.valid.flatMap((valid) => valid.params)],
       sql: `${STORED_MODEL_STATE_JSON_SQL} = ?${linkStatements.valid.map((valid) => ` and (${valid.sql})`).join("")}`,
@@ -1526,7 +1526,7 @@ export class D1ContentRepository
     if (!configurationSyncAdvancesPublicState(actualPlan)) {
       this.releaseGuard(batch, token);
       const results = await this.execute(batch, true);
-      if (results[0]!.meta.changes !== 1) failure("Configuration synchronization plan is stale.");
+      if (results[0]!.meta.changes !== 1) await failedSynchronizationGuard(links);
       return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
     }
     const stateStatements = this.addPublicStateBump(
@@ -1541,7 +1541,7 @@ export class D1ContentRepository
     );
     this.releaseGuard(batch, token);
     const results = await this.execute(batch, true);
-    if (results[0]!.meta.changes !== 1) failure("Configuration synchronization plan is stale.");
+    if (results[0]!.meta.changes !== 1) await failedSynchronizationGuard(links);
     return Object.freeze({
       operations: actualPlan.operations,
       status: "applied" as const,

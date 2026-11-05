@@ -6,7 +6,7 @@ import {
   CollectionQueryValidationError,
   BuildExportVersionChangedError,
 } from "@lacecms/domain";
-import type { DomainErrorCode, AccountErrorCode } from "@lacecms/domain";
+import type { AccountErrorCode, DomainErrorCode, InternalDomainErrorCode } from "@lacecms/domain";
 import { ContractValidationError, toContentValidationIssues, validationError } from "./envelope.js";
 import type { ClassifiedError, LaceErrorCode } from "./envelope.js";
 
@@ -35,7 +35,12 @@ interface ErrorMapping {
 // The constrained union also checks every portable domain/account code.
 const errorMappings: Readonly<
   Record<
-    AssertMapped<MappedErrorCode | DomainErrorCode | AccountErrorCode | "RATE_LIMITED">,
+    AssertMapped<
+      | MappedErrorCode
+      | Exclude<DomainErrorCode, InternalDomainErrorCode>
+      | AccountErrorCode
+      | "RATE_LIMITED"
+    >,
     ErrorMapping
   >
 > = {

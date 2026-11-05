@@ -252,7 +252,7 @@ contract(
 
     await repository.saveCompleteDraft(save("draft-only", 1, 40));
     await expect(applySync(repository, [v2], 41, prepared)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     const after = await syncEvidenceState(sql);
     expect(after.models).toEqual(before.models);
@@ -376,7 +376,7 @@ contract(
       "posts",
     );
     await expect(applySync(repository, [v2], 29, stale)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     await sql.run(
       "update content_models set projection_hash = ? where key = ?",

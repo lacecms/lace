@@ -1,3 +1,4 @@
+import { ObjectStorageError } from "@lacecms/application";
 import {
   MAX_MEDIA_BYTES,
   type ByteStream,
@@ -30,7 +31,7 @@ export interface CloudflareR2Settings {
 
 export const DEFAULT_R2_TIMEOUT_MS = 10_000;
 
-export class CloudflareObjectStorageError extends Error {
+export class CloudflareObjectStorageError extends ObjectStorageError {
   public constructor() {
     super("Object storage operation failed.");
     this.name = "CloudflareObjectStorageError";

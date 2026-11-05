@@ -1,3 +1,4 @@
+import { LaceError } from "@lacecms/content";
 import type { ContentEntryStatus } from "./content.js";
 import type {
   Actor,
@@ -31,6 +32,14 @@ export interface ByteStream extends AsyncIterable<Uint8Array> {}
 
 export interface ReadUrlOptions {
   readonly expiresAt?: UnixMilliseconds;
+}
+
+/** An object-storage adapter failure; internal to every transport. */
+export class ObjectStorageError extends LaceError<"STORAGE_UNAVAILABLE"> {
+  public constructor(message: string) {
+    super("STORAGE_UNAVAILABLE", message);
+    this.name = "ObjectStorageError";
+  }
 }
 
 export interface ObjectStorage {

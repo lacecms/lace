@@ -1,6 +1,8 @@
+import { StaleSynchronizationError } from "@lacecms/domain";
 import { failure } from "../shared/failures.js";
 import { parseObject } from "../shared/values.js";
 import { SNAPSHOT_INTERNAL_LINKS_JSON_SQL } from "../links/statements.js";
+import type { LinkSqlStatement } from "../links/statements.js";
 import type {
   ConfigurationSyncMediaReference,
   ConfigurationSyncMigrationBlock,
@@ -85,7 +87,36 @@ export function assertMigrationPageSize(value: number): number {
 
 /** The stale-plan failure raised when a block-migration guard no longer holds. */
 export function staleBlockMigration(): never {
-  failure("Block migration guard failed; the synchronization plan is stale.");
+  throw new StaleSynchronizationError(
+    "Block migration guard failed; the synchronization plan is stale.",
+  );
+}
+
+/** The stale-plan failure raised when a plan no longer matches stored model state. */
+export function staleSynchronizationPlan(): never {
+  throw new StaleSynchronizationError("Configuration synchronization plan is stale.");
+}
+
+/** Rechecks the link availability conditions of a failed guarded synchronization batch. */
+export interface SyncLinkRecheck {
+  readonly valid: readonly LinkSqlStatement[];
+  readonly first: (
+    sql: string,
+    ...params: unknown[]
+  ) => Promise<{ readonly ok?: unknown } | undefined>;
+}
+
+/**
+ * Reports a failed synchronization guard. A guard that also requires every
+ * introduced internal link to be available fails for either reason, so an
+ * unavailable link found by the recheck is invalid content, as on runtimes
+ * that check links before writing; otherwise the plan is stale.
+ */
+export async function failedSynchronizationGuard(links?: SyncLinkRecheck): Promise<never> {
+  for (const check of links?.valid ?? [])
+    if ((await links!.first(`select ${check.sql} as ok`, ...check.params))?.ok !== 1)
+      failure("Schema synchronization would introduce an unavailable internal link.");
+  staleSynchronizationPlan();
 }
 
 /** Bound JSON of migration targets for {@link SYNC_MIGRATION_ENTRIES_SQL}. */

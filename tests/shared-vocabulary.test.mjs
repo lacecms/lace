@@ -94,7 +94,7 @@ const errorOwners = {
   InvariantError: "packages/content/src/shared/errors.ts",
   AccountError: "packages/domain/src/access/errors.ts",
   RateLimitExceededError: "packages/domain/src/access/errors.ts",
-  ContractValidationError: "packages/contracts/src/errors/envelope.ts",
+  ContractValidationError: "packages/contracts/src/shared/validation-error.ts",
   classifyError: "packages/contracts/src/errors/classification.ts",
 };
 

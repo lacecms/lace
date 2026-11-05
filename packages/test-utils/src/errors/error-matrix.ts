@@ -13,8 +13,14 @@ import {
   BuildExportCursorError,
   BlockOrderError,
   CollectionQueryValidationError,
+  StaleSynchronizationError,
 } from "@lacecms/domain";
-import { AccountError, RateLimitExceededError } from "@lacecms/application";
+import {
+  AccountError,
+  ObjectStorageError,
+  RateLimitExceededError,
+  RuntimeConfigurationError,
+} from "@lacecms/application";
 import { ContractValidationError } from "@lacecms/contracts";
 import type { ClassifiedError } from "@lacecms/contracts";
 
@@ -276,6 +282,33 @@ export const errorMatrixCases: readonly ErrorMatrixCase[] = [
         },
       },
       status: 422,
+    },
+  },
+  {
+    name: "StaleSynchronizationError",
+    errorClass: StaleSynchronizationError,
+    create: () => new StaleSynchronizationError("Configuration synchronization plan is stale."),
+    expected: {
+      body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      status: 500,
+    },
+  },
+  {
+    name: "ObjectStorageError",
+    errorClass: ObjectStorageError,
+    create: () => new ObjectStorageError("Object storage operation failed."),
+    expected: {
+      body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      status: 500,
+    },
+  },
+  {
+    name: "RuntimeConfigurationError",
+    errorClass: RuntimeConfigurationError,
+    create: () => new RuntimeConfigurationError("Invalid runtime environment: PRIVATE_VARIABLE."),
+    expected: {
+      body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      status: 500,
     },
   },
   {

@@ -26,6 +26,7 @@ test("packaged entry point keeps its public exports", async () => {
     "readAllBuildContentPages",
     "readCompleteBuildExport",
     "securityContractCases",
+    "unmatchedErrorClasses",
     "visibilityParityCases",
   ]);
   const subpath = await import("@lacecms/test-utils/visibility-parity");

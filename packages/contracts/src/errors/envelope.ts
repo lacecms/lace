@@ -1,13 +1,14 @@
-import { LaceError, ContentValidationError } from "@lacecms/content";
+import { ContentValidationError } from "@lacecms/content";
 import * as v from "valibot";
 import { jsonObjectSchema } from "../shared/json.js";
-import { identifierSchema, jsonPointerSchema } from "../shared/primitives.js";
+import {
+  contractValidationIssueSchema,
+  ContractValidationError,
+} from "../shared/validation-error.js";
+import type { ContractValidationIssue } from "../shared/validation-error.js";
 
-export const contractValidationIssueSchema = v.strictObject({
-  code: identifierSchema,
-  message: v.string(),
-  path: jsonPointerSchema,
-});
+export { contractValidationIssueSchema, ContractValidationError };
+export type { ContractValidationIssue };
 
 export const errorCodeSchema = v.picklist([
   "AUTHORIZATION_DENIED",
@@ -51,7 +52,6 @@ export type ReportedLaceErrorCode = LaceErrorCode | (string & {});
 export interface TolerantErrorEnvelope {
   readonly error: Omit<ErrorEnvelope["error"], "code"> & { readonly code: ReportedLaceErrorCode };
 }
-export type ContractValidationIssue = v.InferOutput<typeof contractValidationIssueSchema>;
 
 /** JSON Pointer paths for Valibot and portable content validation issues. */
 export function contractIssuePointer(path: readonly unknown[] | undefined): string {
@@ -85,13 +85,6 @@ export interface ClassifiedError {
   readonly body: ErrorEnvelope;
   readonly status: 400 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
   readonly headers?: Readonly<Record<string, string>>;
-}
-
-export class ContractValidationError extends LaceError<"VALIDATION_FAILED"> {
-  public constructor(public readonly issues: readonly ContractValidationIssue[]) {
-    super("VALIDATION_FAILED", "Request validation failed.");
-    this.name = "ContractValidationError";
-  }
 }
 
 /** Creates a safe validation envelope from already-normalized contract issues. */

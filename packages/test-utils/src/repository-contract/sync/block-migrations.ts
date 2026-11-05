@@ -241,7 +241,9 @@ contract(
         },
       },
     );
-    await expect(syncNotes(racing, v3, 30)).rejects.toThrow("stale");
+    await expect(syncNotes(racing, v3, 30)).rejects.toMatchObject({
+      code: "CONFIGURATION_SYNC_STALE",
+    });
     const stopped = await noteState(sql);
     expect(stopped.models).toEqual(before.models);
     expect(stopped.version).toBe(before.version);

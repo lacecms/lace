@@ -19,6 +19,7 @@ import {
 } from "../shared/protocol.js";
 import { AuthorizationError, errorResponse, noStore, notFound } from "../shared/http.js";
 import { isBearerManagementRequest, isImportRoute } from "../security/import-routes.js";
+import { RateLimitExceededError } from "@lacecms/application";
 import type { ImportTokenMetadata } from "@lacecms/application";
 import { classifyError, transportError } from "@lacecms/contracts";
 import { bodyLimit } from "hono/body-limit";
@@ -180,9 +181,8 @@ export function createLaceApp(input: LaceAppInput): Hono {
           "retry-after": String(retryAfterSeconds),
           ...noStore,
         });
-      return errorResponse(transportError("RATE_LIMITED"), {
-        "retry-after": String(retryAfterSeconds),
-      });
+      // The classifier owns the 429 envelope and its whole-second Retry-After.
+      throw new RateLimitExceededError(retryAfterSeconds);
     }
     await next();
   });

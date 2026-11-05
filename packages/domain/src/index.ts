@@ -37,3 +37,4 @@ export type { ContentBlock, ContentBlockInput, BlockPositionPlan } from "./conte
 export * from "./content/collection-queries.js";
 export * from "./content/seo.js";
 export * from "./content/entries.js";
+export * from "./content/synchronization.js";

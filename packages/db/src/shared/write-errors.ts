@@ -1,4 +1,4 @@
-import { ContentValidationError } from "@lacecms/content";
+import { LaceError } from "@lacecms/content";
 import { DomainError } from "@lacecms/domain";
 import { failure } from "./failures.js";
 /** Maps SQLite and D1 constraint failures to stable domain errors. */
@@ -7,7 +7,7 @@ export function sqliteWriteError(
   singletonCreation: boolean,
   runtime: string,
 ): never {
-  if (error instanceof DomainError || error instanceof ContentValidationError) throw error;
+  if (error instanceof LaceError) throw error;
   const message = error instanceof Error ? error.message : "";
   if (
     singletonCreation &&

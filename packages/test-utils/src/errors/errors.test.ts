@@ -14,6 +14,9 @@ const codes: Readonly<Record<string, string>> = {
   BlockOrderError: "CONTENT_INVALID_STATE",
   CollectionQueryValidationError: "CONTENT_INVALID_STATE",
   RateLimitExceededError: "RATE_LIMITED",
+  StaleSynchronizationError: "CONFIGURATION_SYNC_STALE",
+  ObjectStorageError: "STORAGE_UNAVAILABLE",
+  RuntimeConfigurationError: "RUNTIME_CONFIGURATION_INVALID",
   InvariantError: "INTERNAL_INVARIANT",
   LaceError: "INTERNAL_PRIVATE",
 };

@@ -2,7 +2,12 @@
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { DomainError, unixMilliseconds } from "@lacecms/domain";
 import { describe, expect, test } from "vitest";
-import { classifyError, fromIsoTimestamp, toMediaMetadataDto } from "../index.js";
+import {
+  classifyError,
+  ContractValidationError,
+  fromIsoTimestamp,
+  toMediaMetadataDto,
+} from "../index.js";
 
 describe("media metadata contracts", async () => {
   const { mediaEntityTag, resolveMediaPrecondition } = await import("../index.js");
@@ -37,7 +42,7 @@ describe("media metadata contracts", async () => {
       '"abc"',
       '"99999999999999999"',
     ]) {
-      expect(() => resolveMediaPrecondition(invalid)).toThrow(TypeError);
+      expect(() => resolveMediaPrecondition(invalid)).toThrow(ContractValidationError);
     }
   });
   test("stale media edits classify as a sanitized conflict", () => {

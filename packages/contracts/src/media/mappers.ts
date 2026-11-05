@@ -1,6 +1,7 @@
 import { unixMilliseconds } from "@lacecms/domain";
 import type { MediaFocalPoint, UnixMilliseconds } from "@lacecms/domain";
 import { entityTagForVersion, versionFromEntityTag } from "../shared/preconditions.js";
+import { invalidPrecondition } from "../shared/validation-error.js";
 import { toIsoTimestamp } from "../shared/primitives.js";
 import type { EntityTag } from "../shared/primitives.js";
 import type { MediaMetadataDto, MediaDetailDto, UpdateMediaMetadataResultDto } from "./metadata.js";
@@ -136,11 +137,11 @@ export function mediaEntityTag(updatedAt: UnixMilliseconds | number): EntityTag 
  * malformed values are refused.
  */
 export function resolveMediaPrecondition(ifMatch: string | undefined): UnixMilliseconds {
-  if (ifMatch === undefined) throw new TypeError("If-Match is required.");
+  if (ifMatch === undefined) invalidPrecondition("If-Match is required.");
   const value = ifMatch.trim();
-  if (value.startsWith("W/")) throw new TypeError("If-Match requires a strong media tag.");
+  if (value.startsWith("W/")) invalidPrecondition("If-Match requires a strong media tag.");
   if (!/^"[0-9]{1,16}"$/u.test(value)) {
-    throw new TypeError("If-Match must be one strong media tag.");
+    invalidPrecondition("If-Match must be one strong media tag.");
   }
   return unixMilliseconds(versionFromEntityTag(value));
 }

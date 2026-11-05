@@ -1,5 +1,5 @@
 import { opaqueCursor } from "@lacecms/application";
-import { DomainError } from "@lacecms/domain";
+import { LaceError } from "@lacecms/content";
 import { decodeBase64Url, encodeBase64Url } from "./base64.js";
 import { failure } from "./failures.js";
 import { SQL_CURSOR_VERSION, SQL_SORT_CURSOR_VERSION } from "./limits.js";
@@ -28,7 +28,7 @@ export function parseCursorObject(value: string): Record<string, unknown> {
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
-    if (error instanceof DomainError) throw error;
+    if (error instanceof LaceError) throw error;
     failure("Cursor contains invalid JSON.");
   }
 }

@@ -90,7 +90,7 @@ contract(
     await applySync(repository, [enabled], 30);
     expect(await stable()).toEqual(baseline);
     await expect(applySync(repository, [enabled], 31, prepared)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     // Concurrent baseline-only seeding changes state while leaving full identity equal.
     await sql.run(
@@ -103,7 +103,7 @@ contract(
     expect(seedPlan.plan.operations).toMatchObject([{ action: "record-baseline" }]);
     await applySync(repository, [enabled], 32);
     await expect(applySync(repository, [enabled], 33, seedPlan)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     expect(await stable()).toEqual(baseline);
     // SEO and query changes together retain the public build.

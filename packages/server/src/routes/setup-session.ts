@@ -1,4 +1,4 @@
-import { AuthorizationError, notFound, response, validationHook } from "../shared/http.js";
+import { response, validationHook } from "../shared/http.js";
 import { sendTestEmail } from "@lacecms/application";
 import {
   adminSettingsStatusSchema,
@@ -8,6 +8,7 @@ import {
   managedUserSchema,
   setupAdminRequestSchema,
   setupStateSchema,
+  InvariantError,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
@@ -43,18 +44,15 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
     "/api/v1/setup/admin",
     validator("json", setupAdminRequestSchema, validationHook),
     async (context) => {
-      try {
-        const body = context.req.valid("json") as v.InferOutput<typeof setupAdminRequestSchema>;
-        const created = await security().bootstrap({
-          email: body.email,
-          password: body.password,
-          token: body.token as never,
-        });
-        return response(managedUserSchema, created.user, 201);
-      } catch (error) {
-        if (error instanceof AuthorizationError) throw error;
-        return notFound();
-      }
+      // Setup outcomes raise `AccountError("NOT_FOUND")`, one ambiguous 404 through the
+      // classifier; any other failure keeps its own classification.
+      const body = context.req.valid("json") as v.InferOutput<typeof setupAdminRequestSchema>;
+      const created = await security().bootstrap({
+        email: body.email,
+        password: body.password,
+        token: body.token as never,
+      });
+      return response(managedUserSchema, created.user, 201);
     },
   );
 
@@ -74,7 +72,7 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
   );
   app.get("/api/v1/admin/settings/status", async (context) => {
     await settingsActor(context);
-    if (!input.publicBaseUrl) throw new Error("Canonical public URL is unavailable.");
+    if (!input.publicBaseUrl) throw new InvariantError("Canonical public URL is unavailable.");
     return response(adminSettingsStatusSchema, {
       mcp: {
         enabled: input.mcpEnabled === true,

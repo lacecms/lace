@@ -20,7 +20,7 @@ import type {
   ConfigurationSyncSnapshotScanInput,
   StoredContentModelState,
 } from "@lacecms/application";
-import { DomainError, mediaId, isSingletonKind } from "@lacecms/domain";
+import { DomainError, mediaId, isSingletonKind, StaleSynchronizationError } from "@lacecms/domain";
 import type {
   ContentBlock,
   ContentEntry,
@@ -213,10 +213,7 @@ export class InMemoryContentStoreSync extends InMemoryContentStoreMedia {
       !sameStoredModelStates(input.expectedStoredModels, current) ||
       renderConfigurationSyncPlanJson(input.plan) !== renderConfigurationSyncPlanJson(actualPlan)
     ) {
-      throw new DomainError(
-        "CONTENT_INVALID_STATE",
-        "Configuration synchronization plan is stale.",
-      );
+      throw new StaleSynchronizationError("Configuration synchronization plan is stale.");
     }
     if (!actualPlan.requiresApply) {
       return Object.freeze({ operations: Object.freeze([]), status: "noop" });

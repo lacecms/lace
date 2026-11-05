@@ -38,7 +38,13 @@ import {
   type SecurityService,
   type SensitiveRateLimiter,
 } from "@lacecms/application";
-import { DomainError, unixMilliseconds, type UnixMilliseconds } from "@lacecms/domain";
+import { InvariantError } from "@lacecms/content";
+import {
+  AccountError,
+  DomainError,
+  unixMilliseconds,
+  type UnixMilliseconds,
+} from "@lacecms/domain";
 import type { D1Database, D1PreparedStatement } from "./d1.js";
 
 const setupExpiryMs = 60 * 60 * 1000;
@@ -196,7 +202,7 @@ export class D1SecurityService implements SecurityService {
         now,
       ),
     ]);
-    if (minted?.meta.changes !== 1) throw new Error("Setup already completed.");
+    if (minted?.meta.changes !== 1) throw new AccountError("NOT_FOUND");
     return Object.freeze({ expiresAt: unixMilliseconds(now + setupExpiryMs), token });
   }
 
@@ -209,14 +215,14 @@ export class D1SecurityService implements SecurityService {
     const email = normalizedEmail(input.email);
     const tokenHash = await digest(input.token);
     const emailHash = await digest(email);
-    if (await this.isSetupComplete()) throw new Error("Setup unavailable.");
+    if (await this.isSetupComplete()) throw new AccountError("NOT_FOUND");
     const claimed = await this.statement(
       `update setup_tokens set claimed_email_hash = coalesce(claimed_email_hash, ?1), claimed_at = coalesce(claimed_at, ?2) where token_hash = ?3 and expires_at > ?2 and consumed_at is null and (claimed_email_hash is null or claimed_email_hash = ?1) and not ${SETUP_COMPLETED_SQL}`,
       emailHash,
       now,
       tokenHash,
     ).run();
-    if (claimed.meta.changes !== 1) throw new Error("Setup credential is invalid.");
+    if (claimed.meta.changes !== 1) throw new AccountError("NOT_FOUND");
     let account = await this.userByEmail(email);
     if (account === undefined) {
       try {
@@ -227,7 +233,7 @@ export class D1SecurityService implements SecurityService {
       }
     }
     if (account === undefined || account.role !== "admin")
-      throw new Error("Setup claim user is not an administrator.");
+      throw new InvariantError("Setup claim user is not an administrator.");
     const [completed] = await this.database.batch([
       this.statement(
         "update installation_state set setup_completed_at = ?, setup_admin_user_id = ? where singleton_key = 1 and setup_completed_at is null",
@@ -240,7 +246,7 @@ export class D1SecurityService implements SecurityService {
         account.id,
       ),
     ]);
-    if (completed?.meta.changes !== 1) throw new Error("Setup unavailable.");
+    if (completed?.meta.changes !== 1) throw new AccountError("NOT_FOUND");
     return Object.freeze({ user: account });
   }
 
@@ -271,13 +277,13 @@ export class D1SecurityService implements SecurityService {
 
   public async disableUser(input: { readonly userId: string }): Promise<ManagedUser> {
     const value = await this.mutateUser(input.userId, undefined, true);
-    if (value === null) throw new Error("User not found.");
+    if (value === null) throw new AccountError("NOT_FOUND");
     return value;
   }
 
   private async loadInvitation(id: string): Promise<InvitationRecord> {
     const row = await this.statement(`${INVITATION_COLUMNS_SQL} where i.id = ?`, id).first();
-    if (row === null) throw new Error("Invitation could not be reloaded.");
+    if (row === null) throw new InvariantError("Invitation could not be reloaded.");
     return invitation(row);
   }
 

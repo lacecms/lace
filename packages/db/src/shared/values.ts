@@ -1,5 +1,5 @@
 import type { JsonObject } from "@lacecms/content";
-import { DomainError } from "@lacecms/domain";
+import { LaceError } from "@lacecms/content";
 import type { Role } from "@lacecms/domain";
 import { failure } from "./failures.js";
 import { SQL_MAX_PAGE_SIZE } from "./limits.js";
@@ -36,7 +36,7 @@ export function parseObject(value: string, label: string): JsonObject {
     }
     return parsed as JsonObject;
   } catch (error) {
-    if (error instanceof DomainError) throw error;
+    if (error instanceof LaceError) throw error;
     failure(`${label} contains invalid JSON.`);
   }
 }

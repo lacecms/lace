@@ -86,7 +86,7 @@ contract(
       "posts",
     );
     await expect(applySync(repository, models, 40, plan)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     expect(await repository.load({ entryId: created.id })).toEqual(before);
   },
@@ -603,7 +603,7 @@ contract(
       "posts",
     );
     await expect(syncNotes(repository, config, 50, stale)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     expect(await state()).toEqual(afterSync);
   },

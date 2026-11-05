@@ -64,7 +64,7 @@ contract(
       "posts",
     );
     await expect(applySync(repository, projectionUpdate, 13, stale)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
+      code: "CONFIGURATION_SYNC_STALE",
     });
     expect(await sql.get("select version from published_state")).toEqual({ version: 2 });
     expect(await sql.get("select projection_hash from content_models where key = 'posts'")).toEqual(
@@ -138,7 +138,7 @@ contract("allows only one independently prepared sync apply to commit", async (r
     status: "applied",
   });
   await expect(applySync(second, models, 11, secondPrepared)).rejects.toMatchObject({
-    code: "CONTENT_INVALID_STATE",
+    code: "CONFIGURATION_SYNC_STALE",
   });
   expect(await count(harness.sql, "select count(*) as count from content_models")).toBe(1);
   expect(await count(harness.sql, "select count(*) as count from outbox_events")).toBe(1);

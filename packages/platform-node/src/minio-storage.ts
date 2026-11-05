@@ -1,3 +1,4 @@
+import { ObjectStorageError } from "@lacecms/application";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -28,7 +29,7 @@ export interface S3CommandClient {
   send(command: object, options?: { readonly abortSignal?: AbortSignal }): Promise<unknown>;
 }
 
-export class NodeObjectStorageError extends Error {
+export class NodeObjectStorageError extends ObjectStorageError {
   public constructor() {
     super("Object storage operation failed.");
     this.name = "NodeObjectStorageError";

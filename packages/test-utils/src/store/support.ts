@@ -11,6 +11,7 @@ import type {
 } from "@lacecms/application";
 import {
   DomainError,
+  StaleSynchronizationError,
   cloneEntrySeo,
   contentSnapshotId,
   contentModelKey,
@@ -122,8 +123,7 @@ export function stateForModel(
 }
 
 export function staleMigration(): DomainError {
-  return new DomainError(
-    "CONTENT_INVALID_STATE",
+  return new StaleSynchronizationError(
     "Block migration guard failed; the synchronization plan is stale.",
   );
 }

@@ -1,5 +1,8 @@
 import { LaceError } from "@lacecms/content";
 
+/** Domain codes that no transport documents; the classifier maps them to `500`. */
+export type InternalDomainErrorCode = "CONFIGURATION_SYNC_STALE";
+
 export type DomainErrorCode =
   | "AUTHORIZATION_DENIED"
   | "BUILD_EXPORT_VERSION_CHANGED"
@@ -12,6 +15,7 @@ export type DomainErrorCode =
   | "CONTENT_PUBLISHED_IMMUTABLE"
   | "CONTENT_REVISION_CONFLICT"
   | "CONTENT_ROUTE_CONFLICT"
+  | InternalDomainErrorCode
   | "LAST_ADMIN_PROTECTED"
   | "MEDIA_IN_USE"
   | "MEDIA_UPDATE_CONFLICT";

@@ -9,6 +9,7 @@ import {
   siteBuildListSchema,
   identifierSchemaPublic,
   toSiteBuildRecordDto,
+  InvariantError,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
@@ -47,7 +48,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     }),
     async (context) => {
       const resolvedActor = await actor(context);
-      if (input.builds === undefined) throw new Error("Build reads are unavailable.");
+      if (input.builds === undefined) throw new InvariantError("Build reads are unavailable.");
       const items = await input.builds.list(resolvedActor);
       return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
     },
@@ -67,7 +68,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     async (context) => {
       const resolvedActor = await actor(context);
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (input.builds === undefined) throw new Error("Build reads are unavailable.");
+      if (input.builds === undefined) throw new InvariantError("Build reads are unavailable.");
       const build = await input.builds.get(resolvedActor, buildId);
       return build === null
         ? notFound()
@@ -90,7 +91,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     async (context) => {
       const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-      if (input.builds === undefined) throw new Error("Build commands are unavailable.");
+      if (input.builds === undefined) throw new InvariantError("Build commands are unavailable.");
       return response(buildQueueReceiptSchema, await input.builds.request(resolvedActor), 202);
     },
   );
@@ -111,7 +112,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (input.builds === undefined) throw new Error("Build commands are unavailable.");
+      if (input.builds === undefined) throw new InvariantError("Build commands are unavailable.");
       return response(
         buildQueueReceiptSchema,
         await input.builds.retry(resolvedActor, buildId),

@@ -23,6 +23,7 @@ import { validateModelFields } from "@lacecms/content";
 import type { BlockDefinition, BlockRegistry, JsonObject } from "@lacecms/content";
 import {
   DomainError,
+  StaleSynchronizationError,
   contentEntryId,
   contentModelKey,
   contentSnapshotId,
@@ -286,7 +287,7 @@ function plannedMigrations(plan: ConfigurationSyncPlan): readonly {
 }
 
 function staleSynchronization(message: string): never {
-  throw new DomainError("CONTENT_INVALID_STATE", message);
+  throw new StaleSynchronizationError(message);
 }
 
 /** Rewrites every stale block of the planned migrations in guarded per-entry units. */

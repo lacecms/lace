@@ -1,3 +1,4 @@
+import { InvariantError } from "@lacecms/contracts";
 import {
   EMAIL_SENT,
   emailFailed,
@@ -351,7 +352,9 @@ export function createEmailSender(
       });
     default:
       if (options.runtimeSender === undefined)
-        throw new Error(`Email provider ${settings.provider} is not composed for this runtime.`);
+        throw new InvariantError(
+          `Email provider ${settings.provider} is not composed for this runtime.`,
+        );
       return options.runtimeSender(settings);
   }
 }

@@ -1,3 +1,4 @@
+import { RuntimeConfigurationError } from "@lacecms/application";
 import { siteBuildTrackingPolicy } from "@lacecms/domain";
 import {
   parseBuildSiteIdentity,
@@ -54,7 +55,7 @@ export interface CloudflareEnvironmentIssue {
 }
 
 /** Validation failures name bindings or variables but never repeat their values. */
-export class CloudflareEnvironmentError extends Error {
+export class CloudflareEnvironmentError extends RuntimeConfigurationError {
   public constructor(readonly issues: readonly CloudflareEnvironmentIssue[]) {
     super(`Invalid Cloudflare environment: ${issues.map((issue) => issue.variable).join(", ")}.`);
     this.name = "CloudflareEnvironmentError";

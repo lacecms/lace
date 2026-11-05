@@ -1,5 +1,6 @@
 import { opaqueCursor } from "@lacecms/application";
 import {
+  ContractValidationError,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
   idempotencyKeySchema,
@@ -45,7 +46,8 @@ export function revision(
       ...(body.expectedRevision === undefined ? {} : { expectedRevision: body.expectedRevision }),
       ...(ifMatch === undefined ? {} : { ifMatch }),
     });
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ContractValidationError)) throw error;
     return invalid("expectedRevision and If-Match must supply one matching revision.");
   }
 }

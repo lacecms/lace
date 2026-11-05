@@ -1,4 +1,8 @@
-import { buildSiteIdentitySchema, type BuildSiteIdentityDto } from "@lacecms/contracts";
+import {
+  buildSiteIdentitySchema,
+  type BuildSiteIdentityDto,
+  InvariantError,
+} from "@lacecms/contracts";
 import * as v from "valibot";
 
 const identityVariables = ["LACE_BUILD_SITE_ID", "LACE_BUILD_SITE_LABEL"] as const;
@@ -42,6 +46,6 @@ export function parseBuildSiteIdentity(environment: {
       invalid.push("LACE_BUILD_SITE_URL");
   }
   if (!identity.success || invalid.length > 0)
-    throw new Error(`Invalid build site configuration: ${invalid.join(", ")}.`);
+    throw new InvariantError(`Invalid build site configuration: ${invalid.join(", ")}.`);
   return Object.freeze({ ...identity.output, ...(url === undefined ? {} : { url }) });
 }
