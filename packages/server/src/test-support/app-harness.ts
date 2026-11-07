@@ -1,14 +1,24 @@
 import { expect } from "vitest";
 import { createLaceApp } from "../index.js";
-import { ContentUseCases, ContentLinkUseCases, MediaUseCases } from "@lacecms/application";
+import {
+  ContentUseCases,
+  ContentLinkUseCases,
+  MediaUseCases,
+  opaqueTokenSecret,
+} from "@lacecms/application";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
-import { actorId, attenuateActor, unixMilliseconds } from "@lacecms/domain";
+import { unixMilliseconds } from "@lacecms/domain";
 import {
   DeterministicClock,
   DeterministicIdGenerator,
   InMemoryContentStore,
   InMemoryObjectStorage,
+  admin,
+  delegatedActor,
+  editor,
+  fakePort,
+  testActor,
 } from "@lacecms/test-utils";
 
 import type { LaceAppInput } from "../index.js";
@@ -52,9 +62,7 @@ type FixtureOptions = Partial<
   listQueryLimits?: ConstructorParameters<typeof ContentUseCases>[0]["listQueryLimits"];
 };
 
-export const admin: Actor = { id: actorId("admin"), role: "admin" };
-
-export const editor: Actor = { id: actorId("editor"), role: "editor" };
+export { admin, editor };
 
 export async function fixture({
   actor = admin,
@@ -157,7 +165,9 @@ export async function fixture({
     ),
     ...(buildSite === undefined ? {} : { buildSite }),
     ...(builds === undefined ? {} : { builds }),
-    ...(security === undefined ? {} : { security: security as SecurityService }),
+    ...(security === undefined
+      ? {}
+      : { security: fakePort<SecurityService>("SecurityService", security) }),
     ...(importActors === undefined ? {} : { importActors }),
     mcpEnabled: mcpEnabled ?? oauthConnections !== undefined,
     ...(mcp === undefined ? {} : { mcp }),
@@ -253,15 +263,16 @@ export const TOKEN = "Q".repeat(43);
 
 export function accountSecurity(overrides: Partial<SecurityService> = {}) {
   const calls: unknown[][] = [];
+  // Argument and result types come from the port member the call is assigned to.
   const record =
-    (name: string, result: unknown) =>
-    async (...args: unknown[]) => {
+    <Args extends unknown[], Result>(name: string, result: NoInfer<Result>) =>
+    async (...args: Args): Promise<Result> => {
       calls.push([name, ...args]);
-      return typeof result === "function" ? result(...args) : result;
+      return result;
     };
   return {
     calls,
-    security: {
+    security: fakePort<SecurityService>("SecurityService", {
       readUserProfile: async (id: string) => ({
         disabled: false,
         email: `${id}@lace.test`,
@@ -281,7 +292,7 @@ export function accountSecurity(overrides: Partial<SecurityService> = {}) {
           role: "editor",
         },
         status: "created",
-        token: TOKEN,
+        token: opaqueTokenSecret(TOKEN),
       }),
       deleteOtherSessions: record("deleteOtherSessions", 2),
       deleteSession: record("deleteSession", false),
@@ -290,7 +301,7 @@ export function accountSecurity(overrides: Partial<SecurityService> = {}) {
       issuePasswordReset: record("issuePasswordReset", {
         email: "editor@lace.test",
         status: "issued",
-        token: TOKEN,
+        token: opaqueTokenSecret(TOKEN),
         userId: "editor",
       }),
       listInvitations: record("listInvitations", []),
@@ -307,7 +318,7 @@ export function accountSecurity(overrides: Partial<SecurityService> = {}) {
       revokeInvitation: record("revokeInvitation", "revoked"),
       updateDisplayName: record("updateDisplayName", true),
       ...overrides,
-    } as unknown as SecurityService,
+    }),
   };
 }
 
@@ -339,25 +350,22 @@ export const importToken = (
 export function importResolution(capabilities: ImportTokenCapabilities, role: Role = "admin") {
   const publish = (capabilities as readonly string[]).includes("content:publish");
   return {
-    actor: attenuateActor(
-      { id: actorId("admin"), role },
-      {
-        permissions: [
-          "content:read",
-          "content:write",
-          "media:write",
-          ...(publish ? ["content:publish" as const] : []),
-        ],
-        operations: [
-          "discoverModels",
-          "list",
-          "load",
-          "create",
-          "save",
-          ...(publish ? ["publish" as const] : []),
-        ],
-      },
-    ),
+    actor: delegatedActor(testActor(role, "admin"), {
+      permissions: [
+        "content:read",
+        "content:write",
+        "media:write",
+        ...(publish ? ["content:publish" as const] : []),
+      ],
+      operations: [
+        "discoverModels",
+        "list",
+        "load",
+        "create",
+        "save",
+        ...(publish ? ["publish" as const] : []),
+      ],
+    }),
     token: importToken(capabilities),
   };
 }

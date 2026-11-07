@@ -3,21 +3,17 @@
 import { expect, test } from "vitest";
 import { createServer } from "node:http";
 import { connect } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   applyPreparedConfigurationSynchronization,
   prepareConfigurationSynchronization,
 } from "@lacecms/application";
 import { actorId, unixMilliseconds } from "@lacecms/domain";
+import * as platform from "@lacecms/platform-node";
 import {
-  anonymousActorResolver,
-  createNodeRuntime,
-  migrateNodeDatabase,
-  parseNodeRuntimeSettings,
-} from "@lacecms/platform-node";
-import { createTestActorResolver } from "@lacecms/platform-node/test";
+  createTestActorResolver,
+  minioTestEnvironment,
+  openNodeTestRuntime,
+} from "@lacecms/platform-node/test";
 import {
   createNodeDevelopmentGateway,
   proxyNodeDevelopmentUpgrade,
@@ -27,29 +23,14 @@ import { loadProjectConfig } from "./project-config.js";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 const admin = { id: actorId("integration-admin"), role: "admin" };
-const minioEnvironment = Object.freeze({
-  LACE_MINIO_ACCESS_KEY: "test-access-key",
-  LACE_MINIO_BUCKET: "lace-media",
-  LACE_MINIO_ENDPOINT: "http://minio.test:9000",
-  LACE_MINIO_REGION: "us-east-1",
-  LACE_MINIO_SECRET_KEY: "test-secret-key",
-  LACE_MINIO_TIMEOUT_MS: "1000",
+const { anonymousActorResolver, parseNodeRuntimeSettings } = platform;
+const runtimeEnvironment = Object.freeze({
+  LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
+  LACE_PUBLIC_BASE_URL: "https://public.lace.test/",
 });
 
 async function fixture({ actors = createTestActorResolver(admin) } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), "lace-node-api-"));
-  const databasePath = join(directory, "lace.sqlite");
-  migrateNodeDatabase(databasePath);
   const config = await loadProjectConfig();
-  const settings = {
-    ...parseNodeRuntimeSettings({
-      ...minioEnvironment,
-      LACE_DATABASE_PATH: databasePath,
-      LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
-      LACE_PUBLIC_BASE_URL: "https://public.lace.test/",
-    }),
-    port: 0,
-  };
   const deletedKeys = [];
   const storage = {
     createReadUrl: async () => "memory-object://media",
@@ -63,12 +44,15 @@ async function fixture({ actors = createTestActorResolver(admin) } = {}) {
       size: 0,
     }),
   };
-  const runtime = createNodeRuntime({
-    actors,
+  const harness = await openNodeTestRuntime(platform, {
     config,
-    settings,
+    actors,
     storage,
+    runtimeDefaults: true,
+    settings: runtimeEnvironment,
   });
+  const { runtime } = harness;
+  const settings = { ...harness.settings, port: 0 };
   const prepared = await prepareConfigurationSynchronization({
     models: config.runtime.content,
     state: runtime.repository,
@@ -85,8 +69,7 @@ async function fixture({ actors = createTestActorResolver(admin) } = {}) {
   return {
     close: async () => {
       await server.close();
-      runtime.close();
-      await rm(directory, { force: true, recursive: true });
+      await harness.close();
     },
     runtime,
     server,
@@ -371,22 +354,11 @@ test("processes queued media deletion outside the HTTP request", async () => {
 });
 
 test("preflights object storage before binding a Node listener", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "lace-node-preflight-"));
-  const databasePath = join(directory, "lace.sqlite");
-  migrateNodeDatabase(databasePath);
-  const config = await loadProjectConfig();
-  const settings = {
-    ...parseNodeRuntimeSettings({
-      ...minioEnvironment,
-      LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
-      LACE_DATABASE_PATH: databasePath,
-      LACE_PUBLIC_BASE_URL: "https://public.lace.test/",
-    }),
-    port: 0,
-  };
-  const runtime = createNodeRuntime({
-    config,
-    settings,
+  const { runtime, settings } = await openNodeTestRuntime(platform, {
+    config: await loadProjectConfig(),
+    actor: null,
+    runtimeDefaults: true,
+    settings: runtimeEnvironment,
     storage: {
       assertReady: async () => {
         throw new Error("bucket unavailable");
@@ -397,22 +369,9 @@ test("preflights object storage before binding a Node listener", async () => {
       put: async (input) => ({ contentType: input.contentType, key: input.key, size: 0 }),
     },
   });
-  try {
-    await expect(startNodeServer({ runtime, settings })).rejects.toThrow("bucket unavailable");
-  } finally {
-    runtime.close();
-    await rm(directory, { force: true, recursive: true });
-  }
-});
-
-test("refuses to construct the test actor resolver outside Vitest", () => {
-  const original = [...process.argv];
-  process.argv.splice(0, process.argv.length, "node", "production.js");
-  try {
-    expect(() => createTestActorResolver(admin)).toThrow("available only in the Vitest runtime");
-  } finally {
-    process.argv.splice(0, process.argv.length, ...original);
-  }
+  await expect(startNodeServer({ runtime, settings: { ...settings, port: 0 } })).rejects.toThrow(
+    "bucket unavailable",
+  );
 });
 
 test("routes frontend requests to same-origin development upstreams without proxying API paths", async () => {
@@ -429,7 +388,7 @@ test("routes frontend requests to same-origin development upstreams without prox
   const address = upstream.address();
   const origin = `http://127.0.0.1:${address.port}`;
   const settings = parseNodeRuntimeSettings({
-    ...minioEnvironment,
+    ...minioTestEnvironment,
     LACE_ADMIN_DEV_ORIGIN: origin,
     LACE_DATABASE_PATH: "/tmp/lace.sqlite",
     LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
@@ -483,7 +442,7 @@ test("forwards frontend development upgrades and closes connections on gateway s
   const upstreamAddress = upstream.address();
   const upstreamOrigin = `http://127.0.0.1:${upstreamAddress.port}`;
   const settings = parseNodeRuntimeSettings({
-    ...minioEnvironment,
+    ...minioTestEnvironment,
     LACE_ADMIN_DEV_ORIGIN: upstreamOrigin,
     LACE_DATABASE_PATH: "/tmp/lace.sqlite",
     LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",

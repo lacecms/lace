@@ -3,7 +3,7 @@
 import { afterEach, expect, test } from "vitest";
 import { MAX_MEDIA_BYTES } from "@lacecms/application";
 import { CloudflareObjectStorageError, CloudflareR2ObjectStorage } from "./index.js";
-import { openLocalCloudflare } from "./d1-test-harness.mjs";
+import { openLocalCloudflare } from "./test-support/d1-test-harness.js";
 
 const cleanups = [];
 afterEach(async () => {

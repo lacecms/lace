@@ -534,7 +534,10 @@ function checkSourceConditionFixture(exports, sources = ["index.ts"]) {
       join(directory, "package.json"),
       JSON.stringify({ name: "@lacecms/content", exports }),
     );
-    for (const source of sources) writeFileSync(join(directory, "src", source), "export {};\n");
+    for (const source of sources) {
+      mkdirSync(dirname(join(directory, "src", source)), { recursive: true });
+      writeFileSync(join(directory, "src", source), "export {};\n");
+    }
     return spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -551,8 +554,9 @@ test("allows compiled exports that list their source condition first", () => {
       },
       "./Box.astro": { "@lacecms/source": "./src/Box.astro", default: "./dist/Box.astro" },
       "./schema.json": "./schema/schema.json",
+      "./test": { "@lacecms/source": "./src/test-support/harness.ts" },
     },
-    ["index.ts", "Box.astro"],
+    ["index.ts", "Box.astro", "test-support/harness.ts"],
   );
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
@@ -602,8 +606,55 @@ test.each([
     },
     'source condition: @lacecms/content export "./test" names ./src/index.ts, but ./dist/test.d.ts is not built from it',
   ],
+  [
+    "a source-only export outside test-support",
+    { "./helpers": { "@lacecms/source": "./src/index.ts" } },
+    'source condition: @lacecms/content export "./helpers" is source-only, which only a src/test-support/ module may be',
+  ],
 ])("rejects %s", (_name, exports, message) => {
   const result = checkSourceConditionFixture(exports);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
+test("allows listed JavaScript sources and JavaScript tests", () => {
+  const result = checkScratch(
+    {
+      "packages/content/src/index.ts": "export {};\n",
+      "packages/content/src/init.mjs": "export {};\n",
+      "packages/content/src/script.test.mjs": "export {};\n",
+      "packages/content/src/entry.packaged.test.mjs": "export {};\n",
+    },
+    { "javascript-source-allowlist.json": { "packages/content/src/init.mjs": "Plain-Node init." } },
+  );
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test.each([
+  [
+    "an unlisted JavaScript source",
+    { "packages/content/src/helper.mjs": "export {};\n" },
+    {},
+    "untyped source module: packages/content/src/helper.mjs",
+  ],
+  [
+    "a JavaScript test-support module",
+    { "packages/content/src/test-support/harness.mjs": "export {};\n" },
+    { "packages/content/src/test-support/harness.mjs": "listed anyway" },
+    "untyped test-support module: packages/content/src/test-support/harness.mjs",
+  ],
+  [
+    "a stale allowlist entry",
+    {},
+    { "packages/content/src/gone.mjs": "Removed script." },
+    "stale JavaScript source allowlist entry: packages/content/src/gone.mjs is missing",
+  ],
+])("rejects %s", (_name, files, allowlist, message) => {
+  const result = checkScratch(
+    { "packages/content/src/index.ts": "export {};\n", ...files },
+    { "javascript-source-allowlist.json": allowlist },
+  );
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain(message);
 });

@@ -1,4 +1,4 @@
-// Directory dependencies: shared ← adapters, store; delivery, visibility ← repository-contract ← security-contract; errors; filters.
+// Directory dependencies: shared ← adapters, store; fixtures, delivery, visibility ← repository-contract ← security-contract; errors; filters.
 export const packageName = "@lacecms/test-utils";
 export { assertAtomicCheckpoints, assertQueryPlanUsesIndex } from "./shared/assertions.js";
 export {
@@ -11,6 +11,8 @@ export {
   InMemoryDispatcherLeasePort,
 } from "./adapters/fakes.js";
 export { InMemoryContentStore } from "./store/in-memory-content-store.js";
+export { admin, delegatedActor, editor, testActor, viewer } from "./fixtures/actors.js";
+export { allowAllRateLimiter, fakePort, silentLogger } from "./fixtures/ports.js";
 export { readAllBuildContentPages, readCompleteBuildExport } from "./delivery/build-export.js";
 export type {
   BuildExportHttpResponse,

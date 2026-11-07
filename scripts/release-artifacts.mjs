@@ -284,13 +284,16 @@ export const SOURCE_CONDITION = "@lacecms/source";
 
 /**
  * Removes the repository-only `@lacecms/source` condition from an export map.
- * A condition object left with only `default` collapses to its target string.
+ * A condition object left with only `default` collapses to its target string,
+ * and an export left with no target (a source-only test subpath) is removed.
  */
 export function withoutSourceCondition(exports) {
   if (typeof exports !== "object" || exports === null) return exports;
   const entries = Object.entries(exports)
     .filter(([key]) => key !== SOURCE_CONDITION)
-    .map(([key, value]) => [key, withoutSourceCondition(value)]);
+    .map(([key, value]) => [key, withoutSourceCondition(value)])
+    .filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return undefined;
   if (entries.length === 1 && entries[0][0] === "default") return entries[0][1];
   return Object.fromEntries(entries);
 }

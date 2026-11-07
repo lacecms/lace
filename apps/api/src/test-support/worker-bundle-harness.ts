@@ -6,11 +6,19 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
-export const appDirectory = fileURLToPath(new URL("..", import.meta.url));
+export const appDirectory = fileURLToPath(new URL("../..", import.meta.url));
 const wrangler = join(appDirectory, "node_modules", ".bin", "wrangler");
 
+/** The checked-in `wrangler.jsonc` fields the bundle build rewrites. */
+export interface WorkerConfig {
+  readonly main: string;
+  readonly assets: Readonly<Record<string, unknown>>;
+  readonly d1_databases: readonly Readonly<Record<string, unknown>>[];
+  readonly [key: string]: unknown;
+}
+
 /** Wrangler configuration is JSONC: whole-line comments and trailing commas only. */
-export function parseJsonc(text) {
+export function parseJsonc(text: string): unknown {
   return JSON.parse(
     text
       .split("\n")
@@ -20,15 +28,28 @@ export function parseJsonc(text) {
   );
 }
 
-export async function readWorkerConfig() {
-  return parseJsonc(await readFile(join(appDirectory, "wrangler.jsonc"), "utf8"));
+export async function readWorkerConfig(): Promise<WorkerConfig> {
+  const config = parseJsonc(await readFile(join(appDirectory, "wrangler.jsonc"), "utf8"));
+  return config as WorkerConfig;
+}
+
+export interface WorkerBundle {
+  readonly assetsDirectory: string;
+  readonly bundle: string;
+  readonly config: WorkerConfig;
+  readonly directory: string;
+  readonly dispose: () => Promise<void>;
 }
 
 /**
  * Bundles the checked-in Worker with a Wrangler dry-run. A stand-in assets
  * directory keeps the admin build optional; `assets` files are written into it.
  */
-export async function buildWorkerBundle({ assets = { "index.html": "<!doctype html>" } } = {}) {
+export async function buildWorkerBundle({
+  assets = { "index.html": "<!doctype html>" },
+}: {
+  readonly assets?: Readonly<Record<string, string | Uint8Array>>;
+} = {}): Promise<WorkerBundle> {
   const config = await readWorkerConfig();
   const directory = await mkdtemp(join(tmpdir(), "lace-worker-bundle-"));
   const assetsDirectory = join(directory, "assets");

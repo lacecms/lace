@@ -69,12 +69,13 @@
   "packages/test-utils": {
     "shared": [],
     "adapters": ["shared"],
+    "fixtures": [],
     "delivery": [],
     "errors": [],
     "visibility": [],
     "filters": [],
-    "store": ["shared"],
-    "repository-contract": ["delivery", "visibility"],
+    "store": ["fixtures", "shared"],
+    "repository-contract": ["delivery", "fixtures", "visibility"],
     "security-contract": ["repository-contract"]
   }
 }

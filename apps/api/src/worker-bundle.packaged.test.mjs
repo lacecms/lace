@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { buildWorkerBundle } from "./worker-bundle-harness.mjs";
+import { buildWorkerBundle } from "./test-support/worker-bundle-harness.ts";
 
 const secret = "bundle-test-auth-secret-that-is-long-enough";
 let built;

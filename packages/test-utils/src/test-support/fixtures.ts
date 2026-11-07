@@ -1,4 +1,5 @@
-import type { Actor, ContentBlock, ContentBlockInput, ContentModelRoute } from "@lacecms/domain";
+import { admin, editor } from "../fixtures/actors.js";
+import type { ContentBlock, ContentBlockInput, ContentModelRoute } from "@lacecms/domain";
 import type { JsonObject } from "@lacecms/content";
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import type { CompleteDraftInput } from "@lacecms/application";
@@ -27,9 +28,7 @@ import { ContentUseCases, MediaUseCases } from "@lacecms/application";
 import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 
-export const admin: Actor = { id: actorId("admin"), role: "admin" };
-
-export const editor: Actor = { id: actorId("editor"), role: "editor" };
+export { admin, editor };
 
 export function stream(text: string) {
   const bytes = new TextEncoder().encode(text);

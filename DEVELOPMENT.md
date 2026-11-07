@@ -254,7 +254,14 @@ typecheck reads sibling sources without a build, and they participate in package
 typechecking. Legacy test files
 that still carry `@ts-nocheck` are listed in `scripts/test-typecheck-baseline.json`;
 the boundary checker rejects new exceptions and stale entries, and test-support
-modules are always type-checked.
+modules are always type-checked. Shared fixtures come from
+`@lacecms/test-utils` (`admin`, `editor`, `viewer`, `testActor`,
+`delegatedActor`, `fakePort`) for packages above it in the graph; Node product
+tests open runtimes with `openNodeTestRuntime` from
+`@lacecms/platform-node/test`. A new `.mjs` module under `src/` fails `pnpm
+lint` unless `scripts/javascript-source-allowlist.json` names it with a reason.
+Source `test` results are cached per dependency closure; declare any other
+repository file a test reads as a package-scoped input in `turbo.json`.
 
 Process/executable checks, packed CLI/generator consumers, API Worker bundles,
 platform admin assets and the site fixture build run only in `test:packaged`.

@@ -6,7 +6,7 @@ import {
 import type { BuildTriggerResult, SiteBuildRequest } from "@lacecms/application";
 import { unixMilliseconds } from "@lacecms/domain";
 import config from "../../../../lace.config.js";
-import { openLocalCloudflare } from "../d1-test-harness.mjs";
+import { openLocalCloudflare } from "./d1-test-harness.js";
 import type { WorkerExecutionContext } from "../worker.js";
 import type {
   CloudflareWorker,

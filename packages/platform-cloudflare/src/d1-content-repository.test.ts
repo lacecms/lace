@@ -13,7 +13,7 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 import { D1_MAX_BOUND_PARAMETERS, D1_QUERY_BUDGET, D1ContentRepository } from "./index.js";
-import { countingD1, openLocalD1 } from "./d1-test-harness.mjs";
+import { countingD1, openLocalD1 } from "./test-support/d1-test-harness.js";
 
 const editor = { id: actorId("editor"), role: "editor" };
 const posts = { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" };

@@ -5,9 +5,10 @@ import {
   contentSnapshotId,
   unixMilliseconds,
 } from "@lacecms/domain";
+import type { Actor } from "@lacecms/domain";
 
 export const timestamp = unixMilliseconds(1_735_689_600_000);
-export const actor = { id: actorId("actor-1"), role: "admin" };
+export const actor: Actor = { id: actorId("actor-1"), role: "admin" };
 export const block = {
   data: { heading: "Welcome" },
   hidden: false,

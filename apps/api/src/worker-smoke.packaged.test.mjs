@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { appDirectory, buildWorkerBundle } from "./worker-bundle-harness.mjs";
+import { appDirectory, buildWorkerBundle } from "./test-support/worker-bundle-harness.ts";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 const run = promisify(execFile);

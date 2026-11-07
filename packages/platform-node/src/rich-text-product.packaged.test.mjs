@@ -1,19 +1,13 @@
 import { expect, test } from "vitest";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
 import { builtInBlocks, field } from "@lacecms/content";
-import {
-  createNodeRuntime,
-  migrateNodeDatabase,
-  parseNodeRuntimeSettings,
-  runLocalContentSync,
-} from "../dist/index.js";
-import { createTestActorResolver } from "../dist/test-actors.js";
+import * as platform from "../dist/index.js";
+import { openNodeTestRuntime } from "./test-support/node-runtime-harness.ts";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 const execute = promisify(execFile);
@@ -39,11 +33,8 @@ const document = {
 };
 
 test("real Node draft API preserves expanded rich text through publication and an Astro build", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "lace-ce8b-"));
-  let runtime, server;
+  let server;
   try {
-    const databasePath = join(directory, "lace.sqlite");
-    migrateNodeDatabase(databasePath);
     const config = await defineConfig({
       blocks: Object.values(builtInBlocks),
       content: [
@@ -59,43 +50,21 @@ test("real Node draft API preserves expanded rich text through publication and a
         }),
       ],
     });
-    runtime = createNodeRuntime({
+    const {
+      directory,
+      request: send,
+      runtime,
+    } = await openNodeTestRuntime(platform, {
       config,
-      actors: createTestActorResolver({ id: "ce8b-admin", role: "admin" }),
-      logger: { log() {} },
-      rateLimiter: { check: async () => true },
-      settings: parseNodeRuntimeSettings({
-        LACE_AUTH_SECRET: "ce8b-integration-secret-long-enough-for-auth",
-        LACE_DATABASE_PATH: databasePath,
-        LACE_PUBLIC_BASE_URL: "https://lace.test/",
-        LACE_MINIO_TIMEOUT_MS: "1000",
-        LACE_MINIO_ACCESS_KEY: "test",
-        LACE_MINIO_SECRET_KEY: "test",
-        LACE_MINIO_BUCKET: "test",
-        LACE_MINIO_ENDPOINT: "http://localhost:9000",
-        LACE_MINIO_REGION: "test",
-      }),
+      actor: { id: "ce8b-admin", role: "admin" },
+      sync: true,
     });
-    let id = 0;
-    expect(
-      await runLocalContentSync({
-        check: false,
-        clock: { now: () => Date.now() },
-        ids: { next: () => `sync-${++id}` },
-        models: config.runtime.content,
-        blocks: config.runtime.blocks,
-        target: runtime.repository,
-        write() {},
-      }),
-    ).toBe(0);
     const request = async (path, body, method = "POST", headers = {}) => {
-      const response = await runtime.app.fetch(
-        new Request(`https://lace.test${path}`, {
-          method,
-          headers: { origin: "https://lace.test", "content-type": "application/json", ...headers },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }),
-      );
+      const response = await send(path, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
       const result = await response.json();
       expect(response.status, JSON.stringify(result)).toBeLessThan(300);
       return result;
@@ -186,7 +155,5 @@ test("real Node draft API preserves expanded rich text through publication and a
     expect(html).not.toContain("DRAFT ONLY");
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
-    runtime?.close();
-    await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);

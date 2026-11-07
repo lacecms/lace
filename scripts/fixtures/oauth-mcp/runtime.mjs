@@ -20,7 +20,7 @@ import { createCloudflareWorker } from "../../../packages/platform-cloudflare/di
 import {
   openLocalCloudflare,
   countingD1,
-} from "../../../packages/platform-cloudflare/src/d1-test-harness.mjs";
+} from "../../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 import { InMemoryObjectStorage } from "../../../packages/test-utils/dist/index.js";
 
 export const fixturePassword = "oauth-runtime-fixture-password-only";

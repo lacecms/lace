@@ -16,7 +16,7 @@ import {
 } from "../packages/platform-node/dist/index.js";
 import { createCloudflareWorker } from "../packages/platform-cloudflare/dist/index.js";
 import { createUserByInvitation } from "../packages/test-utils/dist/index.js";
-import { openLocalCloudflare } from "../packages/platform-cloudflare/src/d1-test-harness.mjs";
+import { openLocalCloudflare } from "../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 
 const cleanups = [];
 afterEach(async () => {

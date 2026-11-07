@@ -445,6 +445,42 @@ function checkTypecheckExceptions(rootDirectory, members) {
   }
 }
 
+const javaScriptSourcePattern = /\.(?:c|m)?js$/u;
+
+/** Untyped modules under `src/` need a listed reason; tests and test-support never qualify. */
+function checkJavaScriptSources(rootDirectory, members) {
+  const allowlist = readJsonBaseline(rootDirectory, "javascript-source-allowlist.json", {});
+  const collectJavaScript = (directory) =>
+    readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const entryPath = join(directory, entry.name);
+      if (entry.isDirectory()) return collectJavaScript(entryPath);
+      return entry.isFile() && javaScriptSourcePattern.test(entry.name) ? [entryPath] : [];
+    });
+  for (const member of members) {
+    if (!existsSync(member.sourceDirectory)) continue;
+    for (const filePath of collectJavaScript(member.sourceDirectory)) {
+      const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
+      if (/\.test\.(?:c|m)?js$/u.test(sourcePath)) continue;
+      const fileName = toPosix(relative(rootDirectory, filePath));
+      if (sourcePath.startsWith("test-support/")) {
+        throw new Error(`untyped test-support module: ${fileName}; write it in TypeScript`);
+      }
+      if (!Object.hasOwn(allowlist, fileName)) {
+        throw new Error(
+          `untyped source module: ${fileName}; write it in TypeScript or list it with a reason in scripts/javascript-source-allowlist.json`,
+        );
+      }
+    }
+  }
+  for (const fileName of Object.keys(allowlist)) {
+    if (!existsSync(join(rootDirectory, fileName))) {
+      throw new Error(
+        `stale JavaScript source allowlist entry: ${fileName} is missing; remove it from scripts/javascript-source-allowlist.json`,
+      );
+    }
+  }
+}
+
 function resolveRelativeModule(filePath, specifier, files) {
   const target = resolve(dirname(filePath), specifier.replace(/\?.*$/u, ""));
   const withoutJs = target.replace(/\.(?:c|m)?js$/u, "");
@@ -573,8 +609,21 @@ function checkSourceConditions(members) {
           typeof target === "string" &&
           target.startsWith("./dist/"),
       );
-      if (compiled.length === 0) continue;
       const where = `${manifest.name} export "${key}"`;
+      if (compiled.length === 0) {
+        const sourceOnly =
+          typeof value === "object" && value !== null ? value[sourceCondition] : undefined;
+        if (typeof sourceOnly !== "string") continue;
+        if (!sourceOnly.startsWith("./src/test-support/")) {
+          throw new Error(
+            `source condition: ${where} is source-only, which only a src/test-support/ module may be`,
+          );
+        }
+        if (!existsSync(join(member.directory, sourceOnly))) {
+          throw new Error(`source condition: ${where} names missing source ${sourceOnly}`);
+        }
+        continue;
+      }
       const source = typeof value === "string" ? undefined : value[sourceCondition];
       if (typeof source !== "string") {
         throw new Error(`source condition: ${where} has no ${sourceCondition} condition`);
@@ -759,6 +808,7 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
   assertNoCycles(graph);
   checkAdminStructure(rootDirectory);
   checkTypecheckExceptions(rootDirectory, members);
+  checkJavaScriptSources(rootDirectory, members);
   const moduleGraphs = new Map(members.map((member) => [member, memberModuleGraph(member)]));
   checkModuleCycles(rootDirectory, moduleGraphs.values());
   checkSourceLayout(rootDirectory, members, moduleGraphs);

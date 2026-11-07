@@ -6,7 +6,7 @@ import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import {
   migrationStatements,
   openLocalCloudflare,
-} from "../../../packages/platform-cloudflare/src/d1-test-harness.mjs";
+} from "../../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 const authRequire = createRequire(new URL("../../../packages/auth/package.json", import.meta.url));
 const closes = [];
 afterEach(async () => {

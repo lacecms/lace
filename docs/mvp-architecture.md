@@ -402,7 +402,12 @@ in the same change before it reaches 1,000 lines. No subdirectory has a barrel
 also exports internal helpers. Directories depend one way, documented at the top
 of the entry point; module cycles, including type-only imports, are forbidden.
 Tests and type tests sit beside their module; shared helpers live in
-`src/test-support/`. `apps/admin` keeps its section 17 layer/slice structure,
+`src/test-support/` and are TypeScript. `@lacecms/test-utils` owns the shared
+fixture layer (`fixtures/`: role actors, a delegated-actor builder and the
+`fakePort` typed partial fake); packages it depends on (`content`, `domain`,
+`config`, `application`, `contracts`) keep package-local typed test-support. A
+non-test `.mjs` or `.js` module under `src/` needs a reasoned entry in
+`scripts/javascript-source-allowlist.json`. `apps/admin` keeps its section 17 layer/slice structure,
 with the same size limit and no-cycle rule.
 
 Existing flat packages adopt this layout in their RF4–RF6 session or a change
@@ -3703,6 +3708,15 @@ package specifiers for other Lace packages. `tsconfig.test.json`,
 and needs no build. They include tests and test-support modules in `typecheck`,
 and `test:watch` re-runs tests on save. Astro component tests use the source
 components through Astro's Vite configuration.
+
+Node integration and product tests open runtimes through
+`platform-node/src/test-support/node-runtime-harness.ts`, which owns the test
+actor resolver and test settings and takes the source or the compiled platform
+module, so packaged product tests run the same scenario against `dist/`. It is
+the source-only `@lacecms/platform-node/test` export, which release preparation
+drops from the packed manifest. Source `test` hashes follow dependency edges
+through the `test:transit` Turbo task; a test that reads a repository file
+outside its dependency closure declares it as an input of that package's task.
 
 Built exports are checked separately by `*.packaged.test.mjs` under
 `test:packaged`, whose Turbo task depends on the package and dependency builds.

@@ -80,10 +80,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./test": {
-      "types": "./dist/test-actors.d.ts",
-      "import": "./dist/test-actors.js"
     }
   },
   "@lacecms/render": {

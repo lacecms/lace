@@ -19,9 +19,7 @@
       "import": "./dist/index.js"
     },
     "./test": {
-      "@lacecms/source": "./src/test-actors.ts",
-      "types": "./dist/test-actors.d.ts",
-      "import": "./dist/test-actors.js"
+      "@lacecms/source": "./src/test-support/node-runtime-harness.ts"
     }
   },
   "publishConfig": {

@@ -295,9 +295,11 @@ test("release preparation strips the source condition back to the published expo
   }
   expect(stripped).toEqual(published);
   expect(JSON.stringify(stripped)).not.toContain("@lacecms/source");
+  // The source-only test subpath leaves the published platform manifest.
+  expect(stripped["@lacecms/platform-node"]).not.toHaveProperty("./test");
 });
 
-test("a source condition left with only a default collapses to its target", () => {
+test("a source condition left with only a default collapses, and a source-only export goes", () => {
   const exports = {
     ".": {
       "@lacecms/source": "./src/index.ts",
@@ -306,6 +308,7 @@ test("a source condition left with only a default collapses to its target", () =
     },
     "./Box.astro": { "@lacecms/source": "./src/Box.astro", default: "./dist/Box.astro" },
     "./data.json": "./schema/data.json",
+    "./test": { "@lacecms/source": "./src/test-support/harness.ts" },
   };
   expect(withoutSourceCondition(exports)).toEqual({
     ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
