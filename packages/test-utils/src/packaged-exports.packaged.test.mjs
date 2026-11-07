@@ -26,6 +26,7 @@ test("packaged entry point keeps its public exports", async () => {
     "readAllBuildContentPages",
     "readCompleteBuildExport",
     "securityContractCases",
+    "unmatchedErrorClasses",
     "visibilityParityCases",
   ]);
   const subpath = await import("@lacecms/test-utils/visibility-parity");
@@ -33,4 +34,11 @@ test("packaged entry point keeps its public exports", async () => {
   expect(subpath.visibilityParityCases).toEqual(
     (await import("../dist/index.js")).visibilityParityCases,
   );
+  expect(Object.keys(await import("@lacecms/test-utils/filter-parity")).sort()).toEqual([
+    "filterParityCases",
+    "filterParityFields",
+    "filterParityFilterableFields",
+    "filterParityOptions",
+    "filterParityUnlistedField",
+  ]);
 });

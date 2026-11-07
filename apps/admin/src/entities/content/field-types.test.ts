@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { FIELD_FILTER_OPERATIONS, fieldTypeCapabilities } from "@lacecms/content";
 import type { FieldType } from "@lacecms/content";
-import { fieldTypeSupport } from "./field-types.js";
+import { fieldFilterControl, fieldTypeSupport } from "./field-types.js";
 import { fieldFilterOperations } from "./collection-query.js";
 
 test("admin list cells and filter controls cover exactly the queryable field kinds", () => {
@@ -9,7 +9,7 @@ test("admin list cells and filter controls cover exactly the queryable field kin
     expect(fieldTypeSupport[type].listCell !== undefined, type).toBe(
       fieldTypeCapabilities[type].listQueryable,
     );
-    expect(fieldTypeSupport[type].filter !== undefined, type).toBe(
+    expect(fieldFilterControl(type) !== undefined, type).toBe(
       fieldTypeCapabilities[type].listQueryable,
     );
   }

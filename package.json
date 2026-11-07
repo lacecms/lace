@@ -28,7 +28,7 @@
     "dev:stop": "node scripts/dev-stack.mjs stop",
     "dev:bootstrap": "node scripts/dev-stack.mjs bootstrap",
     "format:check": "oxfmt --check .",
-    "lint": "turbo run lint && node scripts/check-boundaries.mjs && node scripts/check-admin-colors.mjs",
+    "lint": "turbo run lint && node scripts/check-boundaries.mjs && node scripts/check-admin-colors.mjs && node scripts/check-drizzle-schema.mjs",
     "lace": "node packages/cli/dist/bin.js",
     "openapi:check": "node scripts/check-openapi.mjs",
     "openapi:generate": "node apps/api/scripts/generate-openapi.mjs",
@@ -57,7 +57,8 @@
     "docs:check": "pnpm --filter @lacecms/app-docs check",
     "compat:mcp": "pnpm compat:mcp:types && vitest run scripts/fixtures/oauth-mcp --maxWorkers=1",
     "compat:mcp:baseline": "vitest run scripts/fixtures/oauth-mcp/compat.test.mjs --maxWorkers=1 -t \"S256|SDK v2|ordinary|inventories|boundary keeps\"",
-    "compat:mcp:types": "tsc -p scripts/fixtures/oauth-mcp/tsconfig.json"
+    "compat:mcp:types": "tsc -p scripts/fixtures/oauth-mcp/tsconfig.json",
+    "db:check": "node scripts/check-drizzle-schema.mjs"
   },
   "dependencies": {
     "@lacecms/config": "workspace:*",

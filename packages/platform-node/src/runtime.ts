@@ -1,3 +1,4 @@
+import { RuntimeConfigurationError } from "@lacecms/application";
 import { createNodeOAuthPersistence } from "./oauth.js";
 import { engineVersion } from "./release-version.js";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
@@ -67,7 +68,7 @@ export interface NodeEnvironmentIssue {
 }
 
 /** Startup failures name variables but intentionally never repeat their values. */
-export class NodeEnvironmentError extends Error {
+export class NodeEnvironmentError extends RuntimeConfigurationError {
   public constructor(readonly issues: readonly NodeEnvironmentIssue[]) {
     super(`Invalid Node environment: ${issues.map((issue) => issue.variable).join(", ")}.`);
     this.name = "NodeEnvironmentError";
@@ -294,7 +295,7 @@ export class NoopNodeCache implements Cache {
   public async set<Value>(_key: string, _value: Value): Promise<void> {}
 }
 
-export class NodeInfrastructureUnavailableError extends Error {
+export class NodeInfrastructureUnavailableError extends RuntimeConfigurationError {
   public constructor() {
     super("Infrastructure capability is unavailable.");
     this.name = "NodeInfrastructureUnavailableError";

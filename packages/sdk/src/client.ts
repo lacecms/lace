@@ -3,6 +3,7 @@ import {
   entityTagSchema,
   versionFromEntityTag,
   identifierSchemaPublic,
+  MAX_PAGE_SIZE,
   opaqueCursorSchema,
   tolerantPublicSchemas,
 } from "@lacecms/contracts";
@@ -211,8 +212,8 @@ function assertEntityTag(value: string): EntityTag {
 }
 
 function assertLimit(value: number): number {
-  if (!Number.isSafeInteger(value) || value < 1 || value > 100) {
-    throw new TypeError("limit must be an integer between 1 and 100.");
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_PAGE_SIZE) {
+    throw new TypeError(`limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`);
   }
   return value;
 }

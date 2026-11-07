@@ -8,7 +8,9 @@ import type {
   ConfigurationSyncStateReadPort,
 } from "@lacecms/application";
 import type { NormalizedContentModel } from "@lacecms/config";
+import { LaceError } from "@lacecms/content";
 import type { BlockRegistry } from "@lacecms/content";
+import { CONFIGURATION_SYNC_STALE } from "@lacecms/domain";
 import type { Clock, IdGenerator } from "@lacecms/application";
 
 /** Runs the local operator flow without hiding the plan or bypassing guarded apply. */
@@ -50,7 +52,7 @@ export async function runLocalContentSync(input: {
     );
     return 0;
   } catch (error) {
-    if (error instanceof Error && error.message.includes("stale")) {
+    if (error instanceof LaceError && error.code === CONFIGURATION_SYNC_STALE) {
       input.write("Sync plan is stale. Rerun pnpm content:sync to review current SQLite state.");
       return 1;
     }

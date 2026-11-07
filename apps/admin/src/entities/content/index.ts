@@ -72,7 +72,13 @@ export {
   type SeoSiteDefaults,
 } from "./seo-preview.js";
 export { seoSiteDefaults, useSeoDefaults } from "./seo-defaults.js";
-export { fieldControlId, fieldTypeSupport, type FieldTypeSupport } from "./field-types.js";
+export {
+  fieldControlId,
+  fieldFilterControl,
+  fieldTypeSupport,
+  type FieldTypeSupport,
+  type FilterControl,
+} from "./field-types.js";
 
 export { EntryListBudget, useCompositeEditing } from "./FieldRenderer/index.js";
 

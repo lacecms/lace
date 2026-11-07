@@ -20,7 +20,11 @@ options, including defaults and constraints where present, and SHALL reject
 unknown descriptor keys, executable values, or non-JSON values. Each model's
 block-definition metadata SHALL correspond only to its declared allowed block
 types and include the stable type, schema version, display metadata, field map,
-and optional default data. The representations SHALL use JSON primitives and
+and optional default data. When present, it SHALL contain exactly one
+definition for each allowed block type and no other definition, matched by the
+definition's stable type and independent of the order of either list; a model
+that lists an allowed block type more than once SHALL NOT carry
+block-definition metadata. The representations SHALL use JSON primitives and
 objects only, SHALL expose content values through explicit DTOs rather than
 persistence rows, and SHALL remain usable by both Node and Cloudflare API
 implementations.
@@ -43,6 +47,25 @@ implementations.
   one or more registered blocks
 - **THEN** a browser client can validate metadata for exactly those block types
   and render their portable fields without importing a server-side registry
+
+#### Scenario: Block definitions in a different order are accepted
+- **WHEN** a content model allows `hero` and `quote` blocks and its
+  block-definition metadata lists the `quote` definition before the `hero`
+  definition
+- **THEN** contract validation accepts the model and keeps both definitions in
+  the order received
+
+#### Scenario: Block definitions that do not cover the allowed types are rejected
+- **WHEN** a content model's block-definition metadata omits an allowed block
+  type, adds a type the model does not allow, or describes one type twice
+- **THEN** contract validation rejects the model with the block-definition
+  mismatch issue
+
+#### Scenario: Duplicate allowed block types cannot carry definitions
+- **WHEN** a content model lists the same allowed block type twice and carries
+  block-definition metadata
+- **THEN** contract validation rejects the model with the block-definition
+  mismatch issue
 
 #### Scenario: A malformed mutation is rejected before dispatch
 - **WHEN** a client submits a create, draft-save, publish, or delete payload
@@ -1595,13 +1618,20 @@ Every contracts projection input that mirrors an application result SHALL be
 checked against that result when the code is built. This covers the content
 model, collection list options, entry summary, import token, media
 metadata, media detail, media usage location, public entry, public media,
-public global and build-export page. The check SHALL require that:
+public global and build-export page. The set of checked pairs SHALL be total:
+every type that the contracts package exports with a name ending in `Source`
+SHALL appear in the checks, so a new projection input cannot be added without
+one. The check SHALL require that:
 
 - the application result is assignable to the projection input;
 - every property of the application result is a property of the projection
   input or is named in a declared list of intentionally omitted properties
   (for example a media item's private storage key);
-- every property of the projection input exists on the application result.
+- every property of the projection input exists on the application result;
+- a property optional on one side is optional on the other;
+- nested object and array-element shapes (the content model's `seo` and
+  `seoDefaults`, and the media detail's `usage` items) satisfy the same
+  rules.
 
 The content model projection SHALL map every property of its input to the
 content model DTO. Its mapped properties SHALL equal the properties of the
@@ -1632,34 +1662,79 @@ or MCP. Existing DTO shapes, values and OpenAPI SHALL remain unchanged.
   filename, tags, hash, size, status, timestamps and attribution, is listed
   as intentionally omitted, and public media responses do not contain them
 
+#### Scenario: A new projection input must be checked
+- **WHEN** a maintainer exports a new `…Source` type from contracts without a
+  mirror check
+- **THEN** the test-utils check fails and names the unchecked type
+
+#### Scenario: A nested property drifts
+- **WHEN** the application adds a property to a media usage location or to a
+  model's SEO configuration without adding it to the projection input
+- **THEN** typechecking fails and names the nested pair
+
 ### Requirement: One error model maps failures through one classification table
 Every portable failure raised by content rules, configuration, domain rules,
-application use cases and shared contracts SHALL carry a stable
-machine-readable code through one shared error base. One shared classifier
-SHALL own the mapping from failure to transport envelope for every transport:
-validation failures carrying issues SHALL map to `422 VALIDATION_FAILED` with
-their issues; any other failure whose code is a documented transport code
-SHALL map to that code's single status and sanitized message; every other
-failure, including configuration, block-definition, block-migration and
-internal-invariant failures and errors without a code, SHALL map to `500
-INTERNAL_ERROR` with the generic message. The documented status and code pairs
-SHALL be exactly: `VALIDATION_FAILED` `422`; `AUTHORIZATION_DENIED` `403`;
-`CONTENT_INVALID_STATE` `422`; `INVALID_CREDENTIALS` `400`; `NOT_FOUND` `404`;
-`INVITATION_INVALID` and `RESET_INVALID` `410`; `PAYLOAD_TOO_LARGE` `413`;
-`RATE_LIMITED` `429`; and `409` for `BUILD_EXPORT_VERSION_CHANGED`,
-`CONFLICT`, `CONTENT_LINKS_IN_USE`, `CONTENT_LINK_IMPACT_CHANGED`,
-`CONTENT_MODEL_CARDINALITY_CONFLICT`, `CONTENT_NOT_PUBLISHED`,
-`CONTENT_PAGE_SINGLETON`, `CONTENT_PUBLISHED_IMMUTABLE`,
-`CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, `LAST_ADMIN_PROTECTED`,
-`MEDIA_IN_USE` and `MEDIA_UPDATE_CONFLICT`. An exhausted account or request
-limit SHALL keep its `Retry-After` header of at least one whole second. A
-stale build export SHALL keep its documented version details, and a block
-order failure SHALL keep its bounded ordering message. No envelope SHALL
-expose the internal message of a failure the table does not mark safe. The
-status, code, message, details and headers the REST API returns for each
-failure SHALL equal those it returned before this requirement, and a
-repository test SHALL pin that matrix for every portable error class the
-shared packages export.
+application use cases, shared contracts, persistence adapters and runtime
+adapters SHALL carry a stable machine-readable code through one shared error
+base. This includes:
+
+- stale configuration-synchronization plans (`CONFIGURATION_SYNC_STALE`);
+- object-storage failures (`STORAGE_UNAVAILABLE`);
+- runtime configuration failures (`RUNTIME_CONFIGURATION_INVALID`);
+- invalid request precondition headers, which are contract validation
+  failures.
+
+**Classification.** One shared classifier SHALL own the mapping from failure
+to transport envelope for every transport:
+
+- validation failures carrying issues SHALL map to `422 VALIDATION_FAILED`
+  with their issues;
+- any other failure whose code is a documented transport code SHALL map to
+  that code's single status and sanitized message;
+- every other failure, including configuration, block-definition,
+  block-migration, stale-synchronization, storage, runtime-configuration and
+  internal-invariant failures and errors without a code, SHALL map to `500
+  INTERNAL_ERROR` with the generic message.
+
+The documented status and code pairs SHALL be exactly:
+
+| Status | Codes |
+|---|---|
+| `422` | `VALIDATION_FAILED`, `CONTENT_INVALID_STATE` |
+| `403` | `AUTHORIZATION_DENIED` |
+| `400` | `INVALID_CREDENTIALS` |
+| `404` | `NOT_FOUND` |
+| `410` | `INVITATION_INVALID`, `RESET_INVALID` |
+| `413` | `PAYLOAD_TOO_LARGE` |
+| `429` | `RATE_LIMITED` |
+| `409` | `BUILD_EXPORT_VERSION_CHANGED`, `CONFLICT`, `CONTENT_LINKS_IN_USE`, `CONTENT_LINK_IMPACT_CHANGED`, `CONTENT_MODEL_CARDINALITY_CONFLICT`, `CONTENT_NOT_PUBLISHED`, `CONTENT_PAGE_SINGLETON`, `CONTENT_PUBLISHED_IMMUTABLE`, `CONTENT_REVISION_CONFLICT`, `CONTENT_ROUTE_CONFLICT`, `LAST_ADMIN_PROTECTED`, `MEDIA_IN_USE`, `MEDIA_UPDATE_CONFLICT` |
+
+**Preserved details and headers.**
+
+- An exhausted account or request limit SHALL keep its `Retry-After` header of
+  at least one whole second. The classifier SHALL be the only producer of the
+  `429 RATE_LIMITED` envelope and its header for non-protocol paths, including
+  the request rate-limit middleware.
+- A stale build export SHALL keep its documented version details.
+- A block order failure SHALL keep its bounded ordering message.
+- No envelope SHALL expose the internal message of a failure the table does
+  not mark safe.
+
+**Code preservation.**
+
+- A persistence or runtime layer that re-throws expected failures SHALL
+  preserve every failure carrying the shared base, not only domain failures,
+  so its code reaches the classifier unchanged.
+- The server SHALL recognize an authorization failure by its code.
+- The server SHALL only catch the contract validation failure of a header
+  parser, and SHALL let any other failure reach the classifier.
+
+**Pinned matrix.** The status, code, message, details and headers the REST API
+returns for each failure SHALL equal those it returned before this
+requirement, except that an unexpected failure while submitting browser setup
+is reported as `500 INTERNAL_ERROR` instead of `404`. A repository test SHALL
+pin that matrix for every portable error class the shared and runtime packages
+export.
 
 #### Scenario: An account failure is classified from its code
 - **WHEN** an account operation fails because an invitation has expired
@@ -1672,6 +1747,12 @@ shared packages export.
 - **THEN** the API returns status `429` with code `RATE_LIMITED` and the header
   `Retry-After: 2`
 
+#### Scenario: The request rate limiter uses the classifier
+- **WHEN** the request rate-limit middleware refuses a non-protocol request
+  with 30 seconds remaining
+- **THEN** the API returns the classifier's `429 RATE_LIMITED` envelope with
+  `Retry-After: 30`, identical to a use-case rate-limit failure
+
 #### Scenario: A configuration failure is internal
 - **WHEN** a request reaches a block definition or configuration failure
 - **THEN** the API returns status `500` with code `INTERNAL_ERROR` and the
@@ -1682,7 +1763,99 @@ shared packages export.
 - **THEN** the API returns status `500` with code `INTERNAL_ERROR` and the
   generic message, without the storage key or internal message
 
+#### Scenario: A lower-layer failure keeps its code
+- **WHEN** a persistence write raises an internal invariant failure or an
+  account failure inside a pass-through guard
+- **THEN** the failure reaches the classifier with its own code instead of
+  `CONTENT_INVALID_STATE`
+
+#### Scenario: An invalid precondition header is a validation failure
+- **WHEN** a client sends `If-Match: W/"3"` to a mutation that requires a
+  strong revision
+- **THEN** the API returns `422 VALIDATION_FAILED` with the existing message,
+  and an unrelated failure inside the same handler is not converted to a
+  validation failure
+
 #### Scenario: The matrix covers every exported error class
-- **WHEN** a shared package exports a new error class that the status matrix
-  does not list
+- **WHEN** a shared or runtime package exports a new error class that the
+  status matrix does not list
 - **THEN** the repository test fails and names that class
+
+### Requirement: Admin list page limits have one bound
+The admin entry-list and media-list query contracts, the server's page
+parsing, the persistence adapters and the generated OpenAPI document SHALL
+use the shared list page limit: an integer from 1 to 100, defaulting to 50
+when omitted. A limit outside that range, or one that is not a canonical
+decimal integer, SHALL fail with the stable `VALIDATION_FAILED` envelope and
+the pointer `/limit` before any list read. The OpenAPI document SHALL describe
+the same range that the server enforces. Bounded reads with their own
+declared limits are unchanged: the build export (1–100, default 100),
+internal-link pages (1–50, default 20) and the media tag catalog (1–100,
+default 50).
+
+#### Scenario: OpenAPI and the server agree
+- **WHEN** a client reads the `limit` parameter of the admin entry-list and
+  media-list operations in the generated OpenAPI document
+- **THEN** it is described as an integer string from 1 to 100, exactly the
+  range the server accepts
+
+#### Scenario: An over-large page is refused
+- **WHEN** a client requests an admin entry list or media list with
+  `limit=101` or `limit=500`
+- **THEN** the API returns `422` `VALIDATION_FAILED` with pointer `/limit`
+  and runs no list query
+
+#### Scenario: The default page size applies
+- **WHEN** a client omits `limit`
+- **THEN** the list returns at most 50 items
+
+### Requirement: Contract JSON values follow the content portable-JSON rule
+
+Every shared contract schema that accepts a consumer-owned JSON value or JSON
+object (entry `fields`, block `data` and `settings`, field metadata defaults,
+layouts, visibility rules and error `details`) SHALL accept exactly the values
+that content configuration normalization accepts, and SHALL refuse every
+other value. The rule SHALL accept `null`, booleans, strings, finite numbers,
+dense arrays and objects with the ordinary or null prototype whose own keys
+are strings, whose properties are data properties, and whose children follow
+the same rule. Object properties SHALL be enumerable. An array SHALL have no
+own keys other than its indices and `length`, and SHALL have no holes or
+accessor elements; an array element SHALL NOT need to be enumerable. A
+reference cycle SHALL be refused, and an acyclic value that reaches the same
+object twice SHALL be accepted. Validation SHALL return a result, never a
+host stack error, for any nesting depth that a JSON parser produces.
+Contract validation and content normalization SHALL be checked against one
+shared table of edge values that expects no difference.
+
+#### Scenario: An array with a named property is refused
+
+- **WHEN** a caller validates an entry `fields` object whose list value is an
+  array that also carries a non-index property
+- **THEN** contract validation refuses it, as content normalization does,
+  because `JSON.stringify` would drop that property
+
+#### Scenario: A non-enumerable array element is accepted
+
+- **WHEN** a JSON value contains a dense array one of whose elements is a
+  non-enumerable data property
+- **THEN** contract validation accepts it, as content normalization does
+
+#### Scenario: Parsed request bodies are unaffected
+
+- **WHEN** a request body produced by `JSON.parse` carries valid JSON values
+  of any shape
+- **THEN** contract validation gives the same result as before this rule
+
+#### Scenario: A deeply nested value is validated
+
+- **WHEN** a JSON value is an array nested 100,000 levels deep around a number
+- **THEN** contract validation accepts it without a stack overflow, and the
+  same value with an `undefined` at its innermost level is refused
+
+#### Scenario: The edge table agrees
+
+- **WHEN** the shared edge table (primitives, non-finite numbers, executable
+  and host values, prototypes, symbol keys, accessors, non-enumerable
+  properties, cycles, shared references, sparse arrays and the two array
+  cases above) runs against contract validation and content normalization
+- **THEN** both give the same verdict for every value

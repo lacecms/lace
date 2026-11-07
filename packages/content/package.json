@@ -24,8 +24,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "lint": "oxlint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json && tsc -p tsconfig.type-test.json",
+    "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "type-test": "tsc -p tsconfig.type-test.json --noEmit",
     "test:watch": "vitest",

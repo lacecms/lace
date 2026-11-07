@@ -55,6 +55,9 @@ additions below:
   value in the progress log, so the effect of the work is measurable.
 - "Open questions" in a step are settled with the owner while writing that
   step's specification, not before.
+- A session that splits or moves test files types the new companions or lists
+  them explicitly in `scripts/test-typecheck-baseline.json`; the `@ts-nocheck`
+  header is never copied silently (RF4X).
 
 Status values: `planned`, `proposed`, `in progress`, `done` (archived).
 
@@ -98,17 +101,21 @@ What the roadmap changes, with the numbers to beat:
 | Test loop | workspace members with a `test:watch` script | 0 → RF2C: 20 |
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
-| Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities |
-| Size | `packages/contracts/src/index.ts` | 3,014 lines |
-| Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) |
+| Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11 → RF4F: 4, enforced by a shrinking size baseline |
+| Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
+| Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) → RF4D: 218-line factory, largest production module 492 lines |
 | Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
 | Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
-| Size | `packages/db/src/sql-content.ts` | 2,229 lines |
-| Size | `packages/application/src/configuration-sync.ts` | 1,836 lines; five-file cluster of 3,733 lines with type-only cycles |
+| Size | `packages/db/src/sql-content.ts` | 2,229 lines → RF4E: domain modules; largest db module 862 lines |
+| Size | `packages/config/src/index.ts` | 1,229 lines → RF4E: entry and domain modules |
+| Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
 | Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
-| Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table |
-| Duplication | `*Source` interfaces in contracts mirroring application types | 11 |
+| Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table → RF3E: admin grouped and counted subsets and filter controls derive from it |
+| Duplication | filter value checks | 2 (application, admin) → RF3E: 1 portable `fieldFilterValueFailure`, pinned by a shared parity table |
+| Duplication | `*Source` interfaces in contracts mirroring application types | 11 → RF3B: 11 kept (the boundary forbids the import), each checked by a `satisfies` mirror test in test-utils → RF3E: 12 (`BuildExportSource` was unchecked), enumerated from the contracts entry, compared both ways with optionality and nested `seo`/`seoDefaults`/`usage[]` |
+| Duplication | copies of shared grammars and limits outside their owner | RF4X audit: field key 13, block type 3, media-tag grammar 3, title length 7, page size 7, draft media references 3, link-resolve batch 3, display name 2, video providers 4 → RF3E: 0, detected by literal in `tests/shared-vocabulary.test.mjs` |
 | Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
 | Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
 | Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
@@ -121,6 +128,8 @@ What the roadmap changes, with the numbers to beat:
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
+| Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137, listed in a shrinking baseline; test-support always typed |
+| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
 | Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
@@ -133,12 +142,13 @@ What the roadmap changes, with the numbers to beat:
 | --- | --- | :---: | --- | --- |
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
-| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D | done |
-| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E | planned |
+| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
+| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | in progress |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
-| RF7 | CLI and developer scripts | M | RF7A → RF7B | planned |
+| RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
 | RF8 | Documentation | L | RF8A → RF8B → RF8C | planned |
+| RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
 
 **Order rationale:** RF1 first because deleting obsolete scripts and tests
 shrinks everything that follows (fewer `.test.mjs` files to convert, fewer
@@ -149,6 +159,25 @@ RF5 follows RF4 because the shared reader lands in a `db` package that has
 already been split by resource. RF6 and RF7 touch disjoint files from RF3–RF5
 and may run in parallel sessions with them. RF8 is last because §15 and §16 of
 the architecture describe ports and runtime deltas that RF4 and RF5 change.
+
+**RF4X insertion (2026-11-04):** an owner-requested audit of RF1–RF4E found
+that the layout and test-typing rules were enforced only by convention and that
+RF2 had left the `verify:*` runners pointing at removed tests. RF4X adds the
+guards before RF4F and RF5 split more modules.
+
+**Second audit follow-up (2026-11-05):** after RF4G the owner asked to plan
+every remaining audit finding. RF3E–RF3F finish the shared vocabulary and
+error model, RF4H–RF4J split files near the ceiling and adopt the layout in the
+remaining flat packages, RF5 and RF6C/RF7 gain the scope listed in their
+sessions, and the new RF9 owns test infrastructure. Order: RF3E → RF3F →
+RF9A → RF9B before RF5, because RF5 rewrites security errors and ports under
+tests that must already be typed and source-resolved; RF4H–RF4J may run in
+parallel with RF3E–RF3F; RF9D–RF9F type platform and CLI tests only after
+RF5 and RF7C move them. Owner checks without a session are listed in §5.
+
+**RF3G insertion (2026-11-07):** RF3E left the contracts and content JSON
+validators with two differing array cases. The owner chose the content rule,
+and RF3G applies it before RF9A.
 
 **Deferred, stays in the backlog:** write-path convergence between Node
 transactions and D1 batches beyond statement builders; a generated admin API
@@ -176,6 +205,24 @@ Proposed, to confirm when writing the first specification:
    first concern was file size.
 7. Decided 2026-11-01 while writing RF1A: only the latest published
    template's fixtures (`0.35.0`) are kept as the upgrade origin.
+
+Pending owner checks from the second audit (2026-11-05), not sessions:
+
+8. Run `pnpm verify:security`, `pnpm verify:cross-runtime --baseline …` and
+   `pnpm verify:operations` once after the RF4X runner repair.
+9. Decide the CHANGELOG entries for unreleased public changes since rc1:
+   RF3D (MCP account and rate-limit codes, `RATE_LIMITED`), RF4C
+   (`hasMatchingBlockDefinitions` matches by type in any order) and RF4B
+   (`AccountSecurityPort` reshaped; `SessionSecurityPort`, `TokenSecurityPort`),
+   RF3E (OpenAPI describes the admin entry-list and media-list `limit` as
+   1–100, the range the server already enforced; a public collection slug
+   over 100 characters returns `422` at `/slug`; four contracts `…Source`
+   inputs became required), RF3F (an unexpected failure during setup
+   returns `500` instead of `404`) and RF3G (the exported contracts
+   `jsonValueSchema` and `jsonObjectSchema` refuse an array with a named
+   property and accept a non-enumerable array element).
+10. Apply or withdraw the active `allow-supported-node-release-preparation`
+    change (0/6 tasks since RF4C); keep pnpm pinned to `12.3.4` until then.
 
 ## Step RF1 — Workspace hygiene
 
@@ -434,96 +481,281 @@ published projection.
 HTTP status matrix equals the baseline matrix; MCP returns the mapped code for
 an `AccountError`.
 
+### Session RF3E — Identifier grammars, limits and mirror checks
+
+Behavior-touching: corrects two contract drifts.
+
+- `@lacecms/content` exports the remaining shared grammars and limits and
+  every copy imports them: field key (`FIELD_KEY_PATTERN`, today 13 copies
+  outside its owner in six packages, including the sort grammar and OpenAPI
+  strings), block type (`BLOCK_TYPE_PATTERN`; config's same-named
+  `BLOCK_KEY_PATTERN` copy is replaced), model key (`MODEL_KEY_PATTERN`; the
+  admin router accepts a leading digit config refuses), title length
+  (`MAX_TITLE_LENGTH`, seven bare `maxLength(200)` in contracts), page size
+  (`MAX_PAGE_SIZE`, `DEFAULT_PAGE_SIZE`), draft media references and the
+  link-resolve batch (200) and `VIDEO_EMBED_PROVIDERS`.
+- `@lacecms/domain` owns the media-tag rules (pattern, 40-character length,
+  200 code points per raw tag before normalization, 20 tags per item, 5
+  filter tags) and the display-name rule (120 characters, no control
+  characters), beside their existing normalizers; contracts re-exports them
+  for the admin.
+- Drift fixes: the entry-list and media-list `limit` contracts and OpenAPI
+  agree with the server's 1–100, default 50 (owner decision 2026-11-05: the
+  server's current range is canonical); the public collection route applies
+  the full slug rule, so an over-long slug returns `422`. Correction found
+  while writing the specification: the media upload tag `maxLength: 200` is
+  the specified bound before normalization, not drift, and stays as the named
+  constant `MAX_MEDIA_TAG_INPUT_LENGTH`.
+- Admin field-type subsets (`groupedFieldTypes`, counted text types) and the
+  filter control become `fieldTypeSupport` columns; presence operators get
+  one declaration (`FIELD_PRESENCE_OPERATIONS`); one portable
+  `fieldFilterValueFailure` replaces the application and admin value checks;
+  config's three display-only key lists become one.
+- Renamed predicate `isRecord` copies (application, admin,
+  platform-cloudflare) import the content helper; contracts `isJsonValue`
+  delegates to content if a parity test shows identical accepted sets. The
+  CLI copies and the exhaustive CLI block scaffold switch move to RF7C,
+  because the CLI may not import content.
+- `*Source` mirror checks become total: every contracts export ending in
+  `Source` is enumerated, keys are compared both ways including optionality,
+  and nested objects (`seo`, `seoDefaults`, `usage[]`) are compared.
+- `tests/shared-vocabulary.test.mjs` matches grammars and numeric limits by
+  pattern, not only declaration names, and exempts lines by symbol, not by
+  exact text.
+
+**Specs:** `field-descriptors`, `rest-contracts`, `collection-query-options`,
+`media-use-cases`, `content-domain-rules`.
+
+### Session RF3F — Error codes follow-up
+
+Behavior-touching where noted.
+
+- A stale synchronization plan carries its own code
+  (`CONFIGURATION_SYNC_STALE`) instead of `CONTENT_INVALID_STATE` plus a
+  message search; `platform-node/src/content-sync.ts` and the CLI check the
+  code. No transport applies a plan, so the code is internal (500 if it ever
+  reached HTTP), not 409 as first planned.
+- Setup and user-lookup failures in both security adapters become
+  `AccountError("NOT_FOUND")`, the documented 404 with the envelope the setup
+  route already returns, so setup outcomes keep one uniform 404 (owner
+  decision 2026-11-05); the route's catch-all goes, and an infrastructure
+  failure during setup becomes `500` instead of a misleading 404.
+- Pass-through checks in `db/shared/*` and `platform-node/image-inspector.ts`
+  test `instanceof LaceError`, so `InvariantError` and `AccountError` are not
+  rewritten to `CONTENT_INVALID_STATE`.
+- Contracts header and precondition parsers throw `ContractValidationError`;
+  the server's bare `catch {}` around them is removed.
+- Server composition and capability failures throw `InvariantError`; the
+  server-local `AuthorizationError` is distinguished by code, not class; the
+  rate-limit middleware throws `RateLimitExceededError` so 429 comes only from
+  the classifier.
+- Node and Cloudflare object-storage and environment errors share bases that
+  extend `LaceError` (`STORAGE_UNAVAILABLE`, environment configuration).
+- Carried from RF3E, not part of `rf03f-error-codes-follow-up`: contracts
+  `isJsonValue` and content `normalizeJsonValue` accept different sets. An
+  array with a named property is accepted by contracts only; an array with a
+  non-enumerable element is accepted by content only
+  (`tests/json-validator-parity.test.mjs`). Resolved by RF3G.
+
+**Specs:** `rest-contracts`, `configuration-synchronization`,
+`browser-first-admin-setup`, `authentication-and-actor-boundary`.
+
+### Session RF3G — One portable-JSON rule
+
+Behavior-touching: contracts accepts exactly the content set.
+
+- Owner decision 2026-11-07: the content portable-JSON rule is canonical,
+  because it matches `JSON.stringify`. An array with a named property loses
+  that property when serialized, so it is refused; a non-enumerable array
+  element is serialized by index, so it is accepted.
+- `@lacecms/content` exports one non-throwing check beside
+  `normalizeJsonValue`, and both use one walk. Contracts `jsonValueSchema`
+  and `jsonObjectSchema` call it, and the contracts `isJsonValue` copy goes.
+- The walk is iterative. Today content normalization throws `RangeError` on
+  values nested about 10,000 levels deep, while contracts accepts any depth
+  that `JSON.parse` produces. Adopting the recursive rule unchanged would
+  turn a deep request body into a stack overflow.
+- `tests/json-validator-parity.test.mjs` expects no difference.
+
+**Specs:** `rest-contracts`, `field-descriptors`.
+
 ## Step RF4 — Module splits
 
-**Size:** L (five sessions). **Depends on:** RF2 (tests on source) and RF3
+**Size:** L (eight sessions). **Depends on:** RF2 (tests on source) and RF3
 (so splits move one definition).
 
 **What:** no source file above roughly 1,000 lines; each module has one
 responsibility and one owner section in the architecture. Every session is a
 pure move: `index.ts` re-exports, public API unchanged, existing tests pass
-with import paths only.
+with import paths only. Follow architecture §6 *Source layout*: domain directories,
+no subdirectory barrels, one-way dependencies including type imports, and tests
+beside modules. RF4B–RF4F map their modules into domain directories and delete
+their split files from `scripts/oversized-source-baseline.json`; RF5/RF6 do the
+same for their files. The guard permits legacy files to shrink but never grow.
 
 ### Session RF4A — `@lacecms/content`
 
-`packages/content/src/index.ts` (3,691 lines) becomes `json.ts` (JSON types
-and helpers), `fields.ts` (descriptor normalization and `field` builders),
-`rich-text.ts`, `validation.ts` (value validation, `compileFieldSchema`,
-published projection), `references.ts` (media and internal-link collection),
-`blocks.ts` (registry, `defineBlock`, migrations; `publishedBlockData` moves
-here to remove the only forward reference), `built-in-blocks.ts` and
-`entry.ts` (aggregate validation, canonical JSON, hashing).
-`index.type-test.ts` is split alongside.
+`packages/content/src/index.ts` (3,881 lines after RF3) becomes an explicit
+re-export entry over `shared/` (JSON, errors, identifiers, objects), `fields/`
+(capabilities, definitions, builders, layout, visibility, validation, rich text,
+video embeds, link tokens, schema paths), `references/` (media, internal links,
+field paths), `blocks/` (definition, list layout, built-ins), and `entries/`
+(aggregate, canonical JSON, list-query policy). Dependencies run one way:
+`shared ← fields ← references, blocks ← entries`; no module cycle, including
+types, is permitted. `publishedBlockData` belongs to the block definition;
+`BlockDataValues` and `FieldVisibilityTargets` belong to field definitions,
+where group value inference needs them (owner-confirmed apply refinement).
+The 1,000-line ceiling applies to every module; existing leaf modules move
+with their history. The monolithic runtime test splits into twelve companions,
+and type tests into six, gated by the ordinary package `typecheck`.
 
 ### Session RF4B — `@lacecms/application`
 
-- `packages/application/src/index.ts` (1,210 lines) becomes `ports/` by
-  capability (`content.ts`, `media.ts`, `security.ts`, `builds.ts`,
-  `infrastructure.ts` for clock, ids, cache, logger), `brands.ts`,
-  `limits.ts` and a thin `index.ts`. `SecurityService` (28 methods) is split
-  into `AccountSecurityPort`, `SessionSecurityPort` and `TokenSecurityPort`;
-  runtimes keep implementing the intersection.
-- The `configuration-*` cluster: first `configuration-sync-types.ts` holding
-  ports, plan, change and evidence types (breaks every type-only cycle), then
-  `configuration-sync.ts` into `configuration-plan.ts`,
-  `configuration-report.ts` and `configuration-apply.ts`; `decideEvolution`
-  (362 lines) becomes a table keyed by `StructuralChange.kind`.
+The package entry re-exports concrete modules from `shared/`, six capability
+port modules, and the content, media, accounts, builds, outbox and configuration
+directories. The three oversized application files leave the size baseline:
+`index.ts`, `content-use-cases.ts`, and `configuration-sync.ts`. Content use
+cases split into inputs, draft normalization and commands; configuration types
+and limits break the former type cycles, and the synchronization implementation
+splits into support, decisions, plan, report and apply modules.
 
-RF2B test companions are already separated: `index.test.ts` covers the
-ports/brands helpers; `configuration-sync.test.ts`,
-`configuration-evolution.test.ts`, `configuration-migration.test.ts` and
-`configuration-visibility.test.ts` accompany the configuration cluster. The
-use-case companions are `accounts.test.ts`, `content-authority.test.ts`,
-`draft-normalization.test.ts`, `conditional-publication.test.ts`,
-`site-build.test.ts`, `media-use-cases.test.ts`, `collection-queries.test.ts`,
-`build-export.test.ts`, `internal-links.test.ts`, `import-tokens.test.ts`,
-`email.test.ts` and `image-container.test.ts`.
+`SecurityService` combines `UserProfileReader` with three disjoint ports:
+account owns setup completion, bootstrap, users, invitations, resets and profile
+and password changes; session owns session listing and deletion; token owns setup,
+build and import credentials. Account use cases require the profile, account and
+session ports. The configuration decision table preserves the breaking-change
+precedence before dispatching by structural change kind.
 
-**Architecture:** §15 *Infrastructure ports* is rewritten from the real
-interfaces (today it shows a `Cache.get<T>` port that does not exist).
+The existing test companions move beside their modules without changing case
+titles. Architecture §15 records the actual infrastructure interfaces.
 
 ### Session RF4C — `@lacecms/contracts`
 
-`packages/contracts/src/index.ts` (3,014 lines) becomes `content.ts`,
-`media.ts`, `accounts.ts`, `builds.ts`, `settings.ts`, `errors.ts` and
-`openapi.ts`, mirroring the REST resource groups. `hasMatchingBlockDefinitions`
-loses its ordering dependency (match by type, not index). Its test file splits
-the same way.
+`packages/contracts/src/index.ts` becomes the entry for 36 concrete modules in
+`shared/`, `errors/`, `openapi/`, `content/`, `media/`, `delivery/`, `builds/`,
+`accounts/` and `settings/`. The directory layout corrects the original seven
+flat-file plan to follow §6 and give delivery and shared primitives an owner.
+Imports follow the one-way direction recorded at the entry and are acyclic.
+`hasMatchingBlockDefinitions` matches exactly one definition per allowed type
+in any order; duplicate allowed types with definitions are rejected. Tests move
+beside their modules while preserving existing case names.
 
 ### Session RF4D — `@lacecms/server`
 
-`createLaceApp` keeps `onError`, the five global middlewares and app
-construction. Routes move to `routes/{setup-session,accounts,admin-users,builds,media,content,public,docs}.ts`,
-each exporting `register<Area>Routes(app, context)` over a `RouteContext`
-(`actor`, `usersActor`, `settingsActor`, `response`, `errorResponse`,
-`noStore`, `deferTask`, DTO mappers). The two handlers that inline domain
-work (media multipart and tag parsing, build export paging) move their
-parsing into `media-upload.ts` and `build-export.ts`. The MCP and OAuth
-special cases become one `protocolErrorResponse` helper.
+`index.ts` is the only production module at the source root. The server is
+organized as `shared/`, `runtime/`, `security/`, `composition/`, `routes/`
+and `app/`, with dependencies directed from shared helpers through runtime
+and security, composition and routes to the app factory. `createLaceApp`
+keeps construction, `onError`, the five middlewares and route registration.
 
-RF2B route test companions map to the future modules: `setup-session` uses
-`routes-session-settings.test.ts`; `accounts` uses `routes-accounts.test.ts`;
-`admin-users` uses `routes-users-invitations.test.ts`; `builds`, `media` and
-`content` use their corresponding `routes-*.test.ts`; `public` uses
-`routes-public-export.test.ts`; `docs` and global middleware remain in
-`app.test.ts`. MCP/OAuth and import protocol coverage live in
-`routes-mcp.test.ts` and `routes-import.test.ts`. Shared fixtures are in
-`src/test-support/app-harness.ts`; `build-site.test.ts` and `email.test.ts`
-remain alongside their existing modules.
+The route registrations live in `routes/{protocol,health,setup-session,accounts,admin-users,credentials,builds,media,content,public,docs}.ts`.
+The protocol and health modules own the MCP/OAuth pass-throughs and probes;
+credentials owns build and import tokens and the import credential. The
+`RouteContext` holds closures over the app input, including the session summary
+shared by account and session routes; pure response helpers and DTO mappers
+are module imports. The multipart and build-export parsers live beside their
+routes as `routes/media-upload.ts` and `routes/build-export.ts`, and media
+binary helpers live in `routes/media-binary.ts`. One protocol error helper
+preserves the existing path predicates and response headers.
 
-### Session RF4E — `@lacecms/db` and remaining monoliths
+The RF2B route companions now live beside their modules, with middleware tests
+in `app/`, import coverage in `security/` and build-site and email tests in
+`runtime/`. The shared fixture stays in `src/test-support/`.
 
-- `packages/db/src/sql-content.ts` (2,229 lines) becomes `sql/{entries,snapshots,blocks,media,builds,cursors}.ts`
-  and `write-errors.ts`; the `*_COLUMNS_SQL` constants gain a test that
-  migrates an in-memory database and asserts every column they name exists in
-  `pragma table_info` (closes the schema-versus-SQL drift gap). `drizzle-kit
-  check` joins `pnpm lint`.
-- `packages/db/src/schema.ts` (862 lines) splits by table group only if the
-  Drizzle snapshot stays identical; otherwise it stays.
+### Session RF4E — `@lacecms/db` and `@lacecms/config`
+
+`db` uses `shared/`, `schema/`, `security/`, `links/`, `content/`, `media/`,
+`delivery/`, `builds/`, `publication/` and `sync/` directories; `config` uses
+`shared/`, `models/`, `structure/` and `configuration/`. Their root entries
+retain the public exports. Test companions follow the `db` modules and the
+Worker-safety test scans the whole production tree.
+
+The original flat SQL split omitted synchronization, public delivery, outbox
+and build export; domain directories provide owners. Drizzle's `check` alone
+only validates migration snapshots, so `pnpm db:check` also detects pending
+schema changes using a disposable copy and runs during lint. The owner chose to
+include the oversized `config` entry here and schedule the remaining seven
+`test-utils` files as RF4F. Splitting the Drizzle schema changed DDL ordering;
+the specified fallback retains the unchanged tables in `schema/tables.ts`,
+with byte-identical export and no pending migration. The config entry explicitly
+exports its public types so its internal `CommonModelInput` stays private.
+
+### Session RF4X — Workspace guards
+
+Inserted after the RF1–RF4E audit. The boundary checker gains a shrinking
+`@ts-nocheck` baseline for test files (test-support modules may not disable
+type checking), a per-member module-cycle check with a strongly connected
+component baseline, and `scripts/source-layout.json` directory rules, barrel
+and root-module checks for the six split packages. The `verify:*` runners run
+package suites through package configurations and name only existing tests,
+guarded by a root path scan; `verify:cross-runtime` requires `--baseline`.
+`config` and `domain` type tests join `typecheck`, Turbo test inputs cover
+files read outside packages, and lint denies warnings. Admin source-test
+resolution, typing the legacy tests and RF3 vocabulary duplicates are separate
+follow-ups.
+
+### Session RF4F — `@lacecms/test-utils`
+
+Split the repository contract, in-memory store and security contract by domain,
+removing the seven remaining `test-utils` files from the oversized baseline.
+Preserve registration order, public exports and both runtime contract suites; add
+one security case-name pin. Split
+the test-utils and config monolithic tests into typed companions, remove their
+two typecheck exceptions, remove the repository contract barrel and declare the
+test-utils directory dependencies in `scripts/source-layout.json`.
+
+### Session RF4G — `@lacecms/domain` and `@lacecms/auth`
+
+Added after the RF4X audit. Both packages keep `index.ts` as their only root
+production module. `domain` moves its 882-line entry into `shared/` (brands,
+errors, internal failure helpers), `access/` (actors, permissions, account and
+rate-limit errors), `media/`, `builds/` and `content/` (routes, blocks,
+collection queries, SEO, entries); `seo.ts` takes `Brand` from
+`shared/brands.ts`, which breaks the `index ↔ seo` cycle. `auth` moves into
+`shared/`, `session/` (the Better Auth boundary), `import/` and `mcp/`; a
+type-only `mcp/provider.ts` breaks the `consent ↔ boundary` cycle. Both
+packages join `scripts/source-layout.json`, their cycle components leave the
+baseline (5 → 3) and their monolithic tests become typed companions (typecheck
+exceptions 139 → 137). Runtime keys, declaration names and test titles are
+unchanged. The audit's platform-node `client-address.ts` "duplicate" does not
+exist: that module imports `normalizeClientAddress` from `@lacecms/auth` and
+adds only the Node trusted-proxy policy, so nothing is removed.
 
 **Acceptance (all RF4 sessions):** `pnpm build` export lists are identical to
 the baseline; `pnpm test` case counts are unchanged; `check-boundaries`
 passes; no source file in the session's package exceeds 1,000 lines.
+
+### Session RF4H — Modules near the ceiling
+
+Splits production modules above about 700 lines before features push them over
+1,000: `application/configuration/evolution.ts` (787: structure diff,
+structure-hint validation, evidence accumulator), `application/content/use-cases.ts`
+(747), `application/media/use-cases.ts` (697: limits, MIME sniffing, filename,
+bytes, metadata patch, class), `content/fields/builders.ts` (736: builder,
+metadata, normalization) and `content/blocks/definition.ts` (697: settings,
+registry, migration). Also splits the catch-all `application/configuration/plan-support.ts`,
+moves the dispatcher lease port from `ports/infrastructure.ts` to an outbox
+port module and gives the configuration tests one typed fixture module.
+Behavior-preserving.
+
+### Session RF4I — Drizzle schema by domain
+
+`db/src/schema/tables.ts` (862 lines, the RF4E fallback) splits by domain.
+The invariant becomes "`pnpm db:check` reports no pending migration and the
+snapshot is unchanged" instead of byte-identical `drizzle-kit export` text;
+if Drizzle still reorders output, the domain modules are listed in
+`drizzle.config.ts` in the original table order. Also gives the outbox rows an
+`outbox/` owner and drops the re-export-only `shared/literal-like.ts`.
+
+### Session RF4J — Remaining flat packages
+
+Adopts §6 in `sdk` (client vs published-site), `render`, `create-lace`,
+`apps/api` and `apps/builder` where a package has a second concern, and
+records an explicit single-concern exemption otherwise. Small leftovers ride
+along: contracts module tests import their module instead of the package
+entry, the `config` packaged test pins declaration names, `apps/api` drops its
+stale `fileParallelism: false`, and `apps/docs` records its JavaScript test
+exception.
 
 ## Step RF5 — Runtime deduplication
 
@@ -541,9 +773,15 @@ Move the verbatim row mappers (`role`, `user`, `profile`, `invitation`,
 `INVITATION_COLUMNS_SQL` and `ACTIVE_INVITATION_SQL` from
 `packages/platform-node/src/security.ts` and
 `packages/platform-cloudflare/src/d1-security.ts` into
-`packages/db/src/security-rows.ts`, following the existing
-`packages/db/src/api-tokens.ts` pattern. `digest`, `tokenSecret` and
+`packages/db/src/security/rows.ts`, following the existing
+`packages/db/src/security/api-tokens.ts` pattern. `digest`, `tokenSecret` and
 `randomHex` stay platform-local. `security-contract` (22 cases) guards both.
+
+Added by the second audit: the verbatim rate-limit policy table and
+`setupExpiryMs` become one `Record<SensitiveRateLimitOperation, Policy>` in
+application; each security adapter splits by port
+(`security/{account,session,token}.ts`), which keeps `d1-security.ts` (978
+lines) under the ceiling; server credential routes take `TokenSecurityPort`.
 
 ### Session RF5B — Shared content reader
 
@@ -560,6 +798,11 @@ on both runtimes: `listMedia`, `loadSnapshots`, `publicMedia`,
 blocks shrink; `repository-contract` passes on SQLite (file and memory) and
 D1.
 
+Added by the second audit: both platform packages adopt the §6 layout and
+join `scripts/source-layout.json`; the three `platform-node` cycles
+(`index`, `runtime`, `content-repository`) and the two oversized repository
+entries leave their baselines.
+
 ### Session RF5C — Runtime deltas and composition
 
 - Align or record the three known write-path differences:
@@ -574,6 +817,10 @@ D1.
   returning the use cases and the `createLaceApp` input; `createNodeRuntime`
   and `createCloudflareRuntime` supply adapters only. `LACE_API_DOCS_ENABLED`
   and `LACE_MCP_ENABLED` are validated once.
+- Added by the second audit: `composeLaceServices` builds `AccountUseCases`
+  instead of the lazy `RouteContext.accounts()`; `RouteContext` splits into
+  actor resolution and capabilities and stops exposing the raw app input to
+  route modules; server consumers depend on the narrow security ports.
 
 **Architecture and specs:** §16 gains a "runtime deltas" table; ADR 0002 is
 amended; `content-repository-contracts` gains the two contract cases.
@@ -628,6 +875,12 @@ drift from the OpenAPI document unnoticed.
 `composites.e2e.ts` pass unchanged; `as never` count in non-test admin code
 drops below 25.
 
+Added by the second audit: the session first makes the RF3A pointer-drag case
+in `composites.e2e.ts` pass at the default 1280×720 viewport (it currently
+needs an enlarged viewport), because the acceptance above requires it
+unchanged. Whether admin `test:e2e` joins CI is settled while writing the
+specification.
+
 ### Session RF6D — List field and block card
 
 - `ListNode`, `ItemRow`, `ItemSummaryLine` and `rowFocusTarget` move from
@@ -676,6 +929,28 @@ output is unchanged.
 **Acceptance:** every CLI command's `--help` text is unchanged (snapshot
 test); `pnpm dev:node` and `pnpm content:sync` still work.
 
+### Session RF7C — CLI source layout
+
+`packages/cli/src` (48 root production modules, the `index ↔ diagnostics`
+cycle) adopts §6 after RF7B's command table gives commands one shape: command
+modules by area, shared flag parsing, doctor/preflight, blocks, import,
+upgrade and database transports. Untyped root `.mjs` test helpers
+(`import-api`, `import-fixtures`, `upgrade-fixtures`) move to
+`src/test-support/` as TypeScript. `cli` joins `source-layout.json` and leaves
+the cycle baseline. The CLI's renamed `isRecord` copies get one CLI-local
+helper and the block scaffold switch becomes exhaustive (moved from RF3E,
+because the CLI may not import content).
+
+### Session RF7D — Naming hygiene
+
+Finishes RF1A's naming rule: `scripts/journeys/rc1-media-selection.mjs` and
+release- or step-numbered log and stage strings (`Alpha.6`, `Alpha.2 field-trial
+§1 (33A)`) are renamed by behavior; roadmap change codes (`CE9A`, `LIST1`,
+`SM1`…) leave test titles, temp prefixes and the pinned contract case names
+(updating both pins); `tests/fixtures/template-0.39.0` is either recorded as
+the latest published template (amending owner decision 7) or deleted. The root
+naming guard extends to test titles.
+
 ## Step RF8 — Documentation
 
 **Size:** L (three sessions). **Depends on:** RF4B and RF5C for the
@@ -688,7 +963,7 @@ architecture sections they change; RF1B for the index.
   its archived change. The body states current behavior only.
 - §24 *Decisions captured by this document* moves into ADRs (new ADRs only
   where none exists); the section becomes a pointer to `docs/adr/README.md`.
-- §15 is rewritten from the real ports after RF4B; §16 gains the runtime
+- §15 is reviewed against the ports RF4B already recorded and RF5 changes; §16 gains the runtime
   deltas table from RF5C; §6 lists the new module layout rules (file size
   ceiling, one responsibility per module).
 - Target size: under 2,500 lines without loss of invariants (a review
@@ -731,6 +1006,61 @@ architecture sections they change; RF1B for the index.
 public CLI command name and every REST path in `api-v1.json` appears in the
 reference pages.
 
+## Step RF9 — Test foundation
+
+**Size:** L (six sessions). **Depends on:** RF4X guards. RF9A–RF9B precede RF5;
+RF9D–RF9F follow the sessions that move the tests they type.
+
+**What:** every test resolves workspace packages from source, shares one typed
+fixture layer, stays under a size ceiling and is type-checked; the
+`@ts-nocheck` baseline (137 files after RF4G) reaches zero.
+
+### Session RF9A — Source resolution for admin and typecheck
+
+`apps/admin` unit tests (198 files) and every package `tsconfig.test.json`
+resolve `@lacecms/*` to source instead of `dist/`, so `pnpm --filter
+@lacecms/app-admin test` passes on a clean checkout and test typecheck no
+longer needs a build. Owner decision 2026-11-05: a `source` export condition
+(with `customConditions` and Vitest `resolve.conditions`) replaces the alias
+table; the specification settles whether release preparation strips it.
+
+### Session RF9B — Typed fixture layer and helper consolidation
+
+One typed fixture layer in `@lacecms/test-utils`: actor and role builders
+(today redefined in application, server, contracts and test-utils), branded
+id fixtures and partial port fakes. Untyped `.mjs` helpers under `src/`
+(`d1-test-harness.mjs`, `apps/api/src/worker-bundle-harness.mjs`) become typed
+`test-support` modules; the repeated Node runtime setup in platform-node and
+`apps/api` product tests becomes one `test-support/node-runtime-harness.ts`;
+`createTestActorResolver` moves out of the production `@lacecms/platform-node/test`
+subpath if no consumer needs it published. Turbo test inputs narrow once
+resolution follows dependency edges.
+
+### Session RF9C — Test size ceiling
+
+The boundary checker applies a 1,000-line ceiling with a shrinking baseline
+to test files. Tests above it split beside their modules: `platform-node`
+`index.test.ts` (1,600), `application` `configuration/evolution.test.ts`
+(1,369), `test-utils` `store/entries.test.ts` (1,328) and `store/media.test.ts`
+(1,166), `platform-cloudflare` `worker.test.ts` (1,183), `server`
+`routes/content.test.ts` (1,153), admin `admin-client.test.ts` (1,122) and
+`EntryPage.test.tsx` (1,082), `sdk` `published-site.test.ts` (1,096).
+
+### Session RF9D — Type core package tests
+
+Removes `@ts-nocheck` from the remaining tests of `contracts` (27), `db` (19),
+`content` (12), `application` (12), `server` (9), `sdk` (2) and `astro`,
+`mcp`, `render` (1 each), using the RF9B fixture layer.
+
+### Session RF9E — Type platform tests
+
+After RF5: `platform-node` (12) and `platform-cloudflare` (12).
+
+### Session RF9F — Type CLI, generator and app tests
+
+After RF7C: `cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder`
+(2). The typecheck baseline file is deleted when it is empty.
+
 ## 6. Progress log
 
 | Date | Session | Change | Notes |
@@ -758,3 +1088,37 @@ reference pages.
 | 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Proposed. `LaceError<Code>` and `InvariantError` in content (correction to the roadmap text: content and config cannot import domain, so the base lives in content; domain and contracts re-export it). Content, config and domain error classes extend it with stable codes; `AccountError`, `AccountErrorCode` and `RateLimitExceededError` (gains `RATE_LIMITED`) move to domain, application re-exports them. `classifyError` uses one total code table (issue-carrying validation errors first; three `expose` hooks for version details, block-order message and `Retry-After`); `ClassifiedError` gains optional `headers`. Server `onError` delegates (`ContractValidationError` in contracts; server-local `AuthorizationError` extends `LaceError`); MCP drops `ArgumentFailure`, so account and rate-limit failures stop surfacing as `INTERNAL_ERROR`. Twelve raw errors become `TypeError` (arguments) or `InvariantError`; `fail` helpers stay local, closing the RF3B deferral. Error matrix in test-utils with export totality, REST matrix pinned to the baseline, MCP matrix, vocabulary guard, ADR 0019. Delta specs: `rest-contracts`, `mcp-content-server` (1 added each). 17 tasks, not applied. |
 | 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Implemented, 17/17 tasks complete. One LaceError base in content and total classifier in contracts; REST matrix preserved and MCP account/rate-limit errors retain shared codes. Twelve raw errors typed; error matrix, totality and vocabulary guards added; ADR 0019 records ownership. Root typecheck, lint, format, build, full tests (64 Turbo tasks; 35 root files / 273 cases), OpenAPI check and strict change validation pass. OpenAPI SHA-256 and existing application exports unchanged; verification recorded in the active change. Not archived. |
 | 2026-11-03 | RF3D | `rf03d-error-model-mapper` | Archived at [`2026-11-03-rf03d-error-model-mapper`](../openspec/changes/archive/2026-11-03-rf03d-error-model-mapper/); 17/17 tasks complete. Both capability deltas synchronized: `rest-contracts` and `mcp-content-server` (one added requirement each). All 84 accepted specifications pass strict validation. RF3 shared-vocabulary work is complete; verification is preserved in the archive. |
+| 2026-11-03 | RF4A | `rf04a-content-module-split` | Proposed, then revised the same day on the owner's request. `index.ts` (3,881 lines at `1ac97ec2`) becomes the only root module, re-exporting concrete files from five domain directories (`shared/`, `fields/`, `references/`, `blocks/`, `entries/`; one-way `shared ← fields ← references, blocks ← entries`, no subdirectory barrels, module graph acyclic including type imports); bodies and JSDoc move verbatim, existing leaf modules move with `git mv`, `publishedBlockData` moves to `blocks/definition.ts`. Corrections to the roadmap text: the eight flat modules do not fit under 1,000 lines without cycles after RF3A, so capabilities, definitions, layout, visibility and list layout are separate modules and the shared error classes join `shared/errors.ts`. Owner decisions: a *Source layout* convention in architecture §6, `AGENTS.md` and ADR 0020 for all future code; the boundary checker fails on production files over 1,000 lines outside a shrinking baseline (`scripts/oversized-source-baseline.json`, the 18 oversized files outside `content`), so later sessions delete their entries. `index.test.ts` splits into twelve module test files with case titles pinned (115); type tests split into six files, their stale `@ts-expect-error` is fixed and they join the package `typecheck`. Delta spec: `workspace-governance` (1 added). 21 tasks, not applied. |
+| 2026-11-03 | RF4A | `rf04a-content-module-split` | Implemented, 21/21 tasks complete; not archived. Content split into 23 concrete modules in five domain directories with a 178-line entry; largest module 736 lines. Owner-confirmed placement of `BlockDataValues`/`FieldVisibilityTargets` in field definitions removes the discovered type cycle. All 180 declaration exports and 93 runtime keys preserved; 115 listed titles / 241 expanded source cases preserved across 17 test files. Six type-test companions now join typecheck. Size guard baselines 18 oversized files outside content; later sessions remove their entries. Root typecheck, lint, formatting, build, full tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and all 86 strict OpenSpec items pass. Boundary scanner progress regression covered. Verification is recorded in the active change. |
+| 2026-11-03 | RF4A | `rf04a-content-module-split` | Archived at [`2026-11-03-rf04a-content-module-split`](../openspec/changes/archive/2026-11-03-rf04a-content-module-split/); 21/21 tasks complete. The `workspace-governance` delta is synchronized (one added requirement, five scenarios). All 84 accepted specifications pass strict validation. Implementation and verification are preserved in the archive. RF4B is next. |
+| 2026-11-03 | RF4B | `rf04b-application-module-split` | Proposed (row added retrospectively by RF4X; the session recorded only its implementation). Application entry re-exports concrete modules from `shared/`, six capability port modules and six domain directories; `SecurityService` composes disjoint account, session and token ports; the configuration decision table keeps the breaking-change precedence. Deviation from owner decision 2: the exported `AccountSecurityPort` type was reshaped (four methods moved to the new `SessionSecurityPort` and `TokenSecurityPort`, five added), so the public type surface changed although runtime exports did not; CHANGELOG handling is left to the next release preparation. Delta spec: `application-ports-and-commands`. 20 tasks. |
+| 2026-11-03 | RF4B | `rf04b-application-module-split` | Implemented the application domain and port split, security capability ports, and configuration decision table. The three application size-baseline entries are removed (18 → 15); 131 listed case titles and the runtime export surface are preserved. Verification is recorded in the active change. |
+| 2026-11-03 | RF4B | `rf04b-application-module-split` | Archived at [`2026-11-03-rf04b-application-module-split`](../openspec/changes/archive/2026-11-03-rf04b-application-module-split/); 20/20 tasks complete. The `application-ports-and-commands` delta is synchronized; all 84 accepted specifications validate. |
+| 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Proposed. `index.ts` (2,994 lines at `83c0157d`) becomes the only root production module, re-exporting 36 concrete modules in nine directories: `shared/`, `errors/`, `openapi/`, `content/`, `media/`, `delivery/`, `builds/`, `accounts/` and `settings/` (direction `shared ← {errors, openapi, accounts, builds, content}`, `accounts ← settings`, `content ← media`, `{content, media, errors} ← delivery`; acyclic including type imports, so the `content-model-projection` → `index` cycle is removed). Correction to the roadmap text: the seven flat files would leave `content.ts` near 1,000 lines with no owner for public delivery, the build export, the tolerant variants or the primitives, so the session uses domain directories (§6). `hasMatchingBlockDefinitions` matches by type: one definition per allowed type in any order, and duplicate allowed types with definitions are rejected. The test files split into module companions with every case name preserved (96 + 1 new). Runtime keys, type names and the OpenAPI document stay unchanged. The baseline goes from 15 to 14. Delta spec: `rest-contracts` (1 modified). 17 tasks, not applied. |
+| 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Implemented, 18/18 tasks complete. The 36-module contracts split and type-matched block definitions leave a 144-line entry and a 226-line largest module; size baseline 15 → 14. The 96 existing listed test names and export surface are preserved, with one new listed case. The shared-vocabulary guard follows the moved owners. All root gates pass (64 Turbo tasks; 35 root files / 284 cases); verification is recorded in the active change. |
+| 2026-11-03 | RF4C | `rf04c-contracts-module-split` | Archived at [`2026-11-03-rf04c-contracts-module-split`](../openspec/changes/archive/2026-11-03-rf04c-contracts-module-split/); 18/18 tasks complete. The `rest-contracts` delta is synchronized; all 84 accepted specifications validate. Implementation and verification remain recorded in the archive. |
+| 2026-11-04 | RF4D | `rf04d-server-module-split` | Proposed. `app.ts` (2,940 lines at `c63c4686`) splits into six directories with `index.ts` as the only root production module: `shared/` (HTTP responses, request parsing, content-model lookups, account DTOs, protocol paths), `runtime/` (build site, MCP flag, email), `security/` (sensitive limits, import routes), `composition/` (`LaceAppInput`, `RouteContext`), `routes/` (eleven `register<Area>Routes` modules plus `media-upload`, `media-binary` and `build-export` helpers) and `app/` (`createLaceApp` with `onError`, the five middlewares and registration); direction `shared ← runtime, security ← composition ← routes ← app`, acyclic including type imports. Corrections to the roadmap text: `credentials`, `protocol` and `health` route modules give the token, MCP/OAuth pass-through and probe routes an owner; `RouteContext` holds only closures over the input, while pure helpers and DTO mappers are module imports; the two parsers live in `routes/` under §6. One `protocolErrorResponse` serves the 503/429/413 MCP and OAuth bodies with each site's predicate and headers unchanged. Export surface, route table and OpenAPI document stay identical; route tests move beside their modules with case titles preserved (86 + 1 characterization case for the untested protocol `onError` body). The baseline goes from 14 to 13. `skip_specs`. 17 tasks, not applied. |
+| 2026-11-04 | RF4D | `rf04d-server-module-split` | Implemented the six-directory server split, including the shared session summary context. The 17 runtime keys, 20 declaration type names, 179-route multiset and 87 listed test names are preserved; one protocol error characterization case was added. The oversized baseline falls from 14 to 13. Verification is recorded in the active change. |
+| 2026-11-04 | RF4D | `rf04d-server-module-split` | Archived at [`2026-11-04-rf04d-server-module-split`](../openspec/changes/archive/2026-11-04-rf04d-server-module-split/); 17/17 tasks complete. No delta specs. Implementation and verification are preserved in the archive. |
+| 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Proposed: split db and config by domain, guard SQL column lists and pending Drizzle migrations, and add RF4F for test-utils. One SQLite migration specification delta. |
+| 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Implemented the db and config module splits; the Drizzle table fallback preserves byte-identical DDL. Public exports and test titles match baseline, with one drift case added; oversized baseline 13 → 11. Root typecheck, lint, formatting, build, tests (64 Turbo tasks; 35 root files / 284 cases), OpenAPI and strict specification gates pass; verification is recorded in the active change. |
+| 2026-11-04 | RF4E | `rf04e-db-config-module-split` | Archived at [`2026-11-04-rf04e-db-config-module-split`](../openspec/changes/archive/2026-11-04-rf04e-db-config-module-split/); 20/20 tasks complete. The `sqlite-schema-and-migrations` delta is synchronized (one requirement, five scenarios). Verification remains recorded in the archive. RF4F is next. |
+| 2026-11-04 | RF4X | `rf04x-workspace-guards` | Proposed after the owner-requested audit of RF1–RF4E, inserted before RF4F. Guards in `check-boundaries`: a shrinking `@ts-nocheck` baseline (143 files; two test-support helpers typed, 141 tests listed), per-member file cycles with a strongly-connected-component baseline (`auth`, `cli`, `domain`, `platform-node`), and `scripts/source-layout.json` directory rules, barrels and root modules for the six split packages. Repairs 21 stale test paths in the `verify:*` runners, which now run package suites through package configs; `--baseline` becomes required. Also gates the `config`/`domain` type tests, adds missing Turbo test inputs, clears 41 Oxlint warnings and makes lint deny warnings, and cleans up the roadmap, backlog and catalog. Admin source resolution, typing the legacy tests and RF3 vocabulary stay out of scope. Delta spec: `workspace-governance` (4 added, 3 modified). 24 tasks, not applied. |
+| 2026-11-04 | RF4X | `rf04x-workspace-guards` | Implemented, 24/24 tasks complete. The boundary checker now enforces a shrinking `@ts-nocheck` baseline (143 → 141; both test-support helpers typed), per-member module cycles against a five-component baseline, and the `scripts/source-layout.json` rules for the six split packages, with type tests treated as tests. The `verify:*` runners run 22 corrected paths through package configs, and a root guard rejects stale runner, verification-config and documentation test paths; it also fixed six stale paths in `docs/verification.md`. The `config`/`domain` type tests are gated, Turbo test inputs are completed, all 41 Oxlint warnings are fixed and lint denies warnings. All root gates pass (64 Turbo tasks; 35 root files / 316 cases). A full `verify:*` run remains an owner check. Not archived. |
+| 2026-11-04 | RF4X | `rf04x-workspace-guards` | Archived at [`2026-11-04-rf04x-workspace-guards`](../openspec/changes/archive/2026-11-04-rf04x-workspace-guards/); 24/24 tasks complete. The `workspace-governance` delta is synchronized (four added, three modified requirements); all accepted specifications validate. RF4F is next. |
+| 2026-11-04 | RF4G | `rf04g-domain-auth-layout` | Proposed as a new session after RF4F, from the RF4X audit. `domain` (882-line entry, `index ↔ seo` cycle) moves into `shared/`, `access/`, `media/`, `builds/` and `content/` directories; account and rate-limit errors go to `access/errors.ts` (owner decision). `auth` moves into `shared/`, `session/`, `import/` and `mcp/`; a type-only `mcp/provider.ts` breaks the `consent ↔ boundary` cycle. Both packages join `source-layout.json`, two cycle components leave the baseline (5 → 3), and both tests are split and typed at once (owner decision; typecheck baseline 141 → 139). Correction: the audit's platform-node `client-address.ts` "duplicate" extends the auth helper and is not a copy, so nothing is removed. Exports unchanged; `skip_specs`. 14 tasks, not applied. |
+| 2026-11-04 | RF4F | `rf04f-test-utils-split` | Proposed with the scope the owner extended after the RF4X audit. `test-utils` keeps only its two package entries at the root and moves everything else into `shared/`, `adapters/`, `delivery/`, `errors/`, `visibility/`, `store/`, `repository-contract/` and `security-contract/`. The repository contract is cut into 23 contiguous same-domain case runs, assembled in the original order by a non-barrel `registry.ts`; the 106-name pin is unchanged. The security contract is split into domain runs and gains a new 17-name pin. `InMemoryContentStore` becomes a linear class chain with method bodies moved verbatim. The seven `test-utils` oversized entries leave the baseline (11 → 4), and `test-utils` joins `source-layout.json`. The monolithic `test-utils` (3,560 lines) and `config` (1,328 lines) tests are split beside their modules and typed (owner decision; 492 and 208 errors today; typecheck baseline −2). Exports, case order and titles are unchanged. `skip_specs`. 15 tasks, not applied. |
+| 2026-11-04 | RF4F | `rf04f-test-utils-split` | Implemented the domain splits and typed test companions; oversized baseline 11 → 4, typecheck exceptions 141 → 139. Runtime exports and contract names match the baseline; the security contract adds one name pin. Root typecheck, lint, formatting, tests and strict change validation pass; verification is recorded in the archived change. |
+| 2026-11-04 | RF4F | `rf04f-test-utils-split` | Archived at [`2026-11-04-rf04f-test-utils-split`](../openspec/changes/archive/2026-11-04-rf04f-test-utils-split/); 15/15 tasks complete. No delta specs. Implementation and verification are preserved in the archive. |
+| 2026-11-05 | RF4G | `rf04g-domain-auth-layout` | Implemented, 14/14 tasks complete. `domain` and `auth` follow the §6 layout and join `source-layout.json`; cycle components 5 → 3, typecheck exceptions 139 → 137 (the proposal's 141 → 139 predated RF4F). Measured edges are narrower than designed: `auth/mcp` imports nothing from `shared/`, and the brand guard `nonEmptyString` stays private in `shared/brands.ts` to avoid a `brands ↔ failures` cycle. Runtime keys, declaration names and test titles match the baseline. Not archived. |
+| 2026-11-05 | RF4G | `rf04g-domain-auth-layout` | Archived at [`2026-11-05-rf04g-domain-auth-layout`](../openspec/changes/archive/2026-11-05-rf04g-domain-auth-layout/); 14/14 tasks complete. No delta specs (`skip_specs`). Implementation and verification are preserved in the archive. |
+| 2026-11-05 | — | — | Second audit follow-up: every remaining finding is now planned. New sessions RF3E (grammars, limits, total mirror checks), RF3F (error codes), RF4H (modules near the ceiling), RF4I (Drizzle schema by domain), RF4J (remaining flat packages), RF7C (CLI layout), RF7D (naming hygiene) and Step RF9 (test foundation: RF9A source resolution, RF9B typed fixtures, RF9C test size ceiling, RF9D–RF9F typing the 137 baselined tests). Scope added to RF5A–RF5C and RF6C. Owner checks are listed in §5 (items 8–10). The stray `packageManager` bump to pnpm 12.17.0 was reverted. No OpenSpec change created. |
+| 2026-11-05 | RF3E | `rf03e-shared-grammars-limits` | Proposed. `content` exports the field-key, block-type and model-key grammars and their sources, the page, draft media-reference and link-resolve limits, and `VIDEO_EMBED_PROVIDERS`. `domain` owns the media-tag and display-name rules, re-exported through contracts for the admin. Every listed copy imports its owner, and existing public names stay as aliases. One page-limit schema means OpenAPI `limit` reads 1–100. The public slug route applies the full slug rule. One portable filter-value check is gated by a parity table (stop if application and admin disagree today), and admin support columns, config display-only keys, `isRecord` copies and JSON-validator parity are unified. Mirror checks become total (enumerated, two-way, nested), and the vocabulary guard works by pattern. Correction: the upload tag `maxLength: 200` is the specified pre-normalization bound. Delta specs: `content-domain-rules` (1 modified), `rest-contracts` (1 added, 1 modified), `collection-query-options` (1 added). 16 tasks, not applied. |
+| 2026-11-05 | RF3F | `rf03f-error-codes-follow-up` | Proposed. `CONFIGURATION_SYNC_STALE` with `StaleSynchronizationError` replaces message searching, and is internal rather than 409. Setup and lookup failures become `AccountError("NOT_FOUND")` (same 404 envelope), and the route's catch-all goes, so infrastructure failures return 500. Pass-through guards test `LaceError`; header parsers throw `ContractValidationError` behind narrowed server catches; server plain errors become `InvariantError`; authorization is tested by code; the rate-limit middleware throws `RateLimitExceededError` so 429 comes only from the classifier. Platform storage and environment errors extend new application bases (500 unchanged). Delta specs: `rest-contracts` (1 modified), `configuration-synchronization` (1 added), `browser-first-admin-setup` (1 added). 11 tasks, not applied. |
+| 2026-11-05 | RF3E | `rf03e-shared-grammars-limits` | Implemented, 16/16 tasks complete. Every listed grammar and limit has one owner (`content`, or `domain` for media tags and display names) and the vocabulary guard detects literal copies. OpenAPI changed only in the two admin list `limit` patterns (1–100); a 101-character public slug returns `422`. Application and admin agreed on all 81 filter parity cases before both delegated to `fieldFilterValueFailure`. Mirror checks are enumerated, two-way, optionality-aware and nested: they found the unchecked `BuildExportSource` and four optionality drifts, fixed by making four contracts inputs required. Contracts and content JSON validators differ on two array edge cases, so contracts keeps `isJsonValue` (noted under RF3F). Config `DISPLAY_ONLY_KEYS` has four owners, not three. Not archived. |
+| 2026-11-05 | RF3E | `rf03e-shared-grammars-limits` | Archived at [`2026-11-05-rf03e-shared-grammars-limits`](../openspec/changes/archive/2026-11-05-rf03e-shared-grammars-limits/); 16/16 tasks complete. Delta specs synchronized: `collection-query-options` (+1), `content-domain-rules` (~1), `rest-contracts` (+1, ~1). Implementation and verification are preserved in the archive. |
+| 2026-11-05 | RF3F | `rf03f-error-codes-follow-up` | Implemented, 11/11 tasks complete. Stale plans carry `CONFIGURATION_SYNC_STALE` (500 if it reached HTTP) and `content:sync` and the CLI test the code. On D1 a failed final guard is rechecked so an unavailable link keeps `CONTENT_INVALID_STATE`, as on Node. Setup outcomes are `AccountError("NOT_FOUND")` (same 404) and an unexpected setup failure returns `500`; the CLI `auth bootstrap` detector also moved from message to code. Pass-through guards test `LaceError`; header parsers throw `ContractValidationError`, which moved to contracts `shared/` because `shared` may not import `errors`; the server catches only that class, throws `InvariantError`, and leaves the `429` to the classifier. Platform storage and environment errors extend new application bases, and each platform test requires every exported error class to be matrix-classified. Not archived. |
+| 2026-11-05 | RF3F | `rf03f-error-codes-follow-up` | Archived at [`2026-11-05-rf03f-error-codes-follow-up`](../openspec/changes/archive/2026-11-05-rf03f-error-codes-follow-up/); 11/11 tasks complete. Delta specs synchronized: `browser-first-admin-setup` (+1), `configuration-synchronization` (+1), `rest-contracts` (~1). Implementation and verification are preserved in the archive. The contracts/content JSON-validator divergence carried from RF3E stays open for an owner decision. |
+| 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Proposed. Owner decision: the content portable-JSON rule is canonical. `@lacecms/content` exports a non-throwing check that shares one iterative walk with `normalizeJsonValue`. Contracts `jsonValueSchema` and `jsonObjectSchema` call it, and the contracts `isJsonValue` copy goes. Contracts then refuses an array with a named property and accepts a non-enumerable array element. Content normalization no longer overflows the stack on deeply nested values. Delta specs: `rest-contracts` (1 added), `field-descriptors` (1 modified). Not applied. |
+| 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Implemented, 6/6 tasks complete. One iterative walk in `content/shared/json.ts` backs `normalizeJsonValue` and the exported `isPortableJsonValue`. Messages, paths and first-failure order match the former recursive walk. Contracts `jsonValueSchema`, `jsonObjectSchema` and `isJsonObject` call it, and the contracts copy is deleted. The parity table (27 edges, including 100,000-level nesting) expects equal verdicts, and the vocabulary guard refuses a new `isJsonValue`. OpenAPI unchanged. Not archived. |
+| 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Archived at [`2026-11-07-rf03g-json-validator-parity`](../openspec/changes/archive/2026-11-07-rf03g-json-validator-parity/); 6/6 tasks complete. Delta specs synchronized: `field-descriptors` (~1), `rest-contracts` (+1). Implementation and verification are preserved in the archive. Step RF3 is done. |

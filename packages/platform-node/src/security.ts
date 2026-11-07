@@ -39,7 +39,13 @@ import {
   type SensitiveRateLimiter,
   type RateLimitDecision,
 } from "@lacecms/application";
-import { DomainError, unixMilliseconds, type UnixMilliseconds } from "@lacecms/domain";
+import { InvariantError } from "@lacecms/content";
+import {
+  AccountError,
+  DomainError,
+  unixMilliseconds,
+  type UnixMilliseconds,
+} from "@lacecms/domain";
 import type Database from "better-sqlite3";
 
 const setupExpiryMs = 60 * 60 * 1000;
@@ -171,7 +177,7 @@ export class NodeSecurityService implements SecurityService {
         .prepare("select setup_completed_at from installation_state where singleton_key = 1")
         .get() as { setup_completed_at: number | null } | undefined;
       if (state?.setup_completed_at !== null && state !== undefined)
-        throw new Error("Setup already completed.");
+        throw new AccountError("NOT_FOUND");
       this.connection
         .prepare("insert or ignore into installation_state (singleton_key) values (1)")
         .run();
@@ -196,7 +202,7 @@ export class NodeSecurityService implements SecurityService {
         .prepare("select setup_completed_at from installation_state where singleton_key = 1")
         .get() as { setup_completed_at: number | null } | undefined;
       if (state?.setup_completed_at !== null && state !== undefined)
-        throw new Error("Setup unavailable.");
+        throw new AccountError("NOT_FOUND");
       const setup = this.connection
         .prepare(
           "select expires_at, consumed_at, claimed_email_hash from setup_tokens where token_hash = ?",
@@ -210,7 +216,7 @@ export class NodeSecurityService implements SecurityService {
         setup.consumed_at !== null ||
         (setup.claimed_email_hash !== null && setup.claimed_email_hash !== emailHash)
       )
-        throw new Error("Setup credential is invalid.");
+        throw new AccountError("NOT_FOUND");
       this.connection
         .prepare(
           "update setup_tokens set claimed_email_hash = ?, claimed_at = ? where token_hash = ? and claimed_email_hash is null",
@@ -239,14 +245,15 @@ export class NodeSecurityService implements SecurityService {
         .prepare("select id, email, role, disabled from user where id = ?")
         .get(id) as Record<string, unknown>;
     }
-    if (account.role !== "admin") throw new Error("Setup claim user is not an administrator.");
+    if (account.role !== "admin")
+      throw new InvariantError("Setup claim user is not an administrator.");
     this.connection.transaction(() => {
       const completed = this.connection
         .prepare(
           "update installation_state set setup_completed_at = ?, setup_admin_user_id = ? where singleton_key = 1 and setup_completed_at is null",
         )
         .run(Number(now), account!.id);
-      if (completed.changes === 0) throw new Error("Setup unavailable.");
+      if (completed.changes === 0) throw new AccountError("NOT_FOUND");
       this.connection
         .prepare("update setup_tokens set consumed_at = ? where consumed_at is null")
         .run(Number(now));
@@ -281,7 +288,7 @@ export class NodeSecurityService implements SecurityService {
   }
   public async disableUser(input: { readonly userId: string }): Promise<ManagedUser> {
     const value = this.mutateUser(input.userId, undefined, true);
-    if (value === null) throw new Error("User not found.");
+    if (value === null) throw new AccountError("NOT_FOUND");
     return value;
   }
   private mutateUser(id: string, nextRole?: SecurityRole, disabled?: boolean): ManagedUser | null {

@@ -391,6 +391,34 @@ README links to the public site and root `DEVELOPMENT.md` contributor guide.
 Documentation uses explicit locale/version routes, initially English/latest for
 rc1 following main, without changing CMS localization scope.
 
+### Source layout
+
+Package `src/` roots hold entry points (`index.ts`, `bin.ts`, declared subpath
+entries) and package-level tests. Other modules live in domain directories named
+by what they own; adopt directories as soon as a package has a second concern.
+Each file owns one responsibility. Aim for a few hundred lines and split a file
+in the same change before it reaches 1,000 lines. No subdirectory has a barrel
+`index.ts`: package entries re-export concrete files, explicitly when a module
+also exports internal helpers. Directories depend one way, documented at the top
+of the entry point; module cycles, including type-only imports, are forbidden.
+Tests and type tests sit beside their module; shared helpers live in
+`src/test-support/`. `apps/admin` keeps its section 17 layer/slice structure,
+with the same size limit and no-cycle rule.
+
+Existing flat packages adopt this layout in their RF4–RF6 session or a change
+adding a second concern. The boundary checker enforces the 1,000-line ceiling
+through `scripts/oversized-source-baseline.json`: oversized legacy files may
+shrink but may not grow; deleted or within-limit files must leave the baseline.
+The same checker rejects module cycles in every member's production graph
+(legacy strongly connected components are frozen in
+`scripts/source-cycle-baseline.json`) and, for packages declared in
+`scripts/source-layout.json`, imports against the declared directory direction,
+subdirectory `index` modules, root modules that are not manifest entries and
+entry headers whose `Directory dependencies:` line names other directories.
+Test files may disable type checking only while listed in the shrinking
+`scripts/test-typecheck-baseline.json`; test-support modules never may.
+See [ADR 0020](adr/0020-source-layout.md).
+
 ## 7. Generated user project
 
 The supported MVP onboarding path is a project generator, not copying the entire Lace engine source into an existing arbitrary application.
@@ -3054,20 +3082,22 @@ Security requirements:
 
 ## 15. Infrastructure ports
 
-Representative application-facing interfaces:
+Application contracts live in `packages/application/src/ports/`: `infrastructure`,
+`links`, `content`, `media`, `builds`, and `security`. Representative
+interfaces are shown below; email delivery remains beside the account use cases.
 
 ```ts
 interface ObjectStorage {
-  put(input: PutObjectInput): Promise<StoredObject>;
-  get(key: string): Promise<ReadableStream | null>;
-  delete(key: string): Promise<void>;
   createReadUrl(key: string, options?: ReadUrlOptions): Promise<string>;
+  delete(key: string): Promise<void>;
+  get(key: string): Promise<ByteStream | null>;
+  put(input: PutObjectInput): Promise<StoredObject>;
 }
 
 interface Cache {
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T, options?: CacheOptions): Promise<void>;
   delete(key: string): Promise<void>;
+  get<Value>(key: string): Promise<Value | null>;
+  set<Value>(key: string, value: Value): Promise<void>;
 }
 
 interface SiteBuildTrigger {
@@ -3075,11 +3105,30 @@ interface SiteBuildTrigger {
 }
 
 interface EmailSender {
-  readonly provider: "none" | "log" | "smtp" | "resend" | "cloudflare";
   readonly from?: string;
+  readonly provider: EmailProviderKind;
   send(message: EmailMessage): Promise<EmailDeliveryOutcome>;
 }
+
+interface Clock {
+  now(): UnixMilliseconds;
+}
+
+interface IdGenerator {
+  next(): string;
+}
+
+interface DispatcherLeasePort {
+  claim(input: ClaimDispatcherEventsInput): Promise<readonly DispatcherLease[]>;
+  complete(input: CompleteDispatcherLeaseInput): Promise<void>;
+  retry(input: RetryDispatcherLeaseInput): Promise<void>;
+}
 ```
+
+`ByteStream` is an `AsyncIterable<Uint8Array>`. Security commands are split
+into account, session, and token capability ports. `SecurityService` combines
+those three ports with `UserProfileReader`; runtime adapters implement the
+combined contract, while use cases can depend on the capabilities they call.
 
 Implementations:
 
@@ -3120,7 +3169,7 @@ The MVP supports the SQLite dialect only:
 - Cloudflare D1 in production and Cloudflare-compatible development;
 - a local SQLite file in Node and Docker.
 
-Drizzle schemas and migrations should stay within the SQL subset supported by both environments.
+Drizzle schemas and migrations should stay within the SQL subset supported by both environments. The `db` column-list drift test applies every checked-in migration to an in-memory database, checks each shared SQL column against its table and prepares each statement. `pnpm db:check`, included in `pnpm lint`, checks the migration snapshot chain and detects schema changes that need a migration in a disposable copy.
 
 Important D1 free-plan design constraints include:
 

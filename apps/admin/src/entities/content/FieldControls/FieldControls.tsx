@@ -16,6 +16,7 @@ import {
 } from "../../../shared/ui/Select/index.js";
 import { Switch } from "../../../shared/ui/Switch/index.js";
 import { Textarea } from "../../../shared/ui/Textarea/index.js";
+import { fieldTypeSupport } from "../field-types.js";
 import type { FieldDefinition, FieldRendererProps } from "../field-types.js";
 import { RichTextEditor } from "../RichTextEditor/index.js";
 
@@ -491,6 +492,6 @@ export const builtInRenderers: Record<
 /** Field types whose control is not a single labelable element. */
 export const groupedFieldTypes: ReadonlySet<FieldDefinition["type"]> = new Set(
   (Object.keys(builtInRenderers) as FieldDefinition["type"][]).filter(
-    (type) => type === "media" || type === "richText",
+    (type) => fieldTypeSupport[type].groupedControl,
   ),
 );

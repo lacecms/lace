@@ -12,12 +12,16 @@
     "./visibility-parity": {
       "types": "./dist/visibility-parity.d.ts",
       "import": "./dist/visibility-parity.js"
+    },
+    "./filter-parity": {
+      "types": "./dist/filter-parity.d.ts",
+      "import": "./dist/filter-parity.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "lint": "oxlint src",
+    "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"

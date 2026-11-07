@@ -58,6 +58,7 @@ import { fieldGuidance, fieldGuidanceParts } from "../field-guidance.js";
 import { fieldLabel } from "../draft.js";
 import {
   fieldControlId,
+  fieldTypeSupport,
   type FieldDefinition,
   type FieldPreviewRegistry,
   type FieldRendererRegistry,
@@ -536,7 +537,7 @@ function ValueNode(props: NodeProps) {
   const quietClass = readOnly || message ? undefined : "sr-only";
   const effectivePlaceholder =
     placeholder ?? ("placeholder" in definition ? definition.placeholder : undefined);
-  const counted = definition.type === "text" || definition.type === "textarea";
+  const counted = fieldTypeSupport[definition.type].characterCount;
   const marker = definition.required ? (
     <span
       aria-hidden="true"
@@ -616,10 +617,7 @@ function ValueNode(props: NodeProps) {
           if (readOnly || busy) return;
           if (item && (next === undefined || next === null)) {
             // Empty string is a real scalar item when valid; absent slots never enter arrays.
-            if (
-              (definition.type === "text" || definition.type === "textarea") &&
-              !fieldProblem(definition, "")
-            ) {
+            if (fieldTypeSupport[definition.type].characterCount && !fieldProblem(definition, "")) {
               setClearedItem(false);
               onChange("");
               return;

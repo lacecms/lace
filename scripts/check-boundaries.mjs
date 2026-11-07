@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createScanner, SyntaxKind } from "typescript/unstable/ast";
 
@@ -144,33 +144,43 @@ function packageOf(specifier) {
 function importsIn(filePath) {
   const imports = [];
   const scanner = createScanner(true, undefined, sourceText(filePath));
-  let token = scanner.scan();
+  // A lexical scan has no parser context for regex/JSX tokens (notably #).
+  // Always advance, as the field-vocabulary scanner does, to avoid hanging.
+  const scan = () => {
+    const before = scanner.getTokenEnd();
+    const token = scanner.scan();
+    if (token !== SyntaxKind.EndOfFile && scanner.getTokenEnd() <= before) {
+      scanner.resetTokenState(before + 1);
+    }
+    return token;
+  };
+  let token = scan();
 
   while (token !== SyntaxKind.EndOfFile) {
     if (token === SyntaxKind.ImportKeyword) {
-      token = scanner.scan();
+      token = scan();
       if (token === SyntaxKind.StringLiteral) imports.push(scanner.getTokenValue());
       if (token === SyntaxKind.OpenParenToken) {
-        token = scanner.scan();
+        token = scan();
         continue;
       }
       while (token !== SyntaxKind.EndOfFile && token !== SyntaxKind.SemicolonToken) {
-        if (token === SyntaxKind.FromKeyword && scanner.scan() === SyntaxKind.StringLiteral) {
+        if (token === SyntaxKind.FromKeyword && scan() === SyntaxKind.StringLiteral) {
           imports.push(scanner.getTokenValue());
           break;
         }
-        token = scanner.scan();
+        token = scan();
       }
     } else if (token === SyntaxKind.ExportKeyword) {
       while (token !== SyntaxKind.EndOfFile && token !== SyntaxKind.SemicolonToken) {
-        if (token === SyntaxKind.FromKeyword && scanner.scan() === SyntaxKind.StringLiteral) {
+        if (token === SyntaxKind.FromKeyword && scan() === SyntaxKind.StringLiteral) {
           imports.push(scanner.getTokenValue());
           break;
         }
-        token = scanner.scan();
+        token = scan();
       }
     }
-    token = scanner.scan();
+    token = scan();
   }
   return imports;
 }
@@ -210,6 +220,7 @@ const slicedAdminLayers = new Set(["pages", "widgets", "features", "entities"]);
 const adminEntryFiles = new Set(["main.tsx", "vite-env.d.ts"]);
 const pascalCase = /^[A-Z][A-Za-z0-9]*$/;
 const testFilePattern = /\.test\.tsx?$/;
+const typeTestFilePattern = /\.type-test\.tsx?$/;
 const typeScriptPattern = /\.(?:c|m)?tsx?$/;
 
 function toPosix(path) {
@@ -370,7 +381,259 @@ export function checkAdminStructure(rootDirectory = defaultRoot) {
   }
 }
 
+function readJsonBaseline(rootDirectory, name, empty) {
+  const path = join(rootDirectory, "scripts", name);
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : empty;
+}
+
+/** Tests, type tests and shared test helpers are outside production module graphs. */
+function isTestSource(sourcePath) {
+  return (
+    testFilePattern.test(sourcePath) ||
+    typeTestFilePattern.test(sourcePath) ||
+    sourcePath.startsWith("test-support/")
+  );
+}
+
+/** True when the leading comment block carries TypeScript's `@ts-nocheck` directive. */
+function disablesTypeChecking(text) {
+  let rest = text.replace(/^﻿/u, "");
+  for (;;) {
+    rest = rest.trimStart();
+    const comment = /^(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)/u.exec(rest);
+    if (comment === null) return false;
+    if (/@ts-nocheck\b/u.test(comment[0])) return true;
+    rest = rest.slice(comment[0].length);
+  }
+}
+
+/** Legacy tests may skip type checking only while listed; the list only shrinks. */
+function checkTypecheckExceptions(rootDirectory, members) {
+  const baseline = readJsonBaseline(rootDirectory, "test-typecheck-baseline.json", []);
+  const listed = new Set(baseline);
+  for (const member of members) {
+    if (!existsSync(member.sourceDirectory)) continue;
+    for (const filePath of collectFiles(member.sourceDirectory)) {
+      if (!disablesTypeChecking(readFileSync(filePath, "utf8"))) continue;
+      const fileName = toPosix(relative(rootDirectory, filePath));
+      const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
+      const testFile = testFilePattern.test(sourcePath) || typeTestFilePattern.test(sourcePath);
+      if (!testFile || sourcePath.startsWith("test-support/")) {
+        throw new Error(
+          `typecheck exception forbidden: ${fileName} is not a test file and must be type-checked`,
+        );
+      }
+      if (!listed.has(fileName)) {
+        throw new Error(
+          `typecheck exception not in baseline: ${fileName} disables type checking; type it or list it in scripts/test-typecheck-baseline.json`,
+        );
+      }
+    }
+  }
+  for (const fileName of baseline) {
+    const filePath = join(rootDirectory, fileName);
+    const reason = !existsSync(filePath)
+      ? "is missing"
+      : !disablesTypeChecking(readFileSync(filePath, "utf8"))
+        ? "no longer disables type checking"
+        : undefined;
+    if (reason !== undefined) {
+      throw new Error(
+        `stale typecheck baseline entry: ${fileName} ${reason}; remove it from scripts/test-typecheck-baseline.json`,
+      );
+    }
+  }
+}
+
+function resolveRelativeModule(filePath, specifier, files) {
+  const target = resolve(dirname(filePath), specifier.replace(/\?.*$/u, ""));
+  const withoutJs = target.replace(/\.(?:c|m)?js$/u, "");
+  const candidates = [
+    ...(withoutJs === target ? [] : [`${withoutJs}.ts`, `${withoutJs}.tsx`]),
+    target,
+    `${target}.ts`,
+    `${target}.tsx`,
+    join(target, "index.ts"),
+    join(target, "index.tsx"),
+  ];
+  return candidates.find((candidate) => files.has(candidate));
+}
+
+/** Production modules of one member and their relative import edges. */
+function memberModuleGraph(member) {
+  const files = new Set(
+    collectFiles(member.sourceDirectory).filter(
+      (filePath) => !isTestSource(toPosix(relative(member.sourceDirectory, filePath))),
+    ),
+  );
+  const graph = new Map();
+  for (const filePath of files) {
+    const edges = new Set();
+    for (const specifier of importsIn(filePath)) {
+      if (!specifier.startsWith(".")) continue;
+      const target = resolveRelativeModule(filePath, specifier, files);
+      if (target !== undefined) edges.add(target);
+    }
+    graph.set(filePath, edges);
+  }
+  return graph;
+}
+
+/** Tarjan's strongly connected components that contain a cycle. */
+function cyclicComponents(graph) {
+  const order = new Map();
+  const low = new Map();
+  const stack = [];
+  const onStack = new Set();
+  const components = [];
+  let next = 0;
+  const visit = (node) => {
+    order.set(node, next);
+    low.set(node, next);
+    next += 1;
+    stack.push(node);
+    onStack.add(node);
+    for (const target of graph.get(node)) {
+      if (!order.has(target)) {
+        visit(target);
+        low.set(node, Math.min(low.get(node), low.get(target)));
+      } else if (onStack.has(target)) low.set(node, Math.min(low.get(node), order.get(target)));
+    }
+    if (low.get(node) !== order.get(node)) return;
+    const component = [];
+    let member;
+    do {
+      member = stack.pop();
+      onStack.delete(member);
+      component.push(member);
+    } while (member !== node);
+    if (component.length > 1 || graph.get(node).has(node)) components.push(component);
+  };
+  for (const node of graph.keys()) if (!order.has(node)) visit(node);
+  return components;
+}
+
+/** Module cycles fail unless they stay inside a recorded legacy component. */
+function checkModuleCycles(rootDirectory, graphs) {
+  const baseline = readJsonBaseline(rootDirectory, "source-cycle-baseline.json", []).map(
+    (component) => new Set(component),
+  );
+  const found = [];
+  for (const graph of graphs) {
+    for (const component of cyclicComponents(graph)) {
+      const files = component.map((filePath) => toPosix(relative(rootDirectory, filePath))).sort();
+      found.push(files);
+      if (!baseline.some((recorded) => files.every((file) => recorded.has(file)))) {
+        throw new Error(`module cycle: ${files.join(", ")}`);
+      }
+    }
+  }
+  for (const recorded of baseline) {
+    if (!found.some((files) => files.every((file) => recorded.has(file)))) {
+      throw new Error(
+        `stale source cycle baseline entry: ${[...recorded].join(", ")} no longer forms a cycle; remove it from scripts/source-cycle-baseline.json`,
+      );
+    }
+  }
+}
+
+/** Source files a manifest's `exports` and `bin` targets are built from. */
+function manifestEntrySources(member) {
+  const manifest = JSON.parse(readFileSync(join(member.directory, "package.json"), "utf8"));
+  const targets = [];
+  const collect = (value) => {
+    if (typeof value === "string") targets.push(value);
+    else if (value !== null && typeof value === "object") Object.values(value).forEach(collect);
+  };
+  collect(manifest.exports);
+  collect(manifest.bin);
+  return new Set(
+    targets
+      .map((target) => /^\.\/dist\/([^/]+)\.js$/u.exec(target)?.[1])
+      .filter((name) => name !== undefined)
+      .flatMap((name) => [`${name}.ts`, `${name}.tsx`]),
+  );
+}
+
+/** Directory names on the entry's `// Directory dependencies:` comment lines. */
+function headerDirectories(entryText) {
+  const lines = entryText.split("\n");
+  const start = lines.findIndex((line) => line.startsWith("// Directory dependencies:"));
+  if (start === -1) return undefined;
+  const header = [lines[start].slice("// Directory dependencies:".length)];
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith("//")) break;
+    header.push(line.slice(2));
+  }
+  return new Set(header.join(" ").match(/[a-z][a-z0-9-]*/gu) ?? []);
+}
+
+function sameSet(left, right) {
+  return left.size === right.size && [...left].every((value) => right.has(value));
+}
+
+/** Domain-directory rules for packages declared in `scripts/source-layout.json`. */
+function checkSourceLayout(rootDirectory, members, graphs) {
+  const layout = readJsonBaseline(rootDirectory, "source-layout.json", {});
+  const membersByPath = new Map(
+    members.map((member) => [toPosix(relative(rootDirectory, member.directory)), member]),
+  );
+  for (const [packagePath, directories] of Object.entries(layout)) {
+    const member = membersByPath.get(packagePath);
+    if (member === undefined) throw new Error(`source layout names unknown member: ${packagePath}`);
+    const declared = new Set(Object.keys(directories));
+    const graph = graphs.get(member);
+    const directoryOf = (filePath) => {
+      const parts = toPosix(relative(member.sourceDirectory, filePath)).split("/");
+      return parts.length === 1 ? undefined : parts[0];
+    };
+    const entries = manifestEntrySources(member);
+    const present = new Set();
+    for (const filePath of graph.keys()) {
+      const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
+      const fileName = toPosix(relative(rootDirectory, filePath));
+      const directory = directoryOf(filePath);
+      if (directory === undefined) {
+        if (!entries.has(sourcePath) && !/\.d\.(?:c|m)?ts$/u.test(sourcePath)) {
+          throw new Error(`source layout: ${fileName} is a root module but not a package entry`);
+        }
+        continue;
+      }
+      present.add(directory);
+      if (/^index\.tsx?$/u.test(basename(filePath))) {
+        throw new Error(`source layout: subdirectory barrel ${fileName}`);
+      }
+      for (const target of graph.get(filePath)) {
+        const targetDirectory = directoryOf(target);
+        if (targetDirectory === directory) continue;
+        if (targetDirectory === undefined || !directories[directory]?.includes(targetDirectory)) {
+          throw new Error(
+            `source layout: ${fileName} imports ${toPosix(relative(rootDirectory, target))}; ${directory} -> ${targetDirectory ?? "<entry>"} is not declared for ${packagePath}`,
+          );
+        }
+      }
+    }
+    if (!sameSet(present, declared)) {
+      throw new Error(
+        `source layout: ${packagePath} directories [${[...present].sort().join(", ")}] differ from scripts/source-layout.json [${[...declared].sort().join(", ")}]`,
+      );
+    }
+    const entryPath = join(member.sourceDirectory, "index.ts");
+    const named = existsSync(entryPath)
+      ? headerDirectories(readFileSync(entryPath, "utf8"))
+      : undefined;
+    if (named === undefined || !sameSet(named, declared)) {
+      throw new Error(
+        `source layout: ${packagePath} entry header names [${[...(named ?? [])].sort().join(", ")}]; declared directories are [${[...declared].sort().join(", ")}]`,
+      );
+    }
+  }
+}
+
 export function checkBoundaries(rootDirectory = defaultRoot) {
+  const baselinePath = join(rootDirectory, "scripts", "oversized-source-baseline.json");
+  const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, "utf8")) : {};
+  const sourceLineCounts = new Map();
   const members = readMembers(rootDirectory);
   const memberNames = new Set(members.map((member) => member.name));
   const graph = new Map(members.map((member) => [member.name, new Set()]));
@@ -380,6 +643,21 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
       const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
       // Test setup is not part of the runtime dependency graph.
       if (testFilePattern.test(sourcePath) || sourcePath.startsWith("test-support/")) continue;
+      const fileName = toPosix(relative(rootDirectory, filePath));
+      const text = readFileSync(filePath, "utf8");
+      const lineCount = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+      sourceLineCounts.set(fileName, lineCount);
+      if (lineCount > 1_000) {
+        const recorded = Object.hasOwn(baseline, fileName) ? baseline[fileName] : undefined;
+        if (recorded === undefined) {
+          throw new Error(`source size limit: ${fileName} has ${lineCount} lines; limit is 1000`);
+        }
+        if (!Number.isInteger(recorded) || lineCount > recorded) {
+          throw new Error(
+            `source size baseline exceeded: ${fileName} has ${lineCount} lines; recorded ${recorded}`,
+          );
+        }
+      }
       for (const specifier of importsIn(filePath)) {
         if (specifier.startsWith(".")) {
           if (isOutside(member.sourceDirectory, filePath, specifier)) {
@@ -427,8 +705,20 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
       }
     }
   }
+  for (const fileName of Object.keys(baseline)) {
+    const lineCount = sourceLineCounts.get(fileName);
+    if (lineCount === undefined || lineCount <= 1_000) {
+      throw new Error(
+        `stale source size baseline entry: ${fileName} ${lineCount === undefined ? "is missing from production source" : `has ${lineCount} lines (limit 1000)`}; remove it from scripts/oversized-source-baseline.json`,
+      );
+    }
+  }
   assertNoCycles(graph);
   checkAdminStructure(rootDirectory);
+  checkTypecheckExceptions(rootDirectory, members);
+  const moduleGraphs = new Map(members.map((member) => [member, memberModuleGraph(member)]));
+  checkModuleCycles(rootDirectory, moduleGraphs.values());
+  checkSourceLayout(rootDirectory, members, moduleGraphs);
 }
 
 if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

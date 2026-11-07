@@ -252,9 +252,19 @@ Envelope values SHALL NOT affect block ordering, key or position rules.
 
 ### Requirement: Identifier grammar, route rules and transport limits are defined once
 The content package SHALL publish one portable definition of each of the
-following: the slug grammar (lowercase ASCII letters or digits in runs joined
-by single hyphens) and its maximum length of 100 characters; the content
-model kinds; the canonical route rules; and these transport limits:
+following:
+
+- the slug grammar (lowercase ASCII letters or digits in runs joined by single
+  hyphens) and its maximum length of 100 characters;
+- the field key grammar (an ASCII letter followed by ASCII letters or digits);
+- the block type grammar (an ASCII letter followed by ASCII letters, digits or
+  hyphens);
+- the model key grammar (a lowercase ASCII letter followed by lowercase
+  letters or digits, in runs joined by single hyphens);
+- the supported video embed providers (`youtube`, `vimeo`);
+- the content model kinds;
+- the canonical route rules;
+- these transport limits:
 
 | Limit | Value |
 | --- | --- |
@@ -262,6 +272,20 @@ model kinds; the canonical route rules; and these transport limits:
 | Media search term length | 200 characters |
 | Media usage entries returned by one read | 50 |
 | Entries per build-export page | 100 |
+| Entry title length | 200 characters |
+| Items per admin list page | 1 to 100, default 50 |
+| Media references in one draft | 200 |
+| Entry IDs in one link-target resolution | 200 |
+
+The domain package SHALL publish one portable definition of the media tag
+rules and the account display-name rule:
+
+- a normalized media tag of 1 to 40 lowercase ASCII letters, digits or hyphens;
+- at most 200 code points per submitted tag before normalization;
+- at most 20 distinct tags per media item;
+- at most 5 tags per media-list filter;
+- a display name of 1 to 120 characters after trimming, without control
+  characters.
 
 The canonical route rules are:
 
@@ -274,15 +298,22 @@ The canonical route rules are:
 - A collection entry's public path is its collection route with `:slug`
   replaced by a valid slug, and the result is a canonical page path.
 
-Configuration validation, domain rules, application use cases, REST and MCP
-contracts, the server and the admin SHALL apply these definitions instead
-of declaring their own copies. Each layer SHALL keep its own failure type and
-stable code: configuration rejects with a configuration error, and the domain
-rejects with `CONTENT_INVALID_STATE`. Configuration and domain failures for
-the same rejected value SHALL use the same message text. Transport failures
-SHALL keep their current status codes, pointers and generic messages. The
-values that are accepted and rejected SHALL stay the same as before this
-requirement, on Node and Cloudflare.
+Configuration validation, domain rules, application use cases, persistence
+adapters, REST and MCP contracts, the generated OpenAPI document, the SDK, the
+server and the admin SHALL apply these definitions instead of declaring their
+own copies. A layer that may not import the owning package SHALL receive the
+definition through a package it may import.
+
+Each layer SHALL keep its own failure type and stable code: configuration
+rejects with a configuration error, and the domain rejects with
+`CONTENT_INVALID_STATE`. Configuration and domain failures for the same
+rejected value SHALL use the same message text. Transport failures SHALL keep
+their current status codes, pointers and generic messages.
+
+The values that are accepted and rejected SHALL stay the same as before this
+requirement, on Node and Cloudflare, with one exception: the admin router no
+longer matches a model key that starts with a digit, which configuration has
+never accepted.
 
 #### Scenario: Configuration and domain agree on a collection route
 - **WHEN** configuration validation and the domain each check the collection
@@ -325,3 +356,29 @@ requirement, on Node and Cloudflare.
 - **THEN** the application read bound, both runtime repositories, the
   in-memory test store and the media detail DTO schema use the new value
   without another edit
+
+#### Scenario: One field key grammar everywhere
+- **WHEN** the field key `2col`, `col-2` or `col_2` is used in a configured
+  field, a list sort `field:<key>`, a collection query filter, field metadata
+  or a synchronization hint
+- **THEN** configuration, the domain, the REST query contracts, the SQL list
+  query and the admin editor all reject it, and the OpenAPI field key pattern
+  is the same grammar
+
+#### Scenario: Media tag rules have one owner
+- **WHEN** a media item is updated with 21 distinct tags, or a media list is
+  filtered by 6 tags
+- **THEN** every layer that enforces the bound (REST contracts, application,
+  persistence and admin) refuses it at the value declared by the domain
+  package, and 20 tags or 5 filter tags are accepted
+
+#### Scenario: A raw tag may be longer than its normalized form
+- **WHEN** an upload sends a tag part of 60 code points that normalizes to 40
+  characters
+- **THEN** it is accepted, and a part of 201 code points is refused before
+  normalization
+
+#### Scenario: Display names share one rule
+- **WHEN** an invitation or a profile update supplies a display name of 121
+  characters or one containing a control character
+- **THEN** the REST contract and the account use case both reject it

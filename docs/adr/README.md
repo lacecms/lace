@@ -27,3 +27,4 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0017 | [Content import client](0017-content-import-client.md) | accepted | — |
 | 0018 | [Conditional fields](0018-conditional-fields.md) | accepted | — |
 | 0019 | [One portable error model and classifier](0019-error-model.md) | accepted | — |
+| 0020 | [Domain source layout and shrinking size baseline](0020-source-layout.md) | accepted | — |

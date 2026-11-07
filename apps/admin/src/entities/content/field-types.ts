@@ -1,5 +1,10 @@
-import { ContentValidationError, MAX_LIST_ITEMS, validateRichTextDocument } from "@lacecms/content";
-import type { FieldType } from "@lacecms/content";
+import {
+  ContentValidationError,
+  fieldTypeCapabilities,
+  MAX_LIST_ITEMS,
+  validateRichTextDocument,
+} from "@lacecms/content";
+import type { FieldFilterKind, FieldType } from "@lacecms/content";
 import { formatAbsoluteTime, formatDate } from "../../shared/lib/index.js";
 import type { ContentModelDto } from "@lacecms/contracts";
 import type { ComponentType, ReactNode } from "react";
@@ -141,10 +146,11 @@ function richTextProblem(value: unknown): string {
 
 export interface FieldTypeSupport {
   readonly problem: (definition: FieldDefinition, value: unknown) => string;
+  /** Whether the control is a group of elements rather than one labelable element. */
+  readonly groupedControl: boolean;
+  /** Whether the control shows a character count; an empty string is a real value. */
+  readonly characterCount: boolean;
   readonly listCell?: (value: unknown) => string;
-  readonly filter?: {
-    readonly control: "text" | "number" | "date" | "datetime-local" | "boolean" | "select";
-  };
   readonly summary?: { readonly priority: 0 | 1 | 2; readonly text: (value: unknown) => string };
   readonly guidance?: (definition: FieldDefinition) => readonly string[];
   readonly draftValue?: () => unknown;
@@ -178,36 +184,58 @@ const compositeProblem = () =>
   "This composite contains an invalid value. Review the saved JSON and the validation details.";
 const numberFormat = new Intl.NumberFormat("en");
 
+/** The admin filter control of each content filter kind. */
+export type FilterControl = "text" | "number" | "date" | "datetime-local" | "boolean" | "select";
+const filterControls: Readonly<Record<FieldFilterKind, FilterControl>> = {
+  text: "text",
+  number: "number",
+  date: "date",
+  datetime: "datetime-local",
+  boolean: "boolean",
+  select: "select",
+};
+
+/** The filter control of a list-queryable field type, derived from its content filter kind. */
+export function fieldFilterControl(type: FieldType): FilterControl | undefined {
+  const capability = fieldTypeCapabilities[type];
+  return capability.listQueryable ? filterControls[capability.filterKind] : undefined;
+}
+
 /** Every kind declares support explicitly; domain eligibility lives in content capabilities. */
 export const fieldTypeSupport: Readonly<Record<FieldType, FieldTypeSupport>> = {
   text: {
+    groupedControl: false,
+    characterCount: true,
     problem: textProblem,
     listCell: stringCell,
-    filter: { control: "text" },
     summary: { priority: 0, text: summaryText },
     guidance: textGuidance,
     draftValue: () => "",
   },
   textarea: {
+    groupedControl: false,
+    characterCount: true,
     problem: textProblem,
     listCell: stringCell,
-    filter: { control: "text" },
     summary: { priority: 0, text: summaryText },
     guidance: textGuidance,
     draftValue: () => "",
   },
   richText: {
+    groupedControl: true,
+    characterCount: false,
     problem: (_, value) => richTextProblem(value),
     summary: { priority: 1, text: (value) => clean(plainRichText(value)) },
   },
   number: {
+    groupedControl: false,
+    characterCount: false,
     problem: (definition) =>
       definition.type === "number"
         ? rangeProblem(definition.min, definition.max)
         : "Enter a number.",
     listCell: (value) =>
       typeof value === "number" && Number.isFinite(value) ? numberFormat.format(value) : "—",
-    filter: { control: "number" },
     guidance: (definition) => {
       const parts: string[] = [];
       if (definition.type === "number") {
@@ -218,39 +246,51 @@ export const fieldTypeSupport: Readonly<Record<FieldType, FieldTypeSupport>> = {
     },
   },
   boolean: {
+    groupedControl: false,
+    characterCount: false,
     problem: () => "Choose on or off.",
     listCell: (value) => (typeof value === "boolean" ? (value ? "Yes" : "No") : "—"),
-    filter: { control: "boolean" },
     draftValue: () => false,
   },
   date: {
+    groupedControl: false,
+    characterCount: false,
     problem: () => "Choose a valid date.",
     listCell: (value) => (typeof value === "string" && formatDate(value)) || "—",
-    filter: { control: "date" },
   },
   datetime: {
+    groupedControl: false,
+    characterCount: false,
     problem: () => "Choose a valid date and time.",
     listCell: (value) => (typeof value === "string" && formatAbsoluteTime(value)) || "—",
-    filter: { control: "datetime-local" },
   },
   select: {
+    groupedControl: false,
+    characterCount: false,
     problem: () => "Choose one of the listed options.",
     listCell: stringCell,
-    filter: { control: "select" },
     summary: { priority: 2, text: summaryText },
   },
   url: {
+    groupedControl: false,
+    characterCount: false,
     problem: (definition) =>
       definition.type === "url" && definition.embedProviders !== undefined
         ? `Enter a valid ${definition.embedProviders.join(" or ")} video URL.`
         : URL_FIELD_MESSAGE,
     listCell: stringCell,
-    filter: { control: "text" },
     summary: { priority: 2, text: summaryText },
   },
-  media: { problem: () => "Choose a media item." },
-  group: { problem: compositeProblem, draftValue: () => ({}) },
+  media: { groupedControl: true, characterCount: false, problem: () => "Choose a media item." },
+  group: {
+    groupedControl: false,
+    characterCount: false,
+    problem: compositeProblem,
+    draftValue: () => ({}),
+  },
   list: {
+    groupedControl: false,
+    characterCount: false,
     problem: compositeProblem,
     guidance: (definition) =>
       definition.type === "list"
