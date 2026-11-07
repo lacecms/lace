@@ -18,6 +18,8 @@ const names = [
   "deepFreeze",
   "isPlainObject",
   "isRecord",
+  "isPortableJsonValue",
+  "isJsonValue",
 ];
 const grammar = "[a-z0-9]+(?:-[a-z0-9]+)*";
 // Exceptions name the file and the declaration that owns the occurrence.

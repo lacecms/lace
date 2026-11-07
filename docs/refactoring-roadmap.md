@@ -142,7 +142,7 @@ What the roadmap changes, with the numbers to beat:
 | --- | --- | :---: | --- | --- |
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
-| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F | in progress |
+| RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | in progress |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
@@ -174,6 +174,10 @@ RF9A → RF9B before RF5, because RF5 rewrites security errors and ports under
 tests that must already be typed and source-resolved; RF4H–RF4J may run in
 parallel with RF3E–RF3F; RF9D–RF9F type platform and CLI tests only after
 RF5 and RF7C move them. Owner checks without a session are listed in §5.
+
+**RF3G insertion (2026-11-07):** RF3E left the contracts and content JSON
+validators with two differing array cases. The owner chose the content rule,
+and RF3G applies it before RF9A.
 
 **Deferred, stays in the backlog:** write-path convergence between Node
 transactions and D1 batches beyond statement builders; a generated admin API
@@ -213,8 +217,10 @@ Pending owner checks from the second audit (2026-11-05), not sessions:
    RF3E (OpenAPI describes the admin entry-list and media-list `limit` as
    1–100, the range the server already enforced; a public collection slug
    over 100 characters returns `422` at `/slug`; four contracts `…Source`
-   inputs became required) and RF3F (an unexpected failure during setup
-   returns `500` instead of `404`).
+   inputs became required), RF3F (an unexpected failure during setup
+   returns `500` instead of `404`) and RF3G (the exported contracts
+   `jsonValueSchema` and `jsonObjectSchema` refuse an array with a named
+   property and accept a non-enumerable array element).
 10. Apply or withdraw the active `allow-supported-node-release-preparation`
     change (0/6 tasks since RF4C); keep pnpm pinned to `12.3.4` until then.
 
@@ -549,11 +555,29 @@ Behavior-touching where noted.
   `isJsonValue` and content `normalizeJsonValue` accept different sets. An
   array with a named property is accepted by contracts only; an array with a
   non-enumerable element is accepted by content only
-  (`tests/json-validator-parity.test.mjs`). Contracts keeps its own validator
-  until the owner chooses one accepted set.
+  (`tests/json-validator-parity.test.mjs`). Resolved by RF3G.
 
 **Specs:** `rest-contracts`, `configuration-synchronization`,
 `browser-first-admin-setup`, `authentication-and-actor-boundary`.
+
+### Session RF3G — One portable-JSON rule
+
+Behavior-touching: contracts accepts exactly the content set.
+
+- Owner decision 2026-11-07: the content portable-JSON rule is canonical,
+  because it matches `JSON.stringify`. An array with a named property loses
+  that property when serialized, so it is refused; a non-enumerable array
+  element is serialized by index, so it is accepted.
+- `@lacecms/content` exports one non-throwing check beside
+  `normalizeJsonValue`, and both use one walk. Contracts `jsonValueSchema`
+  and `jsonObjectSchema` call it, and the contracts `isJsonValue` copy goes.
+- The walk is iterative. Today content normalization throws `RangeError` on
+  values nested about 10,000 levels deep, while contracts accepts any depth
+  that `JSON.parse` produces. Adopting the recursive rule unchanged would
+  turn a deep request body into a stack overflow.
+- `tests/json-validator-parity.test.mjs` expects no difference.
+
+**Specs:** `rest-contracts`, `field-descriptors`.
 
 ## Step RF4 — Module splits
 
@@ -1095,3 +1119,6 @@ After RF7C: `cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder`
 | 2026-11-05 | RF3E | `rf03e-shared-grammars-limits` | Archived at [`2026-11-05-rf03e-shared-grammars-limits`](../openspec/changes/archive/2026-11-05-rf03e-shared-grammars-limits/); 16/16 tasks complete. Delta specs synchronized: `collection-query-options` (+1), `content-domain-rules` (~1), `rest-contracts` (+1, ~1). Implementation and verification are preserved in the archive. |
 | 2026-11-05 | RF3F | `rf03f-error-codes-follow-up` | Implemented, 11/11 tasks complete. Stale plans carry `CONFIGURATION_SYNC_STALE` (500 if it reached HTTP) and `content:sync` and the CLI test the code. On D1 a failed final guard is rechecked so an unavailable link keeps `CONTENT_INVALID_STATE`, as on Node. Setup outcomes are `AccountError("NOT_FOUND")` (same 404) and an unexpected setup failure returns `500`; the CLI `auth bootstrap` detector also moved from message to code. Pass-through guards test `LaceError`; header parsers throw `ContractValidationError`, which moved to contracts `shared/` because `shared` may not import `errors`; the server catches only that class, throws `InvariantError`, and leaves the `429` to the classifier. Platform storage and environment errors extend new application bases, and each platform test requires every exported error class to be matrix-classified. Not archived. |
 | 2026-11-05 | RF3F | `rf03f-error-codes-follow-up` | Archived at [`2026-11-05-rf03f-error-codes-follow-up`](../openspec/changes/archive/2026-11-05-rf03f-error-codes-follow-up/); 11/11 tasks complete. Delta specs synchronized: `browser-first-admin-setup` (+1), `configuration-synchronization` (+1), `rest-contracts` (~1). Implementation and verification are preserved in the archive. The contracts/content JSON-validator divergence carried from RF3E stays open for an owner decision. |
+| 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Proposed. Owner decision: the content portable-JSON rule is canonical. `@lacecms/content` exports a non-throwing check that shares one iterative walk with `normalizeJsonValue`. Contracts `jsonValueSchema` and `jsonObjectSchema` call it, and the contracts `isJsonValue` copy goes. Contracts then refuses an array with a named property and accepts a non-enumerable array element. Content normalization no longer overflows the stack on deeply nested values. Delta specs: `rest-contracts` (1 added), `field-descriptors` (1 modified). Not applied. |
+| 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Implemented, 6/6 tasks complete. One iterative walk in `content/shared/json.ts` backs `normalizeJsonValue` and the exported `isPortableJsonValue`. Messages, paths and first-failure order match the former recursive walk. Contracts `jsonValueSchema`, `jsonObjectSchema` and `isJsonObject` call it, and the contracts copy is deleted. The parity table (27 edges, including 100,000-level nesting) expects equal verdicts, and the vocabulary guard refuses a new `isJsonValue`. OpenAPI unchanged. Not archived. |
+| 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Archived at [`2026-11-07-rf03g-json-validator-parity`](../openspec/changes/archive/2026-11-07-rf03g-json-validator-parity/); 6/6 tasks complete. Delta specs synchronized: `field-descriptors` (~1), `rest-contracts` (+1). Implementation and verification are preserved in the archive. Step RF3 is done. |

@@ -10,7 +10,7 @@ export function normalizeFieldVisibility(
   path = "visibility",
 ): FieldVisibility | undefined {
   if (value === undefined) return undefined;
-  const raw = normalizeJsonValue(value, path, new WeakSet<object>());
+  const raw = normalizeJsonValue(value, path);
   if (!isRecord(raw)) fail(path, "must be a plain object of field rules.");
   for (const [target, rule] of Object.entries(raw)) {
     const at = `${path}.${target}`;

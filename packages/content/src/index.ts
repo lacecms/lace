@@ -7,6 +7,7 @@ export * from "./shared/identifiers.js";
 export type { ValidationPathSegment, ContentValidationIssue } from "./shared/errors.js";
 export { FieldConfigurationError, ContentValidationError } from "./shared/errors.js";
 export type { JsonPrimitive, JsonValue, JsonObject } from "./shared/json.js";
+export { isPortableJsonValue } from "./shared/json.js";
 
 // fields
 export * from "./fields/video-embeds.js";

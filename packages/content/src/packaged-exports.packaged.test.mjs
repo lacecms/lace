@@ -77,6 +77,7 @@ test("packaged entry point keeps its public exports", async () => {
     "isFieldVisible",
     "isInternalLinkTargetId",
     "isPlainObject",
+    "isPortableJsonValue",
     "isRecord",
     "isSafeUrl",
     "isUrlFieldTarget",

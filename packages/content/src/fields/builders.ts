@@ -50,7 +50,7 @@ import { normalizeFormLayout } from "./layout.js";
 import { normalizeFieldVisibility } from "./visibility.js";
 
 function normalizeOptions(options: unknown): MutableJsonObject {
-  const normalized = normalizeJsonValue(options, "options", new WeakSet<object>());
+  const normalized = normalizeJsonValue(options, "options");
   if (normalized === null || Array.isArray(normalized) || typeof normalized !== "object") {
     fail("options", "must be a plain object.");
   }
@@ -714,11 +714,7 @@ function normalizeDescriptor(
       if (max !== undefined) result.maxItems = max;
     }
     if (Object.hasOwn(options, "defaultValue")) {
-      const portableDefault = normalizeJsonValue(
-        defaultValue,
-        `${path}.defaultValue`,
-        new WeakSet<object>(),
-      );
+      const portableDefault = normalizeJsonValue(defaultValue, `${path}.defaultValue`);
       try {
         normalizeFieldValue(result as unknown as FieldDefinition, portableDefault, "draft", [], {
           count: 0,

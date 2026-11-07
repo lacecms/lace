@@ -11,7 +11,7 @@ export function normalizeFormLayout<Key extends string>(
   path = "layout",
 ): FormLayout<Key> | undefined {
   if (value === undefined) return undefined;
-  const raw = normalizeJsonValue(value, path, new WeakSet<object>());
+  const raw = normalizeJsonValue(value, path);
   if (
     !isRecord(raw) ||
     Object.keys(raw).some((key) => !["mode", "groups"].includes(key)) ||

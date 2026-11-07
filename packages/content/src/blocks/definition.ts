@@ -139,7 +139,7 @@ export function normalizeSettingsVisibility<Key extends string>(
   path = "settingsVisibility",
 ): SettingsVisibility<Key> | undefined {
   if (value === undefined) return undefined;
-  const raw = normalizeJsonValue(value, path, new WeakSet<object>());
+  const raw = normalizeJsonValue(value, path);
   if (!isRecord(raw)) fail(path, "must be a plain object of setting rules.");
   for (const [target, rule] of Object.entries(raw)) {
     const at = `${path}.${target}`;
@@ -402,11 +402,7 @@ export function defineBlock<
   let defaultValue: BlockDataValues<Fields, Visibility> | undefined;
   if (input.defaultValue !== undefined) {
     try {
-      const normalized = normalizeJsonValue(
-        input.defaultValue,
-        "defaultValue",
-        new WeakSet<object>(),
-      );
+      const normalized = normalizeJsonValue(input.defaultValue, "defaultValue");
       if (!isRecord(normalized)) {
         blockFail("defaultValue must be a plain object.");
       }
@@ -599,7 +595,7 @@ function jsonObject(value: unknown, name: string): JsonObject {
   if (value instanceof Promise || !isRecord(value)) {
     throw new FieldConfigurationError(`${name} must be a plain JSON object.`);
   }
-  return deepFreeze(normalizeJsonValue(value, name, new WeakSet<object>())) as JsonObject;
+  return deepFreeze(normalizeJsonValue(value, name)) as JsonObject;
 }
 
 /** Checks a step result: `{data, settings?}`; absent settings keep `previous`. */
