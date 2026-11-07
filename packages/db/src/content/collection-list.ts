@@ -7,7 +7,12 @@ import type {
   ContentEntryListPage,
   ListContentEntriesInput,
 } from "@lacecms/application";
-import { FIELD_KEY_PATTERN, fieldTypeCapabilities, sha256CanonicalJson } from "@lacecms/content";
+import {
+  FIELD_KEY_PATTERN,
+  fieldTypeCapabilities,
+  literalLikePattern,
+  sha256CanonicalJson,
+} from "@lacecms/content";
 import { opaqueCursor } from "@lacecms/application";
 import {
   decodeEntryCursor,
@@ -19,7 +24,6 @@ import {
   ENTRY_SORT_SQL,
 } from "./entries.js";
 import type { SummaryRow, TotalsRow } from "./entries.js";
-import { literalLikePattern } from "../shared/literal-like.js";
 
 type Parameter = number | string | null;
 interface Statement {

@@ -93,7 +93,6 @@
   "packages/db/src/schema/migrations.test.ts",
   "packages/db/src/security/api-tokens.test.ts",
   "packages/db/src/shared/cursors.test.ts",
-  "packages/db/src/shared/literal-like.test.ts",
   "packages/db/src/shared/write-errors.test.ts",
   "packages/db/src/sync/block-migration-scan.test.ts",
   "packages/db/src/sync/block-migration-writes.test.ts",

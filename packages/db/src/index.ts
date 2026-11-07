@@ -1,13 +1,23 @@
 // Directory dependencies: shared ← schema, security, links; links ← publication, sync;
-// shared ← content ← media ← delivery ← builds.
+// shared ← content ← media ← delivery ← builds; outbox.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export * from "./content/collection-list.js";
-export * from "./shared/literal-like.js";
+export { literalLikePattern } from "@lacecms/content";
 export const packageName = "@lacecms/db";
 
 export * from "./schema/migrations.js";
-export * from "./schema/tables.js";
+export * from "./schema/content.js";
+export * from "./schema/publication.js";
+export * from "./schema/media.js";
+export * from "./schema/links.js";
+export * from "./schema/outbox.js";
+export * from "./schema/builds.js";
+export * from "./schema/operations.js";
+export * from "./schema/security.js";
+export * from "./schema/auth.js";
+export * from "./schema/oauth.js";
+export * from "./schema/better-auth.js";
 export * from "./sync/model-state.js";
 export * from "./sync/scan.js";
 export * from "./sync/writes.js";
@@ -26,7 +36,8 @@ export {
 } from "./delivery/public.js";
 export type { PublicRow, PublicGlobalRow } from "./delivery/public.js";
 export * from "./builds/site-builds.js";
-export * from "./builds/outbox.js";
+export * from "./builds/requests.js";
+export * from "./outbox/rows.js";
 export * from "./builds/export.js";
 export * from "./media/tags.js";
 export {

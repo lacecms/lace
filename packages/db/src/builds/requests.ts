@@ -1,14 +1,6 @@
 import { parseObject } from "../shared/values.js";
 import type { JsonObject } from "@lacecms/content";
 
-export interface OutboxRow {
-  readonly attempts: number;
-  readonly available_at: number;
-  readonly id: string;
-  readonly payload_json: string;
-  readonly type: string;
-}
-
 export const PENDING_SITE_BUILD_SQL =
   "type = 'site.build.requested' and processed_at is null and locked_at is null";
 

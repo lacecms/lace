@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { relative, resolve } from "node:path";
@@ -47,16 +47,11 @@ try {
   const copy = resolve(temporary, "drizzle");
   await cp(source, copy, { recursive: true });
   const before = await inventory(copy);
-  const schema = Array.isArray(config.schema) ? config.schema : [config.schema];
-  run([
-    "generate",
-    "--dialect",
-    "sqlite",
-    "--schema",
-    schema.join(","),
-    "--out",
-    relative(root, copy),
-  ]);
+  // The CLI accepts one `--schema` path, so a copy of the configuration with
+  // only `out` redirected keeps every listed schema module.
+  const checkConfig = resolve(temporary, "drizzle.config.json");
+  await writeFile(checkConfig, JSON.stringify({ ...config, out: relative(root, copy) }));
+  run(["generate", "--config", relative(root, checkConfig)]);
   if (JSON.stringify(before) !== JSON.stringify(await inventory(copy))) {
     throw new Error("Drizzle schema has a pending migration; generate and review it.");
   }

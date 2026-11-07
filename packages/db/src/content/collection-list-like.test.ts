@@ -1,15 +1,14 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
+import { literalLikePattern } from "@lacecms/content";
 
-test("ordinary literal LIKE escapes wildcards and preserves SQLite case semantics", async () => {
-  const { literalLikePattern } = await import("./literal-like.js");
+test("ordinary literal LIKE escapes wildcards and preserves SQLite case semantics", () => {
   const db = new DatabaseSync(":memory:");
   try {
-    const match = (value, text) =>
-      db.prepare("select ? like ? escape '\\' as matched").get(value, literalLikePattern(text))
-        .matched;
+    const match = (value: string, text: string) =>
+      db.prepare("select ? like ? escape '\\' as matched").get(value, literalLikePattern(text))?.[
+        "matched"
+      ];
     expect(match("Launch", "LAUNCH")).toBe(1);
     expect(match("Москва", "Москва")).toBe(1);
     expect(match("Москва", "МОСКВА")).toBe(0);

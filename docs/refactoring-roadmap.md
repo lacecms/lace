@@ -747,6 +747,11 @@ snapshot is unchanged" instead of byte-identical `drizzle-kit export` text;
 if Drizzle still reorders output, the domain modules are listed in
 `drizzle.config.ts` in the original table order. Also gives the outbox rows an
 `outbox/` owner and drops the re-export-only `shared/literal-like.ts`.
+Outcome (2026-11-07): ten table modules plus `columns.ts` and
+`better-auth.ts`; `pnpm db:check` passes with `drizzle/` unchanged, and the
+export differs only in statement order. The check script now generates
+through a copied configuration, because Drizzle Kit's CLI accepts one
+`--schema` path.
 
 ### Session RF4J — Remaining flat packages
 
@@ -1151,3 +1156,6 @@ is empty.
 | 2026-11-07 | RF9A | `rf09a-source-export-condition` | Archived at [`2026-11-07-rf09a-source-export-condition`](../openspec/changes/archive/2026-11-07-rf09a-source-export-condition/); 10/10 tasks complete. Delta specs synchronized: `workspace-governance` (~1), `alpha-release-artifacts` (~1). RF9B next. |
 | 2026-11-07 | RF9B | `rf09b-typed-test-fixtures` | Implemented, 12/12 tasks complete. test-utils `fixtures/` (role actors, `delegatedActor`, `fakePort`, silent logger, permissive limiter) replaces three actor copies; server `accountSecurity` is a typed `fakePort` with no `SecurityService` cast. The D1 and worker-bundle harnesses are typed `test-support` modules; plain Node loads the D1 harness through type stripping (typing exposed that Better Auth calls `raw()` and tests call `first(column)` on the counting binding). `openNodeTestRuntime` serves four product tests, two packaged product tests and `apps/api`; `@lacecms/platform-node/test` is source-only and leaves the packed manifest. A JavaScript-source allowlist guards `src/`, and `test:transit` makes test hashes follow dependency edges (content → 20 tasks, cli → itself, registry → astro, `lace.config.ts` → cloudflare and api). |
 | 2026-11-07 | RF9B | `rf09b-typed-test-fixtures` | Archived at [`2026-11-07-rf09b-typed-test-fixtures`](../openspec/changes/archive/2026-11-07-rf09b-typed-test-fixtures/); 12/12 tasks complete. Delta spec synchronized: `workspace-governance` (+2). RF9C next in Step RF9. |
+| 2026-11-07 | RF4I | `rf04i-drizzle-schema-by-domain` | Proposed (runs before RF4H, which the roadmap allows). `schema/tables.ts` splits into ten table modules plus `columns.ts` and `better-auth.ts`; `drizzle.config.ts` names them explicitly. Accepted when `pnpm db:check` reports no pending migration and `drizzle/` is unchanged. `OutboxRow` moves to `outbox/rows.ts`, the site-build event helpers to `builds/requests.ts`, and `shared/literal-like.ts` goes (the entry re-exports `literalLikePattern` by name). No spec delta (`skip_specs`). 7 tasks, not applied. |
+| 2026-11-07 | RF4I | `rf04i-drizzle-schema-by-domain` | Implemented, 7/7 tasks complete. `schema/tables.ts` became ten table modules (largest `oauth.ts`, 324 lines) plus `columns.ts` and `better-auth.ts`; `drizzle.config.ts` lists them. `pnpm db:check` passes with `drizzle/` unchanged; the export differs only in statement order. `check-drizzle-schema.mjs` now generates through a copied configuration, because the Drizzle Kit CLI accepts one `--schema` path. `OutboxRow` moved to `outbox/rows.ts`, the site-build event helpers to `builds/requests.ts`; `shared/literal-like.ts` is gone and its test is typed (`db` typecheck exceptions 19 → 18). Runtime keys and declaration names unchanged. Not archived. |
+| 2026-11-08 | RF4I | `rf04i-drizzle-schema-by-domain` | Archived at [`2026-11-08-rf04i-drizzle-schema-by-domain`](../openspec/changes/archive/2026-11-08-rf04i-drizzle-schema-by-domain/); 7/7 tasks complete. No delta spec (`skip_specs`). RF4H and RF4J remain in Step RF4. |

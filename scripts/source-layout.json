@@ -56,7 +56,8 @@
     "content": ["shared"],
     "media": ["content", "shared"],
     "delivery": ["content", "media", "shared"],
-    "builds": ["content", "delivery", "media", "shared"]
+    "builds": ["content", "delivery", "media", "shared"],
+    "outbox": []
   },
   "packages/server": {
     "shared": [],
