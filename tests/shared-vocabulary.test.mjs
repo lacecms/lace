@@ -50,7 +50,7 @@ const literalDetectors = [
   {
     name: "inline block type grammar",
     literal: "[A-Za-z][A-Za-z0-9-]*",
-    owner: "packages/content/src/blocks/definition.ts",
+    owner: "packages/content/src/blocks/grammar.ts",
   },
   {
     name: "inline model key grammar",

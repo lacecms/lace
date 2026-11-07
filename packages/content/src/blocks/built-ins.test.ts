@@ -3,14 +3,13 @@
 import { test, expect } from "vitest";
 import {
   validateBlockData,
-  migrateBlockData,
   validateBlockSettings,
-  toBlockRegistryMetadata,
-  defineBlockRegistry,
   defineBlock,
   toBlockMetadata,
   publishedBlockData,
 } from "./definition.js";
+import { migrateBlockData } from "./migration.js";
+import { toBlockRegistryMetadata, defineBlockRegistry } from "./registry.js";
 import { builtInBlocks } from "./built-ins.js";
 import { ContentValidationError } from "../shared/errors.js";
 import { issueFrom } from "../test-support/content-test-helpers.js";

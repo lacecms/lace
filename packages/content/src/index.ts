@@ -109,7 +109,9 @@ export {
   textLength,
   seoTextLength,
 } from "./fields/validation.js";
-export { field, toFieldMetadata, normalizeFieldDefinition } from "./fields/builders.js";
+export { field } from "./fields/builders.js";
+export { toFieldMetadata } from "./fields/metadata.js";
+export { normalizeFieldDefinition } from "./fields/normalization.js";
 
 // references
 export { encodeFieldPath, decodeFieldPath } from "./references/field-paths.js";
@@ -138,30 +140,29 @@ export type {
   BlockMetadata,
   BlockDefinition,
   BlockRegistry,
-  BlockMigrationErrorCode,
-} from "./blocks/definition.js";
+} from "./blocks/types.js";
+export type { BlockMigrationErrorCode } from "./blocks/migration.js";
 export {
   BLOCK_TYPE_PATTERN,
   BLOCK_TYPE_SOURCE,
-  publishedBlockData,
   MAX_BLOCK_ANCHOR_LENGTH,
   MAX_BLOCK_CLASS_NAME_LENGTH,
   MAX_BLOCK_CLASS_TOKENS,
   MAX_BLOCK_CLASS_TOKEN_LENGTH,
   isBlockAnchor,
   normalizeBlockClassName,
-  BlockConfigurationError,
-  BLOCK_SETTING_FIELD_TYPES,
-  normalizeSettingsVisibility,
+} from "./blocks/grammar.js";
+export {
+  publishedBlockData,
   defineBlock,
   toBlockMetadata,
-  defineBlockRegistry,
-  toBlockRegistryMetadata,
   validateBlockData,
   validateBlockSettings,
-  BlockMigrationError,
-  migrateBlockData,
 } from "./blocks/definition.js";
+export { BlockConfigurationError } from "./blocks/errors.js";
+export { BLOCK_SETTING_FIELD_TYPES, normalizeSettingsVisibility } from "./blocks/settings.js";
+export { defineBlockRegistry, toBlockRegistryMetadata } from "./blocks/registry.js";
+export { BlockMigrationError, migrateBlockData } from "./blocks/migration.js";
 export { listLayoutSettingsVisibility, listLayoutSettings } from "./blocks/list-layout.js";
 export { builtInBlocks } from "./blocks/built-ins.js";
 

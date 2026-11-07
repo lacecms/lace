@@ -1,7 +1,8 @@
 // @ts-nocheck
 // TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { test, expect } from "vitest";
-import { field, toFieldMetadata } from "./builders.js";
+import { field } from "./builders.js";
+import { toFieldMetadata } from "./metadata.js";
 import { compileFieldSchema, validateFieldValue, validateModelFields } from "./validation.js";
 import { ContentValidationError } from "../shared/errors.js";
 import { issueFrom } from "../test-support/content-test-helpers.js";
@@ -140,7 +141,7 @@ test("CE9A shared counts retain ordinary UTF-16 and SEO trimmed code points", as
 
 test("embed URL grammar is shared by definitions, metadata and compiled nested validation", async () => {
   const { parseVideoEmbed } = await import("./video-embeds.js");
-  const { normalizeFieldDefinition } = await import("./builders.js");
+  const { normalizeFieldDefinition } = await import("./normalization.js");
   const descriptor = field.url({ embedProviders: ["vimeo", "youtube"], required: true });
   expect(descriptor.embedProviders).toEqual(["youtube", "vimeo"]);
   const metadata = normalizeFieldDefinition(

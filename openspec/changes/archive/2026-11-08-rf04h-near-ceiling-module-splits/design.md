@@ -1,0 +1,29 @@
+## Context
+
+See proposal. Current production sizes are evolution 786, content use cases 751, media use cases 697, field builders 732 and block definition 700 physical lines. `plan-support.ts` mixes model copying, diagnostics and counts. Configuration evolution and visibility tests have similar but non-identical fixtures; all four configuration suites currently use `@ts-nocheck`. Both packages already declare domain directory direction in `scripts/source-layout.json`.
+
+## Goals / Non-Goals
+
+**Goals:** Split on responsibility, keep package entry surfaces and class semantics intact, preserve existing tests and keep moved test companions typed. Maintain deterministic sync reports, publication guards, media validation and block/field normalization as specified today.
+
+**Non-Goals:** New behavior, new capability requirements, broad test-typing outside touched companions, new dependencies, or changes to storage, deployment, schemas, authorization or public APIs.
+
+## Decisions
+
+1. **Configuration.** Move `diffContentModelStructures` and its comparison helpers to `structure-diff.ts`, `validateStructureHints` and baseline lookup to `structure-hints.ts`, and `changeNeedsEvidence` plus accumulator and its mutable internals to `evidence.ts`. Share only the minimal structure lookup needed by both comparison and hints in a concrete helper, without cycles. Replace `plan-support.ts` with model copying/sync actor, diagnostic construction/comparison, and snapshot count/description modules; direct callers import their owners. Entry exports retain all previously exported names, including `contentSyncActor`. Preserve ordering, caps, path and first-failure behavior. A single renamed catch-all would retain the problem.
+2. **Content application.** Keep `ContentUseCases` as the public facade and retain its constructor, methods, state lifetime and return types. Extract draft validation, visibility and published projection/media collection into cohesive helpers that take explicit dependencies and the existing instance-owned visibility cache; keep orchestration and authorization order in the facade. Avoid an inheritance chain or a public replacement class: both risk changing instance identity and method semantics. `use-case-inputs.ts` remains the input owner.
+3. **Media application.** Move input/result/dependency types to a concrete types module, constants and MIME/filename/stream helpers to upload modules, metadata patch/tag normalization to a metadata module, and projection/dimension helpers to their own owner as needed. Keep the class and call sequence including cleanup, optimistic checks and logging; only the package entry re-exports existing public names. Extract shared private error helpers without changing error type or message.
+4. **Content definitions.** Keep `field` builders in `fields/builders.ts`; move descriptor normalization and metadata projection into concrete modules with dependency edges flowing from normalizer to builders and metadata as required, never back through the package entry. Move block settings/visibility, registry and migration into separate `blocks/` modules; separate shared types and constants from executable consumers if needed to avoid cycles. `defineBlock`, registry iteration, field defaults, freezing, validation and migration ordering must remain unchanged. Existing entry exports and declaration names remain unchanged, with no subdirectory barrels. Splitting by arbitrary line ranges was rejected because it obscures ownership.
+5. **Port ownership.** Put `DispatcherEvent`, retry policy, lease, input types and `DispatcherLeasePort` in `ports/outbox.ts`; outbox consumers and entry import directly. Generic clock, cache, logging and IDs remain in `ports/infrastructure.ts`. `ports` continues to depend only on `shared`.
+6. **Tests and fixtures.** Extract the shared configuration model/snapshot/scan fixture concepts into `src/test-support/configuration-fixtures.ts`, preserving distinct defaults and pagination through typed explicit options, rather than silently unifying different fixtures. Move relevant tests beside concrete owners, retaining every existing test title and preserving intended coverage. The existing projection-only cases incorrectly test a nonexistent `plan.status` and call `configurationSyncContentWrites` with the whole plan instead of an operation and its model: replace those assertions with `plan.isValid` and checks of each actual operation against the corresponding model. This corrects false-positive tests without changing production behavior. A split test must be typechecked and any removed original is removed from `scripts/test-typecheck-baseline.json`; untouched tests retain their existing baseline status. Do not add exemptions or copy `@ts-nocheck`. Runtime and declaration export inventories and test-title multisets are captured before and compared after.
+
+## Risks / Trade-offs
+
+- [Accidental behavior or call-order changes across helpers] → Move logic with minimal edits, preserve shared cache, error messages and order, and run focused suites plus full tests and export comparisons.
+- [Cycles from field/block types or shared helpers] → Make foundational types/constants independent, use direct concrete imports, and run the boundary checker including type edges.
+- [Fixtures differ despite similar names] → Preserve each original default and scan behavior explicitly; compare test names and run configuration suites before and after.
+- [Test typing increases scope] → Type only split companions and shared fixture; do not expand into RF9's unrelated legacy tests. If the split cannot meet this rule without changing scope, stop and revise the plan.
+
+## Migration Plan
+
+No data migration or rollout action. Apply as small independently tested moves; rollback is a normal code revert. Both runtimes keep the same interfaces, transaction boundaries and observable results.

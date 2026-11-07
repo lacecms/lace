@@ -37,11 +37,12 @@ import type {
   ContentSnapshotId,
   UnixMilliseconds,
 } from "@lacecms/domain";
-import { createSnapshotEvidenceAccumulator } from "./evolution.js";
+import { createSnapshotEvidenceAccumulator } from "./evidence.js";
 import { createMigrationEvidenceAccumulator, planEntryMigration } from "./migration.js";
 import type { Clock, IdGenerator } from "../ports/infrastructure.js";
 
-import { contentSyncActor, copyStoredModel, compareByKey } from "./plan-support.js";
+import { contentSyncActor, copyStoredModel } from "./model-state.js";
+import { compareByKey } from "./diagnostics.js";
 import { planConfigurationSynchronization, planConfigurationSyncScans } from "./plan.js";
 import { renderConfigurationSyncPlanJson, reportConfigurationSynchronization } from "./report.js";
 function registryError(message: string): never {

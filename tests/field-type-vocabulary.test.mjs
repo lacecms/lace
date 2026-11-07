@@ -100,7 +100,7 @@ test("production code keeps field-kind lists in the authoritative declarations",
     if (file === "apps/admin/src/entities/content/field-types.ts") return [];
     let source = readFileSync(path, "utf8");
     if (file === "packages/content/src/fields/capabilities.ts") return [];
-    if (file === "packages/content/src/blocks/definition.ts") {
+    if (file === "packages/content/src/blocks/settings.ts") {
       // The single block-settings declaration is canonical vocabulary.
       source = source.replace(/export const BLOCK_SETTING_FIELD_TYPES =[\s\S]*?\);/u, (text) =>
         text.replace(/[^\n]/gu, " "),

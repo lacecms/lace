@@ -12,7 +12,7 @@ import type {
   FieldVisibility,
   ModelFieldValues,
 } from "../fields/definitions.js";
-import type { BlockRegistry } from "../blocks/definition.js";
+import type { BlockRegistry } from "../blocks/types.js";
 import {
   BLOCK_KEY_PATTERN,
   isBlockAnchor,
@@ -20,9 +20,8 @@ import {
   normalizeBlockClassName,
   MAX_BLOCK_CLASS_TOKENS,
   MAX_BLOCK_CLASS_NAME_LENGTH,
-  validateBlockSettings,
-  validateBlockData,
-} from "../blocks/definition.js";
+} from "../blocks/grammar.js";
+import { validateBlockSettings, validateBlockData } from "../blocks/definition.js";
 import { collectSnapshotInternalLinks } from "../references/internal-links.js";
 
 /** Maximum title length shared by draft, publish, REST, and admin validation. */

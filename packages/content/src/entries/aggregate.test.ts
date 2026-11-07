@@ -8,12 +8,9 @@ import {
   MAX_TOP_LEVEL_BLOCKS,
   MAX_JSON_BYTES,
 } from "./aggregate.js";
-import {
-  defineBlockRegistry,
-  toBlockRegistryMetadata,
-  BlockConfigurationError,
-  defineBlock,
-} from "../blocks/definition.js";
+import { defineBlockRegistry, toBlockRegistryMetadata } from "../blocks/registry.js";
+import { BlockConfigurationError } from "../blocks/errors.js";
+import { defineBlock } from "../blocks/definition.js";
 import { settingsBlock, issueFrom } from "../test-support/content-test-helpers.js";
 import { builtInBlocks } from "../blocks/built-ins.js";
 import { ContentValidationError } from "../shared/errors.js";

@@ -16,18 +16,18 @@ import type {
 } from "./types.js";
 import type { NormalizedContentModel } from "@lacecms/config";
 import type { FieldVisibility, JsonObject } from "@lacecms/content";
-import { changeNeedsEvidence } from "./evolution.js";
+import { changeNeedsEvidence } from "./evidence.js";
 
+import { diagnostic } from "./diagnostics.js";
+import type { DiagnosticDetails } from "./diagnostics.js";
 import {
-  diagnostic,
   hasSnapshots,
   snapshotDescription,
   countsDescription,
   total,
   holderCounts,
-  undecidedChange,
-} from "./plan-support.js";
-import type { DiagnosticDetails } from "./plan-support.js";
+} from "./snapshot-counts.js";
+import { undecidedChange } from "./plan-results.js";
 export interface PlanningContext {
   readonly diagnostics: ConfigurationSyncDiagnostic[];
   readonly evidence: ConfigurationSyncEvidence | undefined;

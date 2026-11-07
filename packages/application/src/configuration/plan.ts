@@ -13,18 +13,13 @@ import type { NormalizedContentModel } from "@lacecms/config";
 import { canonicalizeJson, schemaFieldAt, parseSchemaPath } from "@lacecms/content";
 import type { JsonObject, JsonValue } from "@lacecms/content";
 import { DomainError } from "@lacecms/domain";
-import { diffContentModelStructures, validateStructureHints } from "./evolution.js";
+import { diffContentModelStructures } from "./structure-diff.js";
+import { validateStructureHints } from "./structure-hints.js";
 
-import {
-  copyModel,
-  copyStoredModel,
-  diagnostic,
-  compareByKey,
-  compareDiagnostics,
-  hasSnapshots,
-  snapshotDescription,
-  incompatible,
-} from "./plan-support.js";
+import { copyModel, copyStoredModel } from "./model-state.js";
+import { diagnostic, compareByKey, compareDiagnostics } from "./diagnostics.js";
+import { hasSnapshots, snapshotDescription } from "./snapshot-counts.js";
+import { incompatible } from "./plan-results.js";
 import { decideEvolution } from "./decisions.js";
 import type { PlanningContext } from "./decisions.js";
 function trustedPublicBaseline(stored: StoredContentModelState): boolean {

@@ -7,26 +7,12 @@ import {
 import type { ListQueryLimits } from "./collection-queries.js";
 import type { NormalizedContentModel } from "@lacecms/config";
 import {
-  collectFieldMedia,
   toBlockMetadata,
-  collectSnapshotInternalLinks,
-  ContentValidationError,
-  declaresFieldVisibility,
   detachFieldMedia,
-  encodeFieldPath,
   FIELD_KEY_SOURCE,
-  MAX_DRAFT_MEDIA_REFERENCES,
-  publishedBlockData,
-  publishedFieldValues,
   sha256CanonicalJson,
 } from "@lacecms/content";
-import type {
-  InternalLinkReference,
-  FieldVisibility,
-  FieldDefinition,
-  JsonObject,
-  JsonValue,
-} from "@lacecms/content";
+import type { JsonValue } from "@lacecms/content";
 
 /**
  * Thrown by the content use cases when a submitted or published aggregate
@@ -44,17 +30,14 @@ import {
   contentModelKey,
   contentSnapshotId,
   createContentEntry,
-  mediaId,
   requirePermission,
   requirePublishedSnapshot,
   contentPublicPath,
 } from "@lacecms/domain";
 import type {
   Actor,
-  ContentBlock,
   ContentEntry,
   ContentEntryId,
-  DraftMediaReference,
   DraftSnapshot,
   EntrySeo,
   PublishedSnapshot,
@@ -71,16 +54,15 @@ import type {
   ContentEntryListPage,
   ContentEntrySort,
   ContentEntryStatus,
-  PublishedProjection,
 } from "../ports/content.js";
 import type { PublicationIdempotencyKey } from "../shared/brands.js";
-import { internalLinkIssuePath } from "./internal-links.js";
+import { validateDraft } from "./draft-validation.js";
+import { publishedProjection } from "./publication-projection.js";
 
 import type {
   ContentUseCaseDependencies,
   ContentModelDiscovery,
   AdminContentEntryProjection,
-  CompleteDraftInput,
   CreateContentEntryUseCaseInput,
   ListContentEntriesUseCaseInput,
   DescribeActorUseCaseInput,
@@ -102,7 +84,6 @@ import {
   detached,
   contentModelRoute,
   systemTitle,
-  normalizeDraftCandidate,
 } from "./draft-normalization.js";
 const FIELD_SORT_PATTERN = new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u");
 
@@ -117,8 +98,6 @@ function commandEntry(result: ContentCommandResult): ContentEntry {
  * Portable orchestration for content lifecycle commands. Transport handlers and
  * persistence adapters remain outside this service.
  */
-type ModelFieldMap = Readonly<Record<string, FieldDefinition>>;
-
 export class ContentUseCases {
   public readonly listQueryLimits: ListQueryLimits;
   /** Memoized `declaresFieldVisibility` per model key and block type; config is fixed. */
@@ -217,7 +196,8 @@ export class ContentUseCases {
   public async create(input: CreateContentEntryUseCaseInput): Promise<ContentEntry> {
     authorizeContentOperation(input.actor, "create");
     const model = this.model(input.modelKey);
-    const draft = await this.validateDraft(
+    const draft = await validateDraft(
+      this.dependencies,
       { ...input, title: systemTitle(model, input.title) },
       model,
       "draft",
@@ -314,7 +294,8 @@ export class ContentUseCases {
     authorizeContentOperation(input.actor, "save");
     const entry = await this.entry(input.entryId);
     const model = this.model(entry.model.key);
-    const draft = await this.validateDraft(
+    const draft = await validateDraft(
+      this.dependencies,
       { ...input, title: systemTitle(model, input.title) },
       model,
       "draft",
@@ -338,14 +319,20 @@ export class ContentUseCases {
   ): Promise<PublishContentEntryUseCaseResult> {
     authorizeContentOperation(input.actor, "publish");
     const entry = await this.entry(input.entryId);
-    const draft = await this.validateDraft(
+    const draft = await validateDraft(
+      this.dependencies,
       entry.draft,
       this.model(entry.model.key),
       "publish",
       entry.id,
     );
     contentPublicPath(entry.model, draft.slug);
-    const projection = this.publishedProjection(this.model(entry.model.key), draft);
+    const projection = publishedProjection(
+      this.dependencies,
+      this.visibilityOwners,
+      this.model(entry.model.key),
+      draft,
+    );
     // A projection belongs to one draft revision; never attach it to another.
     if (projection !== undefined && entry.draft.revision !== input.expectedRevision)
       throw new DomainError(
@@ -442,7 +429,8 @@ export class ContentUseCases {
       );
     }
     const model = this.model(source.model.key);
-    const draft = await this.validateDraft(
+    const draft = await validateDraft(
+      this.dependencies,
       {
         blocks: source.draft.blocks.map((block) => ({
           ...block,
@@ -573,179 +561,5 @@ export class ContentUseCases {
       throw new DomainError("CONTENT_INVALID_STATE", `Content model ${key} does not exist.`);
     }
     return model;
-  }
-
-  private async validateDraft(
-    input: CompleteDraftInput,
-    model: NormalizedContentModel,
-    mode: "draft" | "publish",
-    publishingEntryId?: string,
-  ): Promise<NormalizedDraft> {
-    const normalized = normalizeDraftCandidate({
-      blocks: this.dependencies.config.blocks,
-      draft: input,
-      mode,
-      model,
-    });
-    const mediaReferences = this.collectMedia(normalized.fields, model.fields, "$fields");
-    if (normalized.seo?.image !== undefined) {
-      mediaReferences.push({
-        fieldPath: "image",
-        mediaId: mediaId(normalized.seo.image),
-        sourceKey: "$seo",
-      });
-    }
-    for (const block of normalized.blocks) {
-      mediaReferences.push(
-        ...this.collectMedia(
-          block.data,
-          this.dependencies.config.blocks.get(block.type)!.fields,
-          block.key,
-        ),
-      );
-    }
-    if (mediaReferences.length > MAX_DRAFT_MEDIA_REFERENCES) {
-      throw new DomainError(
-        "CONTENT_INVALID_STATE",
-        `A draft must not contain more than ${MAX_DRAFT_MEDIA_REFERENCES} media references.`,
-      );
-    }
-    const ids = [...new Set(mediaReferences.map((reference) => reference.mediaId))];
-    const active = new Set(
-      (ids.length === 0 ? [] : await this.dependencies.media.loadMediaMany(ids))
-        .filter((media) => media.status === "active")
-        .map((media) => media.id),
-    );
-    for (const id of ids) {
-      if (!active.has(id))
-        throw new DomainError("CONTENT_INVALID_STATE", `Media ${id} is unavailable.`);
-    }
-    // Links inside hidden targets are not delivered, so publication never checks them.
-    const internalLinks = this.internalLinks(model, normalized.fields, normalized.blocks);
-    if (internalLinks.length > 0) {
-      if (this.dependencies.content.resolveLinkTargets === undefined)
-        throw new DomainError("CONTENT_INVALID_STATE", "Internal link validation is unavailable.");
-      const statuses = await this.dependencies.content.resolveLinkTargets([
-        ...new Set(internalLinks.map((reference) => reference.targetId)),
-      ]);
-      const issues = internalLinks.flatMap((reference) => {
-        const status = statuses[reference.targetId];
-        const self = publishingEntryId === reference.targetId && model.kind !== "global";
-        const nonRoutable = status?.state === "non-routable";
-        if (
-          !nonRoutable &&
-          (mode === "draft" || !reference.delivered || self || status?.state === "published")
-        )
-          return [];
-        return [
-          {
-            code: nonRoutable ? "internal_link_non_routable" : "internal_link_unavailable",
-            message: nonRoutable
-              ? "must target a page or collection entry."
-              : "must target an entry with a published route.",
-            path: internalLinkIssuePath(
-              reference,
-              normalized.blocks.map((block) => block.key),
-            ),
-          },
-        ];
-      });
-      if (issues.length > 0) throw new ContentValidationError(issues);
-    }
-    return { ...normalized, mediaReferences: Object.freeze(mediaReferences), internalLinks };
-  }
-
-  private internalLinks(
-    model: NormalizedContentModel,
-    fields: JsonObject,
-    blocks: readonly Pick<ContentBlock, "data" | "hidden" | "key" | "type">[],
-  ): readonly InternalLinkReference[] {
-    return collectSnapshotInternalLinks(
-      model.fields,
-      fields,
-      blocks.map((block) => {
-        const definition = this.dependencies.config.blocks.get(block.type)!;
-        return {
-          ...block,
-          fields: definition.fields,
-          ...(definition.visibility === undefined
-            ? {}
-            : { visibility: definition.visibility as FieldVisibility }),
-        };
-      }),
-      model.visibility as FieldVisibility | undefined,
-    );
-  }
-
-  /** Whether a model or block type declares conditional-field rules anywhere. */
-  private declaresVisibility(owner: string, fields: ModelFieldMap, rules: unknown): boolean {
-    let declared = this.visibilityOwners.get(owner);
-    if (declared === undefined) {
-      declared = declaresFieldVisibility(fields, rules as FieldVisibility | undefined);
-      this.visibilityOwners.set(owner, declared);
-    }
-    return declared;
-  }
-
-  /**
-   * The published projection of a validated draft and its references, or
-   * `undefined` when neither its model nor its blocks declare rules, so the
-   * repository copies the draft as before.
-   */
-  private publishedProjection(
-    model: NormalizedContentModel,
-    draft: NormalizedDraft,
-  ): PublishedProjection | undefined {
-    const registry = this.dependencies.config.blocks;
-    if (
-      !this.declaresVisibility(`model:${model.key}`, model.fields, model.visibility) &&
-      !draft.blocks.some((block) => {
-        const definition = registry.get(block.type)!;
-        return this.declaresVisibility(
-          `block:${block.type}`,
-          definition.fields,
-          definition.visibility,
-        );
-      })
-    )
-      return undefined;
-    const fields = publishedFieldValues(
-      model.fields,
-      draft.fields,
-      model.visibility as FieldVisibility | undefined,
-    );
-    const blocks = draft.blocks.map((block) => ({
-      ...block,
-      data: publishedBlockData(registry.get(block.type)!, block.data),
-    }));
-    const mediaReferences = this.collectMedia(fields, model.fields, "$fields");
-    if (draft.seo?.image !== undefined)
-      mediaReferences.push({
-        fieldPath: "image",
-        mediaId: mediaId(draft.seo.image),
-        sourceKey: "$seo",
-      });
-    for (const block of blocks)
-      mediaReferences.push(
-        ...this.collectMedia(block.data, registry.get(block.type)!.fields, block.key),
-      );
-    return detached({
-      blocks: blocks.map(({ data, key }) => ({ data, key })),
-      fields,
-      internalLinks: this.internalLinks(model, fields, blocks),
-      mediaReferences,
-    });
-  }
-
-  private collectMedia(
-    values: JsonObject,
-    definitions: Readonly<Record<string, FieldDefinition>>,
-    sourceKey: "$fields" | ReturnType<typeof blockKey>,
-  ): DraftMediaReference[] {
-    return collectFieldMedia(definitions, values).map(({ mediaId: id, path }) => ({
-      fieldPath: encodeFieldPath(path),
-      mediaId: mediaId(id),
-      sourceKey,
-    }));
   }
 }

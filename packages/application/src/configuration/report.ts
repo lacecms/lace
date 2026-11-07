@@ -6,7 +6,8 @@ import type {
 } from "./types.js";
 import type { JsonObject } from "@lacecms/content";
 
-import { reportedStoredModel, countsDescription } from "./plan-support.js";
+import { reportedStoredModel } from "./model-state.js";
+import { countsDescription } from "./snapshot-counts.js";
 import { checkConfigurationSynchronization } from "./plan.js";
 function reportedOperation(operation: ConfigurationSyncOperation): JsonObject {
   if (operation.action !== "incompatible-change" && operation.action !== "blocked-removal") {

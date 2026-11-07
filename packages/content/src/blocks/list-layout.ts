@@ -1,4 +1,4 @@
-import type { SettingsVisibility } from "./definition.js";
+import type { SettingsVisibility } from "./types.js";
 import { deepFreeze } from "../shared/objects.js";
 import type { ChoiceDiagram } from "../fields/definitions.js";
 import { field } from "../fields/builders.js";

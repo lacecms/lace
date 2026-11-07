@@ -1,7 +1,8 @@
 // @ts-nocheck
 // TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { describe, it, expect, test } from "vitest";
-import { field, toFieldMetadata } from "./builders.js";
+import { field } from "./builders.js";
+import { toFieldMetadata } from "./metadata.js";
 import { defineBlock, toBlockMetadata } from "../blocks/definition.js";
 
 describe("visual form layout metadata", () => {

@@ -10,6 +10,12 @@ import {
   transformConfigurationSyncFields,
 } from "../index.js";
 
+import {
+  storedModelFixture,
+  snapshotFixture,
+  scanFixture,
+} from "../test-support/configuration-fixtures.js";
+
 const blocks = Object.values(builtInBlocks);
 const kinds = () => ({
   kind: field.select({
@@ -41,45 +47,9 @@ async function works({ fields, visibility, version = 1, ...rest } = {}) {
   return config.runtime.content[0];
 }
 
-function stored(model) {
-  return {
-    draftSnapshotCount: 2,
-    entryCount: 2,
-    key: model.key,
-    kind: model.kind,
-    projectionHash: model.projectionHash,
-    publicProjectionHash: model.publicProjectionHash,
-    publicProjectionSourceHash: model.projectionHash,
-    publishedSnapshotCount: 1,
-    snapshotFingerprint: "fingerprint",
-    structure: model.structure,
-    structureHash: model.structureHash,
-    version: model.version,
-  };
-}
-
-function snapshot(id, state, fields) {
-  return {
-    blocks: [],
-    entryId: `entry-${id}`,
-    fields,
-    revision: 1,
-    snapshotId: `snapshot-${id}`,
-    state,
-    title: `Title ${id}`,
-  };
-}
-
-function port(models, snapshots) {
-  return {
-    async readConfigurationSyncState() {
-      return models;
-    },
-    async readConfigurationSyncSnapshots() {
-      return { items: snapshots };
-    },
-  };
-}
+const stored = (model) => storedModelFixture(model, "fingerprint");
+const snapshot = snapshotFixture;
+const port = (models, snapshots) => scanFixture(models, snapshots);
 
 const video = { field: "kind", values: ["video"] };
 

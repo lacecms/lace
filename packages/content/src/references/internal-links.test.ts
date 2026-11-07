@@ -2,7 +2,8 @@
 // TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { describe, test, expect } from "vitest";
 import { field } from "../fields/builders.js";
-import { defineBlock, defineBlockRegistry } from "../blocks/definition.js";
+import { defineBlock } from "../blocks/definition.js";
+import { defineBlockRegistry } from "../blocks/registry.js";
 import { validateEntryAggregate } from "../entries/aggregate.js";
 import { collectSnapshotInternalLinks, collectFieldInternalLinks } from "./internal-links.js";
 import { issueFrom } from "../test-support/content-test-helpers.js";

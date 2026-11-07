@@ -1,7 +1,7 @@
 import type { ContentValidationMode } from "./validation.js";
 import type { JsonValue } from "../shared/json.js";
 import type { ListFieldDefinition, GroupFieldDefinition } from "./definitions.js";
-import type { BlockDefinition } from "../blocks/definition.js";
+import type { BlockDefinition } from "../blocks/types.js";
 import { describe, expect, it } from "vitest";
 import { ContentValidationError } from "../shared/errors.js";
 import { canonicalizeJson } from "../entries/canonical-json.js";
@@ -14,12 +14,14 @@ import {
 } from "./validation.js";
 import {
   defineBlock,
-  defineBlockRegistry,
   publishedBlockData,
   toBlockMetadata,
   validateBlockData,
 } from "../blocks/definition.js";
-import { field, normalizeFieldDefinition, toFieldMetadata } from "./builders.js";
+import { defineBlockRegistry } from "../blocks/registry.js";
+import { field } from "./builders.js";
+import { normalizeFieldDefinition } from "./normalization.js";
+import { toFieldMetadata } from "./metadata.js";
 import {
   effectiveVisibilityValues,
   isFieldVisible,

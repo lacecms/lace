@@ -1,4 +1,4 @@
-import type { DispatcherRetryPolicy } from "../ports/infrastructure.js";
+import type { DispatcherRetryPolicy } from "../ports/outbox.js";
 
 export const defaultDispatcherRetryPolicy: DispatcherRetryPolicy = Object.freeze({
   baseDelayMs: 1_000,

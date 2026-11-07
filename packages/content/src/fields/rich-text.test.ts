@@ -8,7 +8,8 @@ import {
   validateModelFields,
   validateSnapshotListBudget,
 } from "./validation.js";
-import { field, toFieldMetadata } from "./builders.js";
+import { field } from "./builders.js";
+import { toFieldMetadata } from "./metadata.js";
 import { ContentValidationError, FieldConfigurationError } from "../shared/errors.js";
 import { defineBlock, validateBlockData } from "../blocks/definition.js";
 import { issueFrom } from "../test-support/content-test-helpers.js";

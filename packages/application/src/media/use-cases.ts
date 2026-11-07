@@ -1,391 +1,46 @@
 import { InvariantError, MAX_PAGE_SIZE } from "@lacecms/content";
 import {
   DomainError,
-  isMediaFocalCoordinate,
   isMediaSha256,
   mediaId,
-  normalizeMediaText,
   normalizeMediaTag,
-  normalizeMediaTags,
   requirePermission,
   unixMilliseconds,
 } from "@lacecms/domain";
-import type {
-  Actor,
-  ContentEntryId,
-  MediaFocalPoint,
-  MediaId,
-  MediaMetadata,
-  MediaTextKind,
-  UnixMilliseconds,
-} from "@lacecms/domain";
+import type { Actor, MediaId, MediaMetadata } from "@lacecms/domain";
 import { DEFAULT_MEDIA_SORT, MEDIA_SORTS } from "../ports/media.js";
-import { MAX_MEDIA_SEARCH_LENGTH, MAX_MEDIA_USAGE_ENTRIES } from "../shared/limits.js";
-import type { ActorSummary } from "../shared/actors.js";
 import type {
-  ByteStream,
-  ImageInspector,
-  MediaCatalogItem,
-  MediaCatalogPort,
-  MediaCommandPort,
-  MediaListPort,
   ListMediaTagsInput,
   MediaTagCount,
   MediaMimeType,
-  MediaReadPort,
   MediaSort,
-  MediaUsageEntry,
-  ObjectStorage,
 } from "../ports/media.js";
-import type { Clock, IdGenerator, OperationalLogger } from "../ports/infrastructure.js";
+import { MAX_MEDIA_SEARCH_LENGTH, MAX_MEDIA_USAGE_ENTRIES } from "../shared/limits.js";
 import type { CursorPage } from "../shared/pagination.js";
-import type { OpaqueCursor } from "../shared/brands.js";
-import type { PublicContentReadPort } from "../ports/content.js";
-
-export const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
-export const MAX_IMAGE_DIMENSION = 12_000;
-export const MAX_IMAGE_PIXELS = 100_000_000;
-export const ALLOWED_MEDIA_MIME_TYPES = Object.freeze([
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-] as const);
-
-export interface MediaView {
-  readonly tags: readonly string[];
-  readonly sha256?: string;
-  readonly alt?: string;
-  readonly caption?: string;
-  readonly createdAt: UnixMilliseconds;
-  readonly createdBy: ActorSummary;
-  readonly filename: string;
-  readonly focalPoint?: MediaFocalPoint;
-  readonly height?: number;
-  readonly id: MediaId;
-  readonly mimeType: MediaMimeType;
-  readonly size: number;
-  readonly status: MediaMetadata["status"];
-  readonly updatedAt: UnixMilliseconds;
-  readonly usageCount: number;
-  readonly width?: number;
-}
-
-/** A single media item with the bounded list of entries that use it. */
-export interface MediaDetailView extends MediaView {
-  readonly usage: readonly MediaUsageEntry[];
-}
-
-export interface CreateMediaUseCaseInput {
-  readonly tags?: readonly string[];
-  readonly actor: Actor;
-  readonly body: ByteStream;
-  readonly filename: string;
-}
-
-export interface ListMediaUseCaseInput {
-  readonly tags?: readonly string[];
-  readonly sha256?: string;
-  readonly actor: Actor;
-  readonly after?: OpaqueCursor;
-  readonly limit: number;
-  readonly q?: string;
-  readonly sort?: string;
-  readonly type?: string;
-}
-
-export interface GetMediaUseCaseInput {
-  readonly actor: Actor;
-  readonly mediaId: MediaId;
-}
-
-export interface DeleteMediaUseCaseInput extends GetMediaUseCaseInput {
-  /**
-   * `drafts` first removes the item from the current draft of every using
-   * entry; it is refused while any current publication uses the item.
-   */
-  readonly detach?: "drafts";
-}
-
-/** Removes one media item from an entry's current draft (a guarded draft save). */
-export interface MediaDraftDetachPort {
-  detachMedia(input: {
-    readonly actor: Actor;
-    readonly entryId: ContentEntryId;
-    readonly mediaId: MediaId;
-  }): Promise<unknown>;
-}
-
-/** An omitted value stays unchanged; `null` (or empty text) clears it. */
-export interface MediaMetadataPatch {
-  readonly tags?: readonly string[] | undefined;
-  readonly alt?: string | null | undefined;
-  readonly caption?: string | null | undefined;
-  readonly focalPoint?: MediaFocalPoint | null | undefined;
-}
-
-export interface UpdateMediaMetadataUseCaseInput {
-  readonly actor: Actor;
-  /** The `updatedAt` of the version the writer edited. */
-  readonly expectedUpdatedAt: UnixMilliseconds;
-  readonly mediaId: MediaId;
-  readonly patch: MediaMetadataPatch;
-}
-
-export type MediaBuildOutcome =
-  | { readonly status: "not-dispatched" }
-  | { readonly status: "queued"; readonly targetVersion: number };
-
-export interface UpdateMediaMetadataUseCaseResult {
-  readonly build: MediaBuildOutcome;
-  readonly media: MediaView;
-}
-
-/** Normalized patch values; `undefined` keeps the stored value. */
-export interface NormalizedMediaMetadataPatch {
-  readonly tags?: readonly string[];
-  readonly alt?: string | null;
-  readonly caption?: string | null;
-  readonly focalPoint?: MediaFocalPoint | null;
-}
-
-export interface PublicMediaBinaryUseCaseInput {
-  readonly mediaId: MediaId;
-}
-
-export interface MediaBinary {
-  readonly body: ByteStream;
-  readonly filename: string;
-  readonly mimeType: MediaMimeType;
-}
-
-export interface MediaUseCaseDependencies {
-  readonly clock: Clock;
-  /** Required only for deletion requests that detach draft usage. */
-  readonly drafts?: MediaDraftDetachPort;
-  readonly idGenerator: IdGenerator;
-  readonly imageInspector: ImageInspector;
-  readonly logger: OperationalLogger;
-  readonly media: MediaReadPort & MediaListPort & MediaCatalogPort & MediaCommandPort;
-  readonly publicMedia?: Pick<PublicContentReadPort, "loadPublicMedia">;
-  readonly storage: ObjectStorage;
-}
-
-function failure(message: string): never {
-  throw new DomainError("CONTENT_INVALID_STATE", message);
-}
-
-function detached<Value>(value: Value): Value {
-  return JSON.parse(JSON.stringify(value)) as Value;
-}
-
-function isPrefix(bytes: Uint8Array, prefix: readonly number[]): boolean {
-  return prefix.every((value, index) => bytes[index] === value);
-}
-
-/** Detects format only; ImageInspector validates container structure and dimensions. */
-export function detectMediaMimeType(bytes: Uint8Array): MediaMimeType {
-  if (bytes.byteLength === 0) failure("Media upload must not be empty.");
-  if (isPrefix(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
-  if (isPrefix(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
-  // GIF87a or GIF89a.
-  if (
-    isPrefix(bytes, [0x47, 0x49, 0x46, 0x38]) &&
-    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
-    bytes[5] === 0x61
-  ) {
-    return "image/gif";
-  }
-  if (
-    bytes.byteLength >= 12 &&
-    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
-    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-  if (
-    bytes.byteLength >= 16 &&
-    String.fromCharCode(...bytes.slice(4, 8)) === "ftyp" &&
-    ["avif", "avis"].includes(String.fromCharCode(...bytes.slice(8, 12)))
-  ) {
-    return "image/avif";
-  }
-  failure("Media upload is not an allowed image format.");
-}
-
-export function sanitizeMediaFilename(value: string): string {
-  const withoutUnsafeCharacters = [...value.normalize("NFKC")]
-    .map((character) => {
-      const code = character.charCodeAt(0);
-      return code <= 0x1f ||
-        (code >= 0x7f && code <= 0x9f) ||
-        character === "/" ||
-        character === "\\"
-        ? " "
-        : character;
-    })
-    .join("");
-  const normalized = withoutUnsafeCharacters.replace(/\s+/gu, " ").trim().slice(0, 255);
-  return normalized.length === 0 ? "upload" : normalized;
-}
-
-export async function collectMediaBytes(body: ByteStream): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for await (const chunk of body) {
-    if (!(chunk instanceof Uint8Array)) failure("Media stream yielded invalid binary data.");
-    size += chunk.byteLength;
-    if (size > MAX_MEDIA_BYTES) failure("Media upload exceeds the 10 MiB limit.");
-    chunks.push(chunk.slice());
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
-}
-
-function streamBytes(bytes: Uint8Array): ByteStream {
-  return {
-    async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
-      yield bytes.slice();
-    },
-  };
-}
-
-function normalizeText(value: unknown, kind: MediaTextKind): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  const normalized = typeof value === "string" ? normalizeMediaText(value, kind) : undefined;
-  if (normalized === undefined) {
-    failure(
-      kind === "alt"
-        ? "Alt text must be single-line plain text of at most 1,000 characters."
-        : "A caption must be plain text of at most 2,000 characters.",
-    );
-  }
-  return normalized;
-}
-
-/**
- * Validates a metadata patch with the shared domain rules: trims text, maps
- * empty text to `null`, normalizes caption line breaks, and requires a focal
- * point of two finite coordinates from 0 to 1.
- */
-export function normalizeMediaMetadataPatch(
-  patch: MediaMetadataPatch,
-): NormalizedMediaMetadataPatch {
-  if (typeof patch !== "object" || patch === null) failure("Media metadata patch is invalid.");
-  const keys = Object.keys(patch);
-  if (
-    keys.some((key) => key !== "alt" && key !== "caption" && key !== "focalPoint" && key !== "tags")
-  ) {
-    failure("Media metadata patch contains an unknown value.");
-  }
-  if (keys.every((key) => patch[key as keyof MediaMetadataPatch] === undefined)) {
-    failure("Supply at least one of alt, caption, focalPoint, or tags.");
-  }
-  const tags = patch.tags === undefined ? undefined : validatedTags(patch.tags);
-  const alt = normalizeText(patch.alt, "alt");
-  const caption = normalizeText(patch.caption, "caption");
-  let focalPoint: MediaFocalPoint | null | undefined;
-  if (patch.focalPoint === null) focalPoint = null;
-  else if (patch.focalPoint !== undefined) {
-    const point = patch.focalPoint as unknown;
-    if (
-      typeof point !== "object" ||
-      point === null ||
-      Object.keys(point).length !== 2 ||
-      !isMediaFocalCoordinate((point as { x?: unknown }).x) ||
-      !isMediaFocalCoordinate((point as { y?: unknown }).y)
-    ) {
-      failure("A focal point must have x and y coordinates from 0 to 1.");
-    }
-    focalPoint = Object.freeze({
-      x: (point as MediaFocalPoint).x,
-      y: (point as MediaFocalPoint).y,
-    });
-  }
-  return Object.freeze({
-    ...(tags === undefined ? {} : { tags }),
-    ...(alt === undefined ? {} : { alt }),
-    ...(caption === undefined ? {} : { caption }),
-    ...(focalPoint === undefined ? {} : { focalPoint }),
-  });
-}
-
-function validatedTags(values: readonly string[], maxInputs?: number): readonly string[] {
-  if (!Array.isArray(values)) failure("Media tags must be an array.");
-  if (maxInputs !== undefined && values.length > maxInputs)
-    failure("Supply at most five filter tags.");
-  const result = normalizeMediaTags(values);
-  if ("issue" in result) failure(`Invalid media tag at /tags/${result.issue}.`);
-  return result.tags;
-}
-
-function sameFocalPoint(left: MediaFocalPoint | null, right: MediaFocalPoint | null): boolean {
-  return left === null || right === null
-    ? left === right
-    : left.x === right.x && left.y === right.y;
-}
-
-/** WebCrypto exists in every supported runtime but not in this package's portable lib types. */
-const webCrypto = globalThis as unknown as {
-  readonly crypto: {
-    readonly subtle: { digest(algorithm: "SHA-256", data: Uint8Array): Promise<ArrayBuffer> };
-  };
-};
-
-/** Lowercase-hex SHA-256 of the exact bytes that object storage receives. */
-async function mediaSha256(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(await webCrypto.crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function toMediaView(item: MediaCatalogItem): MediaView {
-  const value = item.media;
-  const mimeType = value.mimeType;
-  if (!ALLOWED_MEDIA_MIME_TYPES.includes(mimeType as MediaMimeType)) {
-    failure("Media metadata has an unsupported MIME type.");
-  }
-  return Object.freeze({
-    ...(value.alt === undefined ? {} : { alt: value.alt }),
-    ...(value.caption === undefined ? {} : { caption: value.caption }),
-    createdAt: value.createdAt,
-    createdBy: Object.freeze({ displayName: item.createdBy.displayName, id: item.createdBy.id }),
-    tags: Object.freeze([...(value.tags ?? [])]),
-    filename: value.filename,
-    ...(value.focalPoint === undefined
-      ? {}
-      : { focalPoint: Object.freeze({ x: value.focalPoint.x, y: value.focalPoint.y }) }),
-    ...(value.height === undefined ? {} : { height: value.height }),
-    id: value.id,
-    mimeType: mimeType as MediaMimeType,
-    ...(value.sha256 === undefined ? {} : { sha256: value.sha256 }),
-    size: value.size,
-    status: value.status,
-    updatedAt: value.updatedAt,
-    usageCount: item.usageCount,
-    ...(value.width === undefined ? {} : { width: value.width }),
-  });
-}
-
-function validateDimensions(width: number, height: number): void {
-  if (
-    !Number.isSafeInteger(width) ||
-    !Number.isSafeInteger(height) ||
-    width < 1 ||
-    height < 1 ||
-    width > MAX_IMAGE_DIMENSION ||
-    height > MAX_IMAGE_DIMENSION ||
-    width * height > MAX_IMAGE_PIXELS
-  ) {
-    failure("Image dimensions exceed the allowed limits.");
-  }
-}
+import type {
+  MediaUseCaseDependencies,
+  CreateMediaUseCaseInput,
+  GetMediaUseCaseInput,
+  DeleteMediaUseCaseInput,
+  ListMediaUseCaseInput,
+  UpdateMediaMetadataUseCaseInput,
+  UpdateMediaMetadataUseCaseResult,
+  PublicMediaBinaryUseCaseInput,
+  MediaBinary,
+  MediaView,
+  MediaDetailView,
+} from "./types.js";
+import { ALLOWED_MEDIA_MIME_TYPES } from "./limits.js";
+import { detached, failure } from "./helpers.js";
+import {
+  collectMediaBytes,
+  detectMediaMimeType,
+  mediaSha256,
+  sanitizeMediaFilename,
+  streamBytes,
+} from "./upload.js";
+import { normalizeMediaMetadataPatch, sameFocalPoint, validatedTags } from "./metadata.js";
+import { toMediaView, validateDimensions } from "./projection.js";
 
 /** Portable orchestration for media policy and metadata lifecycle commands. */
 export class MediaUseCases {

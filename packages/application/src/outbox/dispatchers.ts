@@ -4,11 +4,8 @@ import {
   dispatcherRetryDelay,
   siteBuildRetryPolicy,
 } from "./retry-policy.js";
-import {
-  type Clock,
-  type DispatcherLeasePort,
-  type DispatcherRetryPolicy,
-} from "../ports/infrastructure.js";
+import type { Clock } from "../ports/infrastructure.js";
+import type { DispatcherLeasePort, DispatcherRetryPolicy } from "../ports/outbox.js";
 import { type MediaDeletionDispatchPort, type ObjectStorage } from "../ports/media.js";
 import {
   type SiteBuildDispatchPort,

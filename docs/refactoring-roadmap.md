@@ -128,7 +128,7 @@ What the roadmap changes, with the numbers to beat:
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
-| Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137, listed in a shrinking baseline; test-support always typed |
+| Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137 → RF4I: 136 → RF4H: 132, listed in a shrinking baseline; test-support always typed |
 | Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
@@ -728,16 +728,23 @@ passes; no source file in the session's package exceeds 1,000 lines.
 
 ### Session RF4H — Modules near the ceiling
 
-Splits production modules above about 700 lines before features push them over
-1,000: `application/configuration/evolution.ts` (787: structure diff,
-structure-hint validation, evidence accumulator), `application/content/use-cases.ts`
-(747), `application/media/use-cases.ts` (697: limits, MIME sniffing, filename,
-bytes, metadata patch, class), `content/fields/builders.ts` (736: builder,
-metadata, normalization) and `content/blocks/definition.ts` (697: settings,
-registry, migration). Also splits the catch-all `application/configuration/plan-support.ts`,
-moves the dispatcher lease port from `ports/infrastructure.ts` to an outbox
-port module and gives the configuration tests one typed fixture module.
-Behavior-preserving.
+Split the near-ceiling application and content modules without changing their
+public exports or behavior. Configuration owns `structure-diff`,
+`structure-hints`, `evidence`, model state, diagnostics, snapshot counts and
+plan results; dispatcher lease contracts move to `ports/outbox.ts`. Content use
+cases delegate draft validation and publication projection while retaining the
+per-instance visibility cache. Media separates types, upload, metadata, limits
+and projection from orchestration. Field scalar builders are independent of
+composite normalization, with metadata in its own module; blocks separate
+field normalization, settings, registry, migration, types and grammar. The
+vocabulary guards follow the new canonical settings and grammar owners.
+
+Typed configuration and media fixtures support the split tests; the four former
+`@ts-nocheck` test files leave the baseline (136 → 132). Existing titles and
+export names are unchanged. During typing, projection-only sync assertions
+were corrected to inspect `plan.isValid` and writes for actual operations;
+select-card field validation now passes its mode in the proper argument slot.
+The largest production file in the touched packages is below 1,000 lines.
 
 ### Session RF4I — Drizzle schema by domain
 
@@ -1065,16 +1072,15 @@ Corrections from the 2026-11-07 inventory:
 
 The boundary checker applies a 1,000-line ceiling with a shrinking baseline
 to test files. Tests above it split beside their modules: `platform-node`
-`index.test.ts` (1,600), `application` `configuration/evolution.test.ts`
-(1,369), `test-utils` `store/entries.test.ts` (1,328) and `store/media.test.ts`
-(1,166), `platform-cloudflare` `worker.test.ts` (1,183), `server`
+`index.test.ts` (1,600), `test-utils` `store/entries.test.ts` (1,328) and
+`store/media.test.ts` (1,166), `platform-cloudflare` `worker.test.ts` (1,183), `server`
 `routes/content.test.ts` (1,153), admin `admin-client.test.ts` (1,122) and
 `EntryPage.test.tsx` (1,082), `sdk` `published-site.test.ts` (1,096).
 
 ### Session RF9D — Type core package tests
 
-Removes `@ts-nocheck` from the remaining tests of `contracts` (27), `db` (19),
-`content` (12), `application` (12), `server` (9), `sdk` (2) and `astro`,
+Removes `@ts-nocheck` from the remaining tests of `contracts` (27), `db` (18),
+`content` (10), `application` (10), `server` (9), `sdk` (2) and `astro`,
 `mcp`, `render` (1 each), using the RF9B fixture layer.
 
 ### Session RF9E — Type platform tests
@@ -1159,3 +1165,5 @@ is empty.
 | 2026-11-07 | RF4I | `rf04i-drizzle-schema-by-domain` | Proposed (runs before RF4H, which the roadmap allows). `schema/tables.ts` splits into ten table modules plus `columns.ts` and `better-auth.ts`; `drizzle.config.ts` names them explicitly. Accepted when `pnpm db:check` reports no pending migration and `drizzle/` is unchanged. `OutboxRow` moves to `outbox/rows.ts`, the site-build event helpers to `builds/requests.ts`, and `shared/literal-like.ts` goes (the entry re-exports `literalLikePattern` by name). No spec delta (`skip_specs`). 7 tasks, not applied. |
 | 2026-11-07 | RF4I | `rf04i-drizzle-schema-by-domain` | Implemented, 7/7 tasks complete. `schema/tables.ts` became ten table modules (largest `oauth.ts`, 324 lines) plus `columns.ts` and `better-auth.ts`; `drizzle.config.ts` lists them. `pnpm db:check` passes with `drizzle/` unchanged; the export differs only in statement order. `check-drizzle-schema.mjs` now generates through a copied configuration, because the Drizzle Kit CLI accepts one `--schema` path. `OutboxRow` moved to `outbox/rows.ts`, the site-build event helpers to `builds/requests.ts`; `shared/literal-like.ts` is gone and its test is typed (`db` typecheck exceptions 19 → 18). Runtime keys and declaration names unchanged. Not archived. |
 | 2026-11-08 | RF4I | `rf04i-drizzle-schema-by-domain` | Archived at [`2026-11-08-rf04i-drizzle-schema-by-domain`](../openspec/changes/archive/2026-11-08-rf04i-drizzle-schema-by-domain/); 7/7 tasks complete. No delta spec (`skip_specs`). RF4H and RF4J remain in Step RF4. |
+| 2026-11-08 | RF4H | `rf04h-near-ceiling-module-splits` | Implemented the application and content module splits with typed test companions; typecheck exceptions 136 → 132. Runtime keys, declaration names and listed test titles match the baseline. Root build, typecheck, lint, formatting and tests pass; strict validation is recorded in the active change. |
+| 2026-11-08 | RF4H | `rf04h-near-ceiling-module-splits` | Archived at [`2026-11-08-rf04h-near-ceiling-module-splits`](../openspec/changes/archive/2026-11-08-rf04h-near-ceiling-module-splits/); 12/12 tasks complete. No delta specs (`skip_specs`). Verification remains in the archive. |

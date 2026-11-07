@@ -8,7 +8,7 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { DispatcherEventId, DispatcherLeaseId } from "../shared/brands.js";
-import type { DispatcherLease } from "./infrastructure.js";
+import type { DispatcherLease } from "./outbox.js";
 
 export interface SiteBuildRequest {
   readonly buildId: SiteBuildId;
