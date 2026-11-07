@@ -9,6 +9,9 @@ import {
 import type { ClassifiedError, ContractValidationIssue } from "@lacecms/contracts";
 import * as v from "valibot";
 
+// `HeadersInit` is a DOM name; Node-only consumers type-check this source too.
+type ResponseHeaders = ConstructorParameters<typeof Headers>[0];
+
 export type ServerSchema = v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
 export class AuthorizationError extends LaceError<"AUTHORIZATION_DENIED"> {
   public constructor(message?: string) {
@@ -38,7 +41,7 @@ export function response<Schema extends ServerSchema>(
   schema: Schema,
   value: unknown,
   status = 200,
-  headers?: HeadersInit,
+  headers?: ResponseHeaders,
 ): Response {
   return Response.json(parse(schema, value), {
     ...(headers === undefined ? {} : { headers }),
@@ -46,7 +49,7 @@ export function response<Schema extends ServerSchema>(
   });
 }
 
-export function errorResponse(error: ClassifiedError, headers?: HeadersInit): Response {
+export function errorResponse(error: ClassifiedError, headers?: ResponseHeaders): Response {
   const combined = new Headers(error.headers);
   new Headers(headers).forEach((value, key) => combined.set(key, value));
   return response(errorEnvelopeSchema, error.body, error.status, combined);

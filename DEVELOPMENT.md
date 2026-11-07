@@ -245,9 +245,13 @@ pnpm exec turbo run test:packaged --filter @lacecms/content
 ```
 
 `test:packaged` checks built public exports; invoke it through Turbo to build
-prerequisites, or run the package script directly after building. Shared Vitest
-aliases resolve public workspace imports to source only for source tests.
-`tsconfig.test.json` participates in package typechecking. Legacy test files
+prerequisites, or run the package script directly after building. Package
+manifests declare a first `@lacecms/source` export condition; the shared Vitest
+plugin (`vitest.shared.mjs`) and the admin test mode resolve workspace imports
+through it, and builds ignore it. `tsconfig.test.json` and
+`tsconfig.type-test.json` set `customConditions: ["@lacecms/source"]`, so test
+typecheck reads sibling sources without a build, and they participate in package
+typechecking. Legacy test files
 that still carry `@ts-nocheck` are listed in `scripts/test-typecheck-baseline.json`;
 the boundary checker rejects new exceptions and stale entries, and test-support
 modules are always type-checked.

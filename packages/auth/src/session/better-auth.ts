@@ -1,4 +1,4 @@
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
 import type { OAuthIssuancePersistence } from "@lacecms/application";
 import { APIError } from "better-auth/api";
 import { createMcpOAuthProvider } from "../mcp/oauth.js";
@@ -167,6 +167,8 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
               ? (settings: BetterAuthOptions) => guard.wrap(options.database(settings))
               : options.database,
             plugins: [
+              // Consumers type-check this source with exactOptionalPropertyTypes,
+              // which the provider's endpoint metadata types do not satisfy.
               createMcpOAuthProvider({
                 origin: input.origin,
                 production: input.production,
@@ -175,7 +177,7 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
                   (async () => {
                     throw new APIError("BAD_REQUEST", { error: "invalid_request" });
                   }),
-              }),
+              }) as BetterAuthPlugin,
             ],
             rateLimit: { enabled: false },
           });

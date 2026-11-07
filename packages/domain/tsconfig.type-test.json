@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.library.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "src"
+    "rootDir": "src",
+    "customConditions": ["@lacecms/source"]
   },
   "include": ["src/index.ts", "src/**/*.type-test.ts"]
 }

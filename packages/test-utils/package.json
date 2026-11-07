@@ -6,14 +6,17 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "@lacecms/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./visibility-parity": {
+      "@lacecms/source": "./src/visibility-parity.ts",
       "types": "./dist/visibility-parity.d.ts",
       "import": "./dist/visibility-parity.js"
     },
     "./filter-parity": {
+      "@lacecms/source": "./src/filter-parity.ts",
       "types": "./dist/filter-parity.d.ts",
       "import": "./dist/filter-parity.js"
     }

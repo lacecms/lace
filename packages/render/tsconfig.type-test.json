@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.library.json",
-  "compilerOptions": { "noEmit": true, "rootDir": "." },
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "customConditions": ["@lacecms/source"]
+  },
   "include": ["src/index.ts", "type-tests/*.type-test.ts"]
 }

@@ -218,9 +218,10 @@ Pending owner checks from the second audit (2026-11-05), not sessions:
    1–100, the range the server already enforced; a public collection slug
    over 100 characters returns `422` at `/slug`; four contracts `…Source`
    inputs became required), RF3F (an unexpected failure during setup
-   returns `500` instead of `404`) and RF3G (the exported contracts
+   returns `500` instead of `404`), RF3G (the exported contracts
    `jsonValueSchema` and `jsonObjectSchema` refuse an array with a named
-   property and accept a non-enumerable array element).
+   property and accept a non-enumerable array element) and RF9B (the
+   published `@lacecms/platform-node` no longer exports `./test`).
 10. Apply or withdraw the active `allow-supported-node-release-preparation`
     change (0/6 tasks since RF4C); keep pnpm pinned to `12.3.4` until then.
 
@@ -760,7 +761,8 @@ exception.
 ## Step RF5 — Runtime deduplication
 
 **Size:** L (three sessions). **Depends on:** RF4E (split `db`), RF2C (split
-contract suite).
+contract suite), RF9A–RF9B (tests resolve from source and share typed
+fixtures).
 
 **What:** Node and D1 share every read path and every row mapper; the write
 paths stay runtime-specific but their known semantic differences are either
@@ -1022,7 +1024,14 @@ resolve `@lacecms/*` to source instead of `dist/`, so `pnpm --filter
 @lacecms/app-admin test` passes on a clean checkout and test typecheck no
 longer needs a build. Owner decision 2026-11-05: a `source` export condition
 (with `customConditions` and Vitest `resolve.conditions`) replaces the alias
-table; the specification settles whether release preparation strips it.
+table. Settled by the specification (2026-11-07): release preparation strips
+the condition, so packed export maps stay exactly as today, and the boundary
+checker requires the condition on every `dist/` export. Owner decision
+2026-11-07 during apply: the condition is named `@lacecms/source`, because
+`eventsource` and `eventsource-parser` already declare a bare `source`
+condition that TypeScript and Vitest's forwarded Node `--conditions` would
+follow. Vitest applies it through a shared plugin for workspace specifiers
+only, and the admin adds that plugin in test mode only.
 
 ### Session RF9B — Typed fixture layer and helper consolidation
 
@@ -1035,6 +1044,17 @@ id fixtures and partial port fakes. Untyped `.mjs` helpers under `src/`
 `createTestActorResolver` moves out of the production `@lacecms/platform-node/test`
 subpath if no consumer needs it published. Turbo test inputs narrow once
 resolution follows dependency edges.
+
+Corrections from the 2026-11-07 inventory:
+
+- No test casts to a branded type; tests already call the domain
+  constructors. No id helper is added.
+- `content`, `domain`, `config`, `application` and `contracts` sit below
+  test-utils in the dependency graph. They keep package-local typed
+  test-support, and the shared layer serves the packages above test-utils.
+- Only repository tests use the test subpath. It becomes a source-only
+  export of the Node runtime harness and leaves the packed manifest.
+- The three CLI fixture `.mjs` modules move to RF9F.
 
 ### Session RF9C — Test size ceiling
 
@@ -1059,7 +1079,10 @@ After RF5: `platform-node` (12) and `platform-cloudflare` (12).
 ### Session RF9F — Type CLI, generator and app tests
 
 After RF7C: `cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder`
-(2). The typecheck baseline file is deleted when it is empty.
+(2). The CLI fixture modules (`import-fixtures.mjs`, `upgrade-fixtures.mjs`,
+`import-api.mjs`) become typed test-support and leave the RF9B
+JavaScript-source allowlist. The typecheck baseline file is deleted when it
+is empty.
 
 ## 6. Progress log
 
@@ -1122,3 +1145,7 @@ After RF7C: `cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder`
 | 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Proposed. Owner decision: the content portable-JSON rule is canonical. `@lacecms/content` exports a non-throwing check that shares one iterative walk with `normalizeJsonValue`. Contracts `jsonValueSchema` and `jsonObjectSchema` call it, and the contracts `isJsonValue` copy goes. Contracts then refuses an array with a named property and accepts a non-enumerable array element. Content normalization no longer overflows the stack on deeply nested values. Delta specs: `rest-contracts` (1 added), `field-descriptors` (1 modified). Not applied. |
 | 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Implemented, 6/6 tasks complete. One iterative walk in `content/shared/json.ts` backs `normalizeJsonValue` and the exported `isPortableJsonValue`. Messages, paths and first-failure order match the former recursive walk. Contracts `jsonValueSchema`, `jsonObjectSchema` and `isJsonObject` call it, and the contracts copy is deleted. The parity table (27 edges, including 100,000-level nesting) expects equal verdicts, and the vocabulary guard refuses a new `isJsonValue`. OpenAPI unchanged. Not archived. |
 | 2026-11-07 | RF3G | `rf03g-json-validator-parity` | Archived at [`2026-11-07-rf03g-json-validator-parity`](../openspec/changes/archive/2026-11-07-rf03g-json-validator-parity/); 6/6 tasks complete. Delta specs synchronized: `field-descriptors` (~1), `rest-contracts` (+1). Implementation and verification are preserved in the archive. Step RF3 is done. |
+| 2026-11-07 | RF9A | `rf09a-source-export-condition` | Proposed. Each package export into `dist/` gains a first `source` condition. Vitest enables it in client and server resolution and the admin only in test mode. Every `tsconfig.test.json`, `tsconfig.type-test.json` and the admin `tsconfig.json` set `customConditions`, so admin tests and test typecheck need no build. `workspaceAliases` and the extra admin typecheck builds go. Release preparation strips the condition, so packed export maps are unchanged. The boundary checker requires the condition. Delta specs: `workspace-governance` (~1), `alpha-release-artifacts` (~1). 10 tasks, not applied. |
+| 2026-11-07 | RF9B | `rf09b-typed-test-fixtures` | Proposed, depends on RF9A. test-utils `fixtures/` adds role actors, a delegated-actor builder and `fakePort`, a typed partial fake that names unimplemented calls. These replace three test-support actor copies and the server `SecurityService` casts. The D1 and worker-bundle harnesses become typed `test-support` modules; plain Node loads the D1 harness through type stripping. One Node runtime harness takes the source or compiled platform module and serves the product tests and `apps/api`. `@lacecms/platform-node/test` becomes source-only and leaves the packed manifest. A JavaScript-source allowlist guards `src/`, and Turbo test hashes follow dependency edges through a transit task. Corrections: no branded-id helper, and packages below test-utils keep local fixtures. Delta spec: `workspace-governance` (+2). 12 tasks, not applied. |
+| 2026-11-07 | RF9A | `rf09a-source-export-condition` | Implemented, 10/10 tasks complete. Owner decision during apply: the condition is `@lacecms/source`, because `eventsource` and `eventsource-parser` declare a bare `source` that TypeScript and Vitest's forwarded Node `--conditions` followed. Vitest resolves workspace specifiers through a shared `sourceCondition()` plugin built from the manifests (Vitest's default conditions stay untouched; registry components resolve without root dependencies); the admin adds it in test mode only and its production build is byte-identical. Test typecheck reads sibling sources: two type-only source fixes (`server` `HeadersInit`, an `auth` plugin assertion under `exactOptionalPropertyTypes`). The extra admin typecheck builds stay, because `e2e/block-order.e2e.ts` imports built output on purpose. Clean-checkout admin tests (1009) and every test and type-test project pass without `dist/`. |
+| 2026-11-07 | RF9A | `rf09a-source-export-condition` | Archived at [`2026-11-07-rf09a-source-export-condition`](../openspec/changes/archive/2026-11-07-rf09a-source-export-condition/); 10/10 tasks complete. Delta specs synchronized: `workspace-governance` (~1), `alpha-release-artifacts` (~1). RF9B next. |

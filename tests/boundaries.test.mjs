@@ -445,7 +445,13 @@ const declaredLayout = {
 const declaredSources = {
   "packages/content/package.json": JSON.stringify({
     name: "@lacecms/content",
-    exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
+    exports: {
+      ".": {
+        "@lacecms/source": "./src/index.ts",
+        types: "./dist/index.d.ts",
+        import: "./dist/index.js",
+      },
+    },
   }),
   "packages/content/src/index.ts":
     '// Directory dependencies: shared ← fields.\nexport * from "./fields/field.js";\n',
@@ -515,6 +521,89 @@ test.each([
     { ...declaredSources, ...files },
     { "source-layout.json": declaredLayout },
   );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
+function checkSourceConditionFixture(exports, sources = ["index.ts"]) {
+  const root = mkdtempSync(join(tmpdir(), "lace-source-condition-"));
+  try {
+    const directory = join(root, "packages", "content");
+    mkdirSync(join(directory, "src"), { recursive: true });
+    writeFileSync(
+      join(directory, "package.json"),
+      JSON.stringify({ name: "@lacecms/content", exports }),
+    );
+    for (const source of sources) writeFileSync(join(directory, "src", source), "export {};\n");
+    return spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("allows compiled exports that list their source condition first", () => {
+  const result = checkSourceConditionFixture(
+    {
+      ".": {
+        "@lacecms/source": "./src/index.ts",
+        types: "./dist/index.d.ts",
+        import: "./dist/index.js",
+      },
+      "./Box.astro": { "@lacecms/source": "./src/Box.astro", default: "./dist/Box.astro" },
+      "./schema.json": "./schema/schema.json",
+    },
+    ["index.ts", "Box.astro"],
+  );
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test.each([
+  [
+    "a missing condition",
+    { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
+    'source condition: @lacecms/content export "." has no @lacecms/source condition',
+  ],
+  [
+    "a string compiled export",
+    { "./Box.astro": "./dist/Box.astro" },
+    'source condition: @lacecms/content export "./Box.astro" has no @lacecms/source condition',
+  ],
+  [
+    "a condition that is not first",
+    {
+      ".": {
+        types: "./dist/index.d.ts",
+        "@lacecms/source": "./src/index.ts",
+        import: "./dist/index.js",
+      },
+    },
+    'source condition: @lacecms/content export "." must list @lacecms/source first',
+  ],
+  [
+    "a missing source file",
+    {
+      "./test": {
+        "@lacecms/source": "./src/test.ts",
+        types: "./dist/test.d.ts",
+        import: "./dist/test.js",
+      },
+    },
+    'source condition: @lacecms/content export "./test" names missing source ./src/test.ts',
+  ],
+  [
+    "a source file that does not match the target",
+    {
+      "./test": {
+        "@lacecms/source": "./src/index.ts",
+        types: "./dist/test.d.ts",
+        import: "./dist/test.js",
+      },
+    },
+    'source condition: @lacecms/content export "./test" names ./src/index.ts, but ./dist/test.d.ts is not built from it',
+  ],
+])("rejects %s", (_name, exports, message) => {
+  const result = checkSourceConditionFixture(exports);
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain(message);
 });

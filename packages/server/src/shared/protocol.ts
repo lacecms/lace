@@ -1,4 +1,5 @@
 /** The MCP and OAuth surface the gate and body limits apply to. */
+
 export const isMcpSurfacePath = (path: string) =>
   path === "/mcp" ||
   path.startsWith("/mcp/") ||
@@ -14,10 +15,13 @@ export function isProtocolErrorPath(path: string): boolean {
   return path === "/mcp" || path.startsWith("/api/auth/oauth2/");
 }
 
+// `HeadersInit` is a DOM name; Node-only consumers type-check this source too.
+type ResponseHeaders = ConstructorParameters<typeof Headers>[0];
+
 export function protocolErrorResponse(
   error: "invalid_request" | "server_error" | "temporarily_unavailable",
   status: number,
-  headers?: HeadersInit,
+  headers?: ResponseHeaders,
 ): Response {
   return Response.json({ error }, { status, ...(headers === undefined ? {} : { headers }) });
 }

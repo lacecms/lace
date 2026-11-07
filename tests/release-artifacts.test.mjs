@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
@@ -9,6 +9,7 @@ import {
   inspectPackage,
   safeSourcePath,
   snapshotSource,
+  withoutSourceCondition,
 } from "../scripts/release-artifacts.mjs";
 import { readJson, readReleaseModel } from "../scripts/release-model.mjs";
 import { prepareRelease } from "../scripts/release.mjs";
@@ -276,6 +277,65 @@ test("CLI import schema is a bounded JSON data export, never a compiled entry po
     await save();
     await writeFile(join(root, schemaExport), "not JSON");
     await expect(inspectPackage(root, release)).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("release preparation strips the source condition back to the published export maps", async () => {
+  const published = await readJson(new URL("./fixtures/release-export-maps.json", import.meta.url));
+  const packages = new URL("../packages/", import.meta.url);
+  const stripped = {};
+  for (const entry of (await readdir(packages, { withFileTypes: true })).filter((item) =>
+    item.isDirectory(),
+  )) {
+    const manifest = await readJson(new URL(`${entry.name}/package.json`, packages));
+    expect(JSON.stringify(manifest.exports)).toContain('"@lacecms/source"');
+    stripped[manifest.name] = withoutSourceCondition(manifest.exports);
+  }
+  expect(stripped).toEqual(published);
+  expect(JSON.stringify(stripped)).not.toContain("@lacecms/source");
+});
+
+test("a source condition left with only a default collapses to its target", () => {
+  const exports = {
+    ".": {
+      "@lacecms/source": "./src/index.ts",
+      types: "./dist/index.d.ts",
+      import: "./dist/index.js",
+    },
+    "./Box.astro": { "@lacecms/source": "./src/Box.astro", default: "./dist/Box.astro" },
+    "./data.json": "./schema/data.json",
+  };
+  expect(withoutSourceCondition(exports)).toEqual({
+    ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
+    "./Box.astro": "./dist/Box.astro",
+    "./data.json": "./schema/data.json",
+  });
+  expect(exports["./Box.astro"]).toHaveProperty("@lacecms/source");
+});
+
+test("archive inspection refuses an export that still points at source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lace-release-source-export-"));
+  try {
+    const manifest = {
+      name: "@lacecms/content",
+      version: "0.1.0-rc1",
+      exports: {
+        ".": {
+          "@lacecms/source": "./src/index.ts",
+          types: "./dist/index.d.ts",
+          import: "./dist/index.js",
+        },
+      },
+    };
+    await writeFile(join(root, "package.json"), JSON.stringify(manifest));
+    await mkdir(join(root, "dist"));
+    await writeFile(join(root, "dist/index.js"), "export {};\n");
+    await writeFile(join(root, "dist/index.d.ts"), "export {};\n");
+    await expect(
+      inspectPackage(root, { version: manifest.version, packages: ["content"] }),
+    ).rejects.toThrow("Invalid export path: @lacecms/content: ./src/index.ts");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

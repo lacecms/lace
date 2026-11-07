@@ -1,0 +1,121 @@
+{
+  "@lacecms/application": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/astro": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./LaceBlocks.astro": "./dist/LaceBlocks.astro",
+    "./LaceImage.astro": "./dist/LaceImage.astro",
+    "./LaceSeo.astro": "./dist/LaceSeo.astro",
+    "./RichText.astro": "./dist/RichText.astro"
+  },
+  "@lacecms/auth": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/cli": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./lace-import.schema.json": "./schema/lace-import.schema.json"
+  },
+  "@lacecms/config": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/content": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/contracts": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "create-lace": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/db": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/domain": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/mcp": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/platform-cloudflare": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/platform-node": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./test": {
+      "types": "./dist/test-actors.d.ts",
+      "import": "./dist/test-actors.js"
+    }
+  },
+  "@lacecms/render": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/sdk": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/server": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "@lacecms/test-utils": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./visibility-parity": {
+      "types": "./dist/visibility-parity.d.ts",
+      "import": "./dist/visibility-parity.js"
+    },
+    "./filter-parity": {
+      "types": "./dist/filter-parity.d.ts",
+      "import": "./dist/filter-parity.js"
+    }
+  }
+}

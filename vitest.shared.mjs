@@ -2,42 +2,53 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, mergeConfig } from "vitest/config";
 
-const sourcePath = (path) => fileURLToPath(new URL(path, import.meta.url));
+const packagesDirectory = new URL("./packages/", import.meta.url);
 
-export const workspaceAliases = [
-  ...readdirSync(new URL("./packages/", import.meta.url), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const manifest = JSON.parse(
-        readFileSync(new URL(`./packages/${entry.name}/package.json`, import.meta.url), "utf8"),
-      );
-      return {
-        find: new RegExp(`^${manifest.name}$`, "u"),
-        replacement: sourcePath(`./packages/${entry.name}/src/index.ts`),
-      };
-    }),
-  {
-    find: "@lacecms/test-utils/visibility-parity",
-    replacement: sourcePath("./packages/test-utils/src/visibility-parity.ts"),
-  },
-  {
-    find: "@lacecms/platform-node/test",
-    replacement: sourcePath("./packages/platform-node/src/test-actors.ts"),
-  },
-  {
-    find: /^@lacecms\/astro\/(\w+\.astro)$/u,
-    replacement: `${sourcePath("./packages/astro/src/")}$1`,
-  },
-  {
-    find: "@lacecms/cli/lace-import.schema.json",
-    replacement: sourcePath("./packages/cli/schema/lace-import.schema.json"),
-  },
-];
+export const sourceConditionName = "@lacecms/source";
+
+// Each workspace package declares a first `@lacecms/source` export condition
+// naming the TypeScript module its compiled target is built from. Source tests
+// resolve workspace specifiers through it, whatever the importer's location
+// (registry components live outside any package). Vite's and Vitest's default
+// conditions stay untouched; Vitest forwards server conditions to its workers
+// as Node `--conditions`.
+function workspaceSourceExports() {
+  const entries = new Map();
+  for (const entry of readdirSync(packagesDirectory, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const directory = new URL(`${entry.name}/`, packagesDirectory);
+    const manifest = JSON.parse(readFileSync(new URL("package.json", directory), "utf8"));
+    for (const [key, target] of Object.entries(manifest.exports ?? {})) {
+      if (
+        typeof target !== "object" ||
+        target === null ||
+        typeof target[sourceConditionName] !== "string"
+      ) {
+        continue;
+      }
+      const specifier = key === "." ? manifest.name : `${manifest.name}${key.slice(1)}`;
+      entries.set(specifier, fileURLToPath(new URL(target[sourceConditionName], directory)));
+    }
+  }
+  return entries;
+}
+
+/** Vite plugin that resolves workspace packages through their `@lacecms/source` condition. */
+export function sourceCondition() {
+  const entries = workspaceSourceExports();
+  return {
+    name: "lace:source-condition",
+    enforce: "pre",
+    resolveId(id) {
+      return entries.get(id) ?? null;
+    },
+  };
+}
 
 export function sharedTestConfig(extra = {}) {
   return mergeConfig(
     defineConfig({
-      resolve: { alias: workspaceAliases },
+      plugins: [sourceCondition()],
       test: { include: ["src/**/*.test.ts"] },
     }),
     extra,

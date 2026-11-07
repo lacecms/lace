@@ -14,10 +14,12 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "@lacecms/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./test": {
+      "@lacecms/source": "./src/test-actors.ts",
       "types": "./dist/test-actors.d.ts",
       "import": "./dist/test-actors.js"
     }

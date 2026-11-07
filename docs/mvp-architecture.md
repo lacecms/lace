@@ -417,6 +417,10 @@ subdirectory `index` modules, root modules that are not manifest entries and
 entry headers whose `Directory dependencies:` line names other directories.
 Test files may disable type checking only while listed in the shrinking
 `scripts/test-typecheck-baseline.json`; test-support modules never may.
+Every `packages/*` export into `dist/` lists the `@lacecms/source` condition
+first, naming the source module its target is built from; the checker rejects
+a missing, misplaced or mismatched condition, and release preparation strips
+it from packed manifests.
 See [ADR 0020](adr/0020-source-layout.md).
 
 ## 7. Generated user project
@@ -3688,11 +3692,17 @@ See `docs/documentation-maintenance.md` for public/internal topic ownership.
 ### Source tests and packaged output
 
 Package `test` tasks run TypeScript tests against source without a build.
-`vitest.shared.mjs` provides source aliases for workspace package specifiers and
-subpath exports; tests use public package specifiers for other Lace packages.
-`tsconfig.test.json` includes tests and test-support modules in `typecheck`, and
-`test:watch` re-runs tests on save. Astro component tests use the source components
-through Astro's Vite configuration.
+Each package manifest declares a first `@lacecms/source` export condition for
+every compiled export, including subpaths. The `sourceCondition()` plugin in
+`vitest.shared.mjs` resolves workspace package specifiers through it for every
+package and app test, and the admin Vite configuration adds it in test mode only;
+builds, development servers and packaged tests keep `dist/`. Tests use public
+package specifiers for other Lace packages. `tsconfig.test.json`,
+`tsconfig.type-test.json` and the admin project set
+`customConditions: ["@lacecms/source"]`, so test typecheck reads sibling sources
+and needs no build. They include tests and test-support modules in `typecheck`,
+and `test:watch` re-runs tests on save. Astro component tests use the source
+components through Astro's Vite configuration.
 
 Built exports are checked separately by `*.packaged.test.mjs` under
 `test:packaged`, whose Turbo task depends on the package and dependency builds.

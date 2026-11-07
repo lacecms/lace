@@ -555,6 +555,49 @@ function manifestEntrySources(member) {
   );
 }
 
+const sourceCondition = "@lacecms/source";
+
+/**
+ * Every `packages/*` export into `dist/` lists `@lacecms/source` first, naming
+ * the existing source module that the compiled target is built from.
+ */
+function checkSourceConditions(members) {
+  for (const member of members) {
+    if (basename(dirname(member.directory)) !== "packages") continue;
+    const manifest = JSON.parse(readFileSync(join(member.directory, "package.json"), "utf8"));
+    for (const [key, value] of Object.entries(manifest.exports ?? {})) {
+      const conditions = typeof value === "string" ? { default: value } : (value ?? {});
+      const compiled = Object.entries(conditions).filter(
+        ([condition, target]) =>
+          condition !== sourceCondition &&
+          typeof target === "string" &&
+          target.startsWith("./dist/"),
+      );
+      if (compiled.length === 0) continue;
+      const where = `${manifest.name} export "${key}"`;
+      const source = typeof value === "string" ? undefined : value[sourceCondition];
+      if (typeof source !== "string") {
+        throw new Error(`source condition: ${where} has no ${sourceCondition} condition`);
+      }
+      if (Object.keys(value)[0] !== sourceCondition) {
+        throw new Error(`source condition: ${where} must list ${sourceCondition} first`);
+      }
+      if (!existsSync(join(member.directory, source))) {
+        throw new Error(`source condition: ${where} names missing source ${source}`);
+      }
+      const sourceBase = /^\.\/src\/(.+)\.(?:tsx?|astro)$/u.exec(source)?.[1];
+      for (const [, target] of compiled) {
+        const targetBase = /^\.\/dist\/(.+?)(?:\.d\.ts|\.js|\.astro)$/u.exec(target)?.[1];
+        if (sourceBase === undefined || sourceBase !== targetBase) {
+          throw new Error(
+            `source condition: ${where} names ${source}, but ${target} is not built from it`,
+          );
+        }
+      }
+    }
+  }
+}
+
 /** Directory names on the entry's `// Directory dependencies:` comment lines. */
 function headerDirectories(entryText) {
   const lines = entryText.split("\n");
@@ -719,6 +762,7 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
   const moduleGraphs = new Map(members.map((member) => [member, memberModuleGraph(member)]));
   checkModuleCycles(rootDirectory, moduleGraphs.values());
   checkSourceLayout(rootDirectory, members, moduleGraphs);
+  checkSourceConditions(members);
 }
 
 if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
