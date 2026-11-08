@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
 test("packaged entry point keeps its public exports", async () => {
@@ -44,8 +46,12 @@ test("packaged entry point keeps its public exports", async () => {
   ]);
 });
 
-test("packaged test subpath keeps its public exports", async () => {
-  expect(Object.keys(await import("@lacecms/platform-node/test")).sort()).toEqual([
-    "createTestActorResolver",
-  ]);
+test("the test subpath is not exported outside the source condition", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", 'await import("@lacecms/platform-node/test");'],
+    { cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8" },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("ERR_PACKAGE_PATH_NOT_EXPORTED");
 });

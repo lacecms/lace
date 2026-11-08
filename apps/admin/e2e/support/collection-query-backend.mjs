@@ -23,7 +23,7 @@ import {
   openNodeDatabase,
 } from "../../../../packages/platform-node/dist/index.js";
 import { D1ContentRepository } from "../../../../packages/platform-cloudflare/dist/index.js";
-import { openLocalD1 } from "../../../../packages/platform-cloudflare/src/d1-test-harness.mjs";
+import { openLocalD1 } from "../../../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 
 export async function startCollectionQueryBackend(kind) {
   const directory = await mkdtemp(resolve(tmpdir(), "lace-cq-browser-"));

@@ -101,13 +101,17 @@ if (existsSync(${JSON.stringify(pause)})) {await fs.writeFile(${JSON.stringify(c
       served.closeAllConnections();
       served.close(done);
     });
-    for (const value of children) {
-      try {
-        process.kill(-value.child.pid, "SIGKILL");
-      } catch (error) {
-        if (error.code !== "ESRCH") throw error;
-      }
-      await value.exited;
-    }
+    await stopChildren(children);
   }
 }, 30000);
+
+async function stopChildren(children) {
+  for (const value of children) {
+    try {
+      process.kill(-value.child.pid, "SIGKILL");
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+    await value.exited;
+  }
+}

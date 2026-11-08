@@ -3,7 +3,7 @@
 import { expect, test, vi } from "vitest";
 import { definePage, defineConfig } from "@lacecms/config";
 import { defineCollection } from "@lacecms/config";
-import { unixMilliseconds } from "@lacecms/domain";
+import { DomainError, StaleSynchronizationError, unixMilliseconds } from "@lacecms/domain";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import {
   openNodeDatabase,
   runLocalContentSync,
 } from "@lacecms/platform-node";
-import { loadProjectConfig } from "./project-config.js";
+import { loadProjectConfig } from "./config/project-config.js";
 
 const config = await defineConfig({
   content: [definePage({ key: "home", path: "/", version: 1 })],
@@ -63,9 +63,20 @@ test("invalid and stale plans report recovery without a successful apply", async
   expect(value.target.applyConfigurationSynchronization).not.toHaveBeenCalled();
 
   const stale = fixture();
-  stale.target.applyConfigurationSynchronization.mockRejectedValueOnce(new Error("plan is stale"));
+  // The command tests the code, so a reworded message keeps its guidance.
+  stale.target.applyConfigurationSynchronization.mockRejectedValueOnce(
+    new StaleSynchronizationError("Stored models changed after review."),
+  );
   expect(await runLocalContentSync({ ...stale.input, check: false })).toBe(1);
   expect(stale.messages.at(-1)).toContain("Rerun pnpm content:sync");
+});
+
+test("an invalid-content failure that mentions staleness is not reported as a stale plan", async () => {
+  const value = fixture();
+  const failure = new DomainError("CONTENT_INVALID_STATE", "A stale value is invalid.");
+  value.target.applyConfigurationSynchronization.mockRejectedValueOnce(failure);
+  await expect(runLocalContentSync({ ...value.input, check: false })).rejects.toBe(failure);
+  expect(value.messages.join("\n")).not.toContain("Rerun pnpm content:sync");
 });
 
 test("local flow syncs migrated SQLite once, changes safely, and preserves blocked or check state", async () => {

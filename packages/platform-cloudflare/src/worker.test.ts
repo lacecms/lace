@@ -14,7 +14,7 @@ import {
   parseCloudflareSettings,
   producesDispatchWork,
 } from "./index.js";
-import { countingD1 } from "./d1-test-harness.mjs";
+import { countingD1 } from "./test-support/d1-test-harness.js";
 import { animatedGifFixture, readCompleteBuildExport } from "@lacecms/test-utils";
 
 const cleanups = [];

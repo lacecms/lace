@@ -1,7 +1,7 @@
 import { createNodeRuntime, parseNodeRuntimeSettings } from "@lacecms/platform-node";
-import { startNodeServer } from "./node-server.js";
-import { loadProjectConfig } from "./project-config.js";
-import { createNodeAdminAssets } from "./admin-assets.js";
+import { startNodeServer } from "./server/node-server.js";
+import { loadProjectConfig } from "./config/project-config.js";
+import { createNodeAdminAssets } from "./server/admin-assets.js";
 
 async function main(): Promise<void> {
   const settings = parseNodeRuntimeSettings(process.env);

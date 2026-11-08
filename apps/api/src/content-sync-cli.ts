@@ -6,7 +6,7 @@ import {
   openNodeDatabase,
   runLocalContentSync,
 } from "@lacecms/platform-node";
-import { loadProjectConfig } from "./project-config.js";
+import { loadProjectConfig } from "./config/project-config.js";
 
 async function main(): Promise<number> {
   const args = process.argv.slice(2);

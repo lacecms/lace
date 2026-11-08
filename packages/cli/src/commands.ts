@@ -8,6 +8,7 @@ import {
   prepareConfigurationSynchronization,
 } from "@lacecms/application";
 import type { NormalizedContentModel } from "@lacecms/config";
+import { CONFIGURATION_SYNC_STALE, LaceError } from "@lacecms/contracts";
 import { D1ContentRepository, D1SecurityService } from "@lacecms/platform-cloudflare";
 import type { D1Database } from "@lacecms/platform-cloudflare";
 import {
@@ -142,7 +143,7 @@ async function sync(
       target,
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("stale"))
+    if (error instanceof LaceError && error.code === CONFIGURATION_SYNC_STALE)
       throw new CliError(
         "OPERATION_FAILED",
         "Synchronization stopped because stored content changed; rerun `lace content sync` to complete it.",
@@ -170,7 +171,8 @@ async function bootstrapToken<T>(create: () => Promise<T>): Promise<T> {
   try {
     return await create();
   } catch (error) {
-    if (error instanceof Error && error.message === "Setup already completed.")
+    // Issuing a setup token fails as not found only once setup has completed.
+    if (error instanceof LaceError && error.code === "NOT_FOUND")
       throw new CliError(
         "OPERATION_FAILED",
         "First-administrator setup has already completed.",

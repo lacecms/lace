@@ -812,9 +812,7 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       );
       return parse(
         linkTargetPageSchema,
-        await request(fetcher, `/api/v1/admin/link-targets?${search}`, {
-          ...(signal === undefined ? {} : { signal }),
-        }),
+        await request(fetcher, `/api/v1/admin/link-targets?${search}`, signal ? { signal } : {}),
       );
     },
     resolveLinkTargets: async (ids: readonly string[], signal?: AbortSignal) =>
@@ -842,7 +840,7 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
         await request(
           fetcher,
           `/api/v1/admin/entries/${encodeURIComponent(entryId)}/link-impact?${search}`,
-          { ...(signal === undefined ? {} : { signal }) },
+          signal === undefined ? {} : { signal },
         ),
       );
     },

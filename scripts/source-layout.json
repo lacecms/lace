@@ -1,0 +1,101 @@
+{
+  "packages/application": {
+    "shared": [],
+    "ports": ["shared"],
+    "accounts": ["ports", "shared"],
+    "builds": ["ports", "shared"],
+    "configuration": ["ports", "shared"],
+    "content": ["ports", "shared"],
+    "media": ["ports", "shared"],
+    "outbox": ["ports", "shared"]
+  },
+  "packages/auth": {
+    "shared": [],
+    "import": ["shared"],
+    "mcp": [],
+    "session": ["mcp", "shared"]
+  },
+  "packages/config": {
+    "shared": [],
+    "models": ["shared"],
+    "structure": ["models", "shared"],
+    "configuration": ["models", "shared", "structure"]
+  },
+  "packages/content": {
+    "shared": [],
+    "fields": ["shared"],
+    "references": ["fields", "shared"],
+    "blocks": ["fields", "shared"],
+    "entries": ["blocks", "fields", "references", "shared"]
+  },
+  "packages/contracts": {
+    "shared": [],
+    "accounts": ["shared"],
+    "builds": ["shared"],
+    "content": ["shared"],
+    "errors": ["shared"],
+    "openapi": ["shared"],
+    "settings": ["accounts", "shared"],
+    "media": ["content", "shared"],
+    "delivery": ["content", "errors", "media", "shared"]
+  },
+  "packages/domain": {
+    "shared": [],
+    "access": ["shared"],
+    "media": ["shared"],
+    "builds": ["shared"],
+    "content": ["access", "shared"]
+  },
+  "packages/db": {
+    "shared": [],
+    "schema": ["shared"],
+    "security": ["shared"],
+    "links": ["shared"],
+    "publication": ["links", "shared"],
+    "sync": ["links", "shared"],
+    "content": ["shared"],
+    "media": ["content", "shared"],
+    "delivery": ["content", "media", "shared"],
+    "builds": ["content", "delivery", "media", "shared"],
+    "outbox": []
+  },
+  "packages/server": {
+    "shared": [],
+    "runtime": ["shared"],
+    "security": ["shared"],
+    "composition": ["runtime", "security", "shared"],
+    "routes": ["composition", "runtime", "security", "shared"],
+    "app": ["composition", "routes", "runtime", "security", "shared"]
+  },
+  "packages/test-utils": {
+    "shared": [],
+    "adapters": ["shared"],
+    "fixtures": [],
+    "delivery": [],
+    "errors": [],
+    "visibility": [],
+    "filters": [],
+    "store": ["fixtures", "shared"],
+    "repository-contract": ["delivery", "fixtures", "visibility"],
+    "security-contract": ["repository-contract"]
+  },
+  "packages/sdk": {
+    "client": [],
+    "site": ["client"]
+  },
+  "packages/create-lace": {
+    "site": [],
+    "template": ["site"],
+    "generator": ["site", "template"],
+    "cli": ["generator", "site"]
+  },
+  "apps/api": {
+    "config": [],
+    "dispatch": [],
+    "server": []
+  },
+  "apps/builder": {
+    "runner": [],
+    "server": ["runner"]
+  }
+}

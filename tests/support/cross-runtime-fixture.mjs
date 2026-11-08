@@ -11,8 +11,8 @@ const { applyPreparedConfigurationSynchronization, prepareConfigurationSynchroni
   application;
 const { createNodeRuntime, migrateNodeDatabase, parseNodeRuntimeSettings } = node;
 const { createCloudflareWorker } = cloudflare;
-import { openLocalCloudflare } from "../../packages/platform-cloudflare/src/d1-test-harness.mjs";
-import { createNodeAdminAssets } from "../../apps/api/dist/admin-assets.js";
+import { openLocalCloudflare } from "../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
+import { createNodeAdminAssets } from "../../apps/api/dist/server/admin-assets.js";
 import rootConfig from "../../lace.config.ts";
 
 const exec = promisify(execFile);

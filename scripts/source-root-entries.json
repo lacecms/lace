@@ -1,0 +1,8 @@
+{
+  "apps/api/src/cloudflare-local.ts": "Local Cloudflare preparation, run as node apps/api/dist/cloudflare-local.js by scripts/cloudflare.mjs.",
+  "apps/api/src/content-sync-cli.ts": "Operator content sync, run as node apps/api/dist/content-sync-cli.js in the API container and by scripts/dev-stack.mjs.",
+  "apps/api/src/dev.ts": "Node development server, started by the apps/api dev script.",
+  "apps/api/src/dispatcher.ts": "Outbox dispatcher process, the dispatcher service command in docker-compose.yml and the generated project.",
+  "apps/api/src/production.ts": "Production API process, the apps/api Dockerfile CMD.",
+  "apps/builder/src/main.ts": "Builder process, started by the apps/builder start script and Dockerfile."
+}

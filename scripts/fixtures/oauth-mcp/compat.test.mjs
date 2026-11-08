@@ -18,7 +18,7 @@ import {
   openLocalD1,
   migrationStatements,
   countingD1,
-} from "../../../packages/platform-cloudflare/src/d1-test-harness.mjs";
+} from "../../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 
 const authRequire = createRequire(new URL("../../../packages/auth/package.json", import.meta.url));
 const platformRequire = createRequire(
@@ -1006,6 +1006,8 @@ for (const runtime of ["SQLite", "D1"]) {
       { redirect_uris: ["javascript:alert(1)"] },
       { redirect_uris: Array(6).fill("https://client.test/cb") },
       { client_name: "x".repeat(121) },
+      { client_name: "Local\u0007assistant" },
+      { client_name: "Local\u007fassistant" },
       { grant_types: ["client_credentials"] },
       { response_types: ["token"] },
       { token_endpoint_auth_method: "client_secret_basic" },

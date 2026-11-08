@@ -33,15 +33,31 @@
       "dependsOn": ["^lint"],
       "outputs": []
     },
+    "test:transit": {
+      "dependsOn": ["^test:transit"]
+    },
     "test": {
-      "dependsOn": [],
+      "dependsOn": ["test:transit"],
+      "outputs": []
+    },
+    "@lacecms/astro#test": {
+      "dependsOn": ["test:transit"],
       "outputs": [],
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/*/src/**",
-        "$TURBO_ROOT$/packages/*/package.json",
-        "$TURBO_ROOT$/registry/**"
+        "$TURBO_ROOT$/registry/**",
+        "$TURBO_ROOT$/apps/site/src/fixtures/**"
       ]
+    },
+    "@lacecms/platform-cloudflare#test": {
+      "dependsOn": ["test:transit"],
+      "outputs": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/lace.config.ts"]
+    },
+    "@lacecms/app-api#test": {
+      "dependsOn": ["test:transit"],
+      "outputs": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/lace.config.ts"]
     },
     "@lacecms/app-docs#build": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/openapi/api-v1.json"],
@@ -49,15 +65,33 @@
     },
     "test:packaged": {
       "dependsOn": ["build", "^build"],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
     },
     "@lacecms/platform-node#test:packaged": {
       "dependsOn": ["build", "^build", "@lacecms/astro#build"],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
     },
     "@lacecms/platform-cloudflare#test:packaged": {
       "dependsOn": ["build", "^build", "@lacecms/astro#build"],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
     }
   },
   "globalDependencies": ["vitest.shared.mjs"]

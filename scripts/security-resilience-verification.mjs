@@ -4,7 +4,14 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runPhases, assertExecutedTests } from "./cross-runtime-verification.mjs";
+import {
+  assertExecutedTests,
+  packageRun,
+  rootRun,
+  runPhaseSteps,
+  runPhases,
+  vitestPhase,
+} from "./cross-runtime-verification.mjs";
 
 export async function ownedCommand(command, args, { signal, env = {} } = {}) {
   await new Promise((done, reject) => {
@@ -59,10 +66,11 @@ export async function executeRequiredPhases(phases, run, save) {
     phases,
     async (phase) => {
       assert.ok(
-        phase.name && (phase.run || (phase.command && phase.args)),
+        phase.name && (phase.run || phase.steps || (phase.command && phase.args)),
         "required phase is unavailable",
       );
-      await run(phase);
+      if (phase.steps) await runPhaseSteps(phase, run);
+      else await run(phase);
       if (phase.testReport)
         assertExecutedTests(JSON.parse(await readFile(phase.testReport, "utf8")));
     },
@@ -82,22 +90,7 @@ export async function main() {
     node: process.version,
     pnpm: execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim(),
   };
-  const phase = (name, args) => ({
-    name,
-    command: "pnpm",
-    args: [
-      "exec",
-      "vitest",
-      "run",
-      ...args,
-      "--exclude=.release-artifacts/**",
-      "--exclude=.lace-acceptance/**",
-      "--reporter=default",
-      "--reporter=json",
-      `--outputFile=${join(output, name + ".json")}`,
-    ],
-    testReport: join(output, name + ".json"),
-  });
+  const phase = (name, runs, extraArgs) => vitestPhase(output, name, runs, extraArgs);
   const phases = [
     {
       name: "local-prerequisites",
@@ -129,54 +122,69 @@ export async function main() {
         "--output-logs=errors-only",
       ],
     },
-    phase("security", [
-      "tests/security-boundary.test.mjs",
-      "tests/cli-database-safety.test.mjs",
-      "tests/consumer-security.test.mjs",
-      "packages/auth/src",
-      "packages/platform-node/src/client-address.test.mjs",
-      "packages/platform-node/src/host-database-safety.test.mjs",
-      "packages/platform-node/src/image-inspector.test.mjs",
-      "packages/platform-cloudflare/src/image-inspector.test.mjs",
-      "packages/test-utils/src/index.test.mjs",
-      "packages/platform-node/src/index.test.mjs",
-      "packages/render/src",
-      "apps/builder/src/runner.test.mjs",
-      "--maxWorkers=2",
-    ]),
-    phase("repositories", [
-      "packages/platform-node/src/repository-contract.test.mjs",
-      "packages/platform-cloudflare/src/repository-contract.test.mjs",
-      "packages/platform-node/src/security-contract.test.mjs",
-      "packages/platform-cloudflare/src/security-contract.test.mjs",
-      "tests/durable-restart.test.mjs",
-      "--maxWorkers=2",
-    ]),
-    phase("provider", [
-      "packages/platform-cloudflare/src/deploy-hook.test.mjs",
-      "packages/platform-cloudflare/src/pages-deployments.test.mjs",
-      "packages/platform-cloudflare/src/worker.test.mjs",
-      "packages/application/src/index.test.mjs",
-      "--maxWorkers=2",
-    ]),
+    phase(
+      "security",
+      [
+        rootRun(
+          "tests/security-boundary.test.mjs",
+          "tests/cli-database-safety.test.mjs",
+          "tests/consumer-security.test.mjs",
+        ),
+        packageRun("packages/auth/src"),
+        packageRun(
+          "packages/platform-node/src/client-address.test.ts",
+          "packages/platform-node/src/host-database-safety.test.ts",
+          "packages/platform-node/src/image-inspector.test.ts",
+          "packages/platform-node/src/index.test.ts",
+        ),
+        packageRun("packages/platform-cloudflare/src/image-inspector.test.ts"),
+        packageRun("packages/test-utils/src/index.test.ts"),
+        packageRun("packages/render/src"),
+        packageRun("apps/builder/src/runner/runner.test.ts"),
+      ],
+      ["--maxWorkers=2"],
+    ),
+    phase(
+      "repositories",
+      [
+        packageRun(
+          "packages/platform-node/src/repository-contract.test.ts",
+          "packages/platform-node/src/security-contract.test.ts",
+        ),
+        packageRun(
+          "packages/platform-cloudflare/src/repository-contract.test.ts",
+          "packages/platform-cloudflare/src/security-contract.test.ts",
+        ),
+        rootRun("tests/durable-restart.test.mjs"),
+      ],
+      ["--maxWorkers=2"],
+    ),
+    phase(
+      "provider",
+      [
+        packageRun(
+          "packages/platform-cloudflare/src/deploy-hook.test.ts",
+          "packages/platform-cloudflare/src/pages-deployments.test.ts",
+          "packages/platform-cloudflare/src/worker.test.ts",
+        ),
+        packageRun(
+          "--packaged",
+          "packages/platform-cloudflare/src/worker-assets.packaged.test.mjs",
+          "packages/platform-cloudflare/src/worker-internal-links.packaged.test.mjs",
+        ),
+        packageRun("packages/application/src"),
+      ],
+      ["--maxWorkers=2"],
+    ),
     { name: "compose-host-safety", command: "node", args: ["scripts/compose-database-safety.mjs"] },
     phase("storage-and-admin-recovery", [
-      "--config",
-      "vitest.verification.config.mjs",
-      "--project",
-      "resilience",
+      rootRun("--config", "vitest.verification.config.mjs", "--project", "resilience"),
     ]),
     phase("static-secret-exclusion", [
-      "--config",
-      "vitest.verification.config.mjs",
-      "--project",
-      "security-static",
+      rootRun("--config", "vitest.verification.config.mjs", "--project", "security-static"),
     ]),
     phase("d1-http-budgets", [
-      "--config",
-      "vitest.verification.config.mjs",
-      "--project",
-      "d1-budgets",
+      rootRun("--config", "vitest.verification.config.mjs", "--project", "d1-budgets"),
     ]),
     {
       name: "dependency-audit",

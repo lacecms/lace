@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { configurationSyncSnapshotRewriteStatements } from "@lacecms/db";
-import { openLocalD1 } from "./d1-test-harness.mjs";
+import { openLocalD1 } from "./test-support/d1-test-harness.js";
 test("bulk nested rewrites fit one guarded D1 batch and roll back failures", async () => {
   const { database: db, dispose } = await openLocalD1();
   const count = 251;

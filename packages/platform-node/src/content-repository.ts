@@ -6,7 +6,7 @@ import {
 } from "@lacecms/db";
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
-import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import { MAX_PAGE_SIZE, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
@@ -142,6 +142,7 @@ import {
   configurationSyncSnapshotRewriteStatements,
   SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
+  staleSynchronizationPlan,
   syncMigrationPage,
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
@@ -417,9 +418,8 @@ export class NodeContentRepository
           !sameStoredModelStates(input.expectedStoredModels, current) ||
           renderConfigurationSyncPlanJson(input.plan) !==
             renderConfigurationSyncPlanJson(actualPlan)
-        ) {
-          failure("Configuration synchronization plan is stale.");
-        }
+        )
+          staleSynchronizationPlan();
         if (!actualPlan.requiresApply) {
           return Object.freeze({ operations: Object.freeze([]), status: "noop" as const });
         }
@@ -505,7 +505,7 @@ export class NodeContentRepository
                 expected.structureHash,
                 expected.projectionHash,
               );
-            if (removed.changes !== 1) failure("Configuration synchronization plan is stale.");
+            if (removed.changes !== 1) staleSynchronizationPlan();
             continue;
           }
           if (
@@ -544,7 +544,7 @@ export class NodeContentRepository
               expected.structureHash,
               expected.projectionHash,
             );
-          if (updated.changes !== 1) failure("Configuration synchronization plan is stale.");
+          if (updated.changes !== 1) staleSynchronizationPlan();
           if (
             (operation.action === "version-update" || operation.action === "rename") &&
             operation.evolution?.recursiveFields
@@ -1830,7 +1830,7 @@ export class NodeContentRepository
   }
 
   public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {
-    const bounded = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const bounded = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.trunc(limit)));
     const rows = this.connection
       .prepare("select * from site_builds order by requested_at desc, id desc limit ?")
       .all(bounded) as SiteBuildRow[];
@@ -1878,7 +1878,7 @@ export class NodeContentRepository
     readonly limit: number;
     readonly now: import("@lacecms/domain").UnixMilliseconds;
   }): Promise<readonly SiteBuildWorkLease[]> {
-    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > MAX_PAGE_SIZE)
       throw new TypeError("Build claim limit is invalid.");
     try {
       return this.connection.transaction(() => {

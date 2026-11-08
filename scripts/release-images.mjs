@@ -30,12 +30,12 @@ const apiSmoke = `
   const root = '/opt/lace/workspace';
   const node = await import('@lacecms/platform-node');
   if (node.migrateNodeDatabase(':memory:').length === 0) throw new Error('Missing migrations');
-  const { loadProjectConfig } = await import(root + '/apps/api/dist/project-config.js');
+  const { loadProjectConfig } = await import(root + '/apps/api/dist/config/project-config.js');
   if (!(await loadProjectConfig()).content.length) throw new Error('Config loading failed');
-  await import(root + '/apps/api/dist/node-server.js');
+  await import(root + '/apps/api/dist/server/node-server.js');
   createRequire(await realpath(root + '/packages/platform-node/src/minio-init.mjs')).resolve('@aws-sdk/client-s3');
   for (const path of ['apps/api/dist/production.js','apps/api/dist/dispatcher.js','packages/platform-node/dist/migrate.js','packages/platform-node/src/minio-init.mjs']) await readFile(root + '/' + path);
-  const { createNodeAdminAssets } = await import(root + '/apps/api/dist/admin-assets.js');
+  const { createNodeAdminAssets } = await import(root + '/apps/api/dist/server/admin-assets.js');
   const assets = createNodeAdminAssets(root + '/apps/admin/dist');
   const server = createServer(async (request,response) => {
     const result = await assets.fetch(new Request('http://localhost' + request.url));

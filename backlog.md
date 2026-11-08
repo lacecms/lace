@@ -6,8 +6,10 @@
   against source → RF3 shared vocabulary (types, constants, rules) → RF4
   module splits → RF5 runtime deduplication → RF6 admin editor structure →
   RF7 CLI and scripts → RF8 documentation. Behavior-preserving sessions carry
-  no delta specs. No OpenSpec change created yet; each session gets its own
-  just-in-time proposal.
+  no delta specs. Each session gets its own just-in-time OpenSpec change;
+  RF1–RF3 and RF4A–RF4E are archived, and RF4X (workspace guards) was inserted
+  before RF4F after an audit of the completed sessions. Progress is tracked in
+  the roadmap's progress log.
 
 - **Site migration roadmap (implemented, archived 2026-11-01):** SM1–SM5
   (twelve sessions) delivered and merged in lacecms/lace#63; every change is

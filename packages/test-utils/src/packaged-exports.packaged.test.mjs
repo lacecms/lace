@@ -15,17 +15,26 @@ test("packaged entry point keeps its public exports", async () => {
     "REVERT_CHECKPOINTS",
     "SECURITY_CONTRACT_EPOCH",
     "UNPUBLICATION_CHECKPOINTS",
+    "admin",
+    "allowAllRateLimiter",
     "animatedGifFixture",
     "assertAtomicCheckpoints",
     "assertQueryPlanUsesIndex",
     "contentRepositoryContractCases",
     "createUserByInvitation",
+    "delegatedActor",
+    "editor",
     "errorMatrixCases",
+    "fakePort",
     "gifFixture",
     "packageName",
     "readAllBuildContentPages",
     "readCompleteBuildExport",
     "securityContractCases",
+    "silentLogger",
+    "testActor",
+    "unmatchedErrorClasses",
+    "viewer",
     "visibilityParityCases",
   ]);
   const subpath = await import("@lacecms/test-utils/visibility-parity");
@@ -33,4 +42,11 @@ test("packaged entry point keeps its public exports", async () => {
   expect(subpath.visibilityParityCases).toEqual(
     (await import("../dist/index.js")).visibilityParityCases,
   );
+  expect(Object.keys(await import("@lacecms/test-utils/filter-parity")).sort()).toEqual([
+    "filterParityCases",
+    "filterParityFields",
+    "filterParityFilterableFields",
+    "filterParityOptions",
+    "filterParityUnlistedField",
+  ]);
 });

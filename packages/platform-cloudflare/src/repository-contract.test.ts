@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "vitest";
 import { contentRepositoryContractCases } from "@lacecms/test-utils";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { D1ContentRepository } from "./index.js";
-import { openLocalD1, countingD1 } from "./d1-test-harness.mjs";
+import { openLocalD1, countingD1 } from "./test-support/d1-test-harness.js";
 
 const cleanups = [];
 

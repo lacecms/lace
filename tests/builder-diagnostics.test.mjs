@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import * as portable from "../packages/domain/dist/build-diagnostics.js";
-import * as builder from "../apps/builder/dist/diagnostics.js";
+import * as portable from "../packages/domain/dist/builds/diagnostics.js";
+import * as builder from "../apps/builder/dist/runner/diagnostics.js";
 test("standalone builder protocol matches portable diagnostic rules", () => {
   expect(builder.siteBuildFailureReasons).toEqual(portable.siteBuildFailureReasons);
   expect(builder.sourceFailureReasons).toEqual(portable.sourceFailureReasons);

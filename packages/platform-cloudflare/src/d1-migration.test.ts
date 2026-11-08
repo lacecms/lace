@@ -2,7 +2,7 @@
 // TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { expect, test } from "vitest";
-import { migrationStatements } from "./d1-test-harness.mjs";
+import { migrationStatements } from "./test-support/d1-test-harness.js";
 
 const OUTCOMES = "0003_site_build_outcomes.sql";
 const ACCOUNT_TOKENS = "0004_account_tokens.sql";
@@ -511,7 +511,7 @@ test("internal-link migration preserves JSON and incoming links after target del
 });
 
 test("public identity migration preserves fresh and populated local D1 state", async () => {
-  const { openLocalCloudflare } = await import("./d1-test-harness.mjs");
+  const { openLocalCloudflare } = await import("./test-support/d1-test-harness.js");
   for (const populated of [false, true]) {
     const { database: db, dispose } = await openLocalCloudflare({ migrate: false });
     try {

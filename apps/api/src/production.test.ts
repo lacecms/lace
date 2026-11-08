@@ -11,8 +11,8 @@ import {
   NodeSiteBuildDispatcher,
   openNodeDatabase,
 } from "@lacecms/platform-node";
-import { createNodeAdminAssets } from "./admin-assets.js";
-import { startDispatchLoop } from "./dispatcher-loop.js";
+import { createNodeAdminAssets } from "./server/admin-assets.js";
+import { startDispatchLoop } from "./dispatch/dispatcher-loop.js";
 
 test("serves admin bundle and client routes without exposing other paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "lace-admin-"));

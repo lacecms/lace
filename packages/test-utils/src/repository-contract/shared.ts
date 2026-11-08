@@ -1,3 +1,4 @@
+import { admin, editor } from "../fixtures/actors.js";
 import {
   applyPreparedConfigurationSynchronization,
   contentModelRoute,
@@ -27,7 +28,6 @@ import type { NormalizedContentModel } from "@lacecms/config";
 
 import type { JsonObject } from "@lacecms/content";
 import {
-  actorId,
   blockKey,
   contentEntryId,
   contentModelKey,
@@ -117,8 +117,7 @@ export const REVERT_CHECKPOINTS = Object.freeze([
   "revert.published",
 ]);
 
-export const editor: Actor = Object.freeze({ id: actorId("editor"), role: "editor" });
-export const admin: Actor = Object.freeze({ id: actorId("admin"), role: "admin" });
+export { admin, editor };
 export const routes = new Map<string, ContentModelRoute>([
   ["posts", { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" }],
   ["home", { key: contentModelKey("home"), kind: "page", path: "/" }],

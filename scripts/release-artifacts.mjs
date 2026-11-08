@@ -252,7 +252,7 @@ export async function inspectPackage(directory, release) {
   }
   if (manifest.name === "create-lace") {
     const { TEMPLATE_FILES, TEMPLATE_VERSION } = await import(
-      pathToFileURL(join(directory, "dist/inventory.js")).href
+      pathToFileURL(join(directory, "dist/template/inventory.js")).href
     );
     if (TEMPLATE_VERSION !== release.templateVersion)
       throw new Error("Packed template identity mismatch");
@@ -280,6 +280,24 @@ export async function extractPackage(archive, destination) {
   return join(destination, "package");
 }
 
+export const SOURCE_CONDITION = "@lacecms/source";
+
+/**
+ * Removes the repository-only `@lacecms/source` condition from an export map.
+ * A condition object left with only `default` collapses to its target string,
+ * and an export left with no target (a source-only test subpath) is removed.
+ */
+export function withoutSourceCondition(exports) {
+  if (typeof exports !== "object" || exports === null) return exports;
+  const entries = Object.entries(exports)
+    .filter(([key]) => key !== SOURCE_CONDITION)
+    .map(([key, value]) => [key, withoutSourceCondition(value)])
+    .filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return undefined;
+  if (entries.length === 1 && entries[0][0] === "default") return entries[0][1];
+  return Object.fromEntries(entries);
+}
+
 export async function preparePackages(snapshot, output, model, order) {
   console.info("Preparing compiled package graph");
   await run("pnpm", ["install", "--frozen-lockfile"], { cwd: snapshot });
@@ -302,6 +320,7 @@ export async function preparePackages(snapshot, output, model, order) {
     const manifest = structuredClone(original);
     delete manifest.devDependencies;
     delete manifest.scripts;
+    if (manifest.exports !== undefined) manifest.exports = withoutSourceCondition(manifest.exports);
     await mkdir(destination, { recursive: true });
     await jsonFile(join(destination, "package.json"), manifest);
     await copyFile(join(snapshot, "LICENSE"), join(destination, "LICENSE"));

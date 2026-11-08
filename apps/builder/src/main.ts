@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
-import { createBuilderHandler } from "./server.js";
-import { FixedCommandBuilder } from "./runner.js";
-import { parseSiteOutputSettings } from "./settings.js";
+import { createBuilderHandler } from "./server/handler.js";
+import { FixedCommandBuilder } from "./runner/runner.js";
+import { parseSiteOutputSettings } from "./runner/settings.js";
 
 const secret = process.env.LACE_BUILDER_SECRET;
 const apiBaseUrl = process.env.LACE_API_BASE_URL;

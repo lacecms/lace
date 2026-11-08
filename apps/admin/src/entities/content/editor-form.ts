@@ -1,5 +1,6 @@
 import {
   ContentValidationError,
+  FIELD_KEY_PATTERN,
   isBlockAnchor,
   MAX_BLOCK_ANCHOR_LENGTH,
   MAX_BLOCK_CLASS_NAME_LENGTH,
@@ -432,8 +433,6 @@ const seoKeys: ReadonlySet<string> = new Set<SeoKey>([
   "title",
 ]);
 
-const fieldKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/u;
-
 function nestedLocation(
   definition: FieldMetadata,
   parts: readonly string[],
@@ -482,7 +481,7 @@ export function issueLocation(
   }
   if (root === "fields") {
     return second !== undefined &&
-      fieldKeyPattern.test(second) &&
+      FIELD_KEY_PATTERN.test(second) &&
       Object.hasOwn(model.fields, second)
       ? (nestedLocation(
           model.fields[second]!,
@@ -511,7 +510,7 @@ export function issueLocation(
     // A declared setting has a control in the Settings tab; anything else stays on the block.
     const definition = model.blockDefinitions?.find((item) => item.type === blocks[index]?.type);
     return fourth !== undefined &&
-      fieldKeyPattern.test(fourth) &&
+      FIELD_KEY_PATTERN.test(fourth) &&
       Object.hasOwn(definition?.settings ?? {}, fourth)
       ? `blocks.${index}.settings.${fourth}`
       : `blocks.${index}.block`;
@@ -521,7 +520,7 @@ export function issueLocation(
   const definition = model.blockDefinitions?.find((item) => item.type === blocks[index]?.type)
     ?.fields[fourth];
   if (!definition)
-    return fieldKeyPattern.test(fourth)
+    return FIELD_KEY_PATTERN.test(fourth)
       ? `blocks.${index}.data.${fourth}`
       : `blocks.${index}.block`;
   return nestedLocation(

@@ -26,7 +26,7 @@ The release SHALL identify an exact prerelease version, generator version, templ
 - **THEN** validation fails and identifies the stale coordinate instead of rewriting files
 
 ### Requirement: Packed artifacts are complete external packages
-Packed public packages SHALL contain resolvable compiled ESM exports and declarations, declared executable entry points where applicable, checked-in database migrations where required, the generator's complete classified templates, and, in the Cloudflare platform package, the compiled admin application of the same source revision in its packaged admin directory. All packed Lace dependency references SHALL resolve to the exact release version; packed third-party dependencies SHALL resolve to concrete registry-compatible versions. Packed dependency metadata SHALL NOT contain `workspace:`, `catalog:`, source-checkout paths or test-only tarball overrides. Archives SHALL exclude credentials, local runtime data, test fixtures, editable admin source and node_modules.
+Packed public packages SHALL contain resolvable compiled ESM exports and declarations, declared executable entry points where applicable, checked-in database migrations where required, the generator's complete classified templates, and, in the Cloudflare platform package, the compiled admin application of the same source revision in its packaged admin directory. All packed Lace dependency references SHALL resolve to the exact release version; packed third-party dependencies SHALL resolve to concrete registry-compatible versions. Packed dependency metadata SHALL NOT contain `workspace:`, `catalog:`, source-checkout paths or test-only tarball overrides. Packed export maps SHALL NOT contain the repository's `@lacecms/source` export condition or any export target outside compiled output and declared data files; release preparation SHALL remove the condition from the staged manifest so that each packed export map equals the repository export map without it. Archives SHALL exclude credentials, local runtime data, test fixtures, editable admin source and node_modules.
 
 #### Scenario: External archive use
 - **WHEN** an operator inspects and extracts the prepared archives outside the engine checkout
@@ -35,6 +35,19 @@ Packed public packages SHALL contain resolvable compiled ESM exports and declara
 #### Scenario: Missing asset or local dependency
 - **WHEN** an archive omits a declared entry point, migration or the packaged admin entry document, or references a workspace/local acceptance artifact
 - **THEN** verification fails with the package and missing or invalid item identified
+
+#### Scenario: Source condition is removed before packing
+- **WHEN** release preparation stages a package whose repository exports
+  declare `@lacecms/source` conditions, including a subpath whose remaining condition
+  is only `default`
+- **THEN** the packed manifest has no `@lacecms/source` key at any depth, the
+  single-`default` export collapses to its target string, and archive
+  verification passes
+
+#### Scenario: A source path reaches an archive manifest
+- **WHEN** an archive's manifest still exports a path under `src/`
+- **THEN** archive verification fails naming the package and the invalid
+  export path
 
 ### Requirement: Runtime images ship compatible compiled applications
 The prepared API image SHALL include the matching compiled admin assets, API, dispatcher, migration capability, bucket initializer and runtime dependency graph. The builder image SHALL include its fixed-command compiled service and pinned consumer-build toolchain. Images SHALL retain generated-project configuration mounts, persistent storage interfaces, explicit migrations and existing fixed-command build semantics. Final image filesystems SHALL exclude registry credentials, local data, Git history, application test fixtures and editable admin source. Supported platforms SHALL be listed explicitly; first-alpha preparation SHALL build and smoke-test `linux/amd64` and `linux/arm64` separately before claiming both. Image version/source metadata SHALL agree with the artifact inventory.

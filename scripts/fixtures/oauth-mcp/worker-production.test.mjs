@@ -14,7 +14,7 @@ import {
   D1ContentRepository,
   D1SecurityService,
 } from "../../../packages/platform-cloudflare/dist/index.js";
-import { migrationStatements } from "../../../packages/platform-cloudflare/src/d1-test-harness.mjs";
+import { migrationStatements } from "../../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 const apiRequire = createRequire(new URL("../../../apps/api/package.json", import.meta.url));
 const platformRequire = createRequire(
   new URL("../../../packages/platform-cloudflare/package.json", import.meta.url),

@@ -13,7 +13,7 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 import { D1_MAX_BOUND_PARAMETERS, D1_QUERY_BUDGET, D1ContentRepository } from "./index.js";
-import { countingD1, openLocalD1 } from "./d1-test-harness.mjs";
+import { countingD1, openLocalD1 } from "./test-support/d1-test-harness.js";
 
 const editor = { id: actorId("editor"), role: "editor" };
 const posts = { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" };
@@ -323,13 +323,30 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
   );
   expect(sources.length).toBeGreaterThan(0);
   const forbidden =
-    /from\s+"(node:[^"]+|fs|path|crypto|better-sqlite3|@aws-sdk\/[^"]+|sharp|@lacecms\/platform-node)"/u;
+    /(?:from\s+|import\s+)"(node:[^"]+|fs|path|crypto|better-sqlite3|@aws-sdk\/[^"]+|sharp|@lacecms\/platform-node)"/u;
   for (const file of sources) {
     expect(await readFile(new URL(file, directory), "utf8"), file).not.toMatch(forbidden);
   }
-  const shared = await readFile(new URL("../../db/src/sql-content.ts", import.meta.url), "utf8");
-  expect(shared).not.toMatch(forbidden);
-  expect(shared).not.toMatch(/\bBuffer\.from\b/u);
+  async function productionFiles(directory) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    const files = [];
+    for (const entry of entries) {
+      const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
+      if (entry.isDirectory() && entry.name !== "test-support") {
+        files.push(...(await productionFiles(url)));
+      } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+        files.push(url);
+      }
+    }
+    return files;
+  }
+  const sharedFiles = await productionFiles(new URL("../../db/src/", import.meta.url));
+  expect(sharedFiles.length).toBeGreaterThan(10);
+  for (const file of sharedFiles) {
+    const shared = await readFile(file, "utf8");
+    expect(shared, file.pathname).not.toMatch(forbidden);
+    expect(shared, file.pathname).not.toMatch(/\bBuffer\.from\b/u);
+  }
 });
 
 test("reads a full build-export page with two bounded batches", async () => {

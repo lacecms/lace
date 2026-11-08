@@ -2,8 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "customConditions": ["@lacecms/source"]
   },
-  "include": ["src/**/*.test.ts", "src/test-support/**/*.ts"],
+  "include": ["src/**/*.test.ts", "src/test-support/**/*.ts", "src/**/*.type-test.ts"],
   "exclude": []
 }

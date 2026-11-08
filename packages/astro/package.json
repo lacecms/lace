@@ -18,13 +18,26 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "@lacecms/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./LaceBlocks.astro": "./dist/LaceBlocks.astro",
-    "./LaceImage.astro": "./dist/LaceImage.astro",
-    "./LaceSeo.astro": "./dist/LaceSeo.astro",
-    "./RichText.astro": "./dist/RichText.astro"
+    "./LaceBlocks.astro": {
+      "@lacecms/source": "./src/LaceBlocks.astro",
+      "default": "./dist/LaceBlocks.astro"
+    },
+    "./LaceImage.astro": {
+      "@lacecms/source": "./src/LaceImage.astro",
+      "default": "./dist/LaceImage.astro"
+    },
+    "./LaceSeo.astro": {
+      "@lacecms/source": "./src/LaceSeo.astro",
+      "default": "./dist/LaceSeo.astro"
+    },
+    "./RichText.astro": {
+      "@lacecms/source": "./src/RichText.astro",
+      "default": "./dist/RichText.astro"
+    }
   },
   "publishConfig": {
     "access": "public",
@@ -33,7 +46,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node copy-components.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "lint": "oxlint src",
+    "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"

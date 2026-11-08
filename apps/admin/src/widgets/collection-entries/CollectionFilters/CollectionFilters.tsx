@@ -8,8 +8,8 @@ import * as v from "valibot";
 import { useId, useState } from "react";
 import {
   collectionFilterProblem,
+  fieldFilterControl,
   fieldFilterOperations as operations,
-  fieldTypeSupport,
   listQueryBudgetHint,
 } from "../../../entities/content/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
@@ -54,7 +54,7 @@ export function CollectionFilters({
   const [key, setKey] = useState(fieldKey);
   const existing = filters.find((filter) => filter.field === fieldKey);
   const field = model.fields[key]!;
-  const control = fieldTypeSupport[field.type].filter?.control;
+  const control = fieldFilterControl(field.type);
   const [op, setOp] = useState(existing?.op ?? operations(field.type)[0]!);
   const [value, setValue] = useState(
     existing && "value" in existing ? String(existing.value) : control === "boolean" ? "false" : "",
@@ -131,11 +131,7 @@ export function CollectionFilters({
                 const next = event.target.value;
                 setKey(next);
                 setOp(operations(model.fields[next]!.type)[0]!);
-                setValue(
-                  fieldTypeSupport[model.fields[next]!.type].filter?.control === "boolean"
-                    ? "false"
-                    : "",
-                );
+                setValue(fieldFilterControl(model.fields[next]!.type) === "boolean" ? "false" : "");
                 setValues([]);
                 setLower("");
                 setUpper("");

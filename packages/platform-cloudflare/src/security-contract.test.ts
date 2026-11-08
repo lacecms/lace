@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "vitest";
 import { SECURITY_CONTRACT_EPOCH, securityContractCases } from "@lacecms/test-utils";
 import { unixMilliseconds } from "@lacecms/domain";
 import { D1FixedWindowRateLimiter, D1SecurityService } from "./index.js";
-import { openLocalD1 } from "./d1-test-harness.mjs";
+import { openLocalD1 } from "./test-support/d1-test-harness.js";
 
 const cleanups = [];
 

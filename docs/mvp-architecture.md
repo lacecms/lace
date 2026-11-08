@@ -391,6 +391,53 @@ README links to the public site and root `DEVELOPMENT.md` contributor guide.
 Documentation uses explicit locale/version routes, initially English/latest for
 rc1 following main, without changing CMS localization scope.
 
+### Source layout
+
+Package `src/` roots hold entry points (`index.ts`, `bin.ts`, declared subpath
+entries) and package-level tests. Other modules live in domain directories named
+by what they own; adopt directories as soon as a package has a second concern.
+Each file owns one responsibility. Aim for a few hundred lines and split a file
+in the same change before it reaches 1,000 lines. No subdirectory has a barrel
+`index.ts`: package entries re-export concrete files, explicitly when a module
+also exports internal helpers. Directories depend one way, documented at the top
+of the entry point; module cycles, including type-only imports, are forbidden.
+Tests and type tests sit beside their module; shared helpers live in
+`src/test-support/` and are TypeScript. `@lacecms/test-utils` owns the shared
+fixture layer (`fixtures/`: role actors, a delegated-actor builder and the
+`fakePort` typed partial fake); packages it depends on (`content`, `domain`,
+`config`, `application`, `contracts`) keep package-local typed test-support. A
+non-test `.mjs` or `.js` module under `src/`, and a JavaScript test other than
+a `*.packaged.test.mjs` packaged-output test, needs a reasoned entry in
+`scripts/javascript-source-allowlist.json`. Applications keep the modules that
+Node, a container command or a Compose service starts directly at the `src/`
+root, listed with a reason in `scripts/source-root-entries.json`, so operator
+command paths survive a layout change. A package with a single concern stays
+flat and is recorded with its reason in
+`scripts/source-layout-exemptions.json`; it may not gain a directory other than
+`test-support/` without declaring a layout. `apps/admin` keeps its section 17
+layer/slice structure, with the same size limit and no-cycle rule.
+
+Existing flat packages adopt this layout in their RF4–RF6 session or a change
+adding a second concern. The boundary checker enforces the 1,000-line ceiling
+through `scripts/oversized-source-baseline.json`: oversized legacy files may
+shrink but may not grow; deleted or within-limit files must leave the baseline.
+The same checker rejects module cycles in every member's production graph
+(legacy strongly connected components are frozen in
+`scripts/source-cycle-baseline.json`) and, for packages declared in
+`scripts/source-layout.json`, imports against the declared directory direction,
+subdirectory `index` modules, root modules that are neither manifest entries
+nor listed process entries, and entry headers whose `Directory dependencies:`
+line names other directories. Every workspace package outside the declaration
+and the exemption list is still flat and adopts the layout in its planned
+session (`platform-node` and `platform-cloudflare` in RF5B, `cli` in RF7C).
+Test files may disable type checking only while listed in the shrinking
+`scripts/test-typecheck-baseline.json`; test-support modules never may.
+Every `packages/*` export into `dist/` lists the `@lacecms/source` condition
+first, naming the source module its target is built from; the checker rejects
+a missing, misplaced or mismatched condition, and release preparation strips
+it from packed manifests.
+See [ADR 0020](adr/0020-source-layout.md).
+
 ## 7. Generated user project
 
 The supported MVP onboarding path is a project generator, not copying the entire Lace engine source into an existing arbitrary application.
@@ -3054,20 +3101,22 @@ Security requirements:
 
 ## 15. Infrastructure ports
 
-Representative application-facing interfaces:
+Application contracts live in `packages/application/src/ports/`: `infrastructure`,
+`links`, `content`, `media`, `builds`, and `security`. Representative
+interfaces are shown below; email delivery remains beside the account use cases.
 
 ```ts
 interface ObjectStorage {
-  put(input: PutObjectInput): Promise<StoredObject>;
-  get(key: string): Promise<ReadableStream | null>;
-  delete(key: string): Promise<void>;
   createReadUrl(key: string, options?: ReadUrlOptions): Promise<string>;
+  delete(key: string): Promise<void>;
+  get(key: string): Promise<ByteStream | null>;
+  put(input: PutObjectInput): Promise<StoredObject>;
 }
 
 interface Cache {
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T, options?: CacheOptions): Promise<void>;
   delete(key: string): Promise<void>;
+  get<Value>(key: string): Promise<Value | null>;
+  set<Value>(key: string, value: Value): Promise<void>;
 }
 
 interface SiteBuildTrigger {
@@ -3075,11 +3124,30 @@ interface SiteBuildTrigger {
 }
 
 interface EmailSender {
-  readonly provider: "none" | "log" | "smtp" | "resend" | "cloudflare";
   readonly from?: string;
+  readonly provider: EmailProviderKind;
   send(message: EmailMessage): Promise<EmailDeliveryOutcome>;
 }
+
+interface Clock {
+  now(): UnixMilliseconds;
+}
+
+interface IdGenerator {
+  next(): string;
+}
+
+interface DispatcherLeasePort {
+  claim(input: ClaimDispatcherEventsInput): Promise<readonly DispatcherLease[]>;
+  complete(input: CompleteDispatcherLeaseInput): Promise<void>;
+  retry(input: RetryDispatcherLeaseInput): Promise<void>;
+}
 ```
+
+`ByteStream` is an `AsyncIterable<Uint8Array>`. Security commands are split
+into account, session, and token capability ports. `SecurityService` combines
+those three ports with `UserProfileReader`; runtime adapters implement the
+combined contract, while use cases can depend on the capabilities they call.
 
 Implementations:
 
@@ -3120,7 +3188,7 @@ The MVP supports the SQLite dialect only:
 - Cloudflare D1 in production and Cloudflare-compatible development;
 - a local SQLite file in Node and Docker.
 
-Drizzle schemas and migrations should stay within the SQL subset supported by both environments.
+Drizzle schemas and migrations should stay within the SQL subset supported by both environments. The `db` column-list drift test applies every checked-in migration to an in-memory database, checks each shared SQL column against its table and prepares each statement. `pnpm db:check`, included in `pnpm lint`, checks the migration snapshot chain and detects schema changes that need a migration in a disposable copy.
 
 Important D1 free-plan design constraints include:
 
@@ -3639,11 +3707,26 @@ See `docs/documentation-maintenance.md` for public/internal topic ownership.
 ### Source tests and packaged output
 
 Package `test` tasks run TypeScript tests against source without a build.
-`vitest.shared.mjs` provides source aliases for workspace package specifiers and
-subpath exports; tests use public package specifiers for other Lace packages.
-`tsconfig.test.json` includes tests and test-support modules in `typecheck`, and
-`test:watch` re-runs tests on save. Astro component tests use the source components
-through Astro's Vite configuration.
+Each package manifest declares a first `@lacecms/source` export condition for
+every compiled export, including subpaths. The `sourceCondition()` plugin in
+`vitest.shared.mjs` resolves workspace package specifiers through it for every
+package and app test, and the admin Vite configuration adds it in test mode only;
+builds, development servers and packaged tests keep `dist/`. Tests use public
+package specifiers for other Lace packages. `tsconfig.test.json`,
+`tsconfig.type-test.json` and the admin project set
+`customConditions: ["@lacecms/source"]`, so test typecheck reads sibling sources
+and needs no build. They include tests and test-support modules in `typecheck`,
+and `test:watch` re-runs tests on save. Astro component tests use the source
+components through Astro's Vite configuration.
+
+Node integration and product tests open runtimes through
+`platform-node/src/test-support/node-runtime-harness.ts`, which owns the test
+actor resolver and test settings and takes the source or the compiled platform
+module, so packaged product tests run the same scenario against `dist/`. It is
+the source-only `@lacecms/platform-node/test` export, which release preparation
+drops from the packed manifest. Source `test` hashes follow dependency edges
+through the `test:transit` Turbo task; a test that reads a repository file
+outside its dependency closure declares it as an input of that package's task.
 
 Built exports are checked separately by `*.packaged.test.mjs` under
 `test:packaged`, whose Turbo task depends on the package and dependency builds.

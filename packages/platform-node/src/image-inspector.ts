@@ -4,6 +4,7 @@ import {
   type ImageInspector,
   type MediaMimeType,
 } from "@lacecms/application";
+import { LaceError } from "@lacecms/content";
 import { DomainError } from "@lacecms/domain";
 import sharp from "sharp";
 
@@ -46,7 +47,7 @@ export class NodeSharpImageInspector implements ImageInspector {
       }
       return { height: height!, width: width! };
     } catch (error) {
-      if (error instanceof DomainError) throw error;
+      if (error instanceof LaceError) throw error;
       throw new DomainError("CONTENT_INVALID_STATE", "Media image data is invalid.");
     }
   }

@@ -1,7 +1,7 @@
 // Disposable local browser acceptance server; never part of a runtime package.
 import { createRequire } from "node:module";
 import { openMcpRuntime } from "./runtime.mjs";
-import { createNodeAdminAssets } from "../../../apps/api/dist/admin-assets.js";
+import { createNodeAdminAssets } from "../../../apps/api/dist/server/admin-assets.js";
 const require = createRequire(new URL("../../../apps/api/package.json", import.meta.url));
 const { serve } = require("@hono/node-server");
 let handler = async () => new Response("Starting", { status: 503 });

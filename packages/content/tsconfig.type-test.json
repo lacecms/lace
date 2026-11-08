@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "customConditions": ["@lacecms/source"]
   },
-  "include": ["src/index.ts", "src/index.type-test.ts"]
+  "include": ["src/index.ts", "src/**/*.type-test.ts", "src/test-support/type-assertions.ts"]
 }

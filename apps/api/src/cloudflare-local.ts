@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { D1ContentRepository, D1SecurityService } from "@lacecms/platform-cloudflare";
 import { SystemNodeClock, UlidGenerator, runLocalContentSync } from "@lacecms/platform-node";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { loadProjectConfig } from "./project-config.js";
+import { loadProjectConfig } from "./config/project-config.js";
 
 const usage = "Usage: node apps/api/dist/cloudflare-local.js prepare --persist-to <dir>";
 const configPath = join(import.meta.dirname, "..", "wrangler.jsonc");
@@ -53,15 +53,14 @@ async function prepare(persistTo: string): Promise<number> {
     });
     if (synced !== 0) return synced;
     const security = new D1SecurityService(database, () => clock.now());
-    try {
+    if (await security.isSetupComplete()) {
+      console.info("First-admin setup is complete.");
+    } else {
       const setup = await security.createSetupToken();
       console.info(
         `First-admin setup token (shown once; expires ${new Date(Number(setup.expiresAt)).toISOString()}):`,
       );
       console.info(setup.token);
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== "Setup already completed.") throw error;
-      console.info("First-admin setup is complete.");
     }
     return 0;
   } finally {

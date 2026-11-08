@@ -600,7 +600,7 @@ Lightbox и public media URL по-прежнему используют ориг
 - `docs/mvp-architecture.md`, `docs/archive/mvp-implementation-roadmap.md`;
 - `openspec/specs/project-generator/spec.md`, `generated-project-acceptance/spec.md`, `public-sdk/spec.md`, `configuration-synchronization/spec.md`, `operational-cli/spec.md`;
 - `packages/create-lace/templates/`, `packages/create-lace/README.md`, `packages/cli/README.md`;
-- `scripts/generated-project-acceptance.mjs`, `apps/builder/src/runner.ts`;
+- `scripts/generated-project-acceptance.mjs`, `apps/builder/src/runner/runner.ts`;
 - `apps/api/worker/index.ts`, `apps/api/wrangler.jsonc`, `docs/cloudflare-worker.md`;
 - `apps/site/src/`, `docs/auth-operations.md`, `apps/admin/src/pages/login/`.
 

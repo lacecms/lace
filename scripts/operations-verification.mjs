@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { packageRun, rootRun, vitestPhase } from "./cross-runtime-verification.mjs";
 import { executeRequiredPhases, ownedCommand } from "./security-resilience-verification.mjs";
 
 export const remoteCredentialNames = [
@@ -49,22 +50,7 @@ export async function main() {
     node: process.version,
     pnpm: execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim(),
   });
-  const testPhase = (name, args) => ({
-    name,
-    command: "pnpm",
-    args: [
-      "exec",
-      "vitest",
-      "run",
-      ...args,
-      "--exclude=.release-artifacts/**",
-      "--exclude=.lace-acceptance/**",
-      "--reporter=default",
-      "--reporter=json",
-      `--outputFile=${join(output, name + ".json")}`,
-    ],
-    testReport: join(output, name + ".json"),
-  });
+  const testPhase = (name, runs, extraArgs) => vitestPhase(output, name, runs, extraArgs);
   const phases = [
     {
       name: "local-prerequisites",
@@ -76,28 +62,29 @@ export async function main() {
       command: "pnpm",
       args: ["exec", "turbo", "run", "build", "--output-logs=errors-only"],
     },
-    testPhase("harness-and-guides", [
-      "tests/operations-verification.test.mjs",
-      "tests/consumer-guides.test.mjs",
-      "--maxWorkers=2",
-    ]),
+    testPhase(
+      "harness-and-guides",
+      [rootRun("tests/operations-verification.test.mjs", "tests/consumer-guides.test.mjs")],
+      ["--maxWorkers=2"],
+    ),
     ...["node", "cloudflare"].map((target) => ({
       name: `generated-${target}-setup`,
       command: "node",
       args: ["scripts/generated-project-acceptance.mjs", target],
     })),
     testPhase("health-restore-rotation", [
-      "--config",
-      "vitest.verification.config.mjs",
-      "--project",
-      "operations",
+      rootRun("--config", "vitest.verification.config.mjs", "--project", "operations"),
+      packageRun("apps/builder/src/runner/runner.test.ts"),
     ]),
-    testPhase("forward-migration-upgrade", [
-      "packages/platform-node/src/migrate.test.mjs",
-      "packages/cli/src/upgrade-command.test.mjs",
-      "packages/cli/src/upgrade-rollback.test.mjs",
-      "--maxWorkers=2",
-    ]),
+    testPhase(
+      "forward-migration-upgrade",
+      [
+        packageRun("packages/platform-node/src/migrate.test.ts"),
+        packageRun("packages/cli/src/upgrade-rollback.test.ts"),
+        packageRun("--packaged", "packages/cli/src/upgrade-command.packaged.test.mjs"),
+      ],
+      ["--maxWorkers=2"],
+    ),
   ];
   try {
     await executeRequiredPhases(

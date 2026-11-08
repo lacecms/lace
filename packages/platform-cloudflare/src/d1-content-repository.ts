@@ -6,7 +6,7 @@ import {
 } from "@lacecms/db";
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "@lacecms/db";
-import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
+import { CLOUDFLARE_LIST_QUERY_LIMITS, MAX_PAGE_SIZE } from "@lacecms/content";
 import type { FieldVisibility } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import {
@@ -148,6 +148,7 @@ import {
   configurationSyncSnapshotRewriteStatements,
   SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
+  failedSynchronizationGuard,
   syncMigrationPage,
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
@@ -805,7 +806,7 @@ export class D1ContentRepository
   }
 
   public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {
-    const bounded = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const bounded = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.trunc(limit)));
     const rows = await this.all<SiteBuildRow>(
       "select * from site_builds order by requested_at desc, id desc limit ?",
       bounded,
@@ -1361,18 +1362,17 @@ export class D1ContentRepository
       !input.plan.isValid ||
       !sameStoredModelStates(input.expectedStoredModels, state) ||
       renderConfigurationSyncPlanJson(input.plan) !== renderConfigurationSyncPlanJson(actualPlan)
-    ) {
-      failure("Configuration synchronization plan is stale.");
-    }
-    if (!actualPlan.requiresApply) {
+    )
+      await failedSynchronizationGuard();
+    if (!actualPlan.requiresApply)
       return Object.freeze({ operations: Object.freeze([]), status: "noop" as const });
-    }
     const expectedByKey = new Map(input.expectedStoredModels.map((model) => [model.key, model]));
     const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
     const singletonEntries = new Map(input.singletonEntries.map((page) => [page.modelKey, page]));
     const batch = this.batch();
     const linkDirtyToken = crypto.randomUUID();
     const linkStatements = syncInternalLinkStatements(input.linkRewrites ?? [], linkDirtyToken);
+    const links = { valid: linkStatements.valid, first: this.first.bind(this) };
     const token = this.guard(batch, input.appliedAt, {
       params: [json, ...linkStatements.valid.flatMap((valid) => valid.params)],
       sql: `${STORED_MODEL_STATE_JSON_SQL} = ?${linkStatements.valid.map((valid) => ` and (${valid.sql})`).join("")}`,
@@ -1526,7 +1526,7 @@ export class D1ContentRepository
     if (!configurationSyncAdvancesPublicState(actualPlan)) {
       this.releaseGuard(batch, token);
       const results = await this.execute(batch, true);
-      if (results[0]!.meta.changes !== 1) failure("Configuration synchronization plan is stale.");
+      if (results[0]!.meta.changes !== 1) await failedSynchronizationGuard(links);
       return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
     }
     const stateStatements = this.addPublicStateBump(
@@ -1541,7 +1541,7 @@ export class D1ContentRepository
     );
     this.releaseGuard(batch, token);
     const results = await this.execute(batch, true);
-    if (results[0]!.meta.changes !== 1) failure("Configuration synchronization plan is stale.");
+    if (results[0]!.meta.changes !== 1) await failedSynchronizationGuard(links);
     return Object.freeze({
       operations: actualPlan.operations,
       status: "applied" as const,
@@ -1789,7 +1789,7 @@ export class D1ContentRepository
     readonly limit: number;
     readonly now: UnixMilliseconds;
   }): Promise<readonly SiteBuildWorkLease[]> {
-    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > MAX_PAGE_SIZE)
       throw new TypeError("Build claim limit is invalid.");
     const expired = input.now - DISPATCHER_LEASE_DURATION_MS;
     const rows = await this.all<OutboxRow>(

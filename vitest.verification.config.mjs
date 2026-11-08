@@ -21,7 +21,7 @@ export default defineConfig({
       {
         test: {
           name: "operations",
-          include: ["tests/operations.acceptance.mjs", "apps/builder/src/runner.test.mjs"],
+          include: ["tests/operations.acceptance.mjs"],
           fileParallelism: false,
           maxWorkers: 1,
           hookTimeout: 30000,

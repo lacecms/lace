@@ -4,7 +4,7 @@ import {
   openNodeDatabase,
 } from "../../packages/platform-node/dist/index.js";
 import { D1ContentRepository } from "../../packages/platform-cloudflare/dist/index.js";
-import { openLocalCloudflare } from "../../packages/platform-cloudflare/src/d1-test-harness.mjs";
+import { openLocalCloudflare } from "../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 
 const { kind, path, mode, oldLease } = JSON.parse(process.argv[2]);
 let repository, close;

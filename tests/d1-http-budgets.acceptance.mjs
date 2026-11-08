@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { openProductRuntime } from "./support/cross-runtime-fixture.mjs";
-import { countingD1 } from "../packages/platform-cloudflare/src/d1-test-harness.mjs";
+import { countingD1 } from "../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
 import {
   BUILD_EXPORT_PAGE_BYTE_BUDGET,
   selectBuildExportPage,
