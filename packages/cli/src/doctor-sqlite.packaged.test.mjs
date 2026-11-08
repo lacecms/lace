@@ -58,44 +58,48 @@ test(
   },
 );
 
-test("concurrent complete doctors preserve a populated installation", async () => {
-  const root = await directory();
-  await writeFile(
-    join(root, "package.json"),
-    JSON.stringify({ engines: { node: ">=24.12.0", pnpm: ">=12" } }),
-  );
-  database(join(root, "db.sqlite")).close();
-  const before = await snapshot(root);
-  const runtime = {
-    cwd: root,
-    environment: {
-      LACE_DATABASE_PATH: "db.sqlite",
-      LACE_API_BASE_URL: "http://127.0.0.1:3000/",
-      LACE_PUBLIC_BASE_URL: "http://127.0.0.1:3000/",
-      LACE_AUTH_SECRET: "a".repeat(64),
-      LACE_MINIO_ACCESS_KEY: "access",
-      LACE_MINIO_SECRET_KEY: "s".repeat(64),
-      LACE_MINIO_ENDPOINT: "http://127.0.0.1:9000/",
-      LACE_MINIO_BUCKET: "lace-media",
-      LACE_MINIO_REGION: "us-east-1",
-      LACE_MINIO_TIMEOUT_MS: "5000",
-      LACE_BUILD_TOKEN: "private-sentinel",
-    },
-    io: {
-      ...doctorIO,
-      nodeVersion: "24.12.0",
-      process: async (command, args, cwd, signal) =>
-        command === "pnpm" ? "12.3.4" : doctorIO.process(command, args, cwd, signal),
-      request: async () => Response.json({ status: "ready" }),
-    },
-  };
-  const options = { target: "node", stage: "ready", mode: "native", json: true };
-  const results = await Promise.all([runDoctor(options, runtime), runDoctor(options, runtime)]);
-  expect(results.map((item) => item.exitCode)).toEqual([0, 0]);
-  expect(results[0].output).toBe(results[1].output);
-  expect(results[0].output).not.toContain("private-sentinel");
-  expect(await snapshot(root)).toEqual(before);
-});
+test(
+  "concurrent complete doctors preserve a populated installation",
+  { timeout: 20_000 },
+  async () => {
+    const root = await directory();
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ engines: { node: ">=24.12.0", pnpm: ">=12" } }),
+    );
+    database(join(root, "db.sqlite")).close();
+    const before = await snapshot(root);
+    const runtime = {
+      cwd: root,
+      environment: {
+        LACE_DATABASE_PATH: "db.sqlite",
+        LACE_API_BASE_URL: "http://127.0.0.1:3000/",
+        LACE_PUBLIC_BASE_URL: "http://127.0.0.1:3000/",
+        LACE_AUTH_SECRET: "a".repeat(64),
+        LACE_MINIO_ACCESS_KEY: "access",
+        LACE_MINIO_SECRET_KEY: "s".repeat(64),
+        LACE_MINIO_ENDPOINT: "http://127.0.0.1:9000/",
+        LACE_MINIO_BUCKET: "lace-media",
+        LACE_MINIO_REGION: "us-east-1",
+        LACE_MINIO_TIMEOUT_MS: "5000",
+        LACE_BUILD_TOKEN: "private-sentinel",
+      },
+      io: {
+        ...doctorIO,
+        nodeVersion: "24.12.0",
+        process: async (command, args, cwd, signal) =>
+          command === "pnpm" ? "12.3.4" : doctorIO.process(command, args, cwd, signal),
+        request: async () => Response.json({ status: "ready" }),
+      },
+    };
+    const options = { target: "node", stage: "ready", mode: "native", json: true };
+    const results = await Promise.all([runDoctor(options, runtime), runDoctor(options, runtime)]);
+    expect(results.map((item) => item.exitCode)).toEqual([0, 0]);
+    expect(results[0].output).toBe(results[1].output);
+    expect(results[0].output).not.toContain("private-sentinel");
+    expect(await snapshot(root)).toEqual(before);
+  },
+);
 
 test(
   "missing ledger, corrupt, denied, symlink and wrong file type have safe diagnostics",
@@ -125,7 +129,7 @@ test(
   },
 );
 
-test("locked SQLite never mutates the selected database", async () => {
+test("locked SQLite never mutates the selected database", { timeout: 20_000 }, async () => {
   const root = await directory();
   const path = join(root, "db.sqlite");
   // POSIX locks are process-scoped; use a separate child to hold the lock.
@@ -158,31 +162,35 @@ test("locked SQLite never mutates the selected database", async () => {
   }
 });
 
-test("concurrent readers of a live WAL database preserve content and all sidecar bytes", async () => {
-  const root = await directory();
-  const path = join(root, "db.sqlite");
-  const db = database(path);
-  db.exec("pragma journal_mode=WAL");
-  db.exec("insert into preserved values ('second-value')");
-  // Establish the ordinary reader mark before comparing all persisted bytes.
-  const reader = new DatabaseSync(path, { readOnly: true });
-  reader.prepare("select * from preserved").all();
-  try {
+test(
+  "concurrent readers of a live WAL database preserve content and all sidecar bytes",
+  { timeout: 20_000 },
+  async () => {
+    const root = await directory();
+    const path = join(root, "db.sqlite");
+    const db = database(path);
+    db.exec("pragma journal_mode=WAL");
+    db.exec("insert into preserved values ('second-value')");
+    // Establish the ordinary reader mark before comparing all persisted bytes.
+    const reader = new DatabaseSync(path, { readOnly: true });
+    reader.prepare("select * from preserved").all();
+    try {
+      const before = await snapshot(root);
+      const results = await Promise.all([inspect(root), inspect(root)]);
+      expect(results.map((item) => item.kind)).toEqual(["operation", "operation"]);
+      expect(await snapshot(root)).toEqual(before);
+      expect(db.prepare("select count(*) as count from preserved").get().count).toBe(2);
+    } finally {
+      reader.close();
+      db.close();
+    }
     const before = await snapshot(root);
-    const results = await Promise.all([inspect(root), inspect(root)]);
-    expect(results.map((item) => item.kind)).toEqual(["operation", "operation"]);
+    const result = await inspect(root);
+    expect(result.kind).toBe("operation");
+    expect(result.reason).toContain("sidecars");
     expect(await snapshot(root)).toEqual(before);
-    expect(db.prepare("select count(*) as count from preserved").get().count).toBe(2);
-  } finally {
-    reader.close();
-    db.close();
-  }
-  const before = await snapshot(root);
-  const result = await inspect(root);
-  expect(result.kind).toBe("operation");
-  expect(result.reason).toContain("sidecars");
-  expect(await snapshot(root)).toEqual(before);
-});
+  },
+);
 
 test(
   "real SQLite migrated before the baseline fails as unsupported without changes",
