@@ -87,6 +87,12 @@ remaining sessions (RF6, RF7, RF8C, RF9C–RF9F) keep their order, are not part
 of rc2 and end in rc3. rc1 stays the oldest supported release and the upgrade
 fixture origin.
 
+**Outcome (RC2):** the owner published rc2 on 2026-11-08: sixteen npm
+packages on `next`, both images for linux/amd64 and linux/arm64, and GitHub
+prerelease `v0.1.0-rc2` at merge commit `e82670cc`. `prepare-rc2-release` is
+archived with its specifications synchronized. `0.1.0-rc2` joins
+`publishedVersions` when rc3 is selected.
+
 ## 3. Baseline (commit `1494b039`, audit of 2026-11-01)
 
 What is healthy and is not touched:
