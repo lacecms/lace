@@ -1027,6 +1027,15 @@ architecture sections they change; RF1B for the index.
   ceiling, one responsibility per module).
 - Target size: under 2,500 lines without loss of invariants (a review
   checklist in the change lists every invariant and where it now lives).
+- Added by owner request (2026-11-08): two Mermaid diagrams in the
+  architecture document. A backend component diagram shows the packages of
+  the §6 dependency rules, the application ports and their Node and D1
+  adapters (shared `db` reader and rows, per-runtime repository areas,
+  security, storage, build triggers, outbox dispatch) and the RF5C
+  composition (`composeLaceServices`). A table diagram (`erDiagram`) shows
+  every Drizzle table in `packages/db/src/schema/` with its keys and
+  foreign-key relations. A root test fails when a schema table is missing
+  from the table diagram, so the diagram cannot drift silently.
 
 ### Session RF8B — OpenSpec specifications
 
@@ -1218,3 +1227,4 @@ is empty.
 | 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Archived at [`2026-11-08-rf05a-shared-security-rows`](../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/); 9/9 tasks complete. No delta specs (`skip_specs`). RF5B next. |
 | 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Implemented, 18/18 tasks complete. `db` `SqlContentReader` owns the identical reads; both repositories delegate and split into area modules (Node 2,291 → largest 481 lines, D1 2,696 → 646); both platform packages adopt the §6 layout; the `platform-node` cycle and both oversized entries leave their baselines. Contract titles (213 Node, 119 D1, 4 D1 budget) and platform export keys/declarations match the baseline; `db` gains only the reader names. No delta specs (`skip_specs`). Not archived. |
 | 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Archived at [`2026-11-08-rf05b-shared-content-reader`](../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/); 18/18 tasks complete. No delta specs (`skip_specs`). RF5C next. |
+| 2026-11-08 | RF8A | — | Scope decision: the owner asked for a backend component diagram and a database table diagram; both join RF8A as Mermaid diagrams in `docs/mvp-architecture.md` (the component diagram after RF5C's composition), the table diagram with a drift test against the Drizzle schema. No change created. |
