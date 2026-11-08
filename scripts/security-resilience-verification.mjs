@@ -140,7 +140,7 @@ export async function main() {
         packageRun("packages/platform-cloudflare/src/image-inspector.test.ts"),
         packageRun("packages/test-utils/src/index.test.ts"),
         packageRun("packages/render/src"),
-        packageRun("apps/builder/src/runner.test.ts"),
+        packageRun("apps/builder/src/runner/runner.test.ts"),
       ],
       ["--maxWorkers=2"],
     ),

@@ -26,6 +26,8 @@ import {
   toMediaMetadataDto,
   toPublishContentEntryResultDto,
   toSiteBuildDto,
+  isCanonicalUrl as contractsIsCanonicalUrl,
+  normalizeSeoText as contractsNormalizeSeoText,
 } from "./index.js";
 import { timestamp, actor, published, entry } from "./test-support/rest-fixtures.js";
 
@@ -237,5 +239,14 @@ describe("admin entry list contracts", () => {
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
     const { globals: _globals, ...legacy } = exportDto;
     expect(v.parse(buildExportSchema, legacy).globals).toEqual([]);
+  });
+});
+
+describe("shared SEO text rules", () => {
+  test("re-exports the domain SEO predicates", () => {
+    expect(contractsIsCanonicalUrl("https://example.com/a")).toBe(true);
+    expect(contractsIsCanonicalUrl("/a")).toBe(false);
+    expect(contractsNormalizeSeoText("a\nb", "title")).toBeUndefined();
+    expect(contractsNormalizeSeoText("  ", "title")).toBeNull();
   });
 });

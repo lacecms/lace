@@ -447,7 +447,10 @@ function checkTypecheckExceptions(rootDirectory, members) {
 
 const javaScriptSourcePattern = /\.(?:c|m)?js$/u;
 
-/** Untyped modules under `src/` need a listed reason; tests and test-support never qualify. */
+/**
+ * Untyped modules and JavaScript tests under `src/` need a listed reason;
+ * packaged-output tests are exempt and test-support never qualifies.
+ */
 function checkJavaScriptSources(rootDirectory, members) {
   const allowlist = readJsonBaseline(rootDirectory, "javascript-source-allowlist.json", {});
   const collectJavaScript = (directory) =>
@@ -460,14 +463,17 @@ function checkJavaScriptSources(rootDirectory, members) {
     if (!existsSync(member.sourceDirectory)) continue;
     for (const filePath of collectJavaScript(member.sourceDirectory)) {
       const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
-      if (/\.test\.(?:c|m)?js$/u.test(sourcePath)) continue;
+      if (/\.packaged\.test\.mjs$/u.test(sourcePath)) continue;
       const fileName = toPosix(relative(rootDirectory, filePath));
       if (sourcePath.startsWith("test-support/")) {
         throw new Error(`untyped test-support module: ${fileName}; write it in TypeScript`);
       }
       if (!Object.hasOwn(allowlist, fileName)) {
+        const kind = /\.test\.(?:c|m)?js$/u.test(sourcePath)
+          ? "JavaScript source test"
+          : "untyped source module";
         throw new Error(
-          `untyped source module: ${fileName}; write it in TypeScript or list it with a reason in scripts/javascript-source-allowlist.json`,
+          `${kind}: ${fileName}; write it in TypeScript or list it with a reason in scripts/javascript-source-allowlist.json`,
         );
       }
     }
@@ -664,9 +670,60 @@ function sameSet(left, right) {
   return left.size === right.size && [...left].every((value) => right.has(value));
 }
 
+/**
+ * Validates the reasoned layout lists: root process entries must be existing
+ * `src/` root modules of declared packages; single-concern exemptions must
+ * name undeclared members whose `src/` holds no directory but `test-support/`.
+ */
+function checkLayoutLists(rootDirectory, members, layout) {
+  const membersByPath = new Map(
+    members.map((member) => [toPosix(relative(rootDirectory, member.directory)), member]),
+  );
+  const rootEntries = readJsonBaseline(rootDirectory, "source-root-entries.json", {});
+  for (const fileName of Object.keys(rootEntries)) {
+    const match = /^(.+?)\/src\/(.+)$/u.exec(fileName);
+    const packagePath = match?.[1];
+    if (match === null || !Object.hasOwn(layout, packagePath)) {
+      throw new Error(
+        `stale source root entry: ${fileName} is not in a package declared in scripts/source-layout.json`,
+      );
+    }
+    if (match[2].includes("/")) {
+      throw new Error(`stale source root entry: ${fileName} is not a src/ root module`);
+    }
+    if (!existsSync(join(rootDirectory, fileName))) {
+      throw new Error(
+        `stale source root entry: ${fileName} is missing; remove it from scripts/source-root-entries.json`,
+      );
+    }
+  }
+  const exemptions = readJsonBaseline(rootDirectory, "source-layout-exemptions.json", {});
+  for (const packagePath of Object.keys(exemptions)) {
+    const member = membersByPath.get(packagePath);
+    if (member === undefined) {
+      throw new Error(`source layout exemption names unknown member: ${packagePath}`);
+    }
+    if (Object.hasOwn(layout, packagePath)) {
+      throw new Error(
+        `source layout exemption: ${packagePath} is also declared in scripts/source-layout.json`,
+      );
+    }
+    if (!existsSync(member.sourceDirectory)) continue;
+    for (const entry of readdirSync(member.sourceDirectory, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name !== "test-support") {
+        throw new Error(
+          `source layout exemption: ${packagePath} has directory src/${entry.name}; declare the package in scripts/source-layout.json instead`,
+        );
+      }
+    }
+  }
+  return new Set(Object.keys(rootEntries));
+}
+
 /** Domain-directory rules for packages declared in `scripts/source-layout.json`. */
 function checkSourceLayout(rootDirectory, members, graphs) {
   const layout = readJsonBaseline(rootDirectory, "source-layout.json", {});
+  const rootEntries = checkLayoutLists(rootDirectory, members, layout);
   const membersByPath = new Map(
     members.map((member) => [toPosix(relative(rootDirectory, member.directory)), member]),
   );
@@ -686,7 +743,11 @@ function checkSourceLayout(rootDirectory, members, graphs) {
       const fileName = toPosix(relative(rootDirectory, filePath));
       const directory = directoryOf(filePath);
       if (directory === undefined) {
-        if (!entries.has(sourcePath) && !/\.d\.(?:c|m)?ts$/u.test(sourcePath)) {
+        if (
+          !entries.has(sourcePath) &&
+          !rootEntries.has(fileName) &&
+          !/\.d\.(?:c|m)?ts$/u.test(sourcePath)
+        ) {
           throw new Error(`source layout: ${fileName} is a root module but not a package entry`);
         }
         continue;

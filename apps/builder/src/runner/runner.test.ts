@@ -16,7 +16,8 @@ import {
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { FixedCommandBuilder, parseSiteOutputSettings } from "./index.js";
+import { FixedCommandBuilder } from "./runner.js";
+import { parseSiteOutputSettings } from "./settings.js";
 
 const cleanup = [];
 afterEach(async () => {
@@ -443,7 +444,7 @@ test("without a cache root the install arguments are unchanged", async () => {
   expect(await lines(join(root, "install-args"))).toEqual(["install --frozen-lockfile"]);
 });
 
-import { builderFixture } from "./test-support/builder-harness.js";
+import { builderFixture } from "../test-support/builder-harness.js";
 
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";

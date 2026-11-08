@@ -4,21 +4,16 @@ import { field } from "@lacecms/content";
 import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
 import { expect, test } from "vitest";
-import {
-  contentEntryListSchema,
-  contentModelListSchema,
-  toAdminContentEntryDto,
-  toContentModelDto,
-} from "../index.js";
+import { contentEntryListSchema } from "./entries.js";
+import { toAdminContentEntryDto } from "./entry-mappers.js";
+import { toContentModelDto } from "./model-projection.js";
+import { contentModelListSchema } from "./models.js";
 import { actor, entry } from "../test-support/rest-fixtures.js";
 
 test("shared content projectors preserve metadata, admin attribution and list timestamps", async () => {
-  const {
-    toAdminEntryProjectionDto,
-    toContentModelDiscoveryDto,
-    toContentEntryListDto,
-    NODE_LIST_QUERY_LIMITS,
-  } = await import("../index.js");
+  const { NODE_LIST_QUERY_LIMITS } = await import("./collection-queries.js");
+  const { toAdminEntryProjectionDto, toContentEntryListDto } = await import("./entry-mappers.js");
+  const { toContentModelDiscoveryDto } = await import("./model-projection.js");
   const projection = { entry, updatedBy: { id: actor.id, displayName: "Editor" }, seo: false };
   expect(toAdminEntryProjectionDto(projection)).toEqual(
     toAdminContentEntryDto(entry, projection.updatedBy),

@@ -13,7 +13,7 @@ import {
   openNodeDatabase,
   runLocalContentSync,
 } from "@lacecms/platform-node";
-import { loadProjectConfig } from "./project-config.js";
+import { loadProjectConfig } from "./config/project-config.js";
 
 const config = await defineConfig({
   content: [definePage({ key: "home", path: "/", version: 1 })],

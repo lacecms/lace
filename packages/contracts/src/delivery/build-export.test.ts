@@ -10,19 +10,21 @@ import {
 } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
+import { classifyError } from "../errors/classification.js";
+import { errorEnvelopeSchema } from "../errors/envelope.js";
+import { mediaUrl } from "../media/mappers.js";
+import {
+  toBuildExportContinuationPageDto,
+  toBuildExportFirstPageDto,
+} from "./build-export-mappers.js";
 import {
   buildExportSchema,
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
   buildExportQuerySchema,
   MAX_BUILD_EXPORT_PAGE_SIZE,
-  toBuildExportContinuationPageDto,
-  toBuildExportFirstPageDto,
-  tolerantPublicSchemas,
-  errorEnvelopeSchema,
-  classifyError,
-  mediaUrl,
-} from "../index.js";
+} from "./build-export.js";
+import { tolerantPublicSchemas } from "./tolerant.js";
 
 describe("paged build export contract", () => {
   const publishedAt = unixMilliseconds(Date.UTC(2026, 9, 1));

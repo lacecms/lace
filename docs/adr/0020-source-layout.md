@@ -49,6 +49,22 @@ of one-off verification scripts.
 
 A package adopts the layout by adding its declaration in its own session.
 
+Amended by RF4J (2026-11-08): two reasoned lists complete the layout rules.
+
+- **Process entries.** `scripts/source-root-entries.json` names root modules
+  of declared applications that Node, a container command or a Compose
+  service starts directly (`apps/api` `production.ts`, `dispatcher.ts`, …,
+  `apps/builder` `main.ts`). Keeping them at the root preserves operator
+  commands, the generated project's Compose file and frozen template
+  fixtures. Missing, nested or undeclared entries fail.
+- **Single-concern exemptions.** `scripts/source-layout-exemptions.json`
+  records packages that stay flat by decision (`render`, the section 13.3
+  render core). An exempt package that gains a directory other than
+  `test-support/`, is also declared, or is not a member fails.
+- **JavaScript tests.** Only `*.packaged.test.mjs` files are JavaScript tests
+  by convention; any other JavaScript test needs a reasoned entry in
+  `scripts/javascript-source-allowlist.json`.
+
 ## Alternatives considered
 
 Flat file splits still hide ownership. Subdirectory barrels add indirection.

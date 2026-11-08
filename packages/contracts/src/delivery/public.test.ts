@@ -3,17 +3,16 @@
 import { blockKey, mediaId } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
+import { toContentEntryDto } from "../content/entry-mappers.js";
+import { mediaUrl } from "../media/mappers.js";
+import { contentMetadataOpenApi } from "../openapi/field-openapi.js";
+import { toIsoTimestamp } from "../shared/primitives.js";
+import { toPublicContentEntryDto, toPublicContentListDto } from "./public-mappers.js";
 import {
   publicContentEntrySchema,
-  contentMetadataOpenApi,
   publicContentListSchema,
   publicMediaDictionarySchema,
-  toPublicContentEntryDto,
-  toPublicContentListDto,
-  mediaUrl,
-  toContentEntryDto,
-  toIsoTimestamp,
-} from "../index.js";
+} from "./public.js";
 import { timestamp, draft, published, entry } from "../test-support/rest-fixtures.js";
 
 describe("public delivery DTOs", () => {

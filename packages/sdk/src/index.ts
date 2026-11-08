@@ -1,10 +1,12 @@
-export * from "./client.js";
-export * from "./published-site.js";
-export * from "./seo.js";
-export * from "./site-files.js";
+// Directory dependencies: client ← site.
+export * from "./client/client.js";
+export * from "./client/errors.js";
+export * from "./site/published-site.js";
+export * from "./site/seo.js";
+export * from "./site/site-files.js";
 export type {
   LinkResolution,
   PublishedLinkLookup,
   LinkDiagnostic,
   LinkDiagnostics,
-} from "./internal-links.js";
+} from "./site/internal-links.js";

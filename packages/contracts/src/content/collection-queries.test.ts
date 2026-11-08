@@ -3,18 +3,19 @@
 import { field } from "@lacecms/content";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import { contentModelSchema } from "../index.js";
+import { contentModelSchema } from "./models.js";
 
 describe("configured collection query contracts", async () => {
   const {
     collectionFieldFiltersSchema: filters,
     collectionListOptionsSchema: options,
-    contentEntrySortSchema: sort,
-    toContentModelDto,
     canonicalCollectionFilters,
-  } = await import("../index.js");
+  } = await import("./collection-queries.js");
+  const { contentEntrySortSchema: sort } = await import("./entries.js");
+  const { toContentModelDto } = await import("./model-projection.js");
   test("runtime metadata round-trips separately and defaults legacy responses", async () => {
-    const { contentModelListSchema, listQueryLimitsSchema } = await import("../index.js");
+    const { listQueryLimitsSchema } = await import("./collection-queries.js");
+    const { contentModelListSchema } = await import("./models.js");
     expect(v.parse(contentModelListSchema, { items: [] }).listQueryLimits).toEqual({
       maxSearchLength: 200,
       maxLikePatternBytes: null,
@@ -139,7 +140,7 @@ describe("configured collection query contracts", async () => {
 });
 
 test("effective capability identity ignores labels and columns but includes select choices", async () => {
-  const { collectionCapabilityIdentity } = await import("../index.js");
+  const { collectionCapabilityIdentity } = await import("./collection-queries.js");
   const source = {
     fields: { category: field.select({ options: ["a", "b"] }), text: field.text() },
     listOptions: { sortableFields: ["category", "text"], searchableFields: ["text"] },

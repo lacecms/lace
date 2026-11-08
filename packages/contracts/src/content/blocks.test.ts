@@ -3,17 +3,14 @@
 import { blockKey } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import {
-  publicContentEntrySchema,
-  toPublicContentEntryDto,
-  toPublicContentListDto,
-  blockMetadataSchema,
-  contentEntrySchema,
-  mediaUrl,
-  saveDraftRequestSchema,
-  toBuildExportDto,
-  toContentEntryDto,
-} from "../index.js";
+import { toBuildExportDto } from "../delivery/build-export-mappers.js";
+import { toPublicContentEntryDto, toPublicContentListDto } from "../delivery/public-mappers.js";
+import { publicContentEntrySchema } from "../delivery/public.js";
+import { mediaUrl } from "../media/mappers.js";
+import { contentEntrySchema } from "./entries.js";
+import { toContentEntryDto } from "./entry-mappers.js";
+import { saveDraftRequestSchema } from "./entry-requests.js";
+import { blockMetadataSchema } from "./metadata.js";
 import { block, draft, published, entry } from "../test-support/rest-fixtures.js";
 
 describe("admin entry list contracts", () => {

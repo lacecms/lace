@@ -3,14 +3,9 @@
 import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import {
-  mediaDetailSchema,
-  mediaDeleteQuerySchema,
-  mediaListQuerySchema,
-  mediaMetadataSchema,
-  normalizeMediaTag,
-  toMediaDetailDto,
-} from "../index.js";
+import { toMediaDetailDto } from "./mappers.js";
+import { mediaDetailSchema, mediaMetadataSchema } from "./metadata.js";
+import { mediaDeleteQuerySchema, mediaListQuerySchema, normalizeMediaTag } from "./queries.js";
 
 describe("admin entry list contracts", () => {
   test("validates media list queries, uploader summaries, and bounded usage details", () => {
@@ -109,7 +104,10 @@ describe("media metadata contracts", async () => {
 });
 
 test("ASCII media tag contracts normalize input and preserve precise issue pointers", async () => {
-  const c = await import("../index.js");
+  const c = {
+    ...(await import("./metadata.js")),
+    ...(await import("./queries.js")),
+  };
   expect(v.parse(c.mediaListQuerySchema, { tag: [" Birch ", "ibiza", "BIRCH"] }).tag).toEqual([
     "birch",
     "ibiza",

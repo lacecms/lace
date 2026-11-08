@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { D1ContentRepository, D1SecurityService } from "@lacecms/platform-cloudflare";
 import { SystemNodeClock, UlidGenerator, runLocalContentSync } from "@lacecms/platform-node";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { loadProjectConfig } from "./project-config.js";
+import { loadProjectConfig } from "./config/project-config.js";
 
 const usage = "Usage: node apps/api/dist/cloudflare-local.js prepare --persist-to <dir>";
 const configPath = join(import.meta.dirname, "..", "wrangler.jsonc");

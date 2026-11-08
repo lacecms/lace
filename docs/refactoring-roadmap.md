@@ -143,7 +143,7 @@ What the roadmap changes, with the numbers to beat:
 | RF1 | Workspace hygiene | M | RF1A → RF1B | done |
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
-| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | in progress |
+| RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
@@ -769,6 +769,18 @@ along: contracts module tests import their module instead of the package
 entry, the `config` packaged test pins declaration names, `apps/api` drops its
 stale `fileParallelism: false`, and `apps/docs` records its JavaScript test
 exception.
+Outcome (2026-11-08): `sdk` (`client/`, `site/`), `create-lace` (`site/`,
+`template/`, `generator/`, `cli/`), `apps/api` (`config/`, `dispatch/`,
+`server/`) and `apps/builder` (`runner/`, `server/`) join
+`scripts/source-layout.json`; `render` is recorded in the new
+`scripts/source-layout-exemptions.json` as the single-concern render core.
+Directly started app modules stay at `src/` root through the new
+`scripts/source-root-entries.json`, so operator command paths and the
+generated project are unchanged. The checker now rejects unlisted
+non-packaged JavaScript tests. Runtime keys, declaration names and test
+titles are unchanged; the typecheck baseline keeps 132 entries (moved paths
+renamed). The `config` declaration pin parses the emitted entry text,
+because TypeScript 7 ships no JavaScript compiler API.
 
 ## Step RF5 — Runtime deduplication
 
@@ -1167,3 +1179,5 @@ is empty.
 | 2026-11-08 | RF4I | `rf04i-drizzle-schema-by-domain` | Archived at [`2026-11-08-rf04i-drizzle-schema-by-domain`](../openspec/changes/archive/2026-11-08-rf04i-drizzle-schema-by-domain/); 7/7 tasks complete. No delta spec (`skip_specs`). RF4H and RF4J remain in Step RF4. |
 | 2026-11-08 | RF4H | `rf04h-near-ceiling-module-splits` | Implemented the application and content module splits with typed test companions; typecheck exceptions 136 → 132. Runtime keys, declaration names and listed test titles match the baseline. Root build, typecheck, lint, formatting and tests pass; strict validation is recorded in the active change. |
 | 2026-11-08 | RF4H | `rf04h-near-ceiling-module-splits` | Archived at [`2026-11-08-rf04h-near-ceiling-module-splits`](../openspec/changes/archive/2026-11-08-rf04h-near-ceiling-module-splits/); 12/12 tasks complete. No delta specs (`skip_specs`). Verification remains in the archive. |
+| 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Implemented, 14/14 tasks complete. `sdk`, `create-lace`, `apps/api` and `apps/builder` adopt the §6 layout; `render` is a recorded single-concern exemption; six app process entries are listed in `scripts/source-root-entries.json`; non-packaged JavaScript tests need an allowlist entry (`apps/docs` catalog test). Contracts module tests import their modules, the `config` packaged test pins declaration names, `apps/api` source tests run in parallel. Delta spec: `workspace-governance` (2 modified). Not archived; Step RF4 becomes done at archive. |
+| 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Archived at [`2026-11-08-rf04j-remaining-flat-packages`](../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/); 14/14 tasks complete. Delta spec synchronized into `workspace-governance` (2 modified requirements). Step RF4 done. |

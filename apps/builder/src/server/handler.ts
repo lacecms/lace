@@ -1,10 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { BuildRequest, BuildResult } from "./runner.js";
+import type { BuildRequest, BuildResult } from "../runner/runner.js";
 
 const MAX_BODY_BYTES = 1024;
 const BUILD_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
-import { siteBuildFailureReasons, normalizeBuildFailure } from "./diagnostics.js";
+import { siteBuildFailureReasons, normalizeBuildFailure } from "../runner/diagnostics.js";
 const SAFE_REASONS = new Set<string>(siteBuildFailureReasons.slice(0, 8));
 
 function sameSecret(actual: string | undefined, expected: string): boolean {

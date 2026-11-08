@@ -4,7 +4,13 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 
 test("import-token, slug and hash contracts are strict and point at their parameters", async () => {
-  const c = await import("../index.js");
+  const c = {
+    ...(await import("../content/entries.js")),
+    ...(await import("../media/mappers.js")),
+    ...(await import("../media/metadata.js")),
+    ...(await import("../media/queries.js")),
+    ...(await import("./credentials.js")),
+  };
   expect(v.parse(c.importTokenCreateRequestSchema, { name: "Framer", expiresInDays: 7 })).toEqual({
     allowPublish: false,
     expiresInDays: 7,

@@ -7,7 +7,7 @@ import {
   toBlockMetadata,
 } from "@lacecms/content";
 import * as v from "valibot";
-import { blockMetadataSchema } from "../index.js";
+import { blockMetadataSchema } from "../content/metadata.js";
 import { contentMetadataOpenApi } from "./field-openapi.js";
 
 type Schema = Record<string, unknown>;

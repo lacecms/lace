@@ -18,8 +18,8 @@ import {
   createNodeDevelopmentGateway,
   proxyNodeDevelopmentUpgrade,
   startNodeServer,
-} from "./index.js";
-import { loadProjectConfig } from "./project-config.js";
+} from "./node-server.js";
+import { loadProjectConfig } from "../config/project-config.js";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 const admin = { id: actorId("integration-admin"), role: "admin" };

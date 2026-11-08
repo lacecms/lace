@@ -3,7 +3,8 @@
 import { DomainError, BlockOrderError } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import { errorEnvelopeSchema, classifyError, transportError, validationError } from "../index.js";
+import { classifyError, transportError } from "./classification.js";
+import { errorEnvelopeSchema, validationError } from "./envelope.js";
 
 describe("account lifecycle contracts", () => {
   const ok = (schema, value) => v.safeParse(schema, value).success;
@@ -108,7 +109,8 @@ test("transports only bounded block-order diagnostics and keeps other domain mes
 });
 
 test("content and query errors share value-free stable codes and escaped pointers", async () => {
-  const { classifyError, contractIssuePointer } = await import("../index.js");
+  const { classifyError } = await import("./classification.js");
+  const { contractIssuePointer } = await import("./envelope.js");
   const { CollectionQueryValidationError } = await import("@lacecms/domain");
   const { ContentValidationError } = await import("@lacecms/content");
   const query = classifyError(new CollectionQueryValidationError("/filters/0/value"));

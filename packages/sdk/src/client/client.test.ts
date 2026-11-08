@@ -1,16 +1,14 @@
 // @ts-nocheck
 // TODO(rf2): Type scripted transport queues, mutable build pages and discriminated responses.
 import { expect, test } from "vitest";
+import { createLaceClient, packageName, userAgent } from "./client.js";
 import {
   LaceContractError,
   LaceHttpError,
   LaceTimeoutError,
   LaceTransportError,
   LaceUnsupportedExportFormatError,
-  createLaceClient,
-  packageName,
-  userAgent,
-} from "./index.js";
+} from "./errors.js";
 
 const timestamp = "2026-09-20T00:00:00.000Z";
 

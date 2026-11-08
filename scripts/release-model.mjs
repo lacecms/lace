@@ -57,7 +57,7 @@ export async function readReleaseModel(root) {
       ),
     ),
     templateVersion: (
-      await readFile(join(root, "packages/create-lace/src/inventory.ts"), "utf8")
+      await readFile(join(root, "packages/create-lace/src/template/inventory.ts"), "utf8")
     ).match(/TEMPLATE_VERSION = "([^"]+)"/u)?.[1],
     environment: await readFile(join(root, "packages/create-lace/templates/.env.example"), "utf8"),
     guides: Object.fromEntries(

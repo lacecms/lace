@@ -525,6 +525,94 @@ test.each([
   expect(result.stderr).toContain(message);
 });
 
+const rootEntrySources = {
+  ...declaredSources,
+  "packages/content/src/main.ts":
+    'import { field } from "./fields/field.js";\nconsole.info(field);\n',
+};
+
+test("allows a listed process entry at a declared package root", () => {
+  const result = checkScratch(rootEntrySources, {
+    "source-layout.json": declaredLayout,
+    "source-root-entries.json": { "packages/content/src/main.ts": "Started by node." },
+  });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test.each([
+  {
+    name: "a missing module",
+    entries: { "packages/content/src/gone.ts": "Removed." },
+    message: "stale source root entry: packages/content/src/gone.ts is missing",
+  },
+  {
+    name: "a nested module",
+    entries: { "packages/content/src/fields/field.ts": "Nested." },
+    message:
+      "stale source root entry: packages/content/src/fields/field.ts is not a src/ root module",
+  },
+  {
+    name: "an undeclared package",
+    entries: { "packages/render/src/index.ts": "Undeclared." },
+    message:
+      "stale source root entry: packages/render/src/index.ts is not in a package declared in scripts/source-layout.json",
+  },
+])("rejects a root entry naming $name", ({ entries, message }) => {
+  const result = checkScratch(rootEntrySources, {
+    "source-layout.json": declaredLayout,
+    "source-root-entries.json": { "packages/content/src/main.ts": "Started by node.", ...entries },
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
+const flatSources = {
+  ...declaredSources,
+  "packages/render/src/index.ts": 'export * from "./blocks.js";\n',
+  "packages/render/src/blocks.ts": "export const block = 1;\n",
+  "packages/render/src/test-support/fixture.ts": "export const fixture = 1;\n",
+};
+
+test("allows an exempt single-concern package to stay flat", () => {
+  const result = checkScratch(flatSources, {
+    "source-layout.json": declaredLayout,
+    "source-layout-exemptions.json": { "packages/render": "Single render core." },
+  });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test.each([
+  {
+    name: "a package that gains a directory",
+    files: { "packages/render/src/blocks/block.ts": "export const block = 1;\n" },
+    exemptions: { "packages/render": "Single render core." },
+    message:
+      "source layout exemption: packages/render has directory src/blocks; declare the package in scripts/source-layout.json instead",
+  },
+  {
+    name: "a declared package",
+    files: {},
+    exemptions: { "packages/content": "Also declared." },
+    message:
+      "source layout exemption: packages/content is also declared in scripts/source-layout.json",
+  },
+  {
+    name: "an unknown member",
+    files: {},
+    exemptions: { "packages/gone": "Removed." },
+    message: "source layout exemption names unknown member: packages/gone",
+  },
+])("rejects an exemption for $name", ({ files, exemptions, message }) => {
+  const result = checkScratch(
+    { ...flatSources, ...files },
+    { "source-layout.json": declaredLayout, "source-layout-exemptions.json": exemptions },
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
 function checkSourceConditionFixture(exports, sources = ["index.ts"]) {
   const root = mkdtempSync(join(tmpdir(), "lace-source-condition-"));
   try {
@@ -625,7 +713,24 @@ test("allows listed JavaScript sources and JavaScript tests", () => {
       "packages/content/src/script.test.mjs": "export {};\n",
       "packages/content/src/entry.packaged.test.mjs": "export {};\n",
     },
-    { "javascript-source-allowlist.json": { "packages/content/src/init.mjs": "Plain-Node init." } },
+    {
+      "javascript-source-allowlist.json": {
+        "packages/content/src/init.mjs": "Plain-Node init.",
+        "packages/content/src/script.test.mjs": "Tests the listed init script.",
+      },
+    },
+  );
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test("allows packaged-output JavaScript tests without listing them", () => {
+  const result = checkScratch(
+    {
+      "packages/content/src/index.ts": "export {};\n",
+      "packages/content/src/entry.packaged.test.mjs": "export {};\n",
+    },
+    { "javascript-source-allowlist.json": {} },
   );
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
@@ -643,6 +748,12 @@ test.each([
     { "packages/content/src/test-support/harness.mjs": "export {};\n" },
     { "packages/content/src/test-support/harness.mjs": "listed anyway" },
     "untyped test-support module: packages/content/src/test-support/harness.mjs",
+  ],
+  [
+    "an unlisted JavaScript source test",
+    { "packages/content/src/script.test.mjs": "export {};\n" },
+    {},
+    "JavaScript source test: packages/content/src/script.test.mjs",
   ],
   [
     "a stale allowlist entry",

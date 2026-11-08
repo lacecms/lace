@@ -2,15 +2,13 @@
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { DomainError, unixMilliseconds } from "@lacecms/domain";
 import { describe, expect, test } from "vitest";
-import {
-  classifyError,
-  ContractValidationError,
-  fromIsoTimestamp,
-  toMediaMetadataDto,
-} from "../index.js";
+import { classifyError } from "../errors/classification.js";
+import { ContractValidationError } from "../errors/envelope.js";
+import { fromIsoTimestamp } from "../shared/primitives.js";
+import { toMediaMetadataDto } from "./mappers.js";
 
 describe("media metadata contracts", async () => {
-  const { mediaEntityTag, resolveMediaPrecondition } = await import("../index.js");
+  const { mediaEntityTag, resolveMediaPrecondition } = await import("./mappers.js");
   const source = {
     createdAt: unixMilliseconds(1_700_000_000_000),
     createdBy: { displayName: "Ada", id: "user-1" },

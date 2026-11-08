@@ -2,14 +2,17 @@
 // TODO(rf2): Type heterogeneous schema fixture tables and mutable forward-compatible DTOs.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
+import { publicBlockSchema } from "../content/blocks.js";
+import { seoValueSchema } from "../content/seo.js";
+import { errorEnvelopeSchema } from "../errors/envelope.js";
 import {
   BUILD_EXPORT_FORMAT_VERSION,
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
   buildExportSchema,
-  errorEnvelopeSchema,
   exportSeoSchema,
-  publicBlockSchema,
+} from "./build-export.js";
+import {
   publicContentEntrySchema,
   publicContentListSchema,
   publicEntrySchema,
@@ -17,9 +20,8 @@ import {
   publicGlobalSchema,
   publicMediaDictionarySchema,
   publicMediaSchema,
-  seoValueSchema,
-  tolerantPublicSchemas,
-} from "../index.js";
+} from "./public.js";
+import { tolerantPublicSchemas } from "./tolerant.js";
 
 const publishedAt = "2026-10-01T08:00:00.000Z";
 

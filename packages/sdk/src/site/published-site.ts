@@ -8,15 +8,15 @@ import type {
   SeoValueDto,
   PublicMediaDto,
 } from "@lacecms/contracts";
+import { createLaceClient } from "../client/client.js";
+import type { BuildExportData, LaceClient, LaceFetch } from "../client/client.js";
 import {
-  createLaceClient,
   LaceHttpError,
   LaceLinkManifestError,
   LaceSdkError,
   LaceTransportError,
   LaceUnsupportedExportFormatError,
-} from "./client.js";
-import type { BuildExportData, LaceClient, LaceFetch } from "./client.js";
+} from "../client/errors.js";
 import { resolveSeo, seoText, siteUrlFor } from "./seo.js";
 import type { ResolvedSeo, SeoDefaultValues } from "./seo.js";
 

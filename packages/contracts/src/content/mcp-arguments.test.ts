@@ -4,12 +4,9 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 
 test("MCP envelopes reuse draft validation, typed filters and explicit revision without actor injection", async () => {
-  const {
-    mcpToolArgumentSchemas,
-    toContractValidationIssues,
-    toContentBlockInput,
-    contentBlockSchema,
-  } = await import("../index.js");
+  const { toContractValidationIssues } = await import("../errors/envelope.js");
+  const { toContentBlockInput, contentBlockSchema } = await import("./blocks.js");
+  const { mcpToolArgumentSchemas } = await import("./mcp-arguments.js");
   const draft = { title: "Draft", fields: { nested: { values: [1, false, null] } }, blocks: [] };
   expect(v.parse(mcpToolArgumentSchemas.create_entry, { ...draft, modelKey: "posts" })).toEqual({
     ...draft,
@@ -73,7 +70,7 @@ test("MCP envelopes reuse draft validation, typed filters and explicit revision 
 });
 
 test("MCP publication requires a revision and uses the REST idempotency key syntax", async () => {
-  const { mcpToolArgumentSchemas } = await import("../index.js");
+  const { mcpToolArgumentSchemas } = await import("./mcp-arguments.js");
   const schema = mcpToolArgumentSchemas.publish_entry;
   expect(
     v.parse(schema, { entryId: "entry", expectedRevision: 1, idempotencyKey: "retry-key" }),

@@ -252,7 +252,7 @@ export async function inspectPackage(directory, release) {
   }
   if (manifest.name === "create-lace") {
     const { TEMPLATE_FILES, TEMPLATE_VERSION } = await import(
-      pathToFileURL(join(directory, "dist/inventory.js")).href
+      pathToFileURL(join(directory, "dist/template/inventory.js")).href
     );
     if (TEMPLATE_VERSION !== release.templateVersion)
       throw new Error("Packed template identity mismatch");

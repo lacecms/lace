@@ -1,13 +1,8 @@
 // @ts-nocheck
 // TODO(rf2): Type mutable export fixtures, scripted transports and invalid loader inputs.
 import { expect, test } from "vitest";
-import {
-  LaceContractError,
-  LaceHttpError,
-  LacePublishedSiteError,
-  LaceSdkError,
-  createPublishedSiteLoader,
-} from "./index.js";
+import { LaceContractError, LaceHttpError, LaceSdkError } from "../client/errors.js";
+import { LacePublishedSiteError, createPublishedSiteLoader } from "./published-site.js";
 
 const timestamp = "2026-09-20T00:00:00.000Z";
 const token = "lace_build_secret-token-value";

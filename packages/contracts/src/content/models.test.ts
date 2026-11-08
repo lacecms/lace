@@ -2,7 +2,9 @@
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import { blockMetadataSchema, contentModelListSchema, toContentModelDto } from "../index.js";
+import { blockMetadataSchema } from "./metadata.js";
+import { toContentModelDto } from "./model-projection.js";
+import { contentModelListSchema } from "./models.js";
 
 describe("shared REST contract DTOs", () => {
   test("validates portable allowed block metadata against each model", () => {

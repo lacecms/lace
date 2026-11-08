@@ -1,6 +1,7 @@
 import type { SeoImage, SeoResolverInput } from "./seo.js";
 import { expect, test } from "vitest";
-import { createPublishedSiteLoader, resolveSeo, seoText } from "./index.js";
+import { createPublishedSiteLoader } from "./published-site.js";
+import { resolveSeo, seoText } from "./seo.js";
 
 const timestamp = "2026-10-01T00:00:00.000Z";
 const emptySeo = { canonical: null, description: null, image: null, noindex: false, title: null };

@@ -1,0 +1,3 @@
+{
+  "packages/render": "Single concern: the framework-neutral render core of architecture section 13.3; every module turns published content into adapter-neutral render descriptions and shares errors.ts."
+}

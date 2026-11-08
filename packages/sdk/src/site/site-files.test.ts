@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { createPublishedSiteLoader, renderRobotsTxt, renderSitemapXml } from "./index.js";
+import { createPublishedSiteLoader } from "./published-site.js";
+import { renderRobotsTxt, renderSitemapXml } from "./site-files.js";
 
 const emptySeo = { canonical: null, description: null, image: null, noindex: false, title: null };
 

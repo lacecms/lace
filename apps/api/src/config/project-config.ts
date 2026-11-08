@@ -1,6 +1,8 @@
-import type { NodeApiConfig } from "./node-server.js";
+import type { CreateNodeRuntimeInput } from "@lacecms/platform-node";
 
-const projectConfigUrl = new URL("../../../lace.config.ts", import.meta.url);
+export type NodeApiConfig = CreateNodeRuntimeInput["config"];
+
+const projectConfigUrl = new URL("../../../../lace.config.ts", import.meta.url);
 
 function isNormalizedConfig(value: unknown): value is NodeApiConfig {
   if (value === null || typeof value !== "object") return false;

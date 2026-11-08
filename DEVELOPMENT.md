@@ -258,8 +258,9 @@ modules are always type-checked. Shared fixtures come from
 `@lacecms/test-utils` (`admin`, `editor`, `viewer`, `testActor`,
 `delegatedActor`, `fakePort`) for packages above it in the graph; Node product
 tests open runtimes with `openNodeTestRuntime` from
-`@lacecms/platform-node/test`. A new `.mjs` module under `src/` fails `pnpm
-lint` unless `scripts/javascript-source-allowlist.json` names it with a reason.
+`@lacecms/platform-node/test`. A new `.mjs` module or non-packaged JavaScript
+test under `src/` fails `pnpm lint` unless
+`scripts/javascript-source-allowlist.json` names it with a reason.
 Source `test` results are cached per dependency closure; declare any other
 repository file a test reads as a package-scoped input in `turbo.json`.
 

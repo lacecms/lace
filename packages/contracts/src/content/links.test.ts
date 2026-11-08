@@ -4,7 +4,10 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 
 test("internal-link queries, statuses and impact pages are strict and independently bounded", async () => {
-  const c = await import("../index.js");
+  const c = {
+    ...(await import("./entry-requests.js")),
+    ...(await import("./links.js")),
+  };
   const valid = (schema, value) => v.safeParse(schema, value).success;
   expect(v.parse(c.linkTargetQuerySchema, {})).toEqual({ limit: 20 });
   expect(v.parse(c.linkTargetQuerySchema, { search: "  A_%  ", limit: "50" })).toEqual({

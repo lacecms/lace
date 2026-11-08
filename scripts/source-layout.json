@@ -78,5 +78,24 @@
     "store": ["fixtures", "shared"],
     "repository-contract": ["delivery", "fixtures", "visibility"],
     "security-contract": ["repository-contract"]
+  },
+  "packages/sdk": {
+    "client": [],
+    "site": ["client"]
+  },
+  "packages/create-lace": {
+    "site": [],
+    "template": ["site"],
+    "generator": ["site", "template"],
+    "cli": ["generator", "site"]
+  },
+  "apps/api": {
+    "config": [],
+    "dispatch": [],
+    "server": []
+  },
+  "apps/builder": {
+    "runner": [],
+    "server": ["runner"]
   }
 }

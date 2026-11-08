@@ -10,7 +10,7 @@ import {
   unpublishContentEntryRequestSchema,
   publishContentEntryRequestSchema,
   saveDraftRequestSchema,
-} from "../index.js";
+} from "./entry-requests.js";
 
 describe("shared REST contract DTOs", () => {
   test("accepts complete mutation request contracts", () => {

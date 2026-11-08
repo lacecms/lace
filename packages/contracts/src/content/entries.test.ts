@@ -2,16 +2,15 @@
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
+import { toIsoTimestamp } from "../shared/primitives.js";
 import {
   adminContentEntrySchema,
   contentEntryListQuerySchema,
   contentEntryListSchema,
   contentEntrySchema,
   contentEntrySummarySchema,
-  toAdminContentEntryDto,
-  toContentEntryDto,
-  toIsoTimestamp,
-} from "../index.js";
+} from "./entries.js";
+import { toAdminContentEntryDto, toContentEntryDto } from "./entry-mappers.js";
 import { timestamp, actor, entry } from "../test-support/rest-fixtures.js";
 
 describe("admin entry list contracts", () => {
@@ -91,7 +90,7 @@ describe("admin entry list contracts", () => {
   });
 });
 
-import { SLUG_PATTERN } from "../index.js";
+import { SLUG_PATTERN } from "@lacecms/content";
 
 test("entry slug query grammar agrees with the portable slug pattern", () => {
   const pipe = contentEntryListQuerySchema.entries.slug.wrapped.pipe;

@@ -4,7 +4,7 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 
 test("admin build diagnostics validate closed reasons and coherent safe paths", async () => {
-  const { siteBuildRecordSchema } = await import("../index.js");
+  const { siteBuildRecordSchema } = await import("./site-builds.js");
   const base = {
     id: "build",
     reason: "manual",
@@ -35,7 +35,7 @@ test("admin build diagnostics validate closed reasons and coherent safe paths", 
 
 test("admin build DTOs accept exactly the seven lifecycle statuses", async () => {
   const { siteBuildRecordSchema, siteBuildStatusSchema, toSiteBuildRecordDto } =
-    await import("../index.js");
+    await import("./site-builds.js");
   const base = {
     id: "build",
     reason: "publication",
@@ -76,7 +76,7 @@ test("admin build DTOs accept exactly the seven lifecycle statuses", async () =>
 });
 
 test("admin build DTOs carry tracking stage, last check and tracking reasons", async () => {
-  const { siteBuildRecordSchema, toSiteBuildRecordDto } = await import("../index.js");
+  const { siteBuildRecordSchema, toSiteBuildRecordDto } = await import("./site-builds.js");
   const base = {
     id: "build",
     reason: "publication",

@@ -12,7 +12,7 @@ import {
   invitationListSchema,
   passwordResetConfirmRequestSchema,
   passwordResetRequestSchema,
-} from "../index.js";
+} from "./invitations.js";
 
 describe("account lifecycle contracts", () => {
   const token = "A".repeat(43);

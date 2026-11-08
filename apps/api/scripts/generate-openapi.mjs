@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { loadProjectConfig } from "../dist/project-config.js";
+import { loadProjectConfig } from "../dist/config/project-config.js";
 import { createLaceApp } from "@lacecms/server";
 
 function sortJson(value) {

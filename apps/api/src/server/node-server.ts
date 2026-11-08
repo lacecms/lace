@@ -3,11 +3,7 @@ import { createServer, request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
-import type {
-  CreateNodeRuntimeInput,
-  NodeRuntime,
-  NodeRuntimeSettings,
-} from "@lacecms/platform-node";
+import type { NodeRuntime, NodeRuntimeSettings } from "@lacecms/platform-node";
 
 const mcpLocalPaths = [
   "/mcp",
@@ -214,5 +210,3 @@ export async function startNodeServer(input: {
     url: new URL(`http://${input.settings.host}:${address.port}`),
   });
 }
-
-export type NodeApiConfig = CreateNodeRuntimeInput["config"];

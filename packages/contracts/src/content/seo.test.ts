@@ -3,29 +3,18 @@
 import { contentEntryId, mediaId } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import {
-  buildExportSchema,
-  publicContentEntrySchema,
-  toPublicContentEntryDto,
-  toPublicContentListDto,
-  adminContentEntrySchema,
-  contentEntrySchema,
-  contentModelListSchema,
-  createContentEntryRequestSchema,
-  mediaDetailSchema,
-  mediaUrl,
-  saveDraftRequestSchema,
-  toBuildExportDto,
-  toAdminContentEntryDto,
-  seoInputSchema,
-  toSeoDto,
-  toContentEntryDto,
-  toContentModelDto,
-  formatSeoTitle,
-  isCanonicalUrl as contractsIsCanonicalUrl,
-  normalizeSeoText as contractsNormalizeSeoText,
-  seoText,
-} from "../index.js";
+import { toBuildExportDto } from "../delivery/build-export-mappers.js";
+import { buildExportSchema } from "../delivery/build-export.js";
+import { toPublicContentEntryDto, toPublicContentListDto } from "../delivery/public-mappers.js";
+import { publicContentEntrySchema } from "../delivery/public.js";
+import { mediaUrl } from "../media/mappers.js";
+import { mediaDetailSchema } from "../media/metadata.js";
+import { adminContentEntrySchema, contentEntrySchema } from "./entries.js";
+import { toAdminContentEntryDto, toContentEntryDto } from "./entry-mappers.js";
+import { createContentEntryRequestSchema, saveDraftRequestSchema } from "./entry-requests.js";
+import { toContentModelDto } from "./model-projection.js";
+import { contentModelListSchema } from "./models.js";
+import { seoInputSchema, toSeoDto, formatSeoTitle, seoText } from "./seo.js";
 import { published, entry } from "../test-support/rest-fixtures.js";
 
 describe("admin entry list contracts", () => {
@@ -223,11 +212,5 @@ describe("shared SEO text rules", () => {
     );
     expect(formatSeoTitle("Hello", { siteName: "  " })).toBe("Hello");
     expect(formatSeoTitle("Hello", undefined)).toBe("Hello");
-  });
-  test("re-exports the domain SEO predicates", () => {
-    expect(contractsIsCanonicalUrl("https://example.com/a")).toBe(true);
-    expect(contractsIsCanonicalUrl("/a")).toBe(false);
-    expect(contractsNormalizeSeoText("a\nb", "title")).toBeUndefined();
-    expect(contractsNormalizeSeoText("  ", "title")).toBeNull();
   });
 });

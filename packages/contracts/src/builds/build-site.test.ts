@@ -2,7 +2,7 @@
 // TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
-import { buildSiteIdentitySchema, buildSiteUrlSchema } from "../index.js";
+import { buildSiteIdentitySchema, buildSiteUrlSchema } from "./build-site.js";
 
 test("build-site URLs are absolute HTTP(S) base URLs", () => {
   for (const url of ["https://example.com/", "http://127.0.0.1:4321/blog/"])

@@ -74,7 +74,7 @@ export async function main() {
     })),
     testPhase("health-restore-rotation", [
       rootRun("--config", "vitest.verification.config.mjs", "--project", "operations"),
-      packageRun("apps/builder/src/runner.test.ts"),
+      packageRun("apps/builder/src/runner/runner.test.ts"),
     ]),
     testPhase(
       "forward-migration-upgrade",

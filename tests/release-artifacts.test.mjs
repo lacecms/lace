@@ -98,7 +98,7 @@ test("injected preparation failure leaves no inventory or success", async () => 
         JSON.stringify(model.templates[index]),
       );
     await fixtureFile(
-      "packages/create-lace/src/inventory.ts",
+      "packages/create-lace/src/template/inventory.ts",
       `export const TEMPLATE_VERSION = "${model.templateVersion}";\n`,
     );
     await fixtureFile("packages/create-lace/templates/.env.example", model.environment);

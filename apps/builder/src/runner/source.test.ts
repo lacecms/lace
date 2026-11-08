@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink, readFile } from "node:fs/promis
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, test } from "vitest";
-import { validateSource, copySource } from "./index.js";
+import { validateSource, copySource } from "./source.js";
 
 const roots: string[] = [];
 afterEach(async () => {

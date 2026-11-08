@@ -1,5 +1,5 @@
 import type { RenderKind } from "./render.js";
-import type { SiteMode } from "./site.js";
+import type { SiteMode } from "../site/modes.js";
 
 export type FileOwner = "managed" | "user";
 

@@ -2,7 +2,7 @@
 // TODO(rf2): Type legacy HTTP/process fixtures and recorded runner calls.
 import { Readable } from "node:stream";
 import { expect, test, vi } from "vitest";
-import { createBuilderHandler } from "./index.js";
+import { createBuilderHandler } from "./handler.js";
 
 const secret = "s".repeat(32);
 

@@ -3,14 +3,10 @@
 import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import {
-  contentModelSchema,
-  blockMetadataSchema,
-  fieldMetadataMapSchema,
-  fieldMetadataSchema,
-  toContentModelDto,
-  validationError,
-} from "../index.js";
+import { validationError } from "../errors/envelope.js";
+import { blockMetadataSchema, fieldMetadataMapSchema, fieldMetadataSchema } from "./metadata.js";
+import { toContentModelDto } from "./model-projection.js";
+import { contentModelSchema } from "./models.js";
 
 describe("shared REST contract DTOs", () => {
   test("accepts only normalized portable field metadata", () => {

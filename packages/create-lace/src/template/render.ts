@@ -1,5 +1,5 @@
-import { SITE_MODES } from "./site.js";
-import type { SiteMode, SiteSelection } from "./site.js";
+import { SITE_MODES } from "../site/modes.js";
+import type { SiteMode, SiteSelection } from "../site/modes.js";
 
 export class TemplateError extends Error {
   public constructor(message: string) {

@@ -8,7 +8,7 @@ import {
   isoTimestampSchema,
   jsonPointerSchema,
   opaqueCursorSchema,
-} from "../index.js";
+} from "./primitives.js";
 
 describe("invalid shared REST payloads", () => {
   test("rejects malformed timestamps, cursors, entity tags, idempotency keys, and issue paths", () => {

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { CONTENT_MODEL_DTO_KEYS } from "./model-projection.js";
-import { contentModelSchema, toContentModelDto } from "../index.js";
+import { toContentModelDto } from "./model-projection.js";
+import { contentModelSchema } from "./models.js";
 
 test("content model projection covers exactly the DTO schema keys", () => {
   expect([...CONTENT_MODEL_DTO_KEYS].sort()).toEqual(

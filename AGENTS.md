@@ -59,7 +59,9 @@ shared helpers in `src/test-support/`. Existing packages adopt this in RF4–RF6
 or when adding a second concern; admin retains its layer/slice structure.
 Remove split files from `scripts/oversized-source-baseline.json`; never grow
 baselined files. The boundary checker also enforces the directory rules in
-`scripts/source-layout.json` (add a package when it adopts the layout), freezes
+`scripts/source-layout.json` (add a package when it adopts the layout; list
+directly started app entries in `scripts/source-root-entries.json` and
+single-concern flat packages in `scripts/source-layout-exemptions.json`), freezes
 legacy module cycles in `scripts/source-cycle-baseline.json`, and limits
 `@ts-nocheck` tests to `scripts/test-typecheck-baseline.json`; a split types its
 test companions or lists them there explicitly. See

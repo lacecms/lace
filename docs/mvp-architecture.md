@@ -406,9 +406,16 @@ Tests and type tests sit beside their module; shared helpers live in
 fixture layer (`fixtures/`: role actors, a delegated-actor builder and the
 `fakePort` typed partial fake); packages it depends on (`content`, `domain`,
 `config`, `application`, `contracts`) keep package-local typed test-support. A
-non-test `.mjs` or `.js` module under `src/` needs a reasoned entry in
-`scripts/javascript-source-allowlist.json`. `apps/admin` keeps its section 17 layer/slice structure,
-with the same size limit and no-cycle rule.
+non-test `.mjs` or `.js` module under `src/`, and a JavaScript test other than
+a `*.packaged.test.mjs` packaged-output test, needs a reasoned entry in
+`scripts/javascript-source-allowlist.json`. Applications keep the modules that
+Node, a container command or a Compose service starts directly at the `src/`
+root, listed with a reason in `scripts/source-root-entries.json`, so operator
+command paths survive a layout change. A package with a single concern stays
+flat and is recorded with its reason in
+`scripts/source-layout-exemptions.json`; it may not gain a directory other than
+`test-support/` without declaring a layout. `apps/admin` keeps its section 17
+layer/slice structure, with the same size limit and no-cycle rule.
 
 Existing flat packages adopt this layout in their RF4–RF6 session or a change
 adding a second concern. The boundary checker enforces the 1,000-line ceiling
@@ -418,8 +425,11 @@ The same checker rejects module cycles in every member's production graph
 (legacy strongly connected components are frozen in
 `scripts/source-cycle-baseline.json`) and, for packages declared in
 `scripts/source-layout.json`, imports against the declared directory direction,
-subdirectory `index` modules, root modules that are not manifest entries and
-entry headers whose `Directory dependencies:` line names other directories.
+subdirectory `index` modules, root modules that are neither manifest entries
+nor listed process entries, and entry headers whose `Directory dependencies:`
+line names other directories. Every workspace package outside the declaration
+and the exemption list is still flat and adopts the layout in its planned
+session (`platform-node` and `platform-cloudflare` in RF5B, `cli` in RF7C).
 Test files may disable type checking only while listed in the shrinking
 `scripts/test-typecheck-baseline.json`; test-support modules never may.
 Every `packages/*` export into `dist/` lists the `@lacecms/source` condition

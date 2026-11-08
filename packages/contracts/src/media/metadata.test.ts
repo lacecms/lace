@@ -3,14 +3,13 @@
 import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import { mediaMetadataSchema, toMediaMetadataDto } from "../index.js";
+import { toMediaMetadataDto } from "./mappers.js";
+import { mediaMetadataSchema } from "./metadata.js";
 
 describe("media metadata contracts", async () => {
-  const {
-    toUpdateMediaMetadataResultDto,
-    updateMediaMetadataRequestSchema,
-    updateMediaMetadataResultSchema,
-  } = await import("../index.js");
+  const { toUpdateMediaMetadataResultDto } = await import("./mappers.js");
+  const { updateMediaMetadataRequestSchema, updateMediaMetadataResultSchema } =
+    await import("./metadata.js");
   const source = {
     createdAt: unixMilliseconds(1_700_000_000_000),
     createdBy: { displayName: "Ada", id: "user-1" },
