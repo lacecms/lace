@@ -120,7 +120,7 @@ What the roadmap changes, with the numbers to beat:
 | Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
 | Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
 | Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim |
-| Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` |
+| Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` → RF5A: one owner each (`db` `security/rows.ts`; rate-limit policies and setup TTL in application); adapters split by port, largest module 629 lines (`d1-security.ts` 984 → 215) |
 | Duplication | argv parsers in `packages/cli` | 6 (+1 in `scripts/cloudflare-lib.mjs`) |
 | Admin | one-line `index.ts` barrels | 176 of 196 |
 | Admin | components under 60 lines occupying a three-file folder | 40 |
@@ -144,7 +144,7 @@ What the roadmap changes, with the numbers to beat:
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
-| RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
+| RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | in progress |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
 | RF8 | Documentation | L | RF8A → RF8B → RF8C | planned |
@@ -801,13 +801,26 @@ Move the verbatim row mappers (`role`, `user`, `profile`, `invitation`,
 `packages/platform-cloudflare/src/d1-security.ts` into
 `packages/db/src/security/rows.ts`, following the existing
 `packages/db/src/security/api-tokens.ts` pattern. `digest`, `tokenSecret` and
-`randomHex` stay platform-local. `security-contract` (22 cases) guards both.
+`randomHex` stay platform-local. `security-contract` (17 cases per runtime;
+the audit's 22 was an overcount) guards both.
 
 Added by the second audit: the verbatim rate-limit policy table and
 `setupExpiryMs` become one `Record<SensitiveRateLimitOperation, Policy>` in
 application; each security adapter splits by port
 (`security/{account,session,token}.ts`), which keeps `d1-security.ts` (978
 lines) under the ceiling; server credential routes take `TokenSecurityPort`.
+
+**Outcome (RF5A):** `packages/db/src/security/rows.ts` owns the mappers under
+value names (`securityRole`, `managedUser`, `userProfile`,
+`invitationRecord`, `sessionRecord`, `buildTokenMetadata`) plus
+`normalizedEmail`, `isUniqueViolation` and the two invitation fragments;
+application owns `SENSITIVE_RATE_LIMIT_POLICIES` (beside the operation type)
+and `SETUP_TOKEN_TTL_MS` (beside the other account TTLs; the setup lifetime is
+not a rate-limit policy). Each platform has `src/security/{account,session,token,secrets}.ts`
+(D1 also `statements.ts`); `NodeSecurityService` (202 lines) and
+`D1SecurityService` (215) stay in their files and delegate, so platform
+exports and `dist/d1-security.js` are unchanged. The shared `managedUser`
+uses D1's `Number(row.disabled) === 1`.
 
 ### Session RF5B — Shared content reader
 
@@ -1181,3 +1194,5 @@ is empty.
 | 2026-11-08 | RF4H | `rf04h-near-ceiling-module-splits` | Archived at [`2026-11-08-rf04h-near-ceiling-module-splits`](../openspec/changes/archive/2026-11-08-rf04h-near-ceiling-module-splits/); 12/12 tasks complete. No delta specs (`skip_specs`). Verification remains in the archive. |
 | 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Implemented, 14/14 tasks complete. `sdk`, `create-lace`, `apps/api` and `apps/builder` adopt the §6 layout; `render` is a recorded single-concern exemption; six app process entries are listed in `scripts/source-root-entries.json`; non-packaged JavaScript tests need an allowlist entry (`apps/docs` catalog test). Contracts module tests import their modules, the `config` packaged test pins declaration names, `apps/api` source tests run in parallel. Delta spec: `workspace-governance` (2 modified). Not archived; Step RF4 becomes done at archive. |
 | 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Archived at [`2026-11-08-rf04j-remaining-flat-packages`](../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/); 14/14 tasks complete. Delta spec synchronized into `workspace-governance` (2 modified requirements). Step RF4 done. |
+| 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Implemented, 9/9 tasks complete. Security row mappers, email/unique helpers and invitation SQL move to `db` `security/rows.ts`; rate-limit policies and the setup-token TTL move to application; both adapters split by port (`d1-security.ts` 984 → 215 lines, largest new module 629). Platform runtime keys, declaration names and the 17 security-contract titles per runtime match the baseline; `db` and `application` gain only the shared names. No delta specs (`skip_specs`). Not archived. |
+| 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Archived at [`2026-11-08-rf05a-shared-security-rows`](../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/); 9/9 tasks complete. No delta specs (`skip_specs`). RF5B next. |

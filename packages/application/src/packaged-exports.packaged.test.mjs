@@ -48,6 +48,8 @@ test("packaged entry point keeps its public exports", async () => {
     "PASSWORD_RESET_TTL_MS",
     "RateLimitExceededError",
     "RuntimeConfigurationError",
+    "SENSITIVE_RATE_LIMIT_POLICIES",
+    "SETUP_TOKEN_TTL_MS",
     "SITE_BUILD_DEBOUNCE_MS",
     "SYSTEM_ACTOR_DISPLAY_NAME",
     "SiteBuildDispatcher",

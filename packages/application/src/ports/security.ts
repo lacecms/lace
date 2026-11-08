@@ -298,6 +298,32 @@ export type SensitiveRateLimitOperation =
   | "token"
   | "upload";
 
+/** At most `limit` attempts per subject in each fixed window of `windowMs`. */
+export interface SensitiveRateLimitPolicy {
+  readonly limit: number;
+  readonly windowMs: number;
+}
+
+const minute = 60 * 1000;
+const hour = 60 * minute;
+
+/** Fixed-window policies every runtime's `SensitiveRateLimiter` enforces. */
+export const SENSITIVE_RATE_LIMIT_POLICIES: Readonly<
+  Record<SensitiveRateLimitOperation, SensitiveRateLimitPolicy>
+> = Object.freeze({
+  mcp: Object.freeze({ limit: 60, windowMs: minute }),
+  "oauth-register": Object.freeze({ limit: 10, windowMs: 15 * minute }),
+  "oauth-token": Object.freeze({ limit: 60, windowMs: minute }),
+  "oauth-revoke": Object.freeze({ limit: 20, windowMs: hour }),
+  auth: Object.freeze({ limit: 10, windowMs: 15 * minute }),
+  email: Object.freeze({ limit: 5, windowMs: hour }),
+  invite: Object.freeze({ limit: 20, windowMs: hour }),
+  reset: Object.freeze({ limit: 3, windowMs: hour }),
+  setup: Object.freeze({ limit: 5, windowMs: hour }),
+  token: Object.freeze({ limit: 20, windowMs: hour }),
+  upload: Object.freeze({ limit: 30, windowMs: minute }),
+});
+
 export interface SensitiveRateLimiter {
   check(input: {
     readonly operation: SensitiveRateLimitOperation;

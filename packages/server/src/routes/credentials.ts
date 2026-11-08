@@ -4,7 +4,7 @@ import {
   importTokenCapabilities,
   importTokenExpiry,
 } from "@lacecms/application";
-import type { SecurityService } from "@lacecms/application";
+import type { TokenSecurityPort } from "@lacecms/application";
 import {
   buildTokenCreateRequestSchema,
   buildTokenCreatedSchema,
@@ -25,8 +25,8 @@ import type { RouteContext } from "../composition/route-context.js";
 
 function buildTokenDto(
   value:
-    | Awaited<ReturnType<SecurityService["createBuildToken"]>>
-    | Awaited<ReturnType<SecurityService["listBuildTokens"]>>[number],
+    | Awaited<ReturnType<TokenSecurityPort["createBuildToken"]>>
+    | Awaited<ReturnType<TokenSecurityPort["listBuildTokens"]>>[number],
 ) {
   return {
     capabilities: ["content:build:read"] as const,
@@ -40,7 +40,8 @@ function buildTokenDto(
 }
 
 export function registerCredentialRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, security, settingsActor } = routeContext;
+  const { actor, settingsActor } = routeContext;
+  const security: () => TokenSecurityPort = routeContext.security;
   app.get("/api/v1/admin/api-tokens", async (context) => {
     await settingsActor(context);
     return response(buildTokenListSchema, {

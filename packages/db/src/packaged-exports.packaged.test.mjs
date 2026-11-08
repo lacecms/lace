@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 test("packaged entry point keeps its public exports", async () => {
   expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([
+    "ACTIVE_INVITATION_SQL",
     "BLOCK_COLUMNS_SQL",
     "BLOCK_COPY_COLUMNS_SQL",
     "BUILD_EXPORT_CANDIDATES_SQL",
@@ -27,6 +28,7 @@ test("packaged entry point keeps its public exports", async () => {
     "INTERNAL_LINK_ROWS_SQL",
     "INVALID_PROJECTED_LINK_TARGETS_SQL",
     "INVALID_PUBLISHED_LINK_TARGETS_SQL",
+    "INVITATION_COLUMNS_SQL",
     "LEASE_TRACKED_SITE_BUILD_SQL",
     "LINK_IMPACT_EVIDENCE_SQL",
     "LINK_TARGETS_SQL",
@@ -88,6 +90,7 @@ test("packaged entry point keeps its public exports", async () => {
     "buildExportPage",
     "buildExportPageRange",
     "buildExportPageSql",
+    "buildTokenMetadata",
     "checkedInMigrations",
     "chunks",
     "collectionListPlan",
@@ -130,9 +133,12 @@ test("packaged entry point keeps its public exports", async () => {
     "importTokenUserInvalidationSql",
     "installationState",
     "internalLinkRowsJson",
+    "invitationRecord",
     "invitations",
+    "isUniqueViolation",
     "linkRemovalCondition",
     "literalLikePattern",
+    "managedUser",
     "media",
     "mediaCatalogItem",
     "mediaCursorKind",
@@ -145,6 +151,7 @@ test("packaged entry point keeps its public exports", async () => {
     "mediaTags",
     "mediaUsageEntries",
     "mutationGuards",
+    "normalizedEmail",
     "normalizedMediaFilterTags",
     "normalizedMediaWriteTags",
     "notPublished",
@@ -182,7 +189,9 @@ test("packaged entry point keeps its public exports", async () => {
     "sameStoredModelStates",
     "sanitizeBuildReason",
     "sanitizeDispatchError",
+    "securityRole",
     "seoJson",
+    "sessionRecord",
     "setupTokens",
     "siteBuildPayload",
     "siteBuildRecord",
@@ -206,5 +215,6 @@ test("packaged entry point keeps its public exports", async () => {
     "trackedSiteBuildCheck",
     "trackedSiteBuildCheckUpdate",
     "unpublicationScope",
+    "userProfile",
   ]);
 });

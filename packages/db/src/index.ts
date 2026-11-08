@@ -2,6 +2,7 @@
 // shared ← content ← media ← delivery ← builds; outbox.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
+export * from "./security/rows.js";
 export * from "./content/collection-list.js";
 export { literalLikePattern } from "@lacecms/content";
 export const packageName = "@lacecms/db";
