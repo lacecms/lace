@@ -1,6 +1,7 @@
 import { MAX_PAGE_SIZE } from "@lacecms/content";
 import {
   DISPATCHER_LEASE_DURATION_MS,
+  MAX_SITE_BUILD_CLAIMS_PER_CALL,
   dispatcherEventId,
   dispatcherLeaseId,
 } from "@lacecms/application";
@@ -80,16 +81,22 @@ export class NodeSiteBuilds
           .all(
             input.now,
             input.now - DISPATCHER_LEASE_DURATION_MS,
-            input.limit,
+            Math.min(input.limit, MAX_SITE_BUILD_CLAIMS_PER_CALL),
           ) as readonly OutboxRow[];
         const leases: SiteBuildWorkLease[] = [];
         for (const row of rows) {
           const leaseId = dispatcherLeaseId(this.nextId());
           const claimed = this.connection
             .prepare(
-              "update outbox_events set locked_at = ?, locked_by = ? where id = ? and processed_at is null and (locked_at is null or locked_at <= ?)",
+              "update outbox_events set locked_at = ?, locked_by = ? where id = ? and payload_json = ? and processed_at is null and (locked_at is null or locked_at <= ?)",
             )
-            .run(input.now, leaseId, row.id, input.now - DISPATCHER_LEASE_DURATION_MS);
+            .run(
+              input.now,
+              leaseId,
+              row.id,
+              row.payload_json,
+              input.now - DISPATCHER_LEASE_DURATION_MS,
+            );
           if (claimed.changes !== 1) continue;
           const payload = siteBuildPayload(row.payload_json);
           if (payload === null) {

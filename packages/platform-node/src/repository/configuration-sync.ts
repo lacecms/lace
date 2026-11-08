@@ -163,6 +163,7 @@ export class NodeConfigurationSync
             }
           }
           this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
+          // In-transaction dirty token of the shared sync link statements (§16 runtime deltas).
           this.connection.prepare("delete from mutation_guards where token=?").run(linkDirtyToken);
         })();
       } catch (error) {
@@ -368,6 +369,7 @@ export class NodeConfigurationSync
           this.connection.prepare(write.sql).run(...write.params);
         if (linkStatements.writes.length) {
           this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
+          // In-transaction dirty token of the shared sync link statements (§16 runtime deltas).
           this.connection.prepare("delete from mutation_guards where token=?").run(linkDirtyToken);
         }
         if (!configurationSyncAdvancesPublicState(actualPlan)) {

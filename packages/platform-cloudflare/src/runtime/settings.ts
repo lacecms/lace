@@ -2,7 +2,7 @@ import { RuntimeConfigurationError } from "@lacecms/application";
 import { siteBuildTrackingPolicy } from "@lacecms/domain";
 import {
   parseBuildSiteIdentity,
-  parseMcpEnabled,
+  parseRuntimeFeatureFlags,
   parseEmailSettings,
   type EmailSettings,
   type LaceAppInput,
@@ -316,15 +316,8 @@ function pagesTracking(
 /** Parses Worker bindings and secrets once, without exposing supplied values in errors. */
 export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSettings {
   const issues: CloudflareEnvironmentIssue[] = [];
-  let mcpEnabled = false;
-  try {
-    mcpEnabled = parseMcpEnabled(env.LACE_MCP_ENABLED);
-  } catch {
-    issues.push({ reason: "invalid", variable: "LACE_MCP_ENABLED" });
-  }
-  const docs = env.LACE_API_DOCS_ENABLED;
-  if (docs !== undefined && docs !== "true" && docs !== "false")
-    issues.push({ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" });
+  const features = parseRuntimeFeatureFlags(env);
+  issues.push(...features.issues);
   const buildSite = parseBuildSiteIdentity(env);
   const database = binding<D1Database>(env.DB, "DB", ["batch", "prepare"], issues);
   const media = binding<R2Bucket>(env.MEDIA, "MEDIA", ["delete", "get", "head", "put"], issues);
@@ -377,8 +370,8 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
     throw new CloudflareEnvironmentError(Object.freeze(issues));
   }
   return Object.freeze({
-    apiDocsEnabled: docs === "true",
-    mcpEnabled,
+    apiDocsEnabled: features.flags.apiDocsEnabled,
+    mcpEnabled: features.flags.mcpEnabled,
     buildSite,
     ...(assets === undefined ? {} : { assets }),
     authSecret,

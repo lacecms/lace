@@ -2,23 +2,16 @@ import { createD1OAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
-  ContentUseCases,
-  OAuthConnectionUseCases,
-  ContentLinkUseCases,
   MediaDeletionDispatcher,
-  MediaUseCases,
   SITE_BUILD_DEBOUNCE_MS,
   SiteBuildDispatcher,
   SiteBuildTracker,
-  SiteBuildUseCases,
-  contentModelRoute,
 } from "@lacecms/application";
 import type {
   BuildTriggerResult,
   Cache,
   Clock,
   ImageInspector,
-  RateLimitDecision,
   SiteBuildTrigger,
   EmailSender,
 } from "@lacecms/application";
@@ -35,13 +28,12 @@ import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
 import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
+  composeLaceServices,
+  contentModelResolver,
   createEmailSender,
   createLaceApp,
-  sensitiveRequestLimit,
-  sensitiveRequestSubject,
   type EmailSettings,
   type ReadinessProbe,
-  type RequestRateLimiter,
   type ServerLogger,
 } from "@lacecms/server";
 import { drizzle } from "drizzle-orm/d1";
@@ -162,34 +154,6 @@ class D1Readiness implements ReadinessProbe {
   }
 }
 
-class CloudflareRequestRateLimiter implements RequestRateLimiter {
-  public constructor(
-    private readonly limiter: D1FixedWindowRateLimiter,
-    private readonly clock: Clock,
-    private readonly clients: TrustedClientAddresses,
-  ) {}
-
-  public async check(input: {
-    readonly request: Request;
-    readonly actor?: { readonly id: string };
-  }): Promise<boolean | RateLimitDecision> {
-    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
-    if (limit === undefined) return true;
-    const subject = await sensitiveRequestSubject(
-      limit,
-      input.request,
-      this.clients.get(input.request),
-      input.actor?.id,
-    );
-    if (subject === undefined) return true;
-    return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
-  }
-}
-
-const defaultLogger: ServerLogger = Object.freeze({
-  log: (entry: Parameters<ServerLogger["log"]>[0]) => console.info(JSON.stringify(entry)),
-});
-
 const defaultOperationalLogger: WorkerOperationalLogger = Object.freeze({
   error: (entry: Record<string, string>) => console.error(JSON.stringify(entry)),
 });
@@ -246,16 +210,12 @@ export function createCloudflareRuntime(
   const ids = { next: () => ulid() };
   const repository = new D1ContentRepository(
     settings.database,
-    (key) => {
-      const model = input.config.runtime.content.find((candidate) => candidate.key === key);
-      return model === undefined ? undefined : contentModelRoute(model);
-    },
+    contentModelResolver(input.config),
     { nextId: () => ids.next() },
   );
   const clients = new TrustedClientAddresses();
   const security = new D1SecurityService(settings.database, () => clock.now());
   const sensitiveLimiter = new D1FixedWindowRateLimiter(settings.database, settings.authSecret);
-  const rateLimiter = new CloudflareRequestRateLimiter(sensitiveLimiter, clock, clients);
   const cache =
     settings.cache === undefined
       ? new NoopCloudflareCache()
@@ -293,26 +253,7 @@ export function createCloudflareRuntime(
         }),
     work: repository,
   });
-  const content = new ContentUseCases({
-    listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
-    clock,
-    config: input.config.runtime,
-    content: repository,
-    idGenerator: ids,
-    media: repository,
-  });
-  const media = new MediaUseCases({
-    clock,
-    drafts: content,
-    idGenerator: ids,
-    imageInspector: input.imageInspector ?? new WorkerImageInspector(),
-    logger: {
-      error: (entry) => logger.error({ component: "media", ...entry }),
-    },
-    media: repository,
-    publicMedia: repository,
-    storage,
-  });
+  const mcpEnabled = settings.mcpEnabled ?? false;
   const oauth = createD1OAuthPersistence(settings.database);
   const auth = createBetterAuthBoundary({
     clientAddress: (request) => clients.get(request),
@@ -321,52 +262,48 @@ export function createCloudflareRuntime(
     production: settings.production,
     schema: betterAuthSchema,
     secret: settings.authSecret,
-    ...(settings.mcpEnabled ? { oauth: { persistence: oauth } } : {}),
+    ...(mcpEnabled ? { oauth: { persistence: oauth } } : {}),
   });
-  const mcp = settings.mcpEnabled
-    ? createMcpContentHandler({ content, version: engineVersion })
-    : undefined;
-  const oauthBoundary = auth.mcp;
-  const app = createLaceApp({
-    mcpEnabled: settings.mcpEnabled ?? false,
-    ...(mcp && oauthBoundary ? { mcp: { resolve: oauthBoundary.resolve, fetch: mcp.fetch } } : {}),
-    ...(settings.mcpEnabled
-      ? { oauthConnections: new OAuthConnectionUseCases({ connections: oauth, clock }) }
-      : {}),
-    apiDocsEnabled: settings.apiDocsEnabled ?? false,
-    ...(settings.assets === undefined
-      ? {}
-      : { adminAssets: createCloudflareAdminAssets(settings.assets) }),
-    actors: auth.actors,
-    importActors: createImportActorResolver({
-      origin: settings.publicBaseUrl,
-      production: settings.production,
-      security,
-    }),
-    auth,
-    builds: new SiteBuildUseCases({ builds: repository, clock }),
-    config: input.config,
-    buildSite: settings.buildSite ?? null,
-    content,
-    links: new ContentLinkUseCases(repository),
-    // Requests use their own `waitUntil`; this fallback serves direct app calls.
-    defer: (task) => {
-      void task.catch(() => logger.error({ component: "deferred", reason: "task_failed" }));
+  const services = composeLaceServices({
+    auth: {
+      boundary: auth,
+      importActors: createImportActorResolver({
+        origin: settings.publicBaseUrl,
+        production: settings.production,
+        security,
+      }),
     },
+    clock,
+    config: input.config,
     email:
       input.email?.(settings) ?? createWorkerEmailSender(settings.email, settings.emailBinding),
-    environment: { engineVersion, openApiTitle: "Lace API" },
-    logger: input.logger ?? defaultLogger,
-    maxBodyBytes: 1_048_576,
-    media,
-    publicBaseUrl: settings.publicBaseUrl.href,
-    publicContent: repository,
-    rateLimiter,
-    readiness: new D1Readiness(settings.database),
-    requestIds: { next: () => ulid() },
+    http: {
+      ...(settings.assets === undefined
+        ? {}
+        : { adminAssets: createCloudflareAdminAssets(settings.assets) }),
+      buildSite: settings.buildSite ?? null,
+      environment: { engineVersion, openApiTitle: "Lace API" },
+      flags: { apiDocsEnabled: settings.apiDocsEnabled ?? false, mcpEnabled },
+      maxBodyBytes: 1_048_576,
+      publicBaseUrl: settings.publicBaseUrl,
+      readiness: new D1Readiness(settings.database),
+      requestIds: { next: () => ulid() },
+      ...(input.logger === undefined ? {} : { requestLogger: input.logger }),
+    },
+    ids,
+    imageInspector: input.imageInspector ?? new WorkerImageInspector(),
+    limits: { clientAddress: (request) => clients.get(request), sensitive: sensitiveLimiter },
+    listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
+    logger,
+    mcp: {
+      connections: oauth,
+      createHandler: (content) => createMcpContentHandler({ content, version: engineVersion }),
+    },
+    repository,
     security,
-    sensitiveLimiter,
+    storage,
   });
+  const app = createLaceApp(services.appInput);
   return Object.freeze({
     clients,
     maintainOAuth: () => {

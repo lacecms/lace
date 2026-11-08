@@ -22,10 +22,11 @@ import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, security, usersActor, accounts } = routeContext;
+  const { actor, usersActor } = routeContext.actors;
+  const { accounts, accountSecurity } = routeContext.capabilities;
   app.get("/api/v1/admin/users", async (context) => {
     await usersActor(context);
-    return response(managedUserListSchema, { items: await security().listUsers() });
+    return response(managedUserListSchema, { items: await accountSecurity().listUsers() });
   });
   app.get(
     "/api/v1/admin/invitations",
@@ -171,7 +172,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
     async (context) => {
       await usersActor(context);
       const body = context.req.valid("json") as v.InferOutput<typeof userUpdateRequestSchema>;
-      const updated = await security().updateUser({
+      const updated = await accountSecurity().updateUser({
         ...(body.disabled === undefined ? {} : { disabled: body.disabled }),
         ...(body.role === undefined ? {} : { role: body.role }),
         userId: context.req.param("userId"),

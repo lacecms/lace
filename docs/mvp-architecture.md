@@ -3149,6 +3149,18 @@ into account, session, and token capability ports. `SecurityService` combines
 those three ports with `UserProfileReader`; runtime adapters implement the
 combined contract, while use cases can depend on the capabilities they call.
 
+Both runtimes compose the portable services in one place: `packages/server`
+`composeLaceServices` receives the runtime adapters (repository, security,
+object storage, image inspector, clock, ids, list-query limits, logger, email
+sender, rate-limit persistence, client-address lookup, authentication
+boundaries, optional MCP and OAuth adapters, HTTP settings) and returns the
+content, media, link, build, account and OAuth-connection use cases plus the
+complete `createLaceApp` input. `createNodeRuntime` and
+`createCloudflareRuntime` build adapters, dispatchers and process wiring only.
+`LACE_API_DOCS_ENABLED` and `LACE_MCP_ENABLED` are parsed by one shared rule.
+Route modules receive actor resolution and the capabilities they call, never
+the raw application input, and depend on the narrow security ports.
+
 Implementations:
 
 | Capability | Cloudflare | Node/VPS |
@@ -3256,6 +3268,26 @@ SQLite's documented rebuild procedure instead: it suspends `foreign_keys` on
 its own connection while the migrations run, runs `PRAGMA foreign_key_check`,
 and fails unless the check is empty before restoring enforcement. Application
 connections always keep foreign keys on.
+
+### Runtime deltas
+
+Node SQLite and D1 share every row mapper, every identical read
+(`SqlContentReader`) and the configuration-sync and link statement builders.
+The write paths stay runtime-specific (interactive transactions versus guarded
+batches, ADR 0002). Every remaining intentional difference is listed here;
+where it could be observable, a shared repository contract case pins the
+result.
+
+| Area | Node SQLite | D1 | Observable result pinned by |
+| --- | --- | --- | --- |
+| Build and dispatcher claims | select and lease update in one transaction | select, then one guarded batch | aligned: at most 10 site-build leases (`MAX_SITE_BUILD_CLAIMS_PER_CALL`, four D1 batch statements each) and 20 dispatcher leases (`MAX_DISPATCHER_CLAIMS_PER_CALL`) per call; site-build lease update guarded by the read `payload_json` on both; contract "caps site-build and dispatcher claims per call" |
+| Revision conflicts | `changes !== 1` on the guarded write | pre-check after replay, guarded batch, post-batch disambiguation | aligned precedence: replay → stale revision → link targets; contract cases for concurrent saves and stale publication |
+| Publication result | committed entry reloaded inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
+| `mutation_guards` | only an in-transaction dirty token for the shared sync link statements; inserted and deleted before commit | batch guard tokens for every guarded mutation | not observable |
+| Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
+| Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
+| Bind chunk for identifier lists | 200 | 100 (`D1_MAX_BOUND_PARAMETERS`) | not observable |
+| Entry reload inside writes | synchronous loader inside publication transactions | awaited shared reader | covered by the publication result row |
 
 ## 17. Admin application
 

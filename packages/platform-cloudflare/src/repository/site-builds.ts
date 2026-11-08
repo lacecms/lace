@@ -1,6 +1,7 @@
 import { MAX_PAGE_SIZE } from "@lacecms/content";
 import {
   DISPATCHER_LEASE_DURATION_MS,
+  MAX_SITE_BUILD_CLAIMS_PER_CALL,
   dispatcherEventId,
   dispatcherLeaseId,
 } from "@lacecms/application";
@@ -38,7 +39,6 @@ import type {
   TrackedSiteBuildOutcome,
   UnixMilliseconds,
 } from "@lacecms/domain";
-import { D1_MAX_CLAIMS_PER_CALL } from "../d1/database.js";
 import { GUARD_SQL, MutationBatch } from "./batch.js";
 import { D1RepositoryBase } from "./base.js";
 
@@ -90,7 +90,7 @@ export class D1SiteBuilds
       "select id, type, payload_json, attempts, available_at from outbox_events where type = 'site.build.requested' and processed_at is null and available_at <= ? and (locked_at is null or locked_at <= ?) order by available_at asc, id asc limit ?",
       input.now,
       expired,
-      Math.min(input.limit, D1_MAX_CLAIMS_PER_CALL),
+      Math.min(input.limit, MAX_SITE_BUILD_CLAIMS_PER_CALL),
     );
     if (rows.length === 0) return Object.freeze([]);
     const batch = this.batch();

@@ -1,5 +1,6 @@
 import {
   DISPATCHER_LEASE_DURATION_MS,
+  MAX_DISPATCHER_CLAIMS_PER_CALL,
   dispatcherEventId,
   dispatcherLeaseId,
 } from "@lacecms/application";
@@ -50,7 +51,7 @@ export class NodeDispatcherLeases extends NodeRepositoryBase implements Dispatch
             ...input.eventTypes,
             input.now,
             input.now - DISPATCHER_LEASE_DURATION_MS,
-            input.limit,
+            Math.min(input.limit, MAX_DISPATCHER_CLAIMS_PER_CALL),
           ) as readonly OutboxRow[];
         const claim = this.connection.prepare(
           "update outbox_events set locked_at = ?, locked_by = ? where id = ? and processed_at is null and (locked_at is null or locked_at <= ?)",

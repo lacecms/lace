@@ -109,5 +109,8 @@ test("preserves every repository contract case in order", () => {
     "rolls back projected publication at every injected checkpoint",
     "refuses a projection that does not name the draft's blocks",
     "shares visibility parity across synchronization and publication",
+    "returns publication and unpublication results equal to a later load",
+    "refuses a stale publication as a revision conflict before link validation",
+    "caps site-build and dispatcher claims per call and leaves the rest claimable",
   ]);
 });

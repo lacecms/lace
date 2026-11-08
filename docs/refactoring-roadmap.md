@@ -119,8 +119,9 @@ What the roadmap changes, with the numbers to beat:
 | Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
 | Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
 | Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
-| Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim → RF5B: every identical read in `db` `SqlContentReader` (472 lines); repositories delegate; remaining runtime-specific reads: `list`, configuration-sync scans and Node's synchronous in-transaction entry loader |
+| Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim → RF5B: every identical read in `db` `SqlContentReader` (472 lines); repositories delegate; remaining runtime-specific reads: `list`, configuration-sync scans and Node's synchronous in-transaction entry loader → RF5C: every remaining write-path difference aligned or listed in architecture §16 "Runtime deltas", pinned by three new contract cases |
 | Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` → RF5A: one owner each (`db` `security/rows.ts`; rate-limit policies and setup TTL in application); adapters split by port, largest module 629 lines (`d1-security.ts` 984 → 215) |
+| Duplication | runtime composition roots | `createNodeRuntime` (621 lines) and `createCloudflareRuntime` (484) each build the use cases, request rate limiter, model resolver, MCP wiring and the 27-field app input → RF5C: one `composeLaceServices` in server; roots build adapters only (561 and 421 lines); one feature-flag parser; routes see actor resolution and capabilities, not the app input |
 | Duplication | argv parsers in `packages/cli` | 6 (+1 in `scripts/cloudflare-lib.mjs`) |
 | Admin | one-line `index.ts` barrels | 176 of 196 |
 | Admin | components under 60 lines occupying a three-file folder | 40 |
@@ -144,7 +145,7 @@ What the roadmap changes, with the numbers to beat:
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
-| RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | in progress |
+| RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
 | RF8 | Documentation | L | RF8A → RF8B → RF8C | planned |
@@ -884,6 +885,29 @@ are now `security/service.ts`, `release-version.ts` is generated into
 **Architecture and specs:** §16 gains a "runtime deltas" table; ADR 0002 is
 amended; `content-repository-contracts` gains the two contract cases.
 
+**Outcome (RF5C):** Node adopts the D1 claim statements (payload-guarded
+site-build lease) and both runtimes cap claims through shared application
+constants: `MAX_DISPATCHER_CLAIMS_PER_CALL` (20) and
+`MAX_SITE_BUILD_CLAIMS_PER_CALL` (10). The new contract case found that D1
+capped site builds at 20 although each claim adds four batch statements, so
+more than ten recoverable events exceeded the 40-statement budget. Node checks
+a stale revision before link targets (D1 order). The D1 publication
+prediction omitted the draft's `seo`, so D1 publish results and their stored
+replays lacked it; fixed and pinned by "returns publication and unpublication
+results equal to a later load". `mutation_guards` stays on Node as the
+in-transaction dirty token of the shared sync link statements. Architecture
+§16 lists every remaining delta; ADR 0002 has an RF5C amendment.
+`packages/server` `composeLaceServices` builds the use cases (accounts eagerly
+on the composed clock) and the complete `createLaceApp` input;
+`SensitiveRequestRateLimiter`, `contentModelResolver` and
+`parseRuntimeFeatureFlags` replace the runtime copies. `RouteContext` is
+`{ actors, capabilities }`; routes no longer read the app input and reach
+security through `accountSecurity()`, `tokenSecurity()` or `profiles()`; the
+import-actor resolver takes `TokenSecurityPort`. Platform export keys are
+unchanged; delta specs: `content-repository-contracts` (1 added),
+`node-content-repositories`, `d1-content-repositories` (1 modified each) and
+`hono-app-factory` (1 added).
+
 ## Step RF6 — Admin editor structure
 
 **Size:** L (four sessions). **Depends on:** RF3A (field type support
@@ -1227,4 +1251,6 @@ is empty.
 | 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Archived at [`2026-11-08-rf05a-shared-security-rows`](../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/); 9/9 tasks complete. No delta specs (`skip_specs`). RF5B next. |
 | 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Implemented, 18/18 tasks complete. `db` `SqlContentReader` owns the identical reads; both repositories delegate and split into area modules (Node 2,291 → largest 481 lines, D1 2,696 → 646); both platform packages adopt the §6 layout; the `platform-node` cycle and both oversized entries leave their baselines. Contract titles (213 Node, 119 D1, 4 D1 budget) and platform export keys/declarations match the baseline; `db` gains only the reader names. No delta specs (`skip_specs`). Not archived. |
 | 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Archived at [`2026-11-08-rf05b-shared-content-reader`](../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/); 18/18 tasks complete. No delta specs (`skip_specs`). RF5C next. |
+| 2026-11-08 | RF5C | `rf05c-runtime-deltas-composition` | Implemented, 16/16 tasks complete. Write-path deltas aligned or recorded in §16 (claims, revision precedence, publication result, `mutation_guards`); apply found two defects — D1 publish results lacked `seo`, D1 site-build claims above ten exceeded the batch budget — both fixed and pinned by new contract cases. `composeLaceServices` composes both runtimes; routes receive actors and capabilities. Platform export keys unchanged; server and application gain only the shared names. Delta specs: 4 capabilities. Not archived; Step RF5 becomes done at archive. |
+| 2026-11-08 | RF5C | `rf05c-runtime-deltas-composition` | Archived at [`2026-11-08-rf05c-runtime-deltas-composition`](../openspec/changes/archive/2026-11-08-rf05c-runtime-deltas-composition/); 16/16 tasks complete. Delta specs synchronized: `content-repository-contracts` and `hono-app-factory` (1 added each), `node-content-repositories` and `d1-content-repositories` (1 modified each). Step RF5 done; the backend refactoring sessions are complete. |
 | 2026-11-08 | RF8A | — | Scope decision: the owner asked for a backend component diagram and a database table diagram; both join RF8A as Mermaid diagrams in `docs/mvp-architecture.md` (the component diagram after RF5C's composition), the table diagram with a drift test against the Drizzle schema. No change created. |

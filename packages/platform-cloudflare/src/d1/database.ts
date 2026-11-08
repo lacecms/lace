@@ -1,3 +1,5 @@
+import { MAX_DISPATCHER_CLAIMS_PER_CALL } from "@lacecms/application";
+
 /**
  * Structural subset of the Cloudflare D1 binding used by Lace. The Worker
  * runtime binding and Miniflare's local proxy both satisfy it.
@@ -25,5 +27,5 @@ export const D1_MAX_BOUND_PARAMETERS = 100;
 export const D1_QUERY_BUDGET = 50;
 /** Leaves room inside {@link D1_QUERY_BUDGET} for a mutation's reads. */
 export const D1_MAX_BATCH_STATEMENTS = 40;
-/** Claims per call, each needing up to two batch statements. */
-export const D1_MAX_CLAIMS_PER_CALL = 20;
+/** Dispatcher event claims per call (one batch statement each); the shared runtime cap. */
+export const D1_MAX_CLAIMS_PER_CALL = MAX_DISPATCHER_CLAIMS_PER_CALL;

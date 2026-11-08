@@ -58,7 +58,6 @@ Configured predicates SHALL execute over the model's current drafts before curso
 - **THEN** the continuation boundary uses the published snapshot timestamp and
   entry ID so the result order is deterministic
 
-
 #### Scenario: Configured sort pages through ties and missing values
 - **WHEN** an unchanged collection with equal field values, zero, false and absent values is paged one row at a time in either direction
 - **THEN** all matching entries appear exactly once in the specified order with absent values last and totals independent of page boundaries
@@ -66,8 +65,6 @@ Configured predicates SHALL execute over the model's current drafts before curso
 #### Scenario: Query affects entries beyond the first page
 - **WHEN** only an entry beyond the default first page matches a configured case-sensitive Cyrillic text search and numeric range
 - **THEN** the first filtered page includes it on Node and D1 without loading all entry JSON into application memory
-
-
 
 #### Scenario: Long custom strings retain exact boundaries
 - **WHEN** unchanged draft string values exceed the cursor transport bound or share long prefixes and are paged one item at a time
@@ -318,7 +315,7 @@ still has the expected status and at least one reference, and
   `MEDIA_IN_USE`
 
 ### Requirement: Node build claims and outcomes are atomic
-The Node SQLite adapter SHALL claim site-build work and create or recover its build row as `running` in one transaction. Recovery SHALL be a guarded update that succeeds only from `pending` or `running` and keeps the original start time; an unprocessed event whose build row is already terminal SHALL be completed without dispatch. It SHALL preserve the target version captured at claim, use lease- and status-guarded transitions from `running`, and atomically record retry, terminal, accepted, tracked, or succeeded outcome with the event. Tracked completion SHALL require the same provider ID, a `running` row, and a completed event. A new publication after claim SHALL enqueue separate unclaimed work.
+The Node SQLite adapter SHALL claim site-build work and create or recover its build row as `running` in one transaction. A site-build claim SHALL return at most 10 leases per call, the same per-call cap as the D1 adapter, and its lease update SHALL require the event payload read by the claim to be unchanged, as on D1. Recovery SHALL be a guarded update that succeeds only from `pending` or `running` and keeps the original start time; an unprocessed event whose build row is already terminal SHALL be completed without dispatch. It SHALL preserve the target version captured at claim, use lease- and status-guarded transitions from `running`, and atomically record retry, terminal, accepted, tracked, or succeeded outcome with the event. Tracked completion SHALL require the same provider ID, a `running` row, and a completed event. A new publication after claim SHALL enqueue separate unclaimed work. Generic dispatcher event claims SHALL return at most 20 leases per call, as on D1.
 
 #### Scenario: Two workers race to claim a build
 - **WHEN** two Node workers concurrently claim one available build event
@@ -331,6 +328,10 @@ The Node SQLite adapter SHALL claim site-build work and create or recover its bu
 #### Scenario: Claimed row is not running
 - **WHEN** a claimed lease records an outcome for a row that is no longer `running`
 - **THEN** the transaction is rejected and neither the event nor the build changes
+
+#### Scenario: A large claim limit is capped
+- **WHEN** a Node worker requests 50 leases while more than 10 site-build events, or more than 20 dispatcher events, are available
+- **THEN** it receives 10 site-build leases, or 20 dispatcher leases, and the remaining events stay unclaimed
 
 ### Requirement: Node tracking checks use guarded leases
 The Node SQLite adapter SHALL implement tracking check claims, check records, and stage-aware tracked completion with the same guards, ordering, lease, and results as the D1 adapter, inside transactions, so the shared repository contract proves parity.

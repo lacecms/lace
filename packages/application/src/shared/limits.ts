@@ -15,6 +15,13 @@ export const IMPORT_TOKEN_USE_RECORD_INTERVAL_MS = 60_000;
 /** Fixed dispatcher timing keeps recovery semantics identical across runtimes. */
 export const DISPATCHER_LEASE_DURATION_MS = 60_000;
 export const SITE_BUILD_DEBOUNCE_MS = 5_000;
+/** Leases one dispatcher event claim returns at most, whatever valid limit it asks for. */
+export const MAX_DISPATCHER_CLAIMS_PER_CALL = 20;
+/**
+ * Leases one site-build claim returns at most. Each claim needs four guarded
+ * D1 batch statements, so ten fill the 40-statement mutation budget.
+ */
+export const MAX_SITE_BUILD_CLAIMS_PER_CALL = 10;
 
 export { MAX_ENTRY_SEARCH_LENGTH as MAX_CONTENT_ENTRY_SEARCH_LENGTH } from "@lacecms/content";
 

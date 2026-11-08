@@ -1,4 +1,5 @@
 import type {
+  AccountUseCases,
   ContentUseCases,
   ContentLinkUseCases,
   OAuthConnectionUseCases,
@@ -65,6 +66,8 @@ export interface BuiltAdminResponder {
 }
 
 export interface LaceAppInput {
+  /** Invitation, recovery and self-service flows; absent disables the account routes. */
+  readonly accounts?: AccountUseCases;
   /** Opt-in browser reference; machine-readable OpenAPI remains available. */
   readonly apiDocsEnabled?: boolean;
   readonly buildSite?: BuildSiteIdentityDto | null;

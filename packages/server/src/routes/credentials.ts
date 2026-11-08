@@ -40,12 +40,12 @@ function buildTokenDto(
 }
 
 export function registerCredentialRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, settingsActor } = routeContext;
-  const security: () => TokenSecurityPort = routeContext.security;
+  const { actor, settingsActor } = routeContext.actors;
+  const { tokenSecurity } = routeContext.capabilities;
   app.get("/api/v1/admin/api-tokens", async (context) => {
     await settingsActor(context);
     return response(buildTokenListSchema, {
-      items: (await security().listBuildTokens()).map(buildTokenDto),
+      items: (await tokenSecurity().listBuildTokens()).map(buildTokenDto),
     });
   });
   app.post(
@@ -54,7 +54,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     async (context) => {
       await settingsActor(context);
       const body = context.req.valid("json") as v.InferOutput<typeof buildTokenCreateRequestSchema>;
-      const token = await security().createBuildToken({
+      const token = await tokenSecurity().createBuildToken({
         name: body.name,
         now: Date.now() as never,
       });
@@ -67,7 +67,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
   );
   app.delete("/api/v1/admin/api-tokens/:tokenId", async (context) => {
     await settingsActor(context);
-    const token = await security().revokeBuildToken({
+    const token = await tokenSecurity().revokeBuildToken({
       now: Date.now() as never,
       tokenId: context.req.param("tokenId"),
     });
@@ -89,7 +89,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     async (context) => {
       await settingsActor(context);
       return response(importTokenListSchema, {
-        items: (await security().listImportTokens()).map(toImportTokenDto),
+        items: (await tokenSecurity().listImportTokens()).map(toImportTokenDto),
       });
     },
   );
@@ -116,7 +116,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
         typeof importTokenCreateRequestSchema
       >;
       const now = Date.now() as never;
-      const token = await security().createImportToken({
+      const token = await tokenSecurity().createImportToken({
         capabilities: importTokenCapabilities(resolvedActor, body.allowPublish),
         createdBy: resolvedActor.id,
         expiresAt: importTokenExpiry(now, body.expiresInDays),
@@ -144,7 +144,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     }),
     async (context) => {
       await settingsActor(context);
-      const token = await security().revokeImportToken({
+      const token = await tokenSecurity().revokeImportToken({
         now: Date.now() as never,
         tokenId: context.req.param("tokenId"),
       });

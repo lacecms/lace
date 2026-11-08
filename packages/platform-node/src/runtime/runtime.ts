@@ -2,15 +2,9 @@ import { RuntimeConfigurationError } from "@lacecms/application";
 import { createNodeOAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
-import {
-  ContentUseCases,
-  OAuthConnectionUseCases,
-  ContentLinkUseCases,
-  MediaUseCases,
-  SiteBuildUseCases,
-  contentModelRoute,
-} from "@lacecms/application";
 import type {
+  ContentUseCases,
+  MediaUseCases,
   Cache,
   Clock,
   IdGenerator,
@@ -31,12 +25,13 @@ import { createMcpContentHandler } from "@lacecms/mcp";
 import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
+  composeLaceServices,
+  contentModelResolver,
   createEmailSender,
   createLaceApp,
-  sensitiveRequestLimit,
-  sensitiveRequestSubject,
+  jsonRequestLogger,
   parseBuildSiteIdentity,
-  parseMcpEnabled,
+  parseRuntimeFeatureFlags,
   parseEmailSettings,
   type EmailSettings,
   type EmailSettingsResult,
@@ -167,15 +162,8 @@ export function parseNodeEmailSettings(environment: NodeEnvironment): EmailSetti
 /** Parses all runtime settings once, without exposing supplied environment values in errors. */
 export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRuntimeSettings {
   const issues: NodeEnvironmentIssue[] = [];
-  let mcpEnabled = false;
-  try {
-    mcpEnabled = parseMcpEnabled(environment.LACE_MCP_ENABLED);
-  } catch {
-    issues.push({ reason: "invalid", variable: "LACE_MCP_ENABLED" });
-  }
-  const docs = environment.LACE_API_DOCS_ENABLED;
-  if (docs !== undefined && docs !== "true" && docs !== "false")
-    issues.push({ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" });
+  const features = parseRuntimeFeatureFlags(environment);
+  issues.push(...features.issues);
   const email = parseNodeEmailSettings(environment);
   issues.push(...email.issues);
   const configuredProxies = environment.LACE_TRUSTED_PROXY_CIDRS?.trim();
@@ -261,8 +249,8 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     throw new NodeEnvironmentError(Object.freeze(issues));
   }
   return Object.freeze({
-    apiDocsEnabled: docs === "true",
-    mcpEnabled,
+    apiDocsEnabled: features.flags.apiDocsEnabled,
+    mcpEnabled: features.flags.mcpEnabled,
     buildSite,
     trustedProxyCidrs,
     ...(adminDevOrigin === undefined ? {} : { adminDevOrigin }),
@@ -372,30 +360,11 @@ export const defaultNodeRateLimiter: RequestRateLimiter = Object.freeze({
   check: async () => true,
 });
 
-class NodeRequestRateLimiter implements RequestRateLimiter {
-  public constructor(
-    private readonly limiter: NodeFixedWindowRateLimiter,
-    private readonly clock: Clock,
-    private readonly clients: TrustedClientAddresses,
-  ) {}
-  public async check(input: {
-    readonly request: Request;
-    readonly actor?: { readonly id: string };
-  }): Promise<boolean | import("@lacecms/application").RateLimitDecision> {
-    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
-    if (limit === undefined) return true;
-    const subject = await sensitiveRequestSubject(
-      limit,
-      input.request,
-      this.clients.get(input.request),
-      input.actor?.id,
-    );
-    if (subject === undefined) return true;
-    return this.limiter.check({ now: this.clock.now(), operation: limit.operation, subject });
-  }
-}
-export const defaultNodeLogger: ServerLogger = Object.freeze({
-  log: (entry: Parameters<ServerLogger["log"]>[0]) => console.info(JSON.stringify(entry)),
+export const defaultNodeLogger: ServerLogger = jsonRequestLogger;
+
+/** Operational failures are one JSON line on standard error. */
+const nodeOperationalLogger = Object.freeze({
+  error: (entry: Readonly<Record<string, string>>) => console.error(JSON.stringify(entry)),
 });
 
 export interface CreateNodeRuntimeInput {
@@ -480,10 +449,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   const ids = new UlidGenerator();
   const repository = new NodeContentRepository(
     database.connection,
-    (key) => {
-      const model = input.config.runtime.content.find((candidate) => candidate.key === key);
-      return model === undefined ? undefined : contentModelRoute(model);
-    },
+    contentModelResolver(input.config),
     { nextId: () => ids.next() },
   );
   const clock = new SystemNodeClock();
@@ -492,14 +458,12 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     database.connection,
     input.settings.authSecret,
   );
-  const rateLimiter =
-    input.rateLimiter ?? new NodeRequestRateLimiter(sensitiveLimiter, clock, clients);
   const cache = new NoopNodeCache();
   const storage = input.storage ?? new NodeMinioObjectStorage(input.settings.minio);
   const deletionDispatcher = new NodeMediaDeletionDispatcher({
     clock,
     logger: {
-      error: (entry) => console.error(JSON.stringify({ component: "media-deletion", ...entry })),
+      error: (entry) => nodeOperationalLogger.error({ component: "media-deletion", ...entry }),
     },
     storage,
     work: repository,
@@ -509,92 +473,72 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     (input.settings.builder === undefined
       ? new NoopNodeBuildTrigger()
       : new NodeBuilderSiteBuildTrigger(input.settings.builder));
-  const builds = new SiteBuildUseCases({ builds: repository, clock });
   const buildDispatcher = new NodeSiteBuildDispatcher({
     clock,
     logger: {
-      error: (entry) => console.error(JSON.stringify({ component: "site-build", ...entry })),
+      error: (entry) => nodeOperationalLogger.error({ component: "site-build", ...entry }),
     },
     trigger: buildTrigger,
     work: repository,
   });
   const readiness = new NodeSqliteReadiness(database.connection);
-  const content = new ContentUseCases({
-    listQueryLimits: NODE_LIST_QUERY_LIMITS,
-    clock,
-    config: input.config.runtime,
-    content: repository,
-    idGenerator: ids,
-    media: repository,
-  });
-  const media = new MediaUseCases({
-    clock,
-    drafts: content,
-    idGenerator: ids,
-    imageInspector: input.imageInspector ?? new NodeSharpImageInspector(),
-    logger: {
-      error: (entry) => console.error(JSON.stringify({ component: "media", ...entry })),
-    },
-    media: repository,
-    publicMedia: repository,
-    storage,
-  });
+  const mcpEnabled = input.settings.mcpEnabled ?? false;
   const oauth = createNodeOAuthPersistence(database.connection);
+  const production = process.env.NODE_ENV === "production";
   const auth =
     input.auth ??
     createBetterAuthBoundary({
       clientAddress: (request) => clients.get(request),
       database: database.drizzle,
       origin: input.settings.publicBaseUrl,
-      production: process.env.NODE_ENV === "production",
+      production,
       schema: betterAuthSchema,
       secret: input.settings.authSecret,
-      ...(input.settings.mcpEnabled ? { oauth: { persistence: oauth } } : {}),
+      ...(mcpEnabled ? { oauth: { persistence: oauth } } : {}),
     });
-  const mcp = input.settings.mcpEnabled
-    ? createMcpContentHandler({ content, version: engineVersion })
-    : undefined;
-  const oauthBoundary = auth.mcp;
-  const app = createLaceApp({
-    mcpEnabled: input.settings.mcpEnabled ?? false,
-    ...(mcp && oauthBoundary ? { mcp: { resolve: oauthBoundary.resolve, fetch: mcp.fetch } } : {}),
-    ...(input.settings.mcpEnabled
-      ? { oauthConnections: new OAuthConnectionUseCases({ connections: oauth, clock }) }
-      : {}),
-    apiDocsEnabled: input.settings.apiDocsEnabled ?? false,
-    ...(input.adminAssets === undefined ? {} : { adminAssets: input.adminAssets }),
-    actors: input.actors ?? auth.actors,
-    importActors: createImportActorResolver({
-      origin: input.settings.publicBaseUrl,
-      production: process.env.NODE_ENV === "production",
-      security,
-    }),
-    auth,
-    builds,
-    buildSite: input.settings.buildSite ?? null,
-    config: input.config,
-    content,
-    links: new ContentLinkUseCases(repository),
-    defer: (task) => {
-      void task.catch(() =>
-        console.error(
-          JSON.stringify({ component: "deferred", level: "warn", reason: "task_failed" }),
-        ),
-      );
+  const services = composeLaceServices({
+    auth: {
+      boundary: auth,
+      ...(input.actors === undefined ? {} : { actors: input.actors }),
+      importActors: createImportActorResolver({
+        origin: input.settings.publicBaseUrl,
+        production,
+        security,
+      }),
     },
+    clock,
+    config: input.config,
     email: input.email ?? createNodeEmailSender(input.settings.email),
-    environment: input.environment ?? { engineVersion, openApiTitle: "Lace API" },
-    logger: input.logger ?? defaultNodeLogger,
-    maxBodyBytes: input.maxBodyBytes ?? 1_048_576,
-    media,
-    publicBaseUrl: input.settings.publicBaseUrl.href,
-    publicContent: repository,
-    rateLimiter,
-    readiness,
-    requestIds: input.requestIds ?? defaultNodeRequestIds,
+    http: {
+      ...(input.adminAssets === undefined ? {} : { adminAssets: input.adminAssets }),
+      buildSite: input.settings.buildSite ?? null,
+      environment: input.environment ?? { engineVersion, openApiTitle: "Lace API" },
+      flags: { apiDocsEnabled: input.settings.apiDocsEnabled ?? false, mcpEnabled },
+      maxBodyBytes: input.maxBodyBytes ?? 1_048_576,
+      publicBaseUrl: input.settings.publicBaseUrl,
+      readiness,
+      requestIds: input.requestIds ?? defaultNodeRequestIds,
+      requestLogger: input.logger ?? defaultNodeLogger,
+    },
+    ids,
+    imageInspector: input.imageInspector ?? new NodeSharpImageInspector(),
+    limits: {
+      clientAddress: (request) => clients.get(request),
+      ...(input.rateLimiter === undefined ? {} : { requests: input.rateLimiter }),
+      sensitive: sensitiveLimiter,
+    },
+    listQueryLimits: NODE_LIST_QUERY_LIMITS,
+    logger: nodeOperationalLogger,
+    mcp: {
+      connections: oauth,
+      createHandler: (content) => createMcpContentHandler({ content, version: engineVersion }),
+    },
+    repository,
     security,
-    ...(input.rateLimiter === undefined ? { sensitiveLimiter } : {}),
+    storage,
   });
+  const app = createLaceApp(services.appInput);
+  const { content, media } = services;
   return Object.freeze({
     setRequestPeer: (request: Request, peer: string | undefined) =>
       clients.set(request, resolveNodeClientAddress(request, peer, trusted)),

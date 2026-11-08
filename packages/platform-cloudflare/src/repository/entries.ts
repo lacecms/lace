@@ -587,6 +587,8 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       fields: draft.fields,
       id: input.publishedSnapshotId,
       revision: draft.revision,
+      // The copy carries the draft's SEO group; the result must equal a later load.
+      ...(draft.seo === undefined ? {} : { seo: draft.seo }),
       ...(draft.slug === undefined ? {} : { slug: draft.slug }),
       title: draft.title,
       updatedAt: input.publishedAt,

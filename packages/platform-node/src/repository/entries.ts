@@ -173,6 +173,10 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
             };
           }
         }
+        // A stale revision is refused before link targets are checked (§16 runtime deltas);
+        // the guarded insert below still catches a concurrent save.
+        if (entry.draft.revision !== input.expectedRevision)
+          revisionConflict("The draft revision no longer matches the expected revision.");
         // A projection replaces the copied fields, block data and references (conditional fields).
         const projected =
           input.projection === undefined
