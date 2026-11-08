@@ -47,10 +47,10 @@ async function fixture(runtime, suppliedD1) {
     stats = measured.stats;
     database = platformRequire("drizzle-orm/d1").drizzle(measured.binding, { schema });
     persistence = (
-      await import("../../../packages/platform-cloudflare/dist/oauth.js")
+      await import("../../../packages/platform-cloudflare/dist/security/oauth.js")
     ).createD1OAuthPersistence(measured.binding);
     security = new (
-      await import("../../../packages/platform-cloudflare/dist/d1-security.js")
+      await import("../../../packages/platform-cloudflare/dist/security/service.js")
     ).D1SecurityService(measured.binding, Date.now);
   } else {
     const Sqlite = authRequire("better-sqlite3");
@@ -59,10 +59,10 @@ async function fixture(runtime, suppliedD1) {
     for (const sql of await migrationStatements()) sqlite.exec(sql);
     database = authRequire("drizzle-orm/better-sqlite3").drizzle(sqlite, { schema });
     persistence = (
-      await import("../../../packages/platform-node/dist/oauth.js")
+      await import("../../../packages/platform-node/dist/security/oauth.js")
     ).createNodeOAuthPersistence(sqlite);
     security = new (
-      await import("../../../packages/platform-node/dist/security.js")
+      await import("../../../packages/platform-node/dist/security/service.js")
     ).NodeSecurityService(sqlite, Date.now);
   }
   const provider = baselineAuth(database, undefined, "fixture-grant");

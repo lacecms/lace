@@ -9,7 +9,7 @@
 
 ## 1. Purpose and source of truth
 
-This document turns [`mvp-architecture.md`](../mvp-architecture.md) into an
+This document turns [architecture](../architecture/README.md) into an
 implementation sequence. The architecture document owns product scope,
 invariants, and technology decisions. This roadmap owns dependency order,
 deliverables, acceptance criteria, and recommended session boundaries.
@@ -1878,7 +1878,7 @@ Planning/documentation only; no production code.
 1. Record an ADR under `docs/adr/` with the decision above, the compared options
    (copy-only starter, npm-packaged renderers, source installer, chosen hybrid),
    their tradeoffs, and the drift evidence from the inventory.
-2. Update `docs/mvp-architecture.md` before any implementation unit:
+2. Update the architecture (`docs/architecture/`) before any implementation unit:
    - package list and dependency graph for the render core and framework
      adapters (fixed as `render -> content`, `astro -> render, sdk`,
      `apps/site -> astro, render, sdk, content`); final package names are fixed

@@ -369,6 +369,13 @@ test("remote D1 is bounded SELECT-only and preserves missing-ledger/auth distinc
     ],
     [new Response(sentinel, { status: 403 }), "fail"],
     [Response.json({ success: true, result: [{ success: true, results: [] }] }), "expected"],
+    [
+      Response.json({
+        success: true,
+        result: [{ success: true, results: [{ name: "0000_exotic_tarantula.sql" }] }],
+      }),
+      "fail",
+    ],
     [new Response(sentinel, { status: 500 }), "fail"],
   ];
   for (const [response, status] of cases) {
@@ -609,8 +616,8 @@ test("a missing or non-Astro recorded site fails as configuration", async () => 
   });
 });
 
-test("a connected starter site is ready, including legacy manifests", async () => {
-  for (const site of [{ mode: "starter", path: "site" }, undefined]) {
+test("a connected starter site is ready", async () => {
+  for (const site of [{ mode: "starter", path: "site" }]) {
     const { root } = await siteProject(site);
     const starter = resolve(import.meta.dirname, "../../create-lace/templates/site");
     await mkdir(join(root, "site/src/lace"), { recursive: true });

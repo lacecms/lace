@@ -2,10 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-10-04
-- Governing architecture: [section 6](../mvp-architecture.md#6-repository-structure),
-  [section 7](../mvp-architecture.md#7-generated-user-project),
-  [section 11](../mvp-architecture.md#11-block-registry-and-rich-text), and
-  [section 13](../mvp-architecture.md#13-site-rendering-and-block-installation)
+- Governing architecture: [section 6](../architecture/workspace.md#6-repository-structure),
+  [section 7](../architecture/distribution.md#7-generated-user-project),
+  [section 11](../architecture/rendering.md#11-block-registry-and-rich-text), and
+  [section 13](../architecture/rendering.md#13-site-rendering-and-block-installation)
 - Related: [ADR 0001](./0001-package-dependency-boundaries.md),
   [ADR 0005](./0005-admin-owned-component-source.md), onboarding feedback §7
 

@@ -21,6 +21,8 @@ import { cases as run19 } from "./media/import-lookups.js";
 import { cases as mediaCatalog } from "./media/catalog.js";
 import { cases as globalsSeo } from "./entries/globals-seo.js";
 import { cases as conditional } from "./entries/conditional.js";
+import { cases as resultParity } from "./entries/result-parity.js";
+import { cases as claimCap } from "./builds/claim-cap.js";
 import type { RepositoryContractCase } from "./shared.js";
 
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] = Object.freeze([
@@ -47,4 +49,6 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...run18,
   ...run19,
   ...conditional,
+  ...resultParity,
+  ...claimCap,
 ]);

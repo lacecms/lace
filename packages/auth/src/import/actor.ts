@@ -1,7 +1,7 @@
 import {
   opaqueTokenSecret,
   type ImportTokenMetadata,
-  type SecurityService,
+  type TokenSecurityPort,
 } from "@lacecms/application";
 import { actorId, attenuateActor, type Actor, type Permission, type Role } from "@lacecms/domain";
 import { trustedOrigins } from "../shared/trusted-origins.js";
@@ -49,7 +49,7 @@ function laceRole(value: string): Role | undefined {
 export function createImportActorResolver(input: {
   readonly origin: URL;
   readonly production: boolean;
-  readonly security: Pick<SecurityService, "resolveImportToken">;
+  readonly security: Pick<TokenSecurityPort, "resolveImportToken">;
   readonly now?: () => number;
 }): { resolve(request: Request): Promise<ImportActorResolution | null> } {
   const allowedOrigins = trustedOrigins(input.origin, input.production);

@@ -151,14 +151,14 @@ test("records baselines for unchanged models and accepts legacy hashes", async (
   });
   expect(configurationSyncAdvancesPublicState(missing)).toBe(false);
 
-  const legacy = { ...model, legacyStructureHash: "legacy-hash" };
-  const upgraded = planConfigurationSynchronization({
-    models: [legacy],
+  // A stored hash from another structural algorithm is a structure change, not a baseline.
+  const foreign = planConfigurationSynchronization({
+    models: [model],
     storedModels: [storedFrom(model, { structure: undefined, structureHash: "legacy-hash" })],
   });
-  expect(upgraded.operations).toMatchObject([
-    { action: "record-baseline", model: { structureHash: model.structureHash } },
-  ]);
+  expect(foreign.diagnostics.map((item) => item.code)).toContain(
+    "STRUCTURE_CHANGE_NEEDS_VERSION_BUMP",
+  );
 
   const current = planConfigurationSynchronization({
     models: [model],

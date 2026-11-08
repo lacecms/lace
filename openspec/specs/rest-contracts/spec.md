@@ -595,7 +595,7 @@ Admin build history and detail SHALL retain optional `error` as a closed failure
 - **THEN** the API returns the existing authentication error without diagnostic data
 
 ### Requirement: Admin build DTOs expose the seven-status lifecycle
-Admin build history and detail DTOs SHALL validate `status` as exactly one of `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, or `unknown`, in shared runtime validation and in generated OpenAPI. All other build fields, the 33C `error`/`errorPath` rules, and authorization SHALL be unchanged. Node and Worker SHALL return identical DTOs for identical persisted builds.
+Admin build history and detail DTOs SHALL validate `status` as exactly one of `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, or `unknown`, in shared runtime validation and in generated OpenAPI. All other build fields, the build `error`/`errorPath` rules, and authorization SHALL be unchanged. Node and Worker SHALL return identical DTOs for identical persisted builds.
 
 #### Scenario: New statuses are readable
 - **WHEN** an authenticated reader requests history containing `accepted`, `cancelled`, and `unknown` builds
@@ -797,7 +797,8 @@ carries a `hidden` key, because ignoring it would deliver hidden content. Contra
 as `{}`; the API SHALL always send it. The export's `entries` SHALL contain
 only routed entries, and its first page's `globals` SHALL contain every
 published global as a public global ordered by model key. The API SHALL always
-send `globals` on the first page.
+send `globals` on the first page, and the first-page and assembled export
+schemas SHALL require it.
 
 Public responses SHALL NOT contain `draft`, `published`, `model`, revision,
 editor or other editorial keys. The strict contract variant SHALL reject
@@ -834,8 +835,8 @@ shape. Each public entry route and the build-export route SHALL document their
 #### Scenario: An export without globals is validated
 - **WHEN** a client validates a first-page payload that has no `globals` or
   no `seo` key
-- **THEN** both the strict and the tolerant first-page variants reject it,
-  because a first page always carries both
+- **THEN** both the strict and the tolerant first-page variants and the
+  assembled export schema reject it, because an export always carries both
 
 #### Scenario: Public blocks carry the envelope without hidden blocks
 - **WHEN** a client reads a published page whose snapshot holds a visible
@@ -965,32 +966,6 @@ SEO enabled and omit it otherwise. Public globals SHALL never carry `seo`.
   stored group and an entry of a model without SEO
 - **THEN** the first carries `seo` with all values `null` and `noindex: false`,
   and the second has no `seo` key
-
-### Requirement: Model DTOs and the build export describe SEO configuration
-Content-model DTOs of pages and collections with SEO enabled SHALL carry
-`seo: {description, image}`, where each value is a mapped field key or
-`null`. The defaults global's DTO SHALL carry
-`seoDefaults: {siteName, titleTemplate, description, image}`, with `null` for
-unmapped optional values. The build export SHALL carry
-`seo: {models, defaults}`:
-
-- `models` maps the key of every SEO-enabled model to its `{description, image}`
-  mapping;
-- `defaults` is `{modelKey, siteName, titleTemplate, description, image}` for
-  the defaults global, or `null` when no global declares `seoDefaults`.
-
-The export schema SHALL treat a missing `seo` as `{models: {}, defaults: null}`,
-so older exports stay valid, and the API SHALL always send it.
-
-#### Scenario: Export with SEO configuration
-- **WHEN** `posts` declares `seo: { description: "excerpt" }`, `home` declares
-  `seo: true` and `settings` declares `seoDefaults: { siteName: "siteName" }`
-- **THEN** the export `seo` is
-  `{models: {home: {description: null, image: null}, posts: {description: "excerpt", image: null}}, defaults: {modelKey: "settings", siteName: "siteName", titleTemplate: null, description: null, image: null}}`
-
-#### Scenario: Older export without the key
-- **WHEN** an export without `seo` is parsed
-- **THEN** it parses with `seo` equal to `{models: {}, defaults: null}`
 
 ### Requirement: Media usage DTOs name SEO image locations
 The admin media usage location SHALL accept a third variant
@@ -1143,42 +1118,6 @@ admin DTO schemas SHALL remain strict and SHALL have no tolerant variant.
 - **WHEN** an error envelope carries `code: "FUTURE_CONDITION"`
 - **THEN** the tolerant envelope accepts it with that code, and the strict
   envelope rejects it
-
-### Requirement: The build export declares its format version
-The build export SHALL carry a required `formatVersion`, a positive integer
-that identifies the export's structure. The format version SHALL be `2` for
-the structure defined by this contract. Adding an optional key or a key that
-older consumers may ignore SHALL NOT change it. Removing a key, changing a
-key's type, or changing the meaning of a value consumers rely on SHALL require
-a new format version. The shared contract SHALL expose the highest format
-version it defines as a constant. The strict build-export variant SHALL accept
-only that current format version. The tolerant variant SHALL accept any
-positive integer, so a consumer can recognize and report a newer format.
-
-Format 2 SHALL require `internalLinks` arrays on delivered entries/globals;
-format 1 compatibility SHALL remain available to tolerant consumer parsing for
-old fixtures. This bump SHALL make old build SDKs fail before rendering an
-unsupported field-target grammar. Generic public JSON fields retain their
-transport representation; new reference strings require link-aware consumers.
-
-#### Scenario: The current API sends an export
-- **WHEN** a build client reads the export from either runtime
-- **THEN** the response carries `formatVersion: 2`, and strict validation
-  succeeds
-
-#### Scenario: An export lacks the format version
-- **WHEN** an export payload has no `formatVersion`, or carries `0` or `1.5`
-- **THEN** both the strict and the tolerant build-export variants reject it
-
-#### Scenario: An export declares a newer format
-- **WHEN** an otherwise valid export payload carries `formatVersion: 3` while
-  the contract's current format version is 2
-- **THEN** the strict variant rejects it and the tolerant variant accepts it
-  with `formatVersion: 3`
-
-#### Scenario: Older builder cannot silently emit tokens
-- **WHEN** a format-1-only SDK requests a new server's export
-- **THEN** it rejects format 2 with its upgrade diagnostic before producing HTML
 
 ### Requirement: The build export is delivered in bounded keyset pages
 `GET /api/v1/public/build-export` SHALL return one page of the export per
@@ -1353,8 +1292,9 @@ in delivered model/global URL fields and block data, excluding hidden blocks,
 block settings and every other field kind. Values in `fields`, `data` and
 `settings` SHALL remain authored values; reference tokens occur only at declared
 ordinary URL locations in fields/data. No editorial metadata or target drafts SHALL
-enter public responses. Strict and tolerant DTO variants SHALL validate the new
-known property; format 1 input without it SHALL normalize to an empty array.
+enter public responses. Strict and tolerant DTO variants SHALL validate the
+known property, and a delivered export entry/global without it SHALL be
+rejected.
 Single public reads SHALL return only local manifests and SHALL NOT fetch target
 entries recursively. SDK/site consumers SHALL resolve explicitly before href
 output; a string's transport type alone SHALL NOT assert that it is an href.
@@ -1859,3 +1799,65 @@ shared table of edge values that expects no difference.
   properties, cycles, shared references, sparse arrays and the two array
   cases above) runs against contract validation and content normalization
 - **THEN** both give the same verdict for every value
+
+### Requirement: Model DTOs and the build export carry SEO configuration
+Content-model DTOs of pages and collections with SEO enabled SHALL carry
+`seo: {description, image}`, where each value is a mapped field key or
+`null`. The defaults global's DTO SHALL carry
+`seoDefaults: {siteName, titleTemplate, description, image}`, with `null` for
+unmapped optional values. The build export SHALL carry
+`seo: {models, defaults}`:
+
+- `models` maps the key of every SEO-enabled model to its `{description, image}`
+  mapping;
+- `defaults` is `{modelKey, siteName, titleTemplate, description, image}` for
+  the defaults global, or `null` when no global declares `seoDefaults`.
+
+The API SHALL always send `seo` on the first export page, and the first-page
+and assembled export schemas SHALL require it.
+
+#### Scenario: Export with SEO configuration
+- **WHEN** `posts` declares `seo: { description: "excerpt" }`, `home` declares
+  `seo: true` and `settings` declares `seoDefaults: { siteName: "siteName" }`
+- **THEN** the export `seo` is
+  `{models: {home: {description: null, image: null}, posts: {description: "excerpt", image: null}}, defaults: {modelKey: "settings", siteName: "siteName", titleTemplate: null, description: null, image: null}}`
+
+#### Scenario: Export without the key
+- **WHEN** an assembled export or first page without `seo` is parsed
+- **THEN** both the strict and the tolerant variants reject it
+
+### Requirement: The build export carries a required format version
+The build export SHALL carry a required `formatVersion`, a positive integer
+that identifies the export's structure. The format version SHALL be `2` for
+the structure defined by this contract. Adding an optional key or a key that
+older consumers may ignore SHALL NOT change it. Removing a key, changing a
+key's type, or changing the meaning of a value consumers rely on SHALL require
+a new format version. The shared contract SHALL expose the highest format
+version it defines as a constant. The strict build-export variant SHALL accept
+only that current format version. The tolerant variant SHALL accept the
+current format version and any higher integer, so a consumer can recognize and
+report a newer format, and SHALL reject a lower one.
+
+Format 2 SHALL require `internalLinks` arrays on delivered entries/globals in
+both variants. Generic public JSON fields retain their transport
+representation; reference strings require link-aware consumers.
+
+#### Scenario: The current API sends an export
+- **WHEN** a build client reads the export from either runtime
+- **THEN** the response carries `formatVersion: 2`, and strict validation
+  succeeds
+
+#### Scenario: An export lacks the format version
+- **WHEN** an export payload has no `formatVersion`, or carries `0` or `1.5`
+- **THEN** both the strict and the tolerant build-export variants reject it
+
+#### Scenario: An export declares a newer format
+- **WHEN** an otherwise valid export payload carries `formatVersion: 3` while
+  the contract's current format version is 2
+- **THEN** the strict variant rejects it and the tolerant variant accepts it
+  with `formatVersion: 3`
+
+#### Scenario: A format 1 export is rejected
+- **WHEN** a payload carries `formatVersion: 1`, with or without
+  `internalLinks` manifests
+- **THEN** both the strict and the tolerant build-export variants reject it

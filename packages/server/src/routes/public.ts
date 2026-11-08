@@ -33,7 +33,8 @@ import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerPublicRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input, publicMediaUrl, seoSection, seoModels } = routeContext;
+  const { capabilities } = routeContext;
+  const { publicMediaUrl, seoSection, seoModels } = capabilities;
   app.get(
     "/api/v1/public/globals/:modelKey",
     describeRoute({
@@ -48,9 +49,9 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
     }),
     validator("param", modelKeyParams, validationHook),
     async (context) => {
-      const model = globalModel(input.config, context.req.param("modelKey"));
+      const model = globalModel(capabilities.config, context.req.param("modelKey"));
       if (model === undefined) return notFound();
-      const global = await input.publicContent.loadPublicGlobal(model.key as never);
+      const global = await capabilities.publicContent.loadPublicGlobal(model.key as never);
       return global === null
         ? notFound()
         : response(publicGlobalContentSchema, toPublicGlobalContentDto(global, publicMediaUrl()));
@@ -71,9 +72,9 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
     }),
     validator("param", modelKeyParams, validationHook),
     async (context) => {
-      const model = pageModel(input.config, context.req.param("modelKey"));
+      const model = pageModel(capabilities.config, context.req.param("modelKey"));
       if (model === undefined) return notFound();
-      const entry = await input.publicContent.loadPublic(model.path);
+      const entry = await capabilities.publicContent.loadPublic(model.path);
       return entry === null
         ? notFound()
         : response(
@@ -97,9 +98,9 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
     }),
     validator("param", modelKeyParams, validationHook),
     async (context) => {
-      const model = collectionModel(input.config, context.req.param("modelKey"));
+      const model = collectionModel(capabilities.config, context.req.param("modelKey"));
       if (model === undefined) return notFound();
-      const page = await input.publicContent.listPublic({
+      const page = await capabilities.publicContent.listPublic({
         modelKey: model.key as never,
         ...pagination(context.req.raw),
       });
@@ -124,7 +125,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
     }),
     validator("param", collectionItemParams, validationHook),
     async (context) => {
-      const model = collectionModel(input.config, context.req.param("modelKey"));
+      const model = collectionModel(capabilities.config, context.req.param("modelKey"));
       if (model === undefined) return notFound();
       const resolved = collectionPathFailure(model.route, context.req.param("slug"));
       if (!("path" in resolved))
@@ -132,7 +133,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           { code: "invalid_value", message: "The submitted value is invalid.", path: "/slug" },
         ]);
       const path = resolved.path;
-      const entry = await input.publicContent.loadPublic(path);
+      const entry = await capabilities.publicContent.loadPublic(path);
       return entry === null
         ? notFound()
         : response(
@@ -168,7 +169,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           { code: "invalid_value", message: "The submitted value is invalid.", path: "/path" },
         ]);
       }
-      const entry = await input.publicContent.loadPublic(path);
+      const entry = await capabilities.publicContent.loadPublic(path);
       return entry === null
         ? notFound()
         : response(
@@ -225,12 +226,12 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
       tags: ["public"],
     }),
     async (context) => {
-      if (input.security !== undefined) {
+      if (capabilities.buildTokens !== undefined) {
         const authorization = context.req.header("authorization");
         if (
           authorization === undefined ||
           !authorization.startsWith("Bearer ") ||
-          !(await input.security.verifyBuildToken({
+          !(await capabilities.buildTokens.verifyBuildToken({
             now: Date.now() as never,
             token: authorization.slice(7) as never,
           }))
@@ -243,14 +244,14 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
       // Conditional reads apply to the first page only; a continuation page
       // is guarded by its cursor's version instead.
       if (query.after === undefined && suppliedTag !== undefined) {
-        const version = await input.publicContent.publishedContentVersion();
+        const version = await capabilities.publicContent.publishedContentVersion();
         if (versionFromEntityTag(suppliedTag) === version)
           return new Response(null, {
             headers: { etag: entityTagForVersion(version) },
             status: 304,
           });
       }
-      const page = await readBuildExportPage(input.publicContent, query);
+      const page = await readBuildExportPage(capabilities.publicContent, query);
       // Each page is validated strictly before it is sent; its ETag is the
       // version it was read at, even when a publication followed the lookup.
       const headers = { etag: entityTagForVersion(page.version) };

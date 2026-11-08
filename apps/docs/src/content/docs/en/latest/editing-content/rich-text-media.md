@@ -68,9 +68,6 @@ before generating an href. Only `state === "resolved"` provides `href`;
 value. The Link block supports button/text appearances and optional new-tab
 navigation. Updated Hero/CTA/navigation/image/gallery sources use this helper.
 
-Build export format 2 requires local `internalLinks` manifests and a compatible
-SDK; format-1-only SDKs fail with upgrade guidance. Upgrade packages and installed
-sources before authoring ID targets. Migration 0010 adds indexed projections;
-back up first and roll back with matching artifacts and the matching database.
-The loader reports bounded `linkDiagnostics` once per assembled view and performs
+Build export format 2 carries local `internalLinks` manifests and needs the
+matching SDK. The loader reports bounded `linkDiagnostics` once per assembled view and performs
 no per-link network requests. Manual URLs and anchors retain their limitations.

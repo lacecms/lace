@@ -1,15 +1,10 @@
 # Compatibility baseline
 
-The current preparation candidate is rc1 (`0.1.0-rc1`, ownership template
-`0.46.0`), on npm `next`. See [rc1 upgrade and rollback](#rc1-upgrade-and-rollback).
-
-Read-only checks on 2026-11-01 confirmed alpha.8's sixteen npm versions and both
-public two-platform image manifests, plus its published GitHub prerelease.
-Alpha.1–alpha.8 are published and immutable. All rc1 package/image coordinates
-and its GitHub tag/release returned 404; availability is not reservation or
-publishing rights. The dated evidence is retained in the
-[rc1 change](../openspec/changes/prepare-rc1-release/registry-preflight.json).
-Preparation does not publish or prove real deployment.
+Lace supports `0.1.0-rc1` (ownership template `0.46.0`, npm `next`) and later
+releases. Earlier prereleases (`0.1.0-alpha.1`–`0.1.0-alpha.8`) stay published
+and immutable but are not supported: their databases, projects and exports
+cannot be upgraded in place ([ADR 0029](adr/0029-rc1-baseline.md)).
+See [Upgrading from rc1](#upgrading-from-rc1).
 
 ## Status
 
@@ -100,182 +95,21 @@ release supports parsing TypeScript 7 without lowering the project's TypeScript
 baseline. That migration must retain the same boundary checks and negative
 fixture coverage.
 
-## Alpha release line
+## Release line
 
-Lace artifacts are experimental prereleases on the npm `next` channel. One
-release definition (`release/alpha.json`) pins the package, generator and
-API/builder image version together with the generator's ownership template
-version; mixing artifacts from different versions is unsupported.
+Lace artifacts are prereleases on the npm `next` channel. One release
+definition (`release/alpha.json`) pins the package, generator and API/builder
+image version together with the generator's ownership template version;
+mixing artifacts from different versions is unsupported.
 
-| Release | Template | Status | Notes |
-| --- | --- | --- | --- |
-| `0.1.0-alpha.1` | `0.4.0` | Published 2026-09-30, immutable | Predates environment preparation, doctor, browser setup, the tour, existing-site mode, `lace add block`, `@lacecms/astro`/`@lacecms/render` and the generated Cloudflare Worker |
-| `0.1.0-alpha.2` | `0.14.0` | Published 2026-10-04, immutable | Carries the onboarding feedback improvements of Steps 26–31; field-tested by the owner (alpha.2 feedback) |
-| `0.1.0-alpha.3` | `0.17.0` | Prepared and accepted locally (Step 33H); npm publication recorded on 2026-10-07 | Carries the alpha.2 field-trial fixes of 33A–33G: block order, weak ETags, builder source diagnostics, seven-status build history with Pages tracking, explicit Cloudflare credentials and preflight, scenario guides and minimum-only engines |
-| `0.1.0-alpha.4` | `0.20.0` | Package publication and real VPS/Cloudflare application/recovery checks owner-confirmed 2026-10-10 | Includes completed 34A–34C local verification; see [owner confirmation](verification.md#owner-confirmed-status--2026-10-10) for confirmation scope and evidence limits |
+| Release | Template | Status |
+| --- | --- | --- |
+| `0.1.0-rc1` | `0.46.0` | Oldest supported release |
+| `0.1.0-rc2` | `0.47.0` | Current candidate; upgrade from rc1 recreates the database |
 
-The next alpha after `0.1.0-alpha.4` (source template `0.24.0`, not yet
-released) changes the public delivery contract: every `/api/v1/public` content
-response and the build export return the published entry directly with a
-resolved `media` dictionary, without the former mirrored `draft`. The API, the
-site packages (`@lacecms/sdk`, `@lacecms/render`, `@lacecms/astro`,
-`@lacecms/content`) and the admin must come from the same release; sites built
-with `getSite()` and `LaceBlocks` keep working, while code that reads REST
-responses or the raw export must be updated. The same release requires
-migrations `0005_content_model_structure` and `0006_media_descriptive_metadata`
-and a configuration sync after raising the version of every model that allows
-the version 2 `image` block, as the `0.23.0` upgrade instructions state.
-
-The same next alpha adds route-less `global` models (CE5,
-[ADR 0010](adr/0010-global-models.md)): a new anonymous
-`GET /api/v1/public/globals/:modelKey` route, an additive `globals` key in the
-build export (the SDK treats a missing key as empty, so older exports stay
-valid; older SDKs reject the new key because the export schema is strict), and
-`kind: "global"` in admin model and entry DTOs. It requires migration
-`0007_content_model_global_kind`, a table rebuild of `content_models`; back up
-before migrating, because rolling back after a global exists means restoring
-that backup. Template `0.24.0` delivers the `0007` upgrade steps and adds an optional
-`settings` global (`siteName`, `tagline`) to new projects' `lace.config.ts`;
-new starter layouts read it through `site.global("settings")` with static
-fallbacks. Existing projects adopt it by hand, because configuration and site
-files are user-owned.
-
-The same next alpha adds per-entry SEO data (CE4A,
-[ADR 0011](adr/0011-seo-system-group.md)). Pages and collections opt in with
-`seo` in `lace.config.ts` (a structural change: raise the model version and
-run configuration sync), one global may declare `seoDefaults`, and disabling
-SEO with stored values needs the temporary `removedSeo: true` hint (otherwise
-sync refuses with `SEO_REMOVAL_HAS_DATA`). Contract additions:
-
-- admin draft and published snapshot DTOs and public entries carry
-  `seo: {title, description, image, canonical, noindex}` for SEO-enabled
-  models; create and save requests accept an optional, nullable `seo`, and a
-  non-null `seo` for a model without SEO fails with `422 seo_not_allowed`;
-- admin model DTOs carry `seo` (fallback fields) or `seoDefaults`;
-- the build export gains a `seo` section (`{models, defaults}`); a missing
-  section validates as empty, and older SDKs reject the new key because the
-  export schema is strict;
-- admin media usage locations gain `{source: "seo", field: "image"}`.
-
-It requires migration `0008_content_snapshot_seo` (an additive column). The
-SDK passes stored values through as `PublishedEntry.seo`.
-
-The same next alpha adds the site output (CE4B, source template `0.25.0`). The
-additions are additive and need no REST or database change:
-
-- `@lacecms/sdk`: `site.seo(entry)`, `site.url`, `site.indexing`,
-  `site.urlFor(path)` and `site.allEntries()`; the exported `resolveSeo`,
-  `renderSitemapXml` and `renderRobotsTxt`; the loader reads the optional
-  `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` (or the `siteUrl` and
-  `indexing` options), and an invalid value fails with
-  `missing_configuration`;
-- `@lacecms/astro`: `@lacecms/astro/LaceSeo.astro`, `sitemapResponse` and
-  `robotsResponse`;
-- the VPS builder forwards the two optional settings to the site build and
-  refuses invalid values at startup; the generated Compose builder service and
-  Cloudflare Pages workflow pass them.
-
-Template `0.25.0` enables SEO on the starter `home` and `posts` models, adds
-`description` and `image` with `seoDefaults` to the starter `settings` global,
-renders `<LaceSeo>` in the starter layout and adds `sitemap.xml` and
-`robots.txt` endpoints. Its upgrade instructions carry the `0008` steps; existing
-projects adopt the configuration and site files by hand, and nothing breaks
-without adoption.
-
-The same next alpha changes the block contract (CE6A,
-[ADR 0012](adr/0012-block-envelope.md)). Every block gains an envelope
-beside its data:
-
-- admin draft and published snapshot DTOs return each block with `hidden`
-  and `settings` and, when set, `anchor` and `className`; create and save
-  requests accept all four as optional values that default (visible, no
-  anchor or class, declared setting defaults), so clients that omit them keep
-  working, but a save still replaces the whole draft including envelopes;
-- public entries, public globals and the build export leave hidden blocks out
-  and return each block as `{key, type, schemaVersion, position, anchor?,
-  className?, settings, data}` with no `hidden` key; a missing `settings`
-  validates as `{}`, and older SDKs reject the new keys because public
-  parsing is strict;
-- media referenced only by hidden blocks are left out of the public `media`
-  dictionary and the public media route, while their usage and deletion guard
-  are unchanged;
-- block metadata in model DTOs may carry `settings`;
-- new `422` issue codes: `invalid_block_anchor`, `duplicate_block_anchor`,
-  `invalid_block_class_name`, `invalid_block_hidden` and
-  `invalid_block_settings` (plus field codes under `/blocks/<i>/settings`);
-- **breaking for user-written block migrations:** a migration step now
-  receives `{ data, settings }` and returns `{ data, settings? }` instead of
-  bare data, so `2: ({ quote, ...rest }) => ({ ...rest, text: quote })`
-  becomes `2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote } })`.
-  Sync reports a migration that still returns bare data as
-  `BLOCK_MIGRATION_INVALID`.
-
-It requires migration `0009_content_block_envelope` (additive columns and a
-partial unique index). Back up first: an older engine would deliver hidden
-blocks, so rolling back once envelopes exist restores the backup.
-
-The site packages of the same next alpha render the envelope (CE6B, source
-template `0.26.0`):
-
-- `@lacecms/render`: `RenderableBlock` accepts optional `anchor`,
-  `className`, `hidden` and `settings`; `prepareBlocks` skips hidden blocks;
-  `BlockProps` gains `anchor`, `className` and typed `settings`
-  (`BlockSettingsOf`); `parseBlockEnvelope` is exported; the new error code
-  `invalid_block_envelope` reports an invalid anchor, class name or settings
-  value. The additions are additive for TypeScript;
-- registry block revisions `cta` 2, `hero` 3, `image` 4, `quote` 2 and
-  `richText` 2 place the anchor as the root `id` and merge the class name
-  into the root `class`, with unchanged markup without an envelope; `lace add
-  block` scaffolds custom components the same way.
-
-Template `0.26.0` ships these components and the `0009` upgrade steps. Block
-components are user-owned, so existing sites adopt them with
-`pnpm exec lace add block --all` (edited components are reported as
-conflicts); components that ignore the new props keep rendering without ids
-or editor classes.
-
-Supported template upgrade verification starts from the latest published
-prerelease template, currently `0.35.0`. Only its exact default and Cloudflare
-fixtures are retained. Earlier published versions remain historical records;
-upgrades from their templates are no longer acceptance gates.
-
-Both runtime images target `linux/amd64` and `linux/arm64`; each platform is
-built and smoke-tested separately during preparation, while the full consumer
-journey runs on the host's platform. Consumer packages and generated projects
-declare minimum-only engines (see below). Existing projects move between template versions
-with `lace upgrade` (user-owned README, `lace.config.ts`, `.env`, site source
-and `worker/wrangler.jsonc` are never modified; managed-file edits are reported
-as conflicts) and then follow the template's upgrade instructions to update
-their image references and site dependencies. On Docker Desktop and OrbStack
-(macOS/Windows), the Compose data directory crosses a VM file share without
-shared SQLite locks or WAL memory: host `lace` database commands must run only
-while the `api` and `dispatcher` services are stopped, as the generated guides
-state. Linux hosts share the kernel with their containers and are not affected.
-Exact candidate evidence is in
-[the archived alpha.3 change](../openspec/changes/archive/2026-10-06-step-33h-alpha3-candidate/) and
-[the archived alpha.2 artifact refresh](../openspec/changes/archive/2026-10-04-step-32b-coherent-artifact-refresh/); preparation and publication
-are described in `docs/alpha-release.md`.
-
-## Alpha.6 coordinated upgrade
-
-Alpha.5 (`0.1.0-alpha.5`, template `0.29.0`) passed local acceptance on
-2026-10-14. Alpha.6 (`0.1.0-alpha.6`, template `0.30.0`) completed local
-acceptance on 2026-10-16; both are now confirmed published. These historical
-contract changes remain relevant when upgrading from alpha.5 or earlier.
-Upgrade API/admin, builder, SDK and site dependencies together. The raw
-build-export endpoint now returns version-bound pages with `formatVersion: 1`;
-custom HTTP consumers must follow cursors. Older SDKs reject the changed contract; unchecked raw clients may silently
-read only the first page. The new SDK rejects exports without a format version.
-Matching SDK/site loaders assemble all pages and preserve version consistency.
-Public SDK reads ignore additive unknown fields but retain required-field,
-rich-text, hidden-block and format-version checks.
-
-Draft-media detachment requires media and content write permissions, never
-rewrites published snapshots and is atomic per draft only. A later conflict
-leaves already-detached drafts saved and the media active for a retry. Published
-use and more than 50 using entries are refused before draft changes. There are
-no new database migrations relative to alpha.5. See
-[alpha.6 notes](./compatibility.md#alpha-6-upgrade-and-rollback) for upgrade, backup and rollback steps.
+A candidate becomes published only when the owner publishes it. Each version is
+recorded in `publishedVersions` after that publication, before the next
+candidate is selected.
 
 ## Minimum requirements and tested versions
 
@@ -291,8 +125,9 @@ pins are separate and unchanged by the minimums:
 
 | Pin | Value | Where |
 | --- | --- | --- |
-| Tested Node | `24.12.0` | CI workflows, `node:24.12.0-bookworm-slim` API/builder images, release preparation |
-| Tested pnpm | `12.3.4` | `packageManager` (root and generated CMS), API/builder images |
+| Tested Node | `24.12.0` | CI workflows, `node:24.12.0-bookworm-slim` API/builder images |
+| Preparation Node | major `24` or later | `release:prepare` gate (`scripts/release.mjs`); eligible, not tested |
+| Tested pnpm | `12.3.4` | `packageManager` (root and generated CMS), API/builder images, release preparation (exact) |
 | Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
 
 Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1
@@ -322,104 +157,10 @@ disposable smoke check on the selected Node LTS, update the catalog and lockfile
 together, and record the new selection date. Framework major upgrades require
 test and migration review, as required by the architecture dependency policy.
 
-## Composite field adoption (CE7A)
-
-Composite definitions add recursive `group`/`list` metadata while preserving the
-existing content JSON envelopes, media usage DTOs and database schema. Scalar
-configuration hashes and scalar media paths are unchanged. Nested media paths
-use relative RFC 6901 pointers such as `/images/0/image`; indices stored in
-pointers are zero-based.
-
-Adopt compatible engine, bundled admin, contracts, SDK and site/render packages
-together before declaring or storing composites. Older consumers may reject
-the new metadata or fail to validate/render nested data. The CE7A admin shows
-composites as read-only JSON and preserves them during scalar edits and
-lifecycle commands; generic authoring follows in CE7C. CE7B supports recursive
-model evolution with sibling rename hints, wildcard removal pointers and
-validated defaults/constraints. Deploy the CE7B engine before adopting nested
-hints; older engines reject them. Registry/starter adoption followed in CE7D
-(below); existing built-in blocks keep their flat schemas.
-
-There is no database migration or automatic down-conversion. After storing
-composites, rollback to an older engine/site requires restoring a compatible
-backup of data and configuration as well as packages. Keep that backup before
-adoption and test the site build against the same definitions.
-
-## Gallery and Navigation (CE7D)
-
-`@lacecms/content` adds the built-in `gallery` and `navigation` blocks
-(version 1, composite data, no settings) to `builtInBlocks`; the five earlier
-built-ins are unchanged, and configurations that do not register the new
-blocks keep their hashes. The registry adds the `gallery` and `navigation`
-Astro items at revision 1. There is no database migration, REST, export or SDK
-change.
-
-A configuration that registers the new blocks needs the content package of
-the same release on the API, admin and site; older packages do not define
-them. Template `0.27.0` registers all seven blocks in new starters, allows them
-in `home` and `posts` (version 2), declares a `navigation` global rendered by
-`BaseLayout` with a static fallback and adds the gallery and navigation CSS.
-Existing projects adopt this by hand: `lace add block gallery navigation`,
-configuration and model version changes, configuration sync, publication of
-the global and the layout change (see the 0.27.0 upgrade instructions). To roll
-back, remove the blocks from the models with `removedBlocks` while entries use
-them, or restore the backup taken before sync.
-
-## CE8A shared rich-text format
-
-CE8A adds H4, horizontal rules, plain code blocks and independent link new-tab
-and nofollow attributes. Existing H1–H3 and href-only JSON stays valid without
-rewrites, database migrations or block schema-version changes.
-
-Stored links use `href` plus optional `target: "_blank"` and `rel: "nofollow"`.
-Omit a switch's attribute when unchecked; null, empty strings, other targets
-and other rel tokens are rejected. Renderers add `noopener noreferrer` for a
-new tab and append `nofollow` when requested. Ordinary URL fields stay strings.
-Code blocks contain only unmarked text, without a language attribute, and render
-as escaped `pre`/`code` preserving spaces, tabs and line breaks. Empty blocks
-are valid. Rules and code are allowed at root and inside list items/blockquote.
-
-Upgrade CMS packages and site `@lacecms/content`, `@lacecms/render` and
-`@lacecms/astro` together before storing expanded documents. Sites using the
-common RichText component need no copied block-source update; custom renderers
-must support the expanded grammar, and overrides must forward validated link
-attributes. A codeBlock override is called for both described pre/code elements,
-following the existing per-element override contract.
-
-CE8B updates the admin extensions and serializer to preserve and author this
-format in every field, including recursive leaves. Use the fixed toolbar or
-selection menu; Link provides independent new-tab/nofollow switches. See
-[rich-text authoring](rich-text-authoring.md). CE8A alone still cannot preserve
-expanded documents in its older admin; deploy CE8B together with its common
-format/rendering dependencies before enabling expanded authoring.
-
-An older engine or site renderer can reject documents using new features. To
-roll back after expanded content is stored, restore a backup predating it or
-explicitly remove the new features before downgrade; never silently strip or
-normalize existing content. See [ADR 0014](adr/0014-expanded-rich-text-format.md).
-
-## Field guidance metadata (CE9A)
-
-Upgrade engine/contracts/admin together before configuring `placeholder`. Older
-engines reject the option. No content or database migration is required; remove
-placeholder options before rollback. Ordinary text length stays raw UTF-16 and
-SEO stays trimmed code points. See [field guidance](field-guidance.md).
-
-
-## Visual form layouts (CE9B)
-
-Upgrade content/config/contracts/API/admin together before configuring `layout`
-or block `settingsLayout`; older engines reject the options. No content or DDL
-migration is required. Remove layouts and synchronize before rolling back to
-a matching earlier engine/admin. Stored field paths and values, including keys
-named `layout`, are unchanged. Public metadata synchronization still advances
-published state and requests a build. Creation-time slugs are ordinary stored
-slugs and need no conversion. See [form organization](form-organization.md).
-
 ## Public contract evolution
 
-Starting with the release after `0.1.0-alpha.5`, the public delivery contract
-(`/api/v1/public/*` responses and the build export) evolves under one policy.
+The public delivery contract (`/api/v1/public/*` responses and the build
+export) evolves under one policy.
 
 - **Compatible (no version change):** adding an optional key, or a key older
   consumers may ignore, to a public response, a public entry, block, global,
@@ -441,33 +182,29 @@ Starting with the release after `0.1.0-alpha.5`, the public delivery contract
   `additionalProperties: false`. External clients generated from that
   document should nevertheless ignore unknown properties, because later
   releases of the same line may add them.
+- **Error codes stay open:** `LaceHttpError.code` is typed
+  `LaceErrorCode | (string & {})`, so an error code introduced by a newer API
+  is reported instead of failing as a contract violation. Code that assigns
+  `code` to a `LaceErrorCode` variable must narrow it first.
 
-The build export carries `formatVersion` (currently `1`). The SDK declares the
-highest format it supports and rejects a newer export with
-`LaceUnsupportedExportFormatError`; the published-site loader reports it as
-`invalid_export` with advice to upgrade `@lacecms/sdk`.
+The build export carries `formatVersion` (currently `2`, with internal-link
+manifests). The SDK declares the highest format it supports and rejects a
+newer export with `LaceUnsupportedExportFormatError`; the published-site
+loader reports it as `invalid_export` with advice to upgrade `@lacecms/sdk`.
 
-Upgrade notes for the next alpha:
+### Build-export paging
 
-- The build export requires `formatVersion`; an SDK of this release rejects
-  an export from `0.1.0-alpha.5` or older. Upgrade the API and site packages
-  together, as before.
-- `LaceHttpError.code` is typed `LaceErrorCode | (string & {})`: an error code
-  introduced by a newer API is reported instead of failing as a contract
-  violation. Code that assigns `code` to a `LaceErrorCode` variable must
-  narrow it first.
-- The build export is paged. `GET /api/v1/public/build-export` returns a
-  first page `{formatVersion, version, entries, globals, seo, media,
-  nextCursor?}`; requests with `?after=<nextCursor>` return continuation pages
-  `{formatVersion, version, entries, media, nextCursor?}`. An optional `limit`
-  (1–100, default 100) caps entries per page, and the server also ends a page
-  at a fixed stored-JSON byte budget, always delivering at least one entry.
-  Sites that use the published-site loader, `getSite()`, `LaceBlocks` or
-  `client.getBuildExport()` need no code change: the SDK follows every cursor
-  and returns the same assembled export as before. Code that reads the raw
-  REST export must follow `nextCursor` until it is absent and merge the
-  pages' `entries` and `media`; `globals` and `seo` come from the first page.
-  The API and `@lacecms/sdk` must come from the same release.
+- `GET /api/v1/public/build-export` returns a first page `{formatVersion,
+  version, entries, globals, seo, media, nextCursor?}`; requests with
+  `?after=<nextCursor>` return continuation pages `{formatVersion, version,
+  entries, media, nextCursor?}`. An optional `limit` (1–100, default 100)
+  caps entries per page, and the server also ends a page at a fixed
+  stored-JSON byte budget, always delivering at least one entry.
+- Sites that use the published-site loader, `getSite()`, `LaceBlocks` or
+  `client.getBuildExport()` follow every cursor through the SDK and receive
+  one assembled export. Code that reads the raw REST export must follow
+  `nextCursor` until it is absent and merge the pages' `entries` and `media`;
+  `globals` and `seo` come from the first page.
 - A continuation request whose cursor was issued before a publication fails
   with `409 BUILD_EXPORT_VERSION_CHANGED` and details `{expectedVersion,
   actualVersion}`. `client.getBuildExport()` then restarts from the first
@@ -483,416 +220,33 @@ Upgrade notes for the next alpha:
   10 ms CPU limit is best effort, because one maximal entry can exceed it on
   its own page.
 
-## Alpha 5 upgrade and rollback
+## Upgrading from rc1
 
-### Changes since alpha.4
+The database starts from one baseline migration that replaces every earlier
+migration, so a database created by rc1 cannot be migrated:
+`lace db migrate` and `lace doctor` report `SCHEMA_UNSUPPORTED` for it and
+change nothing ([database migrations](database-migrations.md)).
 
-- CE1: explicit schema evolution, field rename/removal hints and block migrations.
-- CE2: unpublish, revert, duplicate and delete entry actions.
-- CE3: descriptive media metadata and resolved media in public delivery.
-- CE5: route-less global singletons and site-wide settings.
-- CE4: entry SEO, site defaults, canonical/social metadata and indexing controls.
-- CE6: block anchors, classes, hidden blocks and declared settings.
-- CE7: nested group/list fields, composite editor controls, Gallery and Navigation blocks.
-- CE8: expanded rich-text format and editing tools.
-- CE9: field descriptions/defaults/validation, organized section/tab forms and collection slug suggestions.
+1. Keep the content you need in your own source files for `lace import`, or
+   plan to re-enter it. Back up `lace.config.ts`, site source, package/lock
+   files, deployment settings, the database and media objects.
+2. Upgrade every Lace engine, CLI, SDK/render/Astro/site package and both API
+   and builder images together. Review managed-file conflicts with the
+   template upgrade plan and merge user-owned site and deployment changes
+   explicitly.
+3. Recreate the database. Compose: stop `api` and `dispatcher`, remove
+   `.lace/data/lace.sqlite` with its `-wal` and `-shm` files, then run
+   `pnpm db:migrate`. Local Cloudflare: remove `.lace/data/cloudflare` and run
+   `pnpm cf:db:migrate`. Remote Cloudflare: create a new D1 database, update
+   `LACE_D1_DATABASE_ID` and the Worker binding, then run
+   `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`.
+4. Run `pnpm content:sync` (or the selected Cloudflare target), then
+   `pnpm auth:bootstrap`, complete first-administrator setup and restore the
+   content.
+5. Rebuild the site and check it on the selected runtime before relying on it.
+   Local acceptance is not a real deployment check.
 
-The release includes the completed content-editor waves. Future work remains in
-[backlog.md](../backlog.md).
-
-### Public-contract and site changes
-
-Upgrade the engine, admin, SDK, Astro/render integration and generator together.
-All fourteen `@lacecms/*` packages and `create-lace` use `0.1.0-alpha.5`; both
-runtime images use the matching tag. These coordinates become downloadable only
-after explicit publication. Keep user-owned site components and configuration
-under review; managed template upgrade does not migrate them automatically.
-
-CE3 changes public entry reads to include the entry and its resolved `media`
-dictionary, collection reads to include items/media/cursor, and build export to
-include resolved media. SDK consumers must use the matching response types and
-pass the resolved media to image/render helpers. Media IDs remain the stored
-references; nested composite media references use the same resolution rules.
-
-CE6 extends published block envelopes with anchor, class name and settings.
-Hidden blocks are omitted from public delivery and build export. Custom block
-components must forward declared envelope props when needed; the Astro adapter
-passes them without adding a wrapper. An old engine can expose hidden content
-or discard saved envelope values, so reverting only binaries after adoption is
-unsafe. Group/list fields and the expanded rich-text union also require review
-of exhaustive TypeScript consumers and custom renderers. Use the matching SDK
-and render validators rather than assuming older payload shapes.
-
-### Upgrade and migration order
-
-1. Record the installed package/template/image and configuration versions.
-   Stop writes and dispatch; capture a coordinated backup of database, object
-   bytes and configuration. Retain the existing served site and its source.
-2. Generate a target template with the same site mode/path and Cloudflare
-   selection. Review the CLI upgrade plan and managed-file conflicts before
-   applying it. `.env`, configuration, README, Worker operator settings and
-   Astro source remain user-owned; update their coordinates explicitly.
-3. Install the matching Lace dependencies and set the alpha.5 API/builder
-   images. Review user-owned image definitions for media metadata and bump
-   applicable block/model versions with explicit migrations when needed.
-4. Apply forward database migrations in journal order, then synchronize the
-   configuration explicitly. Do not hand-apply isolated SQL files or bypass
-   schema compatibility checks. Upgrade does not execute these deployment steps.
-5. Start/deploy the matching engine/admin and builder, build the site with the
-   matching SDK, and check content, resolved media, globals, SEO, hidden blocks,
-   composites, rich text and form behavior before resuming normal operation.
-
-For Node/Compose, stop `api` and `dispatcher`, copy the whole stopped
-`.lace/data` directory, preserve the matching MinIO objects/configuration,
-run `pnpm db:migrate` then `pnpm content:sync`, and restart using the generated
-[Compose production guide](../packages/create-lace/templates/docs/lace-compose-production.md).
-Keep database consumers stopped throughout host maintenance.
-
-For Cloudflare, capture D1 export/Time Travel evidence and coordinated R2/config
-backups. Run `pnpm exec lace cloudflare preflight`,
-`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`
-and `pnpm exec lace content sync --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`,
-then deploy the rebuilt Worker and verify its packaged admin. Follow the generated
-[Cloudflare guide](../packages/create-lace/templates/docs/lace-cloudflare.md).
-Local D1/R2 simulation is not a remote restore check.
-
-### Database and rollback boundaries
-
-The release preparation itself adds no DDL. Depending on the installed baseline,
-apply all pending migrations, including earlier account-token migration 0004:
-
-| Migration | Change | Rollback boundary |
-| --- | --- | --- |
-| 0005_content_model_structure | Add model structure baselines | Additive columns; existing data unchanged |
-| 0006_media_descriptive_metadata | Add alt/caption/focal point | Additive columns; existing data unchanged |
-| 0007_content_model_global_kind | Rebuild model kind constraint for globals | After creating globals, restore the matching backup to return to an older engine |
-| 0008_content_snapshot_seo | Add nullable SEO snapshot data | Older engines leave stored SEO unused |
-| 0009_content_block_envelope | Add anchor/class/hidden/settings and anchor uniqueness | After envelope adoption, restore the matching backup; older engines can expose hidden blocks and reset envelopes |
-
-Node and D1 use their existing migration implementations for atomicity and
-foreign-key handling. Content schema/block migrations run through explicit
-configuration synchronization. After storing composites or expanded rich text,
-a return to an older engine requires a matching backup or an explicitly reviewed
-validated conversion. Filesystem upgrade rollback does not undo database/content
-migration. Restore database, media and configuration together into an isolated
-origin with replacement secrets and production hooks disabled before validation.
-
-
-## Alpha 6 upgrade and rollback
-
-### Public-contract compatibility
-
-**The raw HTTP build-export response changed.** `GET /api/v1/public/build-export`
-returns a first page with entries, globals, SEO, media and optional `nextCursor`;
-continuation pages contain entries/media and omit globals/SEO. Follow
-`?after=<cursor>` until no cursor remains. Optional `limit` is 1–100. Each page
-has the same published version and `formatVersion: 1`, with page-scoped media.
-Do not decode cursors or treat the first page as the complete site.
-
-Publication between pages returns HTTP 409 `BUILD_EXPORT_VERSION_CHANGED`.
-The matching SDK `getBuildExport()` restarts once and returns one consistent
-assembled export. A pinned site build fails with `version_mismatch` instead of
-switching versions. First-page conditional retrieval still supports `304`.
-Use matching SDK/site loaders rather than implementing unchecked page merging.
-
-Upgrade API/admin, builder, all Lace site dependencies and generator together.
-All fourteen scoped packages and `create-lace` use `0.1.0-alpha.6`, and both
-images use that tag. An alpha.5 SDK cannot safely consume the new response contract; an alpha.6
-SDK rejects an older export without `formatVersion`. Tolerant parsing does not
-make these release sets interchangeable. Custom code using the former
-repository export port must adopt its page-oriented replacement. Review
-exhaustive TypeScript consumers against the matching declarations.
-
-### Upgrade and migration order
-
-1. Record installed versions; stop writes/dispatch and back up matching database,
-   configuration, object bytes and site source/output.
-2. Generate template 0.30.0 with the same site mode/path and Cloudflare selection.
-   Review `lace upgrade` managed-file conflicts. User-owned `.env`, site files,
-   `lace.config.ts`, README and Worker operator settings require manual review.
-3. Install matching alpha.6 Lace dependencies and explicitly update API/builder
-   image tags. Update user-owned Astro dependencies together, then rebuild the
-   Cloudflare Worker when applicable. Coordinates are downloadable only after
-   publication.
-4. Apply any pending forward database migrations and synchronize configuration
-   explicitly. There are no new migration files relative to the accepted
-   alpha.5 artifact source. Older baselines still require their pending journal
-   migrations; see [alpha.5 migration notes](./compatibility.md#alpha-5-upgrade-and-rollback).
-5. Start/deploy the coordinated engine/admin and builder, rebuild the site, and
-   verify a multi-page export, rendered media and publication/build recovery.
-
-For Node/Compose, stop `api` and `dispatcher` throughout host database work,
-copy the stopped `.lace/data` and matching MinIO/configuration, then run the
-generated `pnpm db:migrate` and `pnpm content:sync` commands as required.
-For Cloudflare, retain coordinated D1 export/Time Travel and R2/config backups;
-use explicit `cloudflare-remote` migration/sync and operator environment selection
-from the [Cloudflare guide](../packages/create-lace/templates/docs/lace-cloudflare.md).
-Local D1/R2 checks do not prove remote restore.
-
-### Draft-media detachment and rollback
-
-`DELETE /api/v1/admin/media/:id?detach=drafts` requires both `media:write` and
-`content:write`. It refuses published usage, inactive media and more than 50
-using entries before any draft changes. It removes matching nested media values
-and SEO images through ordinary revision-guarded draft saves, then requests
-deletion through the existing usage guard. Drafts can become incomplete and
-must be repaired before publication. No public content or build changes occur.
-
-Each draft save is atomic; the overall request is not. If a later save conflicts,
-earlier detachment remains saved, later drafts remain unchanged and media stays
-active. Refresh usage and retry. A reference created concurrently can still
-block the final deletion. Object cleanup remains asynchronously recoverable.
-
-Rollback requires coordinated compatible engine/site/builder versions and
-matching configuration/data. Template filesystem rollback does not restore
-detached draft values, deleted object bytes or database/content migrations.
-Restore matching backups when necessary, first at an isolated origin with
-replacement secrets and production hooks disabled. Automatic database downgrade
-is not supported. Earlier composite/envelope/rich-text rollback restrictions
-remain in force.
-
-## Alpha 7 upgrade and rollback
-
-Alpha.7 (`0.1.0-alpha.7`, ownership template `0.35.0`) packages image delivery
-A–D and the VPS upload proxy fix. It is a preparation candidate on npm `next`;
-use it only after matching artifacts are available. Registry reads on 2026-10-19
-confirmed all alpha.6 packages and both two-platform image indexes are public;
-alpha.7 endpoints returned 404. This does not establish publishing rights.
-
-### Images and deployment changes
-
-Uploads accept verified JPEG, PNG, GIF, WebP and AVIF up to 10 MiB; SVG and video
-are unsupported. Original binaries are unchanged and support cache validators.
-Astro optimizes images at build time to distinct widths `min(960, W)` and
-`min(1920, W)` without upscaling, including animated WebP from GIF. Opaque
-non-GIF images can have blurred placeholders; transparent images, GIF and image
-services without local transforms omit them. Lightbox is opt-in for image and
-gallery blocks; an item's link takes precedence and opens in the same tab.
-
-VPS proxy uploads stream through a dedicated 11 MiB multipart allowance; the API
-still enforces 10 MiB image bytes. Other requests retain the 1 MiB proxy ceiling.
-Successful `/_astro/` assets use thirty-day immutable caching; HTML revalidates
-and missing assets do not receive immutable caching. The builder's separate
-`builder-cache` volume is disposable, bounded at 2 GiB and reuses package/image
-work. After a failed build its Astro cache is cleared; unusable caches fall back
-to an uncached build. Pages adopts asset headers through `public/_headers` and
-its generated workflow restores `node_modules/.astro`.
-
-### Upgrade order
-
-1. Record installed versions and back up matching database, MinIO/R2 objects,
-   configuration, site source, lockfiles and deployment files. Stop API and
-   dispatcher during host SQLite maintenance; use a coordinated D1/R2 backup
-   for Cloudflare, selecting remote operations explicitly.
-2. Generate template 0.35.0 with matching site mode/path and Cloudflare choice.
-   Review `lace upgrade` managed-file conflicts, including nginx, Compose and
-   workflows. `.env`, site source, README, `lace.config.ts` and Worker operator
-   settings remain user-owned. Set all Lace dependencies and API/builder images
-   to alpha.7 together and reinstall; rebuild the Worker when applicable.
-3. In the site, add `sharp` as documented in the generated Astro guide and set
-   `image: laceImageConfig(env)` in `astro.config.mjs`. It allows only the public
-   media path under `LACE_API_BASE_URL`; originals must be reachable during the
-   build. `optimizeImages: false` retains direct public URLs when required.
-4. From the generated CMS, review `pnpm exec lace add block image gallery hero
-   --site <site-path> --dry-run`, then update unedited components and merge
-   conflicts manually (`--write-new` supplies proposed `.new` files). Adopt the
-   starter lightbox/link CSS and Pages `public/_headers` manually. Preserve
-   custom markup and keep `lace.site.json` consistent with reviewed components.
-5. Raise the version of each model allowing image/gallery before explicit
-   content sync. The current starter uses model version 4 for home/posts; custom
-   models advance from their own current version. Image/gallery schemas become
-   4/3 through configuration synchronization, with stored data/settings kept.
-   New components must be ready before the next site build: older renderers
-   refuse the new schemas with `block_version_mismatch`.
-6. Run any older pending forward SQL migrations explicitly, then content sync
-   using the selected Node or Cloudflare target. There are no new migration
-   files relative to tag `v0.1.0-alpha.6`. Recreate updated web/builder services
-   and rebuild; test upload above 1 MiB, GIF animation, linked images, lightbox,
-   HTML refresh and hashed-asset headers at your public origin.
-
-### Rollback boundaries
-
-Template filesystem rollback does not reverse content synchronization. Once the
-new image/gallery schemas are stored, returning to alpha.6 requires matching
-backed-up configuration/content and source components alongside compatible
-packages/images. Restore media objects when content needs them; SQL alone is
-insufficient. Caches are disposable and are not application backups. Keep the
-existing alpha.6 export compatibility and earlier rollback restrictions. Test
-restoration at an isolated origin with replacement secrets and production hooks
-disabled; local acceptance does not establish real VPS or Cloudflare recovery.
-
-## CE10 internal URL links
-
-See [internal URL links](./internal-url-links.md) for canonical ID targets, the
-200-occurrence snapshot bound, publication/removal guards, format-2 transport,
-installed source adoption, migration 0010 and matching-backup rollback. URL
-fields remain content fields; block settings, provider URLs, SEO and rich-text
-hrefs retain their existing grammars.
-
-## Alpha 8 upgrade and rollback
-
-Alpha.8 (`0.1.0-alpha.8`, ownership template `0.39.0`) was the preparation
-candidate and is now published on npm `next`. It adds list presentation settings and compact media
-rows, YouTube/Vimeo embeds, internal URL links and Link blocks, configurable
-draft collection queries and optional OAuth MCP. Alpha.7 remains immutable;
-its original fifteen packages and both images were verified public on 2026-10-29.
-Alpha.8 adds a sixteenth package, `@lacecms/mcp`. Preparation is not publication.
-
-### Upgrade order and migrations
-
-1. Record installed versions, stop writes and dispatch, and back up matching
-   database, media, configuration, site source, lockfiles and deployment files.
-   Stop Node API/dispatcher before copying the complete SQLite data directory.
-   For Cloudflare retain a coordinated D1 export/restore point and R2/configuration
-   backup; select remote operations explicitly.
-2. Generate template 0.39.0 with the same site mode/path and Cloudflare choice.
-   Review managed-file conflicts with `lace upgrade`; `.env`, `lace.config.ts`,
-   site components, README and Worker configuration remain user-owned. Upgrade
-   all Lace packages and both API/builder images to alpha.8 together, including
-   SDK/render/Astro/content in the site; reinstall and rebuild the Worker.
-   The starter pins patched Astro 7.3.3. Existing sites must review and update
-   their user-owned Astro/build dependencies as well; template upgrade does not
-   replace site/package.json or its lockfile.
-3. Apply the release's forward migrations before starting the matching API:
-   `0010_internal_url_links`, `0011_public_projection_identity`, `0012_oauth_mcp`
-   and `0013_oauth_verification_indexes` are new since alpha.7. Use the generated
-   `pnpm db:migrate` for Node; stop local Worker development before
-   `pnpm cf:db:migrate`. Remote D1 uses explicit `lace db migrate --target
-   cloudflare-remote --operator-env .lace/cloudflare-operator.env` after preflight.
-4. Review `pnpm exec lace add block image gallery navigation hero cta link
-   videoEmbed --site <site-path> --dry-run`. Update unedited sources and manually
-   merge `.new` proposals from `--write-new` when components were customized.
-   Preserve matching lock records, video CSS and internal-link resolver helpers.
-   Opt into new blocks/URL fields/list settings/query configuration by editing
-   configuration, advancing affected model versions as required and running the
-   normal content sync for the selected target. Existing site files are never
-   overwritten by a template upgrade.
-5. Recreate affected API/dispatcher/builder/web services or deploy the rebuilt
-   Worker, rebuild the site and verify publication, embeds, internal links,
-   configured queries and media. Query-only configuration changes do not rebuild
-   unchanged public content; Node and Cloudflare search limits differ as described
-   in the content-modeling guide.
-
-### Public-contract and component boundaries
-
-Gallery advances from schema v3 to v4 for scalar layout settings; image remains
-v4 and Navigation remains v1. Install the matching Gallery component and
-`ListLayout.css`, remove competing structural CSS while retaining theme/spacing,
-and increment affected model versions before normal content sync. The block
-migration preserves existing data/settings and supplies layout defaults. Older
-Gallery renderers reject v4; rollback after sync needs matching backups and source.
-
-Build-export format 2 carries internal-link manifests. Older format-1-only SDKs
-reject it; update API, SDK, render/Astro site and builder together. Use
-`site.link(value)` for custom URL markup and emit navigation only for resolved
-results. Missing destinations produce bounded diagnostics and a non-navigating
-fallback. Review [internal links](./internal-url-links.md) for grammar, source
-adoption and destructive-operation confirmation. Video embeds support provider
-URLs and optional image previews; they do not enable uploaded video files.
-
-Template 0.40.0 adopts videoEmbed v2: `aspectRatio` choices are `16:9` (default),
-`4:3`, `1:1`, `4:5`, `9:16`; `playback` is `player` (default) or `ambient`.
-Raise every model version allowing videoEmbed, run configuration sync, then
-`pnpm exec lace add block videoEmbed --site <site-path>` to install revision 2
-component and CSS. Review edited copies using `--write-new`. Otherwise an old
-component or block can fail with `block_version_mismatch`. No database migration.
-Reduced motion and no JavaScript fall back to player. Ambient is muted and looping;
-use posters and limit ambient blocks to control bandwidth. It has no pause control
-and does not meet WCAG 2.2.2 for videos longer than five seconds. See
-[site styling](./site-styling.md#video-embeds) for a site-owned stop-control example.
-Rollback after configuration sync requires matching content backup and source.
-
-### Optional OAuth assistant
-
-MCP remains disabled by default. After migrations, set `LACE_MCP_ENABLED=true`
-in the Node API environment or Worker vars and restart/redeploy. Compose forwards
-this value; existing user-owned Worker settings need manual adoption. Use the
-canonical public HTTPS origin, review the generated nginx discovery/transport
-routes and keep query strings, callback codes and credentials out of access logs.
-Connect clients to `/mcp`; approve explicit read or read-plus-draft permissions.
-Only model/list/get/create/save-draft tools exist. Publication, unpublication,
-deletion and media administration remain unavailable even to administrators.
-Current account roles and consent scopes still restrict every operation.
-
-Settings contains client setup for Codex, Claude Code and Gemini CLI. Account
-manages owned connections and revocation. Ordinary browser sign-out preserves
-independent grants; disabling MCP prevents discovery, issuance, refresh and use.
-See [OAuth MCP](./mcp.md) and the generated `docs/lace-mcp.md` for canonical-origin,
-consent, refresh/replay and connection recovery details.
-
-### Rollback boundaries
-
-No automatic database downgrade or token-to-path conversion is supported.
-Template filesystem rollback cannot reverse content/schema synchronization or
-restore OAuth state. Restore the matching database/configuration/media/site
-source and coordinated package/image versions when returning to alpha.7 after
-adoption; older engines cannot maintain internal-link projections or interpret
-the new URL grammar. Test restoration at an isolated origin with replacement
-secrets and production hooks disabled. Local Node/D1/R2 acceptance does not prove
-real VPS or Cloudflare deployment, restore or assistant-client compatibility.
-
-## Gallery video items (SM5D)
-
-`@lacecms/content` moves the built-in `gallery` to definition version 5: each
-item gains a required `kind` select (`image` default, `video`) that controls
-conditional fields, plus `videoUrl`, `videoTitle`, `playback` and `aspectRatio`
-for videos. Identity migration 5 keeps stored items as images; configuration
-sync materializes the item defaults in drafts and `kind` in publications. No
-SQL migration. `videoEmbed` keeps its version and hashes; its `playback` and
-`aspectRatio` descriptors are now shared with the gallery item.
-
-The registry `gallery` item moves to revision 7 with a new `GalleryVideo.css`
-stylesheet and an ambient-mounting script. Revision 6 components fail with
-`block_version_mismatch` after sync, and published item types make `media`
-optional, so customized copies must check `kind` and `media`. Template 0.45.0
-raises the starter model versions and ships the new component and stylesheet.
-Rollback after sync requires the pre-upgrade content backup with matching code
-and site sources.
-
-
-## Rc1 upgrade and rollback
-
-Rc1 (`0.1.0-rc1`, template `0.46.0`, npm `next`) ships the committed changes after
-alpha.8: video aspect ratios/ambient playback, optional MCP publication consent,
-media tags and multi-selection, content import, conditional fields, gallery video
-items and workspace/documentation hygiene. RC naming does not establish stable
-support or real VPS/Cloudflare deployment readiness.
-
-1. Back up matching database, media objects, `lace.config.ts`, site source,
-   package/lock files and deployment settings. Stop API/dispatchers before a Node
-   database backup; use the maintained D1 export/restore procedure for Cloudflare.
-2. Upgrade all Lace engine, CLI, SDK/render/Astro/site packages and both API and
-   builder images to `0.1.0-rc1` together. Reinstall using the project lockfile,
-   rebuild the Worker and merge user-owned site/deployment changes explicitly.
-3. Before starting the updated runtime, apply forward migrations
-   `0014_media_tags` and `0015_import_credentials`: the former adds tag storage;
-   the latter adds token expiry/creator and nullable media SHA-256. Neither
-   rewrites media objects. Use `pnpm db:migrate` for generated Compose projects;
-   Cloudflare uses the documented `lace db migrate --target cloudflare-remote`
-   operator procedure (or `pnpm cf:db:migrate` for stopped local simulation).
-4. Review installed components with `pnpm exec lace add block --all --site site`
-   (substitute the actual site path). Merge reported source conflicts without
-   overwriting edits. Gallery schema 5 supports image/video item kinds, accessible
-   video titles, per-item playback and aspect ratios; links and lightboxes remain
-   image-only. Upgrade matching components before synchronizing and rebuilding.
-5. Synchronize explicit model/block definitions using `pnpm content:sync` or the
-   selected Cloudflare operator target. Conditional visibility changes structure:
-   hidden draft values persist and remain validated, hidden fields are not
-   required and hidden values are omitted from published APIs/exports. Site types
-   must handle optional published values. Switching an item's kind retains draft
-   values; reverting to published cannot recover omitted hidden draft values.
-6. MCP stays disabled by default. Existing draft grants do not gain publishing:
-   `content:publish` requires separate explicit consent and current role authority.
-   The sixth tool is `publish_entry`; unpublication, deletion and media
-   administration remain forbidden. Revoke connections through account settings.
-   Import tokens are separate credentials with explicit scopes and optional
-   expiry; keep them in operator environment variables, never content packages.
-7. Verify tag persistence, multi-selection, sample import validation/repeat,
-   conditional publication and gallery rendering on the selected runtime before
-   publishing/rebuilding the site. Keep local acceptance distinct from a real
-   deployment check.
-
-Rollback requires matching backed-up database, media, configuration, source and
-compatible package/image versions. A package-only downgrade does not undo forward
-migrations or synchronized gallery/conditional schemas and can expose hidden
-values or reject content; do not promise an automatic downgrade.
+Built-in blocks keep their definition versions and declare no migrations;
+build exports use format 2 only. Rollback means returning to the backed-up
+rc1 packages, images, configuration, source, database and media together; a
+package-only downgrade is not supported.

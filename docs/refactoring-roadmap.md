@@ -17,7 +17,7 @@ session.
 
 Authority follows `AGENTS.md`:
 
-1. [`mvp-architecture.md`](mvp-architecture.md) owns product scope and
+1. [architecture](architecture/README.md) owns product scope and
    invariants.
 2. [`openspec/specs/**`](../openspec/specs) owns accepted capability behavior.
 3. The selected active OpenSpec change owns the proposed delta.
@@ -74,6 +74,19 @@ retain their order and are neither included nor prerequisites for rc1. Publicati
 and real deployment verification remain distinct; RC naming is not stable-release
 approval. Post-release test cleanup uses a commit after the artifact source.
 
+### Owner-requested RC2 release checkpoint (2026-11-08)
+
+After RF8B the owner selected `0.1.0-rc2` on `next` with template `0.47.0`. It
+includes every commit after published rc1 through the reviewed shipping
+source. OpenSpec change `prepare-rc2-release` selects coherent coordinates,
+records rc1 in `publishedVersions`, writes the changelog entry and relaxes the
+preparation gate to Node 24 or later with exact pnpm `12.3.4`. It also
+withdraws `allow-supported-node-release-preparation`. The owner prepares,
+accepts and publishes rc2 themselves using `docs/alpha-release.md`. The
+remaining sessions (RF6, RF7, RF8C, RF9C–RF9F) keep their order, are not part
+of rc2 and end in rc3. rc1 stays the oldest supported release and the upgrade
+fixture origin.
+
 ## 3. Baseline (commit `1494b039`, audit of 2026-11-01)
 
 What is healthy and is not touched:
@@ -102,11 +115,11 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11 → RF4F: 4, enforced by a shrinking size baseline |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11 → RF4F: 4 → RF5B: 2 (admin only), enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) → RF4D: 218-line factory, largest production module 492 lines |
-| Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
-| Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
+| Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines → RF5B: `repository/` (ten modules, largest `entries.ts` 646) |
+| Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines → RF5B: `repository/` (eight modules, largest `entries.ts` 481) |
 | Size | `packages/db/src/sql-content.ts` | 2,229 lines → RF4E: domain modules; largest db module 862 lines |
 | Size | `packages/config/src/index.ts` | 1,229 lines → RF4E: entry and domain modules |
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
@@ -119,21 +132,23 @@ What the roadmap changes, with the numbers to beat:
 | Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
 | Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
 | Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
-| Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim |
-| Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` |
+| Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim → RF5B: every identical read in `db` `SqlContentReader` (472 lines); repositories delegate; remaining runtime-specific reads: `list`, configuration-sync scans and Node's synchronous in-transaction entry loader → RF5C: every remaining write-path difference aligned or listed in architecture §16 "Runtime deltas", pinned by three new contract cases |
+| Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` → RF5A: one owner each (`db` `security/rows.ts`; rate-limit policies and setup TTL in application); adapters split by port, largest module 629 lines (`d1-security.ts` 984 → 215) |
+| Duplication | runtime composition roots | `createNodeRuntime` (621 lines) and `createCloudflareRuntime` (484) each build the use cases, request rate limiter, model resolver, MCP wiring and the 27-field app input → RF5C: one `composeLaceServices` in server; roots build adapters only (561 and 421 lines); one feature-flag parser; routes see actor resolution and capabilities, not the app input |
 | Duplication | argv parsers in `packages/cli` | 6 (+1 in `scripts/cloudflare-lib.mjs`) |
 | Admin | one-line `index.ts` barrels | 176 of 196 |
 | Admin | components under 60 lines occupying a three-file folder | 40 |
 | CLI | runtime dependencies on the `--target node` path | `miniflare` + `workerd` loaded statically through `commands.ts` |
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
-| Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
+| Docs | architecture document (now `docs/architecture/`) | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose → RF8A (4,086 lines at the start): a README and twelve domain files, 2,492 prose lines; codes only in `history.md`; guarded by `tests/architecture-document.test.mjs` |
 | Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137 → RF4I: 136 → RF4H: 132, listed in a shrinking baseline; test-support always typed |
-| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared |
+| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared → RF5B: 2 components (`platform-node` broken); both platform packages declared |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
 | Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
-| Specs | `openspec/specs` | 84 capabilities, 22.7k lines, no index; `admin-draft-editor` 2,154 lines |
+| Specs | `openspec/specs` | 84 capabilities, 22.7k lines, no index; `admin-draft-editor` 2,154 lines (RF8B: 89 capabilities with a domain index; editor core 289 lines) |
+| Migrations | checked-in Drizzle migrations; compatibility paths for pre-rc1 data | 16 migrations; built-in block identity migrations, legacy structure hash, legacy public-identity proofs, export format 1, manifests without site record, alpha.7/alpha.8 upgrade fixtures → RF8X: 1 baseline migration, none of the paths; rc1 fixture; template 0.47.0 |
 | Specs | stale unapplied change | `openspec/changes/video-a-media-upload-delivery` (0 of 20 tasks; fails `spec:validate` strict) |
 
 ## 4. Delivery overview
@@ -144,10 +159,10 @@ What the roadmap changes, with the numbers to beat:
 | RF2 | Tests against source | L | RF2A → RF2B → RF2C | done |
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
-| RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | planned |
+| RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
-| RF8 | Documentation | L | RF8A → RF8B → RF8C | planned |
+| RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | in progress |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
 
 **Order rationale:** RF1 first because deleting obsolete scripts and tests
@@ -174,6 +189,12 @@ RF9A → RF9B before RF5, because RF5 rewrites security errors and ports under
 tests that must already be typed and source-resolved; RF4H–RF4J may run in
 parallel with RF3E–RF3F; RF9D–RF9F type platform and CLI tests only after
 RF5 and RF7C move them. Owner checks without a session are listed in §5.
+
+**RF8X/RF8Y insertion (2026-11-08):** while RF8B was being specified the
+owner decided that rc1 is the oldest supported state (owner decision 11).
+RF8X removes the runtime support for older data and schemas, RF8Y removes
+release history from specifications and documentation; RF8B then reorganizes
+specifications that describe only the current product.
 
 **RF3G insertion (2026-11-07):** RF3E left the contracts and content JSON
 validators with two differing array cases. The owner chose the content rule,
@@ -204,13 +225,25 @@ Proposed, to confirm when writing the first specification:
 6. Tests move to source (RF2) before the large splits, even though the owner's
    first concern was file size.
 7. Decided 2026-11-01 while writing RF1A: only the latest published
-   template's fixtures (`0.35.0`) are kept as the upgrade origin.
+   template's fixtures (`0.35.0`) are kept as the upgrade origin. Amended
+   2026-11-08 by decision 11: the origin is rc1 (template `0.46.0`).
+
+Decided 2026-11-08 while specifying RF8B:
+
+11. Only the owner uses Lace, so `0.1.0-rc1` is the oldest supported state.
+    Support for older block versions, configuration hashes, export formats,
+    database migrations, templates and releases is removed, not kept for
+    compatibility (RF8X code, RF8Y specifications and documentation). Block
+    definition and export format version numbers stay as they are, and the
+    migration mechanisms stay for future versions. The 16 Drizzle migrations
+    are squashed into one baseline; the owner recreates the rc1 database.
 
 Pending owner checks from the second audit (2026-11-05), not sessions:
 
 8. Run `pnpm verify:security`, `pnpm verify:cross-runtime --baseline …` and
    `pnpm verify:operations` once after the RF4X runner repair.
-9. Decide the CHANGELOG entries for unreleased public changes since rc1:
+9. Resolved 2026-11-08 by the rc2 changelog entry (`prepare-rc2-release`).
+   Decide the CHANGELOG entries for unreleased public changes since rc1:
    RF3D (MCP account and rate-limit codes, `RATE_LIMITED`), RF4C
    (`hasMatchingBlockDefinitions` matches by type in any order) and RF4B
    (`AccountSecurityPort` reshaped; `SessionSecurityPort`, `TokenSecurityPort`),
@@ -222,8 +255,9 @@ Pending owner checks from the second audit (2026-11-05), not sessions:
    `jsonValueSchema` and `jsonObjectSchema` refuse an array with a named
    property and accept a non-enumerable array element) and RF9B (the
    published `@lacecms/platform-node` no longer exports `./test`).
-10. Apply or withdraw the active `allow-supported-node-release-preparation`
-    change (0/6 tasks since RF4C); keep pnpm pinned to `12.3.4` until then.
+10. Resolved 2026-11-08: `allow-supported-node-release-preparation` is
+    withdrawn; `prepare-rc2-release` accepts Node 24 or later for preparation
+    and keeps pnpm pinned to `12.3.4`.
 
 ## Step RF1 — Workspace hygiene
 
@@ -801,13 +835,26 @@ Move the verbatim row mappers (`role`, `user`, `profile`, `invitation`,
 `packages/platform-cloudflare/src/d1-security.ts` into
 `packages/db/src/security/rows.ts`, following the existing
 `packages/db/src/security/api-tokens.ts` pattern. `digest`, `tokenSecret` and
-`randomHex` stay platform-local. `security-contract` (22 cases) guards both.
+`randomHex` stay platform-local. `security-contract` (17 cases per runtime;
+the audit's 22 was an overcount) guards both.
 
 Added by the second audit: the verbatim rate-limit policy table and
 `setupExpiryMs` become one `Record<SensitiveRateLimitOperation, Policy>` in
 application; each security adapter splits by port
 (`security/{account,session,token}.ts`), which keeps `d1-security.ts` (978
 lines) under the ceiling; server credential routes take `TokenSecurityPort`.
+
+**Outcome (RF5A):** `packages/db/src/security/rows.ts` owns the mappers under
+value names (`securityRole`, `managedUser`, `userProfile`,
+`invitationRecord`, `sessionRecord`, `buildTokenMetadata`) plus
+`normalizedEmail`, `isUniqueViolation` and the two invitation fragments;
+application owns `SENSITIVE_RATE_LIMIT_POLICIES` (beside the operation type)
+and `SETUP_TOKEN_TTL_MS` (beside the other account TTLs; the setup lifetime is
+not a rate-limit policy). Each platform has `src/security/{account,session,token,secrets}.ts`
+(D1 also `statements.ts`); `NodeSecurityService` (202 lines) and
+`D1SecurityService` (215) stay in their files and delegate, so platform
+exports and `dist/d1-security.js` are unchanged. The shared `managedUser`
+uses D1's `Number(row.disabled) === 1`.
 
 ### Session RF5B — Shared content reader
 
@@ -828,6 +875,26 @@ Added by the second audit: both platform packages adopt the §6 layout and
 join `scripts/source-layout.json`; the three `platform-node` cycles
 (`index`, `runtime`, `content-repository`) and the two oversized repository
 entries leave their baselines.
+
+**Outcome (RF5B):** `packages/db/src/reads/content-reader.ts` (472 lines)
+owns every read that was identical on both runtimes — media, delivery,
+entry hydration, actors, site-build reads, the link reads (through
+`SqlContentLinkReader`) and the build export. A runtime supplies
+`ContentReadSql` (`all`, `bindChunk`, `readGroups`); `readGroups` runs the
+export's two read groups in one SQLite transaction on Node and as two
+`batch()` calls on D1, so Node issues one extra in-transaction version read
+(the `index.test.ts` statement bound is 8). Each repository is a delegating
+composite over a reader and area classes (`configuration-sync`, `entries`,
+`media`, `dispatch`, `site-builds`, D1 also `collection-list`) that extend a
+base holding the shared write helpers; bodies moved verbatim. Remaining
+runtime-specific reads: `list`, the configuration-sync scans and Node's
+synchronous entry loader for reloads inside publication transactions (for
+RF5C's return-path alignment). Layout: `platform-node` `database`,
+`security`, `media`, `builds`, `repository`, `runtime` (root `migrate.ts`
+listed as a started entry); `platform-cloudflare` `d1`, `security`,
+`media`, `deploy`, `repository`, `runtime`. `security.ts`/`d1-security.ts`
+are now `security/service.ts`, `release-version.ts` is generated into
+`src/runtime/`. Platform export keys and declaration names are unchanged.
 
 ### Session RF5C — Runtime deltas and composition
 
@@ -850,6 +917,29 @@ entries leave their baselines.
 
 **Architecture and specs:** §16 gains a "runtime deltas" table; ADR 0002 is
 amended; `content-repository-contracts` gains the two contract cases.
+
+**Outcome (RF5C):** Node adopts the D1 claim statements (payload-guarded
+site-build lease) and both runtimes cap claims through shared application
+constants: `MAX_DISPATCHER_CLAIMS_PER_CALL` (20) and
+`MAX_SITE_BUILD_CLAIMS_PER_CALL` (10). The new contract case found that D1
+capped site builds at 20 although each claim adds four batch statements, so
+more than ten recoverable events exceeded the 40-statement budget. Node checks
+a stale revision before link targets (D1 order). The D1 publication
+prediction omitted the draft's `seo`, so D1 publish results and their stored
+replays lacked it; fixed and pinned by "returns publication and unpublication
+results equal to a later load". `mutation_guards` stays on Node as the
+in-transaction dirty token of the shared sync link statements. Architecture
+§16 lists every remaining delta; ADR 0002 has an RF5C amendment.
+`packages/server` `composeLaceServices` builds the use cases (accounts eagerly
+on the composed clock) and the complete `createLaceApp` input;
+`SensitiveRequestRateLimiter`, `contentModelResolver` and
+`parseRuntimeFeatureFlags` replace the runtime copies. `RouteContext` is
+`{ actors, capabilities }`; routes no longer read the app input and reach
+security through `accountSecurity()`, `tokenSecurity()` or `profiles()`; the
+import-actor resolver takes `TokenSecurityPort`. Platform export keys are
+unchanged; delta specs: `content-repository-contracts` (1 added),
+`node-content-repositories`, `d1-content-repositories` (1 modified each) and
+`hono-app-factory` (1 added).
 
 ## Step RF6 — Admin editor structure
 
@@ -973,19 +1063,18 @@ Finishes RF1A's naming rule: `scripts/journeys/rc1-media-selection.mjs` and
 release- or step-numbered log and stage strings (`Alpha.6`, `Alpha.2 field-trial
 §1 (33A)`) are renamed by behavior; roadmap change codes (`CE9A`, `LIST1`,
 `SM1`…) leave test titles, temp prefixes and the pinned contract case names
-(updating both pins); `tests/fixtures/template-0.39.0` is either recorded as
-the latest published template (amending owner decision 7) or deleted. The root
-naming guard extends to test titles.
+(updating both pins). The template fixtures are settled by RF8X (rc1 is the
+only upgrade origin). The root naming guard extends to test titles.
 
 ## Step RF8 — Documentation
 
-**Size:** L (three sessions). **Depends on:** RF4B and RF5C for the
+**Size:** L (five sessions). **Depends on:** RF4B and RF5C for the
 architecture sections they change; RF1B for the index.
 
 ### Session RF8A — Architecture document
 
 - Remove change codes (`CE7D`, `SM5`, `LIST1`, `MCP2`…) from headings and
-  prose of `docs/mvp-architecture.md`; a "History" appendix maps each code to
+  prose of the architecture document; a "History" appendix maps each code to
   its archived change. The body states current behavior only.
 - §24 *Decisions captured by this document* moves into ADRs (new ADRs only
   where none exists); the section becomes a pointer to `docs/adr/README.md`.
@@ -994,6 +1083,73 @@ architecture sections they change; RF1B for the index.
   ceiling, one responsibility per module).
 - Target size: under 2,500 lines without loss of invariants (a review
   checklist in the change lists every invariant and where it now lives).
+- Added by owner request (2026-11-08): two Mermaid diagrams in the
+  architecture document. A backend component diagram shows the packages of
+  the §6 dependency rules, the application ports and their Node and D1
+  adapters (shared `db` reader and rows, per-runtime repository areas,
+  security, storage, build triggers, outbox dispatch) and the RF5C
+  composition (`composeLaceServices`). A table diagram (`erDiagram`) shows
+  every Drizzle table in `packages/db/src/schema/` with its keys and
+  foreign-key relations. A root test fails when a schema table is missing
+  from the table diagram, so the diagram cannot drift silently.
+
+**Outcome (RF8A):** by owner decision the architecture became the directory
+`docs/architecture/`: a `README.md` (§1–§4, §24, §26 and a section map) and
+twelve domain files, keeping section numbers §1–§26. Prose outside Mermaid
+blocks fell from 4,086 to 2,492 lines (ceiling 2,500, files under 600). The
+invariant checklist of `rf08a-architecture-document` maps 1,181 statements:
+576 kept, 522 replaced by pointers to named spec requirements, 51 in ADRs and
+32 history. §24 became ADRs 0021–0028. `history.md` maps each former change
+code to its archived change. The table diagram (§9.10) covers all 36 Drizzle
+tables and the component diagram sits in §15.
+
+### Session RF8X — rc1 baseline
+
+Owner decision 11, code side. Behavior-touching; delta specs.
+
+- The 16 Drizzle migrations become one baseline migration generated from the
+  declared schema, identical on Node SQLite and D1. A database migrated by an
+  earlier engine is refused with a diagnostic that tells the operator to
+  recreate it, instead of a failed `CREATE TABLE`; `lace doctor` reports it.
+  Per-migration upgrade tests go; the schema requirements describe tables,
+  not migration steps.
+- Built-in block identity migrations (`image` 2–4, `gallery` 2–5,
+  `videoEmbed` 2) are removed; definition versions stay. A stored built-in
+  block below its version fails with the existing `missing_step` diagnostic.
+  The block migration mechanism stays for custom blocks.
+- `legacyStructureHash` and the legacy public-identity hash proofs leave
+  configuration synchronization; a model without a trusted public identity
+  takes the conservative path.
+- The build export requires `globals` and `seo` in the assembled schema; the
+  tolerant variant no longer accepts format 1.
+- The upgrade planner requires the manifest site record.
+- Template upgrade fixtures: `template-0.35.0` and `template-0.39.0` are
+  replaced by `template-0.46.0` (rc1), generated by the rc1 generator.
+- Internal documents that name a removed migration describe the baseline.
+
+**Acceptance:** `pnpm db:check` passes on the baseline; fresh Node and D1
+databases pass the repository contracts; a pre-baseline database is refused
+on both runtimes; the template upgrade acceptance passes from rc1.
+
+**Outcome (RF8X):** `0000_baseline.sql` replaces the 16 migrations; a
+`sqlite_master`/pragma/row comparison found three hand-written security indexes
+and the `content_link_state` seed row outside the declared schema, which are
+appended to the generated SQL. Pre-baseline ledgers are refused by
+`lace db migrate` (`SCHEMA_UNSUPPORTED`, exit 5, before Wrangler runs), doctor and
+readiness. By owner decision during apply the template advanced to `0.47.0`:
+its upgrade instructions keep only the rc1 step (recreate the database), and
+upgrade tests from pre-rc1 templates were removed. ADR 0029 records the
+decision.
+
+### Session RF8Y — Release history out of specifications and documents
+
+Owner decision 11, specification and document side. Release- and
+template-numbered requirements (`alpha-release-artifacts`,
+`project-generator` "Template 0.2x delivers …", `public-documentation`,
+`prepublication-consumer-security`, `generated-project-acceptance`) are
+removed when they only described a past release, or renamed and rewritten as
+current behavior. `docs/compatibility.md`, `docs/alpha-release.md` and the
+public upgrade guidance keep only rc1 and later. Moved here from RF8B.
 
 ### Session RF8B — OpenSpec specifications
 
@@ -1008,6 +1164,19 @@ architecture sections they change; RF1B for the index.
 - Split `admin-draft-editor` (2,154 lines) by sub-surface:
   `admin-draft-editor-fields`, `-blocks`, `-publication`, `-media-lists`.
 - The change archive stays complete (owner decision 4).
+- Architecture pointers name capabilities and requirement titles (RF8A
+  checklist); a capability split or requirement move updates the links in
+  `docs/architecture/` in the same change.
+- RF8A found spec text that disagrees with code or with itself; fix it here:
+  `block-source-registry` gives `image` revision 6 and `hero` revision 4 (code
+  7 and 5) and a seven-block registry (nine items), `rest-contracts` both
+  rejects and tolerates a first export page without `globals`/`seo`, and spec
+  text still carries roadmap codes (`CE10`); release-scoped wording is
+  handled by RF8Y.
+- Decided 2026-11-08: gallery requirements move to a new `gallery-block`
+  capability; `admin-draft-editor` keeps a thin core (layout, read-only
+  viewers, validation summary, global editor, unsaved drafts and saving) beside
+  the four sub-surface capabilities.
 
 **Acceptance:** `pnpm spec:validate` strict; no requirement text is lost
 (diff of concatenated requirement titles before and after).
@@ -1181,3 +1350,21 @@ is empty.
 | 2026-11-08 | RF4H | `rf04h-near-ceiling-module-splits` | Archived at [`2026-11-08-rf04h-near-ceiling-module-splits`](../openspec/changes/archive/2026-11-08-rf04h-near-ceiling-module-splits/); 12/12 tasks complete. No delta specs (`skip_specs`). Verification remains in the archive. |
 | 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Implemented, 14/14 tasks complete. `sdk`, `create-lace`, `apps/api` and `apps/builder` adopt the §6 layout; `render` is a recorded single-concern exemption; six app process entries are listed in `scripts/source-root-entries.json`; non-packaged JavaScript tests need an allowlist entry (`apps/docs` catalog test). Contracts module tests import their modules, the `config` packaged test pins declaration names, `apps/api` source tests run in parallel. Delta spec: `workspace-governance` (2 modified). Not archived; Step RF4 becomes done at archive. |
 | 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Archived at [`2026-11-08-rf04j-remaining-flat-packages`](../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/); 14/14 tasks complete. Delta spec synchronized into `workspace-governance` (2 modified requirements). Step RF4 done. |
+| 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Implemented, 9/9 tasks complete. Security row mappers, email/unique helpers and invitation SQL move to `db` `security/rows.ts`; rate-limit policies and the setup-token TTL move to application; both adapters split by port (`d1-security.ts` 984 → 215 lines, largest new module 629). Platform runtime keys, declaration names and the 17 security-contract titles per runtime match the baseline; `db` and `application` gain only the shared names. No delta specs (`skip_specs`). Not archived. |
+| 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Archived at [`2026-11-08-rf05a-shared-security-rows`](../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/); 9/9 tasks complete. No delta specs (`skip_specs`). RF5B next. |
+| 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Implemented, 18/18 tasks complete. `db` `SqlContentReader` owns the identical reads; both repositories delegate and split into area modules (Node 2,291 → largest 481 lines, D1 2,696 → 646); both platform packages adopt the §6 layout; the `platform-node` cycle and both oversized entries leave their baselines. Contract titles (213 Node, 119 D1, 4 D1 budget) and platform export keys/declarations match the baseline; `db` gains only the reader names. No delta specs (`skip_specs`). Not archived. |
+| 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Archived at [`2026-11-08-rf05b-shared-content-reader`](../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/); 18/18 tasks complete. No delta specs (`skip_specs`). RF5C next. |
+| 2026-11-08 | RF5C | `rf05c-runtime-deltas-composition` | Implemented, 16/16 tasks complete. Write-path deltas aligned or recorded in §16 (claims, revision precedence, publication result, `mutation_guards`); apply found two defects — D1 publish results lacked `seo`, D1 site-build claims above ten exceeded the batch budget — both fixed and pinned by new contract cases. `composeLaceServices` composes both runtimes; routes receive actors and capabilities. Platform export keys unchanged; server and application gain only the shared names. Delta specs: 4 capabilities. Not archived; Step RF5 becomes done at archive. |
+| 2026-11-08 | RF5C | `rf05c-runtime-deltas-composition` | Archived at [`2026-11-08-rf05c-runtime-deltas-composition`](../openspec/changes/archive/2026-11-08-rf05c-runtime-deltas-composition/); 16/16 tasks complete. Delta specs synchronized: `content-repository-contracts` and `hono-app-factory` (1 added each), `node-content-repositories` and `d1-content-repositories` (1 modified each). Step RF5 done; the backend refactoring sessions are complete. |
+| 2026-11-08 | RF8A | — | Scope decision: the owner asked for a backend component diagram and a database table diagram; both join RF8A as Mermaid diagrams in the architecture document (the component diagram after RF5C's composition), the table diagram with a drift test against the Drizzle schema. No change created. |
+| 2026-11-08 | RF8A | `rf08a-architecture-document` | Implemented. Owner chose a domain directory over one file; the single architecture file became `docs/architecture/` (README + 12 files, §1–§26 kept), ADRs 0021–0028 replace §24, codes moved to `history.md`, table and component diagrams added, `tests/architecture-document.test.mjs` guards schema drift, codes, section map and ceilings. Not archived. |
+| 2026-11-08 | RF8A | `rf08a-architecture-document` | Archived at [`2026-11-08-rf08a-architecture-document`](../openspec/changes/archive/2026-11-08-rf08a-architecture-document/); 17/17 tasks complete. Delta spec synchronized: `workspace-governance` (1 added). RF8B next. |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Scope decision while specifying RF8B (owner decision 11): rc1 is the oldest supported state. New sessions RF8X (code) and RF8Y (release text in specs and documents) run before RF8B; RF8B's release-wording item moves to RF8Y. Owner choices: squash the 16 Drizzle migrations (the rc1 database is recreated), replace the upgrade fixtures with rc1 (template `0.46.0`); for RF8B, a new `gallery-block` capability and a thin `admin-draft-editor` core. |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Proposed. One generated baseline migration verified against the old chain; a pre-baseline database is refused by `lace db migrate` (`SCHEMA_UNSUPPORTED`, exit 5), doctor and readiness. Built-in block migrations, `legacyStructureHash`, legacy public-identity proofs, export format 1 and optional `globals`/`seo`, and manifests without a site record go; versions stay. Fixtures `template-0.35.0`/`0.39.0` → `template-0.46.0` from the published rc1 generator. Delta specs: 10 capabilities (requirements that lose legacy scenarios are removed and re-added under new titles). Depends on archiving `prepare-rc1-release` first. 19 tasks, not applied. |
+| 2026-11-08 | — | `prepare-rc1-release` | Archived at [`2026-11-08-prepare-rc1-release`](../openspec/changes/archive/2026-11-08-prepare-rc1-release/) before RF8X apply (its delta modified a requirement RF8X replaces). Delta specs synchronized: `alpha-release-artifacts` (+1, ~1), `generated-project-acceptance` (~1), `public-documentation` (+1, ~1). |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Implemented, 20/20 tasks complete. One baseline migration (schema and seed rows identical to the old chain; three undeclared security indexes and the link-state seed row carried as custom SQL); pre-baseline ledgers refused by migrate (`SCHEMA_UNSUPPORTED`), doctor and readiness on Node and D1. Built-in block migrations, legacy structure hash, legacy identity proofs, export format 1 and site-less manifests removed. Owner decision during apply: template `0.47.0` with rc1-only upgrade instructions (added `project-generator` delta); pre-rc1 template upgrade tests removed. Fixtures `template-0.46.0` from the published rc1 generator; upgrade acceptance passes 0.46.0 → 0.47.0. Contract cases: −4 (three built-in migration cases, legacy structure hash), +1 (built-in refusal), 2 renamed. `db` and `platform-node` gain the ledger helpers; `platform-node` adds `UnsupportedDatabaseError`. ADR 0029. Not archived. |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Archived at [`2026-11-08-rf08x-rc1-baseline`](../openspec/changes/archive/2026-11-08-rf08x-rc1-baseline/); 20/20 tasks complete. Delta specs synchronized: 11 capabilities (+21, ~6, −19; requirements that lost legacy scenarios were removed and re-added under new titles). RF8Y next. |
+| 2026-11-08 | RF8Y | `rf08y-release-history-out-of-specs` | Implemented, 15/15 tasks complete. Delta specs: `alpha-release-artifacts` (five per-release readiness requirements → one candidate-readiness requirement), `project-generator` (21 template-version requirements → five current-delivery requirements), `public-documentation`, `prepublication-consumer-security` (rename), `generated-project-onboarding`. `docs/compatibility.md` keeps the toolchain baseline, contract policy and export paging with one "Upgrading from rc1" section; `docs/alpha-release.md`, public operations/deployment/reference/Astro pages and the generated guides (template `0.47.0`, snapshots regenerated) drop alpha history; a packaged test now refuses alpha names and removed migrations in generated guides. Found: `pnpm release:check` fails with `Template identity mismatch` since RF8X (template `0.47.0`, release definition `0.46.0`) until a release session selects the next candidate; `release:acceptance:import` is now undocumented (RF7 candidate). Not archived. |
+| 2026-11-08 | RF8Y | `rf08y-release-history-out-of-specs` | Archived at [`2026-11-08-rf08y-release-history-out-of-specs`](../openspec/changes/archive/2026-11-08-rf08y-release-history-out-of-specs/); 15/15 tasks complete. Delta specs synchronized: 5 capabilities (+9, ~9, −29, →4). Roadmap code "Step 26" left in `prepublication-consumer-security` for RF8B. RF8B next. |
+| 2026-11-08 | RF8B | `rf08b-specification-ownership` | Implemented. `openspec/specs/README.md` groups the 89 capabilities in 11 domains with ownership rules, guarded by `tests/specs-index.test.mjs`. New `gallery-block` (definition, settings visibility, markup, video items); `admin-draft-editor` keeps a 7-requirement core and moves 50 requirements unchanged to `-fields` (24), `-media-lists` (8), `-blocks` (7) and `-publication` (11). Fixed: image/hero registry revisions 7/5, nine-block starter lock, block map and installation scenarios; roadmap codes left 13 capabilities. The `rest-contracts` first-page contradiction was already resolved by RF8X. Title diff: four requirements re-added under neutral titles, two gallery requirements extracted; two pre-rc1 upgrade scenarios dropped. Architecture pointers updated. |
+| 2026-11-08 | RF8B | `rf08b-specification-ownership` | Archived at [`2026-11-08-rf08b-specification-ownership`](../openspec/changes/archive/2026-11-08-rf08b-specification-ownership/); 8/8 tasks complete. Delta specs synchronized: 21 capabilities (+58, ~15, −56). RF8C next. |

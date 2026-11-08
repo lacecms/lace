@@ -92,9 +92,9 @@ project root unless noted.
    a private D1 operator token with separate Wrangler OAuth, or a single token
    with the necessary D1/Workers/Pages permissions. Copy the credential-free
    `docs/cloudflare-operator.env.example` to the private path with mode `0600`,
-   then edit it privately. For existing alpha.2 projects, install the current
-   CLI and upgrade the template; move the token out of both root dotenv files,
-   remove both assignments and `unset CLOUDFLARE_API_TOKEN` before OAuth.
+   then edit it privately. If a token is still stored in a root dotenv file,
+   move it out of both root dotenv files, remove both assignments and
+   `unset CLOUDFLARE_API_TOKEN` before OAuth.
 2. **Provision.** `pnpm exec wrangler d1 create <name>-cms`,
    `pnpm exec wrangler r2 bucket create <name>-media`, optionally
    `pnpm exec wrangler kv namespace create CACHE`.

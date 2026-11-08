@@ -2,10 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-10-11
-- Governing architecture: [section 9.3](../mvp-architecture.md#93-content-snapshots),
-  [section 9.8](../mvp-architecture.md#98-outbox-and-site-builds),
-  [section 10](../mvp-architecture.md#10-content-publication), and
-  [section 12](../mvp-architecture.md#12-rest-api)
+- Governing architecture: [section 9.3](../architecture/data-model.md#93-content-snapshots),
+  [section 9.8](../architecture/data-model.md#98-outbox-and-site-builds),
+  [section 10](../architecture/publication.md#10-content-publication), and
+  [section 12](../architecture/api.md#12-rest-api)
 - Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE2,
   OpenSpec change `ce02a-entry-lifecycle-commands`
 

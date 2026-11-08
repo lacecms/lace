@@ -105,7 +105,7 @@ to the same bound-parameter limit.
   and revision remain
 
 ### Requirement: D1 build claims and outcomes use guarded batches
-The D1 adapter SHALL claim site-build work and create or recover its build row as `running` in the same batch as the outbox lease, using a guarded update that succeeds only from `pending` or `running` and keeps the original start time. An unprocessed event whose build row is already terminal SHALL be completed in that batch without being returned for dispatch. Every outcome SHALL be one guarded batch requiring the same live lease and a `running` build row, and SHALL record retry (`pending`), `failed`, `succeeded`, `accepted`, or tracked `running` together with the event. Tracked completion SHALL be guarded by build ID, provider ID, `running` status, and a completed event, and SHALL be idempotent for the same outcome. Results SHALL match the Node adapter for every transition.
+The D1 adapter SHALL claim site-build work and create or recover its build row as `running` in the same batch as the outbox lease, using a guarded update that succeeds only from `pending` or `running` and keeps the original start time. A claim SHALL return at most 10 site-build leases per call, whatever larger valid limit is requested, so that its four guarded statements per claim stay within the mutation statement budget; the unreturned events SHALL stay claimable by a later call. An unprocessed event whose build row is already terminal SHALL be completed in that batch without being returned for dispatch. Every outcome SHALL be one guarded batch requiring the same live lease and a `running` build row, and SHALL record retry (`pending`), `failed`, `succeeded`, `accepted`, or tracked `running` together with the event. Tracked completion SHALL be guarded by build ID, provider ID, `running` status, and a completed event, and SHALL be idempotent for the same outcome. Results SHALL match the Node adapter for every transition.
 
 #### Scenario: Batch claim marks running
 - **WHEN** the scheduled Worker claims an available build event
@@ -118,6 +118,10 @@ The D1 adapter SHALL claim site-build work and create or recover its build row a
 #### Scenario: Tracked completion after restart
 - **WHEN** a new Worker invocation completes a tracked build with its provider ID
 - **THEN** only that build becomes terminal, and a repeated identical completion is a no-op
+
+#### Scenario: Many recoverable builds stay within the statement budget
+- **WHEN** more than ten site-build events with expired leases are available and a claim requests 50
+- **THEN** the claim returns ten leases in one batch within the statement budget and a later claim returns the rest
 
 ### Requirement: D1 tracking checks use guarded leases
 The D1 adapter SHALL select due tracked builds (`running`, provider ID present, next check due, outbox event completed) in next-check order and lease them in one batch with updates guarded by build ID, provider ID, `running`, and the selected next-check value, returning only rows whose update changed one row together with the event completion time as tracking start and the last successful check time. Check records and completions SHALL be single guarded statements, and results SHALL match the Node adapter.

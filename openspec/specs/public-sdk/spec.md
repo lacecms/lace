@@ -212,19 +212,23 @@ When a validated export carries a higher `formatVersion`, the SDK SHALL reject
 it with a typed contract error. The error SHALL name the received and the
 supported format versions and tell the operator to upgrade `@lacecms/sdk` to a
 release compatible with the Lace API. It SHALL NOT include the export body or
-the build credential. An export whose `formatVersion` is equal to or lower
-than the supported version SHALL be accepted when it satisfies the tolerant
-contract.
+the build credential. An export whose `formatVersion` equals the supported
+version SHALL be accepted when it satisfies the tolerant contract; a lower
+`formatVersion` SHALL fail tolerant validation as a contract error.
 
 #### Scenario: A newer API changes the export format
-- **WHEN** the SDK supports format version 1 and the export carries
-  `formatVersion: 2`
-- **THEN** the SDK rejects it with a contract error naming versions 2 and 1
+- **WHEN** the SDK supports format version 2 and the export carries
+  `formatVersion: 3`
+- **THEN** the SDK rejects it with a contract error naming versions 3 and 2
   and advising an SDK upgrade, and returns no export
 
 #### Scenario: The export format is supported
-- **WHEN** the export carries `formatVersion: 1` and additional unknown keys
+- **WHEN** the export carries `formatVersion: 2` and additional unknown keys
 - **THEN** the SDK returns the validated export without the unknown keys
+
+#### Scenario: An older export format is rejected
+- **WHEN** the export carries `formatVersion: 1`
+- **THEN** the SDK rejects it with a contract error and returns no export
 
 ### Requirement: Public SDK reads and assembles export pages
 The SDK SHALL expose a build-export page operation that accepts an optional
@@ -282,21 +286,19 @@ reject with that HTTP error. A caller SHALL be able to disable restarts.
 - **THEN** the SDK rejects the traversal with a contract error and returns no
   export
 
-### Requirement: The SDK consumes link-aware export versions and manifests
-The SDK SHALL support build-export formats 1 and 2, preserve validated
+### Requirement: The SDK reads link-aware format 2 exports and manifests
+The SDK SHALL support build-export format 2, preserve validated
 `internalLinks` on every entry/global and assemble them with their source across
-existing keyset pages. A format 2 entry/global SHALL carry its manifest; a
-format 1 entry/global without it SHALL read as no internal references. Transport
+existing keyset pages. Every entry/global SHALL carry its manifest. Transport
 validation SHALL continue to preserve authored JSON unchanged. Format mismatch,
 page-version drift, malformed known keys and invalid manifest shape SHALL remain
 contract errors. No target fetch, reference recursion or admin API SHALL be
-added to public SDK reads. Older SDKs supporting only format 1 SHALL reject
-format 2 with the existing actionable upgrade error.
+added to public SDK reads.
 
 #### Scenario: Target appears on a later export page
 - **WHEN** a source on page 1 refers to a target on page 3
 - **THEN** the SDK assembles all pages before site resolution without falsely declaring the target missing or issuing a target request
 
-#### Scenario: Legacy fixture
-- **WHEN** a valid format 1 fixture has no manifests and uses only manual URLs
-- **THEN** the upgraded SDK and loader accept it with unchanged rendering
+#### Scenario: Entry without a manifest
+- **WHEN** an export page holds an entry without `internalLinks`
+- **THEN** the SDK rejects the page with a contract error and returns no export

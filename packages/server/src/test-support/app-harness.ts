@@ -1,10 +1,12 @@
 import { expect } from "vitest";
 import { createLaceApp } from "../index.js";
 import {
+  AccountUseCases,
   ContentUseCases,
   ContentLinkUseCases,
   MediaUseCases,
   opaqueTokenSecret,
+  unconfiguredEmailSender,
 } from "@lacecms/application";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
@@ -138,6 +140,8 @@ export async function fixture({
     storage,
   });
   let exportLoads = 0;
+  const securityPort =
+    security === undefined ? undefined : fakePort<SecurityService>("SecurityService", security);
   const app = createLaceApp({
     ...(apiDocsEnabled === undefined ? {} : { apiDocsEnabled }),
     ...(auth === undefined ? {} : { auth }),
@@ -165,9 +169,19 @@ export async function fixture({
     ),
     ...(buildSite === undefined ? {} : { buildSite }),
     ...(builds === undefined ? {} : { builds }),
-    ...(security === undefined
+    ...(securityPort === undefined
       ? {}
-      : { security: fakePort<SecurityService>("SecurityService", security) }),
+      : {
+          // The account routes run on host time here, as the runtimes' system clocks do.
+          accounts: new AccountUseCases({
+            clock: { now: () => unixMilliseconds(Date.now()) },
+            email: email ?? unconfiguredEmailSender,
+            ...(sensitiveLimiter === undefined ? {} : { limiter: sensitiveLimiter }),
+            publicBaseUrl,
+            security: securityPort,
+          }),
+          security: securityPort,
+        }),
     ...(importActors === undefined ? {} : { importActors }),
     mcpEnabled: mcpEnabled ?? oauthConnections !== undefined,
     ...(mcp === undefined ? {} : { mcp }),

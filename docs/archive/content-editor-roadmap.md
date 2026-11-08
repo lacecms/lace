@@ -15,7 +15,7 @@ step.
 
 Authority follows `AGENTS.md`:
 
-1. [`mvp-architecture.md`](../mvp-architecture.md) owns product scope and
+1. [architecture](../architecture/README.md) owns product scope and
    invariants.
 2. [`openspec/specs/**`](../../openspec/specs) owns accepted capability behavior.
 3. The selected active OpenSpec change owns the proposed delta.

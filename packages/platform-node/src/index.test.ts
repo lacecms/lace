@@ -1309,9 +1309,10 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         globals: [],
         version: 2,
       });
-      // Version with global sizes, candidates, routes, globals, snapshots,
-      // blocks and delivered media: fixed, independent of the entry count.
-      expect(statements.length).toBeLessThanOrEqual(7);
+      // Version with global sizes, candidates, the shared protocol's version
+      // re-read (same transaction), routes, globals, snapshots, blocks and
+      // delivered media: fixed, independent of the entry count.
+      expect(statements.length).toBeLessThanOrEqual(8);
       expect(statements.join("\n")).not.toMatch(/ in \(\?/u);
       const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
       expect(

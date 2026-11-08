@@ -2,12 +2,12 @@
 
 - Status: Accepted
 - Date: 2026-10-12
-- Governing architecture: [section 8](../mvp-architecture.md#8-content-configuration),
-  [section 9.4](../mvp-architecture.md#94-content-blocks),
-  [section 9.5](../mvp-architecture.md#95-block-ordering-and-nesting),
-  [section 10](../mvp-architecture.md#10-content-publication),
-  [section 11](../mvp-architecture.md#11-block-registry-and-rich-text) and
-  [section 12](../mvp-architecture.md#12-rest-api)
+- Governing architecture: [section 8](../architecture/content-configuration.md#8-content-configuration),
+  [section 9.4](../architecture/data-model.md#94-content-blocks),
+  [section 9.5](../architecture/data-model.md#95-block-ordering-and-nesting),
+  [section 10](../architecture/publication.md#10-content-publication),
+  [section 11](../architecture/rendering.md#11-block-registry-and-rich-text) and
+  [section 12](../architecture/api.md#12-rest-api)
 - Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE6,
   OpenSpec change `ce06a-block-envelope-contract`
 

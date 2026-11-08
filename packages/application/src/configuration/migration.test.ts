@@ -618,7 +618,7 @@ test("stops before the final mutation when the reviewed plan changed", async () 
   expect(state.finals).toEqual([]);
 });
 
-test("migrates version 1 built-in image blocks to the current version without changing their data", async () => {
+test("refuses stored built-in blocks below their version because built-ins declare no migrations", async () => {
   const imageV1 = defineBlock({
     fields: {
       alt: field.text({ required: true }),
@@ -637,7 +637,6 @@ test("migrates version 1 built-in image blocks to the current version without ch
     });
   const baseline = (await imageConfig(imageV1, 1)).runtime.content[0];
   const target = await imageConfig(builtInBlocks.image, 2);
-  const current = builtInBlocks.image.version;
   const model = target.runtime.content[0];
   const data = { alt: "A lake", caption: "Morning", media: "m1" };
   const image = () => ({
@@ -663,34 +662,20 @@ test("migrates version 1 built-in image blocks to the current version without ch
     models: [model],
     state,
   });
-  expect(prepared.plan.isValid).toBe(true);
-  expect(prepared.plan.operations[0].evolution.migrations).toEqual([
-    {
-      blockType: "image",
-      blocks: 2,
-      draft: 1,
-      fromVersions: [1],
-      published: 1,
-      toVersion: current,
-    },
-  ]);
-  await applyPreparedConfigurationSynchronization({
-    blocks: target.runtime.blocks,
-    clock: { now: () => 500 },
-    ids: { next: () => "id" },
-    models: [model],
-    prepared,
-    target: state,
-  });
-  for (const snapshot of [state.entries[0].draft, state.entries[0].published]) {
-    // The lightbox setting's default is stored with the migrated block.
-    expect(snapshot.blocks).toEqual([
-      { ...image(), schemaVersion: current, settings: { lightbox: false } },
-    ]);
-    expect(snapshot.references).toEqual(references);
-  }
-  expect(state.entries[0].draft.revision).toBe(3);
-  expect(state.entries[0].published.revision).toBe(3);
+  expect(prepared.plan.isValid).toBe(false);
+  expect(prepared.plan.diagnostics.map((value) => value.code)).toContain("BLOCK_MIGRATION_MISSING");
+  const before = JSON.stringify(state.entries);
+  await expect(
+    applyPreparedConfigurationSynchronization({
+      blocks: target.runtime.blocks,
+      clock: { now: () => 500 },
+      ids: { next: () => "id" },
+      models: [model],
+      prepared,
+      target: state,
+    }),
+  ).rejects.toThrow();
+  expect(JSON.stringify(state.entries)).toBe(before);
 });
 
 test("checks complete resulting composite budgets and nested prior-media locations", () => {

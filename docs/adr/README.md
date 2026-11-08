@@ -1,9 +1,9 @@
 # Architectural decision index
 
-These records govern decisions within the [architecture](../mvp-architecture.md)
+These records govern decisions within the [architecture](../architecture/README.md)
 and [accepted specifications](../../openspec/specs/). See the
 [internal index](../README.md) for document ownership. Status follows each
-record: all eighteen decisions remain accepted; none names a superseding ADR.
+record: all twenty-eight decisions remain accepted; none names a superseding ADR.
 An `amended` or `superseded` decision must identify its amendment or successor.
 
 | Number | Title | Status | Superseding ADR |
@@ -28,3 +28,12 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0018 | [Conditional fields](0018-conditional-fields.md) | accepted | — |
 | 0019 | [One portable error model and classifier](0019-error-model.md) | accepted | — |
 | 0020 | [Domain source layout and shrinking size baseline](0020-source-layout.md) | accepted | — |
+| 0021 | [Single-site installation with a static Astro site](0021-single-site-static-architecture.md) | accepted | — |
+| 0022 | [Hono REST API with Valibot schemas](0022-hono-rest-valibot-schemas.md) | accepted | — |
+| 0023 | [Admin single-page application stack](0023-admin-spa-stack.md) | accepted | — |
+| 0024 | [One SQLite dialect with capability adapters](0024-sqlite-dialect-capability-adapters.md) | accepted | — |
+| 0025 | [Better Auth with role-mapped permissions](0025-better-auth-role-permissions.md) | accepted | — |
+| 0026 | [Code-defined models with draft and published snapshots](0026-code-defined-models-two-snapshots.md) | accepted | — |
+| 0027 | [Publication through an outbox-triggered rebuild](0027-outbox-triggered-rebuild.md) | accepted | — |
+| 0028 | [Spec-driven delivery and workspace toolchain](0028-spec-driven-delivery-toolchain.md) | accepted | — |
+| 0029 | [rc1 is the oldest supported state](0029-rc1-baseline.md) | accepted | — |

@@ -20,13 +20,13 @@ The documentation SHALL be a separately runnable and buildable static applicatio
 
 ### Requirement: Documentation identities include language and version
 
-Published documentation URLs SHALL carry explicit language and version segments. The initial English latest section SHALL be `/en/latest/` relative to the deployment base. The site root SHALL direct readers to that section. The supported language/version pair SHALL remain exactly `en`/`latest`, with target CMS version `0.1.0-alpha.8`. Pages SHALL identify the current documentation target and that latest follows `main`, without inferring publication or deployment verification from that label.
+Published documentation URLs SHALL carry explicit language and version segments. The initial English latest section SHALL be `/en/latest/` relative to the deployment base. The site root SHALL direct readers to that section. The supported language/version pair SHALL remain exactly `en`/`latest`, with target CMS version `0.1.0-rc1`. Pages SHALL identify the current documentation target and that latest follows `main`, without inferring publication or deployment verification from that label.
 
 Locale/version definitions SHALL be explicit and validated independently of page prose. The structure SHALL allow another locale or version section to be registered and built without renaming existing English/latest routes or rewriting shared page templates. Unsupported pairs SHALL NOT appear in navigation, selectors or search as available documentation. A missing requested page SHALL NOT silently display a different version or language as if it matched.
 
 #### Scenario: Initial entry and identity
 - **WHEN** a reader opens the documentation root
-- **THEN** the reader reaches the English latest landing page and can identify `0.1.0-alpha.8` as the target of documentation following `main`
+- **THEN** the reader reaches the English latest landing page and can identify `0.1.0-rc1` as the target of documentation following `main`
 
 #### Scenario: Additional variant fixture
 - **WHEN** verification registers fixture content for an additional locale and a fixed version
@@ -88,11 +88,11 @@ Repository `docs/**` materials SHALL remain maintained internal engineering docu
 - **WHEN** an internal document is merged into another and deleted
 - **THEN** the index records the replacement, the ownership map and every linking document point at the replacement, and the link guard passes
 
-### Requirement: Image guidance matches the alpha seven consumer workflow
-Public media, Astro integration, deployment and upgrade guidance SHALL describe the accepted image formats and 10 MiB limit, original versus optimized delivery, image origin allowlisting and the site's image-service dependency, variant widths and animated GIF conversion, placeholder exceptions, opt-in lightbox, link precedence and safe updates to installed source. Deployment guidance SHALL explain upload proxy configuration, revalidating HTML, thirty-day immutable successful hashed assets and disposable persistent build caches for VPS and Pages where applicable. It SHALL distinguish database migration from content configuration synchronization and retain current routes. Public, internal and delivered generated guides SHALL be reviewed together according to the existing topic ownership map. Documentation SHALL NOT advertise the unapplied video proposal as supported.
+### Requirement: Public guidance covers image delivery
+Public media, Astro integration and deployment guidance SHALL describe the accepted image formats and 10 MiB limit, original versus optimized delivery, image origin allowlisting and the site's image-service dependency, variant widths and animated GIF conversion, placeholder exceptions, opt-in lightbox, link precedence and safe updates to installed source. Deployment guidance SHALL explain upload proxy configuration, revalidating HTML, thirty-day immutable successful hashed assets and disposable persistent build caches for VPS and Pages where applicable. It SHALL distinguish database migration from content configuration synchronization and retain current routes. Public, internal and delivered generated guides SHALL be reviewed together according to the existing topic ownership map.
 
 #### Scenario: Existing Astro consumer adopts images
-- **WHEN** a reader upgrades a customized existing Astro site to alpha.7
+- **WHEN** a reader connects a customized existing Astro site and adopts the image components
 - **THEN** the guide explains matching dependencies, image configuration, conflict-aware component updates and synchronization before the next build without instructing blind source replacement
 
 #### Scenario: Editor configures a linked gallery item
@@ -103,16 +103,16 @@ Public media, Astro integration, deployment and upgrade guidance SHALL describe 
 - **WHEN** an operator refreshes generated VPS or Pages deployment files
 - **THEN** the guide distinguishes persistent application data from disposable caches and configuration checks from verified remote deployment
 
-### Requirement: Alpha eight guidance covers coordinated upgrades and optional MCP
-English/latest SHALL describe accepted post-alpha.7 functionality and the alpha.8 upgrade path, including list presentation settings, video embeds, internal URL destinations and unavailable-link behavior, export format 2, draft collection-query options and optional OAuth MCP. Guidance SHALL preserve existing route identities and distinguish manual source/configuration adoption from managed-file upgrades. Deployment and operations pages SHALL describe migrations, matching backups/rollback, canonical public origin and proxy configuration, disabled-by-default MCP activation, consent/revocation, supported Codex/Claude Code/Gemini CLI setup, role/scope limits and forbidden publication/deletion. Examples SHALL match shipped alpha.8 commands and SHALL NOT imply that preparation or a latest label proves registry publication or real deployment verification.
+### Requirement: Public guidance covers presentation, links, collection queries and optional MCP
+English/latest SHALL describe list presentation settings, video embeds, internal URL destinations and unavailable-link behavior, build-export format 2, draft collection-query options and optional OAuth MCP. Guidance SHALL preserve existing route identities and distinguish manual source/configuration adoption from managed-file upgrades. Deployment and operations pages SHALL describe canonical public origin and proxy configuration, disabled-by-default MCP activation, consent/revocation, supported Codex/Claude Code/Gemini CLI setup and role/scope limits: publication requires the separately consented `content:publish` scope and current role authority, and unpublication and deletion remain unavailable. Examples SHALL match shipped commands and SHALL NOT imply that preparation or a latest label proves registry publication or real deployment verification.
 
 #### Scenario: Existing operator upgrades
-- **WHEN** an alpha.7 operator follows alpha.8 guidance
-- **THEN** the operator can identify coordinated package/image updates, migrations and source/configuration adoption, optional MCP activation and the matching backup requirement for rollback
+- **WHEN** an operator on a supported release follows the upgrade and MCP guidance
+- **THEN** the operator can identify coordinated package/image updates, source/configuration adoption, optional MCP activation with separately granted publication, and the matching backup requirement for rollback
 
 #### Scenario: Assistant client setup
 - **WHEN** an operator configures a supported MCP client from the documented setup
-- **THEN** examples use the canonical endpoint and explicit permissions, explain sign-in/consent and revocation, and retain the draft-only tool ceiling
+- **THEN** examples use the canonical endpoint and explicit permissions, explain sign-in/consent and revocation, and state that unpublication and deletion are unavailable through MCP
 
 ### Requirement: Public guidance covers content import
 The public documentation SHALL contain an *Import content* page that explains,
@@ -187,23 +187,7 @@ the pages' internal sources.
 - **THEN** the guidance directs them to `settingsVisibility` and explains that data `visibility` is the rule that changes requiredness and published content
 
 ### Requirement: Public guidance covers gallery video items
-The public block reference SHALL describe the version 5 gallery: item kinds,
-the fields that apply to images and to videos, the supported providers, the
-required accessible video title, playback and aspect ratio per item, captions
-without a media fallback for videos, and that the lightbox and links apply to
-images only. The Editing content section SHALL explain adding images through
-Add and videos through "Add Video", and switching an item's Type without
-losing typed values. The conditional-fields page SHALL name the built-in
-gallery as the shipped example of its list-item example. The Astro
-integration guidance SHALL explain the gallery video markup hooks and
-`GalleryVideo.css`, the ambient fallbacks and the WCAG 2.2.2 pause-control
-gap shared with `videoEmbed`, and how site code that copied the gallery
-component handles published items whose `media` is absent: check the item's
-`kind` and the presence of `media` before describing an image. The starter
-guide SHALL carry the same adoption steps as the template upgrade
-instructions: raise model versions that allow `gallery`, synchronize
-configuration, then update the gallery component, because a revision 6
-component fails with `block_version_mismatch` after synchronization.
+The public block reference SHALL describe the gallery block: item kinds, the fields that apply to images and to videos, the supported providers, the required accessible video title, playback and aspect ratio per item, captions without a media fallback for videos, and that the lightbox and links apply to images only. The Editing content section SHALL explain adding images through Add and videos through "Add Video", and switching an item's Type without losing typed values. The conditional-fields page SHALL name the built-in gallery as the shipped example of its list-item example. The Astro integration guidance SHALL explain the gallery video markup hooks and `GalleryVideo.css`, the ambient fallbacks and the WCAG 2.2.2 pause-control gap shared with `videoEmbed`, and how site code that copied the gallery component handles published items whose `media` is absent: check the item's `kind` and the presence of `media` before describing an image.
 
 #### Scenario: A reader adds a video to a gallery
 - **WHEN** a reader follows the editing guidance in a generated project with
@@ -213,7 +197,18 @@ component fails with `block_version_mismatch` after synchronization.
 
 #### Scenario: A reader updates a copied gallery component
 - **WHEN** a reader whose site copied and edited the gallery component follows
-  the upgrade guidance
-- **THEN** they synchronize configuration, merge the revision 7 component and
-  `GalleryVideo.css`, and their typed component compiles because it narrows
-  items by `kind` and checks `media`
+  the Astro integration guidance
+- **THEN** they merge the current registry component and `GalleryVideo.css`,
+  and their typed component compiles because it narrows items by `kind` and
+  checks `media`
+
+### Requirement: Upgrade guidance starts at the oldest supported release
+English/latest, the delivered consumer guidance and the permanent compatibility guide SHALL describe upgrades from rc1 (`0.1.0-rc1`) and later releases only. They SHALL explain that the database starts from one baseline migration, so an rc1 database is recreated rather than migrated, with the backup, recreation, migration, synchronization, bootstrap and content restoration steps for Node and Cloudflare; coordinated package, image and source adoption; and backup-based rollback without promising a package-only downgrade. Sections that describe upgrades between releases older than rc1 or the adoption of features already present in rc1 SHALL NOT remain. Documentation SHALL preserve English/latest routes and SHALL NOT claim publication or real-deployment readiness from preparation alone. The reviewed changelog SHALL provide concise release notes linked to the permanent upgrade guide.
+
+#### Scenario: rc1 operator upgrades
+- **WHEN** an operator on rc1 follows the upgrade guidance
+- **THEN** they can identify the database recreation, coordinated package and image update, configuration synchronization and rollback boundary
+
+#### Scenario: Reader looks for pre-rc1 upgrade steps
+- **WHEN** a reader searches the public operations, deployment, reference and Astro integration pages or the compatibility guide
+- **THEN** no alpha-by-alpha upgrade section or pre-rc1 feature-adoption section remains, and the guidance names rc1 as the oldest supported release

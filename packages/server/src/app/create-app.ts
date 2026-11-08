@@ -9,7 +9,9 @@ import { registerAccountRoutes } from "../routes/accounts.js";
 import { registerAdminUserRoutes } from "../routes/admin-users.js";
 import { registerCredentialRoutes } from "../routes/credentials.js";
 import { registerBuildRoutes } from "../routes/builds.js";
-import { createRouteContext } from "../composition/route-context.js";
+import { createActorContext } from "../composition/actor-context.js";
+import { createCapabilities } from "../composition/capabilities.js";
+import type { RouteContext } from "../composition/route-context.js";
 import type { Actor, LaceAppInput } from "../composition/input.js";
 import { sensitiveRequestLimit } from "../security/sensitive-limits.js";
 import {
@@ -41,8 +43,12 @@ export function createLaceApp(input: LaceAppInput): Hono {
   if (!Number.isSafeInteger(input.maxBodyBytes) || input.maxBodyBytes < 1)
     throw new TypeError("maxBodyBytes must be a positive safe integer.");
   const app = new Hono();
-  const routeContext = createRouteContext(input);
-  const { actor } = routeContext;
+  const actors = createActorContext(input.actors);
+  const routeContext: RouteContext = Object.freeze({
+    actors,
+    capabilities: createCapabilities(input),
+  });
+  const { actor } = actors;
 
   app.onError((error, context) =>
     isProtocolErrorPath(context.req.path)

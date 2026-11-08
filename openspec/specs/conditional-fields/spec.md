@@ -10,7 +10,7 @@ drafts and omitted from published content.
 
 ### Requirement: Field-map owners declare sibling visibility rules
 Models, group descriptors (including groups used as list items or reached
-through nested groups and lists at every permitted CE7 depth) and block data
+through nested groups and lists at every permitted composite depth) and block data
 SHALL accept an optional `visibility` map. Each key SHALL name an immediate
 sibling field of that owner (the target); each value SHALL be a rule of
 exactly `{ field, values }`, where `field` names an immediate sibling field of

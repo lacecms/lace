@@ -10,7 +10,7 @@ import {
   mcpAuthorizationMetadata,
   normalizeMcpClientRegistration,
 } from "../../../packages/auth/dist/index.js";
-import { createD1OAuthPersistence } from "../../../packages/platform-cloudflare/dist/oauth.js";
+import { createD1OAuthPersistence } from "../../../packages/platform-cloudflare/dist/security/oauth.js";
 export const origin = "https://cms.lace.test";
 export const resource = `${origin}/mcp`;
 export const scopes = ["content:read", "offline_access"];

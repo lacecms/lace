@@ -15,7 +15,7 @@ The reference loads `/api/v1/openapi.json` from the same origin; that JSON endpo
 
 ## Consume exports safely
 
-Alpha.6 exports are paginated and tied to a published-state version. Follow continuation/version rules or use the matching SDK, which assembles them. Do not mix pages from different versions. Optional transport keys can be added within the versioned contract; block schema versions and rich-text grammar remain strict. Handle authentication failures and revision conflicts explicitly rather than silently using incomplete content.
+Build exports are paginated and tied to a published-state version. Follow continuation/version rules or use the matching SDK, which assembles them. Do not mix pages from different versions. Optional transport keys can be added within the versioned contract; block schema versions and rich-text grammar remain strict. Handle authentication failures and revision conflicts explicitly rather than silently using incomplete content.
 
 ## Internal URL destinations
 
@@ -33,11 +33,8 @@ before generating an href. Only `state === "resolved"` provides `href`;
 value. The Link block supports button/text appearances and optional new-tab
 navigation. Updated Hero/CTA/navigation/image/gallery sources use this helper.
 
-Build export format 2 requires local `internalLinks` manifests and a compatible
-SDK; format-1-only SDKs fail with upgrade guidance. Upgrade packages and installed
-sources before authoring ID targets. Migration 0010 adds indexed projections;
-back up first and roll back with matching artifacts and the matching database.
-The loader reports bounded `linkDiagnostics` once per assembled view and performs
+Build export format 2 carries local `internalLinks` manifests and needs the
+matching SDK. The loader reports bounded `linkDiagnostics` once per assembled view and performs
 no per-link network requests. Manual URLs and anchors retain their limitations.
 
 ## Configured Admin collection queries

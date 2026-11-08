@@ -16,7 +16,8 @@ import { describeRoute, resolver } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input, actor, settingsActor } = routeContext;
+  const { actor, settingsActor } = routeContext.actors;
+  const { capabilities } = routeContext;
   app.get(
     "/api/v1/admin/build-site",
     describeRoute({
@@ -31,7 +32,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     async (context) => {
       const resolvedActor = await actor(context);
       requireContentReader(resolvedActor);
-      return response(buildSiteSelectionSchema, { site: input.buildSite ?? null });
+      return response(buildSiteSelectionSchema, { site: capabilities.buildSite ?? null });
     },
   );
   app.get(
@@ -48,8 +49,9 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     }),
     async (context) => {
       const resolvedActor = await actor(context);
-      if (input.builds === undefined) throw new InvariantError("Build reads are unavailable.");
-      const items = await input.builds.list(resolvedActor);
+      if (capabilities.builds === undefined)
+        throw new InvariantError("Build reads are unavailable.");
+      const items = await capabilities.builds.list(resolvedActor);
       return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
     },
   );
@@ -68,8 +70,9 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     async (context) => {
       const resolvedActor = await actor(context);
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (input.builds === undefined) throw new InvariantError("Build reads are unavailable.");
-      const build = await input.builds.get(resolvedActor, buildId);
+      if (capabilities.builds === undefined)
+        throw new InvariantError("Build reads are unavailable.");
+      const build = await capabilities.builds.get(resolvedActor, buildId);
       return build === null
         ? notFound()
         : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
@@ -91,8 +94,13 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     async (context) => {
       const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-      if (input.builds === undefined) throw new InvariantError("Build commands are unavailable.");
-      return response(buildQueueReceiptSchema, await input.builds.request(resolvedActor), 202);
+      if (capabilities.builds === undefined)
+        throw new InvariantError("Build commands are unavailable.");
+      return response(
+        buildQueueReceiptSchema,
+        await capabilities.builds.request(resolvedActor),
+        202,
+      );
     },
   );
   app.post(
@@ -112,10 +120,11 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       const resolvedActor = await settingsActor(context);
       parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (input.builds === undefined) throw new InvariantError("Build commands are unavailable.");
+      if (capabilities.builds === undefined)
+        throw new InvariantError("Build commands are unavailable.");
       return response(
         buildQueueReceiptSchema,
-        await input.builds.retry(resolvedActor, buildId),
+        await capabilities.builds.retry(resolvedActor, buildId),
         202,
       );
     },

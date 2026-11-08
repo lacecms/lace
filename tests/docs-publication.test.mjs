@@ -41,7 +41,7 @@ const base = {
 };
 test("hashes public inputs and ignores internal-only prose", () => {
   const before = digest();
-  expect(digest({ "README.md": "changed", "docs/mvp-architecture.md": "changed" })).toBe(before);
+  expect(digest({ "README.md": "changed", "docs/architecture/README.md": "changed" })).toBe(before);
   expect(digest({ "apps/docs/src/catalog.json": "changed" })).not.toBe(before);
   expect(digest({ "apps/api/openapi/api-v1.json": "changed" })).not.toBe(before);
   expect(digest({ ".github/workflows/docs-pages.yml": "changed" })).not.toBe(before);

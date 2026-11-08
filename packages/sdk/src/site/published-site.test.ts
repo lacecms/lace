@@ -20,6 +20,7 @@ function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields =
     path,
     publishedAt: timestamp,
     ...(slug === undefined ? {} : { slug }),
+    internalLinks: [],
     title: `${id} published`,
   };
 }
@@ -45,7 +46,7 @@ function mediaItem(id, overrides = {}) {
 function buildExport(version, entries, media = {}) {
   return {
     entries,
-    formatVersion: 1,
+    formatVersion: 2,
     globals: [],
     media,
     seo: { defaults: null, models: {} },
@@ -543,7 +544,7 @@ function exportGlobal({
   blocks = [],
   fields = {},
 } = {}) {
-  return { blocks, fields, id, modelKey, publishedAt: timestamp };
+  return { blocks, fields, id, internalLinks: [], modelKey, publishedAt: timestamp };
 }
 
 test("the site view exposes published globals by model key", async () => {
@@ -726,6 +727,7 @@ test("all entries span every model in path order and leave globals out", async (
             blocks: [],
             fields: {},
             id: "settings-entry",
+            internalLinks: [],
             modelKey: "settings",
             publishedAt: timestamp,
           },
@@ -822,7 +824,7 @@ function pagedExport(version, paths) {
     const nextCursor = index < paths.length - 1 ? `cursor-${version}-${index}` : undefined;
     const page = {
       entries,
-      formatVersion: 1,
+      formatVersion: 2,
       media: {},
       ...(nextCursor === undefined ? {} : { nextCursor }),
       version,

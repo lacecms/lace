@@ -17,23 +17,13 @@ import { field } from "../fields/builders.js";
 import { canonicalizeJson, sha256CanonicalJson } from "../entries/canonical-json.js";
 import { validateSnapshotListBudget } from "../fields/validation.js";
 
-test("image version 4 keeps alt text optional and migrates earlier data unchanged", () => {
+test("image version 4 keeps alt text optional", () => {
   expect(validateBlockData(builtInBlocks.image, { media: "media-1" }, "publish")).toEqual({
     media: "media-1",
   });
   expect(() => validateBlockData(builtInBlocks.image, { alt: "A lake" }, "publish")).toThrow(
     ContentValidationError,
   );
-  const stored = { alt: "A lake", caption: "Morning", media: "media-1" };
-  for (const from of [1, 2, 3])
-    expect(migrateBlockData(builtInBlocks.image, { data: stored, settings: {} }, from)).toEqual({
-      data: stored,
-      settings: {},
-    });
-  // Version 3 blocks keep a stored lightbox setting and gain no link.
-  expect(
-    migrateBlockData(builtInBlocks.image, { data: stored, settings: { lightbox: true } }, 3),
-  ).toEqual({ data: stored, settings: { lightbox: true } });
   expect(validateBlockSettings(builtInBlocks.image, {})).toEqual({ lightbox: false });
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
   expect(metadata).toMatchObject({ type: "image", version: 4 });
@@ -156,12 +146,6 @@ test("the lightbox setting of image and gallery is a validated boolean", () => {
 test("gallery collects image items that become publishable with one image", () => {
   const { gallery } = builtInBlocks;
   expect(gallery.version).toBe(5);
-  const stored = { images: [{ media: "media-1" }], title: "Studio" };
-  for (const from of [1, 2, 3, 4])
-    expect(migrateBlockData(gallery, { data: stored, settings: {} }, from)).toEqual({
-      data: stored,
-      settings: {},
-    });
   expect(validateBlockSettings(gallery, {})).toEqual({
     lightbox: false,
     layoutMode: "grid",
@@ -279,16 +263,37 @@ test("gallery items hold an image or a video through conditional fields", () => 
   ).toEqual({ images: [{ kind: "image", media: "m", caption: "Kept" }] });
 });
 
-test("version 4 gallery items migrate to version 5 as images", () => {
+test("a gallery item without a kind is an image", () => {
   const { gallery } = builtInBlocks;
   const stored = {
     images: [{ alt: "Kitchen", caption: "Before", link: "/work/kitchen", media: "m" }],
   };
-  const migrated = migrateBlockData(gallery, { data: stored, settings: { lightbox: true } }, 4);
-  expect(migrated).toEqual({ data: stored, settings: { lightbox: true } });
-  const parsed = validateBlockData(gallery, migrated.data, "publish");
+  const parsed = validateBlockData(gallery, stored, "publish");
   expect(publishedBlockData(gallery, parsed)).toEqual({
     images: [{ kind: "image", ...stored.images[0] }],
+  });
+});
+
+test("built-in blocks declare no migrations; older stored versions have no migration step", () => {
+  for (const definition of Object.values(builtInBlocks))
+    expect(definition, definition.type).not.toHaveProperty("migrations");
+  for (const [definition, from] of [
+    [builtInBlocks.gallery, 4],
+    [builtInBlocks.image, 3],
+    [builtInBlocks.videoEmbed, 1],
+  ])
+    expect(() => migrateBlockData(definition, { data: {}, settings: {} }, from)).toThrowError(
+      expect.objectContaining({ code: "missing_step" }),
+    );
+  const custom = defineBlock({
+    fields: { title: field.text() },
+    migrations: { 2: (block) => block },
+    type: "custom",
+    version: 2,
+  });
+  expect(migrateBlockData(custom, { data: { title: "Kept" }, settings: {} }, 1)).toEqual({
+    data: { title: "Kept" },
+    settings: {},
   });
 });
 

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-07
-- Governing architecture: [sections 4.6](../mvp-architecture.md#46-media-never-lives-in-sql), [9.7](../mvp-architecture.md#97-media), and [9.8](../mvp-architecture.md#98-outbox-and-site-builds)
+- Governing architecture: [sections 4.6](../architecture/README.md#46-media-never-lives-in-sql), [9.7](../architecture/data-model.md#97-media), and [9.8](../architecture/data-model.md#98-outbox-and-site-builds)
 
 ## Context
 

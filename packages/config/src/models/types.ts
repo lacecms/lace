@@ -206,12 +206,6 @@ export type ContentModelStructure = JsonObject;
 interface NormalizedModelHashes {
   /** Internal public identity, excluding only collection query options. */
   readonly publicProjectionHash: string;
-  /**
-   * Structural hash produced by the pre-baseline algorithm that removed every
-   * `label` and `description` key at any depth. Present on runtime models only
-   * when it differs from `structureHash`; never part of the public projection.
-   */
-  readonly legacyStructureHash?: string;
   readonly projectionHash: string;
   /** Runtime-only canonical structure; omitted from the public projection. */
   readonly structure?: ContentModelStructure;

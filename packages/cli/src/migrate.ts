@@ -2,8 +2,31 @@ import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { D1Database } from "@lacecms/platform-cloudflare";
-import { migrateNodeDatabase } from "@lacecms/platform-node";
+import {
+  migrateNodeDatabase,
+  uncheckedD1Migrations,
+  UnsupportedDatabaseError,
+} from "@lacecms/platform-node";
+import { missingLedger } from "./diagnostics.js";
 import { CliError, EXIT, type Target } from "./index.js";
+
+const UNSUPPORTED_DATABASE =
+  "The selected database was migrated by a Lace engine older than the baseline migration and cannot be upgraded; recreate it (export its content first if you need to keep it).";
+
+/** Refuses a D1 database whose ledger records migrations that are not checked in. */
+export async function assertD1Baseline(database: D1Database): Promise<void> {
+  let names: readonly string[];
+  try {
+    names = (
+      await database.prepare("select name from d1_migrations").all<{ name: string }>()
+    ).results.map((row) => row.name);
+  } catch (error) {
+    if (missingLedger(error)) return;
+    throw error;
+  }
+  if (uncheckedD1Migrations(names).length > 0)
+    throw new CliError("SCHEMA_UNSUPPORTED", UNSUPPORTED_DATABASE, EXIT.SCHEMA);
+}
 
 function parseJsonc(value: string): unknown {
   return JSON.parse(
@@ -73,7 +96,15 @@ export async function runMigration(input: MigrateInput): Promise<readonly string
   if (input.target === "node") {
     if (!input.databasePath)
       throw new CliError("CONFIG", "Missing LACE_DATABASE_PATH.", EXIT.CONFIG);
-    return migrateNodeDatabase(input.databasePath).map((migration) => String(migration.createdAt));
+    try {
+      return migrateNodeDatabase(input.databasePath).map((migration) =>
+        String(migration.createdAt),
+      );
+    } catch (error) {
+      if (error instanceof UnsupportedDatabaseError)
+        throw new CliError("SCHEMA_UNSUPPORTED", UNSUPPORTED_DATABASE, EXIT.SCHEMA);
+      throw error;
+    }
   }
   if (
     !input.databaseId ||

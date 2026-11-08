@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-03
-- Governing architecture: [section 12](../mvp-architecture.md#contract-rules)
+- Governing architecture: [section 12](../architecture/api.md#contract-rules)
 
 ## Context
 

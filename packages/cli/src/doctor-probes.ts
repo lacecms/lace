@@ -22,6 +22,13 @@ export const skipped = (dependency: string) =>
     `Not inspected because ${dependency} is unavailable.`,
     `Resolve ${dependency} and repeat doctor for the same target.`,
   );
+const unsupportedDatabase = (name: string) =>
+  observation(
+    "schema",
+    "SCHEMA_UNSUPPORTED",
+    `The selected ${name} database was migrated by a Lace engine older than the baseline migration.`,
+    "Recreate the database for the same target (export its content first if you need to keep it), then run lace db migrate and repeat doctor. Doctor changed nothing.",
+  );
 export const probeFailed = (name: string) =>
   observation(
     "operation",
@@ -133,6 +140,7 @@ export async function nodeMigrations(
     );
     if (result === "current")
       return pass("The existing SQLite ledger contains every packaged migration.");
+    if (result === "unsupported") return unsupportedDatabase("SQLite");
     if (result === "missing" || result === "outdated")
       return observation(
         "unfinished",
@@ -223,8 +231,10 @@ export async function remoteMigrations(
       body.result[0].results.some((row) => typeof row?.name !== "string")
     )
       return probeFailed("D1 response");
-    const { checkedInMigrations } = await import("@lacecms/platform-node");
-    const installed = new Set(body.result[0].results.map((row) => row.name));
+    const { checkedInMigrations, uncheckedD1Migrations } = await import("@lacecms/platform-node");
+    const names = body.result[0].results.map((row) => row.name as string);
+    if (uncheckedD1Migrations(names).length > 0) return unsupportedDatabase("D1");
+    const installed = new Set(names);
     return checkedInMigrations.every((item) => installed.has(item.name))
       ? pass("The selected remote D1 ledger contains every packaged migration.")
       : observation(

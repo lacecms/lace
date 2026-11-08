@@ -60,12 +60,14 @@ have only href; a new-tab link adds target `_blank` and derived
 Style those elements through their rich-text wrapper; see
 [site styling](site-styling.md).
 
-Upgrade engine/admin and site content/render/Astro packages together before
-using the expanded format. Existing documents need no migration or rewrite,
-and common-renderer block sources need no replacement. For a custom renderer,
-implement the same grammar and forward validated target/rel attributes. An older
-engine may reject new documents; rollback requires compatible backup or an
-explicit validated conversion. See [compatibility](compatibility.md#ce8a-shared-rich-text-format).
+Stored links use `href` plus optional `target: "_blank"` and `rel: "nofollow"`;
+an unchecked switch omits its attribute, and null, empty strings, other targets
+and other rel tokens are rejected. Code blocks hold only unmarked text without a
+language attribute; empty code blocks are valid. Rules and code blocks are
+allowed at the root and inside list items and blockquotes. A custom renderer
+implements the same grammar and forwards validated target/rel attributes; a
+codeBlock override is called for both the `pre` and the `code` element. See
+[ADR 0014](adr/0014-expanded-rich-text-format.md).
 
 For configurable placeholders, required markers and text counters, see
 [field guidance](field-guidance.md).

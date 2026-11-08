@@ -22,6 +22,7 @@ test("packaged entry point keeps its public exports", async () => {
     "NoopNodeCache",
     "SystemNodeClock",
     "UlidGenerator",
+    "UnsupportedDatabaseError",
     "anonymousActorResolver",
     "assertHostDatabaseSafe",
     "checkedInMigrations",
@@ -43,6 +44,8 @@ test("packaged entry point keeps its public exports", async () => {
     "resolveNodeClientAddress",
     "runLocalContentSync",
     "trustedProxyPolicy",
+    "uncheckedD1Migrations",
+    "uncheckedNodeMigrations",
   ]);
 });
 

@@ -24,7 +24,7 @@ import {
 } from "@lacecms/platform-node";
 import { openLocalD1, RemoteD1Database } from "./d1-transport.js";
 import { CliError, EXIT, type CliEnvironment, type CliOptions } from "./index.js";
-import { runMigration } from "./migrate.js";
+import { assertD1Baseline, runMigration } from "./migrate.js";
 
 export interface CommandOutcome {
   readonly code: string;
@@ -269,6 +269,7 @@ export async function runCommand(
   }
   try {
     if (options.command === "db migrate") {
+      await assertD1Baseline(database);
       await close();
       close = async () => undefined;
       let versions = await runMigration({

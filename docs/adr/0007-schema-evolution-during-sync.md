@@ -2,10 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-10-10
-- Governing architecture: [section 4.7](../mvp-architecture.md#47-published-content-is-immutable),
-  [section 8](../mvp-architecture.md#configuration-projection),
-  [section 9.1](../mvp-architecture.md#91-content-models), and
-  [section 9.3](../mvp-architecture.md#93-content-snapshots)
+- Governing architecture: [section 4.7](../architecture/README.md#47-published-content-is-immutable),
+  [section 8](../architecture/content-configuration.md#configuration-projection),
+  [section 9.1](../architecture/data-model.md#91-content-models), and
+  [section 9.3](../architecture/data-model.md#93-content-snapshots)
 - Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE1,
   OpenSpec change `ce01a-structure-baseline-compatible-changes`
 

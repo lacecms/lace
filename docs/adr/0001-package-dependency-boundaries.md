@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-07
-- Governing architecture: [section 6](../mvp-architecture.md#6-repository-structure)
+- Governing architecture: [section 6](../architecture/workspace.md#6-repository-structure)
 
 ## Context
 

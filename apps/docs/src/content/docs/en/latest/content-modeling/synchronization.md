@@ -27,22 +27,13 @@ For Cloudflare, use the generated local `cf:content:sync` while local dev is sto
 ## Collection query metadata and public identity
 
 `listOptions` changes are projection-only and do not require a model version
-increase or content rewrites. Deploy migration `0011_public_projection_identity`
-before the new API/admin, then run normal sync. It adds nullable public identity
-and source-hash columns only; it performs no content backfill or query indexing.
+increase or content rewrites. Run normal sync after deploying the new API/admin.
 
 Full projection identity includes query settings. Public identity omits only
 root collection `listOptions`, keeping labels, visible columns, SEO and block
 metadata. With a trusted stored public baseline, query-only enable/edit/remove/
 reorder updates metadata without advancing published state or requesting builds.
-Mixed SEO/public changes still request a build. Legacy records initially have
-unknown public identity: an unchanged full hash, or equality with the configured
-public hash on first enablement, proves safe baseline seeding without a build.
-If neither proof holds, sync conservatively rebuilds once and records the pair
-atomically. Repeating unchanged sync then writes nothing.
-
-Roll back code/config together while retaining the additive columns and migration
-history. Older code can leave public identity stale when it updates the full
-hash. Re-upgrade trusts a baseline only when its source equals that full hash;
-otherwise it uses the same legacy proof/fallback. Do not drop columns, rewrite
-snapshots or claim every legacy query update can skip a build.
+Mixed SEO/public changes still request a build. A model without a trusted public
+identity records it without a build when its full hash is unchanged; otherwise
+sync conservatively rebuilds once and records the pair atomically. Repeating
+unchanged sync then writes nothing.

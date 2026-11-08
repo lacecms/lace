@@ -36,10 +36,8 @@ function publicProjectionChanged(
 ): boolean {
   if (trustedPublicBaseline(stored))
     return current.publicProjectionHash !== stored.publicProjectionHash;
-  return (
-    stored.projectionHash !== current.projectionHash &&
-    stored.projectionHash !== current.publicProjectionHash
-  );
+  // Without a trusted public identity, any full projection change may be public.
+  return stored.projectionHash !== current.projectionHash;
 }
 
 function classifyMatchedModel(
@@ -71,11 +69,7 @@ function classifyMatchedModel(
   }
 
   const hasBaseline = stored.structure !== undefined;
-  const legacyMatch =
-    !hasBaseline &&
-    current.legacyStructureHash !== undefined &&
-    current.legacyStructureHash === stored.structureHash;
-  const structureChanged = model.structureHash !== stored.structureHash && !legacyMatch;
+  const structureChanged = model.structureHash !== stored.structureHash;
   if (structureChanged && model.version === stored.version) {
     diagnostics.push(
       diagnostic(
@@ -157,10 +151,7 @@ function classifyMatchedModel(
       model,
     });
   }
-  if (
-    (!hasBaseline || legacyMatch || !trustedPublicBaseline(stored)) &&
-    current.structure !== undefined
-  ) {
+  if ((!hasBaseline || !trustedPublicBaseline(stored)) && current.structure !== undefined) {
     return Object.freeze({ action: "record-baseline", model });
   }
   return undefined;

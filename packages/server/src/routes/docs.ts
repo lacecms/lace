@@ -36,12 +36,15 @@ loadVendor("valibot", {
 });
 
 export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input } = routeContext;
+  const { capabilities } = routeContext;
   app.get(
     "/api/v1/openapi.json",
     openAPIRouteHandler(app, {
       documentation: {
-        info: { title: input.environment.openApiTitle, version: input.environment.engineVersion },
+        info: {
+          title: capabilities.environment.openApiTitle,
+          version: capabilities.environment.engineVersion,
+        },
         openapi: "3.1.0",
         components: {
           schemas: contentMetadataOpenApi as NonNullable<
@@ -52,7 +55,7 @@ export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void 
     }),
   );
 
-  if (input.apiDocsEnabled === true) {
+  if (capabilities.apiDocsEnabled === true) {
     // Supported by the pinned browser bundle, ahead of the Hono wrapper's types.
     const scalarBundleOnlyOptions = { agent: { disabled: true } };
     app.get(

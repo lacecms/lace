@@ -45,37 +45,6 @@ export function omitListFields(model: JsonValue): JsonValue {
   return seo === undefined ? structure : { ...structure, seo: true };
 }
 
-/** The pre-baseline structural value, kept only to recognise legacy stored hashes. */
-export function legacyStructureForHash(projection: JsonValue): MutableJsonValue {
-  const strip = (owner: JsonValue, block = false): JsonValue => {
-    const result = { ...(owner as JsonObject) };
-    delete result.layout;
-    delete result.settingsLayout;
-    if (block) delete result.settingsVisibility;
-    const fieldMap = (map: JsonValue): JsonValue =>
-      Object.fromEntries(
-        Object.entries(map as JsonObject).map(([key, descriptor]) => {
-          const child = { ...(descriptor as JsonObject) };
-          if (child.type === "group") {
-            delete child.layout;
-            child.fields = fieldMap(child.fields!);
-          }
-          if (child.type === "list")
-            child.item = (fieldMap({ item: child.item! }) as JsonObject).item!;
-          return [key, child];
-        }),
-      );
-    if (result.fields) result.fields = fieldMap(result.fields);
-    if (result.settings) result.settings = fieldMap(result.settings);
-    if (Array.isArray(result.blockDefinitions))
-      result.blockDefinitions = result.blockDefinitions.map((definition) =>
-        strip(definition, true),
-      );
-    return result;
-  };
-  return omitDisplayMetadata(strip(omitListFields(projection)));
-}
-
 /**
  * Descriptor keys that carry presentation only, by descriptor owner. Models
  * drop the shared display keys; blocks also drop their settings visibility;

@@ -4,6 +4,7 @@ import type { TolerantErrorEnvelope } from "../errors/envelope.js";
 import { publicBlockSchema } from "../content/blocks.js";
 import { seoValueSchema } from "../content/seo.js";
 import {
+  BUILD_EXPORT_FORMAT_VERSION,
   buildExportFormatVersionSchema,
   exportEntrySchema,
   exportGlobalSchema,
@@ -87,7 +88,11 @@ function toTolerantSchema(
  */
 const tolerantSubstitutions = new Map<AnySchema, AnySchema>([
   [errorCodeSchema, v.pipe(v.string(), v.minLength(1), v.maxLength(128))],
-  [buildExportFormatVersionSchema, v.pipe(v.number(), v.safeInteger(), v.minValue(1))],
+  [
+    buildExportFormatVersionSchema,
+    // A newer format is recognized so consumers can report it; older formats are refused.
+    v.pipe(v.number(), v.safeInteger(), v.minValue(BUILD_EXPORT_FORMAT_VERSION)),
+  ],
 ]);
 tolerantSubstitutions.set(
   publicBlockSchema,
@@ -120,7 +125,6 @@ function tolerantBuild<Schema extends AnySchema>(schema: Schema): Schema {
     v.check((value) => {
       if (value === null || typeof value !== "object") return false;
       const input = value as Record<string, unknown>;
-      if (input.formatVersion === 1) return true;
       return [input.entries, input.globals ?? []].every(
         (items) =>
           Array.isArray(items) &&

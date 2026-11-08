@@ -70,13 +70,12 @@ promise, so a slow provider never delays the request, and their failures are
 logged with the same sanitized fields. Links are built from
 `LACE_PUBLIC_BASE_URL`, never from request headers.
 
-### Accounts and migration `0004`
+### Accounts
 
 Invitations, password resets, and account self-service use the Lace routes
-listed in [Authentication operations](auth-operations.md#invitations) and
-migration `0004_account_tokens`. Run `pnpm db:migrate:node` (or let the local
-migration role apply it) before starting the new API, and deploy the API and
-admin together: `POST /api/v1/admin/users` no longer exists. Only Better
+listed in [Authentication operations](auth-operations.md#invitations). Run
+`pnpm db:migrate:node` (or let the local migration role apply it) before
+starting the API, and deploy the API and admin together: `POST /api/v1/admin/users` no longer exists. Only Better
 Auth's sign-in, sign-out, and get-session routes are forwarded; every other
 `/api/auth/*` path returns `404`.
 

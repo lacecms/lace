@@ -45,7 +45,9 @@ import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerContentRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input, actor, adminEntryDto, seoSection } = routeContext;
+  const { actor } = routeContext.actors;
+  const { capabilities } = routeContext;
+  const { adminEntryDto, seoSection } = capabilities;
   app.get(
     "/api/v1/admin/content-models",
     describeRoute({
@@ -61,7 +63,9 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     async (context) => {
       return response(
         contentModelListSchema,
-        toContentModelDiscoveryDto(input.content.discoverModels({ actor: await actor(context) })),
+        toContentModelDiscoveryDto(
+          capabilities.content.discoverModels({ actor: await actor(context) }),
+        ),
       );
     },
   );
@@ -99,7 +103,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     validator("query", contentEntryListQuerySchema, validationHook),
     async (context) => {
       const modelKey = context.req.param("modelKey");
-      if (contentModel(input.config, modelKey) === undefined) return notFound();
+      if (contentModel(capabilities.config, modelKey) === undefined) return notFound();
       const query = context.req.valid("query") as v.InferOutput<typeof contentEntryListQuerySchema>;
       let filters: unknown;
       if (query.filters !== undefined) {
@@ -109,7 +113,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
           invalid("Filters must be a JSON array.", "/filters");
         }
       }
-      const page = await input.content.list({
+      const page = await capabilities.content.list({
         actor: await actor(context),
         ...(filters === undefined ? {} : { filters }),
         modelKey,
@@ -142,13 +146,13 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     validator("json", createContentEntryRequestSchema, validationHook),
     async (context) => {
       const modelKey = context.req.param("modelKey");
-      if (contentModel(input.config, modelKey) === undefined) return notFound();
+      if (contentModel(capabilities.config, modelKey) === undefined) return notFound();
       const body = context.req.valid("json") as v.InferOutput<
         typeof createContentEntryRequestSchema
       >;
       const { blocks, fields, seo, slug, title } = body;
       const resolvedActor = await actor(context);
-      const entry = await input.content.create({
+      const entry = await capabilities.content.create({
         actor: resolvedActor,
         modelKey,
         blocks: blocks.map(blockInput),
@@ -180,7 +184,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     validator("query", linkTargetQuerySchema, validationHook),
     async (context) => {
       const query = context.req.valid("query") as v.InferOutput<typeof linkTargetQuerySchema>;
-      const result = await input.links.list(await actor(context), {
+      const result = await capabilities.links.list(await actor(context), {
         limit: query.limit,
         ...(query.modelKey === undefined ? {} : { modelKey: query.modelKey }),
         ...(query.status === undefined ? {} : { status: query.status }),
@@ -214,7 +218,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       >;
       return response(
         linkTargetStatusesSchema,
-        await input.links.resolve(await actor(context), body.ids),
+        await capabilities.links.resolve(await actor(context), body.ids),
       );
     },
   );
@@ -238,7 +242,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     validator("query", linkImpactQuerySchema, validationHook),
     async (context) => {
       const query = context.req.valid("query") as v.InferOutput<typeof linkImpactQuerySchema>;
-      const result = await input.links.impact(await actor(context), {
+      const result = await capabilities.links.impact(await actor(context), {
         limit: query.limit,
         action: query.action,
         targetId: context.req.param("entryId"),
@@ -268,7 +272,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     validator("param", entryIdParams, validationHook),
     async (context) => {
       const resolvedActor = await actor(context);
-      const projection = await input.content.loadAdminEntry({
+      const projection = await capabilities.content.loadAdminEntry({
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
       });
@@ -298,7 +302,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     async (context) => {
       const body = context.req.valid("json") as v.InferOutput<typeof saveDraftRequestSchema>;
       const resolvedActor = await actor(context);
-      const entry = await input.content.save({
+      const entry = await capabilities.content.save({
         actor: resolvedActor,
         blocks: body.blocks.map(blockInput),
         entryId: context.req.param("entryId") as never,
@@ -335,7 +339,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       >;
       const idempotencyKey = optionalIdempotencyKey(context.req.raw);
       const resolvedActor = await actor(context);
-      const published = await input.content.publish({
+      const published = await capabilities.content.publish({
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
         expectedRevision: revision(body, context.req.raw),
@@ -344,7 +348,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       return response(
         publishContentEntryResultSchema,
         toPublishContentEntryResultDto(
-          await input.content.projectPublicationResult({
+          await capabilities.content.projectPublicationResult({
             actor: resolvedActor,
             result: published,
           }),
@@ -380,7 +384,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       >;
       const idempotencyKey = optionalIdempotencyKey(context.req.raw);
       const resolvedActor = await actor(context);
-      const unpublished = await input.content.unpublish({
+      const unpublished = await capabilities.content.unpublish({
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
         expectedPublishedSnapshotId: body.expectedPublishedSnapshotId as never,
@@ -392,7 +396,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         toUnpublishContentEntryResultDto({
           ...unpublished,
           seo: seoSection.models[unpublished.entry.model.key] !== undefined,
-          updatedBy: await input.content.describeActor({
+          updatedBy: await capabilities.content.describeActor({
             actor: resolvedActor,
             actorId: unpublished.entry.draft.updatedBy.id,
           }),
@@ -422,7 +426,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     async (context) => {
       const body = parse(revertContentEntryRequestSchema, await optionalJsonBody(context.req.raw));
       const resolvedActor = await actor(context);
-      const entry = await input.content.revertDraft({
+      const entry = await capabilities.content.revertDraft({
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
         expectedRevision: revision(body, context.req.raw),
@@ -456,7 +460,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       );
       const expectedRevision = optionalRevision(body, context.req.raw);
       const resolvedActor = await actor(context);
-      const entry = await input.content.duplicate({
+      const entry = await capabilities.content.duplicate({
         actor: resolvedActor,
         entryId: context.req.param("entryId") as never,
         ...(expectedRevision === undefined ? {} : { expectedRevision }),
@@ -480,7 +484,7 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     validator("param", entryIdParams, validationHook),
     async (context) => {
       const body = parse(deleteContentEntryRequestSchema, await optionalJsonBody(context.req.raw));
-      await input.content.delete({
+      await capabilities.content.delete({
         actor: await actor(context),
         entryId: context.req.param("entryId") as never,
         expectedRevision: revision(body, context.req.raw),

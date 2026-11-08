@@ -168,7 +168,14 @@ export async function templateUpgradeJourney(temporary, operations) {
       await rm(join(project, ".lace/conflicts"), { recursive: true, force: true });
     }
 
-    for (const conflictPath of [variant.conflict, "docs/lace-operations.md"]) {
+    // Infrastructure and documentation candidates that the current template changes;
+    // an unchanged managed file cannot conflict, and at least one must change.
+    const conflictPaths = [variant.conflict, "docs/lace-operations.md"].filter(
+      (path) => targetManifest.files[path]?.sha256 !== baseline.files[path]?.sha256,
+    );
+    if (conflictPaths.length === 0)
+      throw new Error(`upgrade-${version}-${variant.name}: no conflict candidate changes`);
+    for (const conflictPath of conflictPaths) {
       // Modified managed infrastructure is detected and blocks apply.
       await writeFile(
         join(project, conflictPath),
@@ -263,6 +270,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}-repeat: upgraded project is not current`);
   }
   console.info(
-    "Retained published-template default and Cloudflare projects: infrastructure/documentation conflicts and new-guide collisions refused, managed files current, user README, configuration and site source preserved, repeat plan current",
+    "Retained published-template default and Cloudflare projects: conflicts on changed infrastructure/documentation and new-guide collisions refused, managed files current, user README, configuration and site source preserved, repeat plan current",
   );
 }

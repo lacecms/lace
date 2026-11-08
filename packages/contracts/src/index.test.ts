@@ -237,8 +237,8 @@ describe("admin entry list contracts", () => {
     expect(exportDto.globals.map((item) => item.modelKey)).toEqual(["settings"]);
     expect(Object.keys(exportDto.media)).toEqual(["media-1", "media-2"]);
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
-    const { globals: _globals, ...legacy } = exportDto;
-    expect(v.parse(buildExportSchema, legacy).globals).toEqual([]);
+    const { globals: _globals, ...withoutGlobals } = exportDto;
+    expect(v.safeParse(buildExportSchema, withoutGlobals).success).toBe(false);
   });
 });
 

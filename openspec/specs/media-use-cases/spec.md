@@ -511,13 +511,12 @@ able to list, filter and read tags; only `media:write` SHALL change them.
 - **WHEN** a client lists media with six tags
 - **THEN** the request is rejected before any media read
 
-### Requirement: Uploads record a content hash for deduplication
+### Requirement: Every upload records a content hash for deduplication
 Every successful upload SHALL record the SHA-256 digest of the exact stored
 bytes as 64 lowercase hexadecimal characters, computed after format
 verification and before metadata is committed, identically on Node and
 Cloudflare. A failed upload SHALL record nothing. The hash SHALL never change
-after creation; metadata and tag updates SHALL keep it. Media created before
-this capability SHALL keep no hash and SHALL NOT be hashed later. Identical
+after creation; metadata and tag updates SHALL keep it. Identical
 bytes uploaded twice SHALL create two items with the same hash; the hash SHALL
 NOT be unique and SHALL NOT refuse an upload. A media list SHALL be able to
 restrict results to `active` items with a given hash, requiring `content:read`
@@ -531,7 +530,3 @@ change the published-content version or build work.
 #### Scenario: Deleting item is not a match
 - **WHEN** an item with hash `h` is marked `deleting` and a client lists by `h`
 - **THEN** the item is not returned
-
-#### Scenario: Legacy media
-- **WHEN** media uploaded before migration `0015` are listed
-- **THEN** they carry no hash and match no hash filter

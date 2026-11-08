@@ -69,16 +69,7 @@ build rule. Public content, build exports and MCP do not expose tags.
 
 ## Upgrade and rollback
 
-Migration `0014_media_tags` is additive: it creates the indexed join table and
-leaves existing media without tags. Apply it before starting the new API; ship
-API and admin of the same release together.
-
-Stop Node API/dispatcher before migration and back up SQLite plus the object
-store. In a generated project run `pnpm db:migrate`. For Cloudflare export D1
-and preserve R2 objects, then run `pnpm exec lace db migrate --target
-cloudflare-remote --operator-env .lace/cloudflare-operator.env`; local development
-uses `pnpm cf:db:migrate`. Resume the API and check readiness.
-
-An older engine ignores the additive table. Restore the pre-upgrade database
-backup if rollback must remove stored tags. Keep object-store backups consistent
-with the restored database and do not delete objects to undo tag metadata.
+The baseline migration creates the indexed `media_tags` join table; ship API and
+admin of the same release together. Restore a database backup if rollback must
+remove stored tags. Keep object-store backups consistent with the restored
+database and do not delete objects to undo tag metadata.

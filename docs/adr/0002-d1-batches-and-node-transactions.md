@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-07
-- Governing architecture: [sections 4.5](../mvp-architecture.md#45-portable-capabilities-explicit-adapters), [9](../mvp-architecture.md#9-content-data-model), and [10](../mvp-architecture.md#10-content-publication)
+- Governing architecture: [sections 4.5](../architecture/README.md#45-portable-capabilities-explicit-adapters), [9](../architecture/data-model.md#9-content-data-model), and [10](../architecture/publication.md#10-content-publication)
 
 ## Context
 
@@ -35,3 +35,18 @@ statements are conditional on that guard. A zero-row guard returns
   publish stale content.
 - Separate snapshot and outbox writes were rejected because they can leave
   public state without a rebuild request.
+
+## Amendment (RF5C, 2026-11-08)
+
+- **Publication result.** D1 returns the committed entry it predicts before
+  the batch, because the idempotency record that stores the response is part
+  of that batch; Node reloads the entry inside its transaction. Both SHALL
+  equal a subsequent `load` (including the SEO group), and the shared
+  repository contract asserts that for publication, its replay and
+  unpublication.
+- **Conflict precedence.** Both runtimes check, in order: idempotent replay
+  (or a changed fingerprint), a stale expected revision
+  (`CONTENT_REVISION_CONFLICT`), invalid internal-link targets, then write.
+  The guarded statement remains the race guard on both.
+- The full list of intentional runtime differences is the "Runtime deltas"
+  table in architecture §16.

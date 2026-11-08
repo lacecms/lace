@@ -4,7 +4,7 @@
 
 Read these before planning or implementing product work:
 
-1. `docs/mvp-architecture.md` — product scope and architecture invariants;
+1. `docs/architecture/` — product scope and architecture invariants;
    [`docs/README.md`](docs/README.md) indexes internal documents and their status.
 2. `openspec/specs/**` — accepted detailed capability behavior.
 3. The selected active OpenSpec change — the proposed implementation delta.

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-26
-- Governing architecture: [section 17](../mvp-architecture.md#17-admin-application) and [section 19](../mvp-architecture.md#19-dependency-policy)
+- Governing architecture: [section 17](../architecture/admin.md#17-admin-application) and [section 19](../architecture/workspace.md#19-dependency-policy)
 
 ## Context
 

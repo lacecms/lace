@@ -25,6 +25,8 @@ import type { OpaqueTokenSecret } from "../shared/brands.js";
 export const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 /** Password-reset links stay valid for one hour. */
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+/** First-run setup tokens stay valid for one hour after they are minted. */
+export const SETUP_TOKEN_TTL_MS = 60 * 60 * 1000;
 /** Alias of the domain's `MAX_DISPLAY_NAME_LENGTH`. */
 export const DISPLAY_NAME_MAX_LENGTH = MAX_DISPLAY_NAME_LENGTH;
 

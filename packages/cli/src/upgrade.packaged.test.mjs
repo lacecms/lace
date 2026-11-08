@@ -29,7 +29,12 @@ async function project(files, version = "1.0.0") {
   await mkdir(join(root, ".lace"));
   await writeFile(
     join(root, ".lace/manifest.json"),
-    JSON.stringify({ schemaVersion: 1, templateVersion: version, files: inventory }),
+    JSON.stringify({
+      schemaVersion: 1,
+      templateVersion: version,
+      site: { mode: "starter", path: "site" },
+      files: inventory,
+    }),
   );
   return root;
 }

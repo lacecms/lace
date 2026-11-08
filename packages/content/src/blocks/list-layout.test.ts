@@ -38,7 +38,7 @@ test("Gallery and custom lists share visibility without structural setting chang
   });
   expect(custom.settingsVisibility).toEqual(builtInBlocks.gallery.settingsVisibility);
   expect(builtInBlocks.gallery.version).toBe(5);
-  expect(Object.keys(builtInBlocks.gallery.migrations)).toEqual(["2", "3", "4", "5"]);
+  expect(builtInBlocks.gallery).not.toHaveProperty("migrations");
   expect(validateBlockSettings(custom, {})).toEqual({
     layoutMode: "grid",
     layoutWrap: true,

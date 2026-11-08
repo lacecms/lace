@@ -41,7 +41,7 @@ Supply `LACE_API_BASE_URL` to the Astro configuration process as well as the ser
 
 `LaceImage.astro` builds WebP variants at 960 and 1920 pixels, each capped at the original width, with `srcset`, `sizes`, dimensions, alt text and focal point. GIF variants preserve animation. Eligible opaque images receive a blurred placeholder; GIF, transparent images and services without local transforms omit it. Images load lazily by default; Hero uses eager loading. A failed fetch or transform fails the build. Set the loader's `optimizeImages: false` to use direct public originals instead.
 
-Image and Gallery components support an opt-in, script-free full-size lightbox for images. A block/item link takes precedence and opens in the same tab. Adopt the starter's lightbox and link focus styles. After upgrading packages, review `lace add block image gallery hero --site <path> --dry-run`, update unedited files and merge customized components (`--write-new` provides `.new` proposals). Image/gallery schemas are now 4/4: raise affected model versions and synchronize content explicitly, with matching components ready before the next build. See [upgrade and rollback](../operations/#upgrade-and-roll-back).
+Image and Gallery components support an opt-in, script-free full-size lightbox for images. A block/item link takes precedence and opens in the same tab. Adopt the starter's lightbox and link focus styles. To update installed copies, review `lace add block image gallery hero --site <path> --dry-run`, update unedited files and merge customized components (`--write-new` provides `.new` proposals). Components must match the synchronized block versions before the next build.
 
 ## Style your components
 
@@ -108,54 +108,24 @@ narrow before describing an image:
 )}
 ```
 
-### Upgrade Gallery v4 to v5
+### Update an installed Gallery component
 
-1. Back up content and site sources and upgrade the engine, admin, CLI and site
-   packages together. No SQL migration is required.
-2. Raise the version of every model that allows Gallery and synchronize with
-   `lace content sync`. Identity migration 5 keeps stored items: drafts gain the
-   item defaults and publications gain `kind: "image"`.
-3. Run `lace add block gallery --site site` (or merge the `.new` proposals). It
-   updates `GalleryBlock.astro` and `ListLayout.css` and adds
-   `GalleryVideo.css`. A revision 6 component fails with `block_version_mismatch`
-   after synchronization; an edited copy must check `kind` and `media` as above.
-4. Rollback after synchronization needs the pre-upgrade content backup and the
-   matching older code and site sources.
-
-### Upgrade Gallery v3 to v4
-
-1. Back up content and site sources. Upgrade matching engine, admin, content,
-   contracts, CLI, SDK/render and Astro packages before adopting card metadata.
-   Older engines reject the new metadata. No SQL migration is required.
-2. Run `lace add block gallery --site site --dry-run`, review the proposed
-   component and `ListLayout.css`, then run without `--dry-run`. For a connected
-   site, pass that site's directory. A CSS or component conflict protects both
-   files and the item's lock revision. Use `--write-new` to inspect proposed
-   files and manually merge edits; active files are never overwritten. Repeat
-   the command after resolving conflicts and review the lock/diffs.
-3. Remove competing structural Gallery rules from site CSS as described above.
-   Keep spacing through `--lace-list-gap: 1rem` and keep image/theme rules.
-4. Adopt Gallery definition v4 and increment each model version whose structure
-   includes Gallery. Keep migrations 2/3; migration 4 preserves data/settings and
-   normal validation supplies missing `grid`, true and `auto` defaults. Deploy
-   matching CMS/site definitions and renderer together: mismatched versions fail
-   existing guards. Synchronize with `lace content sync` on the intended runtime.
-   Interrupted block migration resumes on rerun using existing guarded units.
-5. Verify draft/published/hidden lists, links overriding lightboxes, all layouts,
-   and a site build. Publish scalar settings normally; diagrams never enter the
-   authored or public payload. Other built-in block versions remain unchanged.
-
-Before synchronization, rollback can restore the earlier code and site files.
-After synchronization, older Gallery code cannot consume v4 blocks: restore the
-pre-upgrade content backup with matching code/site sources. There is no automatic
-down-migration; do not silently strip newly authored settings.
+Run `lace add block gallery --site site --dry-run`, review the proposed
+`GalleryBlock.astro`, `ListLayout.css` and `GalleryVideo.css`, then run without
+`--dry-run`. For a connected site, pass that site's directory. A CSS or
+component conflict protects the files and the item's lock revision. Use
+`--write-new` to inspect proposed files and merge edits by hand; active files
+are never overwritten. An edited copy must check `kind` and `media` as above.
+Remove competing structural Gallery rules from site CSS as described above and
+keep spacing through `--lace-list-gap: 1rem`. Verify draft, published and
+hidden lists, links overriding lightboxes, every layout and a site build.
 
 For mode-specific admin controls, adopt both `listLayoutSettings()` and block-level
 `settingsVisibility: listLayoutSettingsVisibility()` from `@lacecms/content`.
 Wrap items appears for flex and Grid preset for grid, with hidden values retained
 and validated. Errors can reveal an inactive control. This optional metadata needs
-matching updated CMS/admin packages and ordinary sync; existing sync may request
-a build, but visibility requires no Astro/CSS or content migration.
+ordinary sync; sync may request a build, but visibility requires no Astro/CSS
+or content migration.
 
 ## Video embeds
 
@@ -238,12 +208,10 @@ document.addEventListener("click", (event) => {
 });
 ```
 
-To adopt v2 in an existing project, raise every model version that allows
-`videoEmbed`, run configuration sync, then run `pnpm exec lace add block videoEmbed
---site site` before building (substitute your site path). Both component and CSS
-need registry revision 2. Use `--write-new` to review locally edited copies. An
-older component or stored block version can fail with `block_version_mismatch`.
-Template 0.40.0 includes these steps. No database migration is required.
+To update an installed copy, run `pnpm exec lace add block videoEmbed --site site`
+before building (substitute your site path); it updates the component and its
+CSS. Use `--write-new` to review locally edited copies. A component that does not
+match the synchronized block version fails with `block_version_mismatch`.
 
 For an optional manual playback smoke check, publish an owner-approved public
 YouTube video and a Vimeo video allowed on your domain, with and without a poster.
@@ -268,9 +236,6 @@ before generating an href. Only `state === "resolved"` provides `href`;
 value. The Link block supports button/text appearances and optional new-tab
 navigation. Updated Hero/CTA/navigation/image/gallery sources use this helper.
 
-Build export format 2 requires local `internalLinks` manifests and a compatible
-SDK; format-1-only SDKs fail with upgrade guidance. Upgrade packages and installed
-sources before authoring ID targets. Migration 0010 adds indexed projections;
-back up first and roll back with matching artifacts and the matching database.
-The loader reports bounded `linkDiagnostics` once per assembled view and performs
+Build export format 2 carries local `internalLinks` manifests and needs the
+matching SDK. The loader reports bounded `linkDiagnostics` once per assembled view and performs
 no per-link network requests. Manual URLs and anchors retain their limitations.

@@ -8,9 +8,9 @@ sessions, subscriptions, sampling, background tasks and CIMD are not exposed.
 
 ## Enable and connect
 
-1. Apply the release's checked-in migrations on the existing SQLite/D1 database,
-   including `0012_oauth_mcp.sql` and `0013_oauth_verification_indexes.sql`.
-   Existing readiness requires these migrations even while MCP is disabled.
+1. Apply the release's checked-in migrations on the SQLite/D1 database; the
+   baseline creates the OAuth tables, which readiness requires even while MCP
+   is disabled.
 2. Set the canonical public origin in `LACE_PUBLIC_BASE_URL`. Production OAuth
    requires HTTPS. Local development permits loopback HTTP. Incoming Host and
    forwarding headers do not choose the issuer or resource.

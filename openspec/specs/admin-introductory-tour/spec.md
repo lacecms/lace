@@ -185,7 +185,7 @@ claiming publication guarantees immediate site refresh or successful deployment,
 and its status wording SHALL match the shared build status map: only
 `succeeded` proves publication, `accepted` means a provider accepted the request
 without tracked outcome, and `cancelled`, `unknown`, and `failed` can be
-retried by an administrator. It SHALL use Step 29's verified mode guidance:
+retried by an administrator. It SHALL use the verified site-mode guidance:
 Astro dev shows published changes to existing pages on reload and needs a
 restart for new or renamed URLs, a manual static site needs a fresh build and
 deployment, and automatic builds serve content after a succeeded build. It

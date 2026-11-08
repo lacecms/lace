@@ -17,7 +17,7 @@ import { platformReleaseVersion } from "../scripts/platform-release-version.mjs"
 test("platform release generation uses the platform manifest and rejects drift", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lace-release-version-"));
   try {
-    await mkdir(join(directory, "src"));
+    await mkdir(join(directory, "src/runtime"), { recursive: true });
     await writeFile(
       join(directory, "package.json"),
       JSON.stringify({
@@ -26,12 +26,12 @@ test("platform release generation uses the platform manifest and rejects drift",
       }),
     );
     await platformReleaseVersion(directory);
-    expect(await readFile(join(directory, "src/release-version.ts"), "utf8")).toContain(
+    expect(await readFile(join(directory, "src/runtime/release-version.ts"), "utf8")).toContain(
       'engineVersion = "1.2.3-alpha.7"',
     );
     await platformReleaseVersion(directory, { check: true });
     await writeFile(
-      join(directory, "src/release-version.ts"),
+      join(directory, "src/runtime/release-version.ts"),
       'export const engineVersion = "0.0.0";',
     );
     await expect(platformReleaseVersion(directory, { check: true })).rejects.toThrow("Stale");
@@ -43,11 +43,11 @@ test("platform release generation uses the platform manifest and rejects drift",
 test("generation preserves unchanged files and replaces changed versions atomically", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lace-release-version-"));
   try {
-    const source = join(directory, "src/release-version.ts");
+    const source = join(directory, "src/runtime/release-version.ts");
     const manifest = join(directory, "package.json");
     const writeManifest = (version) =>
       writeFile(manifest, JSON.stringify({ name: "@lacecms/platform-node", version }));
-    await mkdir(join(directory, "src"));
+    await mkdir(join(directory, "src/runtime"), { recursive: true });
     await writeManifest("1.2.3");
     await platformReleaseVersion(directory);
     const original = await readFile(source, "utf8");
@@ -65,7 +65,7 @@ test("generation preserves unchanged files and replaces changed versions atomica
       expect(await reader.readFile("utf8")).toBe(original);
       expect(await readFile(source, "utf8")).toContain('engineVersion = "1.2.4"');
       await platformReleaseVersion(directory, { check: true });
-      expect(await readdir(join(directory, "src"))).toEqual(["release-version.ts"]);
+      expect(await readdir(join(directory, "src/runtime"))).toEqual(["release-version.ts"]);
     } finally {
       await reader.close();
     }

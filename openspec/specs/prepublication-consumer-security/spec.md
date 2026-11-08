@@ -43,7 +43,7 @@ Acceptance SHALL exercise the generated dispatcher/builder path and observe a su
 - **THEN** the old release remains served during failure and an explicit retry produces a new successful release
 
 ### Requirement: Secret exclusion and release evidence are explicit
-Acceptance SHALL inspect generated shipping files, extracted package archives, selected image filesystems/configuration, static output and captured diagnostics for test credentials and secret material. Secret detections SHALL fail without echoing values; expected operator .env and persistent auth storage SHALL remain outside shipping scans. Evidence SHALL record exact artifact/source identities, platform, checks and results, preserve relevant local Node/D1 and Worker coverage, and explicitly exclude registry publication, real Cloudflare deployment and stable Step 26 certification.
+Acceptance SHALL inspect generated shipping files, extracted package archives, selected image filesystems/configuration, static output and captured diagnostics for test credentials and secret material. Secret detections SHALL fail without echoing values; expected operator .env and persistent auth storage SHALL remain outside shipping scans. Evidence SHALL record exact artifact/source identities, platform, checks and results, preserve relevant local Node/D1 and Worker coverage, and explicitly exclude registry publication, real Cloudflare deployment and stable-release certification.
 
 #### Scenario: Secret reaches shipping output or diagnostics
 - **WHEN** a setup password, token or deployment secret occurs in a shipping surface or captured diagnostic
@@ -64,7 +64,7 @@ Release acceptance against a complete clean-source inventory SHALL, after the co
 - **WHEN** a consumer lockfile or installed Lace package resolves to the engine checkout
 - **THEN** acceptance fails rather than counting the journey as artifact evidence
 
-### Requirement: Exact-artifact acceptance runs the alpha.2 field-trial regressions
+### Requirement: Exact-artifact acceptance runs the field-trial regressions
 Release acceptance against a complete clean-source inventory SHALL, in addition to the onboarding feedback suite and with only that inventory's generator, package archives and loaded API/builder image IDs, run these field-trial regressions and name each in the receipt:
 
 - **Block order:** in the admin served by the loaded API image, pointer and keyboard reordering, insertion and duplication in the middle of the list, removal and undo of removal SHALL save, survive reload and publish in the displayed order, and the build export and the packed consumer's static output SHALL contain the blocks in that order. A draft whose positions do not ascend SHALL be rejected with `CONTENT_INVALID_STATE`, a safe block-order explanation and a request ID, without advancing the draft revision or changing the published export.

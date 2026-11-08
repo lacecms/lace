@@ -31,7 +31,9 @@ import {
 import { readMediaUpload } from "./media-upload.js";
 
 export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input, actor, media, mediaDto } = routeContext;
+  const { actor } = routeContext.actors;
+  const { capabilities } = routeContext;
+  const { media, mediaDto } = capabilities;
   app.get(
     "/api/v1/admin/media",
     describeRoute({
@@ -182,7 +184,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ? notFound()
         : response(
             mediaDetailSchema,
-            toMediaDetailDto(detail, mediaUrl(input.publicBaseUrl!, detail.id)),
+            toMediaDetailDto(detail, mediaUrl(capabilities.publicBaseUrl!, detail.id)),
             200,
             { etag: mediaEntityTag(detail.updatedAt) },
           );
@@ -242,7 +244,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
             updateMediaMetadataResultSchema,
             toUpdateMediaMetadataResultDto(
               updated,
-              mediaUrl(input.publicBaseUrl!, updated.media.id),
+              mediaUrl(capabilities.publicBaseUrl!, updated.media.id),
             ),
             200,
             { etag: mediaEntityTag(updated.media.updatedAt) },

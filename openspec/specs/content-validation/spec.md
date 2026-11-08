@@ -131,7 +131,7 @@ document structure.
 
 #### Scenario: Nested rich-text leaves use the same rules
 - **WHEN** an expanded document is used in a field inside a group or list, or in block data
-- **THEN** the same validation accepts it in draft and publication modes without counting rich-text nodes toward CE7 list budgets or changing required-field semantics
+- **THEN** the same validation accepts it in draft and publication modes without counting rich-text nodes toward composite list budgets or changing required-field semantics
 
 #### Scenario: Existing documents stay valid
 - **WHEN** a previously valid H1–H3 or href-only document is validated

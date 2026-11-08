@@ -34,7 +34,9 @@ import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerAccountRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input, actor, accounts, currentSessionId, deferTask, sessionSummary } = routeContext;
+  const { actor, currentSessionId } = routeContext.actors;
+  const { capabilities } = routeContext;
+  const { accounts, deferTask, sessionSummary } = capabilities;
   app.post(
     "/api/v1/invitations/inspect",
     describeRoute({
@@ -198,13 +200,15 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
     await actor(context);
     return response(
       accountCapabilitiesSchema,
-      { mcpEnabled: input.mcpEnabled === true && input.oauthConnections !== undefined },
+      {
+        mcpEnabled: capabilities.mcpEnabled === true && capabilities.oauthConnections !== undefined,
+      },
       200,
       noStore,
     );
   });
-  if (input.mcpEnabled && input.oauthConnections) {
-    const connections = input.oauthConnections;
+  if (capabilities.mcpEnabled && capabilities.oauthConnections) {
+    const connections = capabilities.oauthConnections;
     app.get("/api/v1/account/mcp-connections", async (context) => {
       const resolvedActor = await actor(context);
       const query = parse(oauthConnectionListQuerySchema, context.req.query());
@@ -235,7 +239,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
     });
     app.post("/api/v1/account/mcp-connections/:connectionId/revoke", async (context) => {
       const resolvedActor = await actor(context);
-      if (context.req.header("origin") !== new URL(input.publicBaseUrl ?? context.req.url).origin)
+      if (
+        context.req.header("origin") !==
+        new URL(capabilities.publicBaseUrl ?? context.req.url).origin
+      )
         throw new AuthorizationError();
       parse(oauthConnectionRevokeSchema, await optionalJsonBody(context.req.raw));
       const connectionId = parse(identifierSchemaPublic, context.req.param("connectionId"));

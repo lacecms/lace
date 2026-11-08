@@ -21,6 +21,15 @@ async function root() {
   return path;
 }
 
+async function expectNoReleaseHistory(projectPath) {
+  const guides = (await readdir(join(projectPath, "docs"))).filter((name) => name.endsWith(".md"));
+  for (const file of [...guides.map((name) => `docs/${name}`), "README.md"]) {
+    const text = await readFile(join(projectPath, file), "utf8");
+    expect(text, file).not.toMatch(/\balpha\.\d|0\.1\.0-alpha/iu);
+    expect(text, file).not.toMatch(/\b00(?:0[1-9]|1\d)_[a-z]/u);
+  }
+}
+
 async function listFiles(path, prefix = "") {
   const entries = await readdir(path, { withFileTypes: true });
   const files = [];
@@ -61,72 +70,15 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  expect(instructions.configuration.at(-1)).toContain("Template 0.46.0");
-  expect(instructions.database.at(-1)).toContain("0015_import_credentials");
-  expect(instructions.configuration[0]).toMatch(
-    /Template 0\.36\.0: Gallery v4.*No database migration.*ListLayout\.css.*rollback/,
-  );
-  // Upgrading from the published alpha.2 engines needs the 33D build-outcome migration.
-  expect(instructions.database.join("\n")).toContain("0003_site_build_outcomes");
-  // The block envelope is additive, but an older engine would deliver hidden blocks.
+  // Instructions describe only the upgrade from the latest published template (rc1).
+  expect(instructions.configuration).toHaveLength(1);
+  expect(instructions.configuration[0]).toMatch(/^Template 0\.47\.0: .*baseline migration/u);
+  expect(instructions.database).toHaveLength(1);
   expect(instructions.database[0]).toMatch(
-    /0009_content_block_envelope.*additive.*rolling back .* requires restoring that backup/u,
+    /baseline migration.*SCHEMA_UNSUPPORTED.*pnpm db:migrate.*pnpm content:sync/u,
   );
-  // Per-entry SEO adds one nullable column; rolling back needs no restore.
-  expect(instructions.database[3]).toMatch(
-    /0008_content_snapshot_seo.*additive.*rolling back .* works without restoring/u,
-  );
-  // Global models need the content_models rebuild; back up before migrating.
-  expect(instructions.database[6]).toMatch(
-    /0007_content_model_global_kind.*rolling back .* requires restoring that backup/u,
-  );
-  // Schema evolution and media metadata need two additive migrations.
-  expect(instructions.database[9]).toContain(
-    "0005_content_model_structure and 0006_media_descriptive_metadata",
-  );
-  expect(instructions.configuration[2]).toMatch(
-    /^Template 0\.34\.0: image links.*image block moves to version 4 and gallery to version 3.*Link.*same tab instead of the lightbox.*No database migration.*lace add block image gallery.*block_version_mismatch/u,
-  );
-  expect(instructions.configuration[3]).toMatch(
-    /^Template 0\.33\.0: deploy caching.*\/_astro\/.*max-age=2592000, immutable.*builder-cache.*2 GiB.*actions\/cache.*No database migration.*docker compose up -d builder web.*site\/public\/_headers/u,
-  );
-  expect(instructions.configuration[4]).toMatch(
-    /^Template 0\.32\.0: responsive images.*960 and 1920 px.*image block moves to version 3 and gallery to version 2.*No database migration.*lace add block image gallery hero.*block_version_mismatch.*sharp.*laceImageConfig/u,
-  );
-  expect(instructions.configuration[5]).toMatch(
-    /Template 0\.31\.0: .*deploy\/nginx\.conf.*client_max_body_size 11m.*docker compose up -d web.*No new API, admin, CLI or builder artifacts/u,
-  );
-  expect(instructions.configuration[6]).toContain("Template 0.30.0: alpha.6");
-  expect(instructions.configuration.join("\n")).toContain("BUILD_EXPORT_VERSION_CHANGED");
-  // Invitations and password recovery need the additive account-token migration.
-  expect(instructions.database.join("\n")).toContain("0004_account_tokens");
-  expect(instructions.configuration.join("\n")).toMatch(
-    /Template 0\.29\.0: alpha\.5.*0\.1\.0-alpha\.5.*next.*forward database migrations/u,
-  );
-  expect(instructions.configuration[10]).toMatch(
-    /Template 0\.28\.0.*layout.*no database migration/u,
-  );
-  expect(instructions.configuration[11]).toMatch(
-    /^Template 0\.27\.0: Gallery and Navigation.*No database migration.*pnpm exec lace add block gallery navigation.*site\.global\("navigation"\)/u,
-  );
-  expect(instructions.configuration[12]).toMatch(
-    /^Template 0\.26\.0: block anchors.*id=\{anchor\}.*\{ data, settings \}.*pnpm exec lace add block --all/u,
-  );
-  expect(instructions.configuration[13]).toMatch(
-    /^Template 0\.25\.0: search and social metadata.*site\.seo\(entry\).*LACE_SITE_INDEXING.*Nothing breaks without adoption/u,
-  );
-  expect(instructions.configuration[14]).toMatch(
-    /^Template 0\.24\.0: global models.*site\.global\(key\).*upgrade does not add them/u,
-  );
-  expect(instructions.configuration[15]).toMatch(
-    /^Template 0\.23\.0: .*media dictionary keyed by media ID.*keep working unchanged/u,
-  );
-  expect(instructions.configuration[17]).toMatch(
-    /image block is version 2.*raise the version of every model that allows image.*refuses image blocks still stored at version 1/u,
-  );
-  expect(instructions.configuration.join("\n")).toMatch(
-    /Template 0\.22\.0: .*invite people .*deploy the API and admin artifacts together.*shows its link once/u,
-  );
+  expect(JSON.stringify(instructions)).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
+
   expect(files).not.toContain("wrangler.jsonc");
   expect(files.every((file) => !file.startsWith("apps/") && !file.startsWith("packages/"))).toBe(
     true,
@@ -149,19 +101,20 @@ test("generates deterministic owned source and hashed managed files", async () =
   const guide = await readFile(join(left.path, "docs/lace-operations.md"), "utf8");
   expect(guide.indexOf("pnpm env:prepare")).toBeLessThan(guide.indexOf("pnpm db:migrate"));
   expect(guide).not.toContain("cp .env.example .env");
-  expect(guide).toContain("open `/admin/`");
+  expect(guide).toContain("Open `/admin/`");
   expect(guide).toContain("same token and email");
   expect(guide).toContain("12–1024 characters");
   expect(guide).toContain("token expires after one hour");
   expect(guide).toContain("Completed setup remains closed");
   expect(guide).toContain("POST /api/v1/setup/admin");
-  expect(guide).toContain("originally published `0.1.0-alpha.1`");
+  await expectNoReleaseHistory(left.path);
   expect(guide).not.toContain("has no browser setup wizard");
 });
 
 test("optional Cloudflare files are managed only when selected", async () => {
   const parent = await root();
   const project = await generateProject({ target: join(parent, "cloud-site"), cloudflare: true });
+  await expectNoReleaseHistory(project.path);
   const files = project.manifest.files;
   expect(files["wrangler.jsonc"]).toBeUndefined();
   expect(files[".github/workflows/cloudflare.yml"]?.owner).toBe("managed");
@@ -340,13 +293,13 @@ test("alpha generation selects exact compatible packages and overridable images"
   for (const file of ["package.json", "site/package.json"]) {
     const manifest = JSON.parse(await readFile(join(project.path, file), "utf8"));
     for (const [name, version] of Object.entries(manifest.dependencies)) {
-      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-rc1");
+      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-rc2");
     }
   }
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
-  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-rc1");
-  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-rc1");
-  expect(TEMPLATE_VERSION).toBe("0.46.0");
+  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-rc2");
+  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-rc2");
+  expect(TEMPLATE_VERSION).toBe("0.47.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");
@@ -354,7 +307,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   expect(environment).not.toMatch(/^LACE_API_DOCS_ENABLED=true$/m);
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");
   expect(await readFile(join(project.path, "docs/lace-operations.md"), "utf8")).toContain(
-    "pnpm create lace@0.1.0-rc1",
+    "pnpm create lace@0.1.0-rc2",
   );
 });
 

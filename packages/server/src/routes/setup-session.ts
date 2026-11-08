@@ -17,7 +17,9 @@ import { emailDeliveryStatus } from "../runtime/email.js";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext): void {
-  const { input, actor, security, settingsActor, email, sessionSummary } = routeContext;
+  const { actor, settingsActor } = routeContext.actors;
+  const { capabilities } = routeContext;
+  const { email, sessionSummary, accountSecurity, profiles } = capabilities;
   app.get(
     "/api/v1/setup/state",
     describeRoute({
@@ -33,7 +35,7 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
     async () => {
       return response(
         setupStateSchema,
-        { setupComplete: await security().isSetupComplete() },
+        { setupComplete: await accountSecurity().isSetupComplete() },
         200,
         { "cache-control": "no-store" },
       );
@@ -47,7 +49,7 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
       // Setup outcomes raise `AccountError("NOT_FOUND")`, one ambiguous 404 through the
       // classifier; any other failure keeps its own classification.
       const body = context.req.valid("json") as v.InferOutput<typeof setupAdminRequestSchema>;
-      const created = await security().bootstrap({
+      const created = await accountSecurity().bootstrap({
         email: body.email,
         password: body.password,
         token: body.token as never,
@@ -72,16 +74,17 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
   );
   app.get("/api/v1/admin/settings/status", async (context) => {
     await settingsActor(context);
-    if (!input.publicBaseUrl) throw new InvariantError("Canonical public URL is unavailable.");
+    if (!capabilities.publicBaseUrl)
+      throw new InvariantError("Canonical public URL is unavailable.");
     return response(adminSettingsStatusSchema, {
       mcp: {
-        enabled: input.mcpEnabled === true,
-        endpoint: new URL("/mcp", input.publicBaseUrl).href,
+        enabled: capabilities.mcpEnabled === true,
+        endpoint: new URL("/mcp", capabilities.publicBaseUrl).href,
       },
-      configuredModels: input.config.content.length,
+      configuredModels: capabilities.config.content.length,
       email: emailDeliveryStatus(email),
-      engineVersion: input.environment.engineVersion,
-      ready: await input.readiness.isReady(),
+      engineVersion: capabilities.environment.engineVersion,
+      ready: await capabilities.readiness.isReady(),
     });
   });
   app.post(
@@ -102,8 +105,8 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
       const outcome = await sendTestEmail({
         actor: resolvedActor,
         email,
-        installationUrl: input.publicBaseUrl ?? new URL(context.req.url).origin,
-        users: security(),
+        installationUrl: capabilities.publicBaseUrl ?? new URL(context.req.url).origin,
+        users: profiles(),
       });
       return response(emailTestResultSchema, outcome);
     },

@@ -390,7 +390,7 @@ root scalar fields; composites and nested paths SHALL be refused there.
 - **THEN** the structural hash changes and the key remains in the canonical structure
 
 #### Scenario: Scalar hash compatibility
-- **WHEN** the pre-CE7A scalar-only configuration fixtures are normalized
+- **WHEN** the scalar-only configuration fixtures are normalized
 - **THEN** their canonical values, structural hashes and projection hashes remain unchanged
 
 #### Scenario: Scalar-only presentation options

@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.46.0` and Lace `0.1.0-rc1` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.8` or a later compatible release. The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.47.0` and Lace `0.1.0-rc2` packages and images. Releases before rc1 are not supported, and an rc1 project upgrades as described in [Database baseline and upgrading from rc1](#database-baseline-and-upgrading-from-rc1). The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
-After the owner publishes the complete compatible alpha set, generate and install:
+After the owner publishes the complete compatible release set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-rc1 my-site
+pnpm create lace@0.1.0-rc2 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -50,11 +50,9 @@ pnpm env:prepare
 
 Preparation refuses to replace any existing `.env`, including concurrent creation. If you already have one, retain it and review its settings privately; this command does not rotate credentials. A missing, symlinked or malformed `.env.example` must be restored as a regular file with one single-line `NAME=value` assignment for each generated credential and `LACE_BUILD_TOKEN`. Filesystem failures require checking directory permissions and hard-link support. If preparation was forcibly stopped, `.env` is either absent or fully written; private ignored `.lace-env-*` staging directories can be removed after confirming no preparation is running. Retry only when `.env` is absent.
 
-This preparation flow requires `0.1.0-alpha.2` or later compatible packages. Previously published `0.1.0-alpha.1` artifacts are not retroactively updated.
-
 ## Read-only environment checks
 
-With a `0.1.0-alpha.2` or later compatible CLI, run from this project root:
+Run from this project root:
 
 ```bash
 pnpm exec lace doctor --target node --mode compose --stage setup
@@ -96,15 +94,15 @@ pnpm auth:bootstrap
 pnpm dev:api
 ```
 
-Migrations are explicit and repeatable; the API does not apply them on startup. With `0.1.0-alpha.2` or later packages, `pnpm db:migrate` creates missing parent directories for `LACE_DATABASE_PATH`, including `.lace/data`, and preserves existing database contents. No manual directory creation is needed with those packages. The originally published `0.1.0-alpha.1` packages predate this fix and still require `mkdir -p .lace/data` before their first migration. Sync creates the singleton Home draft and registers Posts. Bootstrap prints a one-time setup token and expiry. Capture it privately. Bootstrap refuses after first-admin setup completes; for an expired unused token, run bootstrap again before completing setup.
+Migrations are explicit and repeatable; the API does not apply them on startup. `pnpm db:migrate` creates missing parent directories for `LACE_DATABASE_PATH`, including `.lace/data`, and preserves existing database contents; no manual directory creation is needed. Sync creates the singleton Home draft and registers Posts. Bootstrap prints a one-time setup token and expiry. Capture it privately. Bootstrap refuses after first-admin setup completes; for an expired unused token, run bootstrap again before completing setup.
 
 Host database commands and the running stack: `pnpm db:migrate`, `pnpm content:sync` (including `--check`) and `pnpm auth:bootstrap` open the same SQLite file as the Compose `api` and `dispatcher` services. Run them only while those services are stopped: `docker compose stop api dispatcher`, run the command, then start again with `pnpm dev:api` (or `docker compose up -d` for the full stack). On Docker Desktop and OrbStack the data directory crosses a virtual-machine file share that does not share SQLite locks or write-ahead-log memory with containers, so a host command run while the services are up can leave them with diverging views; publications then stop triggering site builds until the services restart. Doctor never writes and refuses to probe a running write-ahead-log database.
 
 Before opening host SQLite in a Compose installation, the CLI inspects running Compose containers and maps their configured database through bind mounts to the selected host file, including path aliases and different project names. A live consumer or unavailable/ambiguous Docker inspection returns sanitized `OPERATION_FAILED` without opening the database or issuing a token. Stop `api` and `dispatcher` explicitly and keep them stopped throughout maintenance; the preflight is a point-in-time check, not a lock against a concurrent start. A running source-only builder can remain up. Restore Docker access if inspection fails. Node-only installations without a Compose file and in-container maintenance do not need a Docker socket.
 
-With `0.1.0-alpha.2` or later compatible API/admin artifacts, open `/admin/` at the configured `LACE_PUBLIC_BASE_URL` origin. The browser shows setup while installation setup is incomplete. Enter your email, a password of 12–1024 characters, and the operator-issued bootstrap token, then create the administrator and sign in normally. The token expires after one hour. After an interruption, retry with the same token and email; the browser checks whether setup completed before offering another submission. Completed setup remains closed and later visitors see sign-in.
+Open `/admin/` at the configured `LACE_PUBLIC_BASE_URL` origin. The browser shows setup while installation setup is incomplete. Enter your email, a password of 12–1024 characters, and the operator-issued bootstrap token, then create the administrator and sign in normally. The token expires after one hour. After an interruption, retry with the same token and email; the browser checks whether setup completed before offering another submission. Completed setup remains closed and later visitors see sign-in.
 
-The originally published `0.1.0-alpha.1` artifacts predate browser setup. As an alternative, including for those artifacts, create the first admin through `POST /api/v1/setup/admin` using exactly `token`, `email`, and `password` (12–1024 characters). For a concise placeholder-only request, replace `<PUBLIC_API_BASE_URL>` with the configured `LACE_PUBLIC_BASE_URL`, keeping any path prefix and trailing slash. Use the one-time token just issued by `pnpm auth:bootstrap` and a password of at least 12 characters:
+As an alternative, create the first admin through `POST /api/v1/setup/admin` using exactly `token`, `email`, and `password` (12–1024 characters). For a concise placeholder-only request, replace `<PUBLIC_API_BASE_URL>` with the configured `LACE_PUBLIC_BASE_URL`, keeping any path prefix and trailing slash. Use the one-time token just issued by `pnpm auth:bootstrap` and a password of at least 12 characters:
 
 ```bash
 curl --fail-with-body --silent --show-error --request POST \
@@ -234,7 +232,7 @@ The web proxy serves the content-hashed files under `/_astro/` with `Cache-Contr
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-rc1` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-rc2` candidate artifacts.
 
 <!-- lace-site: starter -->
 
@@ -332,7 +330,7 @@ After setup, add people from Admin → Users → Invite user with an email addre
 
 Anyone can request a password reset from the sign-in screen ("Forgot password?"); the answer is the same whether or not the address has an account, and the one-hour link signs the account out everywhere once used. Administrators can also send a reset or sign a user out everywhere from the Users list, and disabling an account ends its sessions. Every signed-in user can change their display name and password and review or end their sessions under Account in the user menu.
 
-Invitations and resets need migration `0004_account_tokens`; see `.lace/upgrade-instructions.json` and deploy the API and admin artifacts together.
+Invitations and resets need no step beyond `pnpm db:migrate`; deploy the API and admin artifacts together.
 
 ## Configuration, routes, renderers and styling
 
@@ -399,7 +397,7 @@ Block keys are unique within an entry, so scope instance selectors by entry. Bui
 
 ## Cloudflare Worker
 
-This project was generated with `--cloudflare`. The CMS runs as your own Cloudflare Worker built from installed Lace packages; the engine checkout is unnecessary. It requires Lace `0.1.0-alpha.2` or later compatible packages: published `0.1.0-alpha.1` packages do not contain the packaged admin and are not retroactively updated.
+This project was generated with `--cloudflare`. The CMS runs as your own Cloudflare Worker built from installed Lace packages; the engine checkout is unnecessary.
 
 | File                       | Owner   | Purpose                                                                                                                                                                                  |
 | -------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -458,7 +456,7 @@ Before `cf:dev` runs, `setup` reports the unreachable Worker as expected and ski
 
 - **Expired or lost setup token.** Tokens expire after one hour. The setup screen then reports that setup is still incomplete and creates no account. Stop `cf:dev`, run `pnpm cf:auth:bootstrap` again for a fresh token, start `cf:dev` and retry. After setup completes, bootstrap reports that setup is closed.
 - **Deploy hook unavailable or rejected.** Publication stays committed. The build stays `pending` with a sanitized reason (`trigger_unavailable` for timeouts, throttling, server errors or network failures; `provider_failed` for rejected or revoked hooks), and the scheduled trigger retries with backoff, up to eight attempts. The build then becomes `failed`. Fix the hook, then use Retry in Admin. Locally no cron runs by itself: `cf:dev` exposes `http://127.0.0.1:8787/__scheduled` to run the scheduled handler once.
-- **Accepted is not deployed.** Without Pages tracking, when the provider accepts the hook Admin records the build as `accepted`, with the provider's deployment ID when it returns one. `accepted` never proves the site changed: confirm the deployment's result in your provider before you treat the site as updated, and retry the build in Admin if it failed. Upgrading from an earlier alpha records former `running` hook builds, and hook `succeeded` builds without a deployment ID, as `accepted`.
+- **Accepted is not deployed.** Without Pages tracking, when the provider accepts the hook Admin records the build as `accepted`, with the provider's deployment ID when it returns one. `accepted` never proves the site changed: confirm the deployment's result in your provider before you treat the site as updated, and retry the build in Admin if it failed.
 - **Pages deployment tracking.** Set `LACE_PAGES_ACCOUNT_ID` and `LACE_PAGES_PROJECT_NAME` in `worker/wrangler.jsonc` `vars` and the Worker secret `LACE_PAGES_API_TOKEN` (a separate token with only _Account · Cloudflare Pages · Read_, never your operator token). Identified hook builds then stay `running` while the scheduled Worker reads that exact deployment every minute; Builds shows the Pages stage and last check. Only a successful deploy stage becomes `succeeded`; build or deploy failure is `failed` (`provider_build_failed`, `provider_deploy_failed`), cancel or skip is `cancelled`, and a missing permission (`tracking_forbidden`), an unknown deployment (`tracking_not_found`) or no result within `LACE_PAGES_TRACKING_TIMEOUT_MINUTES` (default 60, 5–1440; `tracking_timeout`) is `unknown`. Temporary Pages API errors are retried with backoff until that deadline, so no build stays `running` longer. Removing the settings ends tracked builds as `unknown` (`tracking_unconfigured`). Retry `failed`, `cancelled` or `unknown` builds in Admin after checking Pages.
 - **Restarts.** Content, accounts, setup state and media survive `cf:dev` restarts in `.lace/data/cloudflare`. Reset only by deleting that directory with the Worker stopped.
 - **Worker unavailable.** The Worker answers with a generic unavailable error and logs only the names of missing or invalid variables. Check `worker/.dev.vars` locally or the Worker's secrets and `vars` remotely.
@@ -514,7 +512,7 @@ node --env-file=.lace/cloudflare-operator.env node_modules/wrangler/bin/wrangler
 
 Use that explicit Wrangler invocation also for provisioning and `secret put` in the single-token choice. Login is unnecessary for a valid API token. Preflight reports when the intended Wrangler token differs from the Lace token; it cannot certify equal permissions.
 
-**Alpha.2 upgrade:** install a compatible new CLI before using `--operator-env` or preflight. Template `0.15.0` supplies the example and managed guidance; published alpha.2 packages are immutable and do not gain these commands retroactively. `lace upgrade` preserves `.env`, `.env.local`, README, the private operator file, Worker configuration and site source. Manually move the legacy API token into the protected file, remove its assignments from both implicit dotenv files, clear the inherited token, then repeat preflight and `whoami`. Do not print/copy credentials through chat, logs or inline shell commands. Upgrade never relocates credentials automatically.
+**Token in a root dotenv file:** `lace upgrade` preserves `.env`, `.env.local`, README, the private operator file, Worker configuration and site source. Manually move the API token into the protected file, remove its assignments from both implicit dotenv files, clear the inherited token, then repeat preflight and `whoami`. Do not print/copy credentials through chat, logs or inline shell commands. Upgrade never relocates credentials automatically.
 
 ### Deploy the Worker to your account
 
@@ -571,7 +569,7 @@ This project was generated without a site, so its Compose file has no builder an
 
 <!-- lace-site: end -->
 
-Build-site selection (introduced in template `0.7.0`) requires `0.1.0-alpha.2` or later compatible API, admin, CLI and builder artifacts. Published `0.1.0-alpha.1` images are not retroactively updated; this configuration does not publish or download replacement artifacts. Upgrade managed infrastructure with conflict review, retain user-owned README/site/config and manually incorporate guidance in an existing README.
+Build-site selection does not publish or download artifacts. Upgrade managed infrastructure with conflict review, retain user-owned README/site/config and manually incorporate guidance in an existing README.
 
 The builder mounts `LACE_BUILD_SOURCE_ROOT` from the host read-only at `/source`. Compose resolves a relative host path against its project directory and refuses to create a missing source directory. Container paths are separate: `LACE_BUILD_SITE_DIR` selects an Astro project relative to `/source`, and `LACE_BUILD_OUTPUT_DIR` selects a static result relative to that project. Install uses `/source/pnpm-lock.yaml` and its root package/workspace declarations, with frozen pnpm and the image-pinned toolchain. It never guesses which example to build. Served releases remain in the shared `/output` volume; your host `dist` is not overwritten.
 
@@ -626,32 +624,9 @@ failure fallback.
 Pending errors retain their explanation during automatic retries. After eight
 failed attempts, correct the source and use the administrator Retry build
 action. The previous complete release remains served throughout failure.
-Upgrade API, dispatcher, admin and builder together. Legacy reason-only errors
-remain readable; new path-bearing diagnostics use the existing SQL error text
-column. Before downgrading, stop dispatch, back up the database and convert
-validated structured error records to their reason strings, discarding path
-metadata without deleting history or changing statuses/attempts.
+Upgrade API, dispatcher, admin and builder together.
 
 This section defines deployment selection; a configured identity does not prove a successful deployment. See [publication visibility](#when-published-content-becomes-visible) for dev, manual and automatic behavior after publication.
-
-## Alpha.7 image upgrade
-
-Template 0.35.0 selects alpha.7 packages/images together. No new SQL migration
-is introduced since alpha.6, but content synchronization advances image/gallery
-schemas to 4/3. Back up matching configuration, database, media, site source and
-locks first. Update all Lace site dependencies and image tags; review managed
-nginx/Compose/Pages workflow changes and merge customized files. User-owned
-site files and configuration require manual adoption: see `lace-astro-site.md`
-for sharp, laceImageConfig, responsive variants, lightbox/link styles and safe
-registry updates. Raise affected model versions and synchronize explicitly,
-with matching components ready before the next build. Older components reject
-new schemas; package downgrade does not reverse synchronized content.
-
-Recreate updated web/builder services; test an image upload above 1 MiB through
-the proxy, animated GIF variants, link precedence and HTML/hashed-asset headers.
-Keep MinIO/R2 objects and database backups separate from disposable build caches.
-Rollback after synchronization requires matching backed-up content/configuration
-and source alongside compatible packages/images, not just old image tags.
 
 ## Collection list queries
 
@@ -691,14 +666,10 @@ any successful boundary-draft save, deletion or replacement expires them. When
 Load more fails with 422 `/after`, use Restart list: it retains query intent,
 discards old pages/cursors and replaces the results without retrying the cursor.
 
-Migrate the database before deploying the updated API/admin, then sync normally.
-Migration 0011 only adds nullable public identity/source columns. Query-only sync
-avoids builds when trusted public identity or legacy hash equality proves safety;
-unknown legacy identity conservatively rebuilds once. Full projection identity
-includes query settings; public identity omits only root listOptions and keeps
-SEO/labels/columns/blocks. Mixed query/SEO edits still rebuild. On rollback retain
-the additive columns and migration history; older code can leave the public source
-stale, which re-upgrade detects before applying legacy proof/fallback. No content
+Query-only sync avoids builds when the stored public identity is trusted; a model
+without a trusted public identity conservatively rebuilds once. Full projection
+identity includes query settings; public identity omits only root listOptions and
+keeps SEO/labels/columns/blocks. Mixed query/SEO edits still rebuild. No content
 backfill, field-query index, persisted cursor state or bulk action is introduced.
 
 ## Optional content assistant
@@ -707,33 +678,24 @@ See [OAuth content assistant](lace-mcp.md) for opt-in deployment, scoped draft
 tools and separately consented publishing, connections, refresh/replay, proxy log
 redaction and disabling. Unpublication and deletion remain forbidden.
 
-## Media tags migration 0014
+## Media tags
 
-Before starting an engine with media tags, stop Compose `api` and `dispatcher`,
-back up the stopped `.lace/data` directory and preserve the object store, then
-run `pnpm db:migrate`. On Cloudflare export D1 and preserve R2 objects, run
-`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`,
-then deploy API/admin together. Local Cloudflare uses `pnpm cf:db:migrate`.
-Migration `0014_media_tags` is additive and leaves existing media without tags.
 Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
-spaces trimmed; tags-only edits request no build. An older engine ignores the
-new table. Restore the pre-upgrade database backup to remove tags on rollback;
-do not delete media objects as part of tag rollback.
+spaces trimmed; tags-only edits request no build.
 
-## Rc1 upgrade
+## Database baseline and upgrading from rc1
 
-This template selects rc1 packages and both images together. Before runtime
-startup apply migrations 0014_media_tags and 0015_import_credentials. Back up
-matching database, media, configuration, deployment settings and site source.
-Review installed block source and merge conflicts, then synchronize conditional
-field definitions and gallery schema 5 with matching renderers before rebuilding.
-Hidden draft values persist but are omitted from publication; site code handles
-optional published values. Gallery videos require accessible titles and support
-per-item aspect ratios/playback; links and lightboxes apply to images only.
-
-MCP stays optional. Existing draft grants do not acquire publication permission:
-content:publish needs separate consent and current role authority; unpublication
-and deletion remain forbidden. Import uses separate scoped, optionally expiring
-tokens kept outside content packages. Verify tags, multi-selection, imports and
-conditional/gallery rendering after upgrade. Rollback restores matching backed-up
-state; package downgrade does not reverse synchronized content or SQL migrations.
+The database starts from one baseline migration; later schema changes are
+forward migrations after it. A database created by rc1 or an earlier engine
+predates the baseline and cannot be upgraded: `lace db migrate` and `lace doctor`
+report `SCHEMA_UNSUPPORTED` and change nothing. To move an rc1 project to this
+template, keep any content you need in your own source files for `lace import` or
+plan to re-enter it, stop Compose `api` and `dispatcher`, back up `.lace/data` and
+the object store, then remove the database: `.lace/data/lace.sqlite` with its
+`-wal` and `-shm` files for Compose, `.lace/data/cloudflare` for local Cloudflare,
+or create a new D1 database and update `LACE_D1_DATABASE_ID` and the Worker
+binding for remote Cloudflare. Upgrade all Lace packages and both images
+together, run `pnpm db:migrate` (Cloudflare: `pnpm cf:db:migrate` or
+`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`),
+`pnpm content:sync` and `pnpm auth:bootstrap`, complete first-admin setup, restore
+content and rebuild the site.

@@ -3,7 +3,7 @@
 This maintained guide describes verification commands and coverage. Each execution
 writes its own results; release readiness belongs to the archived release change.
 See the [internal index](README.md) for document status and the
-[architecture](mvp-architecture.md) for controlling invariants.
+[architecture](architecture/README.md) for controlling invariants.
 
 ## Commands
 

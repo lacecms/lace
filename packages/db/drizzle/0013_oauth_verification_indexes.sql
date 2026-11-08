@@ -1,2 +1,0 @@
-CREATE INDEX `auth_verifications_identifier_created_idx` ON `verification` (`identifier`,`created_at`);--> statement-breakpoint
-CREATE INDEX `auth_verifications_expiry_idx` ON `verification` (`expires_at`);

@@ -174,7 +174,7 @@ test("embed restrictions classify narrowing as breaking at root and nested paths
   }
 });
 
-test("query identity classifies trusted, legacy and mixed public changes", async () => {
+test("query identity classifies trusted, untrusted and mixed public changes", async () => {
   const before = await posts();
   const after = await posts({ listOptions: { searchableFields: ["summary"] } });
   const plan = (current: NormalizedContentModel, stored: StoredContentModelState) =>
@@ -182,13 +182,6 @@ test("query identity classifies trusted, legacy and mixed public changes", async
   for (const [current, stored] of [
     [after, storedFrom(before)],
     [before, storedFrom(after)],
-    [
-      after,
-      storedFrom(before, {
-        publicProjectionHash: undefined,
-        publicProjectionSourceHash: undefined,
-      }),
-    ],
   ] as const) {
     const result = plan(current, stored);
     expect(result.operations).toMatchObject([
@@ -199,6 +192,15 @@ test("query identity classifies trusted, legacy and mixed public changes", async
       result.operations.flatMap((operation) => configurationSyncContentWrites(operation, current)),
     ).toEqual([]);
   }
+  // Without a trusted identity a query-only change is treated as public.
+  const untrusted = plan(
+    after,
+    storedFrom(before, { publicProjectionHash: undefined, publicProjectionSourceHash: undefined }),
+  );
+  expect(untrusted.operations).toMatchObject([
+    { action: "label-update", affectsPublicProjection: true },
+  ]);
+  expect(configurationSyncAdvancesPublicState(untrusted)).toBe(true);
   const unknown = storedFrom(before, {
     projectionHash: "unknown",
     publicProjectionSourceHash: "stale",

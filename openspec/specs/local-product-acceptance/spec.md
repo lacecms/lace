@@ -34,7 +34,7 @@ The acceptance proof SHALL verify that saving a later draft, including a changed
   lets the invitee set a password and sign in with the invited role
 
 ### Requirement: Acceptance covers recovery and route usability
-The acceptance proof SHALL cover a stale-revision conflict that preserves local authoring and offers explicit recovery; narrow-viewport navigation without horizontal page scrolling; keyboard operation and visible focus for the main editorial controls; and loading, empty, and error states on Content, Media, Users, and Settings. Builds SHALL display its explicit operational state, without claiming history or retry support, until Step 21 connects it to persisted builds. The walkthrough SHALL run on the redesigned admin and SHALL run automated WCAG A and AA accessibility checks on the content home, a collection list, the entry editor, the media library, Users, and Settings with the acceptance stack's real data; any violation SHALL fail the walkthrough.
+The acceptance proof SHALL cover a stale-revision conflict that preserves local authoring and offers explicit recovery; narrow-viewport navigation without horizontal page scrolling; keyboard operation and visible focus for the main editorial controls; and loading, empty, and error states on Content, Media, Users, and Settings. Builds SHALL display its explicit operational state. The walkthrough SHALL run on the redesigned admin and SHALL run automated WCAG A and AA accessibility checks on the content home, a collection list, the entry editor, the media library, Users, and Settings with the acceptance stack's real data; any violation SHALL fail the walkthrough.
 
 #### Scenario: Concurrent edit is rejected
 - **WHEN** a writer saves against a stale draft revision during the walkthrough

@@ -167,6 +167,10 @@ export function failureDiagnostic(
       "The selected database is missing or its migration ledger is outdated.",
       `Run lace db migrate --target ${target} with the same settings, then retry the original command.`,
     ],
+    SCHEMA_UNSUPPORTED: [
+      "The selected database was migrated by a Lace engine older than the baseline migration.",
+      "Recreate the database for the same target (export its content first if you need to keep it), then run lace db migrate and content sync again. The database was not changed.",
+    ],
     SYNC_PENDING: [
       "Configuration synchronization is pending or the checked plan is invalid.",
       "Review the synchronization report and resolve incompatible changes; then explicitly run lace content sync for the same target and repeat --check.",
