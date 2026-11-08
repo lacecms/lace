@@ -70,26 +70,6 @@ The generator SHALL stage a complete project in a sibling temporary directory be
 - **WHEN** publication of a staged `init .` project fails after the original is moved aside
 - **THEN** the original directory is restored or the command identifies the exact backup path and recovery action
 
-### Requirement: Generated project starts its packaged runtimes
-
-The generated project SHALL include documented commands to run its Node development API and Astro site with its own `lace.config.ts`, and a Docker Compose production configuration that uses the release's exact versioned API and builder image references by default and supplies the generated configuration to the API. Generated package dependencies SHALL select exact compatible alpha package versions without development placeholders or local acceptance substitutions. Operators SHALL be able to override image references explicitly. The default alpha template SHALL identify the release and its installation channel and SHALL explain that these coordinates become downloadable only after owner publication. The project SHALL keep editable admin and engine source outside its tree and SHALL require no consumer build of the Lace API or builder images.
-
-#### Scenario: Generated Node development
-- **WHEN** a user installs the generated project and runs its documented Node development command after setting required local values
-- **THEN** the API loads that project's `lace.config.ts` and serves its API without importing the Lace source workspace
-
-#### Scenario: Generated Compose deployment
-- **WHEN** the matching release has been published and a user supplies required secrets to the generated Compose configuration
-- **THEN** default matching API and builder image references start services using the generated project's configuration and persistent data without copying engine or admin source into the project
-
-#### Scenario: Explicit image override
-- **WHEN** an operator supplies compatible API and builder image overrides
-- **THEN** Compose uses those references while preserving generated configuration mounts and persistence behavior
-
-#### Scenario: Unpublished alpha preparation
-- **WHEN** a contributor generates a project before the prepared alpha set is published
-- **THEN** the guide identifies its exact alpha coordinates and publication prerequisite without claiming registry availability or directing ordinary consumers to manual tarball substitutions
-
 ### Requirement: Root README is user-owned and existing introductions are preserved
 
 Fresh generated projects SHALL contain a root `README.md` classified as user-owned without a digest in the ownership manifest. When an allowed target already contains a regular `README.md`, generation SHALL preserve its exact bytes and classify that path as user-owned, without replacing or appending text. Successful CLI output SHALL direct fresh consumers to README and name the generated scenario guides and `docs/lace-operations.md`; when preserving a README, output SHALL explicitly identify the preserved file, the scenario guide paths, the operations reference and manual incorporation of Lace instructions. A project generated in a `cms/` directory SHALL place these files inside that installation root. The same rules SHALL apply with and without `--cloudflare`, retaining existing staged-publication and failure-recovery guarantees.
@@ -120,46 +100,6 @@ Generated Compose and `.env.example` SHALL explicitly select the generated insta
 #### Scenario: CMS is beside existing Astro source
 - **WHEN** an operator configures the documented parent-root mount and explicit project selection from `cms/`
 - **THEN** builder source resolves inside `/source` and API/admin receive the same safe identity without mounting host credentials
-
-### Requirement: Build-site template upgrades protect ownership
-The generator SHALL advance the managed template version to `0.7.0`, retain deterministic managed hashes, provide template upgrade instructions for source selection and identity, and preserve user-owned README, site source and `lace.config.ts`. Modified managed files SHALL retain existing conflict detection. Instructions SHALL require compatible new API/admin/builder/CLI artifacts and SHALL NOT claim this feature exists in previously published alpha images or publish replacement artifacts automatically.
-
-#### Scenario: Operator has edited generated source and infrastructure
-- **WHEN** a consumer reviews an upgrade to the explicit-selection template
-- **THEN** source and README stay unchanged, modified managed infrastructure requires conflict review, and migration guidance explains artifact compatibility and selected mounts
-
-### Requirement: Publication-visibility template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.8.0`, deliver a web proxy that serves site responses with `Cache-Control: no-cache`, deliver updated managed operations guidance and template upgrade instructions, and retain deterministic managed hashes and existing conflict detection. New projects SHALL receive the dev-revalidating user-owned site loader and slug-based post route. Upgrades SHALL preserve user-owned README, `lace.config.ts` and site source; instructions SHALL describe adopting dev revalidation manually and SHALL NOT require new API, admin, CLI or builder artifacts for the proxy and documentation changes.
-
-#### Scenario: Upgrade from 0.7.0
-- **WHEN** a consumer with unmodified 0.7.0 managed files applies the 0.8.0 template upgrade
-- **THEN** the proxy and operations guide are updated, instructions mention the revalidating cache header and manual dev-loader adoption, and user README, configuration and site files are unchanged
-
-#### Scenario: Edited proxy configuration
-- **WHEN** the consumer has modified `deploy/nginx.conf`
-- **THEN** the upgrade reports a managed-file conflict instead of overwriting it
-
-### Requirement: Rendering-core template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.9.0` and generate the adapter-based starter: the user-owned loader file, pages, layout, styles, block map file, `lace.site.json`, and five registry block components, with site dependencies on the Lace adapter, render core, SDK, and content packages pinned to the release version. Every generated file SHALL appear in the ownership inventory; the starter SHALL contain no site-local loader, rendering, or rich-text helper files. It SHALL deliver the existing-site connection guide as a managed file, updated managed operations guidance, and template upgrade instructions that list explicit manual migration steps for an alpha project's user-owned `site/**`. Upgrades SHALL preserve user-owned README, `lace.config.ts` and site source and retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: Fresh generation
-- **WHEN** a project is generated with template `0.9.0`
-- **THEN** its site contains `src/lib/lace.ts`, `src/lace/blocks.ts`, `lace.site.json`, and `src/components/lace/` with the five block components, and contains none of `src/lib/site-data.ts`, `src/lib/rendering.ts`, `src/lib/rich-text.ts`, or `src/components/BlockRenderer.astro`
-
-#### Scenario: Upgrade from 0.8.0
-- **WHEN** a consumer with unmodified 0.8.0 managed files applies the 0.9.0 template upgrade
-- **THEN** managed guidance is updated, the connection guide is added, instructions describe the manual site migration, and every existing user-owned site file is unchanged and no new site file is written
-
-### Requirement: Block-command template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.10.0`. The managed existing-site guide and operations guide and the user-owned generated README SHALL direct operators to `lace add block` for installing, updating, and scaffolding block components instead of copying files from a generated starter. The template upgrade instructions SHALL state that the upgrade changes only managed guidance and that no file under `site/` is changed, added, or deleted. Upgrades SHALL preserve user-owned README, `lace.config.ts` and site source and retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: Fresh generation
-- **WHEN** a project is generated with template `0.10.0`
-- **THEN** its README and guides name `lace add block` and the starter site files are byte-identical to template `0.9.0`
-
-#### Scenario: Upgrade from 0.9.0
-- **WHEN** a consumer with unmodified 0.9.0 managed files applies the 0.10.0 template upgrade
-- **THEN** the managed guides are updated and every user-owned file, including all of `site/`, is unchanged
 
 ### Requirement: Project creation selects an explicit site mode
 The generator SHALL accept at most one of `--starter`, `--existing-site <path>`, and `--no-site`; a second mode flag or a missing path SHALL be a usage error (exit 2) before any filesystem change. `--cloudflare` SHALL be accepted with every mode. An explicit flag SHALL always win. Without a mode flag, when both standard input and standard output are terminals, the generator SHALL ask for the mode and, for existing-site mode, the path; the default answer SHALL be existing site at `..` when the target's parent directory contains `astro.config.*` and a `package.json` declaring `astro` as a dependency or dev dependency, otherwise starter. Without a terminal and without a flag, the generator SHALL use starter mode and print the flags for the other modes. `init .` SHALL keep the empty-target rule in every mode.
@@ -200,7 +140,7 @@ In existing-site mode the path SHALL be a relative POSIX path of segments contai
 - **THEN** every file in the parent site outside the generated target is byte-identical before and after generation
 
 ### Requirement: Managed files are rendered from the site mode
-The generator SHALL render managed files from the site mode and path using the Step 29 build-site variables and SHALL NOT introduce a second site-selection mechanism. In starter mode managed files SHALL equal the starter layout. In existing-site mode `pnpm-workspace.yaml` SHALL list no packages, root `dev` and `build` scripts SHALL run `astro dev` and `astro build` in the site path and no `typecheck` script SHALL exist, `.env.example` and Compose SHALL default to source root `<path>`, site directory `.`, and output `dist`, and the Cloudflare Pages workflow SHALL install, build and deploy the site at `<path>`. In no-site mode `pnpm-workspace.yaml` SHALL list no packages, no `dev`, `build`, or `typecheck` script SHALL exist, `.env.example` SHALL contain no build-source or build-site identity settings, and Compose SHALL contain no builder service, no builder URL, secret, or dependency for the dispatcher, and no build-site identity for the API, so build requests fail with the existing trigger-unavailable reason and Admin shows an unconfigured site. README and the operations guide SHALL describe the project's own mode and path.
+The generator SHALL render managed files from the site mode and path using the build-site variables of the generated deployment and SHALL NOT introduce a second site-selection mechanism. In starter mode managed files SHALL equal the starter layout. In existing-site mode `pnpm-workspace.yaml` SHALL list no packages, root `dev` and `build` scripts SHALL run `astro dev` and `astro build` in the site path and no `typecheck` script SHALL exist, `.env.example` and Compose SHALL default to source root `<path>`, site directory `.`, and output `dist`, and the Cloudflare Pages workflow SHALL install, build and deploy the site at `<path>`. In no-site mode `pnpm-workspace.yaml` SHALL list no packages, no `dev`, `build`, or `typecheck` script SHALL exist, `.env.example` SHALL contain no build-source or build-site identity settings, and Compose SHALL contain no builder service, no builder URL, secret, or dependency for the dispatcher, and no build-site identity for the API, so build requests fail with the existing trigger-unavailable reason and Admin shows an unconfigured site. README and the operations guide SHALL describe the project's own mode and path.
 
 Managed files SHALL additionally be rendered from the Cloudflare selection. With `--cloudflare`, the root `package.json` SHALL depend directly on the release's Cloudflare platform and database packages and SHALL contain local-only `cf:*` scripts for Worker variable preparation, local migration, synchronization, bootstrap, development and an account-free bundle check; `.env.example` SHALL default the local Cloudflare operator target to the generated Worker configuration, the shared local state directory and the configuration's placeholder D1 ID; README and the operations guide SHALL describe the generated Worker. Without `--cloudflare` these dependencies, scripts and Worker sections SHALL be absent and the Cloudflare operator settings SHALL remain empty. The Cloudflare selection SHALL NOT be a second site-selection mechanism.
 
@@ -231,481 +171,6 @@ After generation the generator SHALL print the selected mode and path. For exist
 - **WHEN** generation with `--cloudflare` succeeds
 - **THEN** the output names the Cloudflare Worker section of `docs/lace-operations.md`
 
-### Requirement: Site-mode template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.11.0`. Template upgrade instructions SHALL state that upgrade keeps the project's recorded site mode, never creates, changes, or deletes `site/` files, that a project without a recorded mode is treated as starter mode, and that changing modes requires generating a fresh project and moving configuration manually. Upgrades SHALL preserve user-owned README, `lace.config.ts` and site source and retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: Upgrade from a 0.10 starter project
-- **WHEN** a starter project generated with template `0.10.0` and unmodified managed files applies the `0.11.0` upgrade from a starter-mode template
-- **THEN** managed files are updated, the manifest records starter mode with path `site`, and every `site/` file is unchanged
-
-### Requirement: Cloudflare Worker template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.12.0`. Template upgrade instructions SHALL state that the target template must be generated with the project's site mode and with `--cloudflare` exactly when the project has Cloudflare files; that the former root Pages `wrangler.jsonc` is removed when unmodified and conflicts when edited; that the managed Worker entry and local variables example are added; that the user-owned `worker/wrangler.jsonc` is never created or changed by upgrade and must be copied from a freshly generated project of the same release and completed with the operator's resource IDs and origin; and that no Cloudflare resource, secret or deployment is created or changed. Upgrades SHALL preserve user-owned README, `lace.config.ts`, site source and Worker configuration and retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: Upgrade a 0.11 Cloudflare starter project
-- **WHEN** a Cloudflare starter project generated with template `0.11.0` and unmodified managed files applies the `0.12.0` upgrade from a Cloudflare starter template
-- **THEN** the root `wrangler.jsonc` is removed, `worker/index.ts` and `worker/.dev.vars.example` are added, the root package and environment example are replaced, `worker/wrangler.jsonc` is not created, and every `site/` file is unchanged
-
-#### Scenario: Edited Pages configuration
-- **WHEN** the 0.11 root `wrangler.jsonc` was edited before the upgrade
-- **THEN** the plan reports a removal conflict and leaves the file and manifest unchanged
-
-#### Scenario: Upgrade a 0.11 project without Cloudflare
-- **WHEN** a project generated without `--cloudflare` applies the `0.12.0` upgrade from a template generated without `--cloudflare`
-- **THEN** no Worker file is added and only changed managed guidance is replaced
-
-### Requirement: Cloudflare journey template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.13.0`. The managed operations guide and the user-owned generated README of `--cloudflare` projects SHALL document the local Cloudflare consumer journey, local and remote doctor, recovery and the deploy-hook provider prerequisite. The template upgrade instructions SHALL state that the upgrade changes only managed guidance, creates or changes no Worker configuration, Cloudflare resource, secret or deployment, and that no file under `site/` is changed, added or deleted. Upgrades SHALL preserve user-owned README, `lace.config.ts`, site source and `worker/wrangler.jsonc` and retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: Fresh Cloudflare generation
-- **WHEN** a project is generated with `--cloudflare` and template `0.13.0`
-- **THEN** its operations guide documents local doctor and recovery and the hook prerequisite, and its Worker and site files are byte-identical to template `0.12.0`
-
-#### Scenario: Upgrade from 0.12.0
-- **WHEN** a consumer with unmodified 0.12.0 managed files applies the 0.13.0 upgrade from a template of the same site mode and Cloudflare selection
-- **THEN** only managed guidance is replaced and every user-owned file, including `worker/wrangler.jsonc` and all of `site/`, is unchanged
-
-### Requirement: Next-alpha template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.17.0` and generate exact `0.1.0-alpha.3` Lace package dependencies, `ghcr.io/lacecms/api:0.1.0-alpha.3` and `ghcr.io/lacecms/builder:0.1.0-alpha.3` image defaults and `0.1.0-alpha.3` installation commands in its guides. Generated guides SHALL state which behavior requires these or later artifacts (the private Cloudflare operator file, `--operator-env`, `lace cloudflare preflight`, Pages deployment tracking and the seven-status build outcomes) and SHALL NOT claim that the published `0.1.0-alpha.1` or `0.1.0-alpha.2` artifacts contain it. The template upgrade instructions SHALL state that the upgrade replaces only managed files, that the operator updates the user-owned `.env` image references and, where present, the user-owned site's Lace dependency versions manually, and that no file under `site/`, `lace.config.ts`, README, `.env.local`, `.lace/cloudflare-operator.env` or `worker/wrangler.jsonc` is changed. Because `0.1.0-alpha.3` engines require database migration `0003_site_build_outcomes`, which `0.1.0-alpha.2` engines lack, the instructions SHALL list a database step for both Node SQLite and Cloudflare D1: back up the database, stop dispatch, apply the migration with the generated migration commands before the new engine serves traffic, and restore the backup to downgrade. The instructions for the `0.15.0` and `0.16.0` templates SHALL remain listed for upgrades from the published `0.14.0`. The managed operations guide and the generated development guide SHALL instruct operators of the Compose deployment to stop the `api` and `dispatcher` services before running a host command that opens the SQLite database and to start them again afterwards, explaining that concurrent host and container access through a VM-backed bind mount leaves the services with diverging views. Upgrades SHALL retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: Fresh generation
-- **WHEN** a project is generated with template `0.17.0` in any site mode, with or without `--cloudflare`
-- **THEN** every generated Lace dependency, image default and guide installation command names `0.1.0-alpha.3` and the ownership manifest records template `0.17.0`
-
-#### Scenario: Host database command with the stack running
-- **WHEN** an operator follows the generated guide to sync configuration or re-issue a setup token after starting the Compose API
-- **THEN** the guide directs them to stop `api` and `dispatcher`, run the host command, and start the services again
-
-#### Scenario: Upgrade from 0.13.0
-- **WHEN** a consumer with unmodified 0.13.0 managed files applies the current upgrade from a template of the same site mode and Cloudflare selection
-- **THEN** managed files equal the new template and every user-owned file, including `.env`, README, `lace.config.ts`, `worker/wrangler.jsonc` and all of `site/`, is unchanged, with the manual version steps listed in the instructions
-
-#### Scenario: Upgrade from the published 0.14.0
-- **WHEN** a consumer with unmodified 0.14.0 managed files applies the 0.17.0 upgrade from a template of the same site mode and Cloudflare selection
-- **THEN** managed files equal the new template, every user-owned file, including `.env`, README, `lace.config.ts`, `worker/wrangler.jsonc` and all of `site/`, is unchanged, and the plan lists the accumulated `0.15.0`–`0.17.0` instructions including the manual version steps and the database migration step
-
-#### Scenario: Modified managed file
-- **WHEN** a managed file of the 0.14.0 project was edited by the operator
-- **THEN** the upgrade plan reports the conflict and apply changes nothing
-
-### Requirement: Cloudflare credential example and upgrade preserve ownership
-Cloudflare generation SHALL deliver managed `docs/cloudflare-operator.env.example` with credential-free placeholders for account ID, D1 ID, token and Worker configuration. The private runtime copy SHALL be ignored and user-owned, absent from managed upgrade inventory and never generated with a usable token. Generated `.env.example` SHALL no longer invite storing the remote token in root dotenv; local Cloudflare configuration SHALL remain available. Generation without Cloudflare SHALL deliver no operator example and no remote credential placeholders encouraging implicit Wrangler loading. Existing generated cf scripts SHALL remain local-only.
-
-The ownership template SHALL advance to `0.15.0`, with coherent inventory, upgrade instructions, release template metadata and deterministic snapshots. Upgrades SHALL change only managed files through existing conflict review, and SHALL never move, remove or copy real credentials or modify README, `.env`, `.env.local`, the runtime operator file, lace.config.ts, Worker configuration or site source. Instructions SHALL explain creating the protected private file and moving/removing legacy assignments manually, requiring current CLI support before using the new option. Modified managed references and colliding managed-example destinations SHALL remain conflicts.
-
-#### Scenario: Fresh Cloudflare project
-- **WHEN** generation runs with Cloudflare in any site mode
-- **THEN** the example is credential-free, classified and hashed, the runtime copy is ignored, and local cf scripts still select only simulated resources
-
-#### Scenario: Non-Cloudflare generation
-- **WHEN** generation runs without Cloudflare
-- **THEN** no private operator example is delivered and local generation remains account-free
-
-#### Scenario: Upgrade legacy project
-- **WHEN** a 0.14.0 project containing legacy token assignments upgrades
-- **THEN** managed instructions/example/ignore rules are updated, all private/user bytes are preserved and instructions require manual credential relocation
-
-### Requirement: Scenario-guide template delivery protects ownership
-The generator SHALL advance the ownership template to `0.16.0`, the next unused template version after the completed 33F template `0.15.0`, and record that same version in its manifest, upgrade instructions and current release definition. Every scenario guide SHALL be managed, classified in the deterministic file inventory and hashed. Both Compose guides SHALL be generated in every site mode; the Cloudflare guide SHALL be generated only with `--cloudflare`. Mode and Cloudflare rendering SHALL use the existing selection and omit absent-file links and unavailable scripts. Generator completion output SHALL link to the scenario entry points while retaining the existing site's block-install and connection next steps.
-
-Upgrades from template `0.14.0` SHALL add new managed guides and replace unmodified managed references through the existing plan/apply procedure. Edited managed operations or guide files, and collisions at new managed guide paths, SHALL produce conflicts rather than overwrite operator bytes. Upgrade instructions SHALL give the new guide paths and explain that the user-owned README does not become the new entry README automatically. Upgrades SHALL preserve README, lace.config.ts, .env, Worker configuration and every site file byte-for-byte. Generation in a CMS directory SHALL never rewrite an existing site's root README; retained init README files SHALL be offered links through generator output. This change SHALL create no remote resource or deployment.
-
-#### Scenario: Deterministic mode variants
-- **WHEN** generation runs twice for each of the three site modes with and without Cloudflare
-- **THEN** trees, managed guide hashes and manifests match the reviewed snapshots for that variant
-
-#### Scenario: Upgrade from 0.14.0
-- **WHEN** a template 0.14.0 project with unchanged managed files and customized user files applies a matching current template
-- **THEN** new guides are installed, references are current, instructions name the new guides, user bytes are unchanged and a following plan has no changes
-
-#### Scenario: Managed documentation or destination edited
-- **WHEN** the old operations reference is edited or a user file occupies a new managed guide path
-- **THEN** plan reports the conflict and apply preserves the files through existing conflict handling
-
-#### Scenario: Existing-site README
-- **WHEN** generation connects an existing Astro root from its CMS directory or init preserves an allowed README
-- **THEN** existing README bytes remain unchanged and completion output offers the appropriate guide links
-
-### Requirement: Template 0.21.0 delivers email delivery configuration
-The generator SHALL advance the managed template version to `0.21.0`. The
-following SHALL be updated:
-
-- **Managed `.env.example`:** documents the optional email settings, with the
-  provider unset (`none`).
-- **Managed Compose file:** passes the email settings to the API service with
-  empty defaults, so an unconfigured project starts unchanged.
-- **Managed `worker/.dev.vars.example`** for `--cloudflare` projects: defaults
-  local development to the `log` provider.
-- **Newly generated user-owned `worker/wrangler.jsonc`:** contains a commented,
-  optional `send_email` binding example.
-- **Managed operations and scenario guides:** explain provider selection, the
-  Workers Paid requirement and sending-domain onboarding for the Cloudflare
-  provider, the free-tier Resend option, SMTP transport security, the Settings
-  test action, and that secrets are set with the runtime's secret mechanism.
-
-Template upgrade instructions SHALL state:
-
-- email is optional;
-- no database migration is added;
-- API and admin artifacts must be deployed together, because the admin requires
-  the session-summary endpoint;
-- upgrade never edits `.env`, `.env.local`, `worker/wrangler.jsonc`, the README,
-  `lace.config.ts`, or site files.
-
-Upgrades SHALL preserve user-owned files and retain deterministic managed
-hashes and existing conflict detection.
-
-#### Scenario: Project is generated without email settings
-- **WHEN** a project is generated and started with an `.env` copied from
-  `.env.example`
-- **THEN** the API starts with email delivery reported as not configured
-
-#### Scenario: Existing project upgrades to 0.21.0
-- **WHEN** a 0.20.0 project with unmodified managed files is upgraded
-- **THEN** managed email guidance and environment examples are updated and its
-  `.env` and `worker/wrangler.jsonc` are unchanged
-
-### Requirement: Template 0.22.0 delivers account-lifecycle upgrade instructions
-The generator SHALL advance the managed template version to `0.22.0`. Template
-upgrade instructions SHALL state that Lace engines with invitations and
-password recovery require migration `0004`. For Compose they SHALL give the
-stop, back up, migrate and restart sequence; for Cloudflare, the D1 backup and
-remote migration before deploy. They SHALL state that API and admin artifacts
-must be deployed together, that administrators now invite users instead of
-setting their passwords, and that outgoing account email is optional, with
-links handed to the administrator when email is not configured. Upgrades SHALL
-preserve user-owned files and retain deterministic managed hashes and existing
-conflict detection.
-
-#### Scenario: Existing project upgrades to 0.22.0
-- **WHEN** a 0.21.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe migration `0004` and coordinated
-  deployment, and user-owned files are unchanged
-
-### Requirement: Template 0.23.0 delivers public delivery upgrade instructions
-The generator SHALL advance the managed template version to `0.23.0`. Template
-upgrade instructions SHALL state that the engine requires the additive
-migrations `0005_content_model_structure` and `0006_media_descriptive_metadata`,
-with the Compose and Cloudflare backup and migration sequence. They SHALL state
-that every public content response and the build export changed shape (the
-published entry returned directly with a resolved `media` dictionary, no
-`draft` key), that the API, site packages and admin must be updated together,
-and that code reading REST responses or the raw export must be updated while
-pages using the published-site view keep working. They SHALL explain how to
-adopt the new `image` and `hero` block sources with `lace add block`, with edited
-sources reported as conflicts to update by hand. They SHALL carry the CE3B
-step: raise the version of every model that allows `image` in `lace.config.ts`
-and run configuration sync before building the site, because the render core
-refuses `image` blocks still stored at version 1. The managed Astro site guide
-SHALL document the image describer and the media lookups. Upgrades SHALL
-preserve user-owned files and retain deterministic managed hashes and existing
-conflict detection.
-
-#### Scenario: Existing project upgrades to 0.23.0
-- **WHEN** a 0.22.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe migrations `0005` and `0006`, the
-  public contract change, block source adoption and the `image` model version
-  step, and user-owned files including `lace.config.ts` and site sources are
-  unchanged
-
-#### Scenario: A new project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.23.0` and its site block sources
-  render effective alt text, dimensions and focal point
-
-### Requirement: Template 0.24.0 delivers global models and the starter settings global
-The generator SHALL advance the managed template version to `0.24.0`. The
-generated `lace.config.ts` SHALL declare, besides the `home` page and `posts`
-collection, a `settings` global labelled "Site settings" with a required text
-field `siteName` and an optional text field `tagline`. In starter mode the
-user-owned base layout SHALL receive the published site from each page and
-render a site header from `site.global("settings")`, showing the published
-site name and non-empty tagline and falling back to static values in site
-source when the global is unpublished. The managed Astro site guide SHALL
-document `site.global()`, its `undefined` result for an unpublished global and
-the fallback pattern. Template upgrade instructions SHALL state that the engine
-requires migration `0007_content_model_global_kind`, a table rebuild of
-`content_models`, with the Compose and Cloudflare backup, migration and sync
-sequence, and that rolling back after a global exists requires restoring the
-backup. They SHALL explain the `global` model kind, the Site group in Admin,
-the public global endpoint and the additive `globals` export key, and that the
-starter `settings` global and layout are optional and adopted by hand because
-`lace.config.ts` and site files are user-owned. Upgrades SHALL preserve
-user-owned files and retain deterministic managed hashes and existing conflict
-detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.24.0`, its configuration declares
-  the `settings` global, and its base layout reads `site.global("settings")`
-  with static fallbacks
-
-#### Scenario: Existing project upgrades to 0.24.0
-- **WHEN** a 0.23.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe migration `0007`, the backup and
-  rollback rule and the optional starter global, and user-owned files
-  including `lace.config.ts` and site sources are unchanged
-
-### Requirement: Template 0.25.0 delivers site SEO output
-The generator SHALL advance the managed template version to `0.25.0`. The
-generated `lace.config.ts` SHALL declare `seo: true` on the `home` page,
-`seo: { description: "summary" }` on the `posts` collection, and on the
-`settings` global optional fields `description` (textarea) and `image`
-(media) with `seoDefaults` mapping `siteName`, `description` and `image`.
-In starter mode the user-owned base layout SHALL render the adapter's SEO head
-component from `site.seo(entry)` instead of a bare `<title>`, the post route
-SHALL render with `og:type` `article`, and user-owned `sitemap.xml` and
-`robots.txt` endpoints SHALL use the adapter's helpers. Generated deployment
-files SHALL pass the optional `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING`
-settings to every site build they define: the Compose builder service and the
-Cloudflare Pages workflow (repository variables). The generated `.env.example`
-SHALL document both settings, their defaults and their effect on canonical
-URLs, the sitemap and robots output. The managed Astro site guide and the
-deployment guides SHALL document `site.seo()`, `site.url`, `<LaceSeo>`, the
-sitemap and robots helpers, both settings (including for Git-connected Pages
-projects and staging builds) and that `robots.txt` is only honoured at the
-host root. Template upgrade instructions SHALL state that the engine requires
-the additive migration `0008_content_snapshot_seo`, with the Compose and
-Cloudflare backup, migration and sync sequence, and that rolling back the
-API keeps working because the migration only adds a column. They SHALL explain
-the `seo` model option, `seoDefaults`, the model version bump and sync they
-require, the two build settings, and that the starter configuration, layout
-and endpoints are adopted by hand because `lace.config.ts` and site files are
-user-owned. Upgrades SHALL preserve user-owned files and retain deterministic
-managed hashes and existing conflict detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.25.0`, its configuration enables
-  SEO on `home` and `posts` and declares `seoDefaults` on `settings`, its base
-  layout renders the SEO head component, and its site has `sitemap.xml` and
-  `robots.txt` endpoints
-
-#### Scenario: Deployment files pass the build settings
-- **WHEN** a starter project is generated
-- **THEN** its Compose builder service and its Cloudflare Pages workflow pass
-  `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` to the site build, and its
-  `.env.example` documents both
-
-#### Scenario: Existing project upgrades to 0.25.0
-- **WHEN** a 0.24.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe migration `0008`, the SEO options
-  with their version bump and sync, the build settings and manual adoption,
-  and user-owned files including `lace.config.ts` and site sources are
-  unchanged
-
-### Requirement: Template 0.26.0 delivers block envelope rendering
-The generator SHALL advance the managed template version to `0.26.0`. In
-starter mode the user-owned block components and `site/lace.site.json` SHALL
-hold the registry block revisions that place the block anchor and class name
-on their root element. The managed Astro site guide SHALL document the
-`anchor`, `className` and typed `settings` block props, the root-element
-convention for anchors and class names, declaring settings with
-`defineBlock({ settings })`, and that hidden blocks are never delivered or
-rendered. The managed operations guide's styling section SHALL state that the
-block `id` and the editor class name are content chosen by editors, not part
-of the `data-lace-*` styling contract. Template upgrade instructions SHALL
-state that the engine requires the additive migration
-`0009_content_block_envelope`, with the Compose and Cloudflare backup,
-migration and sync sequence, and that the migration only adds columns and an
-index but an older engine would deliver hidden blocks publicly and reset
-envelopes on save, so rolling back once envelopes exist requires restoring
-the backup. They SHALL state that a
-user-written block migration now receives `{ data, settings }` and returns
-`{ data, settings? }`, that the API, admin and site packages move together
-because older SDKs reject public blocks carrying the envelope, and that block
-components are user-owned: `lace add block --all` updates unchanged
-components to the new revisions and reports edited ones as conflicts, and
-scaffolded custom components are updated by hand. Upgrades SHALL preserve
-user-owned files and retain deterministic managed hashes and existing
-conflict detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.26.0` and its block components
-  and lock equal the current registry revisions byte for byte
-
-#### Scenario: Existing project upgrades to 0.26.0
-- **WHEN** a 0.25.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe migration `0009`, the block
-  migration signature change, the coordinated package upgrade and adoption of
-  the block revisions with `lace add block --all`, and user-owned files
-  including `lace.config.ts` and site sources are unchanged
-
-### Requirement: Template 0.27.0 delivers Gallery, Navigation and the navigation global
-The generator SHALL advance the managed template version to `0.27.0`. The
-generated `lace.config.ts` SHALL register all seven built-in blocks, SHALL let
-the `home` page and the `posts` collection allow each of them at model
-version 2, and SHALL declare a `navigation` global labelled "Navigation" with
-no fields that allows only the `navigation` block. In starter mode the
-user-owned site SHALL contain `GalleryBlock.astro` and `NavigationBlock.astro`
-byte-identical to their registry items, recorded in `lace.site.json` and the
-block map file and listed in the ownership inventory as user-owned; the
-user-owned base layout SHALL render the published `navigation` global's blocks
-in the site header through the block list and block map and SHALL render a
-static fallback navigation with a link to the home page while the global is
-unpublished; and the user-owned stylesheet SHALL contain the responsive
-gallery grid and the navigation layout. The managed Astro site guide SHALL
-document both blocks, their fields and part hooks, rendering a global's blocks
-in a layout with a fallback, the navigation disclosure and current-page
-behavior, the stylesheet rules, model-level group and list examples, the
-list counters and limits, and where nested evolution and media rules are
-described. Template upgrade instructions SHALL state that no database
-migration is required; that the engine packages, admin and site packages move
-together because older content packages lack the two definitions; and that
-adoption is manual because `lace.config.ts` and site files are user-owned:
-run `lace add block gallery navigation`, register the blocks, allow them in
-models with a version bump, declare the `navigation` global, run sync,
-publish the global, and render it from the layout. Upgrades SHALL preserve
-user-owned files and retain deterministic managed hashes and existing
-conflict detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.27.0`, its configuration allows
-  seven built-ins in `home` and `posts` at version 2 and declares the
-  `navigation` global, its site holds the seven registry components with a
-  matching lock and block map, and its layout renders the navigation global
-  with a fallback
-
-#### Scenario: Existing project upgrades to 0.27.0
-- **WHEN** a 0.26.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe the coordinated package upgrade,
-  the absence of a migration and the manual adoption steps, and user-owned
-  files including `lace.config.ts`, `lace.site.json` and site sources are
-  unchanged
-
-### Requirement: Upload-limit template upgrade protects ownership
-The generator SHALL advance the managed template version to `0.31.0`, deliver
-the web proxy configuration with the media upload and JSON body limits,
-deliver a template upgrade instruction that explains the fix and the need to
-recreate the `web` service, and retain deterministic managed hashes and
-existing conflict detection. The instruction SHALL state that no new API,
-admin, CLI or builder artifact is required.
-
-#### Scenario: Upgrade from 0.30.0
-- **WHEN** a consumer with unmodified 0.30.0 managed files applies the 0.31.0
-  template upgrade
-- **THEN** `deploy/nginx.conf` carries the new limits, the instruction names
-  the `web` service recreation, and user README, configuration and site files
-  are unchanged
-
-#### Scenario: Edited proxy configuration
-- **WHEN** the consumer has modified `deploy/nginx.conf`
-- **THEN** the upgrade reports a managed-file conflict instead of overwriting
-  it
-
-### Requirement: Template 0.32.0 delivers build-time image variants and the lightbox setting
-The generator SHALL advance the managed template version to `0.32.0`. The
-generated `lace.config.ts` SHALL keep registering all seven built-in blocks
-and SHALL raise the `home` page and the `posts` collection to model version 3.
-In starter mode the user-owned site SHALL contain the `image`, `gallery` and
-`hero` components byte-identical to their new registry revisions, recorded in
-`lace.site.json`; its `package.json` SHALL declare `sharp` at the version
-Astro's image service uses; its `astro.config.mjs` SHALL read the project `.env` when
-present, overlay the process environment and pass `laceImageConfig` of that
-environment as the Astro `image` configuration; and its stylesheet SHALL
-contain the lightbox rules. The managed Astro site guide SHALL
-document the variants and their widths, the placeholder and when it is left
-out, the `lightbox` setting and its browser support, `sizes`, the
-`optimizeImages` loader option, the remote image allowance and the build
-cache. Template upgrade instructions SHALL state that no database migration
-is required; that engine, admin and site packages move together; that the
-next content sync migrates stored `image` and `gallery` blocks to versions 3
-and 2 and therefore requires the new registry components before the next
-site build; and that adoption is manual because `lace.config.ts` and site
-files are user-owned: bump the models that allow `image` or `gallery`, run
-sync, run `lace add block image gallery hero` (or merge the changes into
-edited components), adopt the `astro.config.mjs` image configuration and the
-stylesheet rules. Upgrades SHALL preserve user-owned files and retain
-deterministic managed hashes and existing conflict detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.32.0`, `home` and `posts` are at
-  version 3, the site holds the new `image`, `gallery` and `hero` revisions
-  with a matching lock, its `package.json` declares `sharp`, and
-  `astro.config.mjs` configures the media remote pattern
-
-#### Scenario: Existing project upgrades to 0.32.0
-- **WHEN** a 0.31.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe the coordinated package upgrade,
-  the absence of a migration, the block version migration on sync and the
-  manual adoption steps, and user-owned files including `lace.config.ts`,
-  `lace.site.json` and site sources are unchanged
-
-### Requirement: Template 0.33.0 delivers deploy caching
-The generator SHALL advance the managed template version to `0.33.0`. The
-managed web proxy SHALL carry the 30-day `/_astro/` cache rule and the
-`/_headers` refusal. In starter and existing-site modes the managed Compose
-file SHALL mount the builder cache volume on the builder and declare it; in
-no-site mode it SHALL declare neither. The managed Cloudflare Pages workflow
-SHALL restore and save the site's Astro cache directory between runs. In
-starter mode the user-owned site SHALL contain `public/_headers` applying
-`Cache-Control: public, max-age=2592000, immutable` to `/_astro/*`, identical
-in value to the proxy rule. The managed guides SHALL describe the asset cache
-lifetime, the `_headers` rule for existing sites, the builder cache, its
-bound and how to reset it, and the Pages workflow cache. Template upgrade
-instructions SHALL state that no database migration and no API, admin, CLI,
-SDK or adapter change is required; that the builder image of the same
-release and the recreation of the `builder` and `web` services are needed;
-and that the `_headers` file is adopted manually because site files are
-user-owned. Upgrades SHALL preserve user-owned files and retain deterministic
-managed hashes and existing conflict detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.33.0`, `site/public/_headers` is
-  user-owned with the 30-day rule, the proxy, Compose and Pages workflow carry
-  the caching changes
-
-#### Scenario: A no-site project is generated
-- **WHEN** a project without a site is generated
-- **THEN** its proxy carries the cache rule and its Compose file has no
-  builder and no builder cache volume
-
-#### Scenario: Existing project upgrades to 0.33.0
-- **WHEN** a 0.32.0 project with unmodified managed files is upgraded
-- **THEN** the proxy, Compose file and workflow are updated, the instruction
-  names the builder image and service recreation and the manual `_headers`
-  adoption, and user-owned files are unchanged
-
-#### Scenario: Edited proxy configuration
-- **WHEN** the consumer has modified `deploy/nginx.conf`
-- **THEN** the upgrade reports a managed-file conflict instead of overwriting
-  it
-
-### Requirement: Template 0.34.0 delivers image links
-The generator SHALL advance the managed template version to `0.34.0`. The
-generated `lace.config.ts` SHALL keep registering all seven built-in blocks
-and SHALL raise the `home` page and the `posts` collection to model version 4.
-In starter mode the user-owned site SHALL contain the `image` and `gallery`
-components byte-identical to their new registry revisions, recorded in
-`lace.site.json`, and its stylesheet SHALL contain the image link focus rule.
-The managed Astro site guide SHALL document the `link` field of `image` and
-gallery items, its precedence over the lightbox and the `link` part. Template
-upgrade instructions SHALL state that no database migration is required; that
-engine, admin and site packages move together; that the next content sync
-migrates stored `image` and `gallery` blocks to versions 4 and 3 and therefore
-requires the new registry components before the next site build; and that
-adoption is manual because `lace.config.ts` and site files are user-owned:
-bump the models that allow `image` or `gallery`, run sync, run
-`lace add block image gallery` (or merge the changes into edited components)
-and copy the stylesheet rule. Upgrades SHALL preserve user-owned files and
-retain deterministic managed hashes and existing conflict detection.
-
-#### Scenario: A new starter project is generated
-- **WHEN** a starter project is generated
-- **THEN** its manifest records template `0.34.0`, `home` and `posts` are at
-  version 4, and the site holds the new `image` and `gallery` revisions with
-  a matching lock
-
-#### Scenario: Existing project upgrades to 0.34.0
-- **WHEN** a 0.33.0 project with unmodified managed files is upgraded
-- **THEN** the upgrade instructions describe the coordinated package upgrade,
-  the absence of a migration, the block version migration on sync and the
-  manual adoption steps, and user-owned files including `lace.config.ts`,
-  `lace.site.json` and site sources are unchanged
-
 ### Requirement: Upgrade instructions cover only the latest published template
 The generated `.lace/upgrade-instructions.json` SHALL describe only the
 database and configuration steps from the latest published template to the
@@ -728,3 +193,100 @@ in.
 - **WHEN** a project is generated in any site mode
 - **THEN** its operations guide mentions the baseline migration and no
   migration file that is not checked in
+
+### Requirement: The starter project delivers a configured site
+The generated `lace.config.ts` SHALL register every built-in block, SHALL declare a `home` page and a `posts` collection that allow every built-in block, SHALL enable SEO with `seo: true` on `home` and `seo: { description: "summary" }` on `posts`, SHALL declare a `settings` global labelled "Site settings" with a required text field `siteName` and optional `tagline`, `description` (textarea) and `image` (media) fields whose `seoDefaults` map `siteName`, `description` and `image`, and SHALL declare a `navigation` global labelled "Navigation" with no fields that allows only the `navigation` block. In starter mode the user-owned site SHALL contain:
+
+- the adapter loader `src/lib/lace.ts`, the block map `src/lace/blocks.ts`, `lace.site.json` and one component per built-in block under `src/components/lace/`, byte-identical to the current registry revisions and recorded in `lace.site.json`, and no site-local loader, rendering or rich-text helper files;
+- a base layout that renders the adapter's SEO head component from `site.seo(entry)`, a header from the published `settings` global with static fallbacks while it is unpublished, and the published `navigation` global's blocks with a fallback link to the home page while it is unpublished;
+- a post route rendered with `og:type` `article` and `sitemap.xml` and `robots.txt` endpoints built with the adapter's helpers;
+- a `package.json` that declares `sharp` at the version Astro's image service uses, and an `astro.config.mjs` that reads the project `.env` when present, overlays the process environment and passes `laceImageConfig` of that environment as the Astro `image` configuration;
+- a stylesheet with the gallery grid, navigation layout, lightbox and image link focus rules, and `public/_headers` applying `Cache-Control: public, max-age=2592000, immutable` to `/_astro/*`.
+
+Every generated file SHALL appear in the ownership inventory, and the site files SHALL be user-owned.
+
+#### Scenario: A new starter project is generated
+- **WHEN** a starter project is generated
+- **THEN** its configuration registers every built-in block and declares the `settings` and `navigation` globals, its site holds one registry component per built-in block with a matching lock and block map, and its layout renders the SEO head, the settings header and the navigation global with fallbacks
+
+#### Scenario: Starter components follow the registry
+- **WHEN** a starter project's block components are compared with the current registry items
+- **THEN** they are byte-identical and `lace.site.json` records the same revisions
+
+#### Scenario: Existing-site and no-site projects
+- **WHEN** a project is generated with `--existing-site <path>` or `--no-site`
+- **THEN** no site file is written and the configuration declares the same models and globals as the starter
+
+### Requirement: Generated deployment files carry proxy, caching, build and email settings
+The managed web proxy SHALL serve site responses with `Cache-Control: no-cache`, SHALL allow media uploads up to the documented multipart limit while other requests keep the smaller JSON body limit, SHALL apply the 30-day immutable cache rule to `/_astro/` and SHALL refuse `/_headers`. In starter and existing-site modes the managed Compose file SHALL mount a builder cache volume on the builder and declare it; in no-site mode it SHALL declare neither. The Compose builder service and the managed Cloudflare Pages workflow SHALL pass the optional `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING` settings to the site build, and the Pages workflow SHALL restore and save the site's Astro cache directory between runs. The managed `.env.example` SHALL document both build settings, their defaults and their effect on canonical URLs, the sitemap and robots output, and SHALL document the optional email settings with the provider unset. The Compose file SHALL pass the email settings to the API with empty defaults, so an unconfigured project starts with email delivery reported as not configured. For `--cloudflare` projects the managed `worker/.dev.vars.example` SHALL default local development to the `log` email provider, and a newly generated user-owned `worker/wrangler.jsonc` SHALL contain a commented, optional `send_email` binding example.
+
+#### Scenario: Starter deployment files
+- **WHEN** a starter project is generated
+- **THEN** its proxy carries the no-cache, upload-limit, `/_astro/` cache and `/_headers` rules, its Compose builder mounts the cache volume and receives both build settings, and its `.env.example` documents the build and email settings
+
+#### Scenario: A no-site project is generated
+- **WHEN** a project without a site is generated
+- **THEN** its proxy carries the cache rule and its Compose file has no builder and no builder cache volume
+
+#### Scenario: Project starts without email settings
+- **WHEN** a project is generated and started with an `.env` copied from `.env.example`
+- **THEN** the API starts with email delivery reported as not configured
+
+### Requirement: Delivered guides describe the current release
+The generator SHALL deliver as managed, classified and hashed files the operations guide, the Astro site guide, the MCP guide and the scenario guides: both Compose guides in every site mode and the Cloudflare guide only with `--cloudflare`; mode and Cloudflare rendering SHALL omit absent-file links and unavailable scripts. Generator completion output SHALL link to the scenario entry points. The guides and the user-owned README SHALL direct operators to `lace add block` for installing, updating and scaffolding block components. The Compose guides SHALL instruct operators to stop the `api` and `dispatcher` services before a host command that opens the SQLite database and to start them again afterwards. The Cloudflare guide SHALL document the local consumer journey, local and remote doctor, recovery and the deploy-hook provider prerequisite. The guides SHALL explain email provider selection, the Workers Paid requirement and sending-domain onboarding for the Cloudflare provider, the Resend option, SMTP transport security, the Settings test action and setting secrets with the runtime's secret mechanism. The Astro site guide SHALL document `site.global()` and its fallback pattern, `site.seo()`, `site.url`, `<LaceSeo>`, the sitemap and robots helpers, the `anchor`, `className` and typed `settings` block props, every built-in block, image variants, placeholders, the lightbox and link precedence; the operations guide SHALL describe the styling contract, the asset cache lifetime, the builder cache and how to reset it, and the Pages workflow cache.
+
+The guides SHALL describe the current release and upgrades from the oldest supported release only. They SHALL NOT describe the behavior or upgrade steps of releases older than rc1 or name database migrations that are not checked in.
+
+#### Scenario: Deterministic guide variants
+- **WHEN** generation runs twice for each of the three site modes with and without Cloudflare
+- **THEN** trees, managed guide hashes and manifests match the reviewed snapshots for that variant
+
+#### Scenario: Host database command with the stack running
+- **WHEN** an operator follows a generated Compose guide to sync configuration or re-issue a setup token after starting the Compose API
+- **THEN** the guide directs them to stop `api` and `dispatcher`, run the host command, and start the services again
+
+#### Scenario: No pre-rc1 history in delivered guides
+- **WHEN** a project is generated in any site mode, with or without `--cloudflare`
+- **THEN** its guides and README name no alpha release, no template older than rc1 and no removed migration
+
+### Requirement: Cloudflare operator credentials stay in a private file
+Cloudflare generation SHALL deliver managed `docs/cloudflare-operator.env.example` with credential-free placeholders for account ID, D1 ID, token and Worker configuration. The private runtime copy `.lace/cloudflare-operator.env` SHALL be ignored and user-owned, absent from the managed upgrade inventory and never generated with a usable token. Generated `.env.example` SHALL NOT invite storing the remote token in root dotenv; local Cloudflare configuration SHALL remain available. Generation without Cloudflare SHALL deliver no operator example and no remote credential placeholders encouraging implicit Wrangler loading. Generated `cf:*` scripts SHALL remain local-only.
+
+#### Scenario: Fresh Cloudflare project
+- **WHEN** generation runs with Cloudflare in any site mode
+- **THEN** the example is credential-free, classified and hashed, the runtime copy is ignored, and local `cf:*` scripts select only simulated resources
+
+#### Scenario: Non-Cloudflare generation
+- **WHEN** generation runs without Cloudflare
+- **THEN** no private operator example is delivered and local generation remains account-free
+
+### Requirement: Template upgrades preserve user-owned files
+A template upgrade SHALL change only managed files, through the existing plan/apply procedure with deterministic managed hashes. A modified managed file, or a user file at a new managed path, SHALL be reported as a conflict and apply SHALL write nothing. An upgrade SHALL keep the project's recorded site mode and SHALL never create, change or delete files under the site, `lace.config.ts`, README, `.env`, `.env.local`, `.lace/cloudflare-operator.env` or `worker/wrangler.jsonc`; changing site mode requires generating a fresh project and moving configuration manually. Upgrade instructions SHALL state the manual steps for user-owned files and SHALL NOT create, change or deploy remote resources.
+
+#### Scenario: Upgrade with unmodified managed files
+- **WHEN** a project with unmodified managed files and edited user files is upgraded to the current template generated with the same site mode and Cloudflare selection
+- **THEN** managed files equal the new template, user-owned bytes are unchanged and a following plan reports no changes
+
+#### Scenario: Modified managed file or occupied managed path
+- **WHEN** a managed file was edited by the operator or a user file occupies a new managed path
+- **THEN** the plan reports the conflict and apply changes nothing
+
+### Requirement: Generated project starts the release's packaged runtimes
+
+The generated project SHALL include documented commands to run its Node development API and Astro site with its own `lace.config.ts`, and a Docker Compose production configuration that uses the release's exact versioned API and builder image references by default and supplies the generated configuration to the API. Generated package dependencies SHALL select exact compatible release package versions without development placeholders or local acceptance substitutions. Operators SHALL be able to override image references explicitly. The default template SHALL identify the release and its installation channel and SHALL explain that these coordinates become downloadable only after owner publication. The project SHALL keep editable admin and engine source outside its tree and SHALL require no consumer build of the Lace API or builder images.
+
+#### Scenario: Generated Node development
+- **WHEN** a user installs the generated project and runs its documented Node development command after setting required local values
+- **THEN** the API loads that project's `lace.config.ts` and serves its API without importing the Lace source workspace
+
+#### Scenario: Generated Compose deployment
+- **WHEN** the matching release has been published and a user supplies required secrets to the generated Compose configuration
+- **THEN** default matching API and builder image references start services using the generated project's configuration and persistent data without copying engine or admin source into the project
+
+#### Scenario: Explicit image override
+- **WHEN** an operator supplies compatible API and builder image overrides
+- **THEN** Compose uses those references while preserving generated configuration mounts and persistence behavior
+
+#### Scenario: Unpublished release preparation
+- **WHEN** a contributor generates a project before the prepared release set is published
+- **THEN** the guide identifies its exact release coordinates and publication prerequisite without claiming registry availability or directing ordinary consumers to manual tarball substitutions

@@ -21,6 +21,15 @@ async function root() {
   return path;
 }
 
+async function expectNoReleaseHistory(projectPath) {
+  const guides = (await readdir(join(projectPath, "docs"))).filter((name) => name.endsWith(".md"));
+  for (const file of [...guides.map((name) => `docs/${name}`), "README.md"]) {
+    const text = await readFile(join(projectPath, file), "utf8");
+    expect(text, file).not.toMatch(/\balpha\.\d|0\.1\.0-alpha/iu);
+    expect(text, file).not.toMatch(/\b00(?:0[1-9]|1\d)_[a-z]/u);
+  }
+}
+
 async function listFiles(path, prefix = "") {
   const entries = await readdir(path, { withFileTypes: true });
   const files = [];
@@ -92,19 +101,20 @@ test("generates deterministic owned source and hashed managed files", async () =
   const guide = await readFile(join(left.path, "docs/lace-operations.md"), "utf8");
   expect(guide.indexOf("pnpm env:prepare")).toBeLessThan(guide.indexOf("pnpm db:migrate"));
   expect(guide).not.toContain("cp .env.example .env");
-  expect(guide).toContain("open `/admin/`");
+  expect(guide).toContain("Open `/admin/`");
   expect(guide).toContain("same token and email");
   expect(guide).toContain("12–1024 characters");
   expect(guide).toContain("token expires after one hour");
   expect(guide).toContain("Completed setup remains closed");
   expect(guide).toContain("POST /api/v1/setup/admin");
-  expect(guide).toContain("originally published `0.1.0-alpha.1`");
+  await expectNoReleaseHistory(left.path);
   expect(guide).not.toContain("has no browser setup wizard");
 });
 
 test("optional Cloudflare files are managed only when selected", async () => {
   const parent = await root();
   const project = await generateProject({ target: join(parent, "cloud-site"), cloudflare: true });
+  await expectNoReleaseHistory(project.path);
   const files = project.manifest.files;
   expect(files["wrangler.jsonc"]).toBeUndefined();
   expect(files[".github/workflows/cloudflare.yml"]?.owner).toBe("managed");

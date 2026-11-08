@@ -27,7 +27,7 @@ Site mode: **none**. This project has no site, so it has no static-site workflow
 ## Prerequisites
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, pnpm `12.3.4`). The project pins Wrangler in `package.json`; always use it through `pnpm exec wrangler`.
-- Lace `0.1.0-rc1` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking are included in this release; published `0.1.0-alpha.2` packages do not contain them.
+- Lace `0.1.0-rc1` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking are included in this release.
 - For the account part only: a Cloudflare account with Workers, D1 and R2.
 
 ## Run the Worker locally
@@ -159,7 +159,7 @@ After editing `lace.config.ts`: run preflight, `pnpm exec lace content sync --ta
 
 - **Preflight fails.** Follow its next action: a missing or invalid private file, conflicting account settings, a stale dotenv token or insufficient D1 permission. Selected-file failures never fall back to other sources.
 - **Deploy hook unavailable or rejected.** Publication stays committed; the build stays pending with a sanitized reason and is retried, then fails. Fix the hook and use Retry in Admin.
-- **Alpha.2 project with a token in `.env`.** Move it to the private file manually, remove it from both `.env` and `.env.local`, clear the shell token and repeat preflight. Upgrades never move credentials.
+- **Token still in `.env`.** Move it to the private file manually, remove it from both `.env` and `.env.local`, clear the shell token and repeat preflight. Upgrades never move credentials.
 - More cases: [Cloudflare recovery](lace-operations.md#recovery).
 
 Real-account deployment is verified by the release gate; local and stub tests do not prove it.

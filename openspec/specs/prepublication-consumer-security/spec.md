@@ -64,7 +64,7 @@ Release acceptance against a complete clean-source inventory SHALL, after the co
 - **WHEN** a consumer lockfile or installed Lace package resolves to the engine checkout
 - **THEN** acceptance fails rather than counting the journey as artifact evidence
 
-### Requirement: Exact-artifact acceptance runs the alpha.2 field-trial regressions
+### Requirement: Exact-artifact acceptance runs the field-trial regressions
 Release acceptance against a complete clean-source inventory SHALL, in addition to the onboarding feedback suite and with only that inventory's generator, package archives and loaded API/builder image IDs, run these field-trial regressions and name each in the receipt:
 
 - **Block order:** in the admin served by the loaded API image, pointer and keyboard reordering, insertion and duplication in the middle of the list, removal and undo of removal SHALL save, survive reload and publish in the displayed order, and the build export and the packed consumer's static output SHALL contain the blocks in that order. A draft whose positions do not ascend SHALL be rejected with `CONTENT_INVALID_STATE`, a safe block-order explanation and a request ID, without advancing the draft revision or changing the published export.

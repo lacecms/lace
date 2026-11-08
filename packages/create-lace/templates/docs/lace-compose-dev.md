@@ -26,7 +26,7 @@ Site mode: **none**. This project builds no site, so this guide ends with publis
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, the project-pinned pnpm `12.3.4`).
 - Docker with Compose and a running daemon. MinIO's first image build needs network access and disk space.
-- Lace `0.1.0-rc1` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`. Published `0.1.0-alpha.1` artifacts predate this workflow; published `0.1.0-alpha.2` artifacts lack the block-order fix, builder source diagnostics and the seven-status build history.
+- Lace `0.1.0-rc1` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
 
 ## Install and prepare the environment
 
@@ -210,5 +210,4 @@ remote fonts and optional hosted integrations are disabled.
 
 Absent or exact `false` disables the page (API `404`); other values, including an
 empty string, are invalid. `/api/v1/openapi.json` remains available. Set `false`
-and recreate the container again to disable. Existing published alpha images
-that predate this feature must first be upgraded to a release containing it.
+and recreate the container again to disable.

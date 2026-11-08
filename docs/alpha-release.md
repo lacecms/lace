@@ -1,27 +1,13 @@
 # Preparing and publishing a Lace prerelease
 
-The owner confirmed publication of `0.1.0-alpha.4` packages on 2026-10-10
-(recording date, not an independently verified upload timestamp). The release
-uses ownership template `0.20.0` and npm channel `next`. Alpha.1 through alpha.4
-are recorded in `release/alpha.json` as published and immutable. GHCR manifests
-were not separately verified by this documentation update.
-
-The owner also confirmed completion of real VPS/Cloudflare application testing
-and recovery/upgrade checks; see the [owner status](./verification.md#owner-confirmed-status--2026-10-10).
-Alpha.5 (`0.1.0-alpha.5`, ownership template `0.29.0`) passed local preparation
-and exact-artifact acceptance on 2026-10-14. Those local receipts alone did not
-establish publication; the registry check below now confirms public availability. See [alpha.5 notes](./compatibility.md#alpha-5-upgrade-and-rollback).
-The selected next candidate is `0.1.0-rc1`, ownership template `0.46.0`, on
-npm `next`. It includes all accepted changes after alpha.8. Read the
-[rc1 upgrade and rollback guide](./compatibility.md#rc1-upgrade-and-rollback).
-Preparation and acceptance never publish; fresh rc1 evidence is required.
-
-Read-only checks on 2026-11-01 confirmed alpha.8's sixteen npm versions, both
-public two-platform GHCR manifests and GitHub prerelease. Alpha.1–alpha.8 remain
-published and immutable. All rc1 versions, image manifests and its GitHub tag/
-release returned 404. The [dated preflight](../openspec/changes/archive/2026-11-08-prepare-rc1-release/registry-preflight.json)
-records availability, not reservations or publishing rights. Historical evidence
-remains bound to its original source and artifacts.
+The selected candidate and its coordinates are defined in `release/alpha.json`;
+the npm channel is `next`. `0.1.0-rc1` (ownership template `0.46.0`) is the
+oldest supported release; earlier prereleases stay recorded in
+`publishedVersions` as published and immutable, but are not supported (see
+[compatibility](./compatibility.md#upgrading-from-rc1)). Preparation and
+acceptance never publish, and each candidate needs its own fresh evidence.
+Record the date of every read-only registry check: an unused version is
+availability evidence, not a reservation or publishing right.
 
 ## Coordinates and ownership
 
@@ -34,12 +20,7 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 | API/admin | `ghcr.io/lacecms/api:0.1.0-rc1` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
 | Builder | `ghcr.io/lacecms/builder:0.1.0-rc1` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
 
-Read-only registry checks on 2026-10-07 returned 404 for alpha.4 for all fifteen npm packages and both GHCR versioned image manifests. This is historical availability evidence, superseded for npm packages by the owner publication confirmation above.
-Read-only checks on 2026-10-14 (Europe/Rome) returned 404 for alpha.5 versions
-of all fifteen npm packages; this neither reserves them nor establishes rights.
-The same read-only check returned 404 for both GHCR alpha.5 image manifests.
-The local npm account is unauthenticated (E401), so publishing rights are not
-verified; the owner must authenticate and recheck npm/GHCR rights before live
+Recheck npm and GHCR publishing rights with authenticated accounts before live
 publication. Local artifact preparation does not need publishing credentials.
 
 
@@ -47,7 +28,7 @@ publication. Local artifact preparation does not need publishing credentials.
 
 Choose a prerelease that is not in `publishedVersions` and is unused in the registries, change `release/alpha.json`, every public manifest, generated dependencies and image defaults, the Dockerfile `LACE_VERSION` defaults, versioned guide commands and the block registry's package requirements together, and advance the ownership template version with upgrade instructions. `release:check` names any stale coordinate; it never rewrites files. After the owner publishes a version, append it to `publishedVersions`.
 
-The fifteen scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, `astro`, and `mcp`; `render` and `astro` were first published with `0.1.0-alpha.2`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
+The scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, `astro`, and `mcp`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
 
 Both runtime images support `linux/amd64` and `linux/arm64` only when both platform builds and smoke checks pass. Local image IDs are not registry manifest digests. Initial preparation saves one archive per runtime/platform and records its ID and checksum. The public version tag is assembled from those tested platform images during publication.
 
@@ -101,13 +82,13 @@ pnpm spec:validate
 
 `acceptance:release` requires a complete publication-eligible inventory and verifies all archive checksums. It runs the extracted generator and installs exactly those tarballs in a temporary project, then loads the saved images and checks immutable IDs, platform and provenance labels. The full journey uses the host's corresponding Linux platform (arm64 or amd64). Both-platform preparation smoke results remain in the inventory; one consumer run does not claim two-platform end-to-end coverage.
 
-Since Session 32B the same command is the complete onboarding feedback regression suite for the candidate. After the journeys below it checks that the packed generator reproduces the reviewed byte-stable snapshots and runs, with only the inventory's generator, archives and image IDs: the static-site preview of a generated `--cloudflare` project, the dev/manual/automatic publication visibility journey, the existing-Astro consumer (connection guide, `lace add block`, safe rich text, styling hooks, public media, block edits across rerun/update), the packed Cloudflare consumer journey (generated Worker bundle with the packaged admin, local D1/R2, browser setup, hook failure/recovery, restart persistence) and the upgrade of the template `0.4.0` and published-alpha.2 `0.14.0` fixtures to the candidate template (including the database instruction for migration `0003_site_build_outcomes`). Since Session 33H it then runs the alpha.2 field-trial regressions: block reorder/insert/duplicate/remove/undo in the packed admin through save, reload, publication, export and the served Compose release; the packed Astro loader through a compressing proxy that weakens the ETag; builder source diagnostics on the existing-site consumer in Compose production with the loaded images; credential separation with the packed CLI; Pages deployment tracking of the packed Worker against a loopback Pages API stub; and the development, production and Cloudflare guide command contracts. The receipt lists these journeys. Local stubs never stand in for a real Cloudflare account; the owner's real-account checks are listed in the verification record.
+The same command is the complete onboarding feedback regression suite for the candidate. After the journeys below it checks that the packed generator reproduces the reviewed byte-stable snapshots and runs, with only the inventory's generator, archives and image IDs: the static-site preview of a generated `--cloudflare` project, the dev/manual/automatic publication visibility journey, the existing-Astro consumer (connection guide, `lace add block`, safe rich text, styling hooks, public media, block edits across rerun/update), the packed Cloudflare consumer journey (generated Worker bundle with the packaged admin, local D1/R2, browser setup, hook failure/recovery, restart persistence) and the upgrade of the retained latest published-template fixtures to the candidate template. It then runs the field-trial regressions: block reorder/insert/duplicate/remove/undo in the packed admin through save, reload, publication, export and the served Compose release; the packed Astro loader through a compressing proxy that weakens the ETag; builder source diagnostics on the existing-site consumer in Compose production with the loaded images; credential separation with the packed CLI; Pages deployment tracking of the packed Worker against a loopback Pages API stub; and the development, production and Cloudflare guide command contracts. The receipt lists these journeys. Local stubs never stand in for a real Cloudflare account; the owner's real-account checks are listed in the verification record.
 
 Only the temporary installation substitutes relative tarball references/overrides. The delivered templates and archives stay unchanged, and source-workspace resolution is rejected. The runner checks setup/login, all five blocks, media upload/reuse, external media URLs, roles, anonymous/build-token denial, later-draft isolation, a served Compose release, terminal failed build, explicit retry, and database/object/static persistence after service recreation. Failed-build testing temporarily supplies a random invalid build token and accelerates only the disposable outbox's retry availability; production retry count and policy stay unchanged. No renderer or deployment patch is needed.
 
 Shipping scans cover generated files, extracted packages, selected image configurations/exported filesystems, host/static-volume releases and captured tool/service diagnostics using the run's exact credential bytes and complete private-key blocks in text files. Intentional bootstrap output, local operator `.env`, installed dependencies and persistent auth database are excluded from shipping scans. Errors redact credential values. The final receipt reports source fingerprint, versions, package checksums and selected image IDs; retain it alongside the inventory. Temporary containers, volumes and consumer files are removed on success/failure; `LACE_ACCEPTANCE_KEEP_TEMP=1` is a diagnostic option that retains sensitive local operator state and must not be used for shared release evidence.
 
-See [verification](verification.md) for current local commands, coverage and owner checks. Historical readiness remains in the archived [alpha.4 change](../openspec/changes/archive/2026-10-07-step-34a-cross-runtime-browser-verification/), [alpha.3 change](../openspec/changes/archive/2026-10-06-step-33h-alpha3-candidate/), [alpha.2 refresh](../openspec/changes/archive/2026-10-04-step-32b-coherent-artifact-refresh/) and [first release change](../openspec/changes/archive/2026-09-30-step-25c-prepublication-consumer-security/). Node/D1/Worker regression checks remain local; dependency audit, fault injection and restore do not establish real VPS/Cloudflare readiness. No acceptance command publishes artifacts.
+See [verification](verification.md) for current local commands, coverage and owner checks. Node/D1/Worker regression checks remain local; dependency audit, fault injection and restore do not establish real VPS/Cloudflare readiness. No acceptance command publishes artifacts.
 
 ## Owner-operated npm publication
 
@@ -189,22 +170,9 @@ stores can identify it by its config digest. Publication and independent
 verification recognize both forms and verify the exact expected runtime and
 attestation graph when a final multi-platform index flattens the inputs.
 
-If alpha.7 stopped with `Published image differs` immediately after uploading
-`api:0.1.0-alpha.7-amd64` using the earlier tooling, use the corrected release
-scripts with the original `.release-artifacts/alpha-7` directory. Do not rebuild
-the images, edit inventory image IDs, remove provenance, or replace the accepted
-source/acceptance receipt. First review the read-only plan:
-
-```sh
-pnpm release:publish:images --artifacts .release-artifacts/alpha-7 --dry-run
-```
-
-It should skip the matching uploaded platform index and report only missing
-images/manifests. Once reviewed, the operator can resume the same live command
-without `--dry-run`. A different root, config, runtime child or attestation still
-causes refusal; do not overwrite that conflict. The saved artifact source remains
-`665bd3499b49180a0873881bd9a93bb2722f556a`; later tooling/handoff commits are not
-the image source. Repair verification itself does not publish anything.
+A matching uploaded platform index is skipped on resume. A different root,
+config, runtime child or attestation causes refusal; do not overwrite that
+conflict, rebuild the images, edit inventory image IDs or remove provenance.
 
 ## GitHub release and cleanup
 
@@ -315,31 +283,5 @@ exact same artifact/evidence/acceptance selection to verify remote identities
 and remove remaining files. Changed scope or remaining artifact bytes cause
 refusal. A successful retry removes its journal.
 
-### Importing acceptance for alpha.5/alpha.6 sets
-
-Only artifact sets prepared before atomic `acceptance.json` saving (alpha.5 and
-alpha.6) need this step; never run it for a current release. It requires that
-older prepared directory to exist locally and your retained original receipt;
-the receipt JSON files are no longer in `docs/`. The published
-[alpha.6 acceptance asset](https://github.com/lacecms/lace/releases/download/v0.1.0-alpha.6/acceptance.json)
-is available with the other preserved reports on its GitHub Release. Replace
-`<receipt>` with the real receipt path:
-
-```sh
-pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt <receipt>
-pnpm release:acceptance:import --artifacts .release-artifacts/alpha-6 --receipt <receipt> --apply
-```
-
-The first command is a preview. Import keeps the historical bytes unchanged.
-
-### Retiring historical tracked receipts
-
-When an older checkout still tracks alpha.5/alpha.6 acceptance JSON, retain it until each
-corresponding published GitHub Release exposes its byte-identical acceptance
-asset. Verify by downloading the asset and comparing SHA-256 with the tracked
-file. Then make a reviewed documentation change: replace receipt links in this
-guide and the historical OpenSpec handoff with the verified release asset URL,
-and remove that tracked JSON. Record the version/tag and preserved checksum in
-the handoff. Local cleanup never performs git rm or rewrites history. Public
-release notes now live in [CHANGELOG.md](../CHANGELOG.md); detailed instructions
-remain in [compatibility](compatibility.md#rc1-upgrade-and-rollback).
+Public release notes live in [CHANGELOG.md](../CHANGELOG.md); detailed upgrade
+instructions live in [compatibility](compatibility.md#upgrading-from-rc1).

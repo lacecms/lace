@@ -24,7 +24,9 @@ Transactional email is optional. Node can use SMTP or Resend; Workers can use Re
 When enabled by your operator, Account lists your own assistant connections.
 Review the client, read or draft-write access and dates; confirm Revoke to stop
 future access and token renewal. Every role can manage its own connections.
-An assistant cannot publish, unpublish or delete content. Its writes replace the
+An assistant can publish a saved draft only with the separately consented
+`content:publish` scope and a current role that may publish; it cannot unpublish
+or delete content. Its writes replace the
 complete draft and require the revision it read; after an uncertain result,
 re-read content rather than automatically creating another entry or overwriting.
 

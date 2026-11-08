@@ -154,17 +154,15 @@ An `image` block or gallery item with a *Link* wraps its `media` image in a
 `link` anchor instead and never gets a lightbox. `site.css` makes the anchor a
 block and gives it the same focus ring as the trigger.
 
-## Alpha.7 image adoption
+## Image components
 
 The matching image/gallery/hero registry components use `LaceImage.astro` for
 build-time WebP variants. Install site `sharp`, configure `laceImageConfig` with
 the build API origin, and review component changes with `lace add block`
 `--dry-run`/`--write-new` rather than replacing customized source blindly.
-Image/gallery versions 4/3 need explicit model-version advances and content sync;
-components must match before rebuilding. Copy lightbox/link focus rules and
-Pages `public/_headers` from the matching starter. See the
-[alpha.7 upgrade guide](./compatibility.md#alpha-7-upgrade-and-rollback) for order
-and backup boundaries, and the generated Astro guide for complete setup.
+Components must match the synchronized block versions before rebuilding. Copy
+lightbox/link focus rules and Pages `public/_headers` from the matching starter.
+See the generated Astro guide for complete setup.
 
 ## Video embeds
 
