@@ -105,10 +105,11 @@ mixing artifacts from different versions is unsupported.
 | Release | Template | Status |
 | --- | --- | --- |
 | `0.1.0-rc1` | `0.46.0` | Oldest supported release |
+| `0.1.0-rc2` | `0.47.0` | Current candidate; upgrade from rc1 recreates the database |
 
-The source tree's template (`0.47.0`) belongs to the next release; it is not
-published until a release session selects and publishes that candidate. A
-version is recorded in `publishedVersions` only after the owner publishes it.
+A candidate becomes published only when the owner publishes it. Each version is
+recorded in `publishedVersions` after that publication, before the next
+candidate is selected.
 
 ## Minimum requirements and tested versions
 
@@ -124,8 +125,9 @@ pins are separate and unchanged by the minimums:
 
 | Pin | Value | Where |
 | --- | --- | --- |
-| Tested Node | `24.12.0` | CI workflows, `node:24.12.0-bookworm-slim` API/builder images, release preparation |
-| Tested pnpm | `12.3.4` | `packageManager` (root and generated CMS), API/builder images |
+| Tested Node | `24.12.0` | CI workflows, `node:24.12.0-bookworm-slim` API/builder images |
+| Preparation Node | major `24` or later | `release:prepare` gate (`scripts/release.mjs`); eligible, not tested |
+| Tested pnpm | `12.3.4` | `packageManager` (root and generated CMS), API/builder images, release preparation (exact) |
 | Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
 
 Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1

@@ -12,7 +12,7 @@ import {
   withoutSourceCondition,
 } from "../scripts/release-artifacts.mjs";
 import { readJson, readReleaseModel } from "../scripts/release-model.mjs";
-import { prepareRelease } from "../scripts/release.mjs";
+import { preparationToolchainError, prepareRelease } from "../scripts/release.mjs";
 import { releaseVersionSource } from "../scripts/platform-release-version.mjs";
 
 test("clean snapshots are stable, dirty inputs require an explicit preview", async () => {
@@ -112,29 +112,56 @@ test("injected preparation failure leaves no inventory or success", async () => 
     git("config", "user.email", "release@lace.test");
     git("add", ".");
     git("commit", "-m", "coherent fixture");
-    // Exercise post-validation cleanup independently of the Node version
-    // running this test; the real release preparation still validates its toolchain.
-    const nodeVersion = Object.getOwnPropertyDescriptor(process.versions, "node");
-    try {
-      Object.defineProperty(process.versions, "node", { value: "24.12.0", configurable: true });
-      await expect(
-        prepareRelease(
-          { root, output, phase: "packages", preview: true },
-          {
-            packages: async () => {
-              throw new Error("injected pack failure");
-            },
+    await expect(
+      prepareRelease(
+        { root, output, phase: "packages", preview: true },
+        {
+          packages: async () => {
+            throw new Error("injected pack failure");
           },
-        ),
-      ).rejects.toThrow("injected pack failure");
-    } finally {
-      Object.defineProperty(process.versions, "node", nodeVersion);
-    }
+        },
+      ),
+    ).rejects.toThrow("injected pack failure");
     expect((await readJson(join(output, "status.json"))).state).toBe("failed");
     await expect(readFile(join(output, "inventory.json"))).rejects.toThrow();
   } finally {
     await rm(parent, { recursive: true, force: true });
   }
+});
+
+test.each(["24.0.0", "24.12.0", "24.22.1", "v24.22.1", "25.1.0", "26.0.0-pre"])(
+  "preparation accepts Node %s with the pinned pnpm",
+  (node) => {
+    expect(preparationToolchainError(node, "12.3.4")).toBeUndefined();
+  },
+);
+
+test.each([
+  ["23.11.0", "12.3.4"],
+  ["", "12.3.4"],
+  ["24", "12.3.4"],
+  ["x24.1.0", "12.3.4"],
+  [undefined, "12.3.4"],
+  ["24.22.1", "12.3.5"],
+  ["24.22.1", "11.25.0"],
+])("preparation refuses Node %s with pnpm %s", (node, pnpm) => {
+  expect(preparationToolchainError(node, pnpm)).toMatch(/Node 24 or later and pnpm 12\.3\.4/u);
+});
+
+test("an ineligible Node is refused before the output destination is claimed", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "lace-release-toolchain-"));
+  const output = join(parent, "out");
+  const nodeVersion = Object.getOwnPropertyDescriptor(process.versions, "node");
+  try {
+    Object.defineProperty(process.versions, "node", { value: "23.11.0", configurable: true });
+    await expect(prepareRelease({ root: process.cwd(), output, preview: true })).rejects.toThrow(
+      "Node 24 or later",
+    );
+  } finally {
+    Object.defineProperty(process.versions, "node", nodeVersion);
+  }
+  await expect(readdir(output)).rejects.toThrow();
+  await rm(parent, { recursive: true, force: true });
 });
 
 test("incomplete and dirty previews cannot claim publication eligibility", () => {

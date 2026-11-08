@@ -148,7 +148,7 @@ describe("upgrade CLI", () => {
       const managed = ["package.json", ".env.example", "docs/lace-operations.md"];
       for (const path of managed) {
         const previous = (await readFile(join(project, path), "utf8")).replaceAll(
-          "0.1.0-rc1",
+          "0.1.0-rc2",
           "0.1.0-alpha.1",
         );
         await writeFile(join(project, path), previous);
@@ -180,7 +180,7 @@ describe("upgrade CLI", () => {
       await writeFile(
         join(project, "docs/lace-operations.md"),
         (await readFile(join(template, "docs/lace-operations.md"), "utf8")).replaceAll(
-          "0.1.0-rc1",
+          "0.1.0-rc2",
           "0.1.0-alpha.1",
         ),
       );

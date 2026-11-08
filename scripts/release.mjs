@@ -12,6 +12,23 @@ import {
   run,
 } from "./release-artifacts.mjs";
 
+/** Lowest Node major that may prepare a release (owner decision; CI and images keep their tested pin). */
+export const PREPARATION_NODE_MAJOR = 24;
+/** Exact pnpm used for frozen installation during preparation. */
+export const PREPARATION_PNPM = "12.3.4";
+
+/** Returns why this Node/pnpm pair may not prepare a release, or undefined when it may. */
+export function preparationToolchainError(nodeVersion, pnpmVersion) {
+  const major = /^v?(\d+)\.\d+\.\d+/u.exec(String(nodeVersion ?? ""))?.[1];
+  if (
+    major === undefined ||
+    Number(major) < PREPARATION_NODE_MAJOR ||
+    pnpmVersion !== PREPARATION_PNPM
+  )
+    return `Preparation requires Node ${PREPARATION_NODE_MAJOR} or later and pnpm ${PREPARATION_PNPM} (found Node ${nodeVersion}, pnpm ${pnpmVersion})`;
+  return undefined;
+}
+
 export async function prepareRelease(options, operations = {}) {
   return (operations.withLock ?? withArtifactLock)(options.output, "prepare", () =>
     prepareUnlocked(options, operations),
@@ -22,13 +39,13 @@ async function prepareUnlocked(
   { root, output, phase = "all", preview = false, platforms },
   operations = {},
 ) {
+  const toolchainError = preparationToolchainError(
+    process.versions.node,
+    await run("pnpm", ["--version"], { cwd: root, capture: true }),
+  );
+  if (toolchainError) throw new Error(toolchainError);
   const model = await readReleaseModel(root);
   const order = validateReleaseModel(model);
-  if (
-    process.versions.node !== "24.12.0" ||
-    (await run("pnpm", ["--version"], { cwd: root, capture: true })) !== "12.3.4"
-  )
-    throw new Error("Preparation requires the pinned Node 24.12.0 and pnpm 12.3.4 toolchain");
   const selected = platforms ?? model.definition.platforms;
   if (
     selected.length === 0 ||

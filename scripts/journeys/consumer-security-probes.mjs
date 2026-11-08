@@ -11,7 +11,7 @@ export async function consumerSecurityProbes({ base, cookie, png }) {
   const statusResponse = await invoke("/api/v1/admin/settings/status");
   assert.equal(statusResponse.status, 200);
   const status = await statusResponse.json();
-  assert.equal(status.engineVersion, "0.1.0-rc1", "exact installed CMS release differs");
+  assert.equal(status.engineVersion, "0.1.0-rc2", "exact installed CMS release differs");
   const anonymous = await fetch(new URL("/api/v1/admin/settings/status", base));
   assert.equal(anonymous.status, 403);
   console.info("Operations exact consumer: running CMS release and administrator boundary passed");

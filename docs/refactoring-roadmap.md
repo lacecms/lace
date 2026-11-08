@@ -74,6 +74,19 @@ retain their order and are neither included nor prerequisites for rc1. Publicati
 and real deployment verification remain distinct; RC naming is not stable-release
 approval. Post-release test cleanup uses a commit after the artifact source.
 
+### Owner-requested RC2 release checkpoint (2026-11-08)
+
+After RF8B the owner selected `0.1.0-rc2` on `next` with template `0.47.0`. It
+includes every commit after published rc1 through the reviewed shipping
+source. OpenSpec change `prepare-rc2-release` selects coherent coordinates,
+records rc1 in `publishedVersions`, writes the changelog entry and relaxes the
+preparation gate to Node 24 or later with exact pnpm `12.3.4`. It also
+withdraws `allow-supported-node-release-preparation`. The owner prepares,
+accepts and publishes rc2 themselves using `docs/alpha-release.md`. The
+remaining sessions (RF6, RF7, RF8C, RF9C–RF9F) keep their order, are not part
+of rc2 and end in rc3. rc1 stays the oldest supported release and the upgrade
+fixture origin.
+
 ## 3. Baseline (commit `1494b039`, audit of 2026-11-01)
 
 What is healthy and is not touched:
@@ -229,7 +242,8 @@ Pending owner checks from the second audit (2026-11-05), not sessions:
 
 8. Run `pnpm verify:security`, `pnpm verify:cross-runtime --baseline …` and
    `pnpm verify:operations` once after the RF4X runner repair.
-9. Decide the CHANGELOG entries for unreleased public changes since rc1:
+9. Resolved 2026-11-08 by the rc2 changelog entry (`prepare-rc2-release`).
+   Decide the CHANGELOG entries for unreleased public changes since rc1:
    RF3D (MCP account and rate-limit codes, `RATE_LIMITED`), RF4C
    (`hasMatchingBlockDefinitions` matches by type in any order) and RF4B
    (`AccountSecurityPort` reshaped; `SessionSecurityPort`, `TokenSecurityPort`),
@@ -241,8 +255,9 @@ Pending owner checks from the second audit (2026-11-05), not sessions:
    `jsonValueSchema` and `jsonObjectSchema` refuse an array with a named
    property and accept a non-enumerable array element) and RF9B (the
    published `@lacecms/platform-node` no longer exports `./test`).
-10. Apply or withdraw the active `allow-supported-node-release-preparation`
-    change (0/6 tasks since RF4C); keep pnpm pinned to `12.3.4` until then.
+10. Resolved 2026-11-08: `allow-supported-node-release-preparation` is
+    withdrawn; `prepare-rc2-release` accepts Node 24 or later for preparation
+    and keeps pnpm pinned to `12.3.4`.
 
 ## Step RF1 — Workspace hygiene
 

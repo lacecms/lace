@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.47.0` and Lace `0.1.0-rc1` packages and images. Earlier prereleases are not supported. The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.47.0` and Lace `0.1.0-rc2` packages and images. Releases before rc1 are not supported, and an rc1 project upgrades as described in [Database baseline and upgrading from rc1](#database-baseline-and-upgrading-from-rc1). The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible release set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-rc1 my-site
+pnpm create lace@0.1.0-rc2 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -232,7 +232,7 @@ The web proxy serves the content-hashed files under `/_astro/` with `Cache-Contr
 
 <!-- lace-site: starter existing -->
 
-Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-rc1` candidate artifacts.
+Saving a draft never changes any site output and never requests a build. Publishing makes the saved revision the published snapshot that build tokens can read; what visitors see then depends on how the site is rendered. These behaviors are verified against a generated consumer of template `0.22.0` with the exact `0.1.0-rc2` candidate artifacts.
 
 <!-- lace-site: starter -->
 
