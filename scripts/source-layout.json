@@ -57,7 +57,8 @@
     "media": ["content", "shared"],
     "delivery": ["content", "media", "shared"],
     "builds": ["content", "delivery", "media", "shared"],
-    "outbox": []
+    "outbox": [],
+    "reads": ["builds", "content", "delivery", "links", "media", "shared"]
   },
   "packages/server": {
     "shared": [],
@@ -97,5 +98,21 @@
   "apps/builder": {
     "runner": [],
     "server": ["runner"]
+  },
+  "packages/platform-node": {
+    "database": [],
+    "security": [],
+    "media": [],
+    "builds": [],
+    "repository": ["database"],
+    "runtime": ["builds", "database", "media", "repository", "security"]
+  },
+  "packages/platform-cloudflare": {
+    "d1": [],
+    "security": ["d1"],
+    "media": [],
+    "deploy": [],
+    "repository": ["d1"],
+    "runtime": ["d1", "deploy", "media", "repository", "security"]
   }
 }

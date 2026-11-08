@@ -88,7 +88,7 @@ test("injected preparation failure leaves no inventory or success", async () => 
     for (const platform of ["node", "cloudflare"]) {
       const { directory, manifest } = model.manifests[`@lacecms/platform-${platform}`];
       await fixtureFile(
-        `${directory}/src/release-version.ts`,
+        `${directory}/src/runtime/release-version.ts`,
         releaseVersionSource(manifest.version),
       );
     }

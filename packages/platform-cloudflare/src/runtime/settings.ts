@@ -9,10 +9,10 @@ import {
 } from "@lacecms/server";
 import type { SendEmailBinding } from "./email.js";
 import type { KVNamespace } from "./cache.js";
-import { DEFAULT_DEPLOY_HOOK_TIMEOUT_MS } from "./deploy-hook.js";
-import type { D1Database } from "./d1.js";
-import { DEFAULT_PAGES_API_BASE_URL } from "./pages-deployments.js";
-import { DEFAULT_R2_TIMEOUT_MS, type R2Bucket } from "./r2-storage.js";
+import { DEFAULT_DEPLOY_HOOK_TIMEOUT_MS } from "../deploy/deploy-hook.js";
+import type { D1Database } from "../d1/database.js";
+import { DEFAULT_PAGES_API_BASE_URL } from "../deploy/pages-deployments.js";
+import { DEFAULT_R2_TIMEOUT_MS, type R2Bucket } from "../media/r2-storage.js";
 
 /** Structural subset of the Workers static-assets binding. */
 export interface AssetsFetcher {

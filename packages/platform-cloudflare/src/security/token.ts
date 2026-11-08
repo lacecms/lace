@@ -22,7 +22,7 @@ import {
   type TokenSecurityPort,
 } from "@lacecms/application";
 import { AccountError, unixMilliseconds, type UnixMilliseconds } from "@lacecms/domain";
-import type { D1Database } from "../d1.js";
+import type { D1Database } from "../d1/database.js";
 import { constantTimeEqual, digest, randomHex, tokenSecret } from "./secrets.js";
 import { SETUP_COMPLETED_SQL, bindStatement } from "./statements.js";
 

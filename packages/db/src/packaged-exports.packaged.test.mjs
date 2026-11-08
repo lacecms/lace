@@ -68,6 +68,7 @@ test("packaged entry point keeps its public exports", async () => {
     "SYNC_MIGRATION_SNAPSHOTS_SQL",
     "SYNC_SNAPSHOTS_SQL",
     "SqlContentLinkReader",
+    "SqlContentReader",
     "SqlOAuthIssuancePersistence",
     "apiTokens",
     "appliedMigrationQuery",

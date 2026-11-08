@@ -102,11 +102,11 @@ What the roadmap changes, with the numbers to beat:
 | Size | shared repository contract layout | 9,400-line monolith → RF2C: eight area modules + shared helpers, 33-line index; all 105 measured registrations pinned in order |
 | Size | server route test layout | 3,966-line `app.test.mjs` → RF2B: route companions and shared harness; `app.test.ts` is 153 lines |
 | Size | `packages/content/src/index.ts` | 3,691 lines, eight responsibilities → RF4A: 178-line re-export entry; 23 modules in five domain directories, largest 736 lines |
-| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11 → RF4F: 4, enforced by a shrinking size baseline |
+| Size | oversized production files | 19 → RF4A: 18 → RF4B: 15 → RF4C: 14 → RF4D: 13 → RF4E: 11 → RF4F: 4 → RF5B: 2 (admin only), enforced by a shrinking size baseline |
 | Size | `packages/contracts/src/index.ts` | 2,994 → RF4C: 144 lines (largest module: 226) |
 | Size | `packages/server/src/app.ts` (`createLaceApp`) | 2,948 lines (73 routes in one function) → RF4D: 218-line factory, largest production module 492 lines |
-| Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines |
-| Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines |
+| Size | `packages/platform-cloudflare/src/d1-content-repository.ts` | 2,696 lines → RF5B: `repository/` (ten modules, largest `entries.ts` 646) |
+| Size | `packages/platform-node/src/content-repository.ts` | 2,291 lines → RF5B: `repository/` (eight modules, largest `entries.ts` 481) |
 | Size | `packages/db/src/sql-content.ts` | 2,229 lines → RF4E: domain modules; largest db module 862 lines |
 | Size | `packages/config/src/index.ts` | 1,229 lines → RF4E: entry and domain modules |
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
@@ -119,7 +119,7 @@ What the roadmap changes, with the numbers to beat:
 | Duplication | slug/route canonicalization | once in content; config/domain preserve their public wrappers (RF3B) |
 | Duplication | conditional-visibility evaluators | 1 in content; application and admin delegate (RF3C) |
 | Duplication | error conventions | 1 shared base in content and classifier in contracts (RF3D); MCP maps application errors through the shared classifier |
-| Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim |
+| Duplication | Node vs D1 content repository | 54 identical public methods; read side ≈ 25% verbatim → RF5B: every identical read in `db` `SqlContentReader` (472 lines); repositories delegate; remaining runtime-specific reads: `list`, configuration-sync scans and Node's synchronous in-transaction entry loader |
 | Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` → RF5A: one owner each (`db` `security/rows.ts`; rate-limit policies and setup TTL in application); adapters split by port, largest module 629 lines (`d1-security.ts` 984 → 215) |
 | Duplication | argv parsers in `packages/cli` | 6 (+1 in `scripts/cloudflare-lib.mjs`) |
 | Admin | one-line `index.ts` barrels | 176 of 196 |
@@ -129,7 +129,7 @@ What the roadmap changes, with the numbers to beat:
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
 | Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
 | Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137 → RF4I: 136 → RF4H: 132, listed in a shrinking baseline; test-support always typed |
-| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared |
+| Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared → RF5B: 2 components (`platform-node` broken); both platform packages declared |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
 | Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
@@ -842,6 +842,26 @@ join `scripts/source-layout.json`; the three `platform-node` cycles
 (`index`, `runtime`, `content-repository`) and the two oversized repository
 entries leave their baselines.
 
+**Outcome (RF5B):** `packages/db/src/reads/content-reader.ts` (472 lines)
+owns every read that was identical on both runtimes — media, delivery,
+entry hydration, actors, site-build reads, the link reads (through
+`SqlContentLinkReader`) and the build export. A runtime supplies
+`ContentReadSql` (`all`, `bindChunk`, `readGroups`); `readGroups` runs the
+export's two read groups in one SQLite transaction on Node and as two
+`batch()` calls on D1, so Node issues one extra in-transaction version read
+(the `index.test.ts` statement bound is 8). Each repository is a delegating
+composite over a reader and area classes (`configuration-sync`, `entries`,
+`media`, `dispatch`, `site-builds`, D1 also `collection-list`) that extend a
+base holding the shared write helpers; bodies moved verbatim. Remaining
+runtime-specific reads: `list`, the configuration-sync scans and Node's
+synchronous entry loader for reloads inside publication transactions (for
+RF5C's return-path alignment). Layout: `platform-node` `database`,
+`security`, `media`, `builds`, `repository`, `runtime` (root `migrate.ts`
+listed as a started entry); `platform-cloudflare` `d1`, `security`,
+`media`, `deploy`, `repository`, `runtime`. `security.ts`/`d1-security.ts`
+are now `security/service.ts`, `release-version.ts` is generated into
+`src/runtime/`. Platform export keys and declaration names are unchanged.
+
 ### Session RF5C — Runtime deltas and composition
 
 - Align or record the three known write-path differences:
@@ -1196,3 +1216,5 @@ is empty.
 | 2026-11-08 | RF4J | `rf04j-remaining-flat-packages` | Archived at [`2026-11-08-rf04j-remaining-flat-packages`](../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/); 14/14 tasks complete. Delta spec synchronized into `workspace-governance` (2 modified requirements). Step RF4 done. |
 | 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Implemented, 9/9 tasks complete. Security row mappers, email/unique helpers and invitation SQL move to `db` `security/rows.ts`; rate-limit policies and the setup-token TTL move to application; both adapters split by port (`d1-security.ts` 984 → 215 lines, largest new module 629). Platform runtime keys, declaration names and the 17 security-contract titles per runtime match the baseline; `db` and `application` gain only the shared names. No delta specs (`skip_specs`). Not archived. |
 | 2026-11-08 | RF5A | `rf05a-shared-security-rows` | Archived at [`2026-11-08-rf05a-shared-security-rows`](../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/); 9/9 tasks complete. No delta specs (`skip_specs`). RF5B next. |
+| 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Implemented, 18/18 tasks complete. `db` `SqlContentReader` owns the identical reads; both repositories delegate and split into area modules (Node 2,291 → largest 481 lines, D1 2,696 → 646); both platform packages adopt the §6 layout; the `platform-node` cycle and both oversized entries leave their baselines. Contract titles (213 Node, 119 D1, 4 D1 budget) and platform export keys/declarations match the baseline; `db` gains only the reader names. No delta specs (`skip_specs`). Not archived. |
+| 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Archived at [`2026-11-08-rf05b-shared-content-reader`](../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/); 18/18 tasks complete. No delta specs (`skip_specs`). RF5C next. |

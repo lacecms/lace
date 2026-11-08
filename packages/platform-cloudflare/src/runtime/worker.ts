@@ -1,4 +1,4 @@
-import { createD1OAuthPersistence } from "./oauth.js";
+import { createD1OAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
@@ -48,13 +48,13 @@ import { drizzle } from "drizzle-orm/d1";
 import { ulid } from "ulid";
 import { createCloudflareAdminAssets } from "./admin-assets.js";
 import { CloudflareKvCache, NoopCloudflareCache } from "./cache.js";
-import { D1ContentRepository } from "./d1-content-repository.js";
-import { DeployHookSiteBuildTrigger } from "./deploy-hook.js";
-import { PagesDeploymentStatusReader } from "./pages-deployments.js";
-import { D1FixedWindowRateLimiter, D1SecurityService } from "./d1-security.js";
-import type { D1Database } from "./d1.js";
-import { WorkerImageInspector } from "./image-inspector.js";
-import { CloudflareR2ObjectStorage } from "./r2-storage.js";
+import { D1ContentRepository } from "../repository/repository.js";
+import { DeployHookSiteBuildTrigger } from "../deploy/deploy-hook.js";
+import { PagesDeploymentStatusReader } from "../deploy/pages-deployments.js";
+import { D1FixedWindowRateLimiter, D1SecurityService } from "../security/service.js";
+import type { D1Database } from "../d1/database.js";
+import { WorkerImageInspector } from "../media/image-inspector.js";
+import { CloudflareR2ObjectStorage } from "../media/r2-storage.js";
 import {
   CloudflareEnvironmentError,
   parseCloudflareSettings,

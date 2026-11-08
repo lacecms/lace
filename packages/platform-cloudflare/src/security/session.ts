@@ -5,7 +5,7 @@ import {
 } from "@lacecms/db";
 import type { SessionRecord, SessionSecurityPort } from "@lacecms/application";
 import type { UnixMilliseconds } from "@lacecms/domain";
-import type { D1Database } from "../d1.js";
+import type { D1Database } from "../d1/database.js";
 import { bindStatement } from "./statements.js";
 
 /** D1 session listing and revocation for one user. */

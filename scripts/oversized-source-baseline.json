@@ -1,6 +1,4 @@
 {
   "apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx": 1508,
-  "apps/admin/src/shared/api/admin-client.ts": 1042,
-  "packages/platform-cloudflare/src/d1-content-repository.ts": 2696,
-  "packages/platform-node/src/content-repository.ts": 2291
+  "apps/admin/src/shared/api/admin-client.ts": 1042
 }

@@ -10,11 +10,11 @@ import {
   type UserProfileReader,
 } from "@lacecms/application";
 import type { UnixMilliseconds } from "@lacecms/domain";
-import type { D1Database } from "./d1.js";
-import { D1AccountSecurity } from "./security/account.js";
-import { encoder, hex } from "./security/secrets.js";
-import { D1SessionSecurity } from "./security/session.js";
-import { D1TokenSecurity } from "./security/token.js";
+import type { D1Database } from "../d1/database.js";
+import { D1AccountSecurity } from "./account.js";
+import { encoder, hex } from "./secrets.js";
+import { D1SessionSecurity } from "./session.js";
+import { D1TokenSecurity } from "./token.js";
 
 /**
  * D1 implementation of the cross-runtime security state protocol. Each port

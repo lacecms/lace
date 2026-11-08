@@ -33,7 +33,7 @@ import {
   unixMilliseconds,
   type UnixMilliseconds,
 } from "@lacecms/domain";
-import type { D1Database } from "../d1.js";
+import type { D1Database } from "../d1/database.js";
 import { digest, randomHex, tokenSecret } from "./secrets.js";
 import { SETUP_COMPLETED_SQL, bindStatement } from "./statements.js";
 

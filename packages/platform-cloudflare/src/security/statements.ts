@@ -1,4 +1,4 @@
-import type { D1Database, D1PreparedStatement } from "../d1.js";
+import type { D1Database, D1PreparedStatement } from "../d1/database.js";
 
 /** True once first-run setup has completed; guards setup writes inside their statement. */
 export const SETUP_COMPLETED_SQL =

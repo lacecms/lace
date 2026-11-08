@@ -1,5 +1,5 @@
 // Directory dependencies: shared ← schema, security, links; links ← publication, sync;
-// shared ← content ← media ← delivery ← builds; outbox.
+// shared ← content ← media ← delivery ← builds; outbox; builds, links ← reads.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export * from "./security/rows.js";
@@ -63,6 +63,7 @@ export * from "./content/snapshots.js";
 export * from "./links/statements.js";
 export * from "./publication/projection.js";
 export * from "./links/reader.js";
+export * from "./reads/content-reader.js";
 
 export * from "./shared/limits.js";
 export * from "./shared/failures.js";

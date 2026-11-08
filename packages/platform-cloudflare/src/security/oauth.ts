@@ -1,5 +1,5 @@
 import { SqlOAuthIssuancePersistence } from "@lacecms/db";
-import type { D1Database } from "./d1.js";
+import type { D1Database } from "../d1/database.js";
 
 export function createD1OAuthPersistence(database: D1Database): SqlOAuthIssuancePersistence {
   return new SqlOAuthIssuancePersistence({

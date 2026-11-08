@@ -2,9 +2,9 @@
 // syntax only, and sibling modules are imported for types only.
 import { readdir, readFile } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import type { KVNamespace } from "../cache.js";
-import type { D1Database, D1PreparedStatement } from "../d1.js";
-import type { R2Bucket } from "../r2-storage.js";
+import type { KVNamespace } from "../runtime/cache.js";
+import type { D1Database, D1PreparedStatement } from "../d1/database.js";
+import type { R2Bucket } from "../media/r2-storage.js";
 
 const migrationsDirectory = new URL("../../../db/drizzle/", import.meta.url);
 

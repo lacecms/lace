@@ -7,13 +7,13 @@ import type { BuildTriggerResult, SiteBuildRequest } from "@lacecms/application"
 import { unixMilliseconds } from "@lacecms/domain";
 import config from "../../../../lace.config.js";
 import { openLocalCloudflare } from "./d1-test-harness.js";
-import type { WorkerExecutionContext } from "../worker.js";
+import type { WorkerExecutionContext } from "../runtime/worker.js";
 import type {
   CloudflareWorker,
   CreateCloudflareWorkerInput,
   WorkerOperationalLogger,
-} from "../worker.js";
-import type { CloudflareWorkerEnv } from "../settings.js";
+} from "../runtime/worker.js";
+import type { CloudflareWorkerEnv } from "../runtime/settings.js";
 
 /** Input overrides; an explicit `undefined` removes a fixture default. */
 export type WorkerFixtureOptions = {

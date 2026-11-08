@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { assertHostDatabaseSafe } from "./host-database-safety.js";
-import { migrateNodeDatabase } from "./index.js";
+import { assertHostDatabaseSafe } from "./database/host-database-safety.js";
+import { migrateNodeDatabase } from "./database/connection.js";
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {

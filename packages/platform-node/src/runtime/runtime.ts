@@ -1,5 +1,5 @@
 import { RuntimeConfigurationError } from "@lacecms/application";
-import { createNodeOAuthPersistence } from "./oauth.js";
+import { createNodeOAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
@@ -49,14 +49,17 @@ import {
   type ServerLogger,
 } from "@lacecms/server";
 import { ulid } from "ulid";
-import { NodeContentRepository } from "./content-repository.js";
-import { NodeFixedWindowRateLimiter, NodeSecurityService } from "./security.js";
-import { openNodeDatabase, type NodeDatabase } from "./index.js";
-import { NodeSharpImageInspector } from "./image-inspector.js";
-import { NodeMinioObjectStorage, type NodeMinioSettings } from "./minio-storage.js";
-import { NodeMediaDeletionDispatcher } from "./media-deletion-dispatcher.js";
-import { NodeSiteBuildDispatcher } from "./site-build-dispatcher.js";
-import { NodeBuilderSiteBuildTrigger, type NodeBuilderTriggerSettings } from "./builder-trigger.js";
+import { NodeContentRepository } from "../repository/repository.js";
+import { NodeFixedWindowRateLimiter, NodeSecurityService } from "../security/service.js";
+import { openNodeDatabase, type NodeDatabase } from "../database/connection.js";
+import { NodeSharpImageInspector } from "../media/image-inspector.js";
+import { NodeMinioObjectStorage, type NodeMinioSettings } from "../media/minio-storage.js";
+import { NodeMediaDeletionDispatcher } from "../media/media-deletion-dispatcher.js";
+import { NodeSiteBuildDispatcher } from "../builds/site-build-dispatcher.js";
+import {
+  NodeBuilderSiteBuildTrigger,
+  type NodeBuilderTriggerSettings,
+} from "../builds/builder-trigger.js";
 import { createSmtpEmailSender } from "./smtp-email.js";
 import type { EmailSender } from "@lacecms/application";
 

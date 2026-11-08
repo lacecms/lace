@@ -14,7 +14,7 @@ export async function platformReleaseVersion(directory, { check = false } = {}) 
   if (!/^@lacecms\/platform-(?:node|cloudflare)$/u.test(manifest.name))
     throw new Error("Expected a Lace platform package");
   const source = releaseVersionSource(manifest.version);
-  const destination = join(directory, "src/release-version.ts");
+  const destination = join(directory, "src/runtime/release-version.ts");
   if (check) {
     if ((await readFile(destination, "utf8")) !== source)
       throw new Error(`Stale platform release version: ${manifest.name}`);

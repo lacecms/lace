@@ -12,9 +12,9 @@ import {
 } from "@lacecms/application";
 import type { UnixMilliseconds } from "@lacecms/domain";
 import type Database from "better-sqlite3";
-import { NodeAccountSecurity } from "./security/account.js";
-import { NodeSessionSecurity } from "./security/session.js";
-import { NodeTokenSecurity } from "./security/token.js";
+import { NodeAccountSecurity } from "./account.js";
+import { NodeSessionSecurity } from "./session.js";
+import { NodeTokenSecurity } from "./token.js";
 
 /**
  * SQLite implementation of the cross-runtime security state protocol. Each port
