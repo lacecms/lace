@@ -43,7 +43,7 @@ to apply to production modules. Admin source-structure checks SHALL remain
 unchanged. Test files SHALL remain subject to their TypeScript, lint and test
 execution gates.
 
-For Step 1, enforcement SHALL use a TypeScript source-level compatibility
+Enforcement SHALL use a TypeScript source-level compatibility
 checker. Dependency-cruiser SHALL NOT be installed, configured, or run while it
 cannot parse the project-pinned TypeScript 7 baseline. The repository SHALL
 document this deferral and replace the compatibility checker with
@@ -67,7 +67,7 @@ baseline without lowering the TypeScript version.
 
 #### Scenario: Dependency-cruiser compatibility deferral
 
-- **WHEN** Step 1 is installed with the project-pinned TypeScript 7 baseline
+- **WHEN** the workspace is installed with the project-pinned TypeScript 7 baseline
 - **THEN** no dependency-cruiser dependency or CI invocation is present, the TypeScript source-level compatibility checker enforces the same required boundaries, and the documented follow-up condition names TypeScript 7 parser support
 
 #### Scenario: Test imports are excluded
@@ -97,7 +97,7 @@ lint command SHALL fail when Oxlint reports any warning in any workspace member.
 #### Scenario: CI quality gate
 
 - **WHEN** a pull request or push triggers the repository CI workflow
-- **THEN** CI uses the exact Step 0 Node and pnpm baseline, performs a frozen-lockfile installation, and fails if any required local quality command fails
+- **THEN** CI uses the exact pinned Node and pnpm baseline, performs a frozen-lockfile installation, and fails if any required local quality command fails
 
 #### Scenario: Invalid specification
 

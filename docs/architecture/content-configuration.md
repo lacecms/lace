@@ -139,7 +139,7 @@ version and requests a build ([content-model-configuration]).
 - `placeholder` on text, textarea, URL, number, select and rich-text
   descriptors at every depth, including scalar list items; other kinds reject
   it. An empty string suppresses the admin's generic prompt
-  ([admin-draft-editor] "Configured placeholders guide empty controls").
+  ([admin-draft-editor-fields] "Configured placeholders guide empty controls").
 - `layout` (sections or tabs over immediate sibling fields) on models, block
   data and groups, and `settingsLayout` on block settings ([field-descriptors]
   "Visual field layouts are portable sibling metadata"). Layout creates no data
@@ -183,7 +183,7 @@ immediate sibling `select` or `boolean` controller ([conditional-fields],
   MCP reads never carry hidden values, and published value types make targets
   optional.
 - The server enforces the rules on every write path; the admin only presents
-  them ([admin-draft-editor]). Rule metadata crosses REST and OpenAPI as
+  them ([admin-draft-editor-fields]). Rule metadata crosses REST and OpenAPI as
   validated JSON.
 - Rules are structural: a model version increase, or for block data a block
   definition change. Sync prunes newly hidden published values in its guarded
@@ -220,7 +220,8 @@ The registry ships `hero`, `richText`, `image`, `quote`, `cta`, `gallery`,
 `navigation`, `videoEmbed` and `link`, defined only through the public block
 and field DSL and without special database treatment. Their fields, settings,
 versions and migrations are in [block-registry], their markup in
-[block-source-registry] and player behavior in [video-embeds]. Video-file
+[block-source-registry] and player behavior in [video-embeds]; the Gallery
+block's definition, markup and video items are in [gallery-block]. Video-file
 uploads are excluded. Projects may define additional blocks in
 `lace.config.ts`; custom blocks use the generic metadata-driven admin form, and
 custom React admin editors are out of scope.
@@ -339,7 +340,7 @@ defaults, no blocks and the actor `system:content-sync`
 advances public projection state"). Collection entries are created only
 through the admin or API and require an initial title.
 
-[admin-draft-editor]: ../../openspec/specs/admin-draft-editor/spec.md
+[admin-draft-editor-fields]: ../../openspec/specs/admin-draft-editor-fields/spec.md
 [astro-adapter]: ../../openspec/specs/astro-adapter/spec.md
 [block-registry]: ../../openspec/specs/block-registry/spec.md
 [block-settings-visibility]: ../../openspec/specs/block-settings-visibility/spec.md
@@ -353,6 +354,7 @@ through the admin or API and require an initial title.
 [content-validation]: ../../openspec/specs/content-validation/spec.md
 [d1-content-repositories]: ../../openspec/specs/d1-content-repositories/spec.md
 [field-descriptors]: ../../openspec/specs/field-descriptors/spec.md
+[gallery-block]: ../../openspec/specs/gallery-block/spec.md
 [internal-url-links]: ../../openspec/specs/internal-url-links/spec.md
 [list-layout]: ../../openspec/specs/list-layout/spec.md
 [public-sdk]: ../../openspec/specs/public-sdk/spec.md

@@ -75,7 +75,9 @@ removes it ([admin-media-library](../../openspec/specs/admin-media-library/spec.
 
 The editor makes draft, published and build status visible and surfaces
 optimistic-concurrency conflicts rather than overwriting a newer draft
-([admin-draft-editor](../../openspec/specs/admin-draft-editor/spec.md)).
+([admin-draft-editor](../../openspec/specs/admin-draft-editor/spec.md),
+[admin-draft-editor-publication](../../openspec/specs/admin-draft-editor-publication/spec.md);
+fields, media lists and blocks have their own `admin-draft-editor-*` capabilities).
 
 - "Save and publish" validates, saves and publishes the saved revision with
   one idempotency key; a failed validation or save publishes nothing.

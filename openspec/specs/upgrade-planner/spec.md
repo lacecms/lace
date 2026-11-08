@@ -37,7 +37,7 @@ Human and JSON output SHALL expose source and target template versions, per-path
 
 #### Scenario: Explicit apply in planner-only release
 - **WHEN** an operator moves from the planner-only CLI release to the apply-capable CLI and invokes upgrade with a valid target template and `--apply`
-- **THEN** the CLI performs guarded application and reports its outcome instead of returning the former 24A unsupported error
+- **THEN** the CLI performs guarded application and reports its outcome instead of returning the former unsupported error
 
 #### Scenario: Cloudflare review without credentials
 - **WHEN** an operator reviews a Cloudflare generated project with no runtime credentials

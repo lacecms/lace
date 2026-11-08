@@ -595,7 +595,7 @@ Admin build history and detail SHALL retain optional `error` as a closed failure
 - **THEN** the API returns the existing authentication error without diagnostic data
 
 ### Requirement: Admin build DTOs expose the seven-status lifecycle
-Admin build history and detail DTOs SHALL validate `status` as exactly one of `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, or `unknown`, in shared runtime validation and in generated OpenAPI. All other build fields, the 33C `error`/`errorPath` rules, and authorization SHALL be unchanged. Node and Worker SHALL return identical DTOs for identical persisted builds.
+Admin build history and detail DTOs SHALL validate `status` as exactly one of `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, or `unknown`, in shared runtime validation and in generated OpenAPI. All other build fields, the build `error`/`errorPath` rules, and authorization SHALL be unchanged. Node and Worker SHALL return identical DTOs for identical persisted builds.
 
 #### Scenario: New statuses are readable
 - **WHEN** an authenticated reader requests history containing `accepted`, `cancelled`, and `unknown` builds
