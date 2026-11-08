@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-03
-- Governing architecture: [section 6](../mvp-architecture.md#source-layout)
+- Governing architecture: [section 6](../architecture/workspace.md#source-layout)
 
 ## Context
 

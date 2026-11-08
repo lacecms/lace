@@ -17,7 +17,7 @@ session.
 
 Authority follows `AGENTS.md`:
 
-1. [`mvp-architecture.md`](mvp-architecture.md) owns product scope and
+1. [architecture](architecture/README.md) owns product scope and
    invariants.
 2. [`openspec/specs/**`](../openspec/specs) owns accepted capability behavior.
 3. The selected active OpenSpec change owns the proposed delta.
@@ -128,7 +128,7 @@ What the roadmap changes, with the numbers to beat:
 | CLI | runtime dependencies on the `--target node` path | `miniflare` + `workerd` loaded statically through `commands.ts` |
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
 | Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
-| Docs | `docs/mvp-architecture.md` | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose |
+| Docs | architecture document (now `docs/architecture/`) | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose → RF8A (4,086 lines at the start): a README and twelve domain files, 2,492 prose lines; codes only in `history.md`; guarded by `tests/architecture-document.test.mjs` |
 | Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137 → RF4I: 136 → RF4H: 132, listed in a shrinking baseline; test-support always typed |
 | Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared → RF5B: 2 components (`platform-node` broken); both platform packages declared |
 | Docs | Obsolete step verification records | Audit: 48 files, 952 KB → RF1B: 0 retained |
@@ -148,7 +148,7 @@ What the roadmap changes, with the numbers to beat:
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
-| RF8 | Documentation | L | RF8A → RF8B → RF8C | planned |
+| RF8 | Documentation | L | RF8A → RF8B → RF8C | in progress |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
 
 **Order rationale:** RF1 first because deleting obsolete scripts and tests
@@ -1042,7 +1042,7 @@ architecture sections they change; RF1B for the index.
 ### Session RF8A — Architecture document
 
 - Remove change codes (`CE7D`, `SM5`, `LIST1`, `MCP2`…) from headings and
-  prose of `docs/mvp-architecture.md`; a "History" appendix maps each code to
+  prose of the architecture document; a "History" appendix maps each code to
   its archived change. The body states current behavior only.
 - §24 *Decisions captured by this document* moves into ADRs (new ADRs only
   where none exists); the section becomes a pointer to `docs/adr/README.md`.
@@ -1061,6 +1061,16 @@ architecture sections they change; RF1B for the index.
   foreign-key relations. A root test fails when a schema table is missing
   from the table diagram, so the diagram cannot drift silently.
 
+**Outcome (RF8A):** by owner decision the architecture became the directory
+`docs/architecture/`: a `README.md` (§1–§4, §24, §26 and a section map) and
+twelve domain files, keeping section numbers §1–§26. Prose outside Mermaid
+blocks fell from 4,086 to 2,492 lines (ceiling 2,500, files under 600). The
+invariant checklist of `rf08a-architecture-document` maps 1,181 statements:
+576 kept, 522 replaced by pointers to named spec requirements, 51 in ADRs and
+32 history. §24 became ADRs 0021–0028. `history.md` maps each former change
+code to its archived change. The table diagram (§9.10) covers all 36 Drizzle
+tables and the component diagram sits in §15.
+
 ### Session RF8B — OpenSpec specifications
 
 - `openspec/specs/README.md` groups the 84 capabilities by domain with one
@@ -1074,6 +1084,14 @@ architecture sections they change; RF1B for the index.
 - Split `admin-draft-editor` (2,154 lines) by sub-surface:
   `admin-draft-editor-fields`, `-blocks`, `-publication`, `-media-lists`.
 - The change archive stays complete (owner decision 4).
+- Architecture pointers name capabilities and requirement titles (RF8A
+  checklist); a capability split or requirement move updates the links in
+  `docs/architecture/` in the same change.
+- RF8A found spec text that disagrees with code or with itself; fix it here:
+  `block-source-registry` gives `image` revision 6 and `hero` revision 4 (code
+  7 and 5) and a seven-block registry (nine items), `rest-contracts` both
+  rejects and tolerates a first export page without `globals`/`seo`, and spec
+  text still carries roadmap codes (`CE10`) and release-scoped wording.
 
 **Acceptance:** `pnpm spec:validate` strict; no requirement text is lost
 (diff of concatenated requirement titles before and after).
@@ -1253,4 +1271,6 @@ is empty.
 | 2026-11-08 | RF5B | `rf05b-shared-content-reader` | Archived at [`2026-11-08-rf05b-shared-content-reader`](../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/); 18/18 tasks complete. No delta specs (`skip_specs`). RF5C next. |
 | 2026-11-08 | RF5C | `rf05c-runtime-deltas-composition` | Implemented, 16/16 tasks complete. Write-path deltas aligned or recorded in §16 (claims, revision precedence, publication result, `mutation_guards`); apply found two defects — D1 publish results lacked `seo`, D1 site-build claims above ten exceeded the batch budget — both fixed and pinned by new contract cases. `composeLaceServices` composes both runtimes; routes receive actors and capabilities. Platform export keys unchanged; server and application gain only the shared names. Delta specs: 4 capabilities. Not archived; Step RF5 becomes done at archive. |
 | 2026-11-08 | RF5C | `rf05c-runtime-deltas-composition` | Archived at [`2026-11-08-rf05c-runtime-deltas-composition`](../openspec/changes/archive/2026-11-08-rf05c-runtime-deltas-composition/); 16/16 tasks complete. Delta specs synchronized: `content-repository-contracts` and `hono-app-factory` (1 added each), `node-content-repositories` and `d1-content-repositories` (1 modified each). Step RF5 done; the backend refactoring sessions are complete. |
-| 2026-11-08 | RF8A | — | Scope decision: the owner asked for a backend component diagram and a database table diagram; both join RF8A as Mermaid diagrams in `docs/mvp-architecture.md` (the component diagram after RF5C's composition), the table diagram with a drift test against the Drizzle schema. No change created. |
+| 2026-11-08 | RF8A | — | Scope decision: the owner asked for a backend component diagram and a database table diagram; both join RF8A as Mermaid diagrams in the architecture document (the component diagram after RF5C's composition), the table diagram with a drift test against the Drizzle schema. No change created. |
+| 2026-11-08 | RF8A | `rf08a-architecture-document` | Implemented. Owner chose a domain directory over one file; the single architecture file became `docs/architecture/` (README + 12 files, §1–§26 kept), ADRs 0021–0028 replace §24, codes moved to `history.md`, table and component diagrams added, `tests/architecture-document.test.mjs` guards schema drift, codes, section map and ceilings. Not archived. |
+| 2026-11-08 | RF8A | `rf08a-architecture-document` | Archived at [`2026-11-08-rf08a-architecture-document`](../openspec/changes/archive/2026-11-08-rf08a-architecture-document/); 17/17 tasks complete. Delta spec synchronized: `workspace-governance` (1 added). RF8B next. |

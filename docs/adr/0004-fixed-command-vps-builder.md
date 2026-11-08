@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-07
-- Governing architecture: [section 5](../mvp-architecture.md#5-system-context) and [section 9.8](../mvp-architecture.md#98-outbox-and-site-builds)
+- Governing architecture: [section 5](../architecture/deployment.md#5-system-context) and [section 9.8](../architecture/data-model.md#98-outbox-and-site-builds)
 
 ## Context
 

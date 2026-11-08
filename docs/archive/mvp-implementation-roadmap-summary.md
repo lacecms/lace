@@ -19,7 +19,7 @@ failed-build recovery were owner-confirmed on 2026-10-10; see the
 [owner verification record](../verification.md#owner-checks-on-real-infrastructure) for scope and evidence limits.
 Beta/stable release approval remains separate.
 
-The [architecture](../mvp-architecture.md) and accepted specs remain sources of truth.
+The [architecture](../architecture/README.md) and accepted specs remain sources of truth.
 New product work continues through the repository-local OpenSpec workflow with
 a just-in-time proposal and explicit apply request. Use the archived roadmap
 for historical context rather than reopening completed implementation sessions.

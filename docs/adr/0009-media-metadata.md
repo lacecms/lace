@@ -2,8 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-11
-- Governing architecture: [section 9.7](../mvp-architecture.md#97-media) and
-  [section 12](../mvp-architecture.md#12-rest-api)
+- Governing architecture: [section 9.7](../architecture/data-model.md#97-media) and
+  [section 12](../architecture/api.md#12-rest-api)
 - Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE3,
   OpenSpec changes `ce03a-media-metadata-storage-api`,
   `ce03b-admin-media-metadata-editing` and `ce03c-public-delivery-contract`

@@ -2,11 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-10-12
-- Governing architecture: [section 8](../mvp-architecture.md#8-content-configuration),
-  [section 9.3](../mvp-architecture.md#93-content-snapshots),
-  [section 9.7](../mvp-architecture.md#97-media),
-  [section 12](../mvp-architecture.md#12-rest-api) and
-  [section 16](../mvp-architecture.md#16-database-portability-and-d1-constraints)
+- Governing architecture: [section 8](../architecture/content-configuration.md#8-content-configuration),
+  [section 9.3](../architecture/data-model.md#93-content-snapshots),
+  [section 9.7](../architecture/data-model.md#97-media),
+  [section 12](../architecture/api.md#12-rest-api) and
+  [section 16](../architecture/runtimes.md#16-database-portability-and-d1-constraints)
 - Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE4,
   OpenSpec change `ce04a-seo-data-contract`
 

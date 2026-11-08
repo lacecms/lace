@@ -2,12 +2,12 @@
 
 - Status: Accepted
 - Date: 2026-10-11
-- Governing architecture: [section 8](../mvp-architecture.md#8-content-configuration),
-  [section 9.6](../mvp-architecture.md#96-published-routes),
-  [section 10](../mvp-architecture.md#10-content-publication),
-  [section 12](../mvp-architecture.md#12-rest-api),
-  [section 13.2](../mvp-architecture.md#132-published-site-loader) and
-  [section 16](../mvp-architecture.md#16-database-portability-and-d1-constraints)
+- Governing architecture: [section 8](../architecture/content-configuration.md#8-content-configuration),
+  [section 9.6](../architecture/data-model.md#96-published-routes),
+  [section 10](../architecture/publication.md#10-content-publication),
+  [section 12](../architecture/api.md#12-rest-api),
+  [section 13.2](../architecture/rendering.md#132-published-site-loader) and
+  [section 16](../architecture/runtimes.md#16-database-portability-and-d1-constraints)
 - Related: [content and editor roadmap](../archive/content-editor-roadmap.md) step CE5,
   OpenSpec change `ce05a-global-kind-storage-delivery`
 

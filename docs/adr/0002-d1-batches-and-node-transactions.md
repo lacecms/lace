@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-07
-- Governing architecture: [sections 4.5](../mvp-architecture.md#45-portable-capabilities-explicit-adapters), [9](../mvp-architecture.md#9-content-data-model), and [10](../mvp-architecture.md#10-content-publication)
+- Governing architecture: [sections 4.5](../architecture/README.md#45-portable-capabilities-explicit-adapters), [9](../architecture/data-model.md#9-content-data-model), and [10](../architecture/publication.md#10-content-publication)
 
 ## Context
 
