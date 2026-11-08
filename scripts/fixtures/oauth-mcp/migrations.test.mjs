@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { afterEach, expect, test } from "vitest";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
-import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
+import { betterAuthSchema } from "@lacecms/db";
 import {
   migrationStatements,
   openLocalCloudflare,
@@ -12,7 +12,6 @@ const closes = [];
 afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
-const migration = "0012_oauth_mcp.sql";
 
 async function open(runtime) {
   if (runtime === "D1") {
@@ -93,26 +92,10 @@ for (const runtime of ["SQLite", "D1"]) {
       expect(indexes).toContain(required);
   }, 30000);
 
-  test(`${runtime}: additive OAuth migration preserves populated accounts, sessions, content and build credentials`, async () => {
+  test(`${runtime}: OAuth lifecycle constraints hold beside accounts, sessions, content and build credentials`, async () => {
     const db = await open(runtime);
-    await db.apply(await migrationStatements((file) => file < migration));
+    await db.apply(await migrationStatements());
     await db.apply(seed);
-    const existing = [
-      "user",
-      "account",
-      "session",
-      "api_tokens",
-      "content_models",
-      "content_entries",
-      "content_snapshots",
-      "published_state",
-      "outbox_events",
-    ];
-    const before = await Promise.all(existing.map((name) => db.rows(`select * from ${name}`)));
-    await db.apply(await migrationStatements((file) => file === migration));
-    expect(await Promise.all(existing.map((name) => db.rows(`select * from ${name}`)))).toEqual(
-      before,
-    );
     expect(await db.rows("pragma foreign_key_check")).toEqual([]);
     await db.run(
       "insert into oauth_clients (id,client_id,redirect_uris) values ('c','client','[\"http://127.0.0.1/callback\"]')",
@@ -175,5 +158,4 @@ test("checked-in provider schema matches pinned model/field/required/reference d
         );
     }
   }
-  expect(checkedInMigrations.some((entry) => entry.name === migration)).toBe(true);
 });

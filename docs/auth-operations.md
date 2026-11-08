@@ -90,9 +90,8 @@ Two list parameters let an import stay idempotent:
   matches. Pages and globals already list at most one entry. Draft slugs are
   not unique, so the page can hold more than one entry.
 - `GET /api/v1/admin/media?sha256=<64 lowercase hex>` returns active items whose
-  stored bytes have that SHA-256. Every upload after migration
-  `0015_import_credentials` records the hash, shown as `sha256` in admin media
-  DTOs; earlier media have none and never match.
+  stored bytes have that SHA-256. Every upload records the hash, shown as
+  `sha256` in admin media DTOs.
 
 Both parameters combine with the other list options and bind continuation
 cursors. Invalid values return `422` with the pointer `/slug` or `/sha256`.
@@ -148,8 +147,7 @@ Every signed-in user manages their own account at `/admin/account`:
   is ended by signing out (`409` here), and another user's session id is `404`.
 
 Invitation and reset tokens are 32 random bytes stored only as SHA-256
-digests in the `invitations` and `password_reset_tokens` tables from migration
-`0004_account_tokens`. They travel only in the URL fragment and JSON request
+digests in the `invitations` and `password_reset_tokens` tables. They travel only in the URL fragment and JSON request
 bodies, never in paths, queries, logs, or error responses, and the admin
 removes the fragment from the address bar as soon as it reads it.
 

@@ -31,7 +31,13 @@ export interface CliOptions {
 
 export class CliError extends Error {
   public constructor(
-    readonly code: "USAGE" | "CONFIG" | "SCHEMA_OUTDATED" | "OPERATION_FAILED" | "SYNC_PENDING",
+    readonly code:
+      | "USAGE"
+      | "CONFIG"
+      | "SCHEMA_OUTDATED"
+      | "SCHEMA_UNSUPPORTED"
+      | "OPERATION_FAILED"
+      | "SYNC_PENDING",
     message: string,
     readonly exitCode: number,
     readonly diagnosticKind?: DiagnosticKind,

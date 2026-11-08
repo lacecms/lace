@@ -116,6 +116,7 @@ export function validateOperation(
     validateUpgradeManifest({
       schemaVersion: 1,
       templateVersion: "1",
+      site: { mode: "starter", path: "site" },
       files: { [path]: { owner: "managed", sha256: "0".repeat(64) } },
     });
     if (
@@ -182,6 +183,7 @@ export function validateOperation(
     validateUpgradeManifest({
       schemaVersion: 1,
       templateVersion: "1",
+      site: { mode: "starter", path: "site" },
       files: { [directory]: { owner: "managed", sha256: "0".repeat(64) } },
     });
     directories.push(directory);

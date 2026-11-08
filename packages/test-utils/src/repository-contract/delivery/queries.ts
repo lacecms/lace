@@ -30,7 +30,7 @@ export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
 contract(
-  "public query identity avoids builds and guards legacy, mixed and stale updates",
+  "public query identity avoids builds and guards untrusted, mixed and stale updates",
   async (runtime, expect) => {
     const model = async (
       listOptions?: CollectionModelInput["listOptions"],
@@ -78,41 +78,36 @@ contract(
       });
       expect((await applySync(repository, [current], 21)).status).toBe("noop");
     }
-    // First enablement from pre-feature identity can be proven without a public baseline.
-    await sql.run(
-      "update content_models set public_projection_hash=null, public_projection_source_hash=null",
-    );
-    const enabled = await model({ searchableFields: ["first"] });
-    const prepared = await prepareConfigurationSynchronization({
-      models: [enabled],
-      state: repository,
-    });
-    await applySync(repository, [enabled], 30);
-    expect(await stable()).toEqual(baseline);
-    await expect(applySync(repository, [enabled], 31, prepared)).rejects.toMatchObject({
-      code: "CONFIGURATION_SYNC_STALE",
-    });
-    // Concurrent baseline-only seeding changes state while leaving full identity equal.
+    // An untrusted identity with an unchanged full projection is recorded without a
+    // build; a concurrent recording makes the older baseline-only plan stale.
     await sql.run(
       "update content_models set public_projection_hash=null, public_projection_source_hash=null",
     );
     const seedPlan = await prepareConfigurationSynchronization({
-      models: [enabled],
+      models: [original],
       state: repository,
     });
     expect(seedPlan.plan.operations).toMatchObject([{ action: "record-baseline" }]);
-    await applySync(repository, [enabled], 32);
-    await expect(applySync(repository, [enabled], 33, seedPlan)).rejects.toMatchObject({
+    await applySync(repository, [original], 30);
+    await expect(applySync(repository, [original], 31, seedPlan)).rejects.toMatchObject({
       code: "CONFIGURATION_SYNC_STALE",
     });
     expect(await stable()).toEqual(baseline);
+    // Without a trusted identity, any full projection change takes the conservative path,
+    // even a query-only one.
+    await sql.run(
+      "update content_models set public_projection_hash=null, public_projection_source_hash=null",
+    );
+    const enabled = await model({ searchableFields: ["first"] });
+    expect((await applySync(repository, [enabled], 32)).targetVersion).toBe(2);
+    expect(await count(sql, "select count(*) as count from outbox_events")).toBe(1);
+    expect((await applySync(repository, [enabled], 33)).status).toBe("noop");
     // SEO and query changes together retain the public build.
     const mixed = await model({ filterableFields: ["second"] }, "second");
-    expect((await applySync(repository, [mixed], 40)).targetVersion).toBe(2);
-    expect(await count(sql, "select count(*) as count from outbox_events")).toBe(1);
-    // Rollback-era full identity writes invalidate the hash/source association.
-    await sql.run("update content_models set projection_hash='rollback-change'");
-    expect((await applySync(repository, [mixed], 50)).targetVersion).toBe(3);
+    expect((await applySync(repository, [mixed], 40)).targetVersion).toBe(3);
+    // A full identity written without the source association is untrusted.
+    await sql.run("update content_models set projection_hash='foreign-change'");
+    expect((await applySync(repository, [mixed], 50)).targetVersion).toBe(4);
     expect((await applySync(repository, [mixed], 51)).status).toBe("noop");
   },
 );

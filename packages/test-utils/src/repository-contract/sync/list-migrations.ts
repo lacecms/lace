@@ -3,7 +3,6 @@ import { ContentUseCases, prepareConfigurationSynchronization } from "@lacecms/a
 import { defineCollection, defineConfig } from "@lacecms/config";
 
 import { builtInBlocks, defineBlock, field } from "@lacecms/content";
-import type { BlockDefinition } from "@lacecms/content";
 import { blockKey, contentEntryId, mediaId, unixMilliseconds } from "@lacecms/domain";
 
 import {
@@ -92,216 +91,53 @@ contract(
   },
 );
 
-contract("LIST1 Gallery v3 migrates draft, published and hidden lists", async (runtime, expect) => {
-  const gallery = builtInBlocks.gallery;
-  const old = defineBlock({
-    type: "gallery",
-    version: 3,
-    fields: gallery.fields,
-    settings: { lightbox: gallery.settings!.lightbox! },
-    migrations: { 2: (b) => b, 3: (b) => b },
-  });
-  const make = (block: BlockDefinition, version: number) =>
-    defineConfig({
-      blocks: [block],
+contract(
+  "SM5D mixed galleries publish only the shown values of each item kind",
+  async (runtime, expect) => {
+    const config = await defineConfig({
+      blocks: [builtInBlocks.gallery],
       content: [
-        defineCollection({ key: "posts", route: "/blog/:slug", version, blocks: ["gallery"] }),
+        defineCollection({ key: "posts", route: "/blog/:slug", version: 1, blocks: ["gallery"] }),
       ],
     });
-  const before = await make(old, 1),
-    after = await make(gallery, 2);
-  const { repository, sql } = await runtime.open({
-    resolveModel: syncResolver(before.runtime.content),
-  });
-  await syncNotes(repository, before, 10);
-  await seedMedia(sql, "m-1");
-  const data = {
-    images: [
-      { media: "m-1", alt: "One", link: "/one" },
-      { media: "m-1", caption: "Two" },
-    ],
-    title: "Studio",
-  };
-  const blocks = [false, true].map((hidden, index) => ({
-    key: blockKey(`gallery-${index}`),
-    type: "gallery",
-    schemaVersion: 3,
-    position: 1000 + index * 1000,
-    hidden,
-    anchor: `photos-${index}`,
-    className: "wide",
-    data,
-    settings: { lightbox: true },
-  }));
-  await repository.create({
-    entry: entry("gallery-entry", "posts", {
-      blocks,
-      slug: "gallery",
-      title: "Gallery",
-      updatedAt: 20,
-    }),
-    mediaReferences: blocks.flatMap((b) =>
-      [0, 1].map((index) => ({
-        sourceKey: b.key,
-        fieldPath: `/images/${index}/media`,
-        mediaId: mediaId("m-1"),
-      })),
-    ),
-  });
-  await repository.publish(publish("gallery-entry", 1, 21, "gallery-published"));
-  const stored = (await repository.load({ entryId: contentEntryId("gallery-entry") }))!;
-  const state = await sql.all("select * from published_state");
-  const prepared = await prepareNotes(repository, after);
-  expect(prepared.plan.isValid, JSON.stringify(prepared.plan)).toBe(true);
-  await syncNotes(repository, after, 30, prepared);
-  const migrated = (await repository.load({ entryId: stored.id }))!;
-  // Synchronization stores validated results: drafts materialize every item
-  // default, publications keep only the defaults their projection shows.
-  const videoDefaults = { aspectRatio: "16:9", playback: "player" };
-  for (const [snapshot, extra] of [
-    [migrated.draft, videoDefaults],
-    [migrated.published!, {}],
-  ] as const) {
-    expect(snapshot.blocks).toEqual(
-      blocks.map((b) => ({
-        ...b,
-        data: {
-          ...data,
-          images: data.images.map((item) => ({ kind: "image", ...extra, ...item })),
-        },
-        schemaVersion: gallery.version,
-        settings: { lightbox: true, layoutMode: "grid", layoutWrap: true, layoutPreset: "auto" },
-      })),
-    );
-  }
-  const useCases = new ContentUseCases({
-    clock: { now: () => unixMilliseconds(35) },
-    config: after.runtime,
-    content: repository,
-    media: repository,
-    idGenerator: { next: sequence("layout-validation") },
-  });
-  for (const [key, value] of [
-    ["layoutMode", "invalid"],
-    ["layoutWrap", "yes"],
-    ["layoutPreset", "invalid"],
-  ] as const) {
-    await expect(
-      useCases.save({
-        actor: editor,
-        entryId: migrated.id,
-        expectedRevision: migrated.draft.revision,
-        title: "Gallery",
-        slug: "gallery",
-        fields: {},
-        blocks: migrated.draft.blocks.map((block, index) =>
-          index === 0
-            ? { ...block, settings: { ...block.settings, layoutMode: "flex-row", [key]: value } }
-            : block,
-        ),
-      }),
-    ).rejects.toMatchObject({ issues: [{ path: ["blocks", 0, "settings", key] }] });
-    expect(await repository.load({ entryId: migrated.id })).toEqual(migrated);
-  }
-  expect(migrated.draft.revision).toBe(stored.draft.revision + 1);
-  expect(await sql.all("select * from published_state")).not.toEqual(state);
-  const stable = await repository.load({ entryId: stored.id });
-  await syncNotes(repository, after, 40);
-  expect(await repository.load({ entryId: stored.id })).toEqual(stable);
-});
-
-contract(
-  "SM5D Gallery v4 items migrate as images and mixed galleries publish their projection",
-  async (runtime, expect) => {
-    const gallery = builtInBlocks.gallery;
-    const { kind, videoUrl, videoTitle, playback, aspectRatio, ...v4Fields } =
-      gallery.fields.images.item.fields;
-    void [kind, videoUrl, videoTitle, playback, aspectRatio];
-    const old = defineBlock({
-      type: "gallery",
-      version: 4,
-      fields: {
-        ...gallery.fields,
-        images: field.list({
-          defaultValue: [],
-          item: field.group({ fields: v4Fields }),
-          itemLabel: "caption",
-          maxItems: 50,
-          minItems: 1,
-        }),
-      },
-      settings: gallery.settings!,
-      migrations: { 2: (b) => b, 3: (b) => b, 4: (b) => b },
-    });
-    const make = (block: BlockDefinition, version: number) =>
-      defineConfig({
-        blocks: [block],
-        content: [
-          defineCollection({ key: "posts", route: "/blog/:slug", version, blocks: ["gallery"] }),
-        ],
-      });
-    const before = await make(old, 1),
-      after = await make(gallery, 2);
     const { repository, sql } = await runtime.open({
-      resolveModel: syncResolver(before.runtime.content),
+      resolveModel: syncResolver(config.runtime.content),
     });
-    await syncNotes(repository, before, 10);
+    await syncNotes(repository, config, 10);
     await seedMedia(sql, "m-1");
     const data = {
       images: [{ media: "m-1", alt: "Kitchen", caption: "Before", link: "/work/kitchen" }],
     };
     const settings = { lightbox: true, layoutMode: "flex-row", layoutWrap: false };
-    const blocks = [false, true].map((hidden, index) => ({
-      key: blockKey(`gallery-${index}`),
+    const block = {
+      key: blockKey("gallery-0"),
       type: "gallery",
-      schemaVersion: 4,
-      position: 1000 + index * 1000,
-      hidden,
-      data,
+      schemaVersion: 5,
+      position: 1000,
+      hidden: false,
+      data: {
+        images: [{ kind: "image", ...data.images[0], aspectRatio: "16:9", playback: "player" }],
+      },
       settings,
-    }));
-    const references = blocks.map((b) => ({
-      sourceKey: b.key,
-      fieldPath: "/images/0/media",
-      mediaId: mediaId("m-1"),
-    }));
+    };
     await repository.create({
-      entry: entry("gallery-v4", "posts", {
-        blocks,
+      entry: entry("gallery-mixed", "posts", {
+        blocks: [block],
         slug: "gallery",
         title: "Gallery",
         updatedAt: 20,
       }),
-      mediaReferences: references,
+      mediaReferences: [
+        { sourceKey: block.key, fieldPath: "/images/0/media", mediaId: mediaId("m-1") },
+      ],
     });
-    await repository.publish(publish("gallery-v4", 1, 21, "gallery-v4-published"));
-    const stored = (await repository.load({ entryId: contentEntryId("gallery-v4") }))!;
-    const prepared = await prepareNotes(repository, after);
-    expect(prepared.plan.isValid, JSON.stringify(prepared.plan)).toBe(true);
-    await syncNotes(repository, after, 30, prepared);
-    const migrated = (await repository.load({ entryId: stored.id }))!;
-    // The identity migration keeps stored values; synchronization stores the
-    // validated result, so drafts gain every default and publications only
-    // the shown `kind`.
-    const image = { kind: "image", ...data.images[0] };
-    for (const [snapshot, item] of [
-      [migrated.draft, { ...image, aspectRatio: "16:9", playback: "player" }],
-      [migrated.published!, image],
-    ] as const)
-      expect(snapshot.blocks).toEqual(
-        blocks.map((b) => ({
-          ...b,
-          data: { images: [item] },
-          schemaVersion: 5,
-          settings: { ...settings, layoutPreset: "auto" },
-        })),
-      );
+    const migrated = (await repository.load({ entryId: contentEntryId("gallery-mixed") }))!;
     const mediaRows = () =>
       sql.all(
         "select snapshot_id, source_key, field_path from content_media_references order by snapshot_id, source_key",
       );
-    const storedRows = await mediaRows();
-    expect(storedRows).toHaveLength(4);
+    const blocks = [block];
+    const after = config;
 
     const useCases = new ContentUseCases({
       clock: { now: () => unixMilliseconds(35) },
@@ -362,117 +198,6 @@ contract(
     expect(
       (await repository.loadPublic("/blog/gallery"))!.entry.published!.blocks[0]!.data,
     ).toEqual(published.published!.blocks[0]!.data);
-  },
-);
-
-contract(
-  "SM1 videoEmbed v1 migrates draft, published and hidden blocks",
-  async (runtime, expect) => {
-    const videoEmbed = builtInBlocks.videoEmbed;
-    const old = defineBlock({
-      type: "videoEmbed",
-      version: 1,
-      fields: videoEmbed.fields,
-    });
-    const make = (block: BlockDefinition, version: number) =>
-      defineConfig({
-        blocks: [block],
-        content: [
-          defineCollection({ key: "posts", route: "/blog/:slug", version, blocks: ["videoEmbed"] }),
-        ],
-      });
-    const before = await make(old, 1),
-      after = await make(videoEmbed, 2);
-    const { repository, sql } = await runtime.open({
-      resolveModel: syncResolver(before.runtime.content),
-    });
-    await syncNotes(repository, before, 10);
-    await seedMedia(sql, "m-1");
-    const data = {
-      url: "https://vimeo.com/123/abc",
-      title: "Studio",
-      poster: "m-1",
-      caption: "Film",
-    };
-    const blocks = [false, true].map((hidden, index) => ({
-      key: blockKey(`videoEmbed-${index}`),
-      type: "videoEmbed",
-      schemaVersion: 1,
-      position: 1000 + index * 1000,
-      hidden,
-      anchor: `photos-${index}`,
-      className: "wide",
-      data,
-      settings: {},
-    }));
-    await repository.create({
-      entry: entry("videoEmbed-entry", "posts", {
-        blocks,
-        slug: "video-embed",
-        title: "Video embed",
-        updatedAt: 20,
-      }),
-      mediaReferences: blocks.map((b) => ({
-        sourceKey: b.key,
-        fieldPath: "poster",
-        mediaId: mediaId("m-1"),
-      })),
-    });
-    await repository.publish(publish("videoEmbed-entry", 1, 21, "videoEmbed-published"));
-    const stored = (await repository.load({ entryId: contentEntryId("videoEmbed-entry") }))!;
-    const state = await sql.all("select * from published_state");
-    const references = await sql.all(
-      "select snapshot_id, source_key, field_path, media_id from content_media_references order by snapshot_id, source_key, field_path",
-    );
-    const prepared = await prepareNotes(repository, after);
-    expect(prepared.plan.isValid, JSON.stringify(prepared.plan)).toBe(true);
-    await syncNotes(repository, after, 30, prepared);
-    const migrated = (await repository.load({ entryId: stored.id }))!;
-    for (const snapshot of [migrated.draft, migrated.published!]) {
-      expect(snapshot.blocks).toEqual(
-        blocks.map((b) => ({
-          ...b,
-          schemaVersion: 2,
-          settings: { aspectRatio: "16:9", playback: "player" },
-        })),
-      );
-    }
-    expect(
-      await sql.all(
-        "select snapshot_id, source_key, field_path, media_id from content_media_references order by snapshot_id, source_key, field_path",
-      ),
-    ).toEqual(references);
-    const useCases = new ContentUseCases({
-      clock: { now: () => unixMilliseconds(35) },
-      config: after.runtime,
-      content: repository,
-      media: repository,
-      idGenerator: { next: sequence("video-validation") },
-    });
-    for (const [key, value] of [
-      ["aspectRatio", "21:9"],
-      ["playback", "autoplay"],
-    ] as const) {
-      await expect(
-        useCases.save({
-          actor: editor,
-          entryId: migrated.id,
-          expectedRevision: migrated.draft.revision,
-          title: "Video embed",
-          slug: "video-embed",
-          fields: {},
-          blocks: migrated.draft.blocks.map((block, index) =>
-            index === 0 ? { ...block, settings: { ...block.settings, [key]: value } } : block,
-          ),
-        }),
-      ).rejects.toMatchObject({ issues: [{ path: ["blocks", 0, "settings", key] }] });
-      expect(await repository.load({ entryId: migrated.id })).toEqual(migrated);
-    }
-    expect(migrated.draft.revision).toBe(stored.draft.revision + 1);
-    expect(await sql.all("select * from published_state")).not.toEqual(state);
-    const stable = await repository.load({ entryId: stored.id });
-    await syncNotes(repository, after, 40);
-    expect(await repository.load({ entryId: stored.id })).toEqual(stable);
   },
 );
 

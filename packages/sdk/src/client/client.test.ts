@@ -117,8 +117,8 @@ test("scopes the build token to exports and supports changed and unchanged expor
       {
         globals: [],
         seo: { defaults: null, models: {} },
-        formatVersion: 1,
-        entries: [publicEntry()],
+        formatVersion: 2,
+        entries: [{ ...publicEntry(), internalLinks: [] }],
         media: {},
         version: 7,
       },
@@ -170,7 +170,7 @@ test("maps Lace error envelopes and rejects malformed server data", async () => 
     status: 404,
   });
 
-  const malformedMock = queuedFetch([json({ formatVersion: 1, entries: "not-an-array" })]);
+  const malformedMock = queuedFetch([json({ formatVersion: 2, entries: "not-an-array" })]);
   const malformedClient = createLaceClient({
     baseUrl: "https://cms.example",
     fetch: malformedMock.fetch,
@@ -216,8 +216,8 @@ test.each(['"7"', 'W/"7"'])("preserves received and supplied build validators %s
       {
         globals: [],
         seo: { defaults: null, models: {} },
-        formatVersion: 1,
-        entries: [publicEntry()],
+        formatVersion: 2,
+        entries: [{ ...publicEntry(), internalLinks: [] }],
         media: {},
         version: 7,
       },
@@ -275,8 +275,8 @@ test("rejects inconsistent response versions and malformed caller validators", a
       {
         globals: [],
         seo: { defaults: null, models: {} },
-        formatVersion: 1,
-        entries: [publicEntry()],
+        formatVersion: 2,
+        entries: [{ ...publicEntry(), internalLinks: [] }],
         media: {},
         version: 8,
       },
@@ -312,7 +312,7 @@ test("reads a published global by model key and validates its shape", async () =
       {
         globals: [],
         seo: { defaults: null, models: {} },
-        formatVersion: 1,
+        formatVersion: 2,
         entries: [],
         media: {},
         version: 3,
@@ -429,6 +429,36 @@ test("reports an error code introduced by a newer API", async () => {
   expect(failure).toMatchObject({ code: "FUTURE_CONDITION", status: 409 });
 });
 
+test("rejects an older build-export format and an entry without a manifest", async () => {
+  const exportPage = (formatVersion, entry) =>
+    json(
+      {
+        entries: [entry],
+        formatVersion,
+        globals: [],
+        media: {},
+        seo: { defaults: null, models: {} },
+        version: 4,
+      },
+      { headers: { etag: '"4"' } },
+    );
+  const mock = queuedFetch([
+    exportPage(1, { ...publicEntry(), internalLinks: [] }),
+    exportPage(2, publicEntry()),
+  ]);
+  const client = createLaceClient({
+    baseUrl: "https://cms.example",
+    fetch: mock.fetch,
+    token: "build-secret",
+  });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const failure = await client.getBuildExport().catch((error) => error);
+    expect(failure).toBeInstanceOf(LaceContractError);
+    expect(failure).not.toBeInstanceOf(LaceUnsupportedExportFormatError);
+    expect(failure.message).not.toContain("build-secret");
+  }
+});
+
 test("rejects a build export in a newer format with upgrade guidance", async () => {
   const mock = queuedFetch([
     json(
@@ -447,7 +477,7 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
       {
         globals: [],
         seo: { defaults: null, models: {} },
-        formatVersion: 1,
+        formatVersion: 2,
         entries: [],
         media: {},
         version: 4,
@@ -471,7 +501,7 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
   const supported = await client.getBuildExport();
   expect(supported.export).toEqual({
     entries: [],
-    formatVersion: 1,
+    formatVersion: 2,
     globals: [],
     media: {},
     seo: { defaults: null, models: {} },
@@ -484,11 +514,21 @@ const exportSeo = { defaults: null, models: { posts: { description: "summary", i
 
 function firstPage(version, paths, { media = {}, nextCursor, ...extra } = {}) {
   return {
-    entries: paths.map((path) =>
-      publicEntry({ id: path === "/" ? "home" : path.slice(1).replaceAll("/", "-"), path }),
-    ),
-    formatVersion: 1,
-    globals: [{ blocks: [], fields: {}, id: "g", modelKey: "settings", publishedAt: timestamp }],
+    entries: paths.map((path) => ({
+      ...publicEntry({ id: path === "/" ? "home" : path.slice(1).replaceAll("/", "-"), path }),
+      internalLinks: [],
+    })),
+    formatVersion: 2,
+    globals: [
+      {
+        blocks: [],
+        fields: {},
+        id: "g",
+        internalLinks: [],
+        modelKey: "settings",
+        publishedAt: timestamp,
+      },
+    ],
     media,
     ...(nextCursor === undefined ? {} : { nextCursor }),
     seo: exportSeo,
@@ -548,7 +588,7 @@ test("assembles a multi-page build export with merged media", async () => {
   expect(result.export.entries.map((entry) => entry.path)).toEqual(["/", "/a", "/b", "/c"]);
   expect(result.export.globals.map((global) => global.id)).toEqual(["g"]);
   expect(result.export.seo).toEqual(exportSeo);
-  expect(result.export).toMatchObject({ formatVersion: 1, version: 9 });
+  expect(result.export).toMatchObject({ formatVersion: 2, version: 9 });
   expect(Object.keys(result.export.media)).toEqual(["m1", "m2"]);
   expect(result.export).not.toHaveProperty("nextCursor");
   expect(mock.requests.map((request) => request.url)).toEqual([

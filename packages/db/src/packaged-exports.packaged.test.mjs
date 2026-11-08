@@ -215,6 +215,8 @@ test("packaged entry point keeps its public exports", async () => {
     "trackedOutcomeError",
     "trackedSiteBuildCheck",
     "trackedSiteBuildCheckUpdate",
+    "uncheckedD1Migrations",
+    "uncheckedNodeMigrations",
     "unpublicationScope",
     "userProfile",
   ]);

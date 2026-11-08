@@ -162,15 +162,6 @@ export const builtInBlocks = deepFreeze({
       title: field.text({ label: "Title" }),
     },
     label: "Gallery",
-    // Version 2 only added the lightbox setting, version 3 only the optional
-    // item link and version 4 scalar layout defaults. Version 5 adds item kinds
-    // whose default makes every stored item an image; data stays valid.
-    migrations: {
-      2: (block) => block,
-      3: (block) => block,
-      4: (block) => block,
-      5: (block) => block,
-    },
     settings: { ...listLayoutSettings(), lightbox: lightboxSetting },
     settingsVisibility: listLayoutSettingsVisibility(),
     settingsLayout: {
@@ -208,9 +199,6 @@ export const builtInBlocks = deepFreeze({
       link: imageLinkField,
     },
     label: "Image",
-    // Version 2 only made `alt` optional, version 3 only added the lightbox
-    // setting and version 4 only the optional link, so earlier data is valid.
-    migrations: { 2: (block) => block, 3: (block) => block, 4: (block) => block },
     settings: { lightbox: lightboxSetting },
     type: "image",
     version: 4,
@@ -295,7 +283,6 @@ export const builtInBlocks = deepFreeze({
     version: 2,
     label: "Video embed",
     description: "A YouTube or Vimeo video with an optional image preview.",
-    migrations: { 2: (block) => block },
     settings: {
       aspectRatio: videoAspectRatioField,
       playback: videoPlaybackField,

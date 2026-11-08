@@ -114,8 +114,10 @@ as an explicit deployment step.
 Compatibility exists at three boundaries: the database schema version, the
 `lace.config.ts` API version, and the REST/build-export contract version.
 
-- Database changes use forward migrations. Automatic database or content-schema
-  downgrade is not promised.
+- Database changes use forward migrations after one baseline migration, the
+  oldest supported schema (rc1, [ADR 0029](../adr/0029-rc1-baseline.md)). A
+  database migrated by an older engine is refused, not upgraded, and is
+  recreated. Automatic database or content-schema downgrade is not promised.
 - Content blocks and field objects carry `schema_version`. Stored block data is
   migrated only by configuration synchronization through the block's declared
   migrations (§8, §11, [ADR 0007](../adr/0007-schema-evolution-during-sync.md)),

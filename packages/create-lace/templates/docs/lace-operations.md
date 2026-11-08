@@ -35,7 +35,7 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.46.0` and Lace `0.1.0-rc1` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.8` or a later compatible release. The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.47.0` and Lace `0.1.0-rc1` packages and images; published `0.1.0-alpha.1` (template `0.4.0`) and `0.1.0-alpha.2` (template `0.14.0`) packages/images retain their original behavior and are not retroactively updated. Environment preparation, doctor, browser setup, tour, existing-site mode and the Cloudflare Worker require `0.1.0-alpha.2` or later; the scenario guides, explicit Cloudflare credentials and preflight, Pages deployment tracking, the seven-status build history, builder source diagnostics and the block-order fix require `0.1.0-alpha.8` or a later compatible release. The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible alpha set, generate and install:
 
@@ -332,7 +332,7 @@ After setup, add people from Admin → Users → Invite user with an email addre
 
 Anyone can request a password reset from the sign-in screen ("Forgot password?"); the answer is the same whether or not the address has an account, and the one-hour link signs the account out everywhere once used. Administrators can also send a reset or sign a user out everywhere from the Users list, and disabling an account ends its sessions. Every signed-in user can change their display name and password and review or end their sessions under Account in the user menu.
 
-Invitations and resets need migration `0004_account_tokens`; see `.lace/upgrade-instructions.json` and deploy the API and admin artifacts together.
+Invitations and resets need no step beyond `pnpm db:migrate`; deploy the API and admin artifacts together.
 
 ## Configuration, routes, renderers and styling
 
@@ -691,14 +691,10 @@ any successful boundary-draft save, deletion or replacement expires them. When
 Load more fails with 422 `/after`, use Restart list: it retains query intent,
 discards old pages/cursors and replaces the results without retrying the cursor.
 
-Migrate the database before deploying the updated API/admin, then sync normally.
-Migration 0011 only adds nullable public identity/source columns. Query-only sync
-avoids builds when trusted public identity or legacy hash equality proves safety;
-unknown legacy identity conservatively rebuilds once. Full projection identity
-includes query settings; public identity omits only root listOptions and keeps
-SEO/labels/columns/blocks. Mixed query/SEO edits still rebuild. On rollback retain
-the additive columns and migration history; older code can leave the public source
-stale, which re-upgrade detects before applying legacy proof/fallback. No content
+Query-only sync avoids builds when the stored public identity is trusted; a model
+without a trusted public identity conservatively rebuilds once. Full projection
+identity includes query settings; public identity omits only root listOptions and
+keeps SEO/labels/columns/blocks. Mixed query/SEO edits still rebuild. No content
 backfill, field-query index, persisted cursor state or bulk action is introduced.
 
 ## Optional content assistant
@@ -707,33 +703,24 @@ See [OAuth content assistant](lace-mcp.md) for opt-in deployment, scoped draft
 tools and separately consented publishing, connections, refresh/replay, proxy log
 redaction and disabling. Unpublication and deletion remain forbidden.
 
-## Media tags migration 0014
+## Media tags
 
-Before starting an engine with media tags, stop Compose `api` and `dispatcher`,
-back up the stopped `.lace/data` directory and preserve the object store, then
-run `pnpm db:migrate`. On Cloudflare export D1 and preserve R2 objects, run
-`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`,
-then deploy API/admin together. Local Cloudflare uses `pnpm cf:db:migrate`.
-Migration `0014_media_tags` is additive and leaves existing media without tags.
 Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
-spaces trimmed; tags-only edits request no build. An older engine ignores the
-new table. Restore the pre-upgrade database backup to remove tags on rollback;
-do not delete media objects as part of tag rollback.
+spaces trimmed; tags-only edits request no build.
 
-## Rc1 upgrade
+## Database baseline and upgrading from rc1
 
-This template selects rc1 packages and both images together. Before runtime
-startup apply migrations 0014_media_tags and 0015_import_credentials. Back up
-matching database, media, configuration, deployment settings and site source.
-Review installed block source and merge conflicts, then synchronize conditional
-field definitions and gallery schema 5 with matching renderers before rebuilding.
-Hidden draft values persist but are omitted from publication; site code handles
-optional published values. Gallery videos require accessible titles and support
-per-item aspect ratios/playback; links and lightboxes apply to images only.
-
-MCP stays optional. Existing draft grants do not acquire publication permission:
-content:publish needs separate consent and current role authority; unpublication
-and deletion remain forbidden. Import uses separate scoped, optionally expiring
-tokens kept outside content packages. Verify tags, multi-selection, imports and
-conditional/gallery rendering after upgrade. Rollback restores matching backed-up
-state; package downgrade does not reverse synchronized content or SQL migrations.
+The database starts from one baseline migration; later schema changes are
+forward migrations after it. A database created by rc1 or an earlier engine
+predates the baseline and cannot be upgraded: `lace db migrate` and `lace doctor`
+report `SCHEMA_UNSUPPORTED` and change nothing. To move an rc1 project to this
+template, keep any content you need in your own source files for `lace import` or
+plan to re-enter it, stop Compose `api` and `dispatcher`, back up `.lace/data` and
+the object store, then remove the database: `.lace/data/lace.sqlite` with its
+`-wal` and `-shm` files for Compose, `.lace/data/cloudflare` for local Cloudflare,
+or create a new D1 database and update `LACE_D1_DATABASE_ID` and the Worker
+binding for remote Cloudflare. Upgrade all Lace packages and both images
+together, run `pnpm db:migrate` (Cloudflare: `pnpm cf:db:migrate` or
+`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`),
+`pnpm content:sync` and `pnpm auth:bootstrap`, complete first-admin setup, restore
+content and rebuild the site.

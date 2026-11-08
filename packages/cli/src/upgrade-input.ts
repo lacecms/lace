@@ -6,7 +6,7 @@ import { join, parse, resolve } from "node:path";
 export type Ownership =
   | { readonly owner: "user" }
   | { readonly owner: "managed"; readonly sha256: string };
-/** Site mode recorded by create-lace; absent in manifests older than template 0.11.0. */
+/** Site mode recorded by create-lace in every supported manifest. */
 export type SiteRecord =
   | { readonly mode: "starter"; readonly path: "site" }
   | { readonly mode: "existing"; readonly path: string }
@@ -14,7 +14,7 @@ export type SiteRecord =
 export interface UpgradeManifest {
   readonly schemaVersion: 1;
   readonly templateVersion: string;
-  readonly site?: SiteRecord;
+  readonly site: SiteRecord;
   readonly files: Readonly<Record<string, Ownership>>;
 }
 
@@ -97,9 +97,8 @@ function validateSite(value: unknown): SiteRecord {
   return invalid("Invalid manifest site record.");
 }
 
-/** Manifests without a site record were generated in starter mode. */
 export function manifestSite(manifest: UpgradeManifest): SiteRecord {
-  return manifest.site ?? { mode: "starter", path: "site" };
+  return manifest.site;
 }
 
 function siteFlags(site: SiteRecord): string {
@@ -123,14 +122,8 @@ export function assertSameSite(project: UpgradeManifest, template: UpgradeManife
 }
 
 export function validateUpgradeManifest(value: unknown): UpgradeManifest {
-  if (
-    !record(value) ||
-    !(
-      keys(value, ["schemaVersion", "templateVersion", "files"]) ||
-      keys(value, ["schemaVersion", "templateVersion", "site", "files"])
-    )
-  )
-    invalid("Invalid upgrade manifest shape.");
+  if (!record(value) || !keys(value, ["schemaVersion", "templateVersion", "site", "files"]))
+    invalid("Invalid upgrade manifest shape; the site record is required.");
   if (value.schemaVersion !== 1)
     invalid(
       "Unsupported manifest schemaVersion; this CLI supports version 1. Use a compatible CLI.",
@@ -140,7 +133,7 @@ export function validateUpgradeManifest(value: unknown): UpgradeManifest {
     !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/u.test(value.templateVersion)
   )
     invalid("Invalid manifest templateVersion.");
-  const site = Object.hasOwn(value, "site") ? validateSite(value.site) : undefined;
+  const site = validateSite(value.site);
   if (!record(value.files)) invalid("Invalid manifest files inventory.");
   const files: Record<string, Ownership> = Object.create(null) as Record<string, Ownership>;
   for (const path of Object.keys(value.files).sort()) {
@@ -168,9 +161,7 @@ export function validateUpgradeManifest(value: unknown): UpgradeManifest {
         invalid("Manifest file paths overlap.");
     }
   }
-  return site === undefined
-    ? { schemaVersion: 1, templateVersion: value.templateVersion, files }
-    : { schemaVersion: 1, templateVersion: value.templateVersion, site, files };
+  return { schemaVersion: 1, templateVersion: value.templateVersion, site, files };
 }
 
 export function upgradeHash(bytes: Uint8Array): string {

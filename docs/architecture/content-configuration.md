@@ -119,8 +119,8 @@ manual URLs ([internal-url-links], [guide](../internal-url-links.md)).
 - One complete published export resolves IDs to paths at build time; rendering
   does no per-link database or HTTP read. Missing targets yield bounded
   warnings and non-navigating content; transport and consistency errors stay
-  fatal. Build-export format 2 is the compatibility boundary, and new SDKs
-  still read compatible format 1 exports ([public-sdk]). Authored public JSON
+  fatal. Build-export format 2 is the only format SDKs read ([public-sdk]).
+  Authored public JSON
   stays as authored, so consumers resolve targets before writing hrefs.
 - A D1 export page uses at most twelve read statements in two batches, within
   the D1 budgets of 50 statements per invocation, 100 binds per statement and

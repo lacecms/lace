@@ -2,12 +2,13 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
-import { checkedInMigrations } from "@lacecms/platform-node";
+import { checkedInMigrations, uncheckedNodeMigrations } from "@lacecms/platform-node";
 
 type State =
   | "current"
   | "missing"
   | "outdated"
+  | "unsupported"
   | "permission"
   | "locked"
   | "unsafe-wal"
@@ -33,6 +34,7 @@ async function inspect(): Promise<State> {
     database = new DatabaseSync(path, { readOnly: true, enableForeignKeyConstraints: false });
     const ledger = database.prepare("select created_at from __drizzle_migrations").all();
     const installed = new Set(ledger.map((row) => Number(row.created_at)));
+    if (uncheckedNodeMigrations([...installed]).length > 0) return "unsupported";
     return checkedInMigrations.every((item) => installed.has(item.createdAt))
       ? "current"
       : "outdated";

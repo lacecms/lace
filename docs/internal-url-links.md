@@ -123,10 +123,8 @@ examples and styles; upgrades preserve user-owned site files and configuration.
 
 ## Persistence, migration and rollback
 
-Apply `0010_internal_url_links.sql` after backing up SQLite/D1 and before starting
-the matching API. It adds the reference projection, target and title-prefix
-indexes and singleton graph revision without rewriting legacy content JSON.
-The source snapshot foreign key cascades outgoing rows; target identity has no
+The baseline migration creates the reference projection, target and title-prefix
+indexes and the singleton graph revision. The source snapshot foreign key cascades outgoing rows; target identity has no
 foreign key so incoming links survive removal. Lifecycle and schema/default/block
 migrations maintain projections atomically; unchanged tuples need no reference
 writes, and a graph-changing atomic unit increments revision once. Existing

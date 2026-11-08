@@ -54,8 +54,11 @@ update to entries.
   is rejected
 
 ### Requirement: Indexed, forward-compatible database initialization
-The system SHALL supply ordered forward migrations and expose the installed
-migration version(s) after migration. It SHALL index model entry lists, route
+The system SHALL supply one baseline migration that creates the complete
+schema, followed by ordered forward migrations for later schema changes, and
+expose the installed migration version(s) after migration. The baseline SHALL
+be generated from the declared schema and SHALL be the same SQL for Node SQLite
+and D1. It SHALL index model entry lists, route
 lookups, blocks by snapshot and position, media-reference reverse lookups,
 available outbox work, and site-build history. A newly migrated Node SQLite
 database SHALL enable foreign-key enforcement and write-ahead logging every time
@@ -64,7 +67,8 @@ shared SQLite/D1 schema or migration SQL.
 
 #### Scenario: Empty database migrates and reopens safely
 - **WHEN** a Node process migrates a new SQLite file and opens it again
-- **THEN** all forward migrations report as installed, required tables and
+- **THEN** the baseline and every later checked-in migration report as
+  installed, required tables and
   indexes exist, foreign-key enforcement and write-ahead logging are enabled,
   and a foreign-key violation is rejected
 
@@ -154,203 +158,6 @@ Explicit Node migration SHALL recursively create missing parent directories of t
 - **WHEN** another process creates a required directory during explicit migration's directory preparation
 - **THEN** preparation accepts the existing directory without deleting or replacing it, while database migration retains its existing locking behavior
 
-### Requirement: Site-build status migration reclassifies unproven outcomes
-The shared schema SHALL restrict `site_builds.status` to `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, and `unknown`, and SHALL store nullable provider tracking stage, last-check time, and next-check time with an index for selecting due tracked builds. A single forward migration shared by Node SQLite and D1 SHALL introduce these without losing any build row, identity, target version, requester, timestamps, provider ID, or stored diagnostic. Existing `running` rows SHALL become `accepted` with a completion time, because no runtime tracked them. On D1, `succeeded` rows without a provider ID SHALL become `accepted`, because deploy-hook acceptance never proved publication. On Node SQLite, `succeeded` rows SHALL remain `succeeded`, because the self-hosted builder proved the release. `pending` and `failed` rows, outbox events, attempts, leases, and coalescing state SHALL be unchanged. The migration SHALL be recorded like every other checked-in migration and SHALL be refused by no supported runtime.
-
-#### Scenario: D1 history is reclassified
-- **WHEN** a migrated D1 database containing `running` rows with provider IDs and `succeeded` rows without provider IDs applies the migration
-- **THEN** all of those rows become `accepted`, keep their provider IDs and timestamps, and gain a completion time when absent
-
-#### Scenario: Node builder history is preserved
-- **WHEN** a Node SQLite database containing builder `succeeded`, `failed`, and `pending` rows applies the migration
-- **THEN** each row keeps its status, timestamps, and diagnostics
-
-#### Scenario: New status values are enforced
-- **WHEN** a write stores `accepted`, `cancelled`, or `unknown` after migration, or an unsupported status value
-- **THEN** the three new values are accepted and the unsupported value is rejected
-
-### Requirement: Account token tables support invitations and password resets
-Migration `0004` SHALL add an `invitations` table (identifier, normalized
-email, Lace role, unique token digest, inviting user, created, expiry, accepted,
-revoked and accepted-user columns) with a role check and a partial unique index
-that allows one active invitation per email, and a `password_reset_tokens`
-table (token digest primary key, user reference with cascade delete, created,
-expiry, consumed and requesting-administrator columns) indexed by user. The
-migration SHALL be additive, SHALL apply identically to Node SQLite and D1, and
-SHALL store no plaintext token.
-
-#### Scenario: Migration applies to an alpha.4 database
-- **WHEN** migration `0004` runs on a database migrated to `0003`
-- **THEN** both tables exist, existing users and content are unchanged, and
-  readiness reports the schema as current
-
-#### Scenario: Second active invitation is rejected by the schema
-- **WHEN** two active invitation rows for one email are inserted
-- **THEN** the second insert fails the unique constraint
-
-### Requirement: Content models store a verifiable structure baseline
-Migration `0005` SHALL add two nullable text columns to `content_models`:
-`structure_json`, holding the canonical JSON structure of the model as of the
-last successful synchronization, and `structure_json_hash`, holding the
-structural hash that structure was written for. The migration SHALL be
-additive, SHALL apply identically to Node SQLite and D1, and SHALL leave every
-existing row with both columns `NULL`. A stored baseline SHALL be considered
-valid only when `structure_json_hash` equals the row's `structure_hash`; the
-configuration file remains the only authoritative definition.
-
-#### Scenario: Migration applies to an alpha.4 database
-- **WHEN** migration `0005` runs on a database migrated to `0004` that holds
-  content models and entries
-- **THEN** both columns exist and are `NULL` for every model, entries and
-  snapshots are unchanged, and readiness reports the schema as current
-
-#### Scenario: Identity write without baseline invalidates it
-- **WHEN** a model row has a baseline and its `structure_hash` is later changed
-  without updating `structure_json_hash`
-- **THEN** reads of the synchronization state report that the model has no
-  valid baseline
-
-### Requirement: Media rows store constrained descriptive metadata
-Migration `0006` SHALL add four nullable columns to `media`: `alt` and
-`caption` as text, and `focal_x` and `focal_y` as reals. The database SHALL
-enforce that `alt` has at most 1,000 characters, that `caption` has at most
-2,000 characters, that `focal_x` and `focal_y` are each from 0 to 1 inclusive,
-and that both focal coordinates are set or both are `NULL`. The migration SHALL
-be additive, SHALL not rebuild the `media` table, SHALL apply identically to
-Node SQLite and D1, and SHALL leave every existing row with all four columns
-`NULL`. The `metadata_json` column SHALL remain reserved and unchanged.
-
-#### Scenario: Migration applies to a database with media
-- **WHEN** migration `0006` runs on a database migrated to `0005` that holds
-  media referenced by drafts and publications
-- **THEN** the four columns exist and are `NULL` for every row, media
-  references and `metadata_json` are unchanged, and readiness reports the
-  schema as current
-
-#### Scenario: The database refuses an inconsistent focal point
-- **WHEN** a statement sets `focal_x` to `0.5` while `focal_y` stays `NULL`,
-  or sets `focal_y` to `1.5`
-- **THEN** the statement fails with a check-constraint error and the row is
-  unchanged
-
-#### Scenario: The database refuses over-long text
-- **WHEN** a statement stores an `alt` value of 1,001 characters
-- **THEN** the statement fails with a check-constraint error
-
-### Requirement: Content-model kinds include global through a guarded table rebuild
-The `content_models.kind` check SHALL accept exactly `page`, `collection` and
-`global`. Migration `0007` SHALL widen the check on an existing database by
-rebuilding `content_models` inside the migration transaction with deferred
-foreign-key enforcement: it SHALL copy every column of every stored model
-unchanged, keep the primary key, the version check and the
-`content_entries.model_key` foreign key with its key-update cascade and delete
-restriction, and leave every entry, snapshot, block, route, media reference and
-published-state row unchanged. The same migration SQL SHALL apply on Node
-SQLite and D1. The explicit Node migrator SHALL apply pending migrations with
-foreign-key enforcement suspended on its connection, SHALL run a foreign-key
-integrity check before restoring enforcement, and SHALL fail without reporting
-success when the check finds a violation. Connections that serve the
-application SHALL keep foreign-key enforcement on.
-
-#### Scenario: Upgrade a populated database
-- **WHEN** a database at migration `0006` holding page and collection models,
-  their entries, published snapshots, routes and media references is migrated on
-  Node or D1
-- **THEN** migration `0007` completes, every stored row is unchanged, a
-  `global` model can be inserted, and an unsupported kind is still rejected
-
-#### Scenario: Foreign keys survive the rebuild
-- **WHEN** the migrated database deletes a model that has entries, renames a
-  model key, or inserts an entry naming an unknown model
-- **THEN** the deletion and the unknown reference are rejected and the key
-  update cascades to the model's entries
-
-#### Scenario: Node migration verifies referential integrity
-- **WHEN** the Node migrator finishes applying pending migrations
-- **THEN** it runs the foreign-key integrity check, restores enforcement on the
-  connection, and reports the installed versions only when no violation exists
-
-### Requirement: Content snapshots store an optional SEO group
-`content_snapshots` SHALL have a nullable `seo_json` column that holds the
-normalized SEO group as a JSON object, or `NULL` when the snapshot has none.
-Migration `0008` SHALL add the column with one additive `ALTER TABLE … ADD`
-on Node SQLite and D1. The migration SHALL not rebuild a table, backfill rows
-or change any existing row, index or foreign key. The checked-in migration
-inventory SHALL list the migration.
-
-#### Scenario: Upgrade a populated database
-- **WHEN** a database at migration `0007` holding pages, collection entries,
-  published snapshots, blocks and media references is migrated to `0008` on
-  Node SQLite or D1
-- **THEN** every existing row is unchanged, every existing snapshot has
-  `seo_json` `NULL`, and foreign keys still hold
-
-#### Scenario: Store a snapshot with an SEO group
-- **WHEN** a snapshot is inserted with an SEO group after the migration
-- **THEN** reading it back returns the same group
-
-### Requirement: Content blocks store the block envelope
-`content_blocks` SHALL have the columns `anchor` (nullable text), `class_name`
-(nullable text), `hidden` (integer, not null, default `0`, constrained to `0`
-or `1`) and `settings_json` (text, not null, default `'{}'`). A partial unique
-index SHALL make `(snapshot_id, anchor)` unique for rows whose `anchor` is not
-`NULL`. Migration `0009` SHALL add the columns with additive
-`ALTER TABLE … ADD` statements and create the index on Node SQLite and D1. It
-SHALL not rebuild a table, backfill rows through the application or change any
-existing foreign key. Existing blocks SHALL read as visible, without an anchor
-or class name, with `{}` settings. The checked-in migration inventory SHALL
-list the migration.
-
-#### Scenario: Upgrade a populated database
-- **WHEN** a database at migration `0008` holding drafts, published snapshots,
-  blocks and media references is migrated to `0009` on Node SQLite or D1
-- **THEN** every existing block keeps its key, type, position, version and
-  data, has `anchor` and `class_name` `NULL`, `hidden` `0` and
-  `settings_json` `'{}'`, and foreign keys still hold
-
-#### Scenario: The database rejects a duplicate anchor
-- **WHEN** two blocks of the same snapshot are written with the same anchor
-  directly, bypassing validation
-- **THEN** the write fails on the unique index, while the same anchor in a
-  different snapshot is accepted
-
-#### Scenario: The database rejects an invalid hidden value
-- **WHEN** a block row is written with `hidden` `2`
-- **THEN** the write fails on the column constraint
-
-### Requirement: Media tags are stored in an indexed join table
-Migration `0014` SHALL create `media_tags` with non-null text columns
-`media_id` and `tag`, a composite primary key `(media_id, tag)`, a foreign key
-from `media_id` to `media.id` with `ON DELETE CASCADE`, an index on
-`(tag, media_id)`, and checks that `tag` has 1 to 40 characters and contains only ASCII `a-z`, `0-9` and `-`. The migration SHALL be additive, SHALL not rebuild `media`, SHALL apply
-identically to Node SQLite and D1, and SHALL leave every existing media item
-without tags. Readiness SHALL report the schema as current only after `0014`.
-
-#### Scenario: Migration applies to a database with media
-- **WHEN** migration `0014` runs on a database migrated to `0013` that holds media, references and publications
-- **THEN** `media_tags` exists and is empty, existing media, references, published state and build work are unchanged, and readiness reports the schema as current
-
-#### Scenario: The database refuses invalid tag rows
-- **WHEN** a statement inserts a duplicate `(media_id, tag)` pair, a tag of 41 characters, a tag with a comma, uppercase letter, space or non-ASCII character, or a row for a missing media item
-- **THEN** the statement fails with a constraint error and no row is stored
-
-### Requirement: Import credentials and media hashes are stored additively
-Migration `0015` SHALL add nullable integer `api_tokens.expires_at`, nullable
-text `api_tokens.created_by`, nullable text `media.sha256` with a check that a
-non-null value has 64 characters from `0-9a-f`, and a non-unique index on
-`media.sha256`. It SHALL be additive, SHALL rebuild no table, SHALL apply
-identically to Node SQLite and D1 and SHALL leave every existing build token
-without expiry or creator and every existing media item without a hash.
-Readiness SHALL report the schema as current only after `0015`.
-
-#### Scenario: Migration applies to a populated database
-- **WHEN** migration `0015` runs on a database migrated to `0014` that holds build tokens, media, tags, references and publications
-- **THEN** existing build tokens still authenticate build export, existing media carry no hash, published state and build work are unchanged, and readiness reports the schema as current
-
-#### Scenario: The database refuses a malformed hash
-- **WHEN** a statement stores a `media.sha256` value of 63 characters or with an uppercase letter
-- **THEN** the statement fails with a constraint error
-
 ### Requirement: Shared SQL and the declared schema stay consistent with the checked-in migrations
 
 The repository SHALL verify that the shared column lists used by both the Node
@@ -393,3 +200,155 @@ two runtimes is unchanged.
 
 - **WHEN** `pnpm lint` runs on a checkout whose declared schema matches the latest checked-in snapshot
 - **THEN** the schema check passes without creating, changing or deleting a file under the committed migration directory
+
+### Requirement: The schema stores invitation and password-reset tokens
+The schema SHALL have an `invitations` table (identifier, normalized
+email, Lace role, unique token digest, inviting user, created, expiry, accepted,
+revoked and accepted-user columns) with a role check and a partial unique index
+that allows one active invitation per email, and a `password_reset_tokens`
+table (token digest primary key, user reference with cascade delete, created,
+expiry, consumed and requesting-administrator columns) indexed by user. Both
+tables SHALL be identical on Node SQLite and D1 and SHALL store no plaintext
+token.
+
+#### Scenario: Second active invitation is rejected by the schema
+- **WHEN** two active invitation rows for one email are inserted
+- **THEN** the second insert fails the unique constraint
+
+### Requirement: Content-model rows hold a verifiable structure baseline
+`content_models` SHALL have two nullable text columns:
+`structure_json`, holding the canonical JSON structure of the model as of the
+last successful synchronization, and `structure_json_hash`, holding the
+structural hash that structure was written for, identical on Node SQLite and
+D1. A model row written before its first synchronization records a baseline
+holds both columns `NULL`. A stored baseline SHALL be considered
+valid only when `structure_json_hash` equals the row's `structure_hash`; the
+configuration file remains the only authoritative definition.
+
+#### Scenario: Identity write without baseline invalidates it
+- **WHEN** a model row has a baseline and its `structure_hash` is later changed
+  without updating `structure_json_hash`
+- **THEN** reads of the synchronization state report that the model has no
+  valid baseline
+
+### Requirement: The schema constrains media descriptive metadata
+`media` SHALL have four nullable columns: `alt` and `caption` as text, and
+`focal_x` and `focal_y` as reals. The database SHALL
+enforce that `alt` has at most 1,000 characters, that `caption` has at most
+2,000 characters, that `focal_x` and `focal_y` are each from 0 to 1 inclusive,
+and that both focal coordinates are set or both are `NULL`, identically on Node
+SQLite and D1. The `metadata_json` column SHALL remain reserved.
+
+#### Scenario: The database refuses an inconsistent focal point
+- **WHEN** a statement sets `focal_x` to `0.5` while `focal_y` stays `NULL`,
+  or sets `focal_y` to `1.5`
+- **THEN** the statement fails with a check-constraint error and the row is
+  unchanged
+
+#### Scenario: The database refuses over-long text
+- **WHEN** a statement stores an `alt` value of 1,001 characters
+- **THEN** the statement fails with a check-constraint error
+
+### Requirement: Content-model kinds include global
+The `content_models.kind` check SHALL accept exactly `page`, `collection` and
+`global`, identically on Node SQLite and D1. `content_entries.model_key` SHALL
+reference `content_models` with a key-update cascade and a delete restriction.
+The explicit Node migrator SHALL apply pending migrations with
+foreign-key enforcement suspended on its connection, SHALL run a foreign-key
+integrity check before restoring enforcement, and SHALL fail without reporting
+success when the check finds a violation. Connections that serve the
+application SHALL keep foreign-key enforcement on.
+
+#### Scenario: Foreign keys survive the rebuild
+- **WHEN** a migrated database deletes a model that has entries, renames a
+  model key, or inserts an entry naming an unknown model
+- **THEN** the deletion and the unknown reference are rejected and the key
+  update cascades to the model's entries
+
+#### Scenario: Node migration verifies referential integrity
+- **WHEN** the Node migrator finishes applying pending migrations
+- **THEN** it runs the foreign-key integrity check, restores enforcement on the
+  connection, and reports the installed versions only when no violation exists
+
+### Requirement: Snapshot rows hold an optional SEO group
+`content_snapshots` SHALL have a nullable `seo_json` column that holds the
+normalized SEO group as a JSON object, or `NULL` when the snapshot has none,
+identically on Node SQLite and D1.
+
+#### Scenario: Store a snapshot with an SEO group
+- **WHEN** a snapshot is inserted with an SEO group
+- **THEN** reading it back returns the same group
+
+### Requirement: Block rows hold the block envelope
+`content_blocks` SHALL have the columns `anchor` (nullable text), `class_name`
+(nullable text), `hidden` (integer, not null, default `0`, constrained to `0`
+or `1`) and `settings_json` (text, not null, default `'{}'`). A partial unique
+index SHALL make `(snapshot_id, anchor)` unique for rows whose `anchor` is not
+`NULL`, identically on Node SQLite and D1. A block row written without
+envelope values SHALL read as visible, without an anchor or class name, with
+`{}` settings.
+
+#### Scenario: The database rejects a duplicate anchor
+- **WHEN** two blocks of the same snapshot are written with the same anchor
+  directly, bypassing validation
+- **THEN** the write fails on the unique index, while the same anchor in a
+  different snapshot is accepted
+
+#### Scenario: The database rejects an invalid hidden value
+- **WHEN** a block row is written with `hidden` `2`
+- **THEN** the write fails on the column constraint
+
+### Requirement: Media tags use an indexed join table
+The schema SHALL have `media_tags` with non-null text columns
+`media_id` and `tag`, a composite primary key `(media_id, tag)`, a foreign key
+from `media_id` to `media.id` with `ON DELETE CASCADE`, an index on
+`(tag, media_id)`, and checks that `tag` has 1 to 40 characters and contains only ASCII `a-z`, `0-9` and `-`, identically on Node SQLite and
+D1.
+
+#### Scenario: The database refuses invalid tag rows
+- **WHEN** a statement inserts a duplicate `(media_id, tag)` pair, a tag of 41 characters, a tag with a comma, uppercase letter, space or non-ASCII character, or a row for a missing media item
+- **THEN** the statement fails with a constraint error and no row is stored
+
+### Requirement: Import credentials and media hashes are stored
+The schema SHALL have nullable integer `api_tokens.expires_at`, nullable text
+`api_tokens.created_by`, nullable text `media.sha256` with a check that a
+non-null value has 64 characters from `0-9a-f`, and a non-unique index on
+`media.sha256`, identically on Node SQLite and D1.
+
+#### Scenario: The database refuses a malformed hash
+- **WHEN** a statement stores a `media.sha256` value of 63 characters or with an uppercase letter
+- **THEN** the statement fails with a constraint error
+
+### Requirement: Site builds store provider-tracked statuses
+The shared schema SHALL restrict `site_builds.status` to `pending`, `running`, `accepted`, `succeeded`, `failed`, `cancelled`, and `unknown`, and SHALL store nullable provider tracking stage, last-check time, and next-check time with an index for selecting due tracked builds, identically on Node SQLite and D1.
+
+#### Scenario: New status values are enforced
+- **WHEN** a write stores `accepted`, `cancelled`, or `unknown`, or an unsupported status value
+- **THEN** the three new values are accepted and the unsupported value is rejected
+
+### Requirement: Databases migrated before the baseline are refused
+A database whose migration ledger records a migration that is not checked in
+SHALL be treated as created by an engine older than the baseline and SHALL be
+refused before any schema or data change, identically for Node SQLite and D1.
+Explicit Node migration SHALL fail with an error that names the selected
+database as unsupported and tells the operator to recreate it (exporting
+content first when it must be kept); it SHALL leave the database file, its
+ledger and its data unchanged. The Node API and the Worker SHALL NOT report
+ready for such a database, because the baseline is not recorded as installed.
+A database whose ledger records exactly the checked-in migrations, or a prefix
+of them in order, SHALL migrate normally.
+
+#### Scenario: Node database from an older engine
+- **WHEN** explicit Node migration selects a SQLite file whose ledger records
+  migrations that are not checked in
+- **THEN** migration fails before applying any statement, names the database as
+  unsupported with recreate advice, and the file, ledger and rows are unchanged
+
+#### Scenario: D1 database from an older engine
+- **WHEN** a Worker serves a D1 database whose `d1_migrations` table records
+  only migration names that are not checked in
+- **THEN** readiness reports unavailable and no request writes to the database
+
+#### Scenario: Fresh database
+- **WHEN** explicit Node migration selects a new SQLite file
+- **THEN** it installs the baseline and reports it as the installed version

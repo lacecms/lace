@@ -1,7 +1,7 @@
 // Directory dependencies: database ← repository; builds, media, security;
 // builds, database, media, repository, security ← runtime.
 export * from "./security/oauth.js";
-export { checkedInMigrations } from "@lacecms/db";
+export { checkedInMigrations, uncheckedD1Migrations, uncheckedNodeMigrations } from "@lacecms/db";
 
 export const packageName = "@lacecms/platform-node";
 

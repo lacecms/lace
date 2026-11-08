@@ -254,11 +254,8 @@ pnpm db:migrate:cloudflare -- --remote
   database name at the prompt, and a non-interactive shell is refused. With
   `CI` set, the command runs without prompting.
 
-Migration `0004_account_tokens` adds the `invitations` and
-`password_reset_tokens` tables. It is additive; back up D1 (or record a Time
-Travel restore point), apply it remotely before deploying a Worker with
-invitations, and deploy the API and admin assets together because `POST
-/api/v1/admin/users` is gone. Invitation acceptance and reset confirmation are
+The baseline migration creates the `invitations` and `password_reset_tokens`
+tables. Deploy the API and admin assets together. Invitation acceptance and reset confirmation are
 single atomic D1 batches, so concurrent uses of one token succeed at most once.
 
 ## Verification

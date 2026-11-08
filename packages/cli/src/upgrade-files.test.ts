@@ -43,6 +43,7 @@ describe("safe upgrade paths and metadata", () => {
     const old = {
       schemaVersion: 1,
       templateVersion: "1",
+      site: { mode: "starter", path: "site" },
       files: { file: { owner: "managed", sha256: upgradeHash(Buffer.from("old")) } },
     };
     const target = {

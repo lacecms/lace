@@ -44,11 +44,9 @@ export const buildExportSchema = v.strictObject({
   entries: v.array(exportEntrySchema),
   /** Strict output accepts only the current format; tolerant consumers accept any. */
   formatVersion: buildExportFormatVersionSchema,
-  /** Always sent by the API; exports produced before globals existed omit it. */
-  globals: v.optional(v.array(exportGlobalSchema), []),
+  globals: v.array(exportGlobalSchema),
   media: publicMediaDictionarySchema,
-  /** Always sent by the API; exports produced before SEO existed omit it. */
-  seo: v.optional(exportSeoSchema, { defaults: null, models: {} }),
+  seo: exportSeoSchema,
   version: nonNegativeIntegerSchema,
 });
 

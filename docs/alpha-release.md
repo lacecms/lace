@@ -19,7 +19,7 @@ Preparation and acceptance never publish; fresh rc1 evidence is required.
 Read-only checks on 2026-11-01 confirmed alpha.8's sixteen npm versions, both
 public two-platform GHCR manifests and GitHub prerelease. Alpha.1–alpha.8 remain
 published and immutable. All rc1 versions, image manifests and its GitHub tag/
-release returned 404. The [dated preflight](../openspec/changes/prepare-rc1-release/registry-preflight.json)
+release returned 404. The [dated preflight](../openspec/changes/archive/2026-11-08-prepare-rc1-release/registry-preflight.json)
 records availability, not reservations or publishing rights. Historical evidence
 remains bound to its original source and artifacts.
 

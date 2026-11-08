@@ -135,6 +135,7 @@ What the roadmap changes, with the numbers to beat:
 | Docs | verification documents | 5 → RF1B: 1 (`docs/verification.md`) |
 | Docs | indexed Markdown files | RF1B: 45 documents + 2 indexes; 18 ADRs |
 | Specs | `openspec/specs` | 84 capabilities, 22.7k lines, no index; `admin-draft-editor` 2,154 lines |
+| Migrations | checked-in Drizzle migrations; compatibility paths for pre-rc1 data | 16 migrations; built-in block identity migrations, legacy structure hash, legacy public-identity proofs, export format 1, manifests without site record, alpha.7/alpha.8 upgrade fixtures → RF8X: 1 baseline migration, none of the paths; rc1 fixture; template 0.47.0 |
 | Specs | stale unapplied change | `openspec/changes/video-a-media-upload-delivery` (0 of 20 tasks; fails `spec:validate` strict) |
 
 ## 4. Delivery overview
@@ -148,7 +149,7 @@ What the roadmap changes, with the numbers to beat:
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
-| RF8 | Documentation | L | RF8A → RF8B → RF8C | in progress |
+| RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | in progress |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
 
 **Order rationale:** RF1 first because deleting obsolete scripts and tests
@@ -175,6 +176,12 @@ RF9A → RF9B before RF5, because RF5 rewrites security errors and ports under
 tests that must already be typed and source-resolved; RF4H–RF4J may run in
 parallel with RF3E–RF3F; RF9D–RF9F type platform and CLI tests only after
 RF5 and RF7C move them. Owner checks without a session are listed in §5.
+
+**RF8X/RF8Y insertion (2026-11-08):** while RF8B was being specified the
+owner decided that rc1 is the oldest supported state (owner decision 11).
+RF8X removes the runtime support for older data and schemas, RF8Y removes
+release history from specifications and documentation; RF8B then reorganizes
+specifications that describe only the current product.
 
 **RF3G insertion (2026-11-07):** RF3E left the contracts and content JSON
 validators with two differing array cases. The owner chose the content rule,
@@ -205,7 +212,18 @@ Proposed, to confirm when writing the first specification:
 6. Tests move to source (RF2) before the large splits, even though the owner's
    first concern was file size.
 7. Decided 2026-11-01 while writing RF1A: only the latest published
-   template's fixtures (`0.35.0`) are kept as the upgrade origin.
+   template's fixtures (`0.35.0`) are kept as the upgrade origin. Amended
+   2026-11-08 by decision 11: the origin is rc1 (template `0.46.0`).
+
+Decided 2026-11-08 while specifying RF8B:
+
+11. Only the owner uses Lace, so `0.1.0-rc1` is the oldest supported state.
+    Support for older block versions, configuration hashes, export formats,
+    database migrations, templates and releases is removed, not kept for
+    compatibility (RF8X code, RF8Y specifications and documentation). Block
+    definition and export format version numbers stay as they are, and the
+    migration mechanisms stay for future versions. The 16 Drizzle migrations
+    are squashed into one baseline; the owner recreates the rc1 database.
 
 Pending owner checks from the second audit (2026-11-05), not sessions:
 
@@ -1030,13 +1048,12 @@ Finishes RF1A's naming rule: `scripts/journeys/rc1-media-selection.mjs` and
 release- or step-numbered log and stage strings (`Alpha.6`, `Alpha.2 field-trial
 §1 (33A)`) are renamed by behavior; roadmap change codes (`CE9A`, `LIST1`,
 `SM1`…) leave test titles, temp prefixes and the pinned contract case names
-(updating both pins); `tests/fixtures/template-0.39.0` is either recorded as
-the latest published template (amending owner decision 7) or deleted. The root
-naming guard extends to test titles.
+(updating both pins). The template fixtures are settled by RF8X (rc1 is the
+only upgrade origin). The root naming guard extends to test titles.
 
 ## Step RF8 — Documentation
 
-**Size:** L (three sessions). **Depends on:** RF4B and RF5C for the
+**Size:** L (five sessions). **Depends on:** RF4B and RF5C for the
 architecture sections they change; RF1B for the index.
 
 ### Session RF8A — Architecture document
@@ -1071,6 +1088,54 @@ invariant checklist of `rf08a-architecture-document` maps 1,181 statements:
 code to its archived change. The table diagram (§9.10) covers all 36 Drizzle
 tables and the component diagram sits in §15.
 
+### Session RF8X — rc1 baseline
+
+Owner decision 11, code side. Behavior-touching; delta specs.
+
+- The 16 Drizzle migrations become one baseline migration generated from the
+  declared schema, identical on Node SQLite and D1. A database migrated by an
+  earlier engine is refused with a diagnostic that tells the operator to
+  recreate it, instead of a failed `CREATE TABLE`; `lace doctor` reports it.
+  Per-migration upgrade tests go; the schema requirements describe tables,
+  not migration steps.
+- Built-in block identity migrations (`image` 2–4, `gallery` 2–5,
+  `videoEmbed` 2) are removed; definition versions stay. A stored built-in
+  block below its version fails with the existing `missing_step` diagnostic.
+  The block migration mechanism stays for custom blocks.
+- `legacyStructureHash` and the legacy public-identity hash proofs leave
+  configuration synchronization; a model without a trusted public identity
+  takes the conservative path.
+- The build export requires `globals` and `seo` in the assembled schema; the
+  tolerant variant no longer accepts format 1.
+- The upgrade planner requires the manifest site record.
+- Template upgrade fixtures: `template-0.35.0` and `template-0.39.0` are
+  replaced by `template-0.46.0` (rc1), generated by the rc1 generator.
+- Internal documents that name a removed migration describe the baseline.
+
+**Acceptance:** `pnpm db:check` passes on the baseline; fresh Node and D1
+databases pass the repository contracts; a pre-baseline database is refused
+on both runtimes; the template upgrade acceptance passes from rc1.
+
+**Outcome (RF8X):** `0000_baseline.sql` replaces the 16 migrations; a
+`sqlite_master`/pragma/row comparison found three hand-written security indexes
+and the `content_link_state` seed row outside the declared schema, which are
+appended to the generated SQL. Pre-baseline ledgers are refused by
+`lace db migrate` (`SCHEMA_UNSUPPORTED`, exit 5, before Wrangler runs), doctor and
+readiness. By owner decision during apply the template advanced to `0.47.0`:
+its upgrade instructions keep only the rc1 step (recreate the database), and
+upgrade tests from pre-rc1 templates were removed. ADR 0029 records the
+decision.
+
+### Session RF8Y — Release history out of specifications and documents
+
+Owner decision 11, specification and document side. Release- and
+template-numbered requirements (`alpha-release-artifacts`,
+`project-generator` "Template 0.2x delivers …", `public-documentation`,
+`prepublication-consumer-security`, `generated-project-acceptance`) are
+removed when they only described a past release, or renamed and rewritten as
+current behavior. `docs/compatibility.md`, `docs/alpha-release.md` and the
+public upgrade guidance keep only rc1 and later. Moved here from RF8B.
+
 ### Session RF8B — OpenSpec specifications
 
 - `openspec/specs/README.md` groups the 84 capabilities by domain with one
@@ -1091,7 +1156,12 @@ tables and the component diagram sits in §15.
   `block-source-registry` gives `image` revision 6 and `hero` revision 4 (code
   7 and 5) and a seven-block registry (nine items), `rest-contracts` both
   rejects and tolerates a first export page without `globals`/`seo`, and spec
-  text still carries roadmap codes (`CE10`) and release-scoped wording.
+  text still carries roadmap codes (`CE10`); release-scoped wording is
+  handled by RF8Y.
+- Decided 2026-11-08: gallery requirements move to a new `gallery-block`
+  capability; `admin-draft-editor` keeps a thin core (layout, read-only
+  viewers, validation summary, global editor, unsaved drafts and saving) beside
+  the four sub-surface capabilities.
 
 **Acceptance:** `pnpm spec:validate` strict; no requirement text is lost
 (diff of concatenated requirement titles before and after).
@@ -1274,3 +1344,8 @@ is empty.
 | 2026-11-08 | RF8A | — | Scope decision: the owner asked for a backend component diagram and a database table diagram; both join RF8A as Mermaid diagrams in the architecture document (the component diagram after RF5C's composition), the table diagram with a drift test against the Drizzle schema. No change created. |
 | 2026-11-08 | RF8A | `rf08a-architecture-document` | Implemented. Owner chose a domain directory over one file; the single architecture file became `docs/architecture/` (README + 12 files, §1–§26 kept), ADRs 0021–0028 replace §24, codes moved to `history.md`, table and component diagrams added, `tests/architecture-document.test.mjs` guards schema drift, codes, section map and ceilings. Not archived. |
 | 2026-11-08 | RF8A | `rf08a-architecture-document` | Archived at [`2026-11-08-rf08a-architecture-document`](../openspec/changes/archive/2026-11-08-rf08a-architecture-document/); 17/17 tasks complete. Delta spec synchronized: `workspace-governance` (1 added). RF8B next. |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Scope decision while specifying RF8B (owner decision 11): rc1 is the oldest supported state. New sessions RF8X (code) and RF8Y (release text in specs and documents) run before RF8B; RF8B's release-wording item moves to RF8Y. Owner choices: squash the 16 Drizzle migrations (the rc1 database is recreated), replace the upgrade fixtures with rc1 (template `0.46.0`); for RF8B, a new `gallery-block` capability and a thin `admin-draft-editor` core. |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Proposed. One generated baseline migration verified against the old chain; a pre-baseline database is refused by `lace db migrate` (`SCHEMA_UNSUPPORTED`, exit 5), doctor and readiness. Built-in block migrations, `legacyStructureHash`, legacy public-identity proofs, export format 1 and optional `globals`/`seo`, and manifests without a site record go; versions stay. Fixtures `template-0.35.0`/`0.39.0` → `template-0.46.0` from the published rc1 generator. Delta specs: 10 capabilities (requirements that lose legacy scenarios are removed and re-added under new titles). Depends on archiving `prepare-rc1-release` first. 19 tasks, not applied. |
+| 2026-11-08 | — | `prepare-rc1-release` | Archived at [`2026-11-08-prepare-rc1-release`](../openspec/changes/archive/2026-11-08-prepare-rc1-release/) before RF8X apply (its delta modified a requirement RF8X replaces). Delta specs synchronized: `alpha-release-artifacts` (+1, ~1), `generated-project-acceptance` (~1), `public-documentation` (+1, ~1). |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Implemented, 20/20 tasks complete. One baseline migration (schema and seed rows identical to the old chain; three undeclared security indexes and the link-state seed row carried as custom SQL); pre-baseline ledgers refused by migrate (`SCHEMA_UNSUPPORTED`), doctor and readiness on Node and D1. Built-in block migrations, legacy structure hash, legacy identity proofs, export format 1 and site-less manifests removed. Owner decision during apply: template `0.47.0` with rc1-only upgrade instructions (added `project-generator` delta); pre-rc1 template upgrade tests removed. Fixtures `template-0.46.0` from the published rc1 generator; upgrade acceptance passes 0.46.0 → 0.47.0. Contract cases: −4 (three built-in migration cases, legacy structure hash), +1 (built-in refusal), 2 renamed. `db` and `platform-node` gain the ledger helpers; `platform-node` adds `UnsupportedDatabaseError`. ADR 0029. Not archived. |
+| 2026-11-08 | RF8X | `rf08x-rc1-baseline` | Archived at [`2026-11-08-rf08x-rc1-baseline`](../openspec/changes/archive/2026-11-08-rf08x-rc1-baseline/); 20/20 tasks complete. Delta specs synchronized: 11 capabilities (+21, ~6, −19; requirements that lost legacy scenarios were removed and re-added under new titles). RF8Y next. |

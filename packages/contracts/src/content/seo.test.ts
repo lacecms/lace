@@ -156,8 +156,8 @@ describe("admin entry list contracts", () => {
     expect(exportDto.entries[0].seo).toMatchObject({ canonical: "https://example.com/a" });
     expect(exportDto.globals[0]).not.toHaveProperty("seo");
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
-    const { seo: _seo, ...legacy } = exportDto;
-    expect(v.parse(buildExportSchema, legacy).seo).toEqual({ defaults: null, models: {} });
+    const { seo: _seo, ...withoutSeo } = exportDto;
+    expect(v.safeParse(buildExportSchema, withoutSeo).success).toBe(false);
     expect(
       v.safeParse(buildExportSchema, {
         ...exportDto,

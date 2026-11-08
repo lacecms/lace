@@ -8,7 +8,7 @@ public two-platform image manifests, plus its published GitHub prerelease.
 Alpha.1–alpha.8 are published and immutable. All rc1 package/image coordinates
 and its GitHub tag/release returned 404; availability is not reservation or
 publishing rights. The dated evidence is retained in the
-[rc1 change](../openspec/changes/prepare-rc1-release/registry-preflight.json).
+[rc1 change](../openspec/changes/archive/2026-11-08-prepare-rc1-release/registry-preflight.json).
 Preparation does not publish or prove real deployment.
 
 ## Status

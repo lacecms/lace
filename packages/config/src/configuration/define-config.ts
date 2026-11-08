@@ -21,7 +21,6 @@ import { pageMatchesCollection } from "../models/routes.js";
 import {
   omitDisplayMetadata,
   omitListFields,
-  legacyStructureForHash,
   withoutDisplayProperties,
   fieldMapWithoutPlaceholders,
   fieldMapStructure,
@@ -120,7 +119,6 @@ function assertRegisteredModelBlocks(
 
 function publicModel(model: NormalizedContentModel): NormalizedContentModel {
   const {
-    legacyStructureHash: _legacyStructureHash,
     publicProjectionHash: _publicProjectionHash,
     removedBlocks: _removedBlocks,
     removedFields: _removedFields,
@@ -165,10 +163,8 @@ export async function defineConfig<const Models extends readonly ContentModelDef
       const { listOptions: _listOptions, ...publicIdentity } = projection as JsonObject;
       const structure = contentModelStructure(model, registry);
       const structureHash = await sha256CanonicalJson(structure);
-      const legacyStructureHash = await sha256CanonicalJson(legacyStructureForHash(projection));
       const normalized: NormalizedContentModel = {
         ...model,
-        ...(legacyStructureHash === structureHash ? {} : { legacyStructureHash }),
         publicProjectionHash: await sha256CanonicalJson(publicIdentity),
         projectionHash: await sha256CanonicalJson(projection),
         structure,

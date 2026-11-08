@@ -22,7 +22,6 @@ function asJsonValue(value: unknown): JsonValue {
 
 export function modelForHash(model: ContentModelDefinition, registry: BlockRegistry): JsonValue {
   const {
-    legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
     publicProjectionHash: _publicProjectionHash,
     removedBlocks: _removedBlocks,
@@ -42,7 +41,6 @@ export function modelForHash(model: ContentModelDefinition, registry: BlockRegis
 
 export function normalizedModelForHash(model: NormalizedContentModel): JsonValue {
   const {
-    legacyStructureHash: _legacyStructureHash,
     projectionHash: _projectionHash,
     publicProjectionHash: _publicProjectionHash,
     removedBlocks: _removedBlocks,

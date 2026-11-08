@@ -36,3 +36,4 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0026 | [Code-defined models with draft and published snapshots](0026-code-defined-models-two-snapshots.md) | accepted | — |
 | 0027 | [Publication through an outbox-triggered rebuild](0027-outbox-triggered-rebuild.md) | accepted | — |
 | 0028 | [Spec-driven delivery and workspace toolchain](0028-spec-driven-delivery-toolchain.md) | accepted | — |
+| 0029 | [rc1 is the oldest supported state](0029-rc1-baseline.md) | accepted | — |

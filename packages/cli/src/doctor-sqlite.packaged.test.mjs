@@ -23,8 +23,7 @@ function database(path, current = true) {
     "create table __drizzle_migrations (created_at integer); create table preserved (value text); insert into preserved values ('private-sentinel')",
   );
   const insert = db.prepare("insert into __drizzle_migrations values (?)");
-  for (const item of current ? checkedInMigrations : checkedInMigrations.slice(0, 1))
-    insert.run(item.createdAt);
+  for (const item of current ? checkedInMigrations : []) insert.run(item.createdAt);
   return db;
 }
 async function snapshot(root) {
@@ -184,3 +183,21 @@ test("concurrent readers of a live WAL database preserve content and all sidecar
   expect(result.reason).toContain("sidecars");
   expect(await snapshot(root)).toEqual(before);
 });
+
+test(
+  "real SQLite migrated before the baseline fails as unsupported without changes",
+  { timeout: 20_000 },
+  async () => {
+    const root = await directory();
+    const db = new DatabaseSync(join(root, "db.sqlite"));
+    db.exec(
+      "create table __drizzle_migrations (created_at integer); insert into __drizzle_migrations values (1789240330790)",
+    );
+    db.close();
+    const before = await snapshot(root);
+    const result = await inspect(root);
+    expect(result).toMatchObject({ kind: "schema", code: "SCHEMA_UNSUPPORTED" });
+    expect(result.nextAction).toMatch(/Recreate/u);
+    expect(await snapshot(root)).toEqual(before);
+  },
+);

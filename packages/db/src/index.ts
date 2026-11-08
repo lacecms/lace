@@ -8,6 +8,7 @@ export { literalLikePattern } from "@lacecms/content";
 export const packageName = "@lacecms/db";
 
 export * from "./schema/migrations.js";
+export * from "./schema/ledger.js";
 export * from "./schema/content.js";
 export * from "./schema/publication.js";
 export * from "./schema/media.js";

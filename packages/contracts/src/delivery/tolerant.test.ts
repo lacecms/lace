@@ -311,22 +311,22 @@ describe("strict and tolerant public read schemas", () => {
   });
 });
 
-test("format 1 normalizes absent local manifests while format 2 requires them", () => {
-  const { internalLinks: _entryLinks, ...legacyEntry } = entry;
-  const { internalLinks: _globalLinks, ...legacyGlobal } = global;
-  const legacy = {
+test("format 1 is refused and format 2 requires local manifests", () => {
+  const { internalLinks: _entryLinks, ...unlinkedEntry } = entry;
+  const { internalLinks: _globalLinks, ...unlinkedGlobal } = global;
+  const unlinked = {
     ...fixtures.buildExport[1],
-    formatVersion: 1,
-    entries: [legacyEntry],
-    globals: [legacyGlobal],
+    entries: [unlinkedEntry],
+    globals: [unlinkedGlobal],
   };
-  const parsed = v.parse(tolerantPublicSchemas.buildExport, legacy);
-  expect(parsed.entries[0].internalLinks).toEqual([]);
-  expect(parsed.globals[0].internalLinks).toEqual([]);
-  expect(v.safeParse(buildExportSchema, legacy).success).toBe(false);
+  for (const formatVersion of [1, 2])
+    for (const schema of [buildExportSchema, tolerantPublicSchemas.buildExport])
+      expect(v.safeParse(schema, { ...unlinked, formatVersion }).success).toBe(false);
+  const linkedExport = { ...fixtures.buildExport[1], formatVersion: 1 };
+  expect(v.safeParse(tolerantPublicSchemas.buildExport, linkedExport).success).toBe(false);
   expect(
-    v.safeParse(tolerantPublicSchemas.buildExport, { ...legacy, formatVersion: 2 }).success,
-  ).toBe(false);
+    v.parse(tolerantPublicSchemas.buildExport, { ...linkedExport, formatVersion: 3 }).formatVersion,
+  ).toBe(3);
   const manifest = [{ sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "target" }];
   const linked = { ...entry, internalLinks: manifest };
   for (const value of [

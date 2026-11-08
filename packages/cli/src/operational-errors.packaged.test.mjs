@@ -331,3 +331,74 @@ test("Wrangler subprocess output is never forwarded", async () => {
     expect(JSON.stringify(failure)).not.toContain(sentinel);
   }
 });
+
+test(
+  "db migrate refuses databases migrated before the baseline on every target",
+  { timeout: 60_000 },
+  async () => {
+    const root = await directory();
+    const path = join(root, "pre-baseline.sqlite");
+    const old = openNodeDatabase(path);
+    try {
+      old.connection.exec(
+        "create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric); insert into __drizzle_migrations (hash, created_at) values ('old', 1789240330790);",
+      );
+    } finally {
+      old.connection.close();
+    }
+    const before = await readFile(path);
+    for (const json of [false, true]) {
+      const result = invoke(root, ["db", "migrate"], { LACE_DATABASE_PATH: path }, json);
+      expect(result.status).toBe(5);
+      diagnostic(result, json, "SCHEMA_UNSUPPORTED", "db migrate", /older than the baseline/u);
+    }
+    expect(await readFile(path)).toEqual(before);
+
+    const environment = { databaseId: "00000000-0000-0000-0000-000000000000", persistTo: root };
+    const options = { command: "db migrate", target: "cloudflare-local", check: false, json: true };
+    const local = await openLocalD1(environment);
+    try {
+      await local.database.batch([
+        local.database.prepare("create table d1_migrations (id integer primary key, name text)"),
+        local.database
+          .prepare("insert into d1_migrations (id, name) values (1, ?)")
+          .bind("0000_exotic_tarantula.sql"),
+      ]);
+    } finally {
+      await local.close();
+    }
+    await expect(runCommand(options, environment, repository)).rejects.toMatchObject({
+      code: "SCHEMA_UNSUPPORTED",
+      exitCode: 5,
+    });
+    const after = await openLocalD1(environment);
+    try {
+      expect(
+        (await after.database.prepare("select name from d1_migrations").all()).results,
+      ).toEqual([{ name: "0000_exotic_tarantula.sql" }]);
+    } finally {
+      await after.close();
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Response.json({
+          success: true,
+          result: [{ success: true, results: [{ name: "0015_import_credentials.sql" }] }],
+        }),
+      ),
+    );
+    try {
+      await expect(
+        runCommand(
+          { ...options, target: "cloudflare-remote" },
+          { accountId: sentinel, apiToken: sentinel, databaseId: sentinel },
+          repository,
+        ),
+      ).rejects.toMatchObject({ code: "SCHEMA_UNSUPPORTED", exitCode: 5 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

@@ -22,7 +22,13 @@ async function root() {
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
-const manifest = (files = {}) => ({ schemaVersion: 1, templateVersion: "0.2.1", files });
+const starterSite = { mode: "starter", path: "site" };
+const manifest = (files = {}) => ({
+  schemaVersion: 1,
+  templateVersion: "0.2.1",
+  site: starterSite,
+  files,
+});
 const managed = { owner: "managed", sha256: upgradeHash(Buffer.from("content")) };
 
 describe("upgrade inputs", () => {
@@ -38,10 +44,9 @@ describe("upgrade inputs", () => {
     expect(Object.keys(validated)).toEqual(["schemaVersion", "templateVersion", "site", "files"]);
     expect(manifestSite(validated)).toEqual(site);
   });
-  it("reads a manifest without a site record as starter mode and keeps it absent", () => {
-    const validated = validateUpgradeManifest(manifest());
-    expect(validated).not.toHaveProperty("site");
-    expect(manifestSite(validated)).toEqual({ mode: "starter", path: "site" });
+  it("refuses a manifest without a site record", () => {
+    const { site: _site, ...withoutSite } = manifest();
+    expect(() => validateUpgradeManifest(withoutSite)).toThrow("the site record is required");
   });
   it.each([
     null,
@@ -63,27 +68,23 @@ describe("upgrade inputs", () => {
     );
   });
   it("requires the template to match the project's site mode and path", () => {
-    const legacy = validateUpgradeManifest(manifest());
-    const starter = validateUpgradeManifest({
-      ...manifest(),
-      site: { mode: "starter", path: "site" },
-    });
+    const starter = validateUpgradeManifest(manifest());
     const existing = (path: string) =>
       validateUpgradeManifest({ ...manifest(), site: { mode: "existing", path } });
-    expect(() => assertSameSite(legacy, starter)).not.toThrow();
+    expect(() => assertSameSite(starter, starter)).not.toThrow();
     expect(() => assertSameSite(existing(".."), existing(".."))).not.toThrow();
     expect(() => assertSameSite(existing(".."), existing("../web"))).toThrow(
       "create-lace <dir> --existing-site ..",
     );
-    expect(() => assertSameSite(legacy, existing(".."))).toThrow("create-lace <dir> --starter");
+    expect(() => assertSameSite(starter, existing(".."))).toThrow("create-lace <dir> --starter");
   });
   it("merged manifests take the target's site record", () => {
-    const legacy = validateUpgradeManifest(manifest({ "README.md": { owner: "user" } }));
-    const target = validateUpgradeManifest({
+    const project = validateUpgradeManifest({
       ...manifest({ "README.md": { owner: "user" } }),
-      site: { mode: "starter", path: "site" },
+      site: { mode: "existing", path: ".." },
     });
-    expect(mergedManifest(legacy, target).site).toEqual({ mode: "starter", path: "site" });
+    const target = validateUpgradeManifest(manifest({ "README.md": { owner: "user" } }));
+    expect(mergedManifest(project, target).site).toEqual({ mode: "starter", path: "site" });
   });
   it("accepts existing generator metadata and sorts paths", () => {
     expect(

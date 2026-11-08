@@ -84,19 +84,13 @@ operation writes the configured structure.
 
 The canonical structure removes `label` and `description` only from model,
 field and block definitions. Fields named `description` or `label` are
-structural. Runtime models carry their `structure` and, when the earlier
-whole-tree stripping produced a different hash, a `legacyStructureHash`; both
-are excluded from the public projection.
+structural. Runtime models carry their `structure`, which is excluded from the
+public projection.
 
-### Upgrading an existing installation
-
-1. Run `lace db migrate` (migration `0005_content_model_structure`).
-2. `lace content sync --check` lists one `record-baseline` operation per model
-   and exits with the pending code.
-3. Run `lace content sync` once. Baselines are stored; a baseline-only apply
-   does not advance `published_state.version` or request a build. A stored hash
-   that equals a model's `legacyStructureHash` is accepted once and replaced by
-   the new hash without a version bump.
+A model row without a valid stored baseline (for example, one whose identity
+was written without its structure) gets one `record-baseline` operation from
+`lace content sync`; a baseline-only apply does not advance
+`published_state.version` or request a build.
 
 If a populated model changes structure before it has a baseline, sync refuses
 with `STRUCTURE_BASELINE_MISSING`: restore the previous definition, sync once,

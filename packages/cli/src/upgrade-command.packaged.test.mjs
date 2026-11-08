@@ -96,23 +96,19 @@ async function updateTemplate(root, path, bytes) {
 
 describe("upgrade CLI", () => {
   it(
-    "upgrades a legacy 0.10 starter manifest to a current starter and records its site",
+    "refuses a manifest without a site record and changes nothing",
     async () => {
       const { root, project, template } = await fixture();
       const manifestPath = await rewind(project, { legacy: true });
       expect(JSON.parse(await readFile(manifestPath, "utf8"))).not.toHaveProperty("site");
-      const before = await snapshot(join(project, "site"));
+      const before = await snapshot(project);
       const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(JSON.parse(result.stdout).guidance).toContain("treated as starter mode");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      expect(manifest.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(manifest.site).toEqual({ mode: "starter", path: "site" });
-      expect(Object.keys(manifest)).toEqual(["schemaVersion", "templateVersion", "site", "files"]);
-      expect(await readFile(join(project, "docs/lace-operations.md"), "utf8")).toBe(
-        await readFile(join(template, "docs/lace-operations.md"), "utf8"),
+      expect(result.status, result.stdout + result.stderr).toBe(4);
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: false, code: "UPGRADE_INPUT" });
+      expect(JSON.parse(result.stdout).reason + JSON.parse(result.stdout).message).toMatch(
+        /site record is required|inputs/u,
       );
-      expect(await snapshot(join(project, "site"))).toEqual(before);
+      expect(await snapshot(project)).toEqual(before);
     },
     integrationTimeout,
   );
@@ -139,103 +135,6 @@ describe("upgrade CLI", () => {
       expect(Object.keys(manifest.files).some((path) => path.startsWith("site/"))).toBe(false);
       expect(await readdir(project)).not.toContain("site");
       expect(await outside()).toEqual(before);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades a 0.11 Cloudflare starter to the current Worker layout without creating its config",
-    async () => {
-      const { root, project, template } = await fixture(true);
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.11.0";
-      const pages = Buffer.from(
-        '{\n  "name": "my-site",\n  "compatibility_date": "2026-09-01",\n  "pages_build_output_dir": "site/dist",\n}\n',
-      );
-      await writeFile(join(project, "wrangler.jsonc"), pages);
-      manifest.files["wrangler.jsonc"] = { owner: "managed", sha256: upgradeHash(pages) };
-      for (const path of ["package.json", ".env.example"]) {
-        const old = Buffer.from(`old 0.11 template ${path}\n`);
-        await writeFile(join(project, path), old);
-        manifest.files[path].sha256 = upgradeHash(old);
-      }
-      for (const path of ["worker/index.ts", "worker/.dev.vars.example", "worker/wrangler.jsonc"])
-        delete manifest.files[path];
-      await rm(join(project, "worker"), { recursive: true });
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      const before = await snapshot(join(project, "site"));
-      const args = ["--project", project, "--template", template, "--apply", "--json"];
-
-      const edited = Buffer.from(`${pages.toString("utf8")}// local edit\n`);
-      await writeFile(join(project, "wrangler.jsonc"), edited);
-      const conflict = cli(args, root);
-      expect(conflict.status, conflict.stdout + conflict.stderr).toBe(2);
-      expect(conflict.stdout).toContain("wrangler.jsonc");
-      expect(await readFile(join(project, "wrangler.jsonc"))).toEqual(edited);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe("0.11.0");
-      await writeFile(join(project, "wrangler.jsonc"), pages);
-      await rm(join(project, ".lace/conflicts"), { recursive: true, force: true });
-
-      const result = cli(args, root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain("worker/wrangler.jsonc");
-      expect(outcome.guidance).toContain("No Cloudflare resource");
-      const files = await readdir(project);
-      expect(files).not.toContain("wrangler.jsonc");
-      for (const path of ["worker/index.ts", "worker/.dev.vars.example", "package.json"])
-        expect(await readFile(join(project, path), "utf8")).toBe(
-          await readFile(join(template, path), "utf8"),
-        );
-      expect(await readdir(join(project, "worker"))).not.toContain("wrangler.jsonc");
-      const upgraded = JSON.parse(await readFile(manifestPath, "utf8"));
-      expect(upgraded.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(upgraded.files).not.toHaveProperty("wrangler.jsonc");
-      expect(upgraded.files["worker/index.ts"]?.owner).toBe("managed");
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades 0.12 Cloudflare guidance to the current template without touching Worker configuration or site",
-    async () => {
-      const { root, project, template } = await fixture(true);
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.12.0";
-      const guides = ["docs/lace-operations.md", ".github/workflows/cloudflare.yml"];
-      for (const path of guides) {
-        const old = Buffer.from(`old 0.12 template ${path}\n`);
-        await writeFile(join(project, path), old);
-        manifest.files[path].sha256 = upgradeHash(old);
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      const config = '{ "name": "operator-owned" }\n';
-      await writeFile(join(project, "worker/wrangler.jsonc"), config);
-      await writeFile(join(project, "README.md"), "user README\n");
-      const before = await snapshot(join(project, "site"));
-      const args = ["--project", project, "--template", template, "--apply", "--json"];
-      const result = cli(args, root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain("guidance only");
-      for (const path of guides)
-        expect(await readFile(join(project, path), "utf8")).toBe(
-          await readFile(join(template, path), "utf8"),
-        );
-      expect(await readFile(join(project, "docs/lace-operations.md"), "utf8")).toContain(
-        "### Local journey and diagnosis",
-      );
-      expect(await readFile(join(project, "worker/wrangler.jsonc"), "utf8")).toBe(config);
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
     },
     integrationTimeout,
   );
@@ -290,222 +189,19 @@ describe("upgrade CLI", () => {
       expect(result.status, result.stdout + result.stderr).toBe(0);
       const outcome = JSON.parse(result.stdout);
       expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain(
-        "Template 0.14.0: release coordinates and one operating rule",
-      );
-      expect(outcome.guidance).toContain("docker compose stop api dispatcher");
-      expect(outcome.guidance).toContain("pnpm --dir site add @lacecms/astro@0.1.0-alpha.2");
-      // The alpha.3 template names its coordinates and the alpha.2 -> alpha.3 database step.
-      expect(outcome.guidance).toContain(
-        "Template 0.17.0: release coordinates for Lace 0.1.0-alpha.3",
-      );
-      expect(outcome.guidance).toContain("pnpm --dir site add @lacecms/astro@0.1.0-alpha.4");
-      expect(outcome.guidance).toContain("Template 0.29.0: alpha.5 release coordinates");
-      expect(outcome.guidance).toContain("Template 0.30.0: alpha.6 release coordinates");
-      expect(outcome.guidance).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-rc1");
-      expect(outcome.guidance).toContain(
-        "Database: Lace 0.1.0-alpha.3 engines require migration 0003_site_build_outcomes",
-      );
-      expect(outcome.guidance).toContain(
-        "Database: Lace engines with invitations and password recovery require migration 0004_account_tokens",
-      );
-      expect(outcome.guidance).toContain("Template 0.22.0: invitations, password recovery");
-      expect(outcome.guidance).toContain("Template 0.23.0: resolved public media");
-      expect(outcome.guidance).toContain("Template 0.24.0: global models for site-wide content");
-      expect(outcome.guidance).toContain("0007_content_model_global_kind");
-      expect(outcome.guidance).toContain("Template 0.25.0: search and social metadata");
-      expect(outcome.guidance).toContain("0008_content_snapshot_seo");
-      expect(outcome.guidance).toContain(
-        "Template 0.26.0: block anchors, classes, settings and hidden blocks",
-      );
-      expect(outcome.guidance).toContain("0009_content_block_envelope");
-      expect(outcome.guidance).toContain(
-        "Template 0.27.0: Gallery and Navigation blocks and a navigation global",
-      );
-      expect(outcome.guidance).toContain("pnpm exec lace add block gallery navigation");
-      expect(outcome.guidance).toContain("pnpm exec lace add block --all");
-      expect(outcome.guidance).toContain("pnpm exec lace add block image hero");
-      expect(outcome.guidance).toContain(
-        "Database: Lace engines with schema evolution and media metadata require migrations 0005_content_model_structure and 0006_media_descriptive_metadata",
-      );
+      // Only the step from the latest published template is described.
+      expect(outcome.guidance).toContain("Template 0.47.0");
+      expect(outcome.guidance).toContain("baseline migration");
+      expect(outcome.guidance).toContain("SCHEMA_UNSUPPORTED");
       expect(outcome.guidance).toContain("--target cloudflare-remote --operator-env");
+      expect(outcome.guidance).not.toMatch(/Template 0\.(?:[0-3]\d|4[0-6])\.0/u);
+      expect(outcome.guidance).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
       for (const path of managed)
         expect(await readFile(join(project, path), "utf8")).toBe(
           await readFile(join(template, path), "utf8"),
         );
       expect(await readFile(join(project, ".env"), "utf8")).toBe(environment);
       expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades the 0.30 proxy configuration to the 0.31 upload limits and reports an edited proxy",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.30.0";
-      // 0.30.0 shipped the proxy without body-size directives.
-      const previous = (await readFile(join(project, "deploy/nginx.conf"), "utf8")).replace(
-        /\n {4}# Matches the API's default JSON body limit[\s\S]*?\n(?= {4}location \/api\/ \{)/u,
-        "\n",
-      );
-      expect(previous).not.toContain("client_max_body_size");
-      await writeFile(join(project, "deploy/nginx.conf"), previous);
-      manifest.files["deploy/nginx.conf"].sha256 = upgradeHash(Buffer.from(previous));
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      await writeFile(join(project, "README.md"), "user README\n");
-      const configuration = await readFile(join(project, "lace.config.ts"), "utf8");
-      const before = await snapshot(join(project, "site"));
-
-      // An operator edit to the managed proxy blocks apply instead of being overwritten.
-      const edited = previous.replace(
-        "listen 8080;",
-        "listen 8080;\n    client_max_body_size 20m;",
-      );
-      await writeFile(join(project, "deploy/nginx.conf"), edited);
-      const blocked = cli(
-        ["--project", project, "--template", template, "--apply", "--json"],
-        root,
-      );
-      expect(blocked.status, blocked.stdout + blocked.stderr).not.toBe(0);
-      expect(blocked.stdout + blocked.stderr).toContain("deploy/nginx.conf");
-      expect(await readFile(join(project, "deploy/nginx.conf"), "utf8")).toBe(edited);
-
-      await writeFile(join(project, "deploy/nginx.conf"), previous);
-      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.guidance).toContain("Template 0.31.0: the managed deploy/nginx.conf");
-      expect(outcome.guidance).toContain("docker compose up -d web");
-      const proxy = await readFile(join(project, "deploy/nginx.conf"), "utf8");
-      expect(proxy).toBe(await readFile(join(template, "deploy/nginx.conf"), "utf8"));
-      expect(proxy).toContain("location = /api/v1/admin/media");
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await readFile(join(project, "lace.config.ts"), "utf8")).toBe(configuration);
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades a 0.31 project to the 0.32 image guidance without touching user-owned files",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.31.0";
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      await writeFile(join(project, "README.md"), "user README\n");
-      const configuration = await readFile(join(project, "lace.config.ts"), "utf8");
-      const lock = await readFile(join(project, "site/lace.site.json"), "utf8");
-      const before = await snapshot(join(project, "site"));
-
-      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.guidance).toContain("Template 0.32.0: responsive images");
-      expect(outcome.guidance).toContain("lace add block image gallery hero");
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await readFile(join(project, "lace.config.ts"), "utf8")).toBe(configuration);
-      expect(await readFile(join(project, "site/lace.site.json"), "utf8")).toBe(lock);
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades a 0.32 project to the 0.33 deploy caching and reports an edited proxy",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.32.0";
-      // 0.32.0 shipped the proxy without the asset cache rule and Compose without the cache volume.
-      const previousProxy = (await readFile(join(project, "deploy/nginx.conf"), "utf8")).replace(
-        /\n {4}# Content-hashed build assets[\s\S]*?\n(?= {4}# Browsers revalidate)/u,
-        "\n",
-      );
-      const previousCompose = (await readFile(join(project, "docker-compose.yml"), "utf8"))
-        .replace("      - builder-cache:/cache\n", "")
-        .replace("  builder-cache: {}\n", "");
-      expect(previousProxy).not.toContain("/_astro/");
-      expect(previousCompose).not.toContain("builder-cache");
-      for (const [file, content] of [
-        ["deploy/nginx.conf", previousProxy],
-        ["docker-compose.yml", previousCompose],
-      ]) {
-        await writeFile(join(project, file), content);
-        manifest.files[file].sha256 = upgradeHash(Buffer.from(content));
-      }
-      await rm(join(project, "site/public"), { recursive: true });
-      delete manifest.files["site/public/_headers"];
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      await writeFile(join(project, "README.md"), "user README\n");
-      const before = await snapshot(join(project, "site"));
-
-      const edited = previousProxy.replace("listen 8080;", "listen 8080;\n    gzip on;");
-      await writeFile(join(project, "deploy/nginx.conf"), edited);
-      const blocked = cli(
-        ["--project", project, "--template", template, "--apply", "--json"],
-        root,
-      );
-      expect(blocked.status, blocked.stdout + blocked.stderr).not.toBe(0);
-      expect(blocked.stdout + blocked.stderr).toContain("deploy/nginx.conf");
-      expect(await readFile(join(project, "deploy/nginx.conf"), "utf8")).toBe(edited);
-
-      await writeFile(join(project, "deploy/nginx.conf"), previousProxy);
-      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.guidance).toContain("Template 0.33.0: deploy caching");
-      expect(outcome.guidance).toContain("docker compose up -d builder web");
-      expect(outcome.guidance).toContain("site/public/_headers");
-      for (const file of ["deploy/nginx.conf", "docker-compose.yml"])
-        expect(await readFile(join(project, file), "utf8")).toBe(
-          await readFile(join(template, file), "utf8"),
-        );
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades a 0.33 project to the 0.34 image-link guidance without touching user-owned files",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.33.0";
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      await writeFile(join(project, "README.md"), "user README\n");
-      const configuration = await readFile(join(project, "lace.config.ts"), "utf8");
-      const lock = await readFile(join(project, "site/lace.site.json"), "utf8");
-      const before = await snapshot(join(project, "site"));
-
-      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.guidance).toContain("Template 0.34.0: image links");
-      expect(outcome.guidance).toContain("lace add block image gallery");
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await readFile(join(project, "lace.config.ts"), "utf8")).toBe(configuration);
-      expect(await readFile(join(project, "site/lace.site.json"), "utf8")).toBe(lock);
       expect(await snapshot(join(project, "site"))).toEqual(before);
       expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
         TEMPLATE_VERSION,
@@ -531,154 +227,6 @@ describe("upgrade CLI", () => {
         expect(output).toContain("UPGRADE_INPUT");
       }
       expect(await snapshot(root)).toEqual(before);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades 0.9 guides to the current template block-command guidance without touching the site",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.9.0";
-      for (const path of ["docs/lace-astro-site.md", "docs/lace-operations.md"]) {
-        const old = Buffer.from(`old 0.9 template ${path}\n`);
-        await writeFile(join(project, path), old);
-        manifest.files[path].sha256 = upgradeHash(old);
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      await writeFile(join(project, "README.md"), "user README\n");
-      const before = await snapshot(join(project, "site"));
-      const args = ["--project", project, "--template", template, "--apply", "--json"];
-      const result = cli(args, root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain("lace add block --all");
-      for (const path of ["docs/lace-astro-site.md", "docs/lace-operations.md"])
-        expect(await readFile(join(project, path), "utf8")).toBe(
-          await readFile(join(template, path), "utf8"),
-        );
-      expect(await readFile(join(project, "docs/lace-astro-site.md"), "utf8")).toContain(
-        "pnpm exec lace add block --all --site ..",
-      );
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades 0.8 to the current template with migration guidance and without touching the alpha site",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.8.0";
-      const operations = Buffer.from("old 0.8 template docs/lace-operations.md\n");
-      await writeFile(join(project, "docs/lace-operations.md"), operations);
-      manifest.files["docs/lace-operations.md"].sha256 = upgradeHash(operations);
-      await rm(join(project, "docs/lace-astro-site.md"));
-      delete manifest.files["docs/lace-astro-site.md"];
-      // Replace the adapter starter with the 0.8 site layout the consumer still owns.
-      for (const path of [
-        "site/src/lib/lace.ts",
-        "site/src/lace/blocks.ts",
-        "site/lace.site.json",
-      ]) {
-        await rm(join(project, path));
-        delete manifest.files[path];
-      }
-      const old = ["site/src/lib/site-data.ts", "site/src/components/BlockRenderer.astro"];
-      const { mkdir } = await import("node:fs/promises");
-      await mkdir(join(project, "site/src/components"), { recursive: true });
-      for (const path of old) {
-        await writeFile(join(project, path), `user ${path}\n`);
-        manifest.files[path] = { owner: "user" };
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      const before = await snapshot(join(project, "site"));
-      const args = ["--project", project, "--template", template, "--apply", "--json"];
-      const result = cli(args, root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain("@lacecms/astro");
-      expect(outcome.guidance).toContain("Delete site/src/lib/site-data.ts");
-      expect(outcome.guidance).toContain("docs/lace-astro-site.md");
-      expect(await readFile(join(project, "docs/lace-astro-site.md"), "utf8")).toBe(
-        await readFile(join(template, "docs/lace-astro-site.md"), "utf8"),
-      );
-      expect(await readFile(join(project, "docs/lace-operations.md"), "utf8")).toBe(
-        await readFile(join(template, "docs/lace-operations.md"), "utf8"),
-      );
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades 0.7 proxy and guidance to the current template without changing user site source",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.7.0";
-      for (const path of ["deploy/nginx.conf", "docs/lace-operations.md"]) {
-        const old = Buffer.from(`old 0.7 template ${path}\n`);
-        await writeFile(join(project, path), old);
-        manifest.files[path].sha256 = upgradeHash(old);
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      const preserved = ["site/src/lib/lace.ts", "site/src/pages/blog/[slug].astro"];
-      for (const path of preserved) await writeFile(join(project, path), `user ${path}\n`);
-      const args = ["--project", project, "--template", template, "--apply", "--json"];
-      const result = cli(args, root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain("Cache-Control: no-cache");
-      expect(outcome.guidance).toContain("revalidate the build export with its ETag");
-      expect(await readFile(join(project, "deploy/nginx.conf"), "utf8")).toContain(
-        'add_header Cache-Control "no-cache" always;',
-      );
-      for (const path of preserved)
-        expect(await readFile(join(project, path), "utf8")).toBe(`user ${path}\n`);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades 0.6 managed deployment files to the current template while preserving user source",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.6.0";
-      for (const path of ["docker-compose.yml", ".env.example", "docs/lace-operations.md"]) {
-        const old = Buffer.from(`old 0.6 template ${path}\n`);
-        await writeFile(join(project, path), old);
-        manifest.files[path].sha256 = upgradeHash(old);
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      const preserved = ["README.md", "lace.config.ts", "site/src/pages/index.astro"];
-      for (const path of preserved) await writeFile(join(project, path), `user ${path}\n`);
-      const args = ["--project", project, "--template", template, "--apply", "--json"];
-      const result = cli(args, root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      expect(outcome.guidance).toContain("compatible freshly built");
-      expect(outcome.guidance).toContain("LACE_BUILD_SOURCE_ROOT");
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
-      expect(await readFile(join(project, "docker-compose.yml"), "utf8")).toContain(
-        "create_host_path: false",
-      );
-      for (const path of preserved)
-        expect(await readFile(join(project, path), "utf8")).toBe(`user ${path}\n`);
     },
     integrationTimeout,
   );

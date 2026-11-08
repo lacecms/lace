@@ -297,36 +297,6 @@ contract(
 );
 
 contract(
-  "accepts a legacy structural hash once when fields use display-like keys",
-  async (runtime, expect) => {
-    const described = await evolvingPosts({ fields: { description: field.textarea() } });
-    expect(described.legacyStructureHash).toEqual(expect.any(String));
-    const { repository, sql } = await runtime.open({ resolveModel: syncResolver([described]) });
-    await applySync(repository, [described], 10);
-    await seedEvolvingEntries(repository, { draft: {}, published: {} });
-    await sql.run(
-      "update content_models set structure_hash = ?, structure_json = null, structure_json_hash = null",
-      described.legacyStructureHash,
-    );
-    const prepared = await prepareConfigurationSynchronization({
-      models: [described],
-      state: repository,
-    });
-    expect(prepared.plan).toMatchObject({
-      isValid: true,
-      operations: [{ action: "record-baseline" }],
-    });
-    await applySync(repository, [described], 20, prepared);
-    expect(await sql.get("select structure_hash from content_models")).toEqual({
-      structure_hash: described.structureHash,
-    });
-    await expect(applySync(repository, [described], 21)).resolves.toMatchObject({
-      status: "noop",
-    });
-  },
-);
-
-contract(
   "prunes newly hidden published values and refuses revealed gaps without writes",
   async (runtime, expect) => {
     const v1 = await evolvingPosts({ fields: conditionalFields() });

@@ -159,9 +159,7 @@ test("keeps fields named like display metadata in the canonical structure", asyn
   });
   expect(runtime.structure).not.toHaveProperty("label");
   expect(runtime.structure).not.toHaveProperty("listFields");
-  expect(runtime.legacyStructureHash).toEqual(expect.any(String));
-  expect(runtime.legacyStructureHash).not.toBe(runtime.structureHash);
-  expect(plain.runtime.content[0]).not.toHaveProperty("legacyStructureHash");
+  expect(runtime).not.toHaveProperty("legacyStructureHash");
   expect(Object.isFrozen(at(runtime.structure, "fields", "description"))).toBe(true);
 
   const labelledBlock = defineBlock({
@@ -189,7 +187,7 @@ test("keeps fields named like display metadata in the canonical structure", asyn
   });
 });
 
-test("omits canonical structures and legacy hashes from public projections", async () => {
+test("omits canonical structures from public projections", async () => {
   const config = await defineConfig({
     blocks,
     content: [postModel({ fields: { description: field.textarea() } }), homeModel()],
@@ -198,7 +196,6 @@ test("omits canonical structures and legacy hashes from public projections", asy
 
   for (const model of config.public.content) {
     expect(model).not.toHaveProperty("structure");
-    expect(model).not.toHaveProperty("legacyStructureHash");
   }
   expect(serialized).not.toContain("blockDefinitions");
   expect(config.runtime.content.every((model) => typeof model.structure === "object")).toBe(true);

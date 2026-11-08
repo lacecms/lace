@@ -7,10 +7,10 @@ test("site-build status SQL mirrors the portable vocabulary", async () => {
   const { siteBuildStatuses, retryableSiteBuildStatuses } = await import("@lacecms/domain");
   const { RETRYABLE_SITE_BUILD_STATUS_SQL, siteBuildRecord } = await import("./site-builds.js");
   const migration = await readFile(
-    new URL("../../drizzle/0003_site_build_outcomes.sql", import.meta.url),
+    new URL("../../drizzle/0000_baseline.sql", import.meta.url),
     "utf8",
   );
-  const check = /CHECK\("status" in \(([^)]*)\)\)/u.exec(migration)?.[1];
+  const check = /CHECK\("site_builds"\."status" in \(([^)]*)\)\)/u.exec(migration)?.[1];
   expect(check?.split(", ")).toEqual(siteBuildStatuses.map((status) => `'${status}'`));
   expect(RETRYABLE_SITE_BUILD_STATUS_SQL).toBe(
     `(${retryableSiteBuildStatuses.map((status) => `'${status}'`).join(", ")})`,

@@ -181,8 +181,21 @@ test("Worker readiness rejects a D1 database with a pending migration", async ()
   const fixture = await workerFixture();
   await fixture.local.database
     .prepare("delete from d1_migrations where name = ?")
-    .bind("0002_mutation_guards.sql")
+    .bind("0000_baseline.sql")
     .run();
+  const ready = await fixture.call("/health/ready");
+  expect(ready.response.status).toBe(503);
+  expect(ready.body).toEqual({ status: "not_ready" });
+});
+
+test("Worker readiness rejects a D1 database migrated before the baseline", async () => {
+  const fixture = await workerFixture();
+  await fixture.local.database.batch([
+    fixture.local.database.prepare("delete from d1_migrations"),
+    fixture.local.database
+      .prepare("insert into d1_migrations (id, name) values (1, ?), (2, ?)")
+      .bind("0000_exotic_tarantula.sql", "0015_import_credentials.sql"),
+  ]);
   const ready = await fixture.call("/health/ready");
   expect(ready.response.status).toBe(503);
   expect(ready.body).toEqual({ status: "not_ready" });
