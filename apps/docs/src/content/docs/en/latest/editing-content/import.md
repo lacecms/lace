@@ -124,6 +124,96 @@ Each page and each global appears at most once, and each collection slug once pe
 
 A reference anywhere else is an error. With `--publish`, a published entry may link only to entries that are published too; import publishes link targets first and reports cycles.
 
+## Examples for every built-in block
+
+These are block objects for an entry's `blocks` array, not separate entries.
+The target model must allow each type, and its current definitions must be
+registered in `lace.config.ts`. This example uses the current starter's block
+versions and a media item with key `studio` in the same package. URL fields
+can also use a `{"$entry": "entry-key"}` reference to another package entry.
+Settings and optional fields can be omitted; imported data must match the
+versions installed in your project.
+
+```json
+[
+  {
+    "type": "hero",
+    "data": {
+      "eyebrow": "Welcome",
+      "heading": "A studio for thoughtful work",
+      "image": { "$media": "studio" },
+      "primaryActionLabel": "Contact us",
+      "primaryActionUrl": "/contact"
+    }
+  },
+  {
+    "type": "richText",
+    "data": {
+      "content": {
+        "type": "doc",
+        "content": [
+          { "type": "paragraph", "content": [{ "type": "text", "text": "Welcome to our studio." }] }
+        ]
+      }
+    }
+  },
+  {
+    "type": "image",
+    "data": { "media": { "$media": "studio" }, "caption": "The studio" },
+    "settings": { "lightbox": true }
+  },
+  {
+    "type": "quote",
+    "data": { "quote": "Make room for ideas.", "attribution": "The studio team" }
+  },
+  {
+    "type": "cta",
+    "data": { "heading": "Work with us", "actionLabel": "Contact", "actionUrl": "/contact" }
+  },
+  {
+    "type": "link",
+    "data": { "label": "Read our journal", "url": "/blog" },
+    "settings": { "appearance": "button", "newTab": false }
+  },
+  {
+    "type": "gallery",
+    "data": {
+      "title": "Our work",
+      "images": [
+        { "kind": "image", "media": { "$media": "studio" }, "caption": "Studio" },
+        { "kind": "video", "videoUrl": "https://vimeo.com/76979871", "videoTitle": "A studio tour" }
+      ]
+    }
+  },
+  {
+    "type": "navigation",
+    "data": {
+      "name": "On this page",
+      "links": [
+        { "label": "About", "url": "/about" },
+        { "label": "More", "children": [{ "label": "Contact", "url": "/contact" }] }
+      ]
+    }
+  },
+  {
+    "type": "videoEmbed",
+    "data": {
+      "url": "https://vimeo.com/76979871",
+      "title": "A studio tour",
+      "poster": { "$media": "studio" }
+    },
+    "settings": { "aspectRatio": "16:9", "playback": "player" }
+  }
+]
+```
+
+For a complete package, define the referenced image in `media` (as shown
+below), place these blocks inside an entry with the required `key`, `model`,
+`title` and `fields`, and validate with `--validate-only --publish`. Gallery
+video items and Video embed use YouTube or Vimeo URLs, not uploaded video
+files. Rich text uses document objects, not HTML. The optional `key`, `anchor`,
+`className`, `hidden` and `settings` belong to the individual block object.
+
 ## Sample package
 
 [Download `lace-import.json`](/lace/examples/content-import/lace-import.json) and its images [`studio.jpg`](/lace/examples/content-import/media/studio.jpg) and [`workshop.jpg`](/lace/examples/content-import/media/workshop.jpg) into an `import/media/` layout. The sample fits the starter project's models: it fills site settings and navigation, the Home page and two linked posts.
