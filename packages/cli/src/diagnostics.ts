@@ -68,10 +68,18 @@ export function filesystemKind(error: unknown): DiagnosticKind | undefined {
   return undefined;
 }
 
+/** A sanitized report that the selected database has no migration ledger. */
+export class MissingLedgerError extends CliError {
+  public constructor() {
+    super("SCHEMA_OUTDATED", "D1 migration ledger is missing.", EXIT.SCHEMA);
+  }
+}
+
 /** Bounded traversal of cause chains; raw messages are never returned. */
 export function missingLedger(error: unknown): boolean {
   let current = error;
   for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    if (current instanceof MissingLedgerError) return true;
     if (
       /\bno such table: (?:main\.)?(?:__drizzle_migrations|d1_migrations)\b/u.test(current.message)
     )
@@ -143,10 +151,16 @@ export function failureDiagnostic(
       "Cloudflare rejected D1 authorization.",
       "Check CLOUDFLARE_API_TOKEN permissions and the selected CLOUDFLARE_ACCOUNT_ID and LACE_D1_DATABASE_ID; retry only the explicitly selected target.",
     ],
-    "d1-unavailable": [
-      "Cloudflare D1 or its local persisted state is unavailable.",
-      "Check connectivity or access to LACE_CLOUDFLARE_PERSIST_TO for the selected target and retry; do not switch to a remote target implicitly.",
-    ],
+    "d1-unavailable":
+      target === "cloudflare-remote"
+        ? [
+            "Cloudflare D1 is unavailable.",
+            "Check connectivity to Cloudflare and the selected CLOUDFLARE_ACCOUNT_ID and LACE_D1_DATABASE_ID, then retry the same remote target.",
+          ]
+        : [
+            "The local persisted Cloudflare D1 state is unavailable.",
+            "Check access to LACE_CLOUDFLARE_PERSIST_TO for the selected target and retry; do not switch to a remote target implicitly.",
+          ],
     "d1-response": [
       "Cloudflare D1 returned an unsuccessful or invalid response.",
       "Check the selected D1 binding and provider availability; retry the same target after resolving the provider failure.",

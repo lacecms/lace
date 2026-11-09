@@ -61,3 +61,24 @@ test("wrapped driver errors use codes without echoing messages", () => {
     expect(failure.exitCode).toBe(6);
   }
 });
+
+test("D1 unavailability advice matches the selected target", () => {
+  const remote = failureDiagnostic(
+    "db migrate",
+    "OPERATION_FAILED",
+    "cloudflare-remote",
+    "d1-unavailable",
+  );
+  expect(remote.reason).toBe("Cloudflare D1 is unavailable.");
+  expect(remote.nextAction).toContain("CLOUDFLARE_ACCOUNT_ID");
+  expect(remote.nextAction).toContain("LACE_D1_DATABASE_ID");
+  expect(JSON.stringify(remote)).not.toContain("LACE_CLOUDFLARE_PERSIST_TO");
+  const local = failureDiagnostic(
+    "db migrate",
+    "OPERATION_FAILED",
+    "cloudflare-local",
+    "d1-unavailable",
+  );
+  expect(local.nextAction).toContain("LACE_CLOUDFLARE_PERSIST_TO");
+  expect(local.reason).toContain("local persisted");
+});

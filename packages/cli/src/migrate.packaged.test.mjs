@@ -180,3 +180,52 @@ test("remote migration child and REST commands share explicitly resolved identit
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("remote migration initializes a fresh D1 whose ledger read fails with HTTP 400", async () => {
+  const { runCommand } = await import("../dist/commands.js");
+  const directory = await mkdtemp(join(tmpdir(), "lace-remote-fresh-"));
+  try {
+    const wranglerConfig = join(directory, "worker/wrangler.jsonc");
+    await mkdir(join(directory, "worker"));
+    await writeFile(wranglerConfig, '{"d1_databases":[{"binding":"DB","database_id":"db"}]}');
+    await mkdir(join(directory, "node_modules/.bin"), { recursive: true });
+    const marker = join(directory, "wrangler-ran");
+    await writeFile(
+      join(directory, "node_modules/.bin/wrangler"),
+      `#!/bin/sh\ntouch "${marker}"\n`,
+      { mode: 0o755 },
+    );
+    const request = vi.fn(async (_url, input) => {
+      const [query] = JSON.parse(input.body).batch;
+      if (query.sql === "select name from d1_migrations")
+        return Response.json(
+          {
+            success: false,
+            result: [],
+            errors: [{ code: 7500, message: "no such table: d1_migrations: SQLITE_ERROR" }],
+          },
+          { status: 400 },
+        );
+      return Response.json({
+        success: true,
+        result: [{ success: true, results: [{ name: "0000_baseline.sql" }] }],
+      });
+    });
+    vi.stubGlobal("fetch", request);
+    const outcome = await runCommand(
+      { command: "db migrate", target: "cloudflare-remote", check: false, json: true },
+      { accountId: "chosen", apiToken: "private-token", databaseId: "db", wranglerConfig },
+      directory,
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      code: "MIGRATED",
+      data: { versions: ["0000_baseline.sql"] },
+    });
+    expect(existsSync(marker)).toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.unstubAllGlobals();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
