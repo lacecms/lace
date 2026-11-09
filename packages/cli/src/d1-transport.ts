@@ -1,4 +1,4 @@
-import { filesystemKind } from "./diagnostics.js";
+import { filesystemKind, MissingLedgerError } from "./diagnostics.js";
 import type { D1Database, D1PreparedStatement, D1Result } from "@lacecms/platform-cloudflare";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { join } from "node:path";
@@ -92,17 +92,25 @@ export class RemoteD1Database implements D1Database {
         "d1-unavailable",
       );
     }
-    if (!response.ok)
-      throw new CliError(
+    const failed = (kind: "d1-auth" | "d1-unavailable" | "d1-response") =>
+      new CliError(
         "OPERATION_FAILED",
         `Cloudflare D1 request failed (HTTP ${response.status}).`,
         EXIT.OPERATION,
-        response.status === 401 || response.status === 403 ? "d1-auth" : "d1-unavailable",
+        kind,
       );
+    // A rejected query (4xx) differs from an unreachable or throttled provider.
+    const rejected = () =>
+      response.status < 500 && response.status !== 429 ? "d1-response" : "d1-unavailable";
+    if (response.status === 401 || response.status === 403) {
+      await response.body?.cancel();
+      throw failed("d1-auth");
+    }
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
+      if (!response.ok) throw failed(rejected());
       throw new CliError(
         "OPERATION_FAILED",
         "Cloudflare D1 returned an invalid response.",
@@ -110,18 +118,20 @@ export class RemoteD1Database implements D1Database {
         "d1-response",
       );
     }
-    // Inspect only a missing-ledger signature; never return provider text.
+    // Inspect only a missing-ledger signature; never return provider text. D1
+    // reports SQL errors such as a missing ledger with HTTP 400.
     const errors = (payload as { errors?: { message?: unknown }[] } | null)?.errors;
     if (
       Array.isArray(errors) &&
       queries.every((query) => query.sql === "select name from d1_migrations") &&
       errors.some(
         (error) =>
-          typeof error.message === "string" &&
+          typeof error?.message === "string" &&
           /\bno such table: (?:main\.)?d1_migrations\b/u.test(error.message),
       )
     )
-      throw new CliError("SCHEMA_OUTDATED", "D1 migration ledger is missing.", EXIT.SCHEMA);
+      throw new MissingLedgerError();
+    if (!response.ok) throw failed(rejected());
     if (
       payload === null ||
       typeof payload !== "object" ||

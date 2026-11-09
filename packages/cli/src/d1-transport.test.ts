@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteD1Database, openLocalD1 } from "./d1-transport.js";
+import { MissingLedgerError, missingLedger } from "./diagnostics.js";
 
 const settings = {
   accountId: "account",
@@ -81,3 +82,49 @@ test("local D1 batch rolls back failed mutations", async () => {
     await rm(persistTo, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("a missing ledger is recognized when D1 reports it as HTTP 400", async () => {
+  const db = new RemoteD1Database(settings, async () =>
+    Response.json(
+      {
+        success: false,
+        result: [],
+        errors: [
+          { code: 7500, message: "no such table: d1_migrations: SQLITE_ERROR private-credential" },
+        ],
+      },
+      { status: 400 },
+    ),
+  );
+  const failure = await db
+    .prepare("select name from d1_migrations")
+    .all()
+    .catch((error) => error);
+  expect(failure).toBeInstanceOf(MissingLedgerError);
+  expect(missingLedger(failure)).toBe(true);
+  expect(failure.message).not.toContain("private-credential");
+});
+
+test("other rejected queries and provider outages keep sanitized distinct causes", async () => {
+  for (const [status, body, kind] of [
+    [
+      400,
+      { success: false, errors: [{ message: "near private-credential: syntax error" }] },
+      "d1-response",
+    ],
+    [400, "private-credential", "d1-response"],
+    [503, "private-credential", "d1-unavailable"],
+    [429, { success: false, errors: [{ message: "private-credential" }] }, "d1-unavailable"],
+  ]) {
+    const db = new RemoteD1Database(settings, async () =>
+      typeof body === "string" ? new Response(body, { status }) : Response.json(body, { status }),
+    );
+    const failure = await db
+      .prepare("select name from d1_migrations")
+      .all()
+      .catch((error) => error);
+    expect(failure).not.toBeInstanceOf(MissingLedgerError);
+    expect(failure).toMatchObject({ code: "OPERATION_FAILED", diagnosticKind: kind });
+    expect(failure.message).toBe(`Cloudflare D1 request failed (HTTP ${status}).`);
+  }
+});
