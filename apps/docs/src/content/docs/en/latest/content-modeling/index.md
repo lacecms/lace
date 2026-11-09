@@ -5,22 +5,112 @@ description: Use typed, version-controlled models for pages, collections, global
 
 `lace.config.ts` is the source of content structure. Admin edits values rather than creating model definitions. A page is a singleton at a fixed path; a collection holds entries addressed by a slug route; a global is a singleton with no public route, for shared site settings or navigation.
 
-```ts
-import { defineCollection } from "@lacecms/config";
-import { field } from "@lacecms/content";
+## A complete starting model
 
-const posts = defineCollection({
-  key: "posts",
-  version: 1,
-  route: "/blog/:slug",
-  fields: {
-    excerpt: field.textarea({ description: "Shown on article cards." }),
-    author: field.text({ required: true, placeholder: "Author name" }),
-  },
+This example defines a Home page at `/`, a collection of articles at
+`/articles/<slug>`, and a shared site settings global. Place it in the generated
+project's `lace.config.ts` (or adapt its existing definitions):
+
+```ts
+import { defineConfig, definePage, defineCollection, defineGlobal } from "@lacecms/config";
+import { builtInBlocks, field } from "@lacecms/content";
+
+export default await defineConfig({
+  blocks: [builtInBlocks.hero, builtInBlocks.richText, builtInBlocks.image],
+  content: [
+    definePage({
+      key: "home",
+      version: 1,
+      label: "Home",
+      path: "/",
+      fields: { introduction: field.textarea({ description: "A short introduction." }) },
+      blocks: ["hero", "richText", "image"],
+      seo: true,
+    }),
+    definePage({
+      key: "about",
+      version: 1,
+      label: "About",
+      path: "/about",
+      fields: { contactEmail: field.text({ label: "Contact email" }) },
+      blocks: ["richText", "image"],
+      seo: true,
+    }),
+    defineCollection({
+      key: "articles",
+      version: 1,
+      label: "Articles",
+      route: "/articles/:slug",
+      fields: {
+        summary: field.textarea({ description: "Shown on article cards." }),
+        author: field.text({ required: true, placeholder: "Author name" }),
+        featured: field.boolean({ defaultValue: false }),
+      },
+      blocks: ["hero", "richText", "image"],
+      seo: { description: "summary" },
+    }),
+    defineGlobal({
+      key: "settings",
+      version: 1,
+      label: "Site settings",
+      fields: {
+        siteName: field.text({ required: true }),
+        description: field.textarea(),
+        image: field.media(),
+      },
+      seoDefaults: { siteName: "siteName", description: "description", image: "image" },
+    }),
+  ],
 });
 ```
 
-Register definitions in the generated configuration, preserving its existing exports and block registry. Keys identify models; changing a key is not automatically interpreted as a rename. Model versions track structural evolution. Model routes do not generate Astro route files: add the corresponding rendering route in your site.
+A page is one editable entry at its fixed `path`; a collection contains any
+number of entries, each with a slug substituted into `route`. A global is one
+shared entry and has no public URL of its own. Publish the settings global for
+its values to reach the site. The starter also defines a `navigation` global;
+keep it if your site's layout reads it. See [SEO](seo/) for fallback rules.
+
+Register each block definition once in `blocks` and list its type in each
+model that permits it. Custom types need their own definition and renderer:
+[create a custom block](custom-blocks/). The configuration describes content;
+it does not create Astro pages. Add corresponding site route files, including a
+`getStaticPaths` route for a collection, and render the relevant published data.
+
+## Change models after deployment
+
+Keys are stable identities: removing one and adding another does not rename it.
+For structural changes, increase the affected model's `version`, then review
+and apply configuration synchronization in **each** environment. For example,
+add a reading-time field to the `articles` definition above and change its
+`version: 1` to `version: 2`:
+
+```ts
+fields: {
+  summary: field.textarea({ description: "Shown on article cards." }),
+  author: field.text({ required: true, placeholder: "Author name" }),
+  featured: field.boolean({ defaultValue: false }),
+  readingTime: field.number({ label: "Reading time (minutes)" }),
+},
+```
+
+Run `pnpm content:sync --check`, review the plan, and then run
+`pnpm content:sync` for a generated Node project with the SQLite services
+stopped. Check mode exits nonzero for pending changes as well as errors; read
+its report. On Cloudflare select the remote target explicitly and redeploy the
+Worker with the updated configuration. Full commands and ordering are in
+[synchronization](synchronization/) and [Cloudflare deployment](../deployment/cloudflare/).
+
+To remove a model, remove its definition from `content` and review sync. A
+model can be removed only when it has **no entries**. An empty collection can
+therefore be removed; a page or global has a singleton created during sync,
+even if nobody edited it, and its removal is blocked while that entry exists.
+The Admin/API delete operation also rejects page and global singletons, so
+there is currently no supported ordinary removal workflow for those models.
+Sync does not infer a rename or automatically delete entries. Changes to a
+populated model may require explicit hints or migrations; take a backup and
+review the plan before applying destructive changes. Deleting a definition also
+does not delete the site's Astro route or renderer: update those separately.
+See [synchronization](synchronization/) for supported evolution and recovery.
 
 ## Fields and author guidance
 
@@ -34,7 +124,7 @@ See [groups, lists and forms](composites/), [conditional fields](conditional-fie
 
 A model declares which block types are allowed. Built-in types include hero, rich text, image, quote, CTA, Link, gallery, navigation and video embed. Blocks are ordered; their content schema and settings are versioned separately from the visual component source. Adding a block definition does not install its renderer into the Astro site.
 
-The SEO system group provides metadata such as title/description, social image and indexing settings. Configure site defaults and use per-entry overrides deliberately. Admin shows inheritance; recommended title/description lengths are guidance, while hard validation limits still apply. SEO title/description recommendations are 60/160 characters and hard limits are 200/500. Published SEO reaches the build export and site helpers; saving a draft does not update a public page.
+The [SEO system group](seo/) provides metadata such as title/description, social image and indexing settings. Configure site defaults and use per-entry overrides deliberately. Admin shows inheritance; recommended title/description lengths are guidance, while hard validation limits still apply. SEO title/description recommendations are 60/160 characters and hard limits are 200/500. Published SEO reaches the build export and site helpers; saving a draft does not update a public page.
 
 A global can supply shared header/navigation content. Publish it like another singleton; unpublished optional globals should have a deliberate site fallback.
 
