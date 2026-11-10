@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { mediaItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
-import type { FieldDefinition, ItemPreview } from "../../../entities/content/index.js";
+import type { FieldDefinition, ItemPreview } from "../../../entities/field-editor/index.js";
 import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 import { MediaItemPreview } from "./index.js";
 

@@ -14,7 +14,7 @@ import {
 } from "../../../shared/api/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { HeaderActionsTargetContext } from "../header-actions.js";
-import { ShellHeader } from "../ShellHeader/index.js";
+import { ShellHeader } from "../ShellHeader.js";
 import { SidebarNav } from "../SidebarNav/index.js";
 
 /**

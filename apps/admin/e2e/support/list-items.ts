@@ -38,6 +38,17 @@ export async function openItem(page: Page, item: string, scope: Scope = page) {
 export async function openAllItems(page: Page) {
   await page.getByRole("heading", { level: 1 }).first().waitFor();
   const collapsed = page.getByRole("button", { name: /^Expand .+ item \d+$/u });
-  for (let opened = 0; opened < 50 && (await collapsed.count()) > 0; opened += 1)
-    await collapsed.first().click();
+  let lastList: ReturnType<Locator["elementHandle"]> | undefined;
+  for (let opened = 0; opened < 50 && (await collapsed.count()) > 0; opened += 1) {
+    const toggle = collapsed.first();
+    lastList = toggle.locator("xpath=ancestor::ol[1]").elementHandle();
+    await toggle.click();
+  }
+  // Clicking a later row can leave the first row of its list above the viewport.
+  // Position the last opened list at the top so pointer interactions start onscreen.
+  const list = await lastList;
+  await list?.evaluate((element) => {
+    element.scrollIntoView({ block: "start" });
+    window.scrollBy(0, -200);
+  });
 }

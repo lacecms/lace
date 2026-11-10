@@ -1,21 +1,23 @@
+import { fieldEditorServices } from "../../../entities/content/index.js";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { useRef } from "react";
 import { useForm } from "react-hook-form";
 import { field } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 import { expect, test, vi } from "vitest";
 import {
-  FieldRenderer,
-  FieldRendererProvider,
-  EntryListBudget,
   createDraftResolver,
   withoutClearedValues,
   type DraftEditorValues,
   validationProblems,
 } from "../../../entities/content/index.js";
+import {
+  FieldRenderer,
+  FieldRendererProvider,
+  EntryListBudget,
+} from "../../../entities/field-editor/index.js";
 import { itemAction, listAction, openActions, openItem } from "../../../app/testing/index.js";
-import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
+import { EntryValidationSummary } from "../EntryValidationSummary.js";
 const links = field.list({
   label: "Links",
   itemLabel: "title",
@@ -42,15 +44,16 @@ function Harness({
     { title: "Two", url: "/two" },
   ],
   onSave = vi.fn(),
+  numbers = [],
 }: {
   readonly readOnly?: boolean;
   readonly initial?: unknown[];
   readonly onSave?: (values: DraftEditorValues) => void;
+  readonly numbers?: number[];
 }) {
-  const transient = useRef(new Map<string, { name: string; message: string }>());
   const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
-    defaultValues: { title: "Title", blocks: [], fields: { links: initial, numbers: [] } },
-    resolver: createDraftResolver(model, () => [...transient.current.values()]),
+    defaultValues: { title: "Title", blocks: [], fields: { links: initial, numbers } },
+    resolver: createDraftResolver(model),
     shouldFocusError: false,
     reValidateMode: "onSubmit",
   });
@@ -58,11 +61,10 @@ function Harness({
   const problems = validationProblems({ model, blocks: [], errors: form.formState.errors });
   return (
     <FieldRendererProvider
-      form={form}
-      model={model}
+      services={fieldEditorServices}
+      editor={{ form, model }}
       readOnly={readOnly}
       renderers={{}}
-      transient={transient.current}
     >
       <form
         noValidate
@@ -101,6 +103,14 @@ function Harness({
           }
         >
           Nested issue
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            form.setError("fields.numbers.1", { type: "server", message: "Number rejected" })
+          }
+        >
+          Number server issue
         </button>
         <button type="submit">Save</button>
         <output data-testid="values">{JSON.stringify(values.fields)}</output>
@@ -226,4 +236,45 @@ test("explicit empty containers round-trip and group items are removed without c
   await user.click(screen.getByRole("button", { name: "Create Children" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved.mock.calls[1]![0].fields.links).toEqual([{ children: [] }]);
+});
+
+test("cleared scalar issues follow moved rows and disappear independently", async () => {
+  const user = userEvent.setup();
+  const saved = vi.fn();
+  render(<Harness numbers={[15, 20]} onSave={saved} />);
+  await user.clear(screen.getByRole("spinbutton", { name: "Numbers item 1" }));
+  await user.clear(screen.getByRole("spinbutton", { name: "Numbers item 2" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(saved).not.toHaveBeenCalled();
+  await itemAction(user, "Numbers item 1", "Move down");
+  await user.type(screen.getByRole("spinbutton", { name: "Numbers item 1" }), "20");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(saved).not.toHaveBeenCalled();
+  await user.type(screen.getByRole("spinbutton", { name: "Numbers item 2" }), "15");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(saved.mock.calls[0]![0]).not.toHaveProperty("__transient");
+});
+
+test("clearing and restoring a scalar preserves another item’s server problem", async () => {
+  const user = userEvent.setup();
+  render(<Harness numbers={[15, 20]} />);
+  await user.click(screen.getByRole("button", { name: "Number server issue" }));
+  await user.clear(screen.getByRole("spinbutton", { name: "Numbers item 1" }));
+  await user.type(screen.getByRole("spinbutton", { name: "Numbers item 1" }), "15");
+  expect(screen.getAllByText("Number rejected").length).toBeGreaterThan(0);
+});
+
+test("removing a cleared scalar clears only that item's issue", async () => {
+  const user = userEvent.setup();
+  const saved = vi.fn();
+  render(<Harness numbers={[15, 20]} onSave={saved} />);
+  await user.clear(screen.getByRole("spinbutton", { name: "Numbers item 1" }));
+  await user.clear(screen.getByRole("spinbutton", { name: "Numbers item 2" }));
+  await itemAction(user, "Numbers item 1", "Remove");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(saved).not.toHaveBeenCalled();
+  await itemAction(user, "Numbers item 1", "Remove");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
 });

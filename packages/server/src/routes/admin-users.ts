@@ -24,10 +24,31 @@ import type { RouteContext } from "../composition/route-context.js";
 export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, usersActor } = routeContext.actors;
   const { accounts, accountSecurity } = routeContext.capabilities;
-  app.get("/api/v1/admin/users", async (context) => {
-    await usersActor(context);
-    return response(managedUserListSchema, { items: await accountSecurity().listUsers() });
-  });
+  app.get(
+    "/api/v1/admin/users",
+    describeRoute({
+      summary: "List managed users",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Successful response",
+          content: { "application/json": { schema: resolver(managedUserListSchema) } },
+        },
+        401: {
+          description: "Session required",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+        403: {
+          description: "Insufficient permissions",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+      },
+    }),
+    async (context) => {
+      await usersActor(context);
+      return response(managedUserListSchema, { items: await accountSecurity().listUsers() });
+    },
+  );
   app.get(
     "/api/v1/admin/invitations",
     describeRoute({

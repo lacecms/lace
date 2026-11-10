@@ -20,6 +20,11 @@ at the entry; forbid cycles including type-only imports. Tests and type tests
 sit beside modules; shared test helpers live in `src/test-support/`.
 
 Admin keeps its existing layers and slices with the same size and cycle rules.
+As amended for RF6A, a private PascalCase sibling component with a colocated
+test may omit its component folder when it stays within its owning slice or
+unit and is not exported, directly or transitively, from its public index.
+Public components retain their folder, test, and index; layer direction and
+cross-slice restrictions remain unchanged (architecture §17).
 Other flat packages adopt the convention during RF4–RF6 or when adding a second
 concern. The boundary checker counts production source physical lines, excluding
 tests and test-support. Oversized legacy files have a committed size baseline:

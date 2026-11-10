@@ -14,8 +14,8 @@ import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { pageClass } from "../../../shared/ui/layout/index.js";
 import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 import { PageAccessDenied } from "../../../shared/ui/PageState/index.js";
-import { InvitationsTable } from "../InvitationsTable/index.js";
-import { UsersTable } from "../UsersTable/index.js";
+import { InvitationsTable } from "../InvitationsTable.js";
+import { UsersTable } from "../UsersTable.js";
 
 const usersRoute = getRouteApi("/_protected/users");
 

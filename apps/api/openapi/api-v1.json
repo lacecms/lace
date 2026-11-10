@@ -1097,6 +1097,645 @@
         "tags": ["account"]
       }
     },
+    "/api/v1/account/capabilities": {
+      "get": {
+        "operationId": "getApiV1AccountCapabilities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "mcpEnabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["mcpEnabled"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          }
+        },
+        "summary": "Read account capabilities",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/account/mcp-connections": {
+      "get": {
+        "operationId": "getApiV1AccountMcpConnections",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "pattern": "^(?:[1-9]|[1-4][0-9]|50)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "clientName": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "createdAt": {},
+                          "expiresAt": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "lastUsedAt": {},
+                          "revokedAt": {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "scopes": {
+                            "items": {
+                              "enum": [
+                                "content:read",
+                                "content:write",
+                                "content:publish",
+                                "offline_access"
+                              ]
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "clientName",
+                          "scopes",
+                          "createdAt",
+                          "expiresAt",
+                          "revokedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["items", "nextCursor"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Connections without credentials"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid query"
+          }
+        },
+        "summary": "List the signed-in user's MCP connections",
+        "tags": ["account"]
+      }
+    },
+    "/api/v1/account/mcp-connections/{connectionId}/revoke": {
+      "post": {
+        "operationId": "postApiV1AccountMcpConnectionsByConnectionIdRevoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connectionId",
+            "required": true,
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "204": {
+            "description": "Connection revoked"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid origin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Connection not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Revoke an owned MCP connection",
+        "tags": ["account"]
+      }
+    },
     "/api/v1/account/password": {
       "post": {
         "operationId": "postApiV1AccountPassword",
@@ -1418,6 +2057,164 @@
       }
     },
     "/api/v1/admin/api-tokens": {
+      "get": {
+        "operationId": "getApiV1AdminApiTokens",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "capabilities": {
+                            "items": [
+                              {
+                                "const": "content:build:read"
+                              }
+                            ],
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "createdAt": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "lastUsedAt": {},
+                          "name": {
+                            "type": "string"
+                          },
+                          "revokedAt": {},
+                          "tokenPrefix": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["capabilities", "createdAt", "id", "name", "tokenPrefix"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Build token metadata"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          }
+        },
+        "summary": "List build tokens",
+        "tags": ["admin"]
+      },
       "post": {
         "operationId": "postApiV1AdminApiTokens",
         "requestBody": {
@@ -1464,6 +2261,218 @@
             "description": "Validation Error"
           }
         }
+      }
+    },
+    "/api/v1/admin/api-tokens/{tokenId}": {
+      "delete": {
+        "operationId": "deleteApiV1AdminApiTokensByTokenId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tokenId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "capabilities": {
+                      "items": [
+                        {
+                          "const": "content:build:read"
+                        }
+                      ],
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "createdAt": {},
+                    "id": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "lastUsedAt": {},
+                    "name": {
+                      "type": "string"
+                    },
+                    "revokedAt": {},
+                    "tokenPrefix": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["capabilities", "createdAt", "id", "name", "tokenPrefix"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Revoked build token metadata"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Token not found"
+          }
+        },
+        "summary": "Revoke a build token",
+        "tags": ["admin"]
       }
     },
     "/api/v1/admin/build-site": {
@@ -8742,6 +9751,188 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/settings/status": {
+      "get": {
+        "operationId": "getApiV1AdminSettingsStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "configuredModels": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "email": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "provider": {
+                              "const": "none"
+                            }
+                          },
+                          "required": ["provider"],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "from": {
+                              "maxLength": 400,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "provider": {
+                              "enum": ["log", "smtp", "resend", "cloudflare"]
+                            }
+                          },
+                          "required": ["from", "provider"],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "engineVersion": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "mcp": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "endpoint": {
+                          "maxLength": 2048,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["enabled", "endpoint"],
+                      "type": "object"
+                    },
+                    "ready": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["configuredModels", "mcp", "email", "engineVersion", "ready"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          }
+        },
+        "summary": "Read settings status",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/site-builds": {
       "get": {
         "operationId": "getApiV1AdminSiteBuilds",
@@ -8968,6 +10159,159 @@
           }
         },
         "summary": "Get a site build",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "getApiV1AdminUsers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "disabled": {
+                            "type": "boolean"
+                          },
+                          "email": {
+                            "format": "email",
+                            "maxLength": 320,
+                            "type": "string"
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "role": {
+                            "enum": ["admin", "editor", "viewer"]
+                          }
+                        },
+                        "required": ["disabled", "email", "id", "role"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Session required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "AUTHORIZATION_DENIED",
+                            "BUILD_EXPORT_VERSION_CHANGED",
+                            "CONFLICT",
+                            "CONTENT_INVALID_STATE",
+                            "CONTENT_LINKS_IN_USE",
+                            "CONTENT_LINK_IMPACT_CHANGED",
+                            "CONTENT_MODEL_CARDINALITY_CONFLICT",
+                            "CONTENT_NOT_PUBLISHED",
+                            "CONTENT_PAGE_SINGLETON",
+                            "CONTENT_PUBLISHED_IMMUTABLE",
+                            "CONTENT_REVISION_CONFLICT",
+                            "CONTENT_ROUTE_CONFLICT",
+                            "LAST_ADMIN_PROTECTED",
+                            "MEDIA_IN_USE",
+                            "MEDIA_UPDATE_CONFLICT",
+                            "INTERNAL_ERROR",
+                            "INVALID_CREDENTIALS",
+                            "INVITATION_INVALID",
+                            "NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "RESET_INVALID",
+                            "VALIDATION_FAILED"
+                          ]
+                        },
+                        "details": {},
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Insufficient permissions"
+          }
+        },
+        "summary": "List managed users",
         "tags": ["admin"]
       }
     },

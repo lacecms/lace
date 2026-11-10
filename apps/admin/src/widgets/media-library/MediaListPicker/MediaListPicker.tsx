@@ -1,4 +1,4 @@
-import type { MediaListPickerProps } from "../../../entities/content/index.js";
+import type { MediaListPickerProps } from "../../../entities/field-editor/index.js";
 import { can, useSession } from "../../../entities/session/index.js";
 import { MediaPickerDialog } from "../MediaPickerDialog/index.js";
 

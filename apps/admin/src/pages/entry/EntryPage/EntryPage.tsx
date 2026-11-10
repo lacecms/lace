@@ -1,45 +1,40 @@
+import { RichTextEditor } from "../../../entities/rich-text/index.js";
+import { LINK_URL_MESSAGE, fieldEditorServices } from "../../../entities/content/index.js";
+import type { FieldRendererProps } from "../../../entities/field-editor/index.js";
 import { LinkAuthoringProvider, OrdinaryUrlField } from "../../../features/select-link/index.js";
-import type {
-  AdminContentEntryDto,
-  ContentModelDto,
-  UnpublishContentEntryResultDto,
-} from "@lacecms/contracts";
-import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AdminContentEntryDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
+import { useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useBlocker } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
-import type { ContractValidationIssue } from "@lacecms/contracts";
-import { useForm, useWatch } from "react-hook-form";
-import { ulid } from "ulid";
+import { useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
 import {
   applicableErrors,
   createDraftResolver,
   draftValues,
   EmbedUrlPreview,
-  FieldRenderer,
-  FieldLayout,
-  EntryListBudget,
-  FieldRendererProvider,
   hiddenFieldNote,
   issueLocation,
   localDraftJson,
-  orderedDraftBlocks,
   locationField,
   PUBLICATION_ISSUE_TYPE,
   renderedFieldKeys,
   resolvedPublicPath,
   seoDefaultsAnnotation,
   siteUrlFor,
-  seoInput,
   serverIssueMessage,
   shownFieldKeys,
   suggestSlug,
   useSeoDefaults,
   validationProblems,
-  withoutClearedValues,
-  type DraftEditorValues,
+} from "../../../entities/content/index.js";
+import {
+  useDraftEditor,
+  FieldRenderer,
+  FieldLayout,
+  EntryListBudget,
+  FieldRendererProvider,
   type FieldPreviewRegistry,
   type FieldRendererRegistry,
-} from "../../../entities/content/index.js";
+} from "../../../entities/field-editor/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { useDuplicateEntry } from "../../../features/duplicate-entry/index.js";
 import { PublishEntryDialog } from "../../../features/publish-entry/index.js";
@@ -63,21 +58,59 @@ import {
   MediaListPicker,
   MediaPicker,
 } from "../../../widgets/media-library/index.js";
-import { DiscardChangesDialog } from "../DiscardChangesDialog/index.js";
-import { EntryActionsMenu } from "../EntryActionsMenu/index.js";
-import { EntryConflictAlert } from "../EntryConflictAlert/index.js";
-import { EntrySeoCard } from "../EntrySeoCard/index.js";
-import { EntryEditorActions, type SaveState } from "../EntryEditorActions/index.js";
-import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
-import {
-  EntryPublicationDetails,
-  type LatestBuildChange,
-} from "../EntryPublicationDetails/index.js";
+import { DiscardChangesDialog } from "../DiscardChangesDialog.js";
+import { EntryActionsMenu } from "../EntryActionsMenu.js";
+import { EntryConflictAlert } from "../EntryConflictAlert.js";
+import { EntrySeoCard } from "../EntrySeoCard.js";
+import { EntryEditorActions, type SaveState } from "../EntryEditorActions.js";
+import { EntryValidationSummary } from "../EntryValidationSummary.js";
+import { useEntryMutations } from "../use-entry-mutations.js";
+import { EntryPublicationDetails } from "../EntryPublicationDetails/index.js";
+
+function RichTextField({
+  describedBy,
+  id,
+  invalid,
+  label,
+  onBlur,
+  onChange,
+  placeholder,
+  readOnly,
+  value,
+}: FieldRendererProps) {
+  return (
+    <RichTextEditor
+      linkUrlMessage={LINK_URL_MESSAGE}
+      {...(describedBy === undefined ? {} : { describedBy })}
+      placeholder={placeholder}
+      id={id}
+      invalid={invalid}
+      label={label}
+      onBlur={onBlur}
+      onChange={onChange}
+      readOnly={readOnly}
+      value={value}
+    />
+  );
+}
 
 const entryRoute = getRouteApi("/_protected/content/$modelKey/$entryId");
-const mediaRenderers: FieldRendererRegistry = { media: MediaPicker, url: OrdinaryUrlField };
+const mediaRenderers: FieldRendererRegistry = {
+  media: MediaPicker,
+  url: OrdinaryUrlField,
+  richText: RichTextField,
+};
 const fieldPreviews: FieldPreviewRegistry = { media: MediaItemPreview, url: EmbedUrlPreview };
 const formId = "entry-draft-form";
+const draftEditorServices = {
+  createDraftResolver,
+  draftValues,
+  issueLocation,
+  locationField,
+  serverIssueMessage,
+  publicationIssueType: PUBLICATION_ISSUE_TYPE,
+  suggestSlug,
+};
 
 export function EntryPage() {
   const { entryId, modelKey } = entryRoute.useParams();
@@ -92,13 +125,8 @@ export function EntryPage() {
     queryKey: adminQueryKeys.entry(entryId),
   });
   const [savedEntry, setSavedEntry] = useState<AdminContentEntryDto | undefined>(undefined);
-  const [conflict, setConflict] = useState<"publish" | "save" | undefined>(undefined);
   const [copyError, setCopyError] = useState<string | undefined>(undefined);
-  const [publishAttempt, setPublishAttempt] = useState<
-    { readonly idempotencyKey: string; readonly revision: number } | undefined
-  >(undefined);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
-  const [latestBuild, setLatestBuild] = useState<LatestBuildChange | undefined>(undefined);
   /** Set once the entry is deleted, so leaving for the list needs no discard prompt. */
   const leaving = useRef(false);
   const currentEntry = savedEntry ?? entry.data;
@@ -110,187 +138,47 @@ export function EntryPage() {
     queryFn: client.loadBuildSite,
     queryKey: adminQueryKeys.buildSite,
   });
-  const modelRef = useRef<ContentModelDto | undefined>(undefined);
-  modelRef.current = model;
-  const transient = useRef(new Map<string, { name: string; message: string }>());
-  const [transientDirty, setTransientDirty] = useState(false);
-  const onTransientChange = useCallback(() => setTransientDirty(transient.current.size > 0), []);
-  const [editorEpoch, setEditorEpoch] = useState(0);
-  const form = useForm<DraftEditorValues, unknown, DraftEditorValues>({
-    defaultValues: { blocks: [], fields: {}, title: "" },
-    // The validation summary takes focus instead of the first invalid control.
-    shouldFocusError: false,
-    reValidateMode: "onSubmit",
-    ...(model === undefined
-      ? {}
-      : { resolver: createDraftResolver(model, () => [...transient.current.values()]) }),
-  });
-  // Model fields decide which conditional fields apply.
-  const fieldValues = useWatch({ control: form.control, name: "fields" });
-  const [summaryShown, setSummaryShown] = useState(false);
-  const [unmappedIssues, setUnmappedIssues] = useState<readonly string[]>([]);
-  const summaryRef = useRef<HTMLElement>(null);
-  const [summaryFocus, setSummaryFocus] = useState(0);
-  const summaryFocused = useRef(0);
-  // Local errors can reach the form state a render after the request to show the
-  // summary, so focus it on the first render that has it, once per request.
-  useEffect(() => {
-    if (summaryFocus === summaryFocused.current || summaryRef.current === null) return;
-    summaryFocused.current = summaryFocus;
-    summaryRef.current.focus();
-  });
-  const showSummary = () => {
-    setSummaryShown(true);
-    setSummaryFocus((count) => count + 1);
-  };
-  const hideSummary = () => {
-    setSummaryShown(false);
-    setUnmappedIssues([]);
-  };
-  /** Shows server validation issues at their locations and in the summary. */
-  const applyServerIssues = (issues: readonly ContractValidationIssue[]) => {
-    const currentModel = modelRef.current;
-    if (currentModel === undefined) return;
-    const blocks = form.getValues("blocks");
-    const unmapped: string[] = [];
-    for (const issue of issues) {
-      const location = issueLocation(issue.path, currentModel, blocks, form.getValues("fields"));
-      if (location === undefined) {
-        unmapped.push(serverIssueMessage(issue));
-        continue;
-      }
-      const definition = locationField(location, currentModel, blocks);
-      const message = serverIssueMessage(
-        issue,
-        definition === undefined
-          ? undefined
-          : { definition, value: form.getValues(location as never) },
-      );
-      // Publication reports required fields; a hidden block is exempt, so the summary can tell.
-      form.setError(location as never, {
-        message,
-        type:
-          issue.code === "missing_required_field" || issue.code === "list_too_short"
-            ? PUBLICATION_ISSUE_TYPE
-            : "server",
-      });
-    }
-    setUnmappedIssues(unmapped);
-    showSummary();
-  };
-  const loaded = useRef<string | undefined>(undefined);
-  const [suggestingSlug, setSuggestingSlug] = useState(false);
-  const suggestingSlugRef = useRef(false);
-  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const titleValue = form.watch("title");
-  const initial =
-    model === undefined || currentEntry === undefined
-      ? undefined
-      : draftValues(model, currentEntry);
-  useEffect(() => {
-    if (initial === undefined || currentEntry === undefined) return;
-    const key = `${currentEntry.id}:${currentEntry.draft.revision}`;
-    if (loaded.current === key) return;
-    suggestingSlugRef.current = false;
-    form.reset(initial);
-    loaded.current = key;
-    setSuggestingSlug(false);
-    setSlugManuallyEdited(false);
-  }, [currentEntry, form, initial]);
+  const editor = useDraftEditor(model, currentEntry, draftEditorServices);
+  const {
+    modelRef,
+    setEditorEpoch,
+    form,
+    transientDirty,
+    fieldValues,
+    summaryShown,
+    unmappedIssues,
+    setUnmappedIssues,
+    summaryRef,
+    showSummary,
+    hideSummary,
+    suggestingSlug,
+    setSuggestingSlug,
+    suggestingSlugRef,
+    setSlugManuallyEdited,
+  } = editor;
   useEffect(() => {
     setSavedEntry(undefined);
-    setConflict(undefined);
-    setPublishAttempt(undefined);
-    setLatestBuild(undefined);
   }, [entryId]);
-  useEffect(() => {
-    if (!suggestingSlugRef.current || slugManuallyEdited) return;
-    const suggested = suggestSlug(titleValue);
-    if (form.getValues("slug") !== suggested)
-      form.setValue("slug", suggested, { shouldDirty: true });
-  }, [form, slugManuallyEdited, suggestingSlug, titleValue]);
   const blocker = useBlocker({
     enableBeforeUnload: () => !leaving.current && (form.formState.isDirty || transientDirty),
     shouldBlockFn: () => !leaving.current && (form.formState.isDirty || transientDirty),
     withResolver: true,
   });
-  const save = useMutation({
-    mutationFn: (submitted: DraftEditorValues) => {
-      if (currentEntry === undefined) throw new Error("The entry has not loaded.");
-      const values = withoutClearedValues(submitted, modelRef.current);
-      return client.saveDraft(entryId, {
-        blocks: orderedDraftBlocks(values.blocks),
-        expectedRevision: currentEntry.draft.revision,
-        fields: values.fields,
-        // Models without SEO accept no group, so only SEO-enabled entries send one.
-        ...(modelRef.current?.seo === undefined || values.seo === undefined
-          ? {}
-          : { seo: seoInput(values.seo) }),
-        // An empty slug input means the draft has no slug.
-        ...(modelRef.current?.kind === "collection" &&
-        values.slug !== undefined &&
-        values.slug !== ""
-          ? { slug: values.slug }
-          : {}),
-        title: values.title,
-      });
-    },
-    onError: (error) => {
-      if (!(error instanceof AdminClientError)) return;
-      if (error.code === "CONTENT_REVISION_CONFLICT") {
-        setConflict("save");
-        return;
-      }
-      if (error.issues !== undefined && error.issues.length > 0) applyServerIssues(error.issues);
-    },
-    onSuccess: async (saved) => {
-      hideSummary();
-      const savedModel = modelRef.current;
-      if (savedModel === undefined) return;
-      queryClient.setQueryData(adminQueryKeys.entry(entryId), saved);
-      setSavedEntry(saved);
-      suggestingSlugRef.current = false;
-      setSuggestingSlug(false);
-      setSlugManuallyEdited(false);
-      setConflict(undefined);
-      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
-    },
-  });
-  const publish = useMutation({
-    mutationFn: (attempt: { readonly idempotencyKey: string; readonly revision: number }) =>
-      client.publishEntry(entryId, {
-        expectedRevision: attempt.revision,
-        idempotencyKey: attempt.idempotencyKey,
-      }),
-    onError: (error) => {
-      if (error instanceof AdminClientError && error.code === "CONTENT_REVISION_CONFLICT") {
-        setConflict("publish");
-        setPublishAttempt(undefined);
-        return;
-      }
-      if (
-        error instanceof AdminClientError &&
-        error.issues !== undefined &&
-        error.issues.length > 0
-      )
-        applyServerIssues(error.issues);
-      if (error instanceof AdminClientError && error.status !== undefined)
-        setPublishAttempt(undefined);
-    },
-    onSuccess: async (result) => {
-      const publishedModel = modelRef.current;
-      if (publishedModel === undefined) return;
-      const values = draftValues(publishedModel, result.entry);
-      queryClient.setQueryData(adminQueryKeys.entry(entryId), result.entry);
-      setSavedEntry(result.entry);
-      loaded.current = `${result.entry.id}:${result.entry.draft.revision}`;
-      form.reset(values);
-      setConflict(undefined);
-      setPublishAttempt(undefined);
-      setLatestBuild({ build: result.build, change: "published" });
-      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
-    },
-  });
+  const {
+    save,
+    publish,
+    reloadServerDraft,
+    conflict,
+    publishAttempt,
+    setPublishAttempt,
+    latestBuild,
+    setLatestBuild,
+    savingToPublish,
+    adoptServerDraft,
+    retryPublish,
+    startPublish,
+    saveAndPublish,
+  } = useEntryMutations({ entryId, modelKey, currentEntry, editor, setSavedEntry });
   const readOnly = !can(session, "content:write");
   const submitDraft = (event?: BaseSyntheticEvent) => {
     setUnmappedIssues([]);
@@ -303,25 +191,6 @@ export function EntryPage() {
     if (readOnly || busy || !(form.formState.isDirty || transientDirty)) return;
     void submitDraft();
   });
-  /** Replaces the form with a server draft the user chose to adopt. */
-  const adoptServerDraft = (adopted: AdminContentEntryDto) => {
-    const adoptedModel = modelRef.current;
-    if (adoptedModel === undefined) return;
-    queryClient.setQueryData(adminQueryKeys.entry(entryId), adopted);
-    setSavedEntry(adopted);
-    loaded.current = `${adopted.id}:${adopted.draft.revision}`;
-    setEditorEpoch((value) => value + 1);
-    transient.current.clear();
-    setTransientDirty(false);
-    form.reset(draftValues(adoptedModel, adopted));
-    hideSummary();
-    setConflict(undefined);
-    setPublishAttempt(undefined);
-  };
-  const reloadServerDraft = useMutation({
-    mutationFn: () => client.loadEntry(entryId),
-    onSuccess: adoptServerDraft,
-  });
   const duplicate = useDuplicateEntry(modelKey);
   useSessionRecovery(models.error ?? entry.error);
   useSessionRecovery(save.error);
@@ -329,7 +198,6 @@ export function EntryPage() {
   useSessionRecovery(reloadServerDraft.error);
   useSessionRecovery(seoDefaults.error);
   useSessionRecovery(buildSite.error);
-  const [savingToPublish, setSavingToPublish] = useState(false);
   if (models.isPending || entry.isPending) return <PageLoading label="Loading draft" />;
   if (models.error !== null) return <PageError error={models.error} />;
   if (entry.error !== null) return <PageError error={entry.error} />;
@@ -368,30 +236,6 @@ export function EntryPage() {
         : dirty
           ? { kind: "dirty" }
           : { kind: "saved", revision: currentEntry.draft.revision };
-  const retryPublish = () => {
-    if (publishAttempt !== undefined) publish.mutate(publishAttempt);
-  };
-  const startPublish = (revision: number) => {
-    const attempt = { idempotencyKey: ulid(), revision };
-    setPublishAttempt(attempt);
-    publish.mutate(attempt);
-  };
-  /** Saves unsaved changes first; any validation or save failure stops before publishing. */
-  const saveAndPublish = () => {
-    setUnmappedIssues([]);
-    // The submit handler returns before the save settles, so the form resets after submission.
-    void form.handleSubmit(
-      (values) => {
-        setSavingToPublish(true);
-        save.mutate(values, {
-          // The save mutation itself presents any failure.
-          onSettled: () => setSavingToPublish(false),
-          onSuccess: (saved) => startPublish(saved.draft.revision),
-        });
-      },
-      () => showSummary(),
-    )();
-  };
   const busy =
     pendingRequests > 0 ||
     save.isPending ||
@@ -481,8 +325,6 @@ export function EntryPage() {
           onDeleted={leaveAfterDelete}
           onDiscardUnsaved={() => {
             setEditorEpoch((value) => value + 1);
-            transient.current.clear();
-            setTransientDirty(false);
             form.reset(draftValues(model, currentEntry));
             hideSummary();
           }}
@@ -504,13 +346,10 @@ export function EntryPage() {
       </ShellHeaderActions>
       <LinkAuthoringProvider form={form} model={model}>
         <FieldRendererProvider
-          epoch={editorEpoch}
-          transient={transient.current}
-          onTransientChange={onTransientChange}
+          services={fieldEditorServices}
+          editor={editor}
           busy={busy || reloadServerDraft.isPending}
-          form={form}
           mediaListPicker={MediaListPicker}
-          model={model}
           previews={fieldPreviews}
           readOnly={readOnly}
           renderers={mediaRenderers}
@@ -613,7 +452,7 @@ export function EntryPage() {
                     )}
                   </div>
                 )}
-                <EntryListBudget control={form.control as never} model={model} />
+                <EntryListBudget control={form.control} model={model} />
                 <BlockEditor
                   control={form.control}
                   errors={blockErrors}

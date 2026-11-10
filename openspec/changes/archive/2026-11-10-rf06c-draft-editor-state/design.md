@@ -1,0 +1,30 @@
+## Context
+
+See the proposal. `EntryPage` currently combines a React Hook Form resolver with a mutable identity-keyed transient map and `transientDirty`, a revision-keyed reset, server JSON Pointer mapping, slug suggestion, Query mutations and conflict recovery. `FieldRenderer` registers cleared scalar-list items in that map; moving or unmounting an item changes its path. The resolver consumes the map on submit. The provider also supports unbound renderer uses. The existing 1280×720 Playwright default is implicit; the pointer test obtains both handle boxes without first arranging for them to be visible. Its actual failure cause must be verified, not assumed.
+
+## Goals / Non-Goals
+
+**Goals:** Give each editor instance one coherent owner for form state and one page-layer owner for remote mutations while retaining accepted behaviors and preserving admin layer direction. Keep the named browser test files unchanged.
+
+**Non-Goals:** Redesign list interactions, move ListNode or block cards (RF6D), change persistence, or create a general-purpose forms framework.
+
+## Decisions
+
+1. Put `useDraftEditor` in `entities/field-editor` and expose it through that slice's public index. It owns the form, model-aware resolver, revision/entry reset, epoch, issue mapping and slug suggestion. Inject lower-layer services or extract portable contracts as needed: entities must not import sibling `content` internals or pages. The page composes query data and UI; preserve unbound provider uses. An upward import or relocating all page logic into the entity would violate §17.
+2. Record each cleared scalar item's blocking issue using `setError` with `type: "transient"` at its current typed path. Treat form-owned errors and values as the source for submit blocking and unsaved protection; React Hook Form `isDirty` alone is insufficient when an absent/default value normalizes back to the baseline. Retain only identity/path bookkeeping necessary for moving and cleaning errors, not a second authoritative issue map or independent dirty flag. Resolver runs, field registration/unregistration, reorder, deletion, unmount, conditional visibility and overlapping server/publication errors must not silently erase or misattribute an active transient issue; clear only the relevant transient error and preserve unrelated errors. Use a form-owned representation that survives validation and submit even if `setError` is cleared by the resolver, and verify it rather than relying on `isValid` semantics. No transient metadata enters saved or copied JSON. Reset/adopt and epoch changes remove stale issues without a cleanup from an old row clearing a new issue at the same path.
+3. Place `useEntryMutations` in the entry page slice. Pass the editor interface, current entry/model and necessary Query/client dependencies down; own save, publish, retry attempt/idempotency, reload and conflict state there. Preserve expected revisions, save-before-publish, invalidation, busy lock, session recovery, error summaries, copied local values and explicit adoption. Entry changes and stale async completions must not overwrite another entry's form. Lifecycle actions outside this scope remain in their existing owners. A generic shared mutation abstraction would blur the page's workflow and permissions.
+4. Pass a single typed `editor` object to `FieldRendererProvider` for form/model/epoch and issue operations, alongside non-editor presentation/services configuration as appropriate. Keep optional unbound contexts functional and update callers/tests. Define template-literal paths for fields, nested groups and numeric list indices, block data/settings and system fields at the lowest appropriate contract boundary. Narrow dynamic server paths before use; never replace `as never` with `any` or an unchecked blanket assertion. Preserve the original runtime mapping and unplaceable issue text.
+5. Before refactoring, reproduce the pointer test at default viewport and determine whether viewport scrolling, layout or drag behavior is responsible. Fix the actual product or shared fixture/support cause while leaving `editor.e2e.ts`, `entry-actions.e2e.ts` and `composites.e2e.ts` byte-identical. Do not mask the issue by enlarging the viewport, skipping assertions or weakening the drag. Confirm the selected list reorders, unrelated lists remain unchanged, keyboard drag and focus still work.
+6. The owner chose not to add admin `test:e2e` to CI in this session. Run the full default admin browser suite as an obligatory RF6C verification in addition to the three named unchanged suites; do not change the CI workflow. Record any environment limitation instead of claiming a pass.
+7. Preserve the existing accepted editor specifications rather than inventing an implementation-only delta. Capture existing non-test `as never` count (40 matching source lines at planning time; count occurrences during apply), and enforce fewer than 25 occurrences after the change. Document baseline and final measurement with the command. Existing tests may change only where the provider's internal contract requires it; preserve behavior assertions.
+
+## Risks / Trade-offs
+
+- [Resolver validation or row cleanup loses form errors] → focused tests for multiple simultaneous cleared items, moves, deletion, resolver submit, overlapping errors, reset and entry changes; retain exact path and summary behavior.
+- [Refactor changes concurrency or publication] → exercise stale revisions, failed save/publish, idempotent retry, reload and local JSON recovery, permission and pending locks with existing tests and focused gaps.
+- [Dynamic server paths are not statically knowable] → validate/narrow at the mapping boundary; retain unmapped messages rather than coercing invalid paths.
+- [Viewport fix could hide an accessibility regression] → run unchanged browser suites at 1280×720 and existing keyboard/narrow viewport tests.
+
+## Migration Plan
+
+No data, deployment or API migration. Ship the browser code and tests together; rollback as one change. Node and Cloudflare use the same unchanged API. Record actual verification and deviations in the change and roadmap.

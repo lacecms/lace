@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { loadProjectConfig } from "../dist/config/project-config.js";
 import { createLaceApp } from "@lacecms/server";
+import { openApiConnections } from "../src/test-support/openapi-connections.ts";
 
 function sortJson(value) {
   if (Array.isArray(value)) return value.map(sortJson);
@@ -23,6 +24,8 @@ const app = createLaceApp({
   environment: { engineVersion: "0.0.0", openApiTitle: "Lace API" },
   logger: { log: () => {} },
   maxBodyBytes: 1_048_576,
+  mcpEnabled: true,
+  oauthConnections: openApiConnections(),
   publicContent: {},
   rateLimiter: { check: async () => true },
   readiness: { isReady: async () => true },
