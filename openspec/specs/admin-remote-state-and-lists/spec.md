@@ -253,11 +253,14 @@ row data.
 ### Requirement: Collection list search, status filter, and sort are URL state
 The collection route SHALL keep its title/slug search term, status filter, and
 sort order and canonical configured field filters in the route's URL search parameters and SHALL request entries from
-the API with exactly those values. Opening or reloading a collection URL with
+the API with exactly those values and the effective sort. The effective sort SHALL be the
+URL sort, otherwise the collection's configured `defaultSort`, otherwise `-updatedAt`. Opening or reloading a collection URL with
 these parameters SHALL restore the same search box contents, status filter,
 sort order, and results. Unsupported status or sort values, and search terms
 that are blank or exceed the advertised runtime LIKE policy, SHALL be ignored rather than
-causing an error, and the API's default sort SHALL not be written to the URL.
+causing an error. The collection's own default sort SHALL not be written to the URL, while every other
+valid sort, including `-updatedAt` on a collection whose default differs, SHALL be written and restored.
+The Sort selector and the sortable column headers SHALL show the effective sort.
 Search input SHALL update the URL after the user pauses typing without adding a
 history entry per keystroke. The status filter SHALL show the per-status totals
 the API reports for the current search. Title, publication date, and last-edit
@@ -316,20 +319,17 @@ recovery. Other retryable read failures SHALL retain the existing retry behavior
 - **THEN** the list is requested without a cursor and shows the first page of
   the new filter
 
-
 #### Scenario: Configured queries survive reload and navigation
 - **WHEN** a user applies category and date filters plus a hidden-field sort and reloads or navigates Back/Forward
 - **THEN** controls, active conditions, URL, API query and results agree and pagination restarts for changed conditions
 
 #### Scenario: Stale links recover after configuration changes
 - **WHEN** an old URL requests a removed filter or field sort
-- **THEN** the route drops unsupported conditions after metadata loads, retains valid conditions and uses default sort if needed without a failed-list screen
+- **THEN** the route drops unsupported conditions after metadata loads, retains valid conditions and uses the collection's default sort if needed without a failed-list screen
 
 #### Scenario: An impossible numeric range is editable
 - **WHEN** the user enters a minimum greater than the maximum
 - **THEN** the control explains the issue, keeps the draft input and does not replace the last valid results with a rejected request
-
-
 
 #### Scenario: An edited string-sort boundary can be recovered
 - **WHEN** another writer edits/deletes the boundary draft and Load more fails at /after
@@ -346,6 +346,22 @@ recovery. Other retryable read failures SHALL retain the existing retry behavior
 #### Scenario: Node keeps the existing search length
 - **WHEN** the admin loads Node metadata and the user supplies a valid 200-code-unit q
 - **THEN** the input and request retain the entire term, while lowercase/uppercase Cyrillic remain distinct
+
+#### Scenario: A collection opens in its configured default sort
+- **WHEN** an editor opens `/content/projects` for a collection whose `defaultSort` is `field:order`
+- **THEN** the list is requested and shown in ascending `order`, the Sort selector and the Order header report ascending order, and the URL carries no `sort`
+
+#### Scenario: The previous default stays in the URL
+- **WHEN** the same editor selects "Updated — descending" and reloads the page
+- **THEN** the URL carries `sort=-updatedAt`, and after the reload the list is still sorted by last edit descending
+
+#### Scenario: Selecting the configured default clears the URL sort
+- **WHEN** an editor on `?sort=-updatedAt` selects "Order — ascending"
+- **THEN** `sort` is removed from the URL and the list is requested sorted by `order` ascending
+
+#### Scenario: Collections without a default keep today's behavior
+- **WHEN** a collection without `defaultSort` is opened, sorted by title and then by "Updated — descending"
+- **THEN** the URL carries `sort=title` and then no `sort`, as before this change
 
 ### Requirement: Content landing summarizes site globals
 The content landing route SHALL present configured globals in a Site group

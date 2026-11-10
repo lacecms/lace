@@ -1,6 +1,5 @@
 import {
   FIELD_KEY_PATTERN,
-  FIELD_KEY_SOURCE,
   MAX_ENTRY_SEARCH_LENGTH,
   MAX_SLUG_LENGTH,
   MAX_TITLE_LENGTH,
@@ -15,6 +14,7 @@ import {
   pageLimitQuerySchema,
   cursorPageSchema,
 } from "../shared/primitives.js";
+import { contentEntrySortSchema } from "./collection-queries.js";
 import { contentBlockSchema } from "./blocks.js";
 import { contentModelRouteSchema } from "./models.js";
 import { seoValueSchema } from "./seo.js";
@@ -84,18 +84,7 @@ export const unpublishContentEntryResultSchema = v.strictObject({
 });
 
 export const contentEntryStatusSchema = v.picklist(["changed", "draft", "published"]);
-export const contentEntrySystemSortSchema = v.picklist([
-  "-publishedAt",
-  "-title",
-  "-updatedAt",
-  "publishedAt",
-  "title",
-  "updatedAt",
-]);
-export const contentEntrySortSchema = v.union([
-  contentEntrySystemSortSchema,
-  v.pipe(v.string(), v.regex(new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u"))),
-]);
+export { contentEntrySortSchema, contentEntrySystemSortSchema } from "./collection-queries.js";
 export { MAX_ENTRY_SEARCH_LENGTH } from "@lacecms/content";
 
 export const listValueSchema = v.union([v.string(), v.pipe(v.number(), v.finite()), v.boolean()]);

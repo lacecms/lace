@@ -227,6 +227,7 @@ test("packaged entry point keeps its public exports", async () => {
     "siteBuildRecordSchema",
     "siteBuildSchema",
     "siteBuildStatusSchema",
+    "sortFieldKey",
     "toAdminContentEntryDto",
     "toAdminEntryProjectionDto",
     "toBuildExportContinuationPageDto",

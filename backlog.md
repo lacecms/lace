@@ -16,26 +16,6 @@
   archived and synchronized. The roadmap moved to
   [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
-- **Configurable default collection sort (from the tatianae.com rc2 mapping,
-  2026-11-10; selected 2026-11-10 as the third owner-inserted change after
-  RF6):** today a collection list
-  always opens sorted by `-updatedAt`, and `listOptions` cannot change that.
-  A portfolio orders its projects by a numeric `order` field, so editors must
-  pick the Order column on every visit. The URL keeps a chosen sort only while
-  the editor stays on that list.
-
-  Candidate: an optional `listOptions.defaultSort`, for example
-  `{ field: "order", direction: "asc" }`, limited to one entry of
-  `sortableFields` or to a system sort. It would be projection-only, like the
-  rest of `listOptions`: it needs no model version bump and requests no build.
-  - The API applies it when a request has no `sort`.
-  - The admin leaves it out of the URL, the same way the current default is
-    not written there.
-  - Node and D1 use the existing typed sort and bounded cursor code.
-
-  Not in scope: drag-and-drop ordering and a public order contract. The site
-  still sorts published entries itself.
-
 - **Route-less collections (from the tatianae.com rc2 mapping, 2026-11-10;
   selected 2026-11-10 as the fourth owner-inserted change after RF6):** a collection always needs a `route`
   with one `:slug` segment, and every entry needs a slug before publication.

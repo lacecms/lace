@@ -2688,6 +2688,25 @@
                           "listOptions": {
                             "additionalProperties": false,
                             "properties": {
+                              "defaultSort": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "-publishedAt",
+                                      "-title",
+                                      "-updatedAt",
+                                      "publishedAt",
+                                      "title",
+                                      "updatedAt"
+                                    ]
+                                  },
+                                  {
+                                    "pattern": "^-?field:[A-Za-z][A-Za-z0-9]*$",
+                                    "type": "string"
+                                  }
+                                ],
+                                "description": "Admin list order for requests without sort; a field sort names an entry of sortableFields."
+                              },
                               "filterableFields": {
                                 "items": {
                                   "pattern": "^[A-Za-z][A-Za-z0-9]*$",

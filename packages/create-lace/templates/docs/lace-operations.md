@@ -638,12 +638,17 @@ listOptions: {
   sortableFields: ["year"],
   filterableFields: ["year", "summary"],
   searchableFields: ["summary"],
+  defaultSort: "-field:year",
 },
 ```
 
 Here `year` must be a declared number field and `summary` a text/textarea field.
 Each capability list allows at most 16 distinct top-level keys; hidden fields
-can be queried. The API accepts `sort=field:year` (or `-field:year`) and JSON
+can be queried. `defaultSort` sets the order a list opens in, written like the
+`sort` parameter: a system sort (`title`, `-title`, `updatedAt`, `-updatedAt`,
+`publishedAt`, `-publishedAt`) or `field:`/`-field:` of a `sortableFields` key.
+Without it lists open by `-updatedAt`. Changing it needs `pnpm content:sync`
+but no model version bump or site build. The API accepts `sort=field:year` (or `-field:year`) and JSON
 filters such as `[{"field":"year","op":"range","min":2020}]`. Filters combine
 with AND; select Any of values combine with OR. Text/URL supports Equals and
 Contains, numbers Equals/ranges, booleans Equals, dates/datetimes inclusive ranges

@@ -255,7 +255,7 @@ test("status buttons show totals for the search and restart pagination when chan
     expect(listCalls(listEntries).at(-1)).toEqual([
       "posts",
       undefined,
-      { q: "launch", status: "changed" },
+      { q: "launch", sort: "-updatedAt", status: "changed" },
     ]),
   );
   expect(router.state.location.search).toEqual({ q: "launch", status: "changed" });
@@ -318,7 +318,9 @@ test("search updates the URL after a pause and deletion returns focus to the hea
   await user.type(screen.getByRole("searchbox", { name: "Search entries" }), "launch");
   await waitFor(() => expect(router.state.location.search).toEqual({ q: "launch" }));
   expect(listCalls(listEntries).some(([, , query]) => query?.q === "lau")).toBe(false);
-  await waitFor(() => expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ q: "launch" }));
+  await waitFor(() =>
+    expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ q: "launch", sort: "-updatedAt" }),
+  );
 
   await openRowAction(user, "Launch", "Delete");
   await user.click(
@@ -463,6 +465,68 @@ test("metadata precedes URL recovery and hidden sorts/valid peers survive", asyn
     { field: "featured", op: "eq", value: false },
   ]);
   expect(screen.getByRole("combobox", { name: "Sort entries" })).toHaveValue("field:category");
+});
+
+test("a collection opens in its configured default sort and keeps other sorts in the URL", async () => {
+  const user = userEvent.setup();
+  const model = {
+    ...postsModel,
+    listOptions: { sortableFields: ["category"], defaultSort: "field:category" },
+  };
+  const listEntries = vi.fn(async () => entryList([changedEntry]));
+  const router = renderRoute(
+    "/content/posts",
+    editor,
+    client({
+      listEntries,
+      listModels: async () => ({ ...(await listModels()), items: [model] }),
+    }),
+  );
+  const table = await screen.findByRole("table", { name: "Posts entries" });
+  const select = screen.getByRole("combobox", { name: "Sort entries" });
+  expect(select).toHaveValue("field:category");
+  expect(within(table).getByRole("columnheader", { name: "Category" })).toHaveAttribute(
+    "aria-sort",
+    "ascending",
+  );
+  expect(within(table).getByRole("columnheader", { name: "Updated" })).toHaveAttribute(
+    "aria-sort",
+    "none",
+  );
+  expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ sort: "field:category" });
+  expect(router.state.location.search).toEqual({});
+
+  // The previous default is an ordinary sort here, so it stays in the URL.
+  await user.selectOptions(select, "-updatedAt");
+  await waitFor(() => expect(router.state.location.search).toEqual({ sort: "-updatedAt" }));
+  await waitFor(() => expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ sort: "-updatedAt" }));
+
+  // Selecting the configured default removes the sort from the URL again.
+  await user.selectOptions(select, "field:category");
+  await waitFor(() => expect(router.state.location.search).toEqual({}));
+  await waitFor(() =>
+    expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ sort: "field:category" }),
+  );
+});
+
+test("a reloaded -updatedAt URL survives on a collection with another default", async () => {
+  const model = {
+    ...postsModel,
+    listOptions: { sortableFields: ["category"], defaultSort: "field:category" },
+  };
+  const listEntries = vi.fn(async () => entryList([changedEntry]));
+  const router = renderRoute(
+    "/content/posts?sort=-updatedAt",
+    editor,
+    client({
+      listEntries,
+      listModels: async () => ({ ...(await listModels()), items: [model] }),
+    }),
+  );
+  await screen.findByRole("table", { name: "Posts entries" });
+  expect(screen.getByRole("combobox", { name: "Sort entries" })).toHaveValue("-updatedAt");
+  expect(router.state.location.search).toEqual({ sort: "-updatedAt" });
+  expect(listCalls(listEntries).every(([, , query]) => query?.sort === "-updatedAt")).toBe(true);
 });
 
 test("expired continuation retains rows and restarts with all query intent, replacing pages", async () => {

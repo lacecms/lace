@@ -24,6 +24,7 @@ import type {
   PublicationIdempotencyKey,
   PublicationRequestFingerprint,
 } from "../shared/brands.js";
+import { CONTENT_ENTRY_SYSTEM_SORTS } from "@lacecms/content";
 import type { CursorPage } from "../shared/pagination.js";
 import type { ActorSummary } from "../shared/actors.js";
 import type { LinkImpactAcknowledgment } from "./links.js";
@@ -89,14 +90,7 @@ export type ContentEntrySort =
   | `field:${string}`
   | `-field:${string}`;
 
-export const CONTENT_ENTRY_SORTS: readonly ContentEntrySort[] = Object.freeze([
-  "-publishedAt",
-  "-title",
-  "-updatedAt",
-  "publishedAt",
-  "title",
-  "updatedAt",
-]);
+export const CONTENT_ENTRY_SORTS: readonly ContentEntrySort[] = CONTENT_ENTRY_SYSTEM_SORTS;
 
 export const DEFAULT_CONTENT_ENTRY_SORT: ContentEntrySort = "-updatedAt";
 

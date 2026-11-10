@@ -10,7 +10,6 @@ import {
   type ContentEntryStatusDto,
 } from "@lacecms/contracts";
 import * as v from "valibot";
-import { DEFAULT_ENTRY_SORT } from "../../shared/api/index.js";
 
 /**
  * The collection-list search, status filter, and sort carried in the route URL.
@@ -26,8 +25,8 @@ export interface CollectionSearch {
 
 /**
  * Keeps only the list parameters the API accepts. Unsupported values are
- * dropped instead of failing the route, and the API default sort is omitted
- * so equivalent lists share one URL.
+ * dropped instead of failing the route. The model's own default sort is
+ * dropped once metadata is known (`resolveCollectionListSearch`).
  */
 export function parseCollectionSearch(search: Record<string, unknown>): CollectionSearch {
   const q = typeof search.q === "string" ? search.q.trim() : "";
@@ -62,7 +61,7 @@ export function parseCollectionSearch(search: Record<string, unknown>): Collecti
   return {
     filters: filters.length ? canonicalCollectionFilters(filters) : undefined,
     q: q.length > 0 && q.length <= MAX_ENTRY_SEARCH_LENGTH ? q : undefined,
-    sort: sort.success && sort.output !== DEFAULT_ENTRY_SORT ? sort.output : undefined,
+    sort: sort.success ? sort.output : undefined,
     status: status.success ? status.output : undefined,
   };
 }

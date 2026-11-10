@@ -109,6 +109,39 @@ for (const kind of ["node", "d1"] as const) {
       await expect(page.getByRole("combobox", { name: "Sort entries" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Filters", exact: true })).toHaveCount(0);
     });
+    test("a collection opens in its default sort and keeps other sorts in the URL", async ({
+      page,
+    }) => {
+      const titles = () =>
+        page
+          .getByRole("table", { name: "Projects entries" })
+          .getByRole("row")
+          .filter({ has: page.getByRole("cell") })
+          .getByRole("link")
+          .allTextContents();
+      const sort = page.getByRole("combobox", { name: "Sort entries" });
+      await page.goto(`${backend.origin}/admin/content/projects`);
+      await expect(page.getByRole("table", { name: "Projects entries" })).toBeVisible();
+      await expect(sort).toHaveValue("field:order");
+      await expect(page.getByRole("columnheader", { name: "Order" })).toHaveAttribute(
+        "aria-sort",
+        "ascending",
+      );
+      await expect.poll(titles).toEqual(["Alpha", "Beta", "Gamma"]);
+      expect(new URL(page.url()).searchParams.has("sort")).toBe(false);
+      expect(new URL(backend.requests.at(-1)!).searchParams.get("sort")).toBe("field:order");
+
+      await sort.selectOption("-updatedAt");
+      await expect(page).toHaveURL(/sort=-updatedAt/);
+      await expect.poll(titles).toEqual(["Beta", "Alpha", "Gamma"]);
+      await page.reload();
+      await expect(sort).toHaveValue("-updatedAt");
+      await expect.poll(titles).toEqual(["Beta", "Alpha", "Gamma"]);
+
+      await sort.selectOption("field:order");
+      await expect(page).not.toHaveURL(/sort=/);
+      await expect.poll(titles).toEqual(["Alpha", "Beta", "Gamma"]);
+    });
     test("long-string paging and edited/deleted anchor restart retain query intent", async ({
       page,
     }) => {

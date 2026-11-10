@@ -153,6 +153,7 @@ export const contentModelSchema = v.pipe(
         Object.entries(model.listOptions).every(
           ([operation, keys]) =>
             keys === undefined ||
+            typeof keys === "string" ||
             keys.every(
               (key) =>
                 Object.hasOwn(model.fields, key) &&

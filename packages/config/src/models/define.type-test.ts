@@ -151,6 +151,36 @@ defineCollection({
     filterableFields: ["nested.child"],
   },
 });
+defineCollection({
+  key: "default-sorted",
+  route: "/sorted/:slug",
+  version: 1,
+  fields: queryFields,
+  listOptions: { sortableFields: ["count"], defaultSort: "-field:count" },
+});
+defineCollection({
+  key: "system-sorted",
+  route: "/system/:slug",
+  version: 1,
+  fields: queryFields,
+  listOptions: { defaultSort: "title" },
+});
+defineCollection({
+  key: "bad-default-system",
+  route: "/bad-default/:slug",
+  version: 1,
+  fields: queryFields,
+  // @ts-expect-error defaultSort names a system sort or a field sort
+  listOptions: { defaultSort: "author" },
+});
+defineCollection({
+  key: "bad-default-field",
+  route: "/bad-field/:slug",
+  version: 1,
+  fields: queryFields,
+  // @ts-expect-error composite fields cannot be a default sort
+  listOptions: { defaultSort: "field:nested" },
+});
 definePage({
   key: "bad-page-query",
   path: "/bad",

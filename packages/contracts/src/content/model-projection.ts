@@ -48,7 +48,7 @@ const contentModelProjection = {
       : Object.fromEntries(
           Object.entries(m.listOptions)
             .filter(([, value]) => value !== undefined)
-            .map(([key, value]) => [key, [...value!]]),
+            .map(([key, value]) => [key, typeof value === "string" ? value : [...value!]]),
         ),
   layout: (m) => (m.layout === undefined ? undefined : normalizeFormLayout(m.layout, m.fields)!),
   path: (m) => m.path,

@@ -355,18 +355,19 @@ A search SHALL match entries whose draft title or draft slug contains the term,
 using ordinary literal LIKE with ASCII-insensitive and non-ASCII-sensitive matching, also including configured searchable draft fields. `status` SHALL be one of `draft`,
 `published`, or `changed` and SHALL restrict items to that status. `sort` SHALL
 be one of `updatedAt`, `-updatedAt`, `title`, `-title`, `publishedAt`, or
-`-publishedAt`, or configured `field:<key>` / `-field:<key>`. A leading `-` means descending, and the default SHALL be
-`-updatedAt`. Title ordering SHALL be case-insensitive for ASCII letters.
+`-publishedAt`, or configured `field:<key>` / `-field:<key>`. A leading `-` means descending. A request without `sort` SHALL use the
+collection's configured `defaultSort` from collection-query-options; for a collection without
+one, and for pages and globals, the default SHALL be `-updatedAt`. Title ordering SHALL be case-insensitive for ASCII letters.
 Publication-time ordering SHALL treat never-published entries as earliest.
 Every order SHALL break ties by entry ID in the same direction. An unsupported
 status or sort, an over-long term, or an invalid limit SHALL return the stable
 `VALIDATION_FAILED` envelope with a JSON Pointer naming the parameter. A
 continuation cursor SHALL be accepted only with the same model, search term,
-status, sort, canonical filters and effective list-query configuration that produced it; otherwise the request SHALL fail validation
+status, effective sort (the requested sort, otherwise the default applied to the request), canonical filters and effective list-query configuration that produced it; otherwise the request SHALL fail validation
 without returning a page. The generated OpenAPI document SHALL describe these
 parameters and the list response schema.
 
-`filters` SHALL be a JSON-encoded array of strict typed filter objects as defined by collection-query-options; omission or [] means no field filters. Each object SHALL carry `field` and `op`, plus only the operator's operands: `value`, `values`, `min`/`max`, or `from`/`to`. Raw filters SHALL be bounded to 8192 UTF-8 bytes before parsing. Duplicate query parameters SHALL fail validation. The API SHALL return 422 VALIDATION_FAILED for malformed or disallowed queries with value-free issues at /filters, /filters/<index>/<member>, or /sort as appropriate. It SHALL not accept client-supplied search target lists. Per-status totals SHALL apply q and all field filters but not the selected status, cursor or page limit. Shared metadata schemas SHALL expose listOptions; generated OpenAPI SHALL document the complete grammar and bounds. Cursor fingerprints SHALL treat reordered filters and select-value lists as equivalent and reject configuration changes that alter effective query semantics, matching-version changes and runtime-policy changes.
+`filters` SHALL be a JSON-encoded array of strict typed filter objects as defined by collection-query-options; omission or [] means no field filters. Each object SHALL carry `field` and `op`, plus only the operator's operands: `value`, `values`, `min`/`max`, or `from`/`to`. Raw filters SHALL be bounded to 8192 UTF-8 bytes before parsing. Duplicate query parameters SHALL fail validation. The API SHALL return 422 VALIDATION_FAILED for malformed or disallowed queries with value-free issues at /filters, /filters/<index>/<member>, or /sort as appropriate. It SHALL not accept client-supplied search target lists. Per-status totals SHALL apply q and all field filters but not the selected status, cursor or page limit. Shared metadata schemas SHALL expose listOptions, including defaultSort; generated OpenAPI SHALL document the complete grammar and bounds. Cursor fingerprints SHALL treat reordered filters and select-value lists as equivalent and reject configuration changes that alter effective query semantics, matching-version changes and runtime-policy changes.
 
 Custom field cursors SHALL remain within the existing 4096-character transport
 bound. Custom string sorts SHALL use the indexed entry/draft/revision anchor
@@ -434,6 +435,18 @@ API SHALL NOT truncate or let D1 discover an oversized LIKE pattern.
 #### Scenario: Over-budget Cloudflare search fails safely
 - **WHEN** q or contains exceeds either Cloudflare's character ceiling or final escaped 50-byte pattern budget
 - **THEN** the API returns value-free 422 validation at /q or /filters/<index>/value before list SQL, while Node accepts the same operand when within its 200-code-unit bound
+
+#### Scenario: A request without sort uses the collection default
+- **WHEN** a collection declares `defaultSort` `field:order` and a client lists its entries without `sort`
+- **THEN** the entries are ordered by draft `order` ascending with missing values last and ID ties, exactly as for `sort=field:order`, on Node and Cloudflare
+
+#### Scenario: An explicit sort overrides the collection default
+- **WHEN** the same client requests `sort=-updatedAt`
+- **THEN** the entries are ordered by last edit descending, and a cursor from that page is rejected when reused without `sort`
+
+#### Scenario: A changed default invalidates an omitted-sort cursor
+- **WHEN** a client continues a page requested without `sort` after synchronization changed the collection's `defaultSort`
+- **THEN** the API returns 422 VALIDATION_FAILED at /after, and the same request without after returns a first page in the new default order
 
 ### Requirement: Admin entry details name the last editor
 Admin entry responses from load, create, complete-draft save, and publication

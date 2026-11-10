@@ -1,4 +1,5 @@
 import {
+  ContentUseCases,
   NODE_LIST_QUERY_LIMITS,
   prepareConfigurationSynchronization,
   resolveCollectionQuery,
@@ -437,6 +438,70 @@ contract(
     await expect(list("field:area", [], { after: lastCursor })).rejects.toMatchObject({
       pointer: "/after",
     });
+  },
+);
+
+contract(
+  "a collection default sort pages like the explicit sort and binds omitted-sort cursors",
+  async (runtime, expect) => {
+    const configFor = (defaultSort?: "field:order" | "-field:order") =>
+      defineConfig({
+        content: [
+          defineCollection({
+            key: "posts",
+            route: "/blog/:slug",
+            version: 1,
+            fields: { order: field.number() },
+            listOptions: {
+              sortableFields: ["order"],
+              ...(defaultSort === undefined ? {} : { defaultSort }),
+            },
+          }),
+        ],
+      });
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts");
+    const fixtures: readonly [string, JsonObject][] = [
+      ["a", { order: 10 }],
+      ["b", {}],
+      ["c", { order: 2 }],
+      ["d", { order: 2 }],
+    ];
+    for (const [name, fields] of fixtures)
+      await repository.create({
+        entry: entry(name, "posts", { fields, title: name, slug: name, updatedAt: 1 }),
+        mediaReferences: [],
+      });
+    const lister = async (defaultSort?: "field:order" | "-field:order") =>
+      new ContentUseCases({
+        clock: { now: () => unixMilliseconds(50) },
+        config: (await configFor(defaultSort)).runtime,
+        content: repository,
+        media: repository,
+        idGenerator: { next: sequence("default-sort") },
+      });
+    const ordered = await lister("field:order");
+    type PageInput = Pick<Parameters<ContentUseCases["list"]>[0], "after" | "sort">;
+    const page = (useCases: ContentUseCases, input: Partial<PageInput> = {}) =>
+      useCases.list({ actor: editor, modelKey: "posts", limit: 2, ...input });
+    // Missing values last, equal values by entry ID, the same as the explicit sort.
+    const first = await page(ordered);
+    expect(first.items.map((item) => item.id)).toEqual(["c", "d"]);
+    const second = await page(ordered, { after: first.nextCursor! });
+    expect(second.items.map((item) => item.id)).toEqual(["a", "b"]);
+    const explicit = await page(ordered, { sort: "field:order" });
+    expect(explicit.items).toEqual(first.items);
+    // An explicit sort wins, and its cursor is not an omitted-sort cursor.
+    const recent = await page(ordered, { sort: "-updatedAt" });
+    await expect(page(ordered, { after: recent.nextCursor! })).rejects.toMatchObject({
+      pointer: "/after",
+    });
+    // A changed default rejects the continuation of an omitted-sort page.
+    for (const changed of [await lister("-field:order"), await lister()])
+      await expect(page(changed, { after: first.nextCursor! })).rejects.toMatchObject({
+        pointer: "/after",
+      });
+    expect((await page(await lister())).items).toHaveLength(2);
   },
 );
 

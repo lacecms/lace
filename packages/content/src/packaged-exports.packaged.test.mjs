@@ -9,6 +9,7 @@ test("packaged entry point keeps its public exports", async () => {
     "BlockMigrationError",
     "CLOUDFLARE_LIST_QUERY_LIMITS",
     "COLLECTION_MATCHING_VERSION",
+    "CONTENT_ENTRY_SYSTEM_SORTS",
     "ContentValidationError",
     "DEFAULT_PAGE_SIZE",
     "FIELD_FILTER_OPERATIONS",

@@ -273,7 +273,8 @@ under those names. A changed structure hash without a version bump fails
 **Collection list metadata.** `listFields` names root scalar fields shown as
 admin list columns; `listOptions` enables sorting, filtering and searching on
 up to 16 root fields per operation, may target fields absent from
-`listFields`, and is rejected on pages and globals
+`listFields`, may name the `defaultSort` the admin list opens in, and is
+rejected on pages and globals
 ([content-model-configuration], [collection-query-options]). Both are
 projection-only. An internal `publicProjectionHash` omits only `listOptions`,
 so query-only edits neither advance published state nor request a build when

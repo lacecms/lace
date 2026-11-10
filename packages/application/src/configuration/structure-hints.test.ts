@@ -213,3 +213,28 @@ test("query identity classifies trusted, untrusted and mixed public changes", as
   const mixed = await posts({ label: "New label", listOptions: { searchableFields: ["summary"] } });
   expect(configurationSyncAdvancesPublicState(plan(mixed, storedFrom(before)))).toBe(true);
 });
+
+test("adding or changing a default sort is query-only synchronization", async () => {
+  const sortable = { sortableFields: ["summary"] } as const;
+  const before = await posts({ listOptions: sortable });
+  const ordered = await posts({ listOptions: { ...sortable, defaultSort: "field:summary" } });
+  const reversed = await posts({ listOptions: { ...sortable, defaultSort: "-field:summary" } });
+  for (const [current, stored] of [
+    [ordered, storedFrom(before)],
+    [reversed, storedFrom(ordered)],
+    [before, storedFrom(ordered)],
+  ] as const) {
+    const result = planConfigurationSynchronization({
+      models: [current],
+      storedModels: [stored],
+    });
+    expect(result.operations).toMatchObject([
+      { action: "label-update", affectsPublicProjection: false },
+    ]);
+    expect(current.version).toBe(stored.version);
+    expect(configurationSyncAdvancesPublicState(result)).toBe(false);
+    expect(
+      result.operations.flatMap((operation) => configurationSyncContentWrites(operation, current)),
+    ).toEqual([]);
+  }
+});

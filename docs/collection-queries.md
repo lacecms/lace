@@ -14,7 +14,12 @@ most 16 distinct top-level keys. Sort/filter allows text, textarea, URL, select,
 number, boolean, date and datetime; extra search allows only text/textarea.
 Pages/globals and nested/composite/block/SEO/media/rich-text targets are refused.
 Empty arrays/options disappear; omission preserves old serialized metadata and
-structural/full hashes. Query metadata is detached. Consumer field/default keys
+structural/full hashes. An optional `defaultSort` (a system sort or a field sort
+of `sortableFields`, in the `sort` syntax) is resolved by the list use case for
+requests without `sort`, so REST and MCP share it; `-updatedAt` normalizes away.
+The repository only sees the effective sort, which also enters the cursor
+fingerprint. The admin sends the effective sort and omits only the model
+default from the URL. Query metadata is detached. Consumer field/default keys
 named `listOptions` retain their structural meaning.
 
 The API retains system title/slug search, status and system sorts and adds

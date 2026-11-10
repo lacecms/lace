@@ -1065,6 +1065,32 @@ test("configured query API validates JSON, limits and model permissions before l
   expect((await json(app, base + "filters=[]")).response.status).toBe(200);
 });
 
+test("the entry-list API applies a collection's default sort when sort is omitted", async () => {
+  const models = [
+    defineCollection({
+      key: "projects",
+      route: "/projects/:slug",
+      version: 1,
+      fields: { order: field.number() },
+      listOptions: { sortableFields: ["order"], defaultSort: "field:order" },
+    }),
+  ];
+  const { app, store } = await fixture({ models });
+  expect((await json(app, "/api/v1/admin/content-models")).body.items[0].listOptions).toEqual({
+    sortableFields: ["order"],
+    defaultSort: "field:order",
+  });
+  const reads = [];
+  store.list = async (query) => {
+    reads.push(query);
+    return { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
+  };
+  const base = "/api/v1/admin/models/projects/entries";
+  expect((await json(app, base)).response.status).toBe(200);
+  expect((await json(app, `${base}?sort=-updatedAt`)).response.status).toBe(200);
+  expect(reads.map((read) => read.sort)).toEqual(["field:order", "-updatedAt"]);
+});
+
 test("runtime search metadata and byte boundaries yield precise value-free API errors before reads", async () => {
   const models = [
     defineCollection({
