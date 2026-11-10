@@ -157,15 +157,14 @@ only after test and migration review. Engine minimums are separate from pins
 | Data and authentication | Drizzle ORM and Drizzle Kit; `drizzle-orm/valibot` for database-boundary schemas where useful; `better-sqlite3` as the Node SQLite driver, compatible with Better Auth and the Node LTS; Better Auth with its Drizzle integration; catalog-pinned `@better-auth/oauth-provider` for optional MCP OAuth, with the official MCP TypeScript SDK v2 Web-standard handling and Valibot-derived schemas. |
 | Infrastructure | Wrangler and Workers types; the AWS S3 client for MinIO on Node; `nodemailer` for SMTP in `@lacecms/platform-node` only (Resend and the Cloudflare Email Service are called without an SDK); no AWS SDK in the R2 adapter. |
 
-The admin adopts no themed component library at runtime: shadcn/ui output is
-committed Lace-owned source, keeping visual design and accessibility under
-Lace's control, with no animation plugin such as `tw-animate-css`; motion comes
-from the Lace motion tokens
+As in [§17](admin.md#component-source-and-design-tokens), shadcn/ui output is
+Lace-owned source, with no themed runtime library or animation plugin such as
+`tw-animate-css`; motion uses Lace tokens
 ([admin-design-system](../../openspec/specs/admin-design-system/spec.md)). An
-approved admin dependency enters the catalog in the change that first imports
-it. An executable Node/Worker gate verifies the pinned MCP OAuth versions,
-existing login, protocol baseline, portable bundle and SQLite/D1 redemption and
-rotation atomicity before production wiring.
+approved admin dependency enters the catalog when first imported. Before
+production wiring, an executable Node/Worker gate checks pinned MCP OAuth
+versions, existing login, protocol baseline, portable bundle and SQLite/D1
+redemption and rotation atomicity.
 
 REST DTOs stay independent of Drizzle-generated schemas; the Drizzle/Valibot
 integration validates internal database boundaries and never makes database

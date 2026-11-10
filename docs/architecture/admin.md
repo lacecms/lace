@@ -27,9 +27,8 @@ The primary routes are `/login`; the public `/accept-invite`,
   globals open their singleton editor directly; collections open a paginated
   entry list; the model route of a page or global only points back to the
   content overview.
-- Shell surfaces never show internal entry or user IDs; the users list and
-  the editor's publication card show no raw IDs, and that card shows no ISO
-  timestamps.
+- Shell surfaces never show internal entry or user IDs; the publication card
+  also hides ISO timestamps.
 - Collection-list search, status, sort and field filters live in the route's
   URL search parameters. The opaque cursor never enters the URL, any
   effective query change resets paging, and a rejected continuation offers a
@@ -53,23 +52,21 @@ The primary routes are `/login`; the public `/accept-invite`,
   from the authenticated settings status; "enabled" describes configuration,
   not verified connectivity. Deployment configuration stays operator-owned:
   there is no browser toggle and no public status endpoint.
-- With MCP enabled, `/admin/mcp/consent` reuses the session and sign-in, and
-  only administrators can grant publication; `/admin/account` lists owned
-  connections through session-only routes, hidden by a server-derived
-  capability when MCP is disabled. OAuth credentials never enter browser
-  storage ([mcp-oauth-delegation](../../openspec/specs/mcp-oauth-delegation/spec.md)).
+- With MCP enabled, `/admin/mcp/consent` reuses session and sign-in; only
+  administrators can grant publication. `/admin/account` lists owned connections
+  through session-only routes, hidden by a server-derived capability when MCP is
+  disabled. OAuth credentials never enter browser storage
+  ([mcp-oauth-delegation](../../openspec/specs/mcp-oauth-delegation/spec.md)).
 
 ### Media
 
-The library keeps its search, filters, sort and view in the URL; the media
-picker reuses its grid with a local query that resets on each opening and
-offers only active items. Thumbnails load lazily through the authenticated
-admin preview endpoint. Uploads are checked for type and size in the browser
-and go through `XMLHttpRequest` to report bytes sent; every other request uses
-`fetch`, and both share error mapping and response validation. A media field
-resolves its stored ID through the media detail read, never by searching
-loaded pages, and keeps the ID in the draft until the writer replaces or
-removes it ([admin-media-library](../../openspec/specs/admin-media-library/spec.md)).
+The library keeps search, filters, sort and view in the URL. Its picker reuses
+the grid, offers active items only and resets its local query on opening.
+Thumbnails load lazily through the authenticated admin preview endpoint.
+Uploads validated for type and size in the browser use `XMLHttpRequest` for
+byte progress; other requests use `fetch`, with shared error mapping and response
+validation. A media field resolves its stored ID through the detail read, not
+loaded pages, and retains it until replaced or removed ([admin-media-library](../../openspec/specs/admin-media-library/spec.md)).
 
 ### Entry editor
 
@@ -85,10 +82,9 @@ fields, media lists and blocks have their own `admin-draft-editor-*` capabilitie
   ([ADR 0008](../adr/0008-entry-lifecycle-commands.md)), and pending lifecycle
   requests lock content mutations. Menus are non-modal Radix menus whose
   confirmations open after the menu closes and return focus to its button.
-- Controls hold a cleared value as `null` in form state, because React Hook
-  Form would show the loaded default again for `undefined`; the editor strips
-  those values before it saves or copies a draft. Dates are parsed textually
-  so days never shift.
+- Cleared controls hold `null` in form state to prevent React Hook Form from
+  restoring loaded defaults; the editor strips those values before save or
+  copy. Dates are parsed textually so days never shift.
 - Viewers see the editor read-only: native controls sit in a disabled
   fieldset, rich text is not editable and there is no Save or Publish.
 - A global has no title input and saves its stored title unchanged
@@ -107,10 +103,9 @@ fields, media lists and blocks have their own `admin-draft-editor-*` capabilitie
   and the accessibility tree; a relevant error reveals its control
   ([block-settings-visibility](../../openspec/specs/block-settings-visibility/spec.md),
   [conditional-fields](../../openspec/specs/conditional-fields/spec.md)).
-  Changing settings visibility affects only the configuration projection:
-  synchronization preserves snapshots, audit and media references and
-  baseline concurrency guards, and keeps published-version advancement and
-  build coalescing.
+  Settings visibility changes only the configuration projection; sync preserves
+  snapshots, audit, media references, concurrency guards, published-version
+  advancement and build coalescing.
 - Guidance (required markers, bounds, counters, placeholders) never
   materializes absent values or blocks an otherwise valid draft save.
 - The Tiptap schema declares only allowlisted attributes, so every document
@@ -144,12 +139,11 @@ before the first screen renders. Inter is self-hosted with a 13px base size
 
 ### Accessibility acceptance
 
-Every admin route and main dialog is audited in the browser with axe against
-the WCAG 2.x A and AA rules, in both themes, and any violation fails the suite.
-No rule is disabled globally. The same browser suite completes the main
-editorial flow with the keyboard alone, checks visible focus along it, and
-checks 375px layouts, including the entry column stacking below the blocks.
-The local product acceptance walkthrough repeats the audits on real data.
+Browser axe audits cover every admin route and main dialog against WCAG 2.x A
+and AA in both themes; any violation fails the suite and no rule is disabled
+globally. The suite also checks the main editorial flow by keyboard, visible
+focus and 375px layouts, including entry-column stacking below blocks. The
+local product acceptance walkthrough repeats the audits on real data.
 
 ### Source layers
 
@@ -160,13 +154,11 @@ Admin source is organized into layers with a single import direction
 app → pages → widgets → features → entities → shared
 ```
 
-`app` owns bootstrap, providers, the router tree and global styles; `pages`
-holds one slice per route screen; `widgets` holds composite screen sections
-such as the shell or an entry list; `features` holds user actions such as
-publish, upload or sign in; `entities` holds domain-facing models, queries and
-presentation of content, media, users and sessions; `shared` holds the API
-client, generic UI primitives, utilities and configuration with no knowledge
-of Lace domain slices.
+`app` owns bootstrap, providers, router and global styles; `pages` holds route
+screens; `widgets` holds composite sections; `features` holds user actions;
+`entities` holds domain-facing models, queries and presentation; `shared` holds
+the API client, generic UI, utilities and configuration without domain-slice
+knowledge.
 
 - A module imports only from layers to its right. Slices of the same layer do
   not import each other.
@@ -180,10 +172,9 @@ of Lace domain slices.
   PascalCase sibling component file with a colocated test may omit the folder
   when it is used only within its slice or unit and is not exported directly
   or transitively from that owner's public index.
-- Only the source-root entry module (`main.tsx`) and test-environment setup in
-  `test/` live outside the layers; the entry module may import any layer's
-  public API. Test files may also import any layer's public API, so a page or
-  widget test can mount the real router, but never another unit's internals.
+- Only `main.tsx` and `test/` environment setup live outside the layers. The
+  entry module and tests may import any layer's public API; tests may mount the
+  real router but never import another unit's internals.
 - Router state is read below `app` through TanStack Router `getRouteApi` with
   string route ids typed by the `Register` augmentation in `app/router`, so no
   runtime import points upward.
