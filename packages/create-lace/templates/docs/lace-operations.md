@@ -35,7 +35,7 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.47.0` and Lace `0.1.0-rc2` packages and images. Releases before rc1 are not supported, and an rc1 project upgrades as described in [Database baseline and upgrading from rc1](#database-baseline-and-upgrading-from-rc1). The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and the project-pinned pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.48.0` and Lace `0.1.0-rc2` packages and images. Releases before rc2 are not supported, and an rc2 project upgrades as described in [Database baseline and upgrading from rc2](#database-baseline-and-upgrading-from-rc2). The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible release set, generate and install:
 
@@ -683,19 +683,16 @@ redaction and disabling. Unpublication and deletion remain forbidden.
 Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
 spaces trimmed; tags-only edits request no build.
 
-## Database baseline and upgrading from rc1
+## Database baseline and upgrading from rc2
 
 The database starts from one baseline migration; later schema changes are
-forward migrations after it. A database created by rc1 or an earlier engine
-predates the baseline and cannot be upgraded: `lace db migrate` and `lace doctor`
-report `SCHEMA_UNSUPPORTED` and change nothing. To move an rc1 project to this
-template, keep any content you need in your own source files for `lace import` or
-plan to re-enter it, stop Compose `api` and `dispatcher`, back up `.lace/data` and
-the object store, then remove the database: `.lace/data/lace.sqlite` with its
-`-wal` and `-shm` files for Compose, `.lace/data/cloudflare` for local Cloudflare,
-or create a new D1 database and update `LACE_D1_DATABASE_ID` and the Worker
-binding for remote Cloudflare. Upgrade all Lace packages and both images
-together, run `pnpm db:migrate` (Cloudflare: `pnpm cf:db:migrate` or
+forward migrations after it. rc2 is the oldest supported release, and an rc2
+database already starts from the baseline, so it is upgraded in place, never
+recreated. Stop Compose `api` and `dispatcher`, back up `.lace/data` and the
+object store, upgrade all Lace packages and both images together, then run
+`pnpm db:migrate` (Cloudflare: `pnpm cf:db:migrate` or
 `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`),
-`pnpm content:sync` and `pnpm auth:bootstrap`, complete first-admin setup, restore
-content and rebuild the site.
+which applies only the checked-in forward migrations, followed by
+`pnpm content:sync`, and rebuild the site. A database created before rc2
+predates the baseline and is not supported: `lace db migrate` and `lace doctor`
+report `SCHEMA_UNSUPPORTED` and change nothing.

@@ -1,10 +1,11 @@
 # Compatibility baseline
 
-Lace supports `0.1.0-rc1` (ownership template `0.46.0`, npm `next`) and later
-releases. Earlier prereleases (`0.1.0-alpha.1`–`0.1.0-alpha.8`) stay published
-and immutable but are not supported: their databases, projects and exports
-cannot be upgraded in place ([ADR 0029](adr/0029-rc1-baseline.md)).
-See [Upgrading from rc1](#upgrading-from-rc1).
+Lace supports `0.1.0-rc2` (ownership template `0.47.0`, npm `next`) and later
+releases ([ADR 0030](adr/0030-rc2-oldest-supported.md)). Earlier prereleases
+(`0.1.0-alpha.1`–`0.1.0-alpha.8` and `0.1.0-rc1`) stay published and immutable
+but are not supported: their databases predate the baseline migration and their
+projects and exports cannot be upgraded in place
+([ADR 0029](adr/0029-rc1-baseline.md)). See [Upgrading from rc2](#upgrading-from-rc2).
 
 ## Status
 
@@ -104,8 +105,7 @@ mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
-| `0.1.0-rc1` | `0.46.0` | Oldest supported release |
-| `0.1.0-rc2` | `0.47.0` | Current candidate; upgrade from rc1 recreates the database |
+| `0.1.0-rc2` | `0.47.0` | Oldest supported release; latest published release |
 
 A candidate becomes published only when the owner publishes it. Each version is
 recorded in `publishedVersions` after that publication, before the next
@@ -220,33 +220,29 @@ loader reports it as `invalid_export` with advice to upgrade `@lacecms/sdk`.
   10 ms CPU limit is best effort, because one maximal entry can exceed it on
   its own page.
 
-## Upgrading from rc1
+## Upgrading from rc2
 
-The database starts from one baseline migration that replaces every earlier
-migration, so a database created by rc1 cannot be migrated:
-`lace db migrate` and `lace doctor` report `SCHEMA_UNSUPPORTED` for it and
-change nothing ([database migrations](database-migrations.md)).
+An rc2 database already starts from the baseline migration, so it is upgraded
+in place with forward migrations and never recreated
+([database migrations](database-migrations.md)).
 
-1. Keep the content you need in your own source files for `lace import`, or
-   plan to re-enter it. Back up `lace.config.ts`, site source, package/lock
-   files, deployment settings, the database and media objects.
+1. Back up `lace.config.ts`, site source, package/lock files, deployment
+   settings, the database and media objects.
 2. Upgrade every Lace engine, CLI, SDK/render/Astro/site package and both API
    and builder images together. Review managed-file conflicts with the
    template upgrade plan and merge user-owned site and deployment changes
    explicitly.
-3. Recreate the database. Compose: stop `api` and `dispatcher`, remove
-   `.lace/data/lace.sqlite` with its `-wal` and `-shm` files, then run
-   `pnpm db:migrate`. Local Cloudflare: remove `.lace/data/cloudflare` and run
-   `pnpm cf:db:migrate`. Remote Cloudflare: create a new D1 database, update
-   `LACE_D1_DATABASE_ID` and the Worker binding, then run
+3. Apply forward migrations. Compose: stop `api` and `dispatcher`, then run
+   `pnpm db:migrate`. Local Cloudflare: `pnpm cf:db:migrate`. Remote
+   Cloudflare:
    `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`.
-4. Run `pnpm content:sync` (or the selected Cloudflare target), then
-   `pnpm auth:bootstrap`, complete first-administrator setup and restore the
-   content.
-5. Rebuild the site and check it on the selected runtime before relying on it.
-   Local acceptance is not a real deployment check.
+4. Run `pnpm content:sync` (or the selected Cloudflare target), restart or
+   redeploy the matching runtime, rebuild the site and check it on the selected
+   runtime before relying on it. Local acceptance is not a real deployment
+   check.
 
-Built-in blocks keep their definition versions and declare no migrations;
-build exports use format 2 only. Rollback means returning to the backed-up
-rc1 packages, images, configuration, source, database and media together; a
+A database created before rc2 predates the baseline: `lace db migrate` and
+`lace doctor` report `SCHEMA_UNSUPPORTED` for it and change nothing; such an
+installation is not supported. Rollback means returning to the backed-up rc2
+packages, images, configuration, source, database and media together; a
 package-only downgrade is not supported.

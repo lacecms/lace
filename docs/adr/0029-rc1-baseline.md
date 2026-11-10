@@ -1,6 +1,7 @@
 # ADR 0029: rc1 is the oldest supported state
 
-- Status: Accepted
+- Status: Amended by [ADR 0030](0030-rc2-oldest-supported.md): rc2 replaces rc1 as
+  the oldest supported release; the other decisions stay accepted
 - Date: 2026-11-08
 - Governing architecture: [section 22](../architecture/distribution.md#22-migration-and-compatibility-policy)
 

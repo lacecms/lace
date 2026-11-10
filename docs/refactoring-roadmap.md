@@ -93,6 +93,30 @@ prerelease `v0.1.0-rc2` at merge commit `e82670cc`. `prepare-rc2-release` is
 archived with its specifications synchronized. `0.1.0-rc2` joins
 `publishedVersions` when rc3 is selected.
 
+### Owner-inserted feature changes after RF6 (2026-11-10)
+
+After RF6 the owner inserted four just-in-time changes outside the RF steps,
+delivered in this order before RF7:
+
+1. `rc2-oldest-supported`: rc2 (template `0.47.0`) becomes the oldest
+   supported release and the upgrade fixture origin; everything that exists
+   only for rc1 (fixtures, upgrade sections, rc1-named scenarios) is removed.
+2. Gallery per-item placement and sizing (backlog).
+3. Configurable default collection sort (backlog).
+4. Route-less collections (backlog).
+
+Later changes migrate only from rc2: a built-in block change still bumps the
+definition version and migrates rc2 data, but no compatibility with rc1 or
+earlier is kept. Gallery decisions: `placement` (`auto`, `full`, `start`,
+`end`) is a reusable list-layout item field that acts in `grid` mode only
+(`start` = first column, `end` = last column, `full` = all columns, for every
+preset) and is retained without effect in flex modes; `featured-first` is
+removed and migrated to `columns-2` with a `full` first item; image `size`
+`natural` keeps intrinsic width capped to the cell with preserved proportions
+and no horizontal overflow; gallery video items default to `ambient` playback,
+`videoEmbed` keeps `player`. No release is selected: the owner decides when
+rc3 is prepared. RF7, RF8C and RF9C–RF9F keep their order after these changes.
+
 ## 3. Baseline (commit `1494b039`, audit of 2026-11-01)
 
 What is healthy and is not touched:
@@ -1390,3 +1414,7 @@ is empty.
 
 | 2026-11-10 | RF6D | `rf06d-list-field-block-card` | Implemented: list, disclosure, shared editor context and block card menu/tabs extracted; renderer 1,478 → 416 lines, ListField 839, and oversized-source baseline cleared. Block actions use stable identity and current state. Full admin unit suite: 1,036 tests; unchanged editor, entry-actions and composites browser suites: 32 tests. Root build, package export comparison, typecheck, lint, format check and strict OpenSpec validation passed. Not archived. |
 | 2026-11-10 | RF6D | `rf06d-list-field-block-card` | Archived at [`2026-11-10-rf06d-list-field-block-card`](../openspec/changes/archive/2026-11-10-rf06d-list-field-block-card/); 11/11 tasks complete. No delta specs. RF6 complete. |
+| 2026-11-10 | — | — | Owner inserted four feature changes after RF6 and before RF7 (see "Owner-inserted feature changes after RF6"): `rc2-oldest-supported`, gallery per-item placement and sizing, default collection sort, route-less collections. rc2 becomes the oldest supported release; later changes migrate from rc2 only. No release selected. |
+| 2026-11-10 | — | `rc2-oldest-supported` | Proposed, first owner-inserted change after RF6. rc2 (template `0.47.0`) becomes the oldest supported release: ADR 0030 supersedes the support floor of ADR 0029, rc2 fixtures from the published `create-lace@0.1.0-rc2` replace `template-0.46.0`, template `0.48.0` instructions and guides describe the rc2 upgrade without database recreation. Delta specs: `generated-project-acceptance` (~1), `project-generator` (+2, −2), `public-documentation` (+1, −1). Not applied. |
+| 2026-11-10 | — | `rc2-oldest-supported` | Implemented, 12/12 tasks complete. ADR 0030 amends the support floor of ADR 0029; architecture §22 names rc2. `tests/fixtures/template-0.47.0` comes from the published `create-lace@0.1.0-rc2` (integrity verified, archive SHA-256 `f8c276aa…`) and replaces `template-0.46.0`. Template `0.48.0`: upgrade instructions and the operations guide describe the rc2 upgrade without database recreation; six generated snapshots regenerated. Compatibility, public operations, release and personal-site guides start at rc2; the rc2 changelog link drops the removed anchor. Template upgrade acceptance passed for default and Cloudflare; generator (65) and CLI (320) tests, docs check, typecheck, Oxlint, Oxfmt and strict validation passed. `release:check` keeps the expected template identity mismatch until a release is selected. Not archived. |
+| 2026-11-10 | — | `rc2-oldest-supported` | Archived at [`2026-11-10-rc2-oldest-supported`](../openspec/changes/archive/2026-11-10-rc2-oldest-supported/); 12/12 tasks complete. Delta specs synchronized: `generated-project-acceptance` (~1), `project-generator` (+2, −2), `public-documentation` (+1, −1). Gallery per-item placement and sizing next. |

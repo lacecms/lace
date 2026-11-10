@@ -101,6 +101,7 @@ the two indexes describe themselves and are excluded from the row count.
 | [0027-outbox-triggered-rebuild.md](adr/0027-outbox-triggered-rebuild.md) | authoritative | ADR 0027: Publication through an outbox-triggered rebuild |
 | [0028-spec-driven-delivery-toolchain.md](adr/0028-spec-driven-delivery-toolchain.md) | authoritative | ADR 0028: Spec-driven delivery and workspace toolchain |
 | [0029-rc1-baseline.md](adr/0029-rc1-baseline.md) | authoritative | ADR 0029: rc1 is the oldest supported state |
+| [0030-rc2-oldest-supported.md](adr/0030-rc2-oldest-supported.md) | authoritative | ADR 0030: rc2 is the oldest supported release |
 
 ## docs/archive/
 

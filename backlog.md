@@ -17,7 +17,8 @@
   [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
 - **Gallery per-item placement and sizing (from the tatianae.com rc2 mapping,
-  2026-11-10; no implementation order selected):** Gallery layout settings
+  2026-11-10; selected 2026-11-10 as the second owner-inserted change after
+  RF6, see the refactoring roadmap):** Gallery layout settings
   apply to the whole block, so a portfolio grid is built from several
   consecutive galleries. Three cases still need workarounds:
   - **Right column only.** `columns-2` can leave the right column empty but
@@ -28,21 +29,25 @@
   - **Natural image size.** An image cannot keep its intrinsic width; for
     example a 405px GIF is stretched to fill its cell.
 
-  Candidate: optional per-item `placement` (`auto`, `full`, `start`, `end`)
-  and an image-only `size` (`fill`, `natural`) on gallery items. They would
-  be exposed as data attributes and given rules in `ListLayout.css`, so a
-  `columns-2` grid can express these rows without class names. This is a
-  block definition change: gallery v6 with an identity migration, a version
-  bump for every model that allows the block, and a template bump for the
-  installed source. Settle in the spec:
-  - placement in flex modes and in `columns-3`/`columns-4`;
-  - how it interacts with `featured-first`;
-  - mobile collapse;
-  - whether video items need a per-block default `playback`, because
-    portfolio videos are almost always ambient.
+  Selected: optional per-item `placement` (`auto`, `full`, `start`, `end`)
+  as a reusable list-layout item field and an image-only `size` (`fill`,
+  `natural`) on gallery items, exposed as data attributes with rules in
+  `ListLayout.css`, so a `columns-2` grid expresses these rows without class
+  names. Owner decisions (2026-11-10):
+  - placement acts in `grid` mode only, for every preset: `start` = first
+    column, `end` = last column, `full` = all columns; flex modes retain the
+    value without effect;
+  - `featured-first` is removed; stored rc2 blocks migrate to `columns-2`
+    with a `full` first item (gallery v6, migration from v5 only);
+  - `natural` keeps the intrinsic width capped to the cell, preserves
+    proportions and never causes horizontal overflow; a one-column grid
+    ignores placement;
+  - gallery video items default to `ambient` playback; `videoEmbed` keeps
+    `player`.
 
 - **Configurable default collection sort (from the tatianae.com rc2 mapping,
-  2026-11-10; no implementation order selected):** today a collection list
+  2026-11-10; selected 2026-11-10 as the third owner-inserted change after
+  RF6):** today a collection list
   always opens sorted by `-updatedAt`, and `listOptions` cannot change that.
   A portfolio orders its projects by a numeric `order` field, so editors must
   pick the Order column on every visit. The URL keeps a chosen sort only while
@@ -61,7 +66,7 @@
   still sorts published entries itself.
 
 - **Route-less collections (from the tatianae.com rc2 mapping, 2026-11-10;
-  no implementation order selected):** a collection always needs a `route`
+  selected 2026-11-10 as the fourth owner-inserted change after RF6):** a collection always needs a `route`
   with one `:slug` segment, and every entry needs a slug before publication.
   Data that is only listed on another page, such as About CV rows,
   testimonials or press mentions, gets URLs nobody renders. Today the site

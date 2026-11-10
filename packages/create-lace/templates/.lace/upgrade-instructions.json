@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "templateVersion": "0.47.0",
+  "templateVersion": "0.48.0",
   "database": [
-    "The database now starts from one baseline migration that replaces every earlier migration, so a database created by rc1 or an earlier engine cannot be upgraded; lace db migrate and lace doctor report SCHEMA_UNSUPPORTED for it and change nothing. Keep any content you need in your own source files for lace import or re-enter it. Stop Compose api/dispatcher, back up .lace/data and the object store, then remove the SQLite database (.lace/data/lace.sqlite with its -wal and -shm files; local Cloudflare: .lace/data/cloudflare; remote Cloudflare: create a new D1 database and update LACE_D1_DATABASE_ID and the Worker binding). Then run pnpm db:migrate (Cloudflare: pnpm cf:db:migrate or pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env), pnpm content:sync, pnpm auth:bootstrap, complete first-admin setup and restore content."
+    "An rc2 database already starts from the baseline migration, so it is upgraded in place, not recreated. Stop Compose api/dispatcher and back up .lace/data and the object store, then run pnpm db:migrate (Cloudflare: pnpm cf:db:migrate or pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env); it applies only the checked-in forward migrations after the baseline. A database created before rc2 predates the baseline and is not supported: lace db migrate and lace doctor report SCHEMA_UNSUPPORTED for it and change nothing."
   ],
   "configuration": [
-    "Template 0.47.0: the operations guide describes the baseline migration instead of numbered migrations, and upgrade instructions cover only the upgrade from rc1 (template 0.46.0). Upgrade all Lace packages and both images together, recreate the database as described in the database step, then run content sync and rebuild the site. Built-in blocks keep their versions (image 4, gallery 5, videoEmbed 2) and declare no migrations; build exports use format 2 only."
+    "Template 0.48.0: guides and upgrade instructions start at rc2 (template 0.47.0), the oldest supported release, and the operations guide describes the rc2 upgrade without database recreation. Upgrade all Lace packages and both images together, apply the database step, then run pnpm content:sync and rebuild the site."
   ]
 }
