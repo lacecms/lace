@@ -158,12 +158,20 @@ for (const width of [320, 1280])
     await expect(page.getByText("Saved revision 2")).toBeVisible();
     const saved = saves[0]!.blocks as { data: { images: unknown[] } }[];
     expect(saved[0]!.data.images).toEqual([
-      { aspectRatio: "16:9", kind: "image", media: "media-a", playback: "player" },
-      { aspectRatio: "16:9", kind: "image", media: "media-b", playback: "player" },
+      ...["media-a", "media-b"].map((media) => ({
+        aspectRatio: "16:9",
+        kind: "image",
+        media,
+        placement: "auto",
+        playback: "ambient",
+        size: "fill",
+      })),
       {
         aspectRatio: "1:1",
         kind: "video",
+        placement: "auto",
         playback: "ambient",
+        size: "fill",
         videoTitle: "Studio tour",
         videoUrl: "https://vimeo.com/76979871",
       },

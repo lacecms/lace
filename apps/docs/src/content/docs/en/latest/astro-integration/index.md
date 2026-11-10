@@ -60,7 +60,10 @@ same scalar settings described in [content modeling](../content-modeling/composi
 Mark the existing outer element `data-lace-layout-container`, its list
 `data-lace-layout={settings.layoutMode}`, `data-lace-wrap={String(settings.layoutWrap)}`,
 `data-lace-preset={settings.layoutPreset}`, and direct items `data-lace-layout-item`.
-Do not register the CSS under a second item's ownership.
+A list that adopts `listLayoutItemFields()` also marks each item
+`data-lace-placement={item.placement ?? "auto"}`; the stylesheet then places
+`start`, `end` and `full` items in grid mode. Do not register the CSS under a
+second item's ownership.
 
 The stylesheet uses container queries and zero-specificity selectors in the
 `lace-layout` layer. It owns neutral flex/grid structure and list resets only;
@@ -74,12 +77,47 @@ site theme after `lace-layout` in the layer order.
 The starter keeps its 1rem Gallery gap and 4:3 image crop in site CSS. Remove old
 unlayered `display: grid` and `grid-template-columns` rules that would force flex
 back into grid. Keep your image and decorative rules. Grid/auto keeps Gallery's
-existing image `sizes`; other layouts use `100vw`. Tune the user-owned component's
-sizes to actual site widths, especially for custom layouts and featured images.
+existing image `sizes`; other layouts use `100vw`, and a `natural` image with a
+known width `W` requests `(max-width: Wpx) 100vw, Wpx`. Tune the user-owned
+component's sizes to actual site widths, especially for custom layouts.
+
+### Gallery placement and natural images
+
+Gallery v6 marks every item part `data-lace-placement` (`auto`, `full`, `start`,
+`end`) and every image item part `data-lace-size` (`fill` or `natural`).
+Placement is structural and comes from `ListLayout.css`. Size is a hook for your
+theme, which already owns image proportions: crop only `fill` images and let
+`natural` images keep their width without overflowing their cell.
+
+```css
+:where([data-lace-block="gallery"]) [data-lace-size="fill"] [data-lace-part="media"] {
+  aspect-ratio: 4 / 3;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+:where([data-lace-block="gallery"]) [data-lace-size="natural"] [data-lace-part="media"] {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: auto;
+}
+:where([data-lace-block="gallery"])
+  [data-lace-placement="end"][data-lace-size="natural"]
+  [data-lace-part="media"] {
+  margin-inline-start: auto;
+}
+```
+
+Until a theme adopts these rules it keeps cropping natural images. New gallery
+video items start `ambient`; synchronization from rc2 keeps `player` on stored
+video items that relied on the old default and rewrites the removed
+`featured-first` preset to `columns-2` with a `full` first item.
 
 ### Gallery video items
 
-Gallery v5 items carry `kind`: `image` items render as before, `video` items
+Gallery items carry `kind`: `image` items render as before, `video` items
 render inside their layout cell as `<li data-lace-part="item"
 data-lace-kind="video">` with a `<figure data-lace-video
 data-lace-aspect-ratio="…" data-lace-playback="…">`, a `[data-lace-video-area]`,

@@ -59,7 +59,7 @@
           "key": "gallery-one",
           "type": "gallery",
           "position": 1000,
-          "schemaVersion": 5,
+          "schemaVersion": 6,
           "data": {
             "title": "Published gallery",
             "images": [
@@ -67,11 +67,15 @@
                 "kind": "image",
                 "media": "<cover>",
                 "alt": "Gallery cover",
-                "caption": "Gallery caption"
+                "caption": "Gallery caption",
+                "placement": "auto",
+                "size": "fill"
               },
               {
                 "kind": "image",
-                "media": "<cover>"
+                "media": "<cover>",
+                "placement": "auto",
+                "size": "fill"
               }
             ]
           }

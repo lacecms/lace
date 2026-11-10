@@ -8,9 +8,12 @@ async function fixture(
   mode = "grid",
   wrap = true,
   count = 5,
+  placements: readonly string[] = [],
 ) {
+  const item = (i: number) =>
+    `<li data-lace-layout-item${placements[i] ? ` data-lace-placement="${placements[i]}"` : ""}>Card ${i}<ul><li>Nested</li></ul></li>`;
   await page.setContent(
-    `<section data-lace-layout-container style="width:${width}px"><ol data-lace-layout="${mode}" data-lace-preset="${preset}" data-lace-wrap="${wrap}">${Array.from({ length: count }, (_, i) => `<li data-lace-layout-item>Card ${i}<ul><li>Nested</li></ul></li>`).join("")}</ol></section>`,
+    `<section data-lace-layout-container style="width:${width}px"><ol data-lace-layout="${mode}" data-lace-preset="${preset}" data-lace-wrap="${wrap}">${Array.from({ length: count }, (_, i) => item(i)).join("")}</ol></section>`,
   );
   await page.addStyleTag({ content: await readFile(source, "utf8") });
   return page.locator("[data-lace-layout]");
@@ -24,7 +27,6 @@ test("LIST1 container thresholds are inclusive for all grid presets", async ({ p
       "columns-4",
       "narrow-wide",
       "wide-narrow",
-      "featured-first",
     ]) {
       const list = await fixture(page, width, preset);
       const tracks = await list.evaluate((el) =>
@@ -47,7 +49,8 @@ test("LIST1 container thresholds are inclusive for all grid presets", async ({ p
         .locator(":scope > li")
         .first()
         .evaluate((el) => getComputedStyle(el).gridColumn);
-      expect(span).toBe(preset === "featured-first" && width >= 512 ? "1 / -1" : "auto");
+      // Presets give no item a span.
+      expect(span).toBe("auto");
       const order = await list.locator(":scope > li").allTextContents();
       expect(order).toEqual(Array.from({ length: 5 }, (_, i) => `Card ${i}Nested`));
     }
@@ -58,7 +61,7 @@ test("LIST1 empty/single/odd lists, flex wrapping, explicit height and CSS overr
 }) => {
   for (const count of [0, 1, 5])
     for (const mode of ["grid", "flex-row", "flex-column"]) {
-      const list = await fixture(page, 400, "featured-first", mode, true, count);
+      const list = await fixture(page, 400, "columns-2", mode, true, count);
       await expect(list.locator(":scope > li")).toHaveCount(count);
       expect(await list.evaluate((el) => getComputedStyle(el).display)).toBe(
         mode === "grid" ? "grid" : "flex",
@@ -106,4 +109,98 @@ test("LIST1 empty/single/odd lists, flex wrapping, explicit height and CSS overr
   ).toEqual({ display: "grid", gap: "23px", columns: "100px 200px" });
   await page.addStyleTag({ content: "[data-lace-layout] { display:block; }" });
   expect(await list.evaluate((el) => getComputedStyle(el).display)).toBe("block");
+});
+
+// Grid row and column (1-based) of every direct item.
+async function cells(list: ReturnType<Page["locator"]>) {
+  return list.locator(":scope > li").evaluateAll((els) => {
+    const tracks = getComputedStyle(els[0]!.parentElement!).gridTemplateColumns.split(" ");
+    const tops = [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().y)))].sort(
+      (a, b) => a - b,
+    );
+    const left = els[0]!.parentElement!.getBoundingClientRect().x;
+    const widths = tracks.map(parseFloat);
+    const gap = parseFloat(getComputedStyle(els[0]!.parentElement!).columnGap) || 0;
+    // Column start lines from the track sizes, so empty tracks still count.
+    const starts = widths.map(
+      (_, i) => left + widths.slice(0, i).reduce((sum, value) => sum + value + gap, 0),
+    );
+    return els.map((el) => {
+      const box = el.getBoundingClientRect();
+      const column = starts.findIndex((start) => Math.abs(start - box.x) < 1) + 1;
+      const span = widths.filter(
+        (_, i) => starts[i]! >= box.x - 1 && starts[i]! + widths[i]! <= box.right + 1,
+      ).length;
+      return { column, row: tops.indexOf(Math.round(box.y)) + 1, span };
+    });
+  });
+}
+test("LIST3 right column only: an end item leaves its row's first column empty", async ({
+  page,
+}) => {
+  const list = await fixture(page, 640, "columns-2", "grid", true, 3, ["end", "auto", "auto"]);
+  expect(await cells(list)).toEqual([
+    { column: 2, row: 1, span: 1 },
+    { column: 1, row: 2, span: 1 },
+    { column: 2, row: 2, span: 1 },
+  ]);
+  expect(await list.locator(":scope > li").allTextContents()).toEqual(
+    Array.from({ length: 3 }, (_, i) => `Card ${i}Nested`),
+  );
+});
+test("LIST3 any item spans the row and start begins a row", async ({ page }) => {
+  const full = await fixture(page, 896, "columns-3", "grid", true, 5, [
+    "auto",
+    "auto",
+    "full",
+    "auto",
+    "auto",
+  ]);
+  expect(await cells(full)).toEqual([
+    { column: 1, row: 1, span: 1 },
+    { column: 2, row: 1, span: 1 },
+    { column: 1, row: 2, span: 3 },
+    { column: 1, row: 3, span: 1 },
+    { column: 2, row: 3, span: 1 },
+  ]);
+  const start = await fixture(page, 896, "columns-3", "grid", true, 2, ["auto", "start"]);
+  expect(await cells(start)).toEqual([
+    { column: 1, row: 1, span: 1 },
+    { column: 1, row: 2, span: 1 },
+  ]);
+  // Every preset honors placement, including auto-fill tracks.
+  for (const preset of ["auto", "columns-4", "narrow-wide", "wide-narrow"]) {
+    const list = await fixture(page, 1100, preset, "grid", true, 3, ["end", "full", "start"]);
+    const [end, row, first] = await cells(list);
+    const tracks = await list.evaluate(
+      (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
+    );
+    expect(end, preset).toEqual({ column: tracks, row: 1, span: 1 });
+    expect(row, preset).toEqual({ column: 1, row: 2, span: tracks });
+    expect(first, preset).toEqual({ column: 1, row: 3, span: 1 });
+  }
+});
+test("LIST3 placement in narrow grids and flex lists", async ({ page }) => {
+  const placements = ["end", "full", "start", "auto"];
+  const narrow = await fixture(page, 448, "columns-2", "grid", true, 4, placements);
+  expect(await cells(narrow)).toEqual(
+    placements.map((_, i) => ({ column: 1, row: i + 1, span: 1 })),
+  );
+  for (const mode of ["flex-row", "flex-column"]) {
+    const flex = await fixture(page, 640, "columns-2", mode, true, 4, placements);
+    const styles = await flex
+      .locator(":scope > li")
+      .evaluateAll((els) => els.map((el) => getComputedStyle(el).gridColumn));
+    expect(styles, mode).toEqual(["auto", "auto", "auto", "auto"]);
+    const plain = await fixture(page, 640, "columns-2", mode, true, 4);
+    const box = (l: ReturnType<Page["locator"]>) =>
+      l.locator(":scope > li").evaluateAll((els) =>
+        els.map((el) => {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        }),
+      );
+    const placed = await fixture(page, 640, "columns-2", mode, true, 4, placements);
+    expect(await box(placed), mode).toEqual(await box(plain));
+  }
 });

@@ -63,7 +63,14 @@ test("a declared item default is copied with its media replaced", () => {
 test("the built-in gallery item is an image holding its media", () => {
   if (gallery.type !== "list") throw new Error("gallery images is a list");
   expect(mediaListItems(gallery.item, { key: "media" }, ["m1"])).toEqual([
-    { aspectRatio: "16:9", kind: "image", media: "m1", playback: "player" },
+    {
+      aspectRatio: "16:9",
+      kind: "image",
+      media: "m1",
+      placement: "auto",
+      playback: "ambient",
+      size: "fill",
+    },
   ]);
 });
 
@@ -72,7 +79,13 @@ test("the gallery offers a Video choice that starts a video item", () => {
   const [choice, ...rest] = mediaListChoices(gallery.item, { key: "media" });
   expect(rest).toEqual([]);
   expect(choice).toEqual({
-    item: { aspectRatio: "16:9", kind: "video", playback: "player" },
+    item: {
+      aspectRatio: "16:9",
+      kind: "video",
+      placement: "auto",
+      playback: "ambient",
+      size: "fill",
+    },
     label: "Video",
     value: "video",
   });

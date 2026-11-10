@@ -2,10 +2,14 @@ import {
   builtInBlocks,
   defineBlock,
   field,
+  listLayoutItemFields,
   listLayoutSettings,
   listLayoutSettingsVisibility,
 } from "@lacecms/content";
 import { defineBlockMap } from "@lacecms/render";
+import type { AddressInfo } from "node:net";
+import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { expect, test } from "vitest";
 // The registry sources exactly as `lace add block` installs them.
@@ -113,9 +117,9 @@ test("gallery items follow the media alt and caption fallbacks", async () => {
       '<main><section class="gallery" data-lace-block="gallery" data-lace-block-key="gallery-1" data-lace-layout-container>',
       '<h2 data-lace-part="title">Studio</h2>',
       '<ul data-lace-part="items" data-lace-layout="grid" data-lace-wrap="true" data-lace-preset="auto" role="list">',
-      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement="auto" data-lace-size="fill"><figure><img alt="Override" data-lace-part="media" decoding="async" height="600" loading="lazy" src="https://media.example/studio.png" style="object-position:25% 40%" width="800"><figcaption data-lace-part="caption">Media caption</figcaption></figure></li>',
       // Astro writes an empty alt text as a bare attribute.
-      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement="auto" data-lace-size="fill"><figure><img alt data-lace-part="media" decoding="async" loading="lazy" src="https://media.example/bare.png"></figure></li>',
       "</ul></section></main>",
     ].join(""),
   );
@@ -147,6 +151,7 @@ test("gallery video items render embed players and keep image dialog indexes", a
     videoTitle: "<Studio & team>",
     aspectRatio: "4:5",
     caption: "Spring",
+    playback: "player",
   };
   const html = await render([
     block(
@@ -421,7 +426,6 @@ test("Gallery emits validated shared hooks for every mode and preset without inl
       "columns-4",
       "narrow-wide",
       "wide-narrow",
-      "featured-first",
     ]) {
       const html = await render([
         block(
@@ -442,11 +446,92 @@ test("Gallery emits validated shared hooks for every mode and preset without inl
   expect(withScripts.replace(galleryScript, "")).not.toContain("<script");
 });
 
+test("gallery items expose their placement and image size hooks", async () => {
+  const html = await render([
+    block("gallery", {
+      images: [
+        { media: "studio" },
+        { media: "studio", placement: "end", size: "natural" },
+        {
+          kind: "video",
+          placement: "full",
+          videoTitle: "Tour",
+          videoUrl: "https://vimeo.com/76979871",
+        },
+      ],
+    }),
+  ]);
+  const items = html.match(/<li data-lace-part="item"[^>]*>/gu);
+  expect(items).toEqual([
+    '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement="auto" data-lace-size="fill">',
+    '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement="end" data-lace-size="natural">',
+    '<li data-lace-part="item" data-lace-layout-item data-lace-kind="video" data-lace-placement="full">',
+  ]);
+  // Gallery video items default to ambient playback.
+  expect(html).toContain('data-lace-playback="ambient"');
+});
+
+test("a natural gallery image requests its own width", async () => {
+  // Astro's own sharp generates the originals the local media server returns.
+  const sharp = createRequire(createRequire(import.meta.url).resolve("astro/package.json"))(
+    "sharp",
+  );
+  const original = await sharp({
+    create: { background: "#3a6", channels: 3, height: 300, width: 405 },
+  })
+    .jpeg()
+    .toBuffer();
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "image/jpeg" });
+    response.end(original);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const sourced = (id: string, width: number, height: number) => ({
+      alt: id,
+      caption: null,
+      focalPoint: null,
+      height,
+      mimeType: "image/jpeg",
+      sourceUrl: `${origin}/api/v1/public/media/${id}`,
+      url: `https://cms.example/api/v1/public/media/${id}`,
+      width,
+    });
+    const library = { natural: sourced("natural", 405, 300), filled: sourced("filled", 405, 300) };
+    const html = await render(
+      [
+        block(
+          "gallery",
+          { images: [{ media: "natural", size: "natural" }, { media: "filled" }] },
+          { settings: { layoutPreset: "columns-2" } },
+        ),
+      ],
+      { media: (id: string) => library[id as keyof typeof library] },
+    );
+    const images = html.match(/<img [^>]*data-lace-part="media"[^>]*>/gu) ?? [];
+    expect(images).toHaveLength(2);
+    expect(images[0]).toContain('width="405"');
+    expect(images[0]).toContain('height="300"');
+    expect(images[0]).toContain('sizes="(max-width: 405px) 100vw, 405px"');
+    expect(images[0]).toMatch(/srcset="\S+ 405w"/u);
+    expect(images[1]).toContain('sizes="100vw"');
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("an unrelated card list uses the same scalar settings and layout hooks", async () => {
   const definition = defineBlock({
     type: "cardList",
     version: 1,
-    fields: { cards: field.list({ defaultValue: [], item: field.text() }) },
+    fields: {
+      cards: field.list({
+        defaultValue: [],
+        item: field.group({ fields: { title: field.text(), ...listLayoutItemFields() } }),
+      }),
+    },
     settings: listLayoutSettings(),
     settingsVisibility: listLayoutSettingsVisibility(),
   });
@@ -462,8 +547,8 @@ test("an unrelated card list uses the same scalar settings and layout hooks", as
             type: "cardList",
             schemaVersion: 1,
             position: 0,
-            data: { cards: ["One", "Two"] },
-            settings: { layoutMode: "flex-row", layoutWrap: false, layoutPreset: "featured-first" },
+            data: { cards: [{ title: "One" }, { title: "Two", placement: "end" }] },
+            settings: { layoutMode: "flex-row", layoutWrap: false, layoutPreset: "columns-2" },
           },
         ],
         media: () => undefined,
@@ -472,9 +557,12 @@ test("an unrelated card list uses the same scalar settings and layout hooks", as
     },
   });
   expect(html).toContain(
-    'data-lace-layout="flex-row" data-lace-wrap="false" data-lace-preset="featured-first"',
+    'data-lace-layout="flex-row" data-lace-wrap="false" data-lace-preset="columns-2"',
   );
-  expect(html).toContain("<li data-lace-layout-item>One<ul><li>Nested list</li></ul></li>");
+  expect(html).toContain(
+    '<li data-lace-layout-item data-lace-placement="auto">One<ul><li>Nested list</li></ul></li>',
+  );
+  expect(html).toContain('<li data-lace-layout-item data-lace-placement="end">Two');
   expect(html).not.toContain("gallery");
 });
 

@@ -2,6 +2,7 @@
   "apps/api/src/dev-bootstrap.mjs": "Operator script run by plain Node in the API container (first-admin setup token).",
   "apps/docs/src/catalog.mjs": "Docs catalog read by the Astro config and the plain-Node docs check.",
   "apps/docs/src/catalog.test.mjs": "Tests the listed docs catalog module and the plain-Node scripts/check.mjs docs check.",
+  "apps/site/src/gallery-layout.browser.mjs": "Playwright browser check for the packaged site fixture build.",
   "apps/site/src/video-embed.browser.mjs": "Playwright browser check for the packaged site fixture build.",
   "packages/cli/src/import-api.mjs": "CLI import test fixture; typed in RF9F.",
   "packages/cli/src/import-fixtures.mjs": "CLI import test fixture; typed in RF9F.",

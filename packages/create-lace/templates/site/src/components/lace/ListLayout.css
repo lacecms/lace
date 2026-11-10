@@ -47,12 +47,22 @@
   :where([data-lace-layout="grid"][data-lace-preset="auto"]) {
     grid-template-columns: repeat(auto-fill, minmax(min(var(--lace-list-item-min), 100%), 1fr));
   }
+  /* Item placement: first column, last column or the whole row, for every
+     preset and column count; skipped tracks stay empty and order is kept. */
+  :where([data-lace-layout="grid"] > [data-lace-layout-item][data-lace-placement="start"]) {
+    grid-column-start: 1;
+  }
+  :where([data-lace-layout="grid"] > [data-lace-layout-item][data-lace-placement="end"]) {
+    grid-column-end: -1;
+  }
+  :where([data-lace-layout="grid"] > [data-lace-layout-item][data-lace-placement="full"]) {
+    grid-column: 1 / -1;
+  }
   @container lace-list (min-width: 32rem) {
     :where(
       [data-lace-layout="grid"][data-lace-preset="columns-2"],
       [data-lace-layout="grid"][data-lace-preset="columns-3"],
-      [data-lace-layout="grid"][data-lace-preset="columns-4"],
-      [data-lace-layout="grid"][data-lace-preset="featured-first"]
+      [data-lace-layout="grid"][data-lace-preset="columns-4"]
     ) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -61,12 +71,6 @@
     }
     :where([data-lace-layout="grid"][data-lace-preset="wide-narrow"]) {
       grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    }
-    :where(
-      [data-lace-layout="grid"][data-lace-preset="featured-first"]
-        > [data-lace-layout-item]:first-child
-    ) {
-      grid-column: 1 / -1;
     }
   }
   @container lace-list (min-width: 48rem) {

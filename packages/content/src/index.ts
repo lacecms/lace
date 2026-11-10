@@ -163,7 +163,11 @@ export { BlockConfigurationError } from "./blocks/errors.js";
 export { BLOCK_SETTING_FIELD_TYPES, normalizeSettingsVisibility } from "./blocks/settings.js";
 export { defineBlockRegistry, toBlockRegistryMetadata } from "./blocks/registry.js";
 export { BlockMigrationError, migrateBlockData } from "./blocks/migration.js";
-export { listLayoutSettingsVisibility, listLayoutSettings } from "./blocks/list-layout.js";
+export {
+  listLayoutItemFields,
+  listLayoutSettingsVisibility,
+  listLayoutSettings,
+} from "./blocks/list-layout.js";
 export { builtInBlocks } from "./blocks/built-ins.js";
 
 // entries

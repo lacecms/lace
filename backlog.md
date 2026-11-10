@@ -16,35 +16,6 @@
   archived and synchronized. The roadmap moved to
   [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
-- **Gallery per-item placement and sizing (from the tatianae.com rc2 mapping,
-  2026-11-10; selected 2026-11-10 as the second owner-inserted change after
-  RF6, see the refactoring roadmap):** Gallery layout settings
-  apply to the whole block, so a portfolio grid is built from several
-  consecutive galleries. Three cases still need workarounds:
-  - **Right column only.** `columns-2` can leave the right column empty but
-    never the left one. Today the workaround is a hand-typed envelope class
-    name plus site CSS.
-  - **Span both columns.** Only the first item of `featured-first` spans both
-    columns; an arbitrary item cannot.
-  - **Natural image size.** An image cannot keep its intrinsic width; for
-    example a 405px GIF is stretched to fill its cell.
-
-  Selected: optional per-item `placement` (`auto`, `full`, `start`, `end`)
-  as a reusable list-layout item field and an image-only `size` (`fill`,
-  `natural`) on gallery items, exposed as data attributes with rules in
-  `ListLayout.css`, so a `columns-2` grid expresses these rows without class
-  names. Owner decisions (2026-11-10):
-  - placement acts in `grid` mode only, for every preset: `start` = first
-    column, `end` = last column, `full` = all columns; flex modes retain the
-    value without effect;
-  - `featured-first` is removed; stored rc2 blocks migrate to `columns-2`
-    with a `full` first item (gallery v6, migration from v5 only);
-  - `natural` keeps the intrinsic width capped to the cell, preserves
-    proportions and never causes horizontal overflow; a one-column grid
-    ignores placement;
-  - gallery video items default to `ambient` playback; `videoEmbed` keeps
-    `player`.
-
 - **Configurable default collection sort (from the tatianae.com rc2 mapping,
   2026-11-10; selected 2026-11-10 as the third owner-inserted change after
   RF6):** today a collection list

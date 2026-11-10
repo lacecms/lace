@@ -13,8 +13,12 @@ const title = data.title?.trim() === "" ? undefined : data.title;
 // its values. Each image item's own alt text and caption override the media
 // item's. A linked image opens its link instead of the lightbox; the alt text
 // names the link, then the caption, then the URL. Video items have no media
-// caption fallback, link or lightbox.
+// caption fallback, link or lightbox. A natural image requests its own width.
+const layoutSizes = settings.layoutMode === "grid" && settings.layoutPreset === "auto"
+  ? "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw"
+  : "100vw";
 const items = data.images.map((item) => {
+  const placement = item.placement ?? "auto";
   if (item.kind === "video") {
     if (item.videoUrl === undefined || item.videoTitle === undefined) return undefined;
     const video = describeVideoEmbed(item.videoUrl, context);
@@ -26,7 +30,8 @@ const items = data.images.map((item) => {
       aspectRatio: item.aspectRatio ?? "16:9",
       caption: item.caption,
       frame,
-      playback: item.playback ?? "player",
+      placement,
+      playback: item.playback ?? "ambient",
       provider: video.provider === "youtube" ? "YouTube" : "Vimeo",
       title: item.videoTitle,
       url: item.videoUrl,
@@ -38,18 +43,19 @@ const items = data.images.map((item) => {
   const media = image(item.media, item.alt);
   const caption = item.caption ?? media.caption;
   const linkLabel = media.alt === "" ? (caption?.trim() || href) : undefined;
-  return { kind: "image" as const, caption, link: href, linkLabel, media };
+  const size = item.size ?? "fill";
+  const sizes = size === "natural" && media.width !== undefined
+    ? `(max-width: ${media.width}px) 100vw, ${media.width}px`
+    : layoutSizes;
+  return { kind: "image" as const, caption, link: href, linkLabel, media, placement, size, sizes };
 });
-const sizes = settings.layoutMode === "grid" && settings.layoutPreset === "auto"
-  ? "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw"
-  : "100vw";
 ---
 
 <section class:list={["gallery", className]} data-lace-block={block.type} data-lace-block-key={block.key} data-lace-layout-container id={anchor}>
   {title !== undefined && <h2 data-lace-part="title">{title}</h2>}
   <ul data-lace-part="items" data-lace-layout={settings.layoutMode} data-lace-wrap={String(settings.layoutWrap)} data-lace-preset={settings.layoutPreset} role="list">
     {items.map((item, index) => item === undefined ? undefined : item.kind === "video" ? (
-      <li data-lace-part="item" data-lace-layout-item data-lace-kind="video">
+      <li data-lace-part="item" data-lace-layout-item data-lace-kind="video" data-lace-placement={item.placement}>
         <figure data-lace-video data-lace-aspect-ratio={item.aspectRatio} data-lace-playback={item.playback}>
           <div data-lace-video-area>
             {item.playback === "ambient" ? (
@@ -65,13 +71,13 @@ const sizes = settings.layoutMode === "grid" && settings.layoutPreset === "auto"
         </figure>
       </li>
     ) : (
-      <li data-lace-part="item" data-lace-layout-item data-lace-kind="image">
+      <li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement={item.placement} data-lace-size={item.size}>
         <figure>
           {item.link === undefined ? (
-            <LaceImage data-lace-part="media" image={item.media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}-${index}`} sizes={sizes} />
+            <LaceImage data-lace-part="media" image={item.media} lightbox={settings.lightbox} lightboxId={`lace-lightbox-${context.entryId}-${block.key}-${index}`} sizes={item.sizes} />
           ) : (
             <a aria-label={item.linkLabel} data-lace-part="link" href={item.link}>
-              <LaceImage data-lace-part="media" image={item.media} sizes={sizes} />
+              <LaceImage data-lace-part="media" image={item.media} sizes={item.sizes} />
             </a>
           )}
           {item.caption !== undefined && <figcaption data-lace-part="caption">{item.caption}</figcaption>}

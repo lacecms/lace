@@ -159,7 +159,9 @@ version and requests a build ([content-model-configuration]).
 
 `listLayoutSettings()` exports the scalar settings `layoutMode`, `layoutWrap`
 and `layoutPreset`, and `listLayoutSettingsVisibility()` shares their
-visibility rules with any block ([list-layout]). Inactive values are retained,
+visibility rules with any block ([list-layout]). `listLayoutItemFields()`
+exports the item field `placement`, which a list adopts in its item group for
+grid-only start, end and full placement. Inactive values are retained,
 submitted and validated unconditionally.
 
 ### Conditional fields

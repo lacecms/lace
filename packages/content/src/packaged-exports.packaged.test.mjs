@@ -81,6 +81,7 @@ test("packaged entry point keeps its public exports", async () => {
     "isRecord",
     "isSafeUrl",
     "isUrlFieldTarget",
+    "listLayoutItemFields",
     "listLayoutSettings",
     "listLayoutSettingsVisibility",
     "literalLikePattern",

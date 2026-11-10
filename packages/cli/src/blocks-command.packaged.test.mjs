@@ -193,7 +193,7 @@ describe("installation into an independent Astro site", () => {
     expect(Object.keys(lock.items)).toEqual(
       builtIns.filter((name) => name !== "videoEmbed" && name !== "link"),
     );
-    expect(lock.items.gallery.revision).toBe(7);
+    expect(lock.items.gallery.revision).toBe(8);
     expect(lock.items.navigation.revision).toBe(2);
     const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
     expect(map).toBe(
@@ -711,7 +711,7 @@ test("CSS companions install, restore and remain atomic on conflicts with .new r
   expect(await readFile(`${component}.new`, "utf8")).toContain("Revision 3");
 });
 
-test("Gallery v3 upgrades to v5 with its stylesheets and protects edited v3 source", async () => {
+test("Gallery v3 upgrades to v6 with its stylesheets and protects edited v3 source", async () => {
   const root = await tempRoot();
   const site = await astroSite(root);
   const previous = await newerRegistry(root, async (directory) => {
@@ -745,7 +745,7 @@ test("Gallery v3 upgrades to v5 with its stylesheets and protects edited v3 sour
   await writeFile(component, "<section>Version 3</section>\n");
   await run(root, ["gallery"]);
   const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-  expect(lock.items.gallery.revision).toBe(7);
+  expect(lock.items.gallery.revision).toBe(8);
   expect(Object.keys(lock.items.gallery.files)).toHaveLength(3);
   expect(await readFile(component, "utf8")).toContain('import "./GalleryVideo.css"');
   expect(await readFile(css, "utf8")).toContain("@layer lace-layout");
@@ -774,7 +774,7 @@ test("a clean revision 6 Gallery update adds the video stylesheet", async () => 
   expect(result).toMatchObject({ ok: true, exitCode: 0 });
   expect(result.data.items[0].status).toBe("updated");
   const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-  expect(lock.items.gallery.revision).toBe(7);
+  expect(lock.items.gallery.revision).toBe(8);
   expect(Object.keys(lock.items.gallery.files).sort()).toEqual([
     "src/components/lace/GalleryBlock.astro",
     "src/components/lace/GalleryVideo.css",

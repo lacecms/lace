@@ -172,11 +172,15 @@ Two built-in blocks hold repeatable content in group and list fields; editors
 fill them with the generic Add, Remove, Duplicate and reorder controls and must
 add at least one item before publishing:
 
-- `gallery` (version 5) has an optional `title` and up to 50 `images`. Each
-  item has a `kind`: an `image` item has `media`, an optional `alt`, `caption`
-  and `link`; a `video` item has a YouTube or Vimeo `videoUrl`, a `videoTitle`,
-  `playback` (`player` or `ambient`), `aspectRatio` and an optional `caption`.
-  Editors add images with **Add** and videos with **Add Video**.
+- `gallery` (version 6) has an optional `title` and up to 50 `images`. Each
+  item has a `kind` and a grid `placement` (`auto`, `full`, `start` or `end`):
+  an `image` item has `media`, an optional `alt`, `caption` and `link`, and a
+  `size` (`fill`, or `natural` to keep the image's own width, never wider than
+  its cell); a `video` item has a YouTube or Vimeo `videoUrl`, a `videoTitle`,
+  `playback` (`ambient`, the default, or `player`), `aspectRatio` and an
+  optional `caption`. Editors add images with **Add** and videos with
+  **Add Video**. Each item part carries `data-lace-placement`, and each image
+  item part `data-lace-size`.
   `GalleryBlock.astro` renders a `<section class="gallery">` with a list of
   figures. Each image uses `image(item.media, item.alt)`, so its alt text falls
   back to the media item's alt text and then to `""`; the caption falls back to
@@ -186,11 +190,15 @@ add at least one item before publishing:
   and no-JavaScript behavior as the Video embed block. Published items include
   only the fields of their kind, so a customized copy checks `item.kind` and
   that `item.media` is present before describing an image.
-- Upgrading from template 0.44.0: raise the version of every model that allows
-  `gallery` and run `pnpm content:sync`. Before the next build, update the
+- Upgrading from rc2 (template 0.47.0): raise the version of every model that
+  allows `gallery` and run `pnpm content:sync`. Migration 6 rewrites the
+  removed `featured-first` preset to `columns-2` with a `full` first item and
+  writes `playback: "player"` to video items that relied on the old default,
+  so stored galleries render as before. Before the next build, update the
   component with `pnpm exec lace add block gallery --site site` or merge the
-  `.new` proposals; a revision 6 component fails with `block_version_mismatch`
-  after sync.
+  `.new` proposals (a revision 7 component fails with `block_version_mismatch`
+  after sync), and adopt the natural-size theme rules below; until then your
+  theme crops natural images.
 - `navigation` has an optional `name` (the `aria-label` of its `<nav>`; name
   every navigation when a page has several) and up to 20 `links`, each with a
   `label`, an optional `url` and up to 20 `children` (one submenu level). A
@@ -573,7 +581,8 @@ The gallery exposes the parts `title`, `items`, `item`, `media` and `caption`,
 and for video items `player` and `source` inside `[data-lace-video]`;
 the navigation exposes `list`, `item`, `link`, `label`, `submenu`, `toggle` and
 `children`. Neither component ships styles. This CSS lays galleries out as an
-adaptive grid that crops images around their focal point, and navigation as a
+adaptive grid that crops `fill` images around their focal point and keeps
+`natural` images at their own width, and navigation as a
 vertical list on narrow screens and a row with dropdown submenus from `48rem`:
 
 ```css
@@ -588,12 +597,23 @@ vertical list on narrow screens and a row with dropdown submenus from `48rem`:
 :where([data-lace-block="gallery"]) figure {
   margin: 0;
 }
-:where([data-lace-block="gallery"]) [data-lace-part="media"] {
+:where([data-lace-block="gallery"]) [data-lace-size="fill"] [data-lace-part="media"] {
   aspect-ratio: 4 / 3;
   display: block;
   height: auto;
   object-fit: cover;
   width: 100%;
+}
+:where([data-lace-block="gallery"]) [data-lace-size="natural"] [data-lace-part="media"] {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: auto;
+}
+:where([data-lace-block="gallery"])
+  [data-lace-placement="end"][data-lace-size="natural"]
+  [data-lace-part="media"] {
+  margin-inline-start: auto;
 }
 :where([data-lace-block="navigation"]) ul {
   list-style: none;
@@ -761,15 +781,23 @@ in the same item. CSS/component conflicts preserve the entire active item; inspe
 Custom lists spread `listLayoutSettings()` from `@lacecms/content` into scalar
 settings, set `settingsVisibility: listLayoutSettingsVisibility()` on the block
 (using the companion export from `@lacecms/content`), and reuse the installed CSS
-by relative import. Mark their outer element
+by relative import. To let editors place items, spread `listLayoutItemFields()`
+into the list's item group; it adds `placement` (`auto`, `full`, `start`, `end`).
+Mark their outer element
 `data-lace-layout-container`, list `data-lace-layout`, `data-lace-wrap` and
-`data-lace-preset` from validated settings, and direct items `data-lace-layout-item`.
+`data-lace-preset` from validated settings, and direct items `data-lace-layout-item`
+and, with the item field, `data-lace-placement` (`item.placement ?? "auto"`). In grid
+mode `start` takes the first column, `end` the last column and `full` the whole row
+for every preset; flex lists keep the value without effect.
 Do not claim a second registry ownership of the shared file. The `lace-layout`
 layer has zero-specificity structural rules; site CSS controls decoration and
 image crop. Set `--lace-list-gap` (default 0) and `--lace-list-item-min` (14rem).
 Unlayered site rules override it; order theme layers after `lace-layout` otherwise.
 Vertical wrap needs an explicit site-defined height. Grid thresholds are container
-widths of 32/48/64rem; all seven preset names are in the content-modeling guide.
+widths of 32/48/64rem; all six preset names are in the content-modeling guide.
+The `featured-first` preset was removed in template 0.48.0: a custom block that
+stored it declares a migration that sets `layoutPreset` to `columns-2` and its
+first item's `placement` to `full`, as Gallery's migration 6 does.
 Schematics explain composition, not site appearance. Default grid/auto preserves
 Gallery sizes; other modes use conservative `100vw`, tunable in your component.
 

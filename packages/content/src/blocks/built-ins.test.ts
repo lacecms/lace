@@ -49,7 +49,13 @@ test("image blocks and gallery items take an optional safe link", () => {
       media: "m",
     });
   const item = { link: "https://example.com/", media: "m" };
-  const defaults = { aspectRatio: "16:9", kind: "image", playback: "player" };
+  const defaults = {
+    aspectRatio: "16:9",
+    kind: "image",
+    placement: "auto",
+    playback: "ambient",
+    size: "fill",
+  };
   expect(validateBlockData(gallery, { images: [item, { media: "n" }] }, "publish")).toEqual({
     images: [
       { ...defaults, ...item },
@@ -85,8 +91,10 @@ test("image and gallery items declare media first without changing identity", as
     "videoTitle",
     "caption",
     "link",
+    "size",
     "playback",
     "aspectRatio",
+    "placement",
   ]);
   const sorted = (fields) =>
     Object.fromEntries(Object.entries(fields).sort(([a], [b]) => a.localeCompare(b)));
@@ -129,7 +137,7 @@ test("image and gallery items declare media first without changing identity", as
     expect(canonicalizeJson(reordered)).toBe(canonicalizeJson(original));
     expect(await sha256CanonicalJson(reordered)).toBe(await sha256CanonicalJson(original));
   }
-  expect([image.version, gallery.version]).toEqual([4, 5]);
+  expect([image.version, gallery.version]).toEqual([4, 6]);
 });
 
 test("the lightbox setting of image and gallery is a validated boolean", () => {
@@ -145,14 +153,20 @@ test("the lightbox setting of image and gallery is a validated boolean", () => {
 
 test("gallery collects image items that become publishable with one image", () => {
   const { gallery } = builtInBlocks;
-  expect(gallery.version).toBe(5);
+  expect(gallery.version).toBe(6);
   expect(validateBlockSettings(gallery, {})).toEqual({
     lightbox: false,
     layoutMode: "grid",
     layoutWrap: true,
     layoutPreset: "auto",
   });
-  const defaults = { aspectRatio: "16:9", kind: "image", playback: "player" };
+  const defaults = {
+    aspectRatio: "16:9",
+    kind: "image",
+    placement: "auto",
+    playback: "ambient",
+    size: "fill",
+  };
   expect(validateBlockData(gallery, {}, "draft")).toEqual({ images: [] });
   expect(issueFrom(() => validateBlockData(gallery, {}, "publish"))).toMatchObject({
     code: "list_too_short",
@@ -194,6 +208,7 @@ test("gallery items hold an image or a video through conditional fields", () => 
     media: { field: "kind", values: ["image"] },
     alt: { field: "kind", values: ["image"] },
     link: { field: "kind", values: ["image"] },
+    size: { field: "kind", values: ["image"] },
     videoUrl: { field: "kind", values: ["video"] },
     videoTitle: { field: "kind", values: ["video"] },
     playback: { field: "kind", values: ["video"] },
@@ -201,7 +216,22 @@ test("gallery items hold an image or a video through conditional fields", () => 
   });
   const metadata = toBlockMetadata(gallery).fields.images.item.fields;
   const embed = toBlockMetadata(videoEmbed);
-  expect(metadata.playback).toEqual(embed.settings.playback);
+  expect(metadata.playback).toEqual({ ...embed.settings.playback, defaultValue: "ambient" });
+  expect(embed.settings.playback.defaultValue).toBe("player");
+  expect(validateBlockSettings(videoEmbed, {}).playback).toBe("player");
+  expect(metadata.placement).toMatchObject({
+    defaultValue: "auto",
+    label: "Placement",
+    options: ["auto", "full", "start", "end"],
+  });
+  expect(metadata.size).toMatchObject({
+    defaultValue: "fill",
+    label: "Size",
+    options: ["fill", "natural"],
+    presentation: { control: "cards" },
+    required: true,
+  });
+  expect(metadata.size.description).toMatch(/natural image keeps its own width/i);
   expect(metadata.aspectRatio).toEqual(embed.settings.aspectRatio);
   expect(metadata.kind).toMatchObject({
     defaultValue: "image",
@@ -222,12 +252,14 @@ test("gallery items hold an image or a video through conditional fields", () => 
     caption: "Spring 2026",
   };
   const parsed = validateBlockData(gallery, { images: [video] }, "publish");
-  expect(parsed).toEqual({ images: [video] });
-  expect(publishedBlockData(gallery, parsed)).toEqual({ images: [video] });
+  const parsedVideo = { ...video, placement: "auto" };
+  expect(parsed).toEqual({ images: [{ ...parsedVideo, size: "fill" }] });
+  expect(publishedBlockData(gallery, parsed)).toEqual({ images: [parsedVideo] });
   const minimal = { kind: "video", videoUrl: video.videoUrl, videoTitle: "Tour" };
   expect(validateBlockData(gallery, { images: [minimal] }, "publish").images[0]).toMatchObject({
     aspectRatio: "16:9",
-    playback: "player",
+    placement: "auto",
+    playback: "ambient",
   });
 
   const draft = { images: [{ kind: "video" }] };
@@ -256,11 +288,41 @@ test("gallery items hold an image or a video through conditional fields", () => 
   const stale = { ...video, media: "m", alt: "Old", link: "/work" };
   const staleParsed = validateBlockData(gallery, { images: [stale] }, "publish");
   expect(staleParsed.images[0]).toMatchObject({ media: "m", alt: "Old", link: "/work" });
-  expect(publishedBlockData(gallery, staleParsed)).toEqual({ images: [video] });
+  expect(publishedBlockData(gallery, staleParsed)).toEqual({ images: [parsedVideo] });
   const image = { kind: "image", media: "m", videoUrl: video.videoUrl, caption: "Kept" };
   expect(
     publishedBlockData(gallery, validateBlockData(gallery, { images: [image] }, "publish")),
-  ).toEqual({ images: [{ kind: "image", media: "m", caption: "Kept" }] });
+  ).toEqual({
+    images: [{ kind: "image", media: "m", caption: "Kept", placement: "auto", size: "fill" }],
+  });
+});
+
+test("gallery items carry a placement and image items a size", () => {
+  const { gallery } = builtInBlocks;
+  const image = { kind: "image", media: "m", placement: "end", size: "natural" };
+  const video = {
+    kind: "video",
+    placement: "full",
+    videoTitle: "Tour",
+    videoUrl: "https://vimeo.com/1",
+  };
+  const parsed = validateBlockData(gallery, { images: [image, video] }, "publish");
+  expect(publishedBlockData(gallery, parsed)).toEqual({
+    images: [image, { ...video, aspectRatio: "16:9", playback: "ambient" }],
+  });
+  expect(
+    issueFrom(() =>
+      validateBlockData(
+        gallery,
+        { images: [{ media: "m" }, { media: "n", size: "cover" }] },
+        "draft",
+      ),
+    ).path,
+  ).toEqual(["images", 1, "size"]);
+  expect(
+    issueFrom(() => validateBlockData(gallery, { images: [{ placement: "center" }] }, "draft"))
+      .path,
+  ).toEqual(["images", 0, "placement"]);
 });
 
 test("a gallery item without a kind is an image", () => {
@@ -270,13 +332,15 @@ test("a gallery item without a kind is an image", () => {
   };
   const parsed = validateBlockData(gallery, stored, "publish");
   expect(publishedBlockData(gallery, parsed)).toEqual({
-    images: [{ kind: "image", ...stored.images[0] }],
+    images: [{ kind: "image", ...stored.images[0], placement: "auto", size: "fill" }],
   });
 });
 
-test("built-in blocks declare no migrations; older stored versions have no migration step", () => {
+test("only gallery declares a migration; older stored versions have no migration step", () => {
   for (const definition of Object.values(builtInBlocks))
-    expect(definition, definition.type).not.toHaveProperty("migrations");
+    if (definition.type !== "gallery")
+      expect(definition, definition.type).not.toHaveProperty("migrations");
+  expect(Object.keys(builtInBlocks.gallery.migrations)).toEqual(["6"]);
   for (const [definition, from] of [
     [builtInBlocks.gallery, 4],
     [builtInBlocks.image, 3],

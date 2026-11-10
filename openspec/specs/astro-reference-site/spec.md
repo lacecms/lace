@@ -379,13 +379,20 @@ image link's focus ring.
   public media URL without `srcset`
 
 The maintained site SHALL load Gallery's installed neutral structural stylesheet
-and keep its 1rem gallery spacing and 4:3 image crop in site-owned theme CSS.
+and keep its 1rem gallery spacing and its 4:3 crop of `fill` gallery images in
+site-owned theme CSS. Its theme SHALL render `natural` gallery images at their
+intrinsic width without cropping, never wider than their cell, with height
+following their own proportions, and SHALL align a `natural` image of an `end`
+item to the end of its cell. No gallery item SHALL cause horizontal page
+overflow at any viewport width. The committed fixture SHALL hold its galleries
+at block version 6, including one item with `placement` `end`, one with
+`placement` `full` and one `natural` image.
 Competing unlayered rules that force every Gallery into the old grid SHALL be
 removed. The default `grid`/`auto` layout SHALL retain the reference appearance,
 while all other modes and presets SHALL remain selectable and CSS-overridable.
 
 #### Scenario: Layout adoption preserves the default theme
-- **WHEN** the updated fixture with Gallery version 4 and default layout settings
+- **WHEN** the updated fixture with Gallery version 6 and default layout settings
   is rendered
 - **THEN** it retains the existing gallery image proportions, spacing, caption
   and link/lightbox behavior while exposing the shared layout hooks
@@ -394,6 +401,13 @@ while all other modes and presets SHALL remain selectable and CSS-overridable.
 - **WHEN** a Gallery fixture chooses horizontal flex and then vertical flex
 - **THEN** its computed display and direction follow its settings, and the
   reference theme does not override them back to the former grid
+
+#### Scenario: Natural image in a narrow viewport
+- **WHEN** the reference fixture renders its `natural` gallery image at
+  viewport widths of 1280 and 320 pixels
+- **THEN** at 1280 it keeps its intrinsic width and proportions without the
+  4:3 crop, at 320 it shrinks to its cell keeping its proportions, and the
+  page has no horizontal overflow at either width
 
 ### Requirement: Maintained sites exercise stable links and the standalone Link block
 The reference and generated starter SHALL register/install version 1 `link`

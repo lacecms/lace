@@ -1340,7 +1340,7 @@ async function starterJourney(project) {
   }
   imageExport.entries[0].blocks.push({
     type: "gallery",
-    schemaVersion: 5,
+    schemaVersion: 6,
     key: "image-delivery-gallery",
     position: 20000,
     data: {

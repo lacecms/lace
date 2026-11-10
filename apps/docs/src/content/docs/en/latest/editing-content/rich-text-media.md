@@ -25,9 +25,12 @@ Each gallery item has a **Type**: Image or Video. **Add** opens the media librar
 so you can add several images at once; **Add Video** adds one video item. An
 image item uses its image, alt text and optional link. A video item takes a
 YouTube or Vimeo **Video URL**, a **Video title** read by assistive technology,
-**Playback** (Player, or Ambient for a muted loop without controls) and an
-**Aspect ratio**. Both kinds take a caption; only image captions fall back to the
-media item's caption. Switching an item's Type keeps what you typed for the
+**Playback** (Ambient, the default, for a muted loop without controls, or Player)
+and an **Aspect ratio**. Both kinds take a caption; only image captions fall back
+to the media item's caption. An image item's **Size** is Fill (the site's usual
+crop) or Natural (the image's own width, never wider than its cell). Every item
+has a **Placement** for grid galleries: Auto, Full row, First column or Last
+column. Switching an item's Type keeps what you typed for the
 other kind, but only the fields of the selected Type are published. The
 lightbox and links apply to images only, and collapsed video rows show the
 title and the provider.

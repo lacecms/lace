@@ -542,7 +542,13 @@ test("Add Video appends one open video item next to the media Add", async () => 
   expect(screen.getByTestId("value")).toHaveTextContent(
     JSON.stringify([
       { kind: "image", media: "a" },
-      { kind: "video", playback: "player", aspectRatio: "16:9" },
+      {
+        kind: "video",
+        size: "fill",
+        playback: "ambient",
+        aspectRatio: "16:9",
+        placement: "auto",
+      },
     ]),
   );
   expect(screen.getByTestId("dirty")).toHaveTextContent("true");

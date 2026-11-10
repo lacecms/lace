@@ -230,7 +230,7 @@ export async function apiJourney(f) {
       {
         key: "gallery-one",
         type: "gallery",
-        schemaVersion: 5,
+        schemaVersion: 6,
         position: 1000,
         data: {
           title: "Published gallery",
