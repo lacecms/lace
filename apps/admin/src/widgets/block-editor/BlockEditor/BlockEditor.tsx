@@ -13,7 +13,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { PlusIcon } from "lucide-react";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFieldArray, type Control, type UseFormGetValues } from "react-hook-form";
 import { ulid } from "ulid";
@@ -26,6 +26,20 @@ import { AddBlockMenu } from "../AddBlockMenu/index.js";
 import { BlockCard, type BlockTab } from "../BlockCard/index.js";
 import { RemovedBlockNotice } from "../RemovedBlockNotice.js";
 import { blockLabel, defaultSettings, type BlockDefinitionDto } from "../block-presentation.js";
+
+/**
+ * Overlays opened from a block (menus, popovers, the media dialog) render
+ * outside the block list but still belong to the active block.
+ */
+const OVERLAY_SELECTOR = [
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  "[data-radix-popper-content-wrapper]",
+  '[data-slot="dialog-overlay"]',
+  '[data-slot="sheet-overlay"]',
+].join(", ");
 
 interface RemovedBlock {
   readonly block: ContentBlockDto;
@@ -114,6 +128,23 @@ export function BlockEditor({
     card.scrollIntoView({ block: "nearest" });
     setFocusKey(undefined);
   }, [fields, focusKey]);
+
+  // The highlight follows the writer: interacting outside the list clears it.
+  useEffect(() => {
+    if (activeKey === undefined) return;
+    const clear = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (list.current?.contains(target) || target.closest(OVERLAY_SELECTOR) !== null) return;
+      setActiveKey(undefined);
+    };
+    document.addEventListener("pointerdown", clear, true);
+    document.addEventListener("focusin", clear);
+    return () => {
+      document.removeEventListener("pointerdown", clear, true);
+      document.removeEventListener("focusin", clear);
+    };
+  }, [activeKey]);
 
   const reveal = (key: string) => {
     setActiveKey(key);
@@ -307,11 +338,34 @@ export function BlockEditor({
   });
   if (removed !== undefined && removed.index >= fields.length) items.push(notice);
 
+  // Blocks with an error stay open, so only the others decide the bulk action.
+  const expandable = fields.filter((block, index) => {
+    const error = errors?.[index];
+    if (error !== undefined && Object.keys(error).length > 0) return false;
+    return definitions.some((definition) => definition.type === block.type);
+  });
+  const collapseAll = expandable.some((block) => !collapsed.has(block.key));
   return (
     <section aria-labelledby="blocks-title" className="mt-6 grid gap-3">
-      <h2 className="m-0 text-lg font-semibold outline-hidden" id="blocks-title" tabIndex={-1}>
-        Blocks
-      </h2>
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <h2 className="m-0 text-lg font-semibold outline-hidden" id="blocks-title" tabIndex={-1}>
+          Blocks
+        </h2>
+        {fields.length < 2 ? undefined : (
+          <Button
+            aria-label={collapseAll ? "Collapse all blocks" : "Expand all blocks"}
+            onClick={() =>
+              setCollapsed(collapseAll ? new Set(fields.map((block) => block.key)) : new Set())
+            }
+            size="icon-sm"
+            title={collapseAll ? "Collapse all blocks" : "Expand all blocks"}
+            type="button"
+            variant="ghost"
+          >
+            {collapseAll ? <ChevronsDownUpIcon aria-hidden /> : <ChevronsUpDownIcon aria-hidden />}
+          </Button>
+        )}
+      </div>
       <p className="sr-only" role="status">
         {announcement}
       </p>

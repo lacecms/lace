@@ -150,7 +150,7 @@ test("CE9B viewers navigate layouts and disclosures without mutation controls", 
   await user.click(await screen.findByRole("tab", { name: "Details tab" }));
   await user.click(screen.getByRole("tab", { name: "Address tab" }));
   expect(screen.getByRole("textbox", { name: "Address" })).toBeDisabled();
-  expect(screen.queryByRole("button", { name: "Create Absent" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Create absent" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Collapse Details" }));
   await user.click(screen.getByRole("button", { name: "Expand Details" }));

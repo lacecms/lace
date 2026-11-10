@@ -16,6 +16,14 @@
   archived and synchronized. The roadmap moved to
   [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
+- **Per-model navigation icons (from the admin UI review, 2026-11-10):** every
+  global uses the same globe icon in the admin navigation, so Navigation and
+  Site settings look alike; pages and collections share one icon per kind.
+  Candidate: an optional model `icon` from a fixed admin icon set, carried in
+  the model metadata contract, with the current kind icons as the default.
+  Settle in the spec: the allowed names, validation in configuration and the
+  admin fallback for an unknown name.
+
 - **Route-less collections (from the tatianae.com rc2 mapping, 2026-11-10;
   selected 2026-11-10 as the fourth owner-inserted change after RF6):** a collection always needs a `route`
   with one `:slug` segment, and every entry needs a slug before publication.

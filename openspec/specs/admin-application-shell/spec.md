@@ -68,8 +68,8 @@ safe content landing route.
   navigation affordance
 
 ### Requirement: Role-gated shell navigation is enforced at the route boundary
-The admin shell SHALL group its navigation into Pages, Collections, Site,
-Library, and Admin, in that order. Pages, Collections and Site SHALL list the
+The admin shell SHALL group its navigation into Pages, Collections, Globals,
+Library, and Admin, in that order. Pages, Collections and Globals SHALL list the
 configured page, collection and global models from the authenticated
 content-model response, and a group without models SHALL be omitted. Library
 SHALL present Media and Builds navigation to every authenticated session
@@ -86,12 +86,12 @@ and SHALL not change the API's authorization authority.
 #### Scenario: An editor views the shell
 - **WHEN** a session with the `editor` role opens the content landing route
   of a configuration with pages, collections and globals
-- **THEN** it receives the Pages, Collections, Site, and Library navigation
+- **THEN** it receives the Pages, Collections, Globals, and Library navigation
   groups and no Admin group, Users, or Settings navigation affordance
 
 #### Scenario: A configuration has no globals
 - **WHEN** the content-model response contains only page and collection models
-- **THEN** the shell shows no Site group
+- **THEN** the shell shows no Globals group
 
 #### Scenario: A viewer opens an administrator route directly
 - **WHEN** a session with the `viewer` role opens `/users`
@@ -183,7 +183,7 @@ without changing the current route or unsaved editor state.
 - **THEN** the admin follows the browser color-scheme preference
 
 ### Requirement: Shell navigation reflects configured content
-Each page model in the Pages group and each global model in the Site group
+Each page model in the Pages group and each global model in the Globals group
 SHALL link directly to its singleton entry editor when the singleton exists,
 and SHALL otherwise link to the content overview section of its kind, where
 synchronization guidance is shown. Each collection model in the Collections
@@ -207,13 +207,13 @@ refresh the affected counts and singleton links.
 #### Scenario: A global opens its singleton editor
 - **WHEN** the `settings` global model labelled "Site settings" has a
   synchronized singleton entry
-- **THEN** the Site group lists "Site settings", linking to that entry's
+- **THEN** the Globals group lists "Site settings", linking to that entry's
   editor route without a count
 
 #### Scenario: A global is not synchronized yet
 - **WHEN** the entry list of the `settings` global is empty
-- **THEN** its Site navigation item links to the Site section of the content
-  overview
+- **THEN** its Globals navigation item links to the Globals section (`#globals`)
+  of the content overview
 
 #### Scenario: The current location is marked
 - **WHEN** a user is on `/content/posts/entry-1`

@@ -248,7 +248,7 @@ test.each([
       "Required for publication only. 4 characters Site name used in search and social titles.",
     );
     expect(screen.getByRole("textbox", { name: "Tagline" })).toHaveAccessibleDescription(
-      "0 characters Default description for search and social previews.",
+      "Default description for search and social previews.",
     );
     expect(screen.queryByRole("region", { name: "SEO" })).not.toBeInTheDocument();
   },

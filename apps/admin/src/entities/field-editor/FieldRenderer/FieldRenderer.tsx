@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useId, useState } from "react";
 import { Controller, type Control } from "react-hook-form";
 import { textLength } from "@lacecms/content";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { inSentence } from "../create-label.js";
 import { cn } from "../../../shared/lib/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import type { DraftEditorValues, DraftFieldPath } from "../../../shared/editor-contract/index.js";
@@ -96,7 +97,7 @@ function ValueNode(props: NodeProps) {
                 size="sm"
                 variant="outline"
               >
-                Create {label}
+                Create {inSentence(label)}
               </Button>
             ) : null}
             {createProblem ? <small>{createProblem}</small> : null}
@@ -197,7 +198,13 @@ function ValueNode(props: NodeProps) {
   const quietClass = readOnly || message ? undefined : "sr-only";
   const effectivePlaceholder =
     placeholder ?? ("placeholder" in definition ? definition.placeholder : undefined);
-  const counted = services.fieldTypeSupport[definition.type].characterCount;
+  const characters = textLength(typeof value === "string" && !clearedItem ? value : "");
+  // A declared bound makes zero meaningful; an unbounded empty field needs no count.
+  const bounded =
+    ("minLength" in definition && definition.minLength !== undefined) ||
+    ("maxLength" in definition && definition.maxLength !== undefined);
+  const counted =
+    services.fieldTypeSupport[definition.type].characterCount && (bounded || characters > 0);
   const marker = definition.required ? (
     <span
       aria-hidden="true"
@@ -243,7 +250,7 @@ function ValueNode(props: NodeProps) {
               className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums"
               id={`${id}-count`}
             >
-              {textLength(typeof value === "string" && !clearedItem ? value : "")} characters
+              {characters} characters
             </span>
           ) : null}
         </div>

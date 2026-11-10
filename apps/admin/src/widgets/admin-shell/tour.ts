@@ -8,7 +8,8 @@ const groupGuidance = {
     "Each collection holds multiple entries. Choose a collection in navigation to browse its list, search, and filter by status.",
   pages:
     "Each configured page has one entry. Choose a page in navigation to open it; pages waiting for synchronization lead to the Content overview.",
-  site: "Each global holds site-wide content, such as the site name, in one entry with no URL of its own. Choose it in navigation to open it; once published, it appears on every page that shows it after the next site build.",
+  globals:
+    "Each global holds site-wide content, such as the site name, in one entry with no URL of its own. Choose it in navigation to open it; once published, it appears on every page that shows it after the next site build.",
 } as const;
 
 export interface TourStep {
@@ -47,7 +48,7 @@ export function tourSteps(
     },
   ];
   for (const group of groups) {
-    if (group.key === "pages" || group.key === "collections" || group.key === "site") {
+    if (group.key === "pages" || group.key === "collections" || group.key === "globals") {
       steps.push({
         id: group.key,
         title: group.label,

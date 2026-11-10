@@ -21,7 +21,7 @@ The content landing route SHALL show a distinct empty state when the authenticat
 
 #### Scenario: Global has no synchronized singleton
 - **WHEN** the model API contains a global but its entry list is empty
-- **THEN** its Site card explains that local synchronization may be pending and shows `pnpm content:sync`
+- **THEN** its Globals card explains that local synchronization may be pending and shows `pnpm content:sync`
 
 #### Scenario: Model API fails
 - **WHEN** loading models fails
@@ -364,8 +364,8 @@ recovery. Other retryable read failures SHALL retain the existing retry behavior
 - **THEN** the URL carries `sort=title` and then no `sort`, as before this change
 
 ### Requirement: Content landing summarizes site globals
-The content landing route SHALL present configured globals in a Site group
-after Pages and Collections, with an anchor that navigation can target, and
+The content landing route SHALL present configured globals in a Globals group
+after Pages and Collections, with a `globals` anchor that navigation can target, and
 SHALL omit the group when no global is configured. Each global SHALL show its
 label, its description when configured, the singleton's derived status
 (draft, published, or changed), its relative last-edit time and the last
@@ -377,7 +377,7 @@ place without hiding other models.
 #### Scenario: A published global with later edits
 - **WHEN** the `settings` global labelled "Site settings" has status
   `changed` and was updated an hour ago by "Ada Editor"
-- **THEN** its Site card shows a Changed status, "1 hour ago" and "Ada
+- **THEN** its Globals card shows a Changed status, "1 hour ago" and "Ada
   Editor", links to the singleton editor, and shows no public path
 
 #### Scenario: One global summary fails

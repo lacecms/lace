@@ -108,9 +108,7 @@ test("a placeholder is shown in text controls and is part of the description", (
   );
   const input = screen.getByRole("textbox", { name: "Hero Image" });
   expect(input).toHaveAttribute("placeholder", "Uses media alt: Red bicycle");
-  expect(input).toHaveAccessibleDescription(
-    "Shown on cards. 0 characters Uses media alt: Red bicycle",
-  );
+  expect(input).toHaveAccessibleDescription("Shown on cards. Uses media alt: Red bicycle");
 });
 
 test("textarea controls apply the placeholder too", () => {
@@ -126,7 +124,7 @@ test("a notice describes the control for writers and is hidden when view only", 
     <Harness definition={{ required: false, type: "text" }} notice={<p>No alt text.</p>} />,
   );
   expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
-    "0 characters No alt text.",
+    "No alt text.",
   );
   unmount();
   render(
@@ -141,9 +139,7 @@ test("a notice describes the control for writers and is hidden when view only", 
     />,
   );
   expect(screen.queryByText("No alt text.")).toBeNull();
-  expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
-    "0 characters",
-  );
+  expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription("");
 });
 
 test("an annotation is shown to every user and describes the control", () => {
@@ -160,7 +156,7 @@ test("an annotation is shown to every user and describes the control", () => {
   );
   expect(screen.getByText("Site name used in search and social titles.")).toBeVisible();
   expect(screen.getByRole("textbox", { name: "Hero Image" })).toHaveAccessibleDescription(
-    "Shown in the header. 0 characters Site name used in search and social titles.",
+    "Shown in the header. Site name used in search and social titles.",
   );
 });
 
@@ -177,11 +173,15 @@ test("CE9A inherited prompts override configured generic text and empty prompts 
   expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", "");
 });
 
-test("the count sits in the label row and the required note is a tooltip until a problem", () => {
+test("the count sits in the label row and the required note is a tooltip until a problem", async () => {
+  const user = userEvent.setup();
   const view = render(<Harness definition={{ required: true, type: "text" }} />);
   const input = screen.getByRole("textbox", { name: "Hero Image" });
-  expect(input).toHaveAccessibleDescription("Required for publication only. 0 characters");
-  const count = screen.getByText("0 characters");
+  expect(input).toHaveAccessibleDescription("Required for publication only.");
+  expect(screen.queryByText(/characters/u)).toBeNull();
+  await user.type(input, "Hi");
+  expect(input).toHaveAccessibleDescription("Required for publication only. 2 characters");
+  const count = screen.getByText("2 characters");
   expect(count).not.toHaveClass("sr-only");
   expect(count.parentElement).toContainElement(screen.getByText("Hero Image"));
   expect(screen.getByText("Required for publication only.")).toHaveClass("sr-only");

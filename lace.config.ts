@@ -107,15 +107,12 @@ export default await defineConfig({
       label: "Site settings",
       description: "Site name, tagline and the search and social defaults of every page.",
       fields: {
-        helpUrl: field.url({ label: "Help page" }),
         siteName: field.text({ label: "Site name", required: true }),
         tagline: field.text({ label: "Tagline" }),
-        titleTemplate: field.text({
-          label: "Title template",
-          description: "Page titles use it; %s stands for the page title.",
-        }),
+        titleTemplate: field.text({ label: "Title template" }),
         description: field.textarea({ label: "Site description" }),
         image: field.media({ label: "Share image" }),
+        helpUrl: field.url({ label: "Help page" }),
       },
       seoDefaults: {
         siteName: "siteName",

@@ -159,7 +159,7 @@ test("an admin edits, publishes, and reverts a global with the keyboard alone", 
   await page.goto("/admin/content");
   await expect(page.getByRole("heading", { name: "Content", exact: true })).toBeVisible();
   const sidebar = page.getByRole("complementary", { name: "Admin navigation" });
-  const site = sidebar.getByRole("list", { name: "Site" });
+  const site = sidebar.getByRole("list", { name: "Globals" });
   const link = site.getByRole("link", { name: "Site settings" });
   await expect(link).toHaveAttribute("href", "/admin/content/settings/settings-1");
   await tabTo(page, link);
@@ -233,7 +233,7 @@ test("an admin edits, publishes, and reverts a global with the keyboard alone", 
 test("a global's model route and overview card carry no list or path", async ({ page }) => {
   await mockApi(page);
   await page.goto("/admin/content");
-  const section = page.getByRole("region", { name: "Site" });
+  const section = page.getByRole("region", { name: "Globals" });
   await expect(section.getByRole("link", { name: "Site settings" })).toBeVisible();
   await expect(section).toContainText("Name and tagline shown on every page.");
   await page.goto("/admin/content/settings");

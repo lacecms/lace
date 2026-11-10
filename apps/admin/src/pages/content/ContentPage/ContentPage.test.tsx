@@ -182,7 +182,7 @@ test("the Site section summarizes globals without a path and guides a missing sy
       }),
     }),
   );
-  const site = within(await screen.findByRole("region", { name: "Site" }));
+  const site = within(await screen.findByRole("region", { name: "Globals" }));
   expect(await site.findByRole("link", { name: "Site settings" })).toHaveAttribute(
     "href",
     "/admin/content/settings/settings-1",
