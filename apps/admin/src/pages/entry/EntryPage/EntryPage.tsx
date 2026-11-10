@@ -437,7 +437,7 @@ export function EntryPage() {
         >
           <form
             aria-labelledby="entry-title"
-            className="mx-auto grid w-full max-w-[80rem] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
+            className="grid max-w-[80rem] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
             id={formId}
             noValidate
             onSubmit={(event) => {
