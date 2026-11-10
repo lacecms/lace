@@ -1,17 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  ChevronDownIcon,
-  CircleAlertIcon,
-  CopyIcon,
-  EyeIcon,
-  EyeOffIcon,
-  GripVerticalIcon,
-  MoreHorizontalIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { ChevronDownIcon, CircleAlertIcon, EyeOffIcon, GripVerticalIcon } from "lucide-react";
 import { type ComponentProps, useEffect, useId, useRef } from "react";
 import { flushSync } from "react-dom";
 import { useController, useWatch, type Control } from "react-hook-form";
@@ -33,19 +22,13 @@ import { cn, REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";
 import { Badge } from "../../../shared/ui/Badge/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../../shared/ui/DropdownMenu/index.js";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../shared/ui/Tabs/index.js";
-import {
   blockIcon,
   blockLabel,
   blockSummary,
   type BlockDefinitionDto,
 } from "../block-presentation.js";
+import type { BlockActions } from "../block-actions.js";
+import { BlockCardMenu } from "../BlockCardMenu/index.js";
 import {
   BlockSettingsPanel,
   BlockSettingsSummary,
@@ -53,7 +36,8 @@ import {
 } from "../BlockSettingsPanel/index.js";
 
 /** Which tab of an expanded block card is selected. */
-export type BlockTab = "content" | "settings";
+export type { BlockTab } from "../BlockCardTabs/index.js";
+import { BlockCardTabs, type BlockTab } from "../BlockCardTabs/index.js";
 
 type ErrorEntry = { readonly message?: string; readonly type?: string } | undefined;
 
@@ -108,15 +92,6 @@ function applicableBlockErrors(
   return Object.keys(next).length === 0 ? undefined : next;
 }
 
-function TabProblemMarker({ shown }: { readonly shown: boolean }) {
-  return shown ? (
-    <>
-      <CircleAlertIcon aria-hidden className="size-3.5 text-destructive" />
-      <span className="sr-only"> (has problems)</span>
-    </>
-  ) : undefined;
-}
-
 /**
  * One block as a sortable card: a header that stays recognizable when
  * collapsed, and the block's fields. Fields stay mounted while collapsed so
@@ -124,6 +99,7 @@ function TabProblemMarker({ shown }: { readonly shown: boolean }) {
  */
 export function BlockCard({
   active,
+  actions,
   busy = false,
   duplicateProblem,
   blockKey,
@@ -145,6 +121,7 @@ export function BlockCard({
   total,
 }: {
   readonly active: boolean;
+  readonly actions?: BlockActions;
   readonly busy?: boolean;
   readonly duplicateProblem?: string | undefined;
   readonly blockKey: string;
@@ -155,24 +132,32 @@ export function BlockCard({
   readonly index: number;
   /** The entry's absolute site URL, when the site URL and the entry path are known. */
   readonly linkBase?: string | undefined;
-  readonly onActivate: () => void;
+  readonly onActivate?: () => void;
   /** Receives a polite status message, such as a block being hidden from the menu. */
   readonly onAnnounce?: (message: string) => void;
-  readonly onDuplicate: () => void;
-  readonly onMove: (target: number) => void;
-  readonly onRemove: () => void;
+  readonly onDuplicate?: () => void;
+  readonly onMove?: (target: number) => void;
+  readonly onRemove?: () => void;
   readonly onTabChange?: (tab: BlockTab) => void;
-  readonly onToggleCollapsed: () => void;
+  readonly onToggleCollapsed?: () => void;
   /** Viewers see the content and a read-only Settings section without tabs. */
   readonly readOnly?: boolean;
   readonly tab?: BlockTab;
   readonly total: number;
 }) {
+  const activate = () => (actions ? actions.activate(blockKey) : onActivate?.());
+  const duplicate = () => (actions ? actions.duplicate(blockKey) : onDuplicate?.());
+  const move = (target: number) =>
+    actions ? actions.move(blockKey, target - index) : onMove?.(target);
+  const remove = () => (actions ? actions.remove(blockKey) : onRemove?.());
+  const announce = (message: string) =>
+    actions ? actions.announce(message) : onAnnounce?.(message);
+  const selectTab = (next: BlockTab) =>
+    actions ? actions.selectTab(blockKey, next) : onTabChange?.(next);
+  const toggleCollapsed = () =>
+    actions ? actions.toggleCollapsed(blockKey) : onToggleCollapsed?.();
   const id = useId();
   const sortable = useSortable({ id: blockKey, disabled: readOnly || busy });
-  // Duplicate and Remove move focus elsewhere. They run once the menu has
-  // closed, so its focus trap and focus return cannot take focus back.
-  const afterClose = useRef<() => void>(undefined);
   const article = useRef<HTMLElement | null>(null);
   const data = useWatch({ control, name: `blocks.${index}.data` });
   const error = applicableBlockErrors(storedError, definition, data);
@@ -195,8 +180,8 @@ export function BlockCard({
     error?.className !== undefined ||
     hasMessages(error, "settings", settings);
   // The summary asks for a control in the unselected tab; show it before focus moves.
-  const tabChange = useRef(onTabChange);
-  tabChange.current = onTabChange;
+  const tabChange = useRef(selectTab);
+  tabChange.current = selectTab;
   useEffect(() => {
     const element = article.current;
     if (element === null) return;
@@ -268,8 +253,8 @@ export function BlockCard({
       data-invalid={hasError ? "true" : undefined}
       data-active={active ? "true" : undefined}
       data-block-key={blockKey}
-      onFocusCapture={onActivate}
-      onPointerDownCapture={onActivate}
+      onFocusCapture={activate}
+      onPointerDownCapture={activate}
       ref={(element) => {
         article.current = element;
         sortable.setNodeRef(element);
@@ -326,7 +311,7 @@ export function BlockCard({
             aria-controls={`${id}-fields`}
             aria-expanded={!collapsed}
             aria-label={`${collapsed ? "Expand" : "Collapse"} ${label} block`}
-            onClick={onToggleCollapsed}
+            onClick={toggleCollapsed}
             size="icon-sm"
             variant="ghost"
           >
@@ -340,76 +325,20 @@ export function BlockCard({
           </Button>
         )}
         {!readOnly ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                disabled={busy}
-                aria-label={`Actions for ${label} block`}
-                size="icon-sm"
-                variant="ghost"
-              >
-                <MoreHorizontalIcon aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={(event) => {
-                const action = afterClose.current;
-                if (action === undefined) return;
-                afterClose.current = undefined;
-                event.preventDefault();
-                action();
-              }}
-            >
-              <DropdownMenuItem disabled={busy || index === 0} onSelect={() => onMove(index - 1)}>
-                <ArrowUpIcon aria-hidden />
-                Move up
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={busy || index === total - 1}
-                onSelect={() => onMove(index + 1)}
-              >
-                <ArrowDownIcon aria-hidden />
-                Move down
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={busy || !!duplicateProblem}
-                title={duplicateProblem}
-                onSelect={() => {
-                  afterClose.current = onDuplicate;
-                }}
-              >
-                <CopyIcon aria-hidden />
-                Duplicate
-              </DropdownMenuItem>
-              {readOnly ? undefined : (
-                <DropdownMenuItem
-                  disabled={busy}
-                  onSelect={() => {
-                    if (busy || readOnly) return;
-                    hiddenField.onChange(!hiddenOnSite);
-                    onAnnounce?.(
-                      `${label} block ${index + 1} ${hiddenOnSite ? "shown on" : "hidden from"} the site.`,
-                    );
-                  }}
-                >
-                  {hiddenOnSite ? <EyeIcon aria-hidden /> : <EyeOffIcon aria-hidden />}
-                  {hiddenOnSite ? "Show block" : "Hide block"}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={busy}
-                onSelect={() => {
-                  afterClose.current = onRemove;
-                }}
-                variant="destructive"
-              >
-                <Trash2Icon aria-hidden />
-                Remove
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <BlockCardMenu
+            busy={busy}
+            duplicateProblem={duplicateProblem}
+            hiddenOnSite={hiddenOnSite}
+            index={index}
+            label={label}
+            onAnnounce={announce}
+            onDuplicate={duplicate}
+            onHiddenChange={hiddenField.onChange}
+            onMove={move}
+            onRemove={remove}
+            readOnly={readOnly}
+            total={total}
+          />
         ) : null}
       </header>
       {problems.length === 0 ? undefined : (
@@ -435,42 +364,15 @@ export function BlockCard({
             />
           </>
         ) : (
-          <Tabs onValueChange={(next) => onTabChange?.(next as BlockTab)} value={tab}>
-            <TabsList aria-label={`${label} block sections`}>
-              <TabsTrigger value="content">
-                Content
-                <TabProblemMarker shown={contentProblems} />
-              </TabsTrigger>
-              <TabsTrigger value="settings">
-                Settings
-                <TabProblemMarker shown={settingsProblems} />
-              </TabsTrigger>
-            </TabsList>
-            {/* Both panels stay mounted so rich-text and media controls keep their state.
-                They hold focusable controls, so the panels themselves are not tab stops. */}
-            <TabsContent
-              className="grid gap-3 outline-hidden"
-              data-block-tab="content"
-              forceMount
-              hidden={tab !== "content"}
-              tabIndex={-1}
-              value="content"
-            >
-              {contentFields}
-              {Object.keys(definition.fields).length === 0 ? (
-                <p className="m-0 text-sm text-muted-foreground">
-                  This block has no content fields.
-                </p>
-              ) : undefined}
-            </TabsContent>
-            <TabsContent
-              className="outline-hidden"
-              data-block-tab="settings"
-              forceMount
-              hidden={tab !== "settings"}
-              tabIndex={-1}
-              value="settings"
-            >
+          <BlockCardTabs
+            contentFields={contentFields}
+            contentProblems={contentProblems}
+            empty={Object.keys(definition.fields).length === 0}
+            label={label}
+            onTabChange={selectTab}
+            settingsProblems={settingsProblems}
+            tab={tab}
+            settingsFields={
               <fieldset className="min-w-0 border-0 p-0" disabled={busy}>
                 <BlockSettingsPanel
                   control={control}
@@ -481,8 +383,8 @@ export function BlockCard({
                   settingsError={(key) => controlError(error, "settings", key, hiddenOnSite)}
                 />
               </fieldset>
-            </TabsContent>
-          </Tabs>
+            }
+          />
         )}
       </div>
     </article>

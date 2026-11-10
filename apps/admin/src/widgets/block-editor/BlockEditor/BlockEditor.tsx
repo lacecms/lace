@@ -21,6 +21,7 @@ import { BLOCK_MESSAGES, type DraftEditorValues } from "../../../entities/conten
 import { useCompositeEditing } from "../../../entities/field-editor/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
+import type { BlockActions } from "../block-actions.js";
 import { AddBlockMenu } from "../AddBlockMenu/index.js";
 import { BlockCard, type BlockTab } from "../BlockCard/index.js";
 import { RemovedBlockNotice } from "../RemovedBlockNotice.js";
@@ -181,6 +182,49 @@ export function BlockEditor({
     addButton.current?.focus();
   };
 
+  // The object is stable while its delegates always resolve the current render's state.
+  const currentActions = useRef<BlockActions>(undefined);
+  currentActions.current = {
+    activate: setActiveKey,
+    announce: setAnnouncement,
+    duplicate: (key) => {
+      const index = fields.findIndex((block) => block.key === key);
+      if (index >= 0) duplicate(index);
+    },
+    move: (key, offset) => {
+      const index = fields.findIndex((block) => block.key === key);
+      if (index >= 0) moveBlock(index, index + offset);
+    },
+    remove: (key) => {
+      const index = fields.findIndex((block) => block.key === key);
+      const block = fields[index];
+      if (block === undefined) return;
+      const definition = definitions.find((item) => item.type === block.type) ?? {
+        fields: {},
+        type: block.type,
+        version: block.schemaVersion,
+      };
+      removeBlock(index, definition);
+    },
+    selectTab: (key, tab) => setTabs((current) => new Map(current).set(key, tab)),
+    toggleCollapsed: (key) =>
+      setCollapsed((current) => {
+        const next = new Set(current);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      }),
+  };
+  const [actions] = useState<BlockActions>(() => ({
+    activate: (key) => currentActions.current?.activate(key),
+    announce: (message) => currentActions.current?.announce(message),
+    duplicate: (key) => currentActions.current?.duplicate(key),
+    move: (key, offset) => currentActions.current?.move(key, offset),
+    remove: (key) => currentActions.current?.remove(key),
+    selectTab: (key, tab) => currentActions.current?.selectTab(key, tab),
+    toggleCollapsed: (key) => currentActions.current?.toggleCollapsed(key),
+  }));
+
   const notice =
     removed === undefined ? undefined : (
       <RemovedBlockNotice
@@ -240,6 +284,7 @@ export function BlockEditor({
       (allowed === undefined ? { type: { message: BLOCK_MESSAGES.typeNotAllowed } } : undefined);
     items.push(
       <BlockCard
+        actions={actions}
         active={activeKey === block.key}
         blockKey={block.key}
         collapsed={collapsed.has(block.key)}
@@ -249,25 +294,11 @@ export function BlockEditor({
         index={index}
         key={block.formId}
         linkBase={linkBase}
-        onActivate={() => setActiveKey(block.key)}
-        onAnnounce={setAnnouncement}
         duplicateProblem={growthProblem("blocks", [
           ...getValues("blocks"),
           getValues(`blocks.${index}`),
         ])}
         busy={busy}
-        onDuplicate={() => duplicate(index)}
-        onMove={(target) => moveBlock(index, target)}
-        onRemove={() => removeBlock(index, definition)}
-        onTabChange={(tab) => setTabs((current) => new Map(current).set(block.key, tab))}
-        onToggleCollapsed={() =>
-          setCollapsed((current) => {
-            const next = new Set(current);
-            if (next.has(block.key)) next.delete(block.key);
-            else next.add(block.key);
-            return next;
-          })
-        }
         readOnly={readOnly}
         tab={tabs.get(block.key) ?? "content"}
         total={fields.length}

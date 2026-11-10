@@ -129,7 +129,7 @@ What the roadmap changes, with the numbers to beat:
 | Size | `packages/db/src/sql-content.ts` | 2,229 lines → RF4E: domain modules; largest db module 862 lines |
 | Size | `packages/config/src/index.ts` | 1,229 lines → RF4E: entry and domain modules |
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
-| Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) → RF6A: moved to `entities/field-editor`, 1,502 lines; the existing baseline follows the file without growing |
+| Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) → RF6A: moved to `entities/field-editor`, 1,502 lines → RF6C: 1,478 → RF6D: 416; split files remain below 1,000 lines and the baseline entry is removed |
 | Type safety | admin source `as never` occurrences (including app test support) | RF6C: 40 → 22, all remaining in `app/testing`; counted with `rg -o` over non-test source |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test → RF6B: 132-line facade; largest domain module 198 lines, OpenAPI drift guard |
 | Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table → RF3E: admin grouped and counted subsets and filter controls derive from it |
@@ -167,7 +167,7 @@ What the roadmap changes, with the numbers to beat:
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
-| RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | in progress |
+| RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | done |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
 | RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | in progress |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
@@ -1387,3 +1387,6 @@ is empty.
 
 | 2026-11-10 | RF6C | `rf06c-draft-editor-state` | Implemented: form and transient issue state moved to the field-editor hook, mutation and conflict coordination to the entry slice, and the provider accepts one editor object. Validated server error locations retain their existing synthetic block paths. `as never` occurrences 40 → 22 (remaining in test support); FieldRenderer 1,502 → 1,478 lines. The unchanged pointer drag passes at 1280×720 after the shared fixture positions the last expanded list. Full admin unit suite: 1,028 tests; build, typecheck, lint and strict OpenSpec validation pass. The three unchanged acceptance suites passed (32 tests), and the full admin browser suite passed (168 tests). Not archived. |
 | 2026-11-10 | RF6C | `rf06c-draft-editor-state` | Archived at [`2026-11-10-rf06c-draft-editor-state`](../openspec/changes/archive/2026-11-10-rf06c-draft-editor-state/); 13/13 tasks complete. No delta specs. RF6D next. |
+
+| 2026-11-10 | RF6D | `rf06d-list-field-block-card` | Implemented: list, disclosure, shared editor context and block card menu/tabs extracted; renderer 1,478 → 416 lines, ListField 839, and oversized-source baseline cleared. Block actions use stable identity and current state. Full admin unit suite: 1,036 tests; unchanged editor, entry-actions and composites browser suites: 32 tests. Root build, package export comparison, typecheck, lint, format check and strict OpenSpec validation passed. Not archived. |
+| 2026-11-10 | RF6D | `rf06d-list-field-block-card` | Archived at [`2026-11-10-rf06d-list-field-block-card`](../openspec/changes/archive/2026-11-10-rf06d-list-field-block-card/); 11/11 tasks complete. No delta specs. RF6 complete. |
