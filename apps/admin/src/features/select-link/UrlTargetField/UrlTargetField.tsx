@@ -1,4 +1,9 @@
-import { collectFieldInternalLinks, decodeEntryLink, encodeEntryLink } from "@lacecms/content";
+import {
+  collectFieldInternalLinks,
+  decodeEntryLink,
+  encodeEntryLink,
+  type JsonObject,
+} from "@lacecms/content";
 import type { ContentModelDto, LinkTargetStatusesDto } from "@lacecms/contracts";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
@@ -28,16 +33,13 @@ export function LinkAuthoringProvider({
   readonly children: ReactNode;
 }) {
   const client = useAdminClient();
-  const watched = useWatch<Record<string, unknown>>({ control: form.control as never });
-  const values = watched as unknown as Partial<DraftEditorValues>;
+  useWatch({ control: form.control, name: ["fields", "blocks"] });
+  const values = form.getValues();
   const definitions = new Map(model.blockDefinitions?.map((block) => [block.type, block.fields]));
   const references = [
-    ...collectFieldInternalLinks(model.fields, (values.fields ?? {}) as never),
+    ...collectFieldInternalLinks(model.fields, values.fields as JsonObject),
     ...(values.blocks ?? []).flatMap((block) =>
-      collectFieldInternalLinks(
-        definitions.get(block.type ?? "") ?? {},
-        (block.data ?? {}) as never,
-      ),
+      collectFieldInternalLinks(definitions.get(block.type ?? "") ?? {}, block.data),
     ),
   ];
   const ids = [...new Set(references.map((item) => item.targetId))].sort();

@@ -319,9 +319,8 @@ function PickerHarness({
     <FieldRendererProvider
       services={fieldEditorServices}
       busy={busy}
-      form={form}
+      editor={{ form, model }}
       mediaListPicker={FakeMediaListPicker}
-      model={model}
       readOnly={readOnly}
       renderers={{}}
     >

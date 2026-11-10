@@ -98,7 +98,7 @@ function Harness({
     <FieldRendererProvider
       services={fieldEditorServices}
       busy={busy}
-      form={form}
+      editor={{ form }}
       readOnly={readOnly}
       renderers={{}}
     >

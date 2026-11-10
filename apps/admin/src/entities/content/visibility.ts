@@ -43,15 +43,15 @@ function hasMessage(error: unknown): boolean {
 function withoutPublication(error: unknown): unknown {
   if (!record(error) && !Array.isArray(error)) return error;
   const node = error as Record<string, unknown>;
-  const result: Record<string, unknown> = Array.isArray(error) ? ([] as never) : {};
+  const result: Record<string, unknown> | unknown[] = Array.isArray(error) ? [] : {};
   const own = node.type === PUBLICATION;
   for (const [key, child] of Object.entries(node)) {
     if (errorKeys.has(key)) {
-      if (!own) result[key] = child;
+      if (!own) Reflect.set(result, key, child);
       continue;
     }
     const next = withoutPublication(child);
-    if (next !== undefined) result[key] = next;
+    if (next !== undefined) Reflect.set(result, key, next);
   }
   return hasMessage(result) ? result : undefined;
 }
@@ -67,12 +67,12 @@ export function applicableValueErrors(
     return applicableErrors(definition.fields, definition.visibility, value, error);
   if (definition.type === "list" && Array.isArray(value)) {
     const node = error as Record<string, unknown>;
-    const result: Record<string, unknown> = Array.isArray(error) ? ([] as never) : {};
+    const result: Record<string, unknown> | unknown[] = Array.isArray(error) ? [] : {};
     for (const [key, child] of Object.entries(node)) {
       const next = /^(0|[1-9]\d*)$/u.test(key)
         ? applicableValueErrors(definition.item, value[Number(key)], child)
         : child;
-      if (next !== undefined) result[key] = next;
+      if (next !== undefined) Reflect.set(result, key, next);
     }
     return hasMessage(result) ? result : undefined;
   }
@@ -96,14 +96,14 @@ export function applicableErrors(
   const shown = shownFieldKeys(fields, visibility, values);
   const present = record(values) ? values : {};
   const node = errors as Record<string, unknown>;
-  const result: Record<string, unknown> = Array.isArray(errors) ? ([] as never) : {};
+  const result: Record<string, unknown> | unknown[] = Array.isArray(errors) ? [] : {};
   for (const [key, child] of Object.entries(node)) {
     const next = !Object.hasOwn(fields, key)
       ? child
       : shown.has(key)
         ? applicableValueErrors(fields[key]!, present[key], child)
         : withoutPublication(child);
-    if (next !== undefined) result[key] = next;
+    if (next !== undefined) Reflect.set(result, key, next);
   }
   return result;
 }

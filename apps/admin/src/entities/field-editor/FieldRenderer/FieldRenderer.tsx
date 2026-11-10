@@ -54,6 +54,7 @@ import { cn, REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import type {
   DraftEditorValues,
+  DraftFieldPath,
   FieldEditorServices,
 } from "../../../shared/editor-contract/index.js";
 import { FieldLayout } from "../FieldLayout/index.js";
@@ -65,6 +66,7 @@ import type {
   MediaListPickerProps,
 } from "../field-types.js";
 import { builtInRenderers } from "../FieldControls/index.js";
+import { useTransientIssue } from "../transient-issues.js";
 
 type Form = UseFormReturn<DraftEditorValues, unknown, DraftEditorValues>;
 interface ContextValue {
@@ -76,8 +78,6 @@ interface ContextValue {
   /** Adds several items to eligible media lists at once; without it they use the ordinary Add. */
   readonly mediaListPicker?: ComponentType<MediaListPickerProps> | undefined;
   readonly epoch?: number;
-  readonly onTransientChange?: (() => void) | undefined;
-  readonly transient?: Map<string, { name: string; message: string }> | undefined;
   readonly form?: Form | undefined;
   readonly model?: ContentModelDto | undefined;
 }
@@ -95,16 +95,22 @@ export function FieldRendererProvider({
   renderers,
   previews,
   mediaListPicker,
-  form,
-  model,
-  transient,
-  epoch = 0,
-  onTransientChange,
-}: Omit<ContextValue, "readOnly" | "busy"> & {
+  editor,
+}: Omit<ContextValue, "readOnly" | "busy" | "form" | "model" | "epoch"> & {
+  readonly editor?:
+    | {
+        readonly form: Form;
+        readonly model?: ContentModelDto | undefined;
+        readonly editorEpoch?: number;
+      }
+    | undefined;
   readonly readOnly?: boolean;
   readonly busy?: boolean;
   readonly children: ReactNode;
 }) {
+  const form = editor?.form;
+  const model = editor?.model;
+  const epoch = editor?.editorEpoch ?? 0;
   const value = useMemo(
     () => ({
       services,
@@ -115,23 +121,9 @@ export function FieldRendererProvider({
       mediaListPicker,
       form,
       model,
-      transient,
       epoch,
-      onTransientChange,
     }),
-    [
-      services,
-      readOnly,
-      busy,
-      renderers,
-      previews,
-      mediaListPicker,
-      form,
-      model,
-      transient,
-      epoch,
-      onTransientChange,
-    ],
+    [services, readOnly, busy, renderers, previews, mediaListPicker, form, model, epoch],
   );
   return form ? (
     <BoundContext value={value} form={form}>
@@ -150,7 +142,8 @@ function BoundContext({
   readonly form: Form;
   readonly children: ReactNode;
 }) {
-  const values = useWatch<Record<string, unknown>>({ control: form.control as never });
+  useWatch({ control: form.control, name: ["fields", "blocks"] });
+  const values = form.getValues();
   // Notify every list about entry-wide budget changes in other fields/blocks.
   const context = useMemo(() => ({ ...value, snapshot: values }), [value, values]);
   return <Context.Provider value={context}>{children}</Context.Provider>;
@@ -173,17 +166,15 @@ export function EntryListBudget({
   control,
   model,
 }: {
-  readonly control: Control<DraftEditorValues>;
+  readonly control: Control<DraftEditorValues, unknown, DraftEditorValues>;
   readonly model: ContentModelDto;
 }) {
   const { snapshotBudget } = useEditorContext().services;
-  const values = useWatch<Record<string, unknown>>({
-    control: control as never,
-  }) as unknown as DraftEditorValues;
+  const [fields, blocks] = useWatch({ control, name: ["fields", "blocks"] });
   const budget = snapshotBudget(model, {
-    ...values,
-    blocks: values.blocks ?? [],
-    fields: values.fields ?? {},
+    title: "",
+    blocks: blocks ?? [],
+    fields: fields ?? {},
   });
   return (
     <p className="text-xs text-muted-foreground" role="status">
@@ -341,8 +332,7 @@ function ValueNode(props: NodeProps) {
     notice,
     placeholder,
   } = props;
-  const { readOnly, busy, renderers, growthProblem, transient, epoch, form, onTransientChange } =
-    useCompositeEditing();
+  const { readOnly, busy, renderers, growthProblem, epoch, form } = useCompositeEditing();
   const services = useEditorContext().services;
   const id = services.fieldControlId(name as `fields.${string}`);
   const label = item ? fieldKey : services.fieldLabel(fieldKey, definition.label);
@@ -351,16 +341,7 @@ function ValueNode(props: NodeProps) {
     setClearedItem(false);
   }, [epoch]);
   const identity = useId();
-  useLayoutEffect(() => {
-    if (clearedItem)
-      transient?.set(identity, { name, message: "Enter a value or remove this item." });
-    else transient?.delete(identity);
-    onTransientChange?.();
-    return () => {
-      transient?.delete(identity);
-      onTransientChange?.();
-    };
-  }, [clearedItem, identity, name, transient, onTransientChange]);
+  useTransientIssue(form, identity, name, clearedItem);
   const error = clearedItem ? "Enter a value or remove this item." : errorMessage(errors);
   const blockIndex = /^blocks\.(\d+)\./u.exec(name)?.[1];
   const hidden =
@@ -606,15 +587,10 @@ function ValueNode(props: NodeProps) {
               return;
             }
             setClearedItem(true);
-            onErrors?.({
-              ...errors,
-              message: "Enter a value or remove this item.",
-              type: "validate",
-            });
             return;
           }
           setClearedItem(false);
-          onErrors?.(undefined);
+          if (!clearedItem) onErrors?.(undefined);
           onChange(next);
         }}
         placeholder={effectivePlaceholder}
@@ -1414,7 +1390,7 @@ export function FieldRenderer({
   ...props
 }: {
   readonly control: Control<DraftEditorValues, unknown, DraftEditorValues>;
-  readonly name: `blocks.${number}.${"data" | "settings"}.${string}` | `fields.${string}`;
+  readonly name: DraftFieldPath;
   readonly error: string | undefined;
   readonly definition: FieldDefinition;
   readonly fieldKey: string;
@@ -1428,12 +1404,12 @@ export function FieldRenderer({
   } = useEditorContext();
   const applyErrors = (next: unknown) => {
     if (!form) return;
-    form.clearErrors(name as never);
-    const visit = (value: unknown, path: string) => {
+    form.clearErrors(name);
+    const visit = (value: unknown, path: typeof name) => {
       if (value === null || typeof value !== "object") return;
       const entries = value as Record<string, unknown>;
       if (typeof entries.message === "string")
-        form.setError(path as never, {
+        form.setError(path, {
           message: entries.message,
           type: typeof entries.type === "string" ? entries.type : "server",
         });
@@ -1475,7 +1451,7 @@ export function FieldRenderer({
   return (
     <Controller
       control={control}
-      name={name as never}
+      name={name}
       render={({ field, fieldState }) => (
         <ValueNode
           {...props}
@@ -1489,7 +1465,7 @@ export function FieldRenderer({
           onChange={(next) => {
             field.onChange(next === undefined ? null : next);
             if (form && hasProblems(fieldState.error)) {
-              const retained = retainedErrors(form.getFieldState(name as never).error);
+              const retained = retainedErrors(form.getFieldState(name).error);
               applyErrors(mergeErrors(recursiveFieldErrors(props.definition, next), retained));
             }
           }}

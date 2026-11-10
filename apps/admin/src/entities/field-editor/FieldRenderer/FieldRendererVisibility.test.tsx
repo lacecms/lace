@@ -57,7 +57,7 @@ function Harness({
   return (
     <FieldRendererProvider
       services={fieldEditorServices}
-      form={form}
+      editor={{ form }}
       readOnly={readOnly}
       renderers={{}}
     >

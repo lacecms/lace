@@ -14,3 +14,5 @@ export {
 } from "./FieldRenderer/index.js";
 export { FieldLayout, layoutHasProblems } from "./FieldLayout/index.js";
 export { builtInRenderers } from "./FieldControls/index.js";
+
+export { useDraftEditor } from "./use-draft-editor.js";

@@ -55,7 +55,7 @@ function Harness({
     }),
   );
   return (
-    <FieldRendererProvider services={fieldEditorServices} form={form} renderers={{}}>
+    <FieldRendererProvider services={fieldEditorServices} editor={{ form }} renderers={{}}>
       <DndContext>
         <SortableContext items={[key]}>
           <BlockCard {...props} blockKey={key} control={form.control} definition={promo} />

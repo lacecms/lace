@@ -3,6 +3,20 @@ import type { ComponentType, ReactNode } from "react";
 
 export type FieldDefinition = ContentModelDto["fields"][string];
 
+/** Paths for dynamic editor controls, including arbitrarily nested composites. */
+export type DraftFieldPath =
+  | `fields.${string}`
+  | `blocks.${number}.${"data" | "settings"}.${string}`;
+
+/** Validated server error locations include synthetic block summary nodes. */
+export type DraftIssuePath =
+  | DraftFieldPath
+  | "blocks.root"
+  | "slug"
+  | "title"
+  | `blocks.${number}.${"anchor" | "block" | "className" | "key" | "schemaVersion" | "type"}`
+  | `seo.${keyof SeoFormValues}`;
+
 /** The SEO group as the editor form holds it: text inputs need strings. */
 export interface SeoFormValues {
   canonical: string;
@@ -13,6 +27,8 @@ export interface SeoFormValues {
 }
 
 export interface DraftEditorValues {
+  /** Form-only identity-to-path bookkeeping for temporarily cleared list items. */
+  __transient?: Record<string, DraftFieldPath>;
   blocks: ContentBlockDto[];
   fields: Record<string, unknown>;
   /** Present for entries of models with SEO enabled. */

@@ -12,7 +12,7 @@ import {
   normalizeBlockClassName,
   validateFieldValue,
 } from "@lacecms/content";
-import type { BlockMetadata, FieldMetadata, JsonObject } from "@lacecms/content";
+import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
 import type { ContentBlockDto, ContentModelDto, ContractValidationIssue } from "@lacecms/contracts";
 import type { FieldErrors, Resolver } from "react-hook-form";
 import {
@@ -24,7 +24,7 @@ import {
 } from "./composite-values.js";
 import { SEO_MESSAGES, seoProblems, type SeoKey } from "./seo.js";
 
-import type { DraftEditorValues } from "../../shared/editor-contract/index.js";
+import type { DraftEditorValues, DraftIssuePath } from "../../shared/editor-contract/index.js";
 export type { DraftEditorValues } from "../../shared/editor-contract/index.js";
 
 export { LINK_URL_MESSAGE, URL_FIELD_MESSAGE } from "./field-types.js";
@@ -265,7 +265,8 @@ function fieldErrors(
   const budget = snapshotBudget(model, values);
   if (budget.problem) errors.fields = { ...fieldIssues, root: error(budget.problem) };
   if (
-    canonicalJsonByteLength(withoutCleared(values.fields, model.fields) as never) > MAX_JSON_BYTES
+    canonicalJsonByteLength(withoutCleared(values.fields, model.fields) as JsonValue) >
+    MAX_JSON_BYTES
   )
     errors.fields = {
       ...(errors.fields as object),
@@ -277,7 +278,7 @@ function fieldErrors(
         withoutCleared(
           block.data,
           model.blockDefinitions?.find((definition) => definition.type === block.type)?.fields,
-        ) as never,
+        ) as JsonValue,
       ) > MAX_JSON_BYTES
     ) {
       blockIssues[index] = {
@@ -348,8 +349,9 @@ export function withoutClearedValues(
   values: DraftEditorValues,
   model?: ContentModelDto,
 ): DraftEditorValues {
+  const { __transient: _transient, ...draft } = values;
   return {
-    ...values,
+    ...draft,
     blocks: values.blocks.map(({ anchor, className, ...block }) => {
       const trimmedClassName = className?.trim() ?? "";
       return {
@@ -377,22 +379,19 @@ export function validateDraftValues(
 /** Builds the local draft-mode resolver from validated, serializable model metadata. */
 export function createDraftResolver(
   model: ContentModelDto,
-  transient?: () => readonly { readonly name: string; readonly message: string }[],
 ): Resolver<DraftEditorValues, unknown, DraftEditorValues> {
   return async (values) => {
     const errors = fieldErrors(model, values);
-    for (const issue of transient?.() ?? []) {
-      const parts = issue.name.split(".");
+    for (const path of Object.values(values.__transient ?? {})) {
+      const parts = path.split(".");
       let target = errors as Record<string, unknown>;
       parts.slice(0, -1).forEach((part) => {
         if (!record(target[part])) target[part] = {};
         target = target[part] as Record<string, unknown>;
       });
-      target[parts.at(-1)!] = error(issue.message);
+      target[parts.at(-1)!] = { message: "Enter a value or remove this item.", type: "transient" };
     }
-    return Object.keys(errors).length === 0
-      ? { errors: {}, values }
-      : ({ errors, values: {} } as never);
+    return Object.keys(errors).length === 0 ? { errors: {}, values } : { errors, values: {} };
   };
 }
 
@@ -405,15 +404,7 @@ export function initialModelFieldValues(
 }
 
 /** A form location that a server validation issue can be shown at. */
-export type IssueLocation =
-  | "blocks.root"
-  | "slug"
-  | "title"
-  | `blocks.${number}.${"anchor" | "block" | "className" | "key" | "schemaVersion" | "type"}`
-  | `blocks.${number}.data.${string}`
-  | `blocks.${number}.settings.${string}`
-  | `fields.${string}`
-  | `seo.${SeoKey}`;
+export type IssueLocation = DraftIssuePath;
 
 function unescapePointer(segment: string): string {
   return segment.replaceAll("~1", "/").replaceAll("~0", "~");
