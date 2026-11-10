@@ -28,6 +28,7 @@ import {
   sessionRevocationResultSchema,
   sessionRevokeRequestSchema,
 } from "@lacecms/contracts";
+import { toJsonSchema } from "@valibot/to-json-schema";
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
@@ -196,59 +197,160 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       );
     },
   );
-  app.get("/api/v1/account/capabilities", async (context) => {
-    await actor(context);
-    return response(
-      accountCapabilitiesSchema,
-      {
-        mcpEnabled: capabilities.mcpEnabled === true && capabilities.oauthConnections !== undefined,
+  app.get(
+    "/api/v1/account/capabilities",
+    describeRoute({
+      summary: "Read account capabilities",
+      tags: ["account"],
+      responses: {
+        200: {
+          description: "Successful response",
+          content: { "application/json": { schema: resolver(accountCapabilitiesSchema) } },
+        },
+        401: {
+          description: "Session required",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+        403: {
+          description: "Insufficient permissions",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
       },
-      200,
-      noStore,
-    );
-  });
-  if (capabilities.mcpEnabled && capabilities.oauthConnections) {
-    const connections = capabilities.oauthConnections;
-    app.get("/api/v1/account/mcp-connections", async (context) => {
-      const resolvedActor = await actor(context);
-      const query = parse(oauthConnectionListQuerySchema, context.req.query());
-      const limit = query.limit === undefined ? 20 : Number(query.limit);
-      const items = await connections.list(resolvedActor, {
-        ...(query.after === undefined ? {} : { after: query.after }),
-        limit,
-      });
+    }),
+    async (context) => {
+      await actor(context);
       return response(
-        oauthConnectionListSchema,
+        accountCapabilitiesSchema,
         {
-          items: items.map((item) => ({
-            id: item.id,
-            clientName: item.clientName,
-            scopes: [...item.scopes],
-            createdAt: toIsoTimestamp(item.createdAt),
-            expiresAt: toIsoTimestamp(item.expiresAt),
-            revokedAt: item.revokedAt === null ? null : toIsoTimestamp(item.revokedAt),
-            ...(item.lastUsedAt === undefined
-              ? {}
-              : { lastUsedAt: toIsoTimestamp(item.lastUsedAt) }),
-          })),
-          nextCursor: items.length === limit ? items.at(-1)!.id : null,
+          mcpEnabled:
+            capabilities.mcpEnabled === true && capabilities.oauthConnections !== undefined,
         },
         200,
         noStore,
       );
-    });
-    app.post("/api/v1/account/mcp-connections/:connectionId/revoke", async (context) => {
-      const resolvedActor = await actor(context);
-      if (
-        context.req.header("origin") !==
-        new URL(capabilities.publicBaseUrl ?? context.req.url).origin
-      )
-        throw new AuthorizationError();
-      parse(oauthConnectionRevokeSchema, await optionalJsonBody(context.req.raw));
-      const connectionId = parse(identifierSchemaPublic, context.req.param("connectionId"));
-      if (!(await connections.revoke(resolvedActor, connectionId))) return notFound();
-      return new Response(null, { status: 204, headers: noStore });
-    });
+    },
+  );
+  if (capabilities.mcpEnabled && capabilities.oauthConnections) {
+    const connections = capabilities.oauthConnections;
+    app.get(
+      "/api/v1/account/mcp-connections",
+      describeRoute({
+        summary: "List the signed-in user's MCP connections",
+        tags: ["account"],
+        parameters: [
+          {
+            in: "query",
+            name: "after",
+            required: false,
+            schema: toJsonSchema(oauthConnectionListQuerySchema.entries.after) as never,
+          },
+          {
+            in: "query",
+            name: "limit",
+            required: false,
+            schema: toJsonSchema(oauthConnectionListQuerySchema.entries.limit, {
+              errorMode: "ignore",
+            }) as never,
+          },
+        ],
+        responses: {
+          200: {
+            description: "Connections without credentials",
+            content: { "application/json": { schema: resolver(oauthConnectionListSchema) } },
+          },
+          401: {
+            description: "Session required",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+          422: {
+            description: "Invalid query",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+        },
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const query = parse(oauthConnectionListQuerySchema, context.req.query());
+        const limit = query.limit === undefined ? 20 : Number(query.limit);
+        const items = await connections.list(resolvedActor, {
+          ...(query.after === undefined ? {} : { after: query.after }),
+          limit,
+        });
+        return response(
+          oauthConnectionListSchema,
+          {
+            items: items.map((item) => ({
+              id: item.id,
+              clientName: item.clientName,
+              scopes: [...item.scopes],
+              createdAt: toIsoTimestamp(item.createdAt),
+              expiresAt: toIsoTimestamp(item.expiresAt),
+              revokedAt: item.revokedAt === null ? null : toIsoTimestamp(item.revokedAt),
+              ...(item.lastUsedAt === undefined
+                ? {}
+                : { lastUsedAt: toIsoTimestamp(item.lastUsedAt) }),
+            })),
+            nextCursor: items.length === limit ? items.at(-1)!.id : null,
+          },
+          200,
+          noStore,
+        );
+      },
+    );
+    app.post(
+      "/api/v1/account/mcp-connections/:connectionId/revoke",
+      describeRoute({
+        summary: "Revoke an owned MCP connection",
+        tags: ["account"],
+        parameters: [
+          {
+            in: "path",
+            name: "connectionId",
+            required: true,
+            schema: toJsonSchema(identifierSchemaPublic) as never,
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: { "application/json": { schema: resolver(oauthConnectionRevokeSchema) } },
+        },
+        responses: {
+          204: { description: "Connection revoked" },
+          401: {
+            description: "Session required",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+          403: {
+            description: "Invalid origin",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+          404: {
+            description: "Connection not found",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+          422: {
+            description: "Invalid request",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+          429: {
+            description: "Rate limit exceeded",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+        },
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        if (
+          context.req.header("origin") !==
+          new URL(capabilities.publicBaseUrl ?? context.req.url).origin
+        )
+          throw new AuthorizationError();
+        parse(oauthConnectionRevokeSchema, await optionalJsonBody(context.req.raw));
+        const connectionId = parse(identifierSchemaPublic, context.req.param("connectionId"));
+        if (!(await connections.revoke(resolvedActor, connectionId))) return notFound();
+        return new Response(null, { status: 204, headers: noStore });
+      },
+    );
   }
 
   app.get(

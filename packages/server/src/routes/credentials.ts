@@ -6,6 +6,7 @@ import {
 } from "@lacecms/application";
 import type { TokenSecurityPort } from "@lacecms/application";
 import {
+  errorEnvelopeSchema,
   buildTokenCreateRequestSchema,
   buildTokenCreatedSchema,
   buildTokenListSchema,
@@ -42,12 +43,33 @@ function buildTokenDto(
 export function registerCredentialRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, settingsActor } = routeContext.actors;
   const { tokenSecurity } = routeContext.capabilities;
-  app.get("/api/v1/admin/api-tokens", async (context) => {
-    await settingsActor(context);
-    return response(buildTokenListSchema, {
-      items: (await tokenSecurity().listBuildTokens()).map(buildTokenDto),
-    });
-  });
+  app.get(
+    "/api/v1/admin/api-tokens",
+    describeRoute({
+      summary: "List build tokens",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Build token metadata",
+          content: { "application/json": { schema: resolver(buildTokenListSchema) } },
+        },
+        401: {
+          description: "Session required",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+        403: {
+          description: "Insufficient permissions",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+      },
+    }),
+    async (context) => {
+      await settingsActor(context);
+      return response(buildTokenListSchema, {
+        items: (await tokenSecurity().listBuildTokens()).map(buildTokenDto),
+      });
+    },
+  );
   app.post(
     "/api/v1/admin/api-tokens",
     validator("json", buildTokenCreateRequestSchema, validationHook),
@@ -65,14 +87,40 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       );
     },
   );
-  app.delete("/api/v1/admin/api-tokens/:tokenId", async (context) => {
-    await settingsActor(context);
-    const token = await tokenSecurity().revokeBuildToken({
-      now: Date.now() as never,
-      tokenId: context.req.param("tokenId"),
-    });
-    return token === null ? notFound() : response(buildTokenSchema, buildTokenDto(token));
-  });
+  app.delete(
+    "/api/v1/admin/api-tokens/:tokenId",
+    describeRoute({
+      summary: "Revoke a build token",
+      tags: ["admin"],
+      parameters: [{ name: "tokenId", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        200: {
+          description: "Revoked build token metadata",
+          content: { "application/json": { schema: resolver(buildTokenSchema) } },
+        },
+        401: {
+          description: "Session required",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+        403: {
+          description: "Insufficient permissions",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+        404: {
+          description: "Token not found",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+      },
+    }),
+    async (context) => {
+      await settingsActor(context);
+      const token = await tokenSecurity().revokeBuildToken({
+        now: Date.now() as never,
+        tokenId: context.req.param("tokenId"),
+      });
+      return token === null ? notFound() : response(buildTokenSchema, buildTokenDto(token));
+    },
+  );
   /** Import-token administration needs a browser session; Bearer requests never reach it. */
   app.get(
     "/api/v1/admin/import-tokens",

@@ -346,3 +346,25 @@ test("MCP publish calls require the publication scope before handler work and lo
   expect(calls).toBe(0);
   expect(JSON.stringify(f.logs)).not.toContain("private-publish-token");
 });
+
+test("enabled MCP connection routes describe their existing contracts in OpenAPI", async () => {
+  const unused = async () => {
+    throw new Error("OpenAPI must not call connection storage");
+  };
+  const connections = new OAuthConnectionUseCases({
+    clock: { now: () => unixMilliseconds(0) },
+    connections: { listConnections: unused, revokeConnection: unused, invalidateUser: unused },
+  });
+  const { app } = await fixture({ oauthConnections: connections });
+  const doc = (await json(app, "/api/v1/openapi.json")).body;
+  const list = doc.paths["/api/v1/account/mcp-connections"].get;
+  const revoke = doc.paths["/api/v1/account/mcp-connections/{connectionId}/revoke"].post;
+  expect(list.parameters.map(({ name }) => name).sort()).toEqual(["after", "limit"]);
+  expect(Object.keys(list.responses).sort()).toEqual(["200", "401", "422"]);
+  expect(revoke.parameters).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "connectionId", in: "path", required: true }),
+    ]),
+  );
+  expect(Object.keys(revoke.responses).sort()).toEqual(["204", "401", "403", "404", "422", "429"]);
+});

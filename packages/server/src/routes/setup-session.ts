@@ -1,6 +1,7 @@
 import { response, validationHook } from "../shared/http.js";
 import { sendTestEmail } from "@lacecms/application";
 import {
+  errorEnvelopeSchema,
   adminSettingsStatusSchema,
   adminSessionSchema,
   emailTestRequestSchema,
@@ -72,21 +73,42 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
     }),
     async (context) => sessionSummary(await actor(context)),
   );
-  app.get("/api/v1/admin/settings/status", async (context) => {
-    await settingsActor(context);
-    if (!capabilities.publicBaseUrl)
-      throw new InvariantError("Canonical public URL is unavailable.");
-    return response(adminSettingsStatusSchema, {
-      mcp: {
-        enabled: capabilities.mcpEnabled === true,
-        endpoint: new URL("/mcp", capabilities.publicBaseUrl).href,
+  app.get(
+    "/api/v1/admin/settings/status",
+    describeRoute({
+      summary: "Read settings status",
+      tags: ["admin"],
+      responses: {
+        200: {
+          description: "Successful response",
+          content: { "application/json": { schema: resolver(adminSettingsStatusSchema) } },
+        },
+        401: {
+          description: "Session required",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
+        403: {
+          description: "Insufficient permissions",
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+        },
       },
-      configuredModels: capabilities.config.content.length,
-      email: emailDeliveryStatus(email),
-      engineVersion: capabilities.environment.engineVersion,
-      ready: await capabilities.readiness.isReady(),
-    });
-  });
+    }),
+    async (context) => {
+      await settingsActor(context);
+      if (!capabilities.publicBaseUrl)
+        throw new InvariantError("Canonical public URL is unavailable.");
+      return response(adminSettingsStatusSchema, {
+        mcp: {
+          enabled: capabilities.mcpEnabled === true,
+          endpoint: new URL("/mcp", capabilities.publicBaseUrl).href,
+        },
+        configuredModels: capabilities.config.content.length,
+        email: emailDeliveryStatus(email),
+        engineVersion: capabilities.environment.engineVersion,
+        ready: await capabilities.readiness.isReady(),
+      });
+    },
+  );
   app.post(
     "/api/v1/admin/settings/email-test",
     describeRoute({
