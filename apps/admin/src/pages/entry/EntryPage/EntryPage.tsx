@@ -1,3 +1,6 @@
+import { RichTextEditor } from "../../../entities/rich-text/index.js";
+import { LINK_URL_MESSAGE, fieldEditorServices } from "../../../entities/content/index.js";
+import type { FieldRendererProps } from "../../../entities/field-editor/index.js";
 import { LinkAuthoringProvider, OrdinaryUrlField } from "../../../features/select-link/index.js";
 import type {
   AdminContentEntryDto,
@@ -15,10 +18,6 @@ import {
   createDraftResolver,
   draftValues,
   EmbedUrlPreview,
-  FieldRenderer,
-  FieldLayout,
-  EntryListBudget,
-  FieldRendererProvider,
   hiddenFieldNote,
   issueLocation,
   localDraftJson,
@@ -37,9 +36,15 @@ import {
   validationProblems,
   withoutClearedValues,
   type DraftEditorValues,
+} from "../../../entities/content/index.js";
+import {
+  FieldRenderer,
+  FieldLayout,
+  EntryListBudget,
+  FieldRendererProvider,
   type FieldPreviewRegistry,
   type FieldRendererRegistry,
-} from "../../../entities/content/index.js";
+} from "../../../entities/field-editor/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { useDuplicateEntry } from "../../../features/duplicate-entry/index.js";
 import { PublishEntryDialog } from "../../../features/publish-entry/index.js";
@@ -63,19 +68,50 @@ import {
   MediaListPicker,
   MediaPicker,
 } from "../../../widgets/media-library/index.js";
-import { DiscardChangesDialog } from "../DiscardChangesDialog/index.js";
-import { EntryActionsMenu } from "../EntryActionsMenu/index.js";
-import { EntryConflictAlert } from "../EntryConflictAlert/index.js";
-import { EntrySeoCard } from "../EntrySeoCard/index.js";
-import { EntryEditorActions, type SaveState } from "../EntryEditorActions/index.js";
-import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
+import { DiscardChangesDialog } from "../DiscardChangesDialog.js";
+import { EntryActionsMenu } from "../EntryActionsMenu.js";
+import { EntryConflictAlert } from "../EntryConflictAlert.js";
+import { EntrySeoCard } from "../EntrySeoCard.js";
+import { EntryEditorActions, type SaveState } from "../EntryEditorActions.js";
+import { EntryValidationSummary } from "../EntryValidationSummary.js";
 import {
   EntryPublicationDetails,
   type LatestBuildChange,
 } from "../EntryPublicationDetails/index.js";
 
+function RichTextField({
+  describedBy,
+  id,
+  invalid,
+  label,
+  onBlur,
+  onChange,
+  placeholder,
+  readOnly,
+  value,
+}: FieldRendererProps) {
+  return (
+    <RichTextEditor
+      linkUrlMessage={LINK_URL_MESSAGE}
+      {...(describedBy === undefined ? {} : { describedBy })}
+      placeholder={placeholder}
+      id={id}
+      invalid={invalid}
+      label={label}
+      onBlur={onBlur}
+      onChange={onChange}
+      readOnly={readOnly}
+      value={value}
+    />
+  );
+}
+
 const entryRoute = getRouteApi("/_protected/content/$modelKey/$entryId");
-const mediaRenderers: FieldRendererRegistry = { media: MediaPicker, url: OrdinaryUrlField };
+const mediaRenderers: FieldRendererRegistry = {
+  media: MediaPicker,
+  url: OrdinaryUrlField,
+  richText: RichTextField,
+};
 const fieldPreviews: FieldPreviewRegistry = { media: MediaItemPreview, url: EmbedUrlPreview };
 const formId = "entry-draft-form";
 
@@ -504,6 +540,7 @@ export function EntryPage() {
       </ShellHeaderActions>
       <LinkAuthoringProvider form={form} model={model}>
         <FieldRendererProvider
+          services={fieldEditorServices}
           epoch={editorEpoch}
           transient={transient.current}
           onTransientChange={onTransientChange}

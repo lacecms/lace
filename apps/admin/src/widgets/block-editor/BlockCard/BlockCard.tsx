@@ -19,8 +19,6 @@ import { isBlockAnchor } from "@lacecms/content";
 import {
   applicableErrors,
   blockLevelProblems,
-  FieldRenderer,
-  FieldLayout,
   hiddenFieldNote,
   mediaAltPair,
   PUBLICATION_ISSUE_TYPE,
@@ -28,6 +26,7 @@ import {
   shownFieldKeys,
   type DraftEditorValues,
 } from "../../../entities/content/index.js";
+import { FieldRenderer, FieldLayout } from "../../../entities/field-editor/index.js";
 import { useMediaItem } from "../../../entities/media/index.js";
 import { MissingAltWarning } from "../../../features/edit-media-metadata/index.js";
 import { cn, REVEAL_CONTROL_EVENT } from "../../../shared/lib/index.js";

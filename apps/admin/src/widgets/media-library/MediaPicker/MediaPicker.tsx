@@ -1,7 +1,8 @@
 import type { MediaMetadataDto } from "@lacecms/contracts";
 import { ImagePlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { fieldLabel, type FieldRendererProps } from "../../../entities/content/index.js";
+import { fieldLabel } from "../../../entities/content/index.js";
+import { type FieldRendererProps } from "../../../entities/field-editor/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { MediaPickerDialog } from "../MediaPickerDialog/index.js";
 import { SelectedMedia } from "../SelectedMedia/index.js";

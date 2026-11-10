@@ -6,7 +6,7 @@ import { useSession, useSessionRecovery } from "../../../entities/session/index.
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
 import { navigationGroups, type NavigationItem } from "../navigation.js";
-import { UserMenu } from "../UserMenu/index.js";
+import { UserMenu } from "../UserMenu.js";
 
 const itemClass =
   "flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground transition-colors duration-(--duration-fast) hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground";

@@ -1,9 +1,6 @@
 import { ImageOff } from "lucide-react";
-import {
-  mediaAltPair,
-  shownFieldKeys,
-  type FieldPreviewProps,
-} from "../../../entities/content/index.js";
+import { mediaAltPair, shownFieldKeys } from "../../../entities/content/index.js";
+import { type FieldPreviewProps } from "../../../entities/field-editor/index.js";
 import { MediaThumbnail, useMediaItem } from "../../../entities/media/index.js";
 import { AdminClientError } from "../../../shared/api/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";

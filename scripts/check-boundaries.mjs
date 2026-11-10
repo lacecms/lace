@@ -141,7 +141,7 @@ function packageOf(specifier) {
   return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
 }
 
-function importsIn(filePath) {
+export function importsIn(filePath) {
   const imports = [];
   const scanner = createScanner(true, undefined, sourceText(filePath));
   // A lexical scan has no parser context for regex/JSX tokens (notably #).
@@ -183,6 +183,72 @@ function importsIn(filePath) {
     token = scan();
   }
   return imports;
+}
+
+// Normalize tokens instead of searching source text: comments and string
+// contents cannot masquerade as import/export declarations.
+function exportEdgesIn(filePath) {
+  const scanner = createScanner(true, undefined, sourceText(filePath));
+  const strings = new Map();
+  const tokens = [];
+  for (;;) {
+    const before = scanner.getTokenEnd();
+    const token = scanner.scan();
+    if (token === SyntaxKind.EndOfFile) break;
+    if (scanner.getTokenEnd() <= before) scanner.resetTokenState(before + 1);
+    if (token === SyntaxKind.StringLiteral) {
+      const key = `literal${strings.size}`;
+      strings.set(key, scanner.getTokenValue());
+      tokens.push(`"${key}"`);
+    } else if (
+      token === SyntaxKind.NoSubstitutionTemplateLiteral ||
+      token === SyntaxKind.TemplateHead ||
+      token === SyntaxKind.TemplateMiddle ||
+      token === SyntaxKind.TemplateTail
+    ) {
+      tokens.push("template");
+    } else tokens.push(scanner.getTokenText());
+  }
+  const text = tokens.join(" ");
+  const edges = [
+    ...text.matchAll(
+      /\bexport\s+(?:type\s+)?(?:\*\s*(?:as\s+\w+\s*)?|\{[^}]*\}\s*)from\s*"(literal\d+)"/gu,
+    ),
+  ].map((match) => strings.get(match[1]));
+  const localExports = [...text.matchAll(/\bexport\s+(?:type\s+)?\{([^}]*)\}(?!\s*from\b)/gu)]
+    .flatMap((match) => match[1].split(","))
+    .map(
+      (name) =>
+        name
+          .trim()
+          .replace(/^type\s+/u, "")
+          .split(/\s+as\s+/u)[0],
+    );
+  for (const match of text.matchAll(/\bexport\s+default\s+(\w+)/gu)) localExports.push(match[1]);
+  for (const match of text.matchAll(/\bexport\s+(?:const|let|var)\s+\w+\s*=\s*(\w+)\s*(?:;|$)/gu)) {
+    localExports.push(match[1]);
+  }
+  for (const match of text.matchAll(/\bimport\s+(?:type\s+)?([^;]*?)\s+from\s+"(literal\d+)"/gu)) {
+    const clause = match[1];
+    const names = [];
+    const defaultName = /^(\w+)\s*(?:,|$)/u.exec(clause);
+    if (defaultName) names.push(defaultName[1]);
+    const namespace = /\*\s+as\s+(\w+)/u.exec(clause);
+    if (namespace) names.push(namespace[1]);
+    const named = /\{([^}]*)\}/u.exec(clause);
+    if (named)
+      names.push(
+        ...named[1].split(",").map((name) =>
+          name
+            .trim()
+            .replace(/^type\s+/u, "")
+            .split(/\s+as\s+/u)
+            .at(-1),
+        ),
+      );
+    if (names.some((name) => localExports.includes(name))) edges.push(strings.get(match[2]));
+  }
+  return edges.filter((edge) => edge !== undefined);
 }
 
 function isNodeBuiltin(specifier) {
@@ -279,6 +345,7 @@ function isInside(unit, relativePath) {
 
 function checkAdminComponentFolders(sourceDirectory, relativeFiles) {
   const directories = new Set();
+  const leaves = [];
   for (const relativePath of relativeFiles) {
     if (classifyAdminPath(relativePath) !== "layer") continue;
     const parts = relativePath.split("/");
@@ -288,11 +355,18 @@ function checkAdminComponentFolders(sourceDirectory, relativeFiles) {
     const fileName = parts.at(-1);
     if (!fileName.endsWith(".tsx") || testFilePattern.test(fileName)) continue;
     const folder = parts.at(-2);
-    if (!pascalCase.test(folder) || fileName !== `${folder}.tsx`) {
+    if (pascalCase.test(folder) && fileName === `${folder}.tsx`) continue;
+    const name = fileName.slice(0, -4);
+    if (!pascalCase.test(name)) {
       throw new Error(
-        `admin component module must be <Name>/<Name>.tsx in a PascalCase folder: ${relativePath}`,
+        `admin component module must be <Name>/<Name>.tsx or a private PascalCase leaf: ${relativePath}`,
       );
     }
+    const companion = join(dirname(join(sourceDirectory, relativePath)), `${name}.test.tsx`);
+    if (!existsSync(companion)) {
+      throw new Error(`admin component ${relativePath} is missing ${name}.test.tsx`);
+    }
+    leaves.push(relativePath);
   }
   for (const directory of directories) {
     const name = directory.split("/").at(-1);
@@ -303,6 +377,7 @@ function checkAdminComponentFolders(sourceDirectory, relativeFiles) {
       }
     }
   }
+  return leaves;
 }
 
 export function checkAdminStructure(rootDirectory = defaultRoot) {
@@ -318,7 +393,29 @@ export function checkAdminStructure(rootDirectory = defaultRoot) {
       );
     }
   }
-  checkAdminComponentFolders(sourceDirectory, relativeFiles);
+  const leaves = checkAdminComponentFolders(sourceDirectory, relativeFiles);
+
+  // Follow re-export edges from each owner's public API. A private component
+  // may be imported by its owner, but may not be part of that public API.
+  for (const leaf of leaves) {
+    const unit = adminUnitOf(sourceDirectory, leaf);
+    const target = join(sourceDirectory, leaf);
+    const pending = [join(sourceDirectory, unit, "index.ts")];
+    const seen = new Set();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (seen.has(current) || !existsSync(current)) continue;
+      seen.add(current);
+      if (current === target) {
+        throw new Error(`admin private leaf ${leaf} is exported from ${unit}/index.ts`);
+      }
+      for (const specifier of exportEdgesIn(current)) {
+        if (!specifier.startsWith(".")) continue;
+        const next = resolveAdminImport(current, specifier);
+        if (next !== undefined) pending.push(next);
+      }
+    }
+  }
 
   for (const [index, filePath] of files.entries()) {
     const sourcePath = relativeFiles[index];

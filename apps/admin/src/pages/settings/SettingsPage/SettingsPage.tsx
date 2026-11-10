@@ -16,9 +16,9 @@ import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { pageClass } from "../../../shared/ui/layout/index.js";
 import { LoadingState } from "../../../shared/ui/LoadingState/index.js";
 import { PageAccessDenied } from "../../../shared/ui/PageState/index.js";
-import { BuildTokenTable } from "../BuildTokenTable/index.js";
-import { ImportTokenTable } from "../ImportTokenTable/index.js";
-import { SiteStatusCards } from "../SiteStatusCards/index.js";
+import { BuildTokenTable } from "../BuildTokenTable.js";
+import { ImportTokenTable } from "../ImportTokenTable.js";
+import { SiteStatusCards } from "../SiteStatusCards.js";
 
 const settingsRoute = getRouteApi("/_protected/settings");
 

@@ -3,8 +3,9 @@ import type { ContentModelDto, LinkTargetStatusesDto } from "@lacecms/contracts"
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useWatch, type UseFormReturn } from "react-hook-form";
-import type { DraftEditorValues, FieldRendererProps } from "../../../entities/content/index.js";
-import { builtInRenderers } from "../../../entities/content/index.js";
+import type { DraftEditorValues } from "../../../entities/content/index.js";
+import type { FieldRendererProps } from "../../../entities/field-editor/index.js";
+import { builtInRenderers } from "../../../entities/field-editor/index.js";
 import { errorDescription, useAdminClient } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { Input } from "../../../shared/ui/Input/index.js";

@@ -1,0 +1,30 @@
+## Context
+
+Architecture §17 forbids imports between entity slices, including type imports; the checker also requires access through public indexes and checks component folders. Today `field-types.ts` supplies both pure content helpers and renderer types, `FieldControls` directly imports `RichTextEditor`, and `FieldRenderer` consumes content validation and helpers. Moving files verbatim into three sibling slices would break those rules. Sidebar tests also use a full router harness that can eagerly import editor pages, so that harness cannot prove the isolated navigation dependency graph.
+
+## Goals / Non-Goals
+
+**Goals:** isolate heavy editor imports while retaining one definition per field rule, enforce the amended folder rule and preserve behavior. Make the roadmap's acceptance measurable without weakening the layer rules.
+
+**Non-Goals:** editor state redesign, large renderer decomposition, API-client restructuring, changing package APIs, or broad component redesign.
+
+## Decisions
+
+1. Keep content-facing field support, validation and pure helpers in `entities/content`; put field controls and layout in `entities/field-editor`, and rich-text UI/extensions in `entities/rich-text`. Same-layer imports, including type-only imports, remain forbidden. Reuse domain rules from their existing owner and supply the field editor with the content operations it needs through cohesive typed dependencies composed by the entry page or another appropriate higher layer. Compose rich text through the renderer registry there; preserve existing defaults, overrides and observable behavior. Keep editor-only types in the editor slice and move editor-specific preview helpers with their consumers when this removes a dependency without duplicating logic.
+
+   Place only types needed by more than one slice in a small internal `shared` contract, exposed through its public unit index. Candidates are `DraftEditorValues` and its `SeoFormValues` dependency, plus the preview contracts only where both slices actually require them. Define each once, derive field definitions from existing package DTOs, and do not import an entity slice or put validation, field tables, renderer implementations or other content rules in the contract. This is an admin integration contract, not a new public package or a general domain-logic home. Keep types in their original owner when rearranging a helper removes the need for sharing. The higher layer connects the pieces; the contract itself performs no runtime composition. This refines the roadmap's proposed placement of all of `field-types.ts`: moving it intact would introduce cross-slice imports. Update every production and test import through the appropriate public index. Do not permit cross-slice exceptions or duplicate field tables.
+2. A private sibling leaf is a PascalCase `.tsx` with a colocated test, inside its owner and absent from the owner's public export graph, including re-export chains. Check direct external imports with the existing unit boundary, and traverse re-export edges to reject public exposure; keep folder completeness and deep-import restrictions unchanged. Convert enough genuinely private components to sibling leaves to reduce the count of one-line `index.ts` files under `apps/admin/src` from the observed 163 to below 150; count physical one-line files, including slice and unit indexes. Do not remove required public indexes. Extend checker fixture tests for success, re-export chains, missing test, outside imports and existing folder failures. An unchecked convention or blanket folder exemption would undermine the existing public API rule.
+3. Move the common confirmation UI and mutation orchestration to a single appropriately layered reusable token feature, parameterized by token kind. Preserve each endpoint, query key, exact user-facing text, pending state, success toast, failure details and dialog reset; exercise both variants. This avoids cross-feature imports and separate copies.
+4. Add an isolated SidebarNav test with a lightweight provider/harness that does not import the full app router, using hoisted Tiptap module mock factories and call counts to detect evaluation, alongside a static dependency graph check covering all `@tiptap/*` imports and dnd-kit from the content/navigation path. Retain existing full-router tests for behavior; prove the detector by a controlled positive fixture. Count and record before/after metrics in the roadmap. Static graph checks complement mock counts because mocking only selected Tiptap modules cannot prove all packages absent.
+5. Update architecture §17 and ADR 0020 before code for the explicit component-folder invariant change, and synchronize the accepted spec only via the normal archive workflow. Preserve §6's admin exception and all other boundary rules. Record the refined file placement and measures in the roadmap. The new delta is necessary because the enforcement contract changes, even though editor behavior does not.
+
+## Risks / Trade-offs
+
+- [A shared contract can grow into a domain-logic dumping ground] → limit it to types actually needed across slices and their type dependencies; keep behavior in its owner, inject cohesive callbacks or registry entries, and test the composed editor.
+- [Registry composition may omit default or override behavior] → retain existing field/editor tests and add integration coverage for rich text and custom overrides.
+- [Leaf detection misses indirect exports or test-only paths] → cover transitive re-exports and negative fixtures; retain slice boundary checks and colocated tests.
+- [Token consolidation crosses feature boundaries] → make one owning feature and re-point consumers; test both authorization-sensitive operations and errors.
+
+## Migration Plan
+
+No persisted data, deployment, runtime or public package migration is needed. Land documentation, checker and code together; rollback the change as a unit. Compare package `dist/index.d.ts` export lists from builds of the pre-change tree and final tree as required by the roadmap; admin's private slice APIs are intentionally repointed.

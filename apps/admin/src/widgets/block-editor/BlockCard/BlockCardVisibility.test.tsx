@@ -1,3 +1,4 @@
+import { fieldEditorServices } from "../../../entities/content/index.js";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
@@ -6,7 +7,8 @@ import { userEvent } from "@testing-library/user-event";
 import { useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { expect, test, vi } from "vitest";
-import { FieldRendererProvider, type DraftEditorValues } from "../../../entities/content/index.js";
+import { type DraftEditorValues } from "../../../entities/content/index.js";
+import { FieldRendererProvider } from "../../../entities/field-editor/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 import { BlockCard } from "./index.js";
 
@@ -53,7 +55,7 @@ function Harness({
     }),
   );
   return (
-    <FieldRendererProvider form={form} renderers={{}}>
+    <FieldRendererProvider services={fieldEditorServices} form={form} renderers={{}}>
       <DndContext>
         <SortableContext items={[key]}>
           <BlockCard {...props} blockKey={key} control={form.control} definition={promo} />

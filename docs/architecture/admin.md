@@ -175,8 +175,11 @@ of Lace domain slices.
   are not sliced: their public units are the shallowest directories with an
   `index.ts` (such as `app/router` or `shared/ui/Button`), and units of the
   same unsliced layer import each other through those indexes.
-- Every React component lives in its own PascalCase folder with its test and
-  an `index.ts`; code outside the folder imports it only through that index.
+- React components live in PascalCase folders with their test and an `index.ts`;
+  code outside the folder imports them only through that index. A private
+  PascalCase sibling component file with a colocated test may omit the folder
+  when it is used only within its slice or unit and is not exported directly
+  or transitively from that owner's public index.
 - Only the source-root entry module (`main.tsx`) and test-environment setup in
   `test/` live outside the layers; the entry module may import any layer's
   public API. Test files may also import any layer's public API, so a page or

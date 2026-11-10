@@ -1,3 +1,4 @@
+import { fieldEditorServices } from "../../../entities/content/index.js";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 import { builtInBlocks, defineBlockRegistry, toBlockRegistryMetadata } from "@lacecms/content";
@@ -8,7 +9,8 @@ import { useState, type ComponentProps } from "react";
 import { useForm } from "react-hook-form";
 import { expect, test, vi } from "vitest";
 import { mediaItem, openItem, renderInRouter, stubClient } from "../../../app/testing/index.js";
-import { FieldRendererProvider, type DraftEditorValues } from "../../../entities/content/index.js";
+import { type DraftEditorValues } from "../../../entities/content/index.js";
+import { FieldRendererProvider } from "../../../entities/field-editor/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 import { BlockCard } from "./index.js";
 
@@ -48,16 +50,18 @@ function Harness({ values = defaultValues, ...props }: CardProps & { values?: Dr
   // DeepPartial default-value type off the recursive JSON block data.
   useState(() => form.reset(values));
   return (
-    <DndContext>
-      <SortableContext items={["01ARZ3NDEKTSV4RRFFQ69G5FAV"]}>
-        <BlockCard
-          {...props}
-          blockKey="01ARZ3NDEKTSV4RRFFQ69G5FAV"
-          control={form.control}
-          definition={hero}
-        />
-      </SortableContext>
-    </DndContext>
+    <FieldRendererProvider services={fieldEditorServices} renderers={{}}>
+      <DndContext>
+        <SortableContext items={["01ARZ3NDEKTSV4RRFFQ69G5FAV"]}>
+          <BlockCard
+            {...props}
+            blockKey="01ARZ3NDEKTSV4RRFFQ69G5FAV"
+            control={form.control}
+            definition={hero}
+          />
+        </SortableContext>
+      </DndContext>
+    </FieldRendererProvider>
   );
 }
 
@@ -233,7 +237,7 @@ function ImageHarness({
     }),
   );
   return (
-    <FieldRendererProvider readOnly={readOnly} renderers={{}}>
+    <FieldRendererProvider services={fieldEditorServices} readOnly={readOnly} renderers={{}}>
       <DndContext>
         <SortableContext items={["01ARZ3NDEKTSV4RRFFQ69G5FAV"]}>
           <BlockCard

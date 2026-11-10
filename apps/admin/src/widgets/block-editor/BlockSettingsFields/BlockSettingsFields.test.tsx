@@ -1,10 +1,12 @@
+import { fieldEditorServices } from "../../../entities/content/index.js";
 import { useState } from "react";
 import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { expect, test } from "vitest";
-import { FieldRendererProvider, type DraftEditorValues } from "../../../entities/content/index.js";
+import { type DraftEditorValues } from "../../../entities/content/index.js";
+import { FieldRendererProvider } from "../../../entities/field-editor/index.js";
 import { BlockSettingsFields } from "./index.js";
 
 const definition = (tabs = false) =>
@@ -93,7 +95,13 @@ function Harness({
   useState(() => form.reset(values));
   const watched = form.watch();
   return (
-    <FieldRendererProvider busy={busy} form={form} readOnly={readOnly} renderers={{}}>
+    <FieldRendererProvider
+      services={fieldEditorServices}
+      busy={busy}
+      form={form}
+      readOnly={readOnly}
+      renderers={{}}
+    >
       {[0, 1].map((index) => (
         <section aria-label={`Block ${index}`} key={index}>
           <BlockSettingsFields control={form.control} definition={definition(tabs)} index={index} />

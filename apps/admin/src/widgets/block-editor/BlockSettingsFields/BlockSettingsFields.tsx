@@ -1,10 +1,10 @@
 import { useFormState, useWatch, type Control } from "react-hook-form";
+import { type DraftEditorValues } from "../../../entities/content/index.js";
 import {
   FieldLayout,
   FieldRenderer,
   layoutHasProblems,
-  type DraftEditorValues,
-} from "../../../entities/content/index.js";
+} from "../../../entities/field-editor/index.js";
 import type { BlockDefinitionDto } from "../block-presentation.js";
 
 /** Metadata-driven settings composition shared by writers and viewers. */

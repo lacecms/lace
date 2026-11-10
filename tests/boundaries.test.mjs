@@ -66,6 +66,133 @@ test("allows downward admin imports through public indexes and test-only harness
   expect(result.status).toBe(0);
 });
 
+function checkLeafFixture(files) {
+  const root = mkdtempSync(join(tmpdir(), "lace-admin-leaf-"));
+  try {
+    const base = join(root, "apps/admin");
+    mkdirSync(base, { recursive: true });
+    writeFileSync(join(base, "package.json"), '{"name":"@lacecms/app-admin"}');
+    for (const [path, content] of Object.entries(files)) {
+      const file = join(base, "src", path);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, content);
+    }
+    return spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+}
+
+const privateLeaf = {
+  "widgets/example/index.ts": 'export { Example } from "./Example/index.js";',
+  "widgets/example/Example/index.ts": 'export { Example } from "./Example.js";',
+  "widgets/example/Example/Example.tsx":
+    'import { Leaf } from "./Leaf.js"; export const Example = () => <Leaf />;',
+  "widgets/example/Example/Example.test.tsx": "",
+  "widgets/example/Example/Leaf.tsx": "export const Leaf = () => null;",
+  "widgets/example/Example/Leaf.test.tsx": "",
+};
+
+test("allows a private tested sibling component", () => {
+  const result = checkLeafFixture(privateLeaf);
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+});
+
+test("ignores export-like comments and string contents", () => {
+  const result = checkLeafFixture({
+    ...privateLeaf,
+    "widgets/example/index.ts": `// export { Leaf } from "./Example/Leaf.js";
+const message = 'export { Leaf } from "./Example/Leaf.js";';
+const template = \`export { Leaf } from "./Example/Leaf.js";\`;
+export { Example } from "./Example/index.js";`,
+  });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+});
+
+test.each([
+  ["missing test", { "widgets/example/Example/Leaf.test.tsx": null }, "Leaf.test.tsx"],
+  [
+    "direct export",
+    { "widgets/example/index.ts": 'export { Leaf } from "./Example/Leaf.js";' },
+    "Leaf.tsx",
+  ],
+  [
+    "transitive export",
+    {
+      "widgets/example/index.ts": 'export { Leaf } from "./bridge.js";',
+      "widgets/example/bridge.ts": 'export { Leaf } from "./Example/Leaf.js";',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "imported local export",
+    {
+      "widgets/example/index.ts":
+        'import { Leaf as Alias } from "./Example/Leaf.js"; export { Alias };',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "namespace local export",
+    {
+      "widgets/example/index.ts": 'import * as Alias from "./Example/Leaf.js"; export { Alias };',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "default local export",
+    {
+      "widgets/example/index.ts": 'import Alias from "./Example/Leaf.js"; export { Alias };',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "default export expression",
+    {
+      "widgets/example/index.ts": 'import Alias from "./Example/Leaf.js"; export default Alias;',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "combined import",
+    {
+      "widgets/example/index.ts":
+        'import Other, { Leaf as Alias } from "./Example/Leaf.js"; export { Alias };',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "exported const alias",
+    {
+      "widgets/example/index.ts":
+        'import { Leaf } from "./Example/Leaf.js"; export const Public = Leaf;',
+    },
+    "Leaf.tsx",
+  ],
+  [
+    "outside import",
+    {
+      "pages/home/index.ts": 'import { Leaf } from "../../widgets/example/Example/Leaf.js";',
+    },
+    "Leaf",
+  ],
+  [
+    "malformed name",
+    {
+      "widgets/example/Example/notPascal.tsx": "export const leaf = () => null;",
+    },
+    "notPascal.tsx",
+  ],
+])("rejects %s for a sibling component", (_name, changes, message) => {
+  const files = { ...privateLeaf, ...changes };
+  for (const [path, content] of Object.entries(files)) if (content === null) delete files[path];
+  const result = checkLeafFixture(files);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(message);
+});
+
 test.each([
   ["upward", "admin upward import in entities/item/index.ts: entities may not import features"],
   [

@@ -137,7 +137,7 @@ test("viewer reads layout text without radio controls", async () => {
 });
 
 test("summary focus reveals nested list cards and the selected radio", async () => {
-  const { focusProblemTarget } = await import("../EntryValidationSummary/index.js");
+  const { focusProblemTarget } = await import("../EntryValidationSummary.js");
   const user = userEvent.setup();
   open();
   await screen.findByRole("article");

@@ -22,16 +22,10 @@ import {
   readPath,
   snapshotBudget,
 } from "./composite-values.js";
-import { SEO_MESSAGES, seoProblems, type SeoFormValues, type SeoKey } from "./seo.js";
+import { SEO_MESSAGES, seoProblems, type SeoKey } from "./seo.js";
 
-export interface DraftEditorValues {
-  blocks: ContentBlockDto[];
-  fields: Record<string, unknown>;
-  /** Present for entries of models with SEO enabled. */
-  seo?: SeoFormValues;
-  slug?: string;
-  title: string;
-}
+import type { DraftEditorValues } from "../../shared/editor-contract/index.js";
+export type { DraftEditorValues } from "../../shared/editor-contract/index.js";
 
 export { LINK_URL_MESSAGE, URL_FIELD_MESSAGE } from "./field-types.js";
 import { fieldTypeSupport } from "./field-types.js";

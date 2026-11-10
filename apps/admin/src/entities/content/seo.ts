@@ -7,14 +7,8 @@ import {
 } from "@lacecms/contracts";
 import type { ContentModelDto, SeoInputDto, SeoValueDto } from "@lacecms/contracts";
 
-/** The SEO group as the editor form holds it: text inputs need strings. */
-export interface SeoFormValues {
-  canonical: string;
-  description: string;
-  image: string | null;
-  noindex: boolean;
-  title: string;
-}
+import type { SeoFormValues } from "../../shared/editor-contract/index.js";
+export type { SeoFormValues } from "../../shared/editor-contract/index.js";
 
 /** The SEO group a save sends; every value is present. */
 export interface SeoSaveInput extends SeoInputDto {

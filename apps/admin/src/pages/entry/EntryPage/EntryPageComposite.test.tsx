@@ -1,3 +1,4 @@
+import { fieldEditorServices } from "../../../entities/content/index.js";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useRef } from "react";
@@ -6,16 +7,18 @@ import { field } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 import { expect, test, vi } from "vitest";
 import {
-  FieldRenderer,
-  FieldRendererProvider,
-  EntryListBudget,
   createDraftResolver,
   withoutClearedValues,
   type DraftEditorValues,
   validationProblems,
 } from "../../../entities/content/index.js";
+import {
+  FieldRenderer,
+  FieldRendererProvider,
+  EntryListBudget,
+} from "../../../entities/field-editor/index.js";
 import { itemAction, listAction, openActions, openItem } from "../../../app/testing/index.js";
-import { EntryValidationSummary } from "../EntryValidationSummary/index.js";
+import { EntryValidationSummary } from "../EntryValidationSummary.js";
 const links = field.list({
   label: "Links",
   itemLabel: "title",
@@ -58,6 +61,7 @@ function Harness({
   const problems = validationProblems({ model, blocks: [], errors: form.formState.errors });
   return (
     <FieldRendererProvider
+      services={fieldEditorServices}
       form={form}
       model={model}
       readOnly={readOnly}

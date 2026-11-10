@@ -129,7 +129,7 @@ What the roadmap changes, with the numbers to beat:
 | Size | `packages/db/src/sql-content.ts` | 2,229 lines → RF4E: domain modules; largest db module 862 lines |
 | Size | `packages/config/src/index.ts` | 1,229 lines → RF4E: entry and domain modules |
 | Size | `packages/application/src/configuration-sync.ts` | 1,836 lines → RF4B: five planning, decision, support, report and apply modules; no module cycles |
-| Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) |
+| Size | `apps/admin/src/entities/content/FieldRenderer/FieldRenderer.tsx` | 1,508 lines (`ListNode` alone ≈ 580) → RF6A: moved to `entities/field-editor`, 1,502 lines; the existing baseline follows the file without growing |
 | Size | `apps/admin/src/shared/api/admin-client.ts` | 1,043 lines, 59 methods, 53 literal paths, no route drift test |
 | Duplication | copies of the "list-queryable field types" set | 1 authoritative content table; 0 consumer copies (RF3A); 1 admin support table → RF3E: admin grouped and counted subsets and filter controls derive from it |
 | Duplication | filter value checks | 2 (application, admin) → RF3E: 1 portable `fieldFilterValueFailure`, pinned by a shared parity table |
@@ -142,7 +142,7 @@ What the roadmap changes, with the numbers to beat:
 | Duplication | security row mappers and SQL constants | verbatim in `platform-node/security.ts` and `platform-cloudflare/d1-security.ts` → RF5A: one owner each (`db` `security/rows.ts`; rate-limit policies and setup TTL in application); adapters split by port, largest module 629 lines (`d1-security.ts` 984 → 215) |
 | Duplication | runtime composition roots | `createNodeRuntime` (621 lines) and `createCloudflareRuntime` (484) each build the use cases, request rate limiter, model resolver, MCP wiring and the 27-field app input → RF5C: one `composeLaceServices` in server; roots build adapters only (561 and 421 lines); one feature-flag parser; routes see actor resolution and capabilities, not the app input |
 | Duplication | argv parsers in `packages/cli` | 6 (+1 in `scripts/cloudflare-lib.mjs`) |
-| Admin | one-line `index.ts` barrels | 176 of 196 |
+| Admin | one-line `index.ts` barrels | 176 of 196 → before RF6A: 163 → RF6A: 147 of 182 |
 | Admin | components under 60 lines occupying a three-file folder | 40 |
 | CLI | runtime dependencies on the `--target node` path | `miniflare` + `workerd` loaded statically through `commands.ts` |
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
@@ -166,7 +166,7 @@ What the roadmap changes, with the numbers to beat:
 | RF3 | Shared vocabulary: types, constants, rules | L | RF3A → RF3B → RF3C → RF3D → RF3E → RF3F → RF3G | done |
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
-| RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | planned |
+| RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | in progress |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | planned |
 | RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | in progress |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
@@ -962,8 +962,12 @@ drift from the OpenAPI document unnoticed.
   helpers), `entities/rich-text` (`RichTextEditor*`, `LinkPopover`,
   `RichTextBubbleMenu`, `RichTextToolbar`, extensions) and
   `entities/field-editor` (`FieldRenderer`, `FieldControls`, `FieldLayout`,
-  `field-types.ts`). The 27 importers of the old barrel are re-pointed; no
-  boundary rule changes.
+  renderer-specific types). Content field support stays in `content`; shared
+  type contracts live in `shared/editor-contract`. The entry page composes
+  content operations and the rich-text control into the editor; same-layer
+  imports remain forbidden. Existing tests keep their behavior assertions and
+  add the explicit provider required by composition, as well as updating
+  imports; this refines §2's import-only test-move gate for this session.
 - `scripts/check-boundaries.mjs`: a PascalCase leaf component that is not
   exported from its slice may live as a sibling file without a folder.
   Merge `RevokeBuildTokenDialog` and `RevokeImportTokenDialog` into one
@@ -1374,3 +1378,5 @@ is empty.
 | 2026-11-08 | RF8Y | `rf08y-release-history-out-of-specs` | Archived at [`2026-11-08-rf08y-release-history-out-of-specs`](../openspec/changes/archive/2026-11-08-rf08y-release-history-out-of-specs/); 15/15 tasks complete. Delta specs synchronized: 5 capabilities (+9, ~9, −29, →4). Roadmap code "Step 26" left in `prepublication-consumer-security` for RF8B. RF8B next. |
 | 2026-11-08 | RF8B | `rf08b-specification-ownership` | Implemented. `openspec/specs/README.md` groups the 89 capabilities in 11 domains with ownership rules, guarded by `tests/specs-index.test.mjs`. New `gallery-block` (definition, settings visibility, markup, video items); `admin-draft-editor` keeps a 7-requirement core and moves 50 requirements unchanged to `-fields` (24), `-media-lists` (8), `-blocks` (7) and `-publication` (11). Fixed: image/hero registry revisions 7/5, nine-block starter lock, block map and installation scenarios; roadmap codes left 13 capabilities. The `rest-contracts` first-page contradiction was already resolved by RF8X. Title diff: four requirements re-added under neutral titles, two gallery requirements extracted; two pre-rc1 upgrade scenarios dropped. Architecture pointers updated. |
 | 2026-11-08 | RF8B | `rf08b-specification-ownership` | Archived at [`2026-11-08-rf08b-specification-ownership`](../openspec/changes/archive/2026-11-08-rf08b-specification-ownership/); 8/8 tasks complete. Delta specs synchronized: 21 capabilities (+58, ~15, −56). RF8C next. |
+| 2026-11-10 | RF6A | `rf06a-admin-slice-split` | Implemented. Content, field-editor and rich-text are independent entity slices; shared editor types have one lower-layer contract and the entry page composes content operations and rich-text UI. Private tested leaf components can omit folders; direct and transitive public exports remain guarded. Build and import token revocation use one feature. One-line admin indexes 163 → 147 (182 total); the `FieldRenderer` baseline moves with the file without growing (1,508 limit, 1,502 actual). Tests add explicit providers to preserve the composed editor's behavior. Admin: 1,012 tests; boundary/graph: 105 tests; root build passed and package declarations match byte-for-byte. Root typecheck, lint, format and strict OpenSpec validation passed. Not archived. |
+| 2026-11-10 | RF6A | `rf06a-admin-slice-split` | Archived at [`2026-11-10-rf06a-admin-slice-split`](../openspec/changes/archive/2026-11-10-rf06a-admin-slice-split/); 12/12 tasks complete. Delta spec synchronized: `admin-source-structure` (1 modified requirement, 3 added scenarios). RF6B next. |

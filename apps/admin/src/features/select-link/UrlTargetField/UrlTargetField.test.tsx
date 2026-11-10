@@ -1,3 +1,4 @@
+import { fieldEditorServices } from "../../../entities/content/index.js";
 import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { field, normalizeFieldDefinition } from "@lacecms/content";
@@ -5,11 +6,8 @@ import type { ContentModelDto } from "@lacecms/contracts";
 import { useForm } from "react-hook-form";
 import { expect, test, vi } from "vitest";
 import { renderInRouter, stubClient } from "../../../app/testing/index.js";
-import {
-  FieldRenderer,
-  FieldRendererProvider,
-  type DraftEditorValues,
-} from "../../../entities/content/index.js";
+import { type DraftEditorValues } from "../../../entities/content/index.js";
+import { FieldRenderer, FieldRendererProvider } from "../../../entities/field-editor/index.js";
 import { LinkAuthoringProvider, OrdinaryUrlField } from "./index.js";
 
 const url = normalizeFieldDefinition(field.url({ label: "Destination" }));
@@ -49,7 +47,11 @@ function Harness({
   });
   return (
     <LinkAuthoringProvider form={form} model={model}>
-      <FieldRendererProvider readOnly={readOnly} renderers={{ url: OrdinaryUrlField }}>
+      <FieldRendererProvider
+        services={fieldEditorServices}
+        readOnly={readOnly}
+        renderers={{ url: OrdinaryUrlField }}
+      >
         <fieldset disabled={readOnly}>
           <FieldRenderer
             error={undefined}

@@ -17,16 +17,13 @@ import { PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFieldArray, type Control, type UseFormGetValues } from "react-hook-form";
 import { ulid } from "ulid";
-import {
-  BLOCK_MESSAGES,
-  useCompositeEditing,
-  type DraftEditorValues,
-} from "../../../entities/content/index.js";
+import { BLOCK_MESSAGES, type DraftEditorValues } from "../../../entities/content/index.js";
+import { useCompositeEditing } from "../../../entities/field-editor/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import { AddBlockMenu } from "../AddBlockMenu/index.js";
 import { BlockCard, type BlockTab } from "../BlockCard/index.js";
-import { RemovedBlockNotice } from "../RemovedBlockNotice/index.js";
+import { RemovedBlockNotice } from "../RemovedBlockNotice.js";
 import { blockLabel, defaultSettings, type BlockDefinitionDto } from "../block-presentation.js";
 
 interface RemovedBlock {
