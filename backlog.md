@@ -16,6 +16,77 @@
   archived and synchronized. The roadmap moved to
   [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
+- **Gallery per-item placement and sizing (from the tatianae.com rc2 mapping,
+  2026-11-10; no implementation order selected):** Gallery layout settings
+  apply to the whole block, so a portfolio grid is built from several
+  consecutive galleries. Three cases still need workarounds:
+  - **Right column only.** `columns-2` can leave the right column empty but
+    never the left one. Today the workaround is a hand-typed envelope class
+    name plus site CSS.
+  - **Span both columns.** Only the first item of `featured-first` spans both
+    columns; an arbitrary item cannot.
+  - **Natural image size.** An image cannot keep its intrinsic width; for
+    example a 405px GIF is stretched to fill its cell.
+
+  Candidate: optional per-item `placement` (`auto`, `full`, `start`, `end`)
+  and an image-only `size` (`fill`, `natural`) on gallery items. They would
+  be exposed as data attributes and given rules in `ListLayout.css`, so a
+  `columns-2` grid can express these rows without class names. This is a
+  block definition change: gallery v6 with an identity migration, a version
+  bump for every model that allows the block, and a template bump for the
+  installed source. Settle in the spec:
+  - placement in flex modes and in `columns-3`/`columns-4`;
+  - how it interacts with `featured-first`;
+  - mobile collapse;
+  - whether video items need a per-block default `playback`, because
+    portfolio videos are almost always ambient.
+
+- **Configurable default collection sort (from the tatianae.com rc2 mapping,
+  2026-11-10; no implementation order selected):** today a collection list
+  always opens sorted by `-updatedAt`, and `listOptions` cannot change that.
+  A portfolio orders its projects by a numeric `order` field, so editors must
+  pick the Order column on every visit. The URL keeps a chosen sort only while
+  the editor stays on that list.
+
+  Candidate: an optional `listOptions.defaultSort`, for example
+  `{ field: "order", direction: "asc" }`, limited to one entry of
+  `sortableFields` or to a system sort. It would be projection-only, like the
+  rest of `listOptions`: it needs no model version bump and requests no build.
+  - The API applies it when a request has no `sort`.
+  - The admin leaves it out of the URL, the same way the current default is
+    not written there.
+  - Node and D1 use the existing typed sort and bounded cursor code.
+
+  Not in scope: drag-and-drop ordering and a public order contract. The site
+  still sorts published entries itself.
+
+- **Route-less collections (from the tatianae.com rc2 mapping, 2026-11-10;
+  no implementation order selected):** a collection always needs a `route`
+  with one `:slug` segment, and every entry needs a slug before publication.
+  Data that is only listed on another page, such as About CV rows,
+  testimonials or press mentions, gets URLs nobody renders. Today the site
+  works around this in three ways:
+  - a dummy route (`/cv/:slug`);
+  - a hand-made slug for every row;
+  - a sitemap filter (`sitemapResponse(site, { include })`) that leaves the
+    model out so the 404 URLs are not listed.
+
+  Candidate: a collection without `route`. Its entries have no slug, never
+  enter `published_routes` and are left out of path lookup and the sitemap.
+  Like globals, they are read through the site view by model key, but there
+  can be many of them. Settle in the spec:
+  - the kind boundary: whether adding or removing a route is breaking,
+    following the existing route and kind rules;
+  - internal links to such entries (`entry:` targets need a published route
+    today);
+  - SEO opt-in, which is rejected without a route;
+  - the admin slug UI;
+  - export format and SDK typing;
+  - Node/D1 parity.
+
+  Related, but separate: bulk publication for many small entries (see "bulk
+  list actions" below).
+
 - **Shared video primitive (deferred from SM5D, 2026-11-01):** `videoEmbed`
   and gallery video items each carry their own registry markup and ambient
   mounting script. Extract a `LaceVideo` adapter component (with its
